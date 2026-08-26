@@ -1,0 +1,434 @@
+import { afterEach, describe, expect, it } from "vitest";
+import type { PipelineRunEventStore, StoredPipelineEvent } from "./run-store.js";
+import { startPipelineRunStudio, type PipelineRunStudioServer } from "./run-store-ui.js";
+
+const servers: PipelineRunStudioServer[] = [];
+const fixtureParameters = [
+  {
+    description: "Message to process.",
+    flag: "message",
+    key: "message",
+    multiple: false,
+    positional: false,
+    required: true,
+    type: "string" as const,
+  },
+];
+
+afterEach(async () => {
+  await Promise.all(servers.splice(0).map((server) => server.close()));
+});
+
+function memoryStore(events: readonly StoredPipelineEvent[]): PipelineRunEventStore {
+  return {
+    close() {},
+    export() {},
+    async listEvents(query = {}) {
+      return events.filter(
+        (event) =>
+          (query.runId === undefined || event.runId === query.runId) &&
+          (query.pipelineId === undefined || event.pipelineId === query.pipelineId) &&
+          (query.afterId === undefined || event.id > query.afterId)
+      );
+    },
+  };
+}
+
+const events: StoredPipelineEvent[] = [
+  {
+    attributes: { dry_run: false },
+    id: 1,
+    name: "pipeline.started",
+    pipelineId: "studio-fixture",
+    runId: "run-1",
+    timestampMs: 10,
+    version: 1,
+  },
+  {
+    attributes: { status: "completed" },
+    durationMs: 5,
+    id: 2,
+    name: "pipeline.completed",
+    pipelineId: "studio-fixture",
+    runId: "run-1",
+    timestampMs: 15,
+    version: 1,
+  },
+];
+
+describe("local pipeline run studio", () => {
+  it("rejects malformed command parameter metadata before listening", async () => {
+    await expect(
+      startPipelineRunStudio({
+        launcher: {
+          commands: [
+            {
+              canPlan: false,
+              id: "invalid",
+              name: "Invalid",
+              parameters: [{ flag: "value", key: "value", type: "mystery" }] as never,
+            },
+          ],
+          async launch() {
+            return { accepted: true, runId: "unused" };
+          },
+        },
+        port: 0,
+        store: memoryStore(events),
+      })
+    ).rejects.toThrow('Studio command "invalid" has invalid parameters.');
+  });
+
+  it("rejects ambiguous launcher command definitions before listening", async () => {
+    await expect(
+      startPipelineRunStudio({
+        launcher: {
+          commands: [
+            {
+              canPlan: false,
+              id: "duplicate",
+              name: "First",
+              parameters: fixtureParameters,
+            },
+            {
+              canPlan: false,
+              id: "duplicate",
+              name: "Second",
+              parameters: fixtureParameters,
+            },
+          ],
+          async launch() {
+            return { accepted: true, runId: "unused" };
+          },
+        },
+        port: 0,
+        store: memoryStore(events),
+      })
+    ).rejects.toThrow('Duplicate studio command id "duplicate".');
+  });
+
+  it("serves the standalone interface and keeps launching disabled by default", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const page = await fetch(server.url);
+    expect(page.status).toBe(200);
+    expect(page.headers.get("content-security-policy")).toContain("default-src 'none'");
+    const html = await page.text();
+    expect(html).toContain("Tubeless — Local Studio");
+    expect(html).toContain("nested work stays with its parent");
+    expect(html).not.toContain('data-view="active"');
+    expect(html).not.toContain('data-view="definitions"');
+    expect(html).toContain("Run pipeline");
+    expect(html).toContain("Available pipelines");
+    expect(html).toContain("Preview plan");
+    expect(html).toContain("Pipeline inputs");
+    expect(html).toContain("Execution controls");
+    expect(html).toContain("Built into Tubeless");
+    expect(html).toContain("if (checked !== Boolean(parameter.default))");
+    expect(html).toContain("Clear run history?");
+    expect(html).toContain("step-status-icon");
+    expect(html).toContain("status-mark");
+    expect(html).not.toContain("mode-tabs");
+    expect(html).not.toContain("Bible");
+
+    const snapshot = await fetch(`${server.url}/api/snapshot`).then((response) => response.json());
+    expect(snapshot).toMatchObject({
+      activeRunCount: 0,
+      completedRunCount: 1,
+      runs: [{ pipelineId: "studio-fixture", status: "completed" }],
+    });
+    const run = await fetch(`${server.url}/api/runs/run-1`).then((response) => response.json());
+    expect(run).toMatchObject({ run: { runId: "run-1", status: "completed" } });
+
+    await expect(
+      fetch(`${server.url}/api/commands`).then((response) => response.json())
+    ).resolves.toEqual({ commands: [] });
+    await expect(
+      fetch(`${server.url}/api/capabilities`).then((response) => response.json())
+    ).resolves.toEqual({ canClearHistory: false });
+    const clear = await fetch(`${server.url}/api/history`, {
+      headers: { "x-tubeless-studio-clear-history": "1" },
+      method: "DELETE",
+    });
+    expect(clear.status).toBe(405);
+    const mutation = await fetch(`${server.url}/api/commands/fixture/runs`, {
+      body: JSON.stringify({ values: {} }),
+      headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
+      method: "POST",
+    });
+    expect(mutation.status).toBe(405);
+  });
+
+  it("exposes only injected commands and delegates bounded structured launch values", async () => {
+    const launches: { commandId: string; values: Record<string, unknown> }[] = [];
+    const plans: { commandId: string; dryRun?: boolean; target?: readonly string[] }[] = [];
+    const server = await startPipelineRunStudio({
+      launcher: {
+        commands: [
+          {
+            canPlan: true,
+            description: "Run the fixture.",
+            id: "fixture",
+            name: "Fixture",
+            parameters: fixtureParameters,
+          },
+        ],
+        plan(commandId, input) {
+          plans.push({ commandId, dryRun: input.dryRun, target: input.target });
+          return {
+            dryRun: input.dryRun === true,
+            errors: [],
+            ok: true,
+            pipelineId: "fixture",
+            steps: [],
+          };
+        },
+        async launch(commandId, values) {
+          launches.push({ commandId, values });
+          return { accepted: true, runId: "studio-run-1" };
+        },
+      },
+      port: 0,
+      store: memoryStore(events),
+    });
+    servers.push(server);
+
+    await expect(
+      fetch(`${server.url}/api/commands`).then((response) => response.json())
+    ).resolves.toEqual({
+      commands: [
+        {
+          canPlan: true,
+          description: "Run the fixture.",
+          id: "fixture",
+          name: "Fixture",
+          parameters: fixtureParameters,
+        },
+      ],
+    });
+    const planResponse = await fetch(`${server.url}/api/commands/fixture/plan`, {
+      body: JSON.stringify({ dryRun: true, step: [], target: ["publish"] }),
+      headers: { "content-type": "application/json", "x-tubeless-studio-plan": "1" },
+      method: "POST",
+    });
+    expect(planResponse.status).toBe(200);
+    await expect(planResponse.json()).resolves.toMatchObject({
+      plan: { dryRun: true, ok: true, pipelineId: "fixture" },
+    });
+    expect(plans).toEqual([{ commandId: "fixture", dryRun: true, target: ["publish"] }]);
+    const response = await fetch(`${server.url}/api/commands/fixture/runs`, {
+      body: JSON.stringify({
+        values: { dryRun: false, message: "hello world", retries: [1, 2], tags: ["one", "two"] },
+      }),
+      headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ accepted: true, runId: "studio-run-1" });
+    expect(launches).toEqual([
+      {
+        commandId: "fixture",
+        values: { dryRun: false, message: "hello world", retries: [1, 2], tags: ["one", "two"] },
+      },
+    ]);
+
+    const crossOriginShape = await fetch(`${server.url}/api/commands/fixture/runs`, {
+      body: JSON.stringify({ values: {} }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    expect(crossOriginShape.status).toBe(415);
+  });
+
+  it("pages beyond a store query cap and incrementally loads newer events", async () => {
+    const stored = [...events];
+    const cursors: (number | undefined)[] = [];
+    const store: PipelineRunEventStore = {
+      close() {},
+      export() {},
+      async listEvents(query = {}) {
+        cursors.push(query.afterId);
+        return stored.filter((event) => event.id > (query.afterId ?? 0)).slice(0, 1);
+      },
+    };
+    const server = await startPipelineRunStudio({ port: 0, store });
+    servers.push(server);
+
+    await expect(
+      fetch(`${server.url}/api/snapshot`).then((response) => response.json())
+    ).resolves.toMatchObject({
+      completedRunCount: 1,
+      lastEventId: 2,
+      runs: [{ runId: "run-1", status: "completed" }],
+    });
+    expect(cursors).toEqual([undefined, 1, 2]);
+
+    stored.push(
+      {
+        attributes: { dry_run: false },
+        id: 3,
+        name: "pipeline.started",
+        pipelineId: "studio-fixture",
+        runId: "run-2",
+        timestampMs: 20,
+        version: 1,
+      },
+      {
+        attributes: { status: "completed" },
+        durationMs: 5,
+        id: 4,
+        name: "pipeline.completed",
+        pipelineId: "studio-fixture",
+        runId: "run-2",
+        timestampMs: 25,
+        version: 1,
+      }
+    );
+    await expect(
+      fetch(`${server.url}/api/snapshot`).then((response) => response.json())
+    ).resolves.toMatchObject({ completedRunCount: 2, lastEventId: 4 });
+    expect(cursors.slice(-3)).toEqual([2, 3, 4]);
+  });
+
+  it("includes a first store event whose id is zero in snapshots", async () => {
+    const store = memoryStore([
+      {
+        attributes: { dry_run: false },
+        id: 0,
+        name: "pipeline.started",
+        pipelineId: "studio-fixture",
+        runId: "run-zero",
+        timestampMs: 1,
+        version: 1,
+      },
+    ]);
+    const server = await startPipelineRunStudio({ port: 0, store });
+    servers.push(server);
+
+    await expect(
+      fetch(`${server.url}/api/snapshot`).then((response) => response.json())
+    ).resolves.toMatchObject({
+      activeRunCount: 1,
+      lastEventId: 0,
+      runs: [{ runId: "run-zero", status: "running", startedAtMs: 1 }],
+    });
+  });
+
+  it("clears complete history only through an injected maintenance capability", async () => {
+    let stored = [...events];
+    let clearCount = 0;
+    const store: PipelineRunEventStore = {
+      close() {},
+      export() {},
+      async listEvents(query = {}) {
+        return stored.filter((event) => event.id > (query.afterId ?? 0));
+      },
+    };
+    const server = await startPipelineRunStudio({
+      history: {
+        clear() {
+          clearCount += 1;
+          stored = [];
+        },
+      },
+      port: 0,
+      store,
+    });
+    servers.push(server);
+
+    await expect(
+      fetch(`${server.url}/api/capabilities`).then((response) => response.json())
+    ).resolves.toEqual({ canClearHistory: true });
+    const missingHeader = await fetch(`${server.url}/api/history`, { method: "DELETE" });
+    expect(missingHeader.status).toBe(415);
+    const response = await fetch(`${server.url}/api/history`, {
+      headers: { "x-tubeless-studio-clear-history": "1" },
+      method: "DELETE",
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      cleared: true,
+      eventCount: 2,
+      runCount: 1,
+    });
+    expect(clearCount).toBe(1);
+    await expect(
+      fetch(`${server.url}/api/snapshot`).then((snapshot) => snapshot.json())
+    ).resolves.toMatchObject({ lastEventId: 0, runs: [] });
+  });
+
+  it("clears a persisted run left active by an interrupted process", async () => {
+    let clearCount = 0;
+    const server = await startPipelineRunStudio({
+      history: {
+        clear() {
+          clearCount += 1;
+        },
+      },
+      port: 0,
+      store: memoryStore(events.slice(0, 1)),
+    });
+    servers.push(server);
+
+    const response = await fetch(`${server.url}/api/history`, {
+      headers: { "x-tubeless-studio-clear-history": "1" },
+      method: "DELETE",
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      cleared: true,
+      runCount: 1,
+    });
+    expect(clearCount).toBe(1);
+  });
+
+  it("refuses to clear while the maintenance host knows a writer is live", async () => {
+    let clearCount = 0;
+    const server = await startPipelineRunStudio({
+      history: {
+        clear() {
+          clearCount += 1;
+        },
+        isBusy: () => true,
+      },
+      port: 0,
+      store: memoryStore(events),
+    });
+    servers.push(server);
+
+    const response = await fetch(`${server.url}/api/history`, {
+      headers: { "x-tubeless-studio-clear-history": "1" },
+      method: "DELETE",
+    });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: "Wait for active runs to finish before clearing history.",
+    });
+    expect(clearCount).toBe(0);
+  });
+
+  it("brackets an IPv6 host in URLs and trusted request authorities", async () => {
+    let clearCount = 0;
+    const server = await startPipelineRunStudio({
+      history: {
+        clear() {
+          clearCount += 1;
+        },
+      },
+      host: "::1",
+      port: 0,
+      store: memoryStore(events),
+    });
+    servers.push(server);
+
+    expect(server.url).toMatch(/^http:\/\/\[::1\]:\d+$/);
+    const response = await fetch(`${server.url}/api/history`, {
+      headers: { "x-tubeless-studio-clear-history": "1" },
+      method: "DELETE",
+    });
+    expect(response.status).toBe(200);
+    expect(clearCount).toBe(1);
+  });
+});

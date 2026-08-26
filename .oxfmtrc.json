@@ -1,0 +1,9 @@
+{
+  "semi": true,
+  "singleQuote": false,
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "printWidth": 100,
+  "sortPackageJson": false,
+  "ignorePatterns": ["dist", "node_modules", "bun.lock", "tools/oxlint/anti-slop"]
+}

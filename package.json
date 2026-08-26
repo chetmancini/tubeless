@@ -1,0 +1,132 @@
+{
+  "name": "tubeless",
+  "version": "0.0.0",
+  "description": "Typed pipeline primitives for composable data-processing workflows.",
+  "license": "MIT",
+  "private": true,
+  "packageManager": "bun@1.3.14",
+  "sideEffects": false,
+  "type": "module",
+  "bin": {
+    "tubeless": "./dist/workbench-bin.js"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "evals",
+    "examples",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "api:check": "node scripts/generate-api-reference.mjs --check",
+    "api:generate": "bun run build && node scripts/generate-api-reference.mjs",
+    "check": "bun run build && bun run lint:run && bun run format:check && bun run typecheck:run && bun run docs:check && bun run api:check && bun run test:run && bun run eval:verify && bun run pack:verify",
+    "docs:check": "node scripts/validate-learning-surface.mjs",
+    "eval:agent": "node scripts/evaluate-agent-submission.mjs",
+    "eval:verify": "node scripts/verify-agent-evaluation-runner.mjs",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "lint": "bun run build && bun run lint:run",
+    "lint:run": "oxlint .",
+    "pack:dry-run": "bun pm pack --dry-run --ignore-scripts",
+    "tubeless": "bun run --silent build && bun dist/workbench-bin.js",
+    "prepack": "bun run build",
+    "test": "bun run build && bun run test:run",
+    "test:run": "vitest run --config vitest.config.ts",
+    "typecheck": "bun run build && bun run typecheck:run",
+    "typecheck:run": "tsc -p tsconfig.json --noEmit && tsc -p examples/tsconfig.json --noEmit",
+    "pack:verify": "node scripts/verify-packed-artifact.mjs"
+  },
+  "devDependencies": {
+    "@oxlint/plugins": "1.79.0",
+    "@types/node": "26.2.0",
+    "oxfmt": "0.63.0",
+    "oxlint": "1.79.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/pipeline.d.ts",
+      "import": "./dist/pipeline.js",
+      "default": "./dist/pipeline.js"
+    },
+    "./batch": {
+      "types": "./dist/batch.d.ts",
+      "import": "./dist/batch.js",
+      "default": "./dist/batch.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js",
+      "default": "./dist/cli.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js",
+      "default": "./dist/node.js"
+    },
+    "./rate-limit": {
+      "types": "./dist/rate-limit.d.ts",
+      "import": "./dist/rate-limit.js",
+      "default": "./dist/rate-limit.js"
+    },
+    "./render": {
+      "types": "./dist/render.d.ts",
+      "import": "./dist/render.js",
+      "default": "./dist/render.js"
+    },
+    "./reporter": {
+      "types": "./dist/reporter-entry.d.ts",
+      "import": "./dist/reporter-entry.js",
+      "default": "./dist/reporter-entry.js"
+    },
+    "./retry": {
+      "types": "./dist/retry.d.ts",
+      "import": "./dist/retry.js",
+      "default": "./dist/retry.js"
+    },
+    "./run-store": {
+      "types": "./dist/run-store.d.ts",
+      "import": "./dist/run-store.js",
+      "default": "./dist/run-store.js"
+    },
+    "./run-store/sqlite": {
+      "types": "./dist/run-store-sqlite.d.ts",
+      "import": "./dist/run-store-sqlite.js",
+      "default": "./dist/run-store-sqlite.js"
+    },
+    "./workbench/studio": {
+      "types": "./dist/workbench-studio.d.ts",
+      "import": "./dist/workbench-studio.js",
+      "default": "./dist/workbench-studio.js"
+    },
+    "./run-store/ui": {
+      "types": "./dist/run-store-ui.d.ts",
+      "import": "./dist/run-store-ui.js",
+      "default": "./dist/run-store-ui.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "default": "./dist/testing.js"
+    },
+    "./tracing": {
+      "types": "./dist/tracing.d.ts",
+      "import": "./dist/tracing.js",
+      "default": "./dist/tracing.js"
+    },
+    "./tracing/json": {
+      "types": "./dist/tracing-json.d.ts",
+      "import": "./dist/tracing-json.js",
+      "default": "./dist/tracing-json.js"
+    },
+    "./tracing/otel": {
+      "types": "./dist/tracing-otel.d.ts",
+      "import": "./dist/tracing-otel.js",
+      "default": "./dist/tracing-otel.js"
+    }
+  }
+}

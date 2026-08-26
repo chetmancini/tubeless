@@ -1,0 +1,251 @@
+import { mkdir } from "node:fs/promises";
+import * as path from "node:path";
+import type { PipelineTraceEvent } from "./tracing.js";
+import type {
+  PipelineRunEventQuery,
+  PipelineRunEventStore,
+  StoredPipelineEvent,
+} from "./run-store.js";
+
+interface SqliteStatement {
+  all(...params: unknown[]): unknown[];
+  run(...params: unknown[]): void;
+}
+
+interface SqliteDatabase {
+  close(): void;
+  exec(sql: string): void;
+  prepare?(sql: string): SqliteStatement;
+  query?(sql: string): SqliteStatement;
+}
+
+interface SqliteModule {
+  Database?: new (filename: string) => SqliteDatabase;
+  DatabaseSync?: new (filename: string) => SqliteDatabase;
+}
+
+interface StoredEventRow {
+  attempt_id: string | null;
+  attributes_json: string;
+  duration_ms: number | null;
+  error_json: string | null;
+  event_name: PipelineTraceEvent["name"];
+  id: number | bigint;
+  item_key: string | null;
+  parent_run_id: string | null;
+  pipeline_id: string;
+  run_id: string;
+  step_id: string | null;
+  timestamp_ms: number | bigint;
+  version: 1;
+}
+
+const RUN_EVENT_STORE_VERSION = 1;
+
+const RUN_EVENT_STORE_APPEND_ONLY_TRIGGERS = `
+  CREATE TRIGGER IF NOT EXISTS pipeline_run_events_no_update
+  BEFORE UPDATE ON pipeline_run_events
+  BEGIN
+    SELECT RAISE(ABORT, 'pipeline_run_events is append-only');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS pipeline_run_events_no_delete
+  BEFORE DELETE ON pipeline_run_events
+  BEGIN
+    SELECT RAISE(ABORT, 'pipeline_run_events is append-only');
+  END;
+`;
+
+const RUN_EVENT_STORE_SCHEMA = `
+  PRAGMA journal_mode = WAL;
+  PRAGMA synchronous = NORMAL;
+  PRAGMA foreign_keys = ON;
+
+  CREATE TABLE IF NOT EXISTS pipeline_run_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    version INTEGER NOT NULL,
+    run_id TEXT NOT NULL,
+    parent_run_id TEXT,
+    pipeline_id TEXT NOT NULL,
+    step_id TEXT,
+    attempt_id TEXT,
+    item_key TEXT,
+    event_name TEXT NOT NULL,
+    timestamp_ms INTEGER NOT NULL,
+    duration_ms REAL,
+    attributes_json TEXT NOT NULL,
+    error_json TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS pipeline_run_events_run_id_idx
+    ON pipeline_run_events(run_id, id);
+  CREATE INDEX IF NOT EXISTS pipeline_run_events_pipeline_id_idx
+    ON pipeline_run_events(pipeline_id, id DESC);
+  CREATE INDEX IF NOT EXISTS pipeline_run_events_timestamp_idx
+    ON pipeline_run_events(timestamp_ms DESC);
+
+  ${RUN_EVENT_STORE_APPEND_ONLY_TRIGGERS}
+`;
+
+/** SQLite event store plus the explicit all-history maintenance operation. */
+export interface SqlitePipelineRunStore extends PipelineRunEventStore {
+  /** Delete every recorded event and compact the database; individual mutation stays forbidden. */
+  clearHistory(): void | Promise<void>;
+}
+
+function statement(database: SqliteDatabase, sql: string): SqliteStatement {
+  const prepared = database.query?.(sql) ?? database.prepare?.(sql);
+  if (!prepared) throw new Error("The current SQLite runtime does not support prepared queries.");
+  return prepared;
+}
+
+async function loadSqliteModule(): Promise<SqliteModule> {
+  const specifier = "Bun" in globalThis ? "bun:sqlite" : "node:sqlite";
+  // SAFETY: The dynamic import resolves to the built-in sqlite module whose
+  // runtime shape is the `SqliteModule` interface we depend on.
+  return (await import(specifier)) as SqliteModule;
+}
+
+async function openDatabase(filename: string): Promise<SqliteDatabase> {
+  const module = await loadSqliteModule();
+  const Database = module.Database ?? module.DatabaseSync;
+  if (!Database) throw new Error("No synchronous SQLite database implementation is available.");
+  return new Database(filename);
+}
+
+function mapRow(row: StoredEventRow): StoredPipelineEvent {
+  const event: StoredPipelineEvent = {
+    // SAFETY: attributes_json was written by this store via JSON.stringify of a
+    // PipelineTraceEvent["attributes"] value, so parsing yields the same shape.
+    attributes: JSON.parse(row.attributes_json) as PipelineTraceEvent["attributes"],
+    id: Number(row.id),
+    name: row.event_name,
+    pipelineId: row.pipeline_id,
+    runId: row.run_id,
+    timestampMs: Number(row.timestamp_ms),
+    version: row.version,
+  };
+  if (row.attempt_id) event.attemptId = row.attempt_id;
+  if (row.duration_ms !== null) event.durationMs = Number(row.duration_ms);
+  if (row.error_json) {
+    // SAFETY: error_json was written by this store via JSON.stringify of a
+    // NonNullable<PipelineTraceEvent["error"]> value, so parsing yields the same shape.
+    event.error = JSON.parse(row.error_json) as NonNullable<PipelineTraceEvent["error"]>;
+  }
+  if (row.item_key) event.itemKey = row.item_key;
+  if (row.parent_run_id) event.parentRunId = row.parent_run_id;
+  if (row.step_id) event.stepId = row.step_id;
+  return event;
+}
+
+/**
+ * Open the optional local SQLite trace store used by `tubeless run --store` and
+ * `tubeless ui`. The main executor never imports this module.
+ */
+export async function openSqlitePipelineRunStore(
+  filename: string
+): Promise<SqlitePipelineRunStore> {
+  const resolvedFilename = filename === ":memory:" ? filename : path.resolve(filename);
+  if (resolvedFilename !== ":memory:") {
+    await mkdir(path.dirname(resolvedFilename), { recursive: true });
+  }
+  const database = await openDatabase(resolvedFilename);
+  try {
+    // SAFETY: `PRAGMA user_version` always returns a single row with a
+    // `user_version` column, so the first result row matches this shape.
+    const versionRow = statement(database, "PRAGMA user_version").all()[0] as
+      | { user_version?: number | bigint }
+      | undefined;
+    const version = Number(versionRow?.user_version ?? 0);
+    if (version !== 0 && version !== RUN_EVENT_STORE_VERSION) {
+      throw new Error(
+        `Unsupported pipeline run store schema version ${version}; expected ${RUN_EVENT_STORE_VERSION}.`
+      );
+    }
+    database.exec(RUN_EVENT_STORE_SCHEMA);
+    database.exec(`PRAGMA user_version = ${RUN_EVENT_STORE_VERSION}`);
+  } catch (error) {
+    database.close();
+    throw error;
+  }
+  const insert = statement(
+    database,
+    `INSERT INTO pipeline_run_events (
+      version, run_id, parent_run_id, pipeline_id, step_id, attempt_id, item_key,
+      event_name, timestamp_ms, duration_ms, attributes_json, error_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  let closed = false;
+
+  return {
+    export(event) {
+      if (closed) throw new Error("Cannot append to a closed pipeline run store.");
+      insert.run(
+        event.version,
+        event.runId,
+        event.parentRunId ?? null,
+        event.pipelineId,
+        event.stepId ?? null,
+        event.attemptId ?? null,
+        event.itemKey ?? null,
+        event.name,
+        event.timestampMs,
+        event.durationMs ?? null,
+        JSON.stringify(event.attributes),
+        event.error ? JSON.stringify(event.error) : null
+      );
+    },
+    flush() {},
+    async listEvents(query: PipelineRunEventQuery = {}) {
+      if (closed) throw new Error("Cannot query a closed pipeline run store.");
+      const predicates: string[] = [];
+      const params: unknown[] = [];
+      if (query.afterId !== undefined) {
+        predicates.push("id > ?");
+        params.push(query.afterId);
+      }
+      if (query.pipelineId !== undefined) {
+        predicates.push("pipeline_id = ?");
+        params.push(query.pipelineId);
+      }
+      if (query.runId !== undefined) {
+        predicates.push("run_id = ?");
+        params.push(query.runId);
+      }
+      const limit = Math.max(1, Math.min(100_000, Math.floor(query.limit ?? 20_000)));
+      params.push(limit);
+      const where = predicates.length > 0 ? `WHERE ${predicates.join(" AND ")}` : "";
+      // SAFETY: The SELECT * columns match the StoredEventRow interface exactly
+      // (the table schema is owned by this module), so each result row is one.
+      const rows = statement(
+        database,
+        `SELECT * FROM pipeline_run_events ${where} ORDER BY id ASC LIMIT ?`
+      ).all(...params) as StoredEventRow[];
+      return rows.map(mapRow);
+    },
+    clearHistory() {
+      if (closed) throw new Error("Cannot clear a closed pipeline run store.");
+      try {
+        database.exec(`
+          BEGIN IMMEDIATE;
+          DROP TRIGGER IF EXISTS pipeline_run_events_no_update;
+          DROP TRIGGER IF EXISTS pipeline_run_events_no_delete;
+          DELETE FROM pipeline_run_events;
+          ${RUN_EVENT_STORE_APPEND_ONLY_TRIGGERS}
+          COMMIT;
+        `);
+      } catch (error) {
+        try {
+          database.exec("ROLLBACK");
+        } catch {}
+        throw error;
+      }
+      database.exec("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      database.close();
+    },
+  };
+}

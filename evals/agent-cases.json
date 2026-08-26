@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "sequential-import",
+      "prompt": "Create a typed pipeline that loads caller-provided lines, normalizes non-empty values, and returns their count and values.",
+      "mustDemonstrate": ["typed options", "required step dependency", "requireOutputs finalizer"],
+      "mustAvoid": ["string-only dependency lookup", "manual output type map"]
+    },
+    {
+      "id": "safe-publication",
+      "prompt": "Create a build, validate, and publish pipeline that supports a useful dry run and can continue independent diagnostics after validation failure without publishing.",
+      "mustDemonstrate": [
+        "dryRun skip policy on publication",
+        "failure gate",
+        "continueOnError-aware design"
+      ],
+      "mustAvoid": ["side effects during dry run", "policy skip swallowing validation failure"]
+    },
+    {
+      "id": "conditional-cache",
+      "prompt": "Create a pipeline step that reuses a caller-provided cached value when refresh is not requested, reports the deliberate skip, and gives dependents a usable value.",
+      "mustDemonstrate": ["valued policy skip", "explicit undefined handling", "stable step ID"],
+      "mustAvoid": ["throwing to represent a cache hit", "assuming skip output is always defined"]
+    },
+    {
+      "id": "fan-out-children",
+      "prompt": "Create a parent pipeline that maps a reusable child pipeline over runtime shards with concurrency four, stable shard keys, input-order results, and visible progress.",
+      "mustDemonstrate": [
+        "forEachPipeline",
+        "stable keys",
+        "bounded concurrency",
+        "progress metadata"
+      ],
+      "mustAvoid": ["unbounded Promise.all", "flattening child steps into the parent"]
+    },
+    {
+      "id": "resumable-api-work",
+      "prompt": "Create a long-running API enrichment pipeline that rate-limits calls, retries transient failures, cooperates with cancellation, and checkpoints only after persisted batches succeed.",
+      "mustDemonstrate": [
+        "RateLimiter",
+        "withRetry",
+        "AbortSignal propagation",
+        "checkpoint after persistence"
+      ],
+      "mustAvoid": ["global sleep", "checkpoint before persistence", "real network call in tests"]
+    },
+    {
+      "id": "pipeline-cli",
+      "prompt": "Expose an existing pipeline as a typed CLI with one required input file and optional positive concurrency. It should support help, dry run, plan, dependency-aware target selection, reporting, and SIGINT cancellation.",
+      "mustDemonstrate": [
+        "definePipelineCommand",
+        "path validation",
+        "numeric validation",
+        "built-in pipeline flags",
+        "explicit source-to-domain option mapping"
+      ],
+      "mustAvoid": ["manual process.argv parsing", "redeclared dry-run flag", "process.exit"]
+    },
+    {
+      "id": "targeted-execution",
+      "prompt": "Run only a pipeline's publish goal while automatically including its build input and validation failure gate, but not an unrelated optional diagnostic step.",
+      "mustDemonstrate": [
+        "declared pipeline target",
+        "targets selection",
+        "required input closure",
+        "failure gate closure",
+        "optional-only input exclusion",
+        "structured selection provenance"
+      ],
+      "mustAvoid": ["exact stepIds filtering", "manual prerequisite list"]
+    },
+    {
+      "id": "pipeline-plan",
+      "prompt": "Preview an existing pipeline's publish goal and dry-run behavior, including why each step was selected or omitted, without executing it or supplying domain options.",
+      "mustDemonstrate": [
+        "tubeless plan pipeline-file runner",
+        "target selection",
+        "dry-run planning",
+        "selection explanations"
+      ],
+      "mustAvoid": [
+        "executing the pipeline",
+        "invented domain options",
+        "manual dependency traversal"
+      ]
+    },
+    {
+      "id": "observable-work",
+      "prompt": "Add determinate progress, retry attempt reporting, and JSON lifecycle tracing to a pipeline without coupling the package to a telemetry SDK.",
+      "mustDemonstrate": [
+        "reportProgress",
+        "reportAttempt",
+        "JSON trace exporter",
+        "application-owned runtime context"
+      ],
+      "mustAvoid": ["console logging inside steps", "telemetry SDK imported into the core executor"]
+    },
+    {
+      "id": "causal-diagnostics",
+      "prompt": "Inspect a failed best-effort pipeline run and classify a step failure, a dependency-blocked step, and a finalization failure without parsing error messages.",
+      "mustDemonstrate": [
+        "stable diagnostic code",
+        "diagnostic phase and kind",
+        "dependency report diagnostic",
+        "sourceCode for an underlying error code"
+      ],
+      "mustAvoid": ["message string parsing", "invented diagnostic codes"]
+    },
+    {
+      "id": "pipeline-diagram",
+      "prompt": "Generate Mermaid source for an existing pipeline without running it or supplying domain options.",
+      "mustDemonstrate": [
+        "tubeless graph pipeline-file runner",
+        "display name override",
+        "generated dependency edges"
+      ],
+      "mustAvoid": ["hand-maintained graph", "executing the pipeline", "string-built step ids"]
+    },
+    {
+      "id": "pipeline-workbench-run",
+      "prompt": "Execute an existing pipeline-backed command through the tubeless workbench with validated domain flags, target selection, and cancellation-aware exit handling.",
+      "mustDemonstrate": [
+        "definePipelineCommand export",
+        "tubeless run command-file runner",
+        "application argument boundary",
+        "stable workbench exit codes"
+      ],
+      "mustAvoid": [
+        "executing a raw pipeline",
+        "reflecting over TypeScript options",
+        "application flags before --"
+      ]
+    }
+  ]
+}
