@@ -10,7 +10,7 @@ Package: `tubeless`
 | --------------------------- | ------------------------------ | ------------------------------------------------------------------ | ---------------: |
 | `tubeless`                  | `./dist/pipeline.d.ts`         | `e0c9802d5dcb71b319562d301c452446d74ea1c67d18b3ad76617467127bca71` |               68 |
 | `tubeless/batch`            | `./dist/batch.d.ts`            | `2ae7ccbf0fb6582243d2a395c2d2b0fe561fd19d3850309321b7d270c5a8d015` |                5 |
-| `tubeless/cli`              | `./dist/cli.d.ts`              | `a511064fe5395bb5fd96fd188d2cb26c22aa940ae6e0fc73400dfc2723c63c7b` |               35 |
+| `tubeless/cli`              | `./dist/cli.d.ts`              | `fa8aeac9a22f491ef6b90da82fd15523e87d6185a93efcc57568337dff2086fb` |               36 |
 | `tubeless/node`             | `./dist/node.d.ts`             | `d6f70752eb9e0ea752b8e2bfb9418f5d30bd46d790360504434fdfeb6a6f7414` |                8 |
 | `tubeless/rate-limit`       | `./dist/rate-limit.d.ts`       | `2376474470b4fdc671f45daa90cb47cb0fd94653ba77ee9f03dcd10af7c0b022` |                1 |
 | `tubeless/render`           | `./dist/render.d.ts`           | `1e9e3c4f18d8cf6992ec48c7f793ebbfc3bc43219d8694fb6cee76da83d98479` |                6 |
@@ -19,7 +19,7 @@ Package: `tubeless`
 | `tubeless/run-store`        | `./dist/run-store.d.ts`        | `2031752bcabe730abce31dacf5d439159e8bb1bfed0ac6793092b6d5968555fe` |               15 |
 | `tubeless/run-store/sqlite` | `./dist/run-store-sqlite.d.ts` | `13a9d5b25010b79c1771f81eb681d990e14288a3cefa2520dde21eb9535328ff` |                2 |
 | `tubeless/workbench/studio` | `./dist/workbench-studio.d.ts` | `2afced697589a4d76527107c9517921512c46ad62c074743264cb415a773539c` |                6 |
-| `tubeless/run-store/ui`     | `./dist/run-store-ui.d.ts`     | `b0c27f8b7d3481709b72912d7cae2ce325bb940315d432e53e3529dde7272e70` |                3 |
+| `tubeless/run-store/ui`     | `./dist/run-store-ui.d.ts`     | `b0c27f8b7d3481709b72912d7cae2ce325bb940315d432e53e3529dde7272e70` |                8 |
 | `tubeless/testing`          | `./dist/testing.d.ts`          | `a6e8a051df80bc56942c195d8fe62e4bb1e9436164c618abe703ffd51c9f1c34` |                7 |
 | `tubeless/tracing`          | `./dist/tracing.d.ts`          | `aaa44ca17255d9da1ae3a2e29c0e62e4fc279de16b3526831023289d6d3c1b12` |                8 |
 | `tubeless/tracing/json`     | `./dist/tracing-json.d.ts`     | `dcd58eb97dc8e08e2a5097a4f5435bf1d87901fb8c2b0bc387fcbce6d4caddc0` |                2 |
@@ -143,6 +143,7 @@ Package: `tubeless`
 - `PipelineCommandPlanInput`
 - `promptMultiSelect`
 - `PromptMultiSelectOptions`
+- `TUBELESS_WORKBENCH_EXIT_CODE`
 
 ### `tubeless/node`
 
@@ -225,6 +226,11 @@ Package: `tubeless`
 
 ### `tubeless/run-store/ui`
 
+- `PipelineRunStudioCommand`
+- `PipelineRunStudioHistoryMaintenance`
+- `PipelineRunStudioLauncher`
+- `PipelineRunStudioLaunchRequest`
+- `PipelineRunStudioLaunchResult`
 - `PipelineRunStudioOptions`
 - `PipelineRunStudioServer`
 - `startPipelineRunStudio`

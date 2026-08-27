@@ -1,28 +1,30 @@
 # Child-pipeline composition
 
-## Production status
+## What ships
 
-The opaque child-step contract is implemented as
-`createSteps<TOptions>().fromPipeline(...)`. The production API uses overloads
-for identity and mapped results, keeps child lifecycle hooks isolated, and
-bridges child work into parent-step progress without changing the pipeline run
-loop or reporter contracts.
+Compose a child pipeline as one typed parent step with
+`createSteps<TOptions>().fromPipeline(...)`. Overloads cover identity and
+mapped results. Child lifecycle hooks stay isolated, and child work reports
+through parent-step progress without changing the pipeline run loop or
+reporter contracts.
 
-Runtime-selected child sets are implemented as
-`createSteps<TOptions>().forEachPipeline(...)`. It maps a runtime item list to
-the same typed child pipeline with stable item keys and bounded concurrency.
-Results retain input order even when children finish out of order. All running
-children settle before an aggregate failure is returned, so the parent cannot
-finalize while child side effects are still in flight.
+Map a runtime item list onto the same child pipeline with
+`createSteps<TOptions>().forEachPipeline(...)`. Item keys are stable,
+concurrency is bounded, and results keep input order even when children
+finish out of order. All running children settle before an aggregate failure
+is returned, so the parent cannot finalize while child side effects are still
+in flight.
 
-The contract is dogfooded by production workflows whose opaque parent steps
-compose existing child pipelines, pass outputs through typed dependencies, skip
-side effects in dry-run, and convert domain validation errors into failed parent
+Opaque parent steps pass outputs through typed dependencies, skip side
+effects in dry-run, and convert domain validation errors into failed parent
 steps.
 
-## Problem and current evidence
+## Why not call the child from an ordinary step
 
-`DbSeedSeriesPipeline` currently invokes two child pipelines from ordinary steps and passes each child the parent `PipelineStepContext`. This gives the child the parent's runtime seams, but it also gives the child the parent's raw hooks and parent-only `reportProgress` callback.
+Invoking a child pipeline from an ordinary parent step and passing the parent
+`PipelineStepContext` gives the child the parent's runtime seams, but it also
+gives the child the parent's raw hooks and parent-only `reportProgress`
+callback.
 
 The resulting lifecycle stream is flat. A direct nested run emits the child pipeline, step, finalize, and completion events between the parent wrapper step's start and completion events. Most events have no pipeline path or run identity. The interactive reporter also owns one plan, one step map, and one result. A child start replaces its visible plan, and a child completion disposes the reporter before the parent completes.
 
@@ -34,7 +36,7 @@ The package needs a composition contract that preserves typing and runtime behav
 - Infer parent dependency inputs, parent options, child options, the child result, and any mapped result.
 - Preserve cancellation, logging, timing, working-directory, dry-run, progress, and failure behavior.
 - Keep raw child lifecycle hooks inside the adapter while reporting useful progress through the opaque parent step.
-- Define a bounded first production slice that can be tested and reviewed independently.
+- Keep the first slice bounded: one opaque child, or a mapped set of the same child.
 
 ## Supported: policy skip on opaque steps
 
@@ -53,8 +55,8 @@ step is a normal step under the hood):
   need a real output. With `mapResult`, skip `value` is the parent-facing
   mapped `TOut` — policy skip does not call `mapResult`.
 
-In production use, a `fromPipeline.skippable` step can policy-skip optional work
-and publish a concrete disabled result via `{ reason, value }`.
+A `fromPipeline.skippable` step can policy-skip optional work and publish a
+concrete disabled result via `{ reason, value }`.
 
 `forEachPipeline` does not accept `skip` today; gate mapped fan-out with an
 upstream step or filter `items` instead.
@@ -68,7 +70,7 @@ upstream step or filter `items` instead.
 - Injected runner overrides (substituting a child pipeline implementation at
   test time via parent options) — separate from policy skip.
 
-## Models considered
+## Why this shape
 
 | Model                                     | Typing                                                                                                                                                           | Planning                                                                                                      | Hooks and reporting                                                                                                                                | Selective execution                                                                                              | Failure                                                                                                                  | Dry run                                                                                              | Cost                                                                                             |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -78,33 +80,31 @@ upstream step or filter `items` instead.
 
 Shared raw hooks are rejected because they already corrupt the interactive reporter's single frame and cannot distinguish nested runs. Immediate flattening is rejected because it needs stable identity, selection, dependency, failure, and finalization rules that the current event and plan models don't provide. The opaque adapter addresses the existing composition case without deciding those broader contracts.
 
-## Recommended contract: opaque typed child step
+## Contract
 
 The parent DAG contains one ordinary step. That step maps its typed parent inputs and context into typed child options, validates the child plan, runs the child with an isolated internal hook bridge, and returns either the child result or a mapped parent result.
 
 The bridge owns child lifecycle events. Parent and custom hooks receive only the parent pipeline and opaque parent-step events. The bridge reports terminal child-step counts through the parent step's `reportProgress`, so existing reporters keep one live frame.
 
-## Proposed API
+## API
 
-The production API is a method on the parent-scoped step factory:
+The parent-scoped step factory owns the adapter:
 
 ```ts
-const seedEmbeddingsStage = step.fromPipeline("seed-embeddings", {
-  pipeline: EmbeddingSeedPipeline,
-  dependsOn: [seedCrossrefsStage],
-  description: "Seed precomputed verse embeddings",
+const seedIndexStage = step.fromPipeline("seed-index", {
+  pipeline: IndexSeedPipeline,
+  dependsOn: [seedCatalogStage],
+  description: "Seed a precomputed search index",
   mapOptions: (_inputs, context) => ({
-    embeddingDir: context.options.embeddingsDir,
+    indexDir: context.options.indexDir,
     syncSchema: false,
   }),
-  mapResult: () => ({ ran: true, stageId: "seed-embeddings" }),
+  mapResult: () => ({ ran: true, stageId: "seed-index" }),
 });
 ```
 
-The initial spike used a standalone test-local helper. Production now exposes
-the same contract through `StepFactory.fromPipeline` and
-`StepFactory.fromPipeline.skippable`, which infer
-the child result when `mapResult` is absent and infer the mapped result when it
+`StepFactory.fromPipeline` and `StepFactory.fromPipeline.skippable` infer the
+child result when `mapResult` is absent, and infer the mapped result when it
 is present.
 
 For runtime-selected sets (any domain — shards, files, jobs, catalog rows):
@@ -151,33 +151,35 @@ Parent dry-run overrides the mapped child run object's `dryRun` value.
 | Selective execution | Selecting or targeting the opaque parent step runs the child according to its mapped controls. Parent selection is never forwarded into the child's ID namespace.                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Checkpoints         | The adapter adds no checkpoint behavior. The child receives mapped options and the normal runtime context.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
-## Prototype results
+## Guarantees
 
-The test-local helper preserved required and optional dependency input types, parent domain options, required child options, the default child result, and a transformed `mapResult` output without explicit generic arguments at call sites. The package TypeScript configuration accepted both the positive inference assertions and the negative missing-child-option assertion.
+Call sites infer required and optional dependency inputs, parent domain
+options, required child options, the default child result, and a transformed
+`mapResult` output without explicit generic arguments. Missing required child
+options fail at compile time.
 
-At runtime, the parent plan contained only the opaque stage. The child received the exact working directory, logger, clock, sleep function, and abort signal through an explicitly constructed context. Parent hooks received no raw child lifecycle events. The internal bridge converted the child's canonical step statuses into monotonic progress on the opaque parent step.
+The parent plan contains only the opaque stage. The child receives the
+parent's working directory, logger, clock, sleep function, and abort signal.
+Parent hooks see no raw child lifecycle events. The internal bridge converts
+the child's canonical step statuses into monotonic progress on the opaque
+parent step.
 
-Parent dry-run precedence prevented a child side-effecting step from running.
-Unsuccessful child results failed one opaque parent step with the child pipeline,
-step, and error in the message, including when `continueOnError` produced a
-best-effort final value. Later cancellation interrupted in-flight child work,
-and invalid child plans failed before child execution began.
+Parent dry-run precedence prevents a child side-effecting step from running.
+An unusable child result fails one opaque parent step and names the child
+pipeline, step, and error, including when `continueOnError` produced a
+best-effort final value. Later cancellation interrupts in-flight child work.
+An invalid child plan fails before the child starts.
 
-The prototype required no production runtime changes. Its no-`mapResult` identity branch uses one test-local cast from the child value to the generic output. A production implementation should use overloads if they can remove that boundary without weakening normal call-site inference.
+`fromPipeline` identity (no `mapResult`) uses overloads so the parent-facing
+output stays the child result.
 
-## Decision: GO — implement opaque child steps
+## Out of scope
 
-## Follow-up boundary
-
-`DbSeedSeriesPipeline` remains deferred. Its embedding stages can return
-conditional `{ ran: false }` results without invoking a child, and its options
-expose injected child runners used by tests. Policy skip plus
-`TOut | undefined` typing cover intentional skip-without-run for opaque
-`fromPipeline` steps (see Supported above). Runner substitution and any
-richer “skipped output” shape beyond policy skip remain out of scope; removing
-injected runners for a migration would still be a semantic regression.
+Policy skip plus `TOut | undefined` typing cover skip-without-run for opaque
+`fromPipeline` steps. Runner substitution and any richer skipped-output shape
+beyond policy skip are not supported.
 
 Hierarchical or versioned external events, flattened or namespaced child
-selection, parallel DAG scheduling, and other production consumer migrations
-also remain deferred. Mapped children provide bounded parallelism inside one
-opaque parent step; they do not make the pipeline DAG executor parallel.
+selection, and parallel DAG scheduling remain out of scope. Mapped children
+provide bounded parallelism inside one opaque parent step; they do not make
+the pipeline DAG executor parallel.

@@ -19,14 +19,14 @@ name; recheck immediately before the first publish.
 - [x] Decide and document the support contract: ESM-only imports, minimum Node
       version for library entrypoints, Bun requirement for the `tubeless` CLI,
       and supported operating systems.
-- [ ] Audit the public API for names that should be stable at launch, including
+- [x] Audit the public API for names that should be stable at launch, including
       export paths, the `tubeless` binary, `TUBELESS_*` error codes,
       `TUBELESS_WORKBENCH_EXIT_CODE`, `.tubeless` storage, studio headers, and
-      runtime symbol keys.
-- [ ] Perform a legal and public-source scrub: confirm MIT ownership and
+      runtime symbol keys. See [Public names](#public-names).
+- [x] Perform a legal and public-source scrub: confirm MIT ownership and
       copyright, third-party notices, contributor attribution/history, and that
       no internal URLs, credentials, customer data, or private repository
-      assumptions remain.
+      assumptions remain. See [Legal and public-source scrub](#legal-and-public-source-scrub).
 - [ ] Review the local studio threat model. Confirm loopback binding remains the
       safe default, document the risk of non-loopback binding, and test the
       launch/clear-history request guards.
@@ -93,3 +93,50 @@ name; recheck immediately before the first publish.
 - [ ] Search the Bible Search repository for imports, CLI invocations, generated
       artifacts, CI path filters, documentation, and release scripts that still
       refer to `@pipes/core`, `pipes`, or `packages/pipes-core`.
+
+## Public names
+
+These names are the 0.1.0 contract. Treat a change as a breaking change.
+
+| Kind               | Stable name                                                                                                                                                                                                                                                                                                                                       | Notes                                                                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Package and binary | `tubeless`                                                                                                                                                                                                                                                                                                                                        | Bin path `./dist/workbench-bin.js` is an implementation detail.                                                                                                |
+| Export paths       | `tubeless`, `tubeless/batch`, `tubeless/cli`, `tubeless/node`, `tubeless/rate-limit`, `tubeless/render`, `tubeless/reporter`, `tubeless/retry`, `tubeless/run-store`, `tubeless/run-store/sqlite`, `tubeless/run-store/ui`, `tubeless/workbench/studio`, `tubeless/testing`, `tubeless/tracing`, `tubeless/tracing/json`, `tubeless/tracing/otel` | `workbench` is the CLI family name, not leftover `pipes` branding. Keep `tubeless/workbench/studio` rather than adding a `tubeless/studio` alias before 0.1.0. |
+| Error codes        | `TUBELESS_*` on `PipelineErrorCode`                                                                                                                                                                                                                                                                                                               | Prefix and current spellings stay.                                                                                                                             |
+| CLI exit codes     | `TUBELESS_WORKBENCH_EXIT_CODE` from `tubeless/cli`                                                                                                                                                                                                                                                                                                | `0`–`7`: success, usage, load, definition, validation, planning, execution, cancellation.                                                                      |
+| Storage            | `.tubeless/runs.sqlite`                                                                                                                                                                                                                                                                                                                           | Default studio/CLI store path.                                                                                                                                 |
+| Studio headers     | `x-tubeless-studio-plan`, `x-tubeless-studio-launch`, `x-tubeless-studio-clear-history`                                                                                                                                                                                                                                                           | Local studio protocol.                                                                                                                                         |
+| Runtime symbols    | `Symbol.for("tubeless/pipeline-command")`, `Symbol.for("tubeless/pipeline-studio-config/v1")`                                                                                                                                                                                                                                                     | Cross-instance markers. Consumers should not set these.                                                                                                        |
+| Other constants    | `PIPELINE_FINALIZE_STEP_ID` (`__finalize__`), `RUN_MODEL_VERSION` (`1`), `PIPELINE_STUDIO_CONFIG_VERSION` (`1`)                                                                                                                                                                                                                                   | Reserved finalize id and stored-run/studio versions.                                                                                                           |
+
+`tubeless/run-store/ui` also re-exports `PipelineRunStudioCommand`,
+`PipelineRunStudioLauncher`, `PipelineRunStudioLaunchResult`,
+`PipelineRunStudioLaunchRequest`, and `PipelineRunStudioHistoryMaintenance`.
+The inventory generator now counts `export type { … }` blocks so those names
+stay reviewable.
+
+`TUBELESS_VERSION`, `TUBELESS_LIMIT`, `TUBELESS_NAMES`, and
+`TUBELESS_CORE_PUBLIC_API_SMOKE_ENV` appear only in tests. They are not package
+environment variables.
+
+## Legal and public-source scrub
+
+- LICENSE is MIT, Copyright (c) 2026 Chet Mancini. `package.json` author,
+  repository, homepage, and bugs match that identity.
+- Git history in this worktree is only Chet Mancini
+  (`chet.mancini@gmail.com` / `chetmancini@gmail.com`). No third-party
+  contributor attribution is owed.
+- Runtime is dependency-free. DevDependencies are oxlint, oxfmt, TypeScript,
+  Vitest, and `@types/node`. `StandardSchemaV1` is a local subset of the
+  Standard Schema protocol, not a vendored file with a third-party copyright
+  header. No NOTICE file is required.
+- No credentials, tokens, customer data, or private hosts in the tree. URLs
+  are public GitHub links plus local studio `http://` examples.
+- `bible-search`, `@pipes/core`, and `packages/pipes-core` remain only in this
+  checklist as extraction provenance and post-publish consumer follow-through.
+  They are not in shipped docs, examples, or source.
+- Scrubbed before publish: Bible Search domain leftovers in
+  `docs/child-pipeline-composition.md` (`DbSeedSeriesPipeline`, verse
+  embeddings) and test fixtures (`kjv` / `genesis` / `Bible version` /
+  `verses.json`). That composition page now documents the shipped child
+  adapter instead of the extraction-era design memo.

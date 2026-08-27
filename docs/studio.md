@@ -71,6 +71,11 @@ attempts, progress, logs, and structured errors. Nested pipeline steps are
 labeled with the child pipeline and its declared steps; runtime fan-out is
 identified without guessing its item count.
 
+Browser plan, launch, and clear-history requests send
+`x-tubeless-studio-plan`, `x-tubeless-studio-launch`, and
+`x-tubeless-studio-clear-history`. Those header names are part of the local
+studio protocol.
+
 Programmatic callers can compose the same pieces from
 `tubeless/run-store/sqlite` and `tubeless/run-store/ui`. See
 [`local-observability.ts`](../examples/local-observability.ts).

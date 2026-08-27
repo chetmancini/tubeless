@@ -113,6 +113,6 @@ A first script is [`cli-job.ts`](../examples/cli-job.ts). Local history with
 | `6`  | Execution    |
 | `7`  | Cancellation |
 
-These values are also exported as `TUBELESS_WORKBENCH_EXIT_CODE`. SIGINT is
-forwarded through the command context. Help (`--help` or a command's own help)
-exits `0`.
+These values are also exported as `TUBELESS_WORKBENCH_EXIT_CODE` from
+`tubeless/cli`. SIGINT is forwarded through the command context. Help (`--help`
+or a command's own help) exits `0`.

@@ -124,9 +124,10 @@
         "PipelineCommandHookSets",
         "PipelineCommandPlanInput",
         "promptMultiSelect",
-        "PromptMultiSelectOptions"
+        "PromptMultiSelectOptions",
+        "TUBELESS_WORKBENCH_EXIT_CODE"
       ],
-      "sha256": "a511064fe5395bb5fd96fd188d2cb26c22aa940ae6e0fc73400dfc2723c63c7b",
+      "sha256": "fa8aeac9a22f491ef6b90da82fd15523e87d6185a93efcc57568337dff2086fb",
       "specifier": "tubeless/cli"
     },
     {
@@ -232,7 +233,16 @@
     },
     {
       "declaration": "./dist/run-store-ui.d.ts",
-      "exports": ["PipelineRunStudioOptions", "PipelineRunStudioServer", "startPipelineRunStudio"],
+      "exports": [
+        "PipelineRunStudioCommand",
+        "PipelineRunStudioHistoryMaintenance",
+        "PipelineRunStudioLauncher",
+        "PipelineRunStudioLaunchRequest",
+        "PipelineRunStudioLaunchResult",
+        "PipelineRunStudioOptions",
+        "PipelineRunStudioServer",
+        "startPipelineRunStudio"
+      ],
       "sha256": "b0c27f8b7d3481709b72912d7cae2ce325bb940315d432e53e3529dde7272e70",
       "specifier": "tubeless/run-store/ui"
     },

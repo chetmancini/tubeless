@@ -27,7 +27,7 @@ function exportedSymbols(declaration) {
     /export\s+(?:declare\s+)?(?:abstract\s+)?(?:class|const|enum|function|interface|type|let|var)\s+([A-Za-z_$][\w$]*)/g;
   for (const match of declaration.matchAll(direct)) symbols.add(match[1]);
 
-  const blocks = /export\s*\{([\s\S]*?)\}(?:\s*from\s*["'][^"']+["'])?\s*;/g;
+  const blocks = /export\s+(?:type\s+)?\{([\s\S]*?)\}(?:\s*from\s*["'][^"']+["'])?\s*;/g;
   for (const match of declaration.matchAll(blocks)) {
     for (const item of match[1].split(",")) {
       const normalized = item.replace(/\/\*[\s\S]*?\*\//g, "").trim();
