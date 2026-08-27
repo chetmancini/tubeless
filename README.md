@@ -33,18 +33,18 @@ const rows = await ImportPipeline.runOrThrow({ lines: [" Alpha ", "", "Beta"] })
 // ["alpha", "beta"]
 ```
 
-`createSteps` describes domain options only. Runs accept built-in controls beside
-them without exposing those controls through `context.options`; `plan(controls)`
-needs no domain input. `definePipelineCommand` maps compatible flags and requires
-`mapOptions` for transformations.
+`createSteps` describes domain options only. Runs accept built-in controls
+beside them; `plan(controls)` needs no domain input.
+
+Library imports are ESM-only on Node.js 22+. The `tubeless` CLI requires Bun
+1.3.14+. See [runtime support](./docs/getting-started.md#runtime-support).
 
 The definition's `targets: [normalize]` declares `normalize` as a supported
 downstream goal. Pass `{ lines, targets: ["normalize"] }` to run that goal with its
 required inputs and failure gates. Use `stepIds: ["normalize"]` only for exact
 low-level filtering; it intentionally does not add prerequisites. `requireOutputs`
 makes the outputs needed by a valid final result non-optional. A declared target
-whose closure cannot satisfy those outputs is rejected when the pipeline is
-defined.
+whose closure cannot satisfy those outputs is rejected when the pipeline is defined.
 
 Use `runOrThrow` when failure should throw. Use `run` when the caller needs the
 complete structured report, `plan` when nothing should execute, and `toMermaid`

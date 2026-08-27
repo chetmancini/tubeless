@@ -1,5 +1,16 @@
 # Getting started
 
+## Runtime support
+
+Library imports (`tubeless` and every subpath) are ESM-only and require
+Node.js 22 or later. They are dependency-free compiled JavaScript.
+
+The `tubeless` CLI requires Bun 1.3.14 or later. Its shebang is
+`#!/usr/bin/env bun`, and Bun loads TypeScript pipeline modules directly.
+`npx tubeless` is not a supported way to run the binary.
+
+Supported operating systems are Linux and macOS. Windows is untested.
+
 ## 1. Define domain options
 
 Describe only domain input. Built-in controls are added automatically to the

@@ -16,7 +16,7 @@ name; recheck immediately before the first publish.
 - [ ] Add complete npm metadata: `repository`, `homepage`, `bugs`, `keywords`,
       author/maintainers, supported runtime `engines`, and explicit public
       `publishConfig`.
-- [ ] Decide and document the support contract: ESM-only imports, minimum Node
+- [x] Decide and document the support contract: ESM-only imports, minimum Node
       version for library entrypoints, Bun requirement for the `tubeless` CLI,
       and supported operating systems.
 - [ ] Audit the public API for names that should be stable at launch, including
