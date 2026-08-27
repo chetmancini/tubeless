@@ -35,12 +35,18 @@ name; recheck immediately before the first publish.
 - [x] Validate the exact tarball in clean consumers: inspect `npm pack --dry-run`,
       check size and contents, install the tarball, import every export path,
       run the executable, and confirm the executable bit and Bun shebang.
-- [ ] Configure npm account security and a recovery path. Require 2FA for human
-      access and publishing.
-- [ ] Configure npm Trusted Publishing from a GitHub-hosted Actions runner with
-      least-privilege `contents: read` and `id-token: write` permissions. Avoid
-      a long-lived npm token; publish the first release with public access and
-      provenance.
+- [x] Configure npm Trusted Publishing from a GitHub-hosted Actions runner with
+      least-privilege `contents: read` and `id-token: write` permissions on
+      `.github/workflows/publish.yml`. Do not store an `NPM_TOKEN`.
+- [ ] Operator: enable 2FA on the npm account (auth-and-writes), then register
+      GitHub Actions as the trusted publisher for `tubeless`: - Organization or user: `chetmancini` - Repository: `tubeless` - Workflow filename: `publish.yml` (filename only) - Environment: `npm` - Allowed action: `npm publish`
+      Recheck `npm view tubeless` immediately before the first tag. If the name
+      is taken, STOP. Create the empty GitHub Environment `npm` (Settings →
+      Environments) if Actions has not created it yet.
+- [ ] Operator: first publish is `git tag v0.1.0` on the commit you intend, then
+      `git push origin v0.1.0`. Do not `npm publish` from a laptop. After it
+      succeeds, set package publishing to trusted-publisher-only / disallow
+      tokens if the npm UI offers that.
 - [ ] Define the release trigger and rollback process: protected version tags,
       GitHub Releases, prerelease dist-tags, deprecation guidance, and who can
       publish or yank/deprecate a broken version.
