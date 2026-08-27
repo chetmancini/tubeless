@@ -165,8 +165,8 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
     identities.add(identity);
   }
 
-  const host = parsed.values.host ?? "127.0.0.1";
-  const isLoopbackHost = ["127.0.0.1", "::1", "localhost"].includes(host);
+  const host = (parsed.values.host ?? "127.0.0.1").toLowerCase();
+  const isLoopbackHost = host === "127.0.0.1" || host === "::1" || host === "localhost";
   if (specs.length > 0 && !isLoopbackHost) {
     return writeUsageError(io, "Browser-triggered execution requires a loopback --host.", UI_USAGE);
   }

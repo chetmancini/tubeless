@@ -1,6 +1,46 @@
+import { request as httpRequest } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import type { PipelineRunEventStore, StoredPipelineEvent } from "./run-store.js";
 import { startPipelineRunStudio, type PipelineRunStudioServer } from "./run-store-ui.js";
+
+async function requestWithHost(
+  url: string,
+  options: {
+    body?: string;
+    headers?: Record<string, string>;
+    host: string;
+    method: string;
+  }
+): Promise<{ status: number; body: unknown }> {
+  const parsed = new URL(url);
+  return await new Promise((resolve, reject) => {
+    const request = httpRequest(
+      {
+        headers: { host: options.host, ...options.headers },
+        hostname: parsed.hostname,
+        method: options.method,
+        path: parsed.pathname,
+        port: parsed.port,
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        response.on("end", () => {
+          const text = Buffer.concat(chunks).toString("utf8");
+          resolve({
+            body: text === "" ? undefined : JSON.parse(text),
+            status: response.statusCode ?? 0,
+          });
+        });
+      }
+    );
+    request.on("error", reject);
+    if (options.body !== undefined) request.write(options.body);
+    request.end();
+  });
+}
 
 const servers: PipelineRunStudioServer[] = [];
 const fixtureParameters = [
@@ -240,6 +280,28 @@ describe("local pipeline run studio", () => {
       method: "POST",
     });
     expect(crossOriginShape.status).toBe(415);
+
+    const missingPlanHeader = await fetch(`${server.url}/api/commands/fixture/plan`, {
+      body: JSON.stringify({ dryRun: true }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    expect(missingPlanHeader.status).toBe(415);
+    const missingLaunchType = await fetch(`${server.url}/api/commands/fixture/runs`, {
+      body: JSON.stringify({ values: { message: "hello" } }),
+      headers: { "x-tubeless-studio-launch": "1" },
+      method: "POST",
+    });
+    expect(missingLaunchType.status).toBe(415);
+    const forgedHost = await requestWithHost(`${server.url}/api/commands/fixture/runs`, {
+      body: JSON.stringify({ values: { message: "hello" } }),
+      headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
+      host: `evil.example:${new URL(server.url).port}`,
+      method: "POST",
+    });
+    expect(forgedHost.status).toBe(403);
+    expect(forgedHost.body).toEqual({ error: "The launch request host is not trusted." });
+    expect(launches).toHaveLength(1);
   });
 
   it("pages beyond a store query cap and incrementally loads newer events", async () => {
@@ -343,6 +405,14 @@ describe("local pipeline run studio", () => {
     ).resolves.toEqual({ canClearHistory: true });
     const missingHeader = await fetch(`${server.url}/api/history`, { method: "DELETE" });
     expect(missingHeader.status).toBe(415);
+    const forgedHost = await requestWithHost(`${server.url}/api/history`, {
+      headers: { "x-tubeless-studio-clear-history": "1" },
+      host: `evil.example:${new URL(server.url).port}`,
+      method: "DELETE",
+    });
+    expect(forgedHost.status).toBe(403);
+    expect(forgedHost.body).toEqual({ error: "The history request host is not trusted." });
+    expect(clearCount).toBe(0);
     const response = await fetch(`${server.url}/api/history`, {
       headers: { "x-tubeless-studio-clear-history": "1" },
       method: "DELETE",

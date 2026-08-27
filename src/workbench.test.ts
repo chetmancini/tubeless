@@ -572,6 +572,65 @@ describe("tubeless workbench", () => {
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
   });
 
+  it("rejects browser-triggered execution on a non-loopback host", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const commandIo = captureIo(directory);
+    await expect(
+      runWorkbenchCli(
+        ["ui", "--host", "0.0.0.0", "--command", "pipeline.mjs", "--port", "0"],
+        commandIo
+      )
+    ).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(commandIo.errors.join("")).toContain(
+      "Browser-triggered execution requires a loopback --host."
+    );
+
+    await writeStudioConfig(directory);
+    const catalogIo = captureIo(directory);
+    await expect(
+      runWorkbenchCli(
+        ["ui", "--host", "0.0.0.0", "--port", "0", "config/tubeless.studio.mjs"],
+        catalogIo
+      )
+    ).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(catalogIo.errors.join("")).toContain(
+      "Browser-triggered execution requires a loopback --host."
+    );
+  });
+
+  it("keeps a non-loopback studio read-only and history-immutable", async () => {
+    const { directory } = await writeModule("export {};");
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), signal: controller.signal };
+    const command = runWorkbenchCli(
+      ["ui", "--host", "0.0.0.0", "--store", path.join(directory, "runs.sqlite"), "--port", "0"],
+      io
+    );
+
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
+    expect(url).toMatch(/^http:\/\/0\.0\.0\.0:\d+$/);
+    await expect(
+      fetch(`${url}/api/capabilities`).then((response) => response.json())
+    ).resolves.toEqual({ canClearHistory: false });
+    await expect(
+      fetch(`${url}/api/history`, {
+        headers: { "x-tubeless-studio-clear-history": "1" },
+        method: "DELETE",
+      }).then((response) => response.status)
+    ).resolves.toBe(405);
+    await expect(
+      fetch(`${url}/api/commands/fixture/runs`, {
+        body: JSON.stringify({ values: {} }),
+        headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
+        method: "POST",
+      }).then((response) => response.status)
+    ).resolves.toBe(405);
+
+    controller.abort();
+    await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+  });
+
   it("uses stable validation, planning, execution, and cancellation exit codes", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     const validationIo = captureIo(directory);

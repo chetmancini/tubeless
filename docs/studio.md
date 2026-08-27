@@ -36,7 +36,10 @@ and step/target values from the same form; it never creates a run.
 Default bind address is `127.0.0.1`, default port is `4317`, and the default
 store is `.tubeless/runs.sqlite`. Browser-triggered execution requires a
 loopback host (`127.0.0.1`, `::1`, or `localhost`). Non-loopback binding is
-rejected when any command is registered.
+rejected when any command is registered. A non-loopback `--host` without
+commands is allowed and stays read-only: the store is visible to anyone who
+can reach the port, and clear-history is not wired. That bind is a risk you
+enable; see [SECURITY.md](../SECURITY.md).
 
 ## Checked-in catalog
 
@@ -73,8 +76,10 @@ identified without guessing its item count.
 
 Browser plan, launch, and clear-history requests send
 `x-tubeless-studio-plan`, `x-tubeless-studio-launch`, and
-`x-tubeless-studio-clear-history`. Those header names are part of the local
-studio protocol.
+`x-tubeless-studio-clear-history`. Those requests also require a `Host` header
+that matches the bound authority, and plan/launch require `application/json`.
+The header names are part of the local studio protocol. They are same-origin
+guards, not authentication.
 
 Programmatic callers can compose the same pieces from
 `tubeless/run-store/sqlite` and `tubeless/run-store/ui`. See

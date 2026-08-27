@@ -27,9 +27,9 @@ name; recheck immediately before the first publish.
       copyright, third-party notices, contributor attribution/history, and that
       no internal URLs, credentials, customer data, or private repository
       assumptions remain. See [Legal and public-source scrub](#legal-and-public-source-scrub).
-- [ ] Review the local studio threat model. Confirm loopback binding remains the
+- [x] Review the local studio threat model. Confirm loopback binding remains the
       safe default, document the risk of non-loopback binding, and test the
-      launch/clear-history request guards.
+      launch/clear-history request guards. See [Studio threat model](#studio-threat-model).
 - [x] Add CI on the declared Node/Bun support matrix. It must run the complete
       `make check` gate and fail on stale generated API artifacts.
 - [x] Validate the exact tarball in clean consumers: inspect `npm pack --dry-run`,
@@ -140,3 +140,23 @@ environment variables.
   embeddings) and test fixtures (`kjv` / `genesis` / `Bible version` /
   `verses.json`). That composition page now documents the shipped child
   adapter instead of the extraction-era design memo.
+
+## Studio threat model
+
+The studio is a local process, not an authenticated network service.
+
+- `tubeless ui` defaults to `127.0.0.1`. Plan and launch are refused unless
+  `--host` is `127.0.0.1`, `::1`, or `localhost` (case-insensitive).
+- Clear-history is injected only on those loopback hosts. A non-loopback
+  `--host` without commands is read-only; anyone who can reach the port can
+  read the store, including pipeline log text.
+- `startPipelineRunStudio` defaults to `127.0.0.1` but does not refuse a
+  non-loopback host plus an injected launcher or history capability. That
+  combination is out of scope, same as a non-loopback CLI bind the user
+  enables.
+- Plan, launch, and clear-history require a `Host` matching the bound
+  authority, a custom `x-tubeless-studio-*` header, and `application/json`
+  for plan and launch. Those are same-origin guards, not authentication.
+
+Documented in `SECURITY.md` and `docs/studio.md`. Covered by
+`src/run-store-ui.test.ts` and `src/workbench.test.ts`.
