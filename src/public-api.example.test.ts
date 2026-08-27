@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createSteps, definePipeline, type PipelineLogger, type PipelineRun } from "tubeless";
 import { createPipelineReporter, createRunReporter } from "tubeless/reporter";
 import { chunk, runConcurrent } from "tubeless/batch";
-import { parseMultiSelectInput } from "tubeless/cli";
+import { parseMultiSelectInput, TUBELESS_WORKBENCH_EXIT_CODE } from "tubeless/cli";
 import { definePaths, requireEnv } from "tubeless/node";
 import { RateLimiter } from "tubeless/rate-limit";
 import { withRetry } from "tubeless/retry";
@@ -143,6 +143,16 @@ describe("public API example", () => {
     expect(parseMultiSelectInput("1 2", ["a", "b"])).toEqual({
       kind: "values",
       values: ["a", "b"],
+    });
+    expect(TUBELESS_WORKBENCH_EXIT_CODE).toMatchObject({
+      success: 0,
+      usage: 1,
+      load: 2,
+      definition: 3,
+      validation: 4,
+      planning: 5,
+      execution: 6,
+      cancellation: 7,
     });
   });
 

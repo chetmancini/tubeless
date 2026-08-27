@@ -39,3 +39,4 @@ export {
   type ParseMultiSelectInputOptions,
   type PromptMultiSelectOptions,
 } from "./prompt-select.js";
+export { TUBELESS_WORKBENCH_EXIT_CODE } from "./workbench-shared.js";

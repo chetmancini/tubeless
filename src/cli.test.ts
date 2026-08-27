@@ -74,10 +74,10 @@ describe("defineCommand: string params", () => {
       params: { version: { type: "string" } },
       run: (values) => values,
     });
-    const result = command.parse(["--version", "kjv"]);
+    const result = command.parse(["--version", "json"]);
     expect(result).toEqual({
       kind: "values",
-      values: { version: "kjv", dryRun: false, resume: false },
+      values: { version: "json", dryRun: false, resume: false },
     });
   });
 
@@ -142,8 +142,8 @@ describe("defineCommand: string params", () => {
       params: { version: { type: "string" } },
       run: (values) => values,
     });
-    const result = command.parse(["--version=kjv"]);
-    expect(result).toMatchObject({ kind: "values", values: { version: "kjv" } });
+    const result = command.parse(["--version=json"]);
+    expect(result).toMatchObject({ kind: "values", values: { version: "json" } });
   });
 
   it("errors when a required string is missing", () => {
@@ -155,29 +155,29 @@ describe("defineCommand: string params", () => {
 
   it("returns undefined for an optional string that is absent", () => {
     const command = defineCommand({
-      params: { book: { type: "string", optional: true } },
+      params: { label: { type: "string", optional: true } },
       run: (v) => v,
     });
     const result = command.parse([]);
-    expect(result).toMatchObject({ kind: "values", values: { book: undefined } });
+    expect(result).toMatchObject({ kind: "values", values: { label: undefined } });
   });
 
   it("falls back to a default when absent", () => {
     const command = defineCommand({
-      params: { version: { type: "string", default: "web" } },
+      params: { version: { type: "string", default: "yaml" } },
       run: (v) => v,
     });
-    expect(command.parse([])).toMatchObject({ kind: "values", values: { version: "web" } });
+    expect(command.parse([])).toMatchObject({ kind: "values", values: { version: "yaml" } });
   });
 
   it("rejects a value outside of choices", () => {
     const command = defineCommand({
-      params: { version: { type: "string", choices: ["kjv", "web"] } },
+      params: { version: { type: "string", choices: ["json", "yaml"] } },
       run: (v) => v,
     });
-    const result = command.parse(["--version", "niv"]);
+    const result = command.parse(["--version", "xml"]);
     expect(result.kind).toBe("error");
-    expect(result.kind === "error" && result.errors[0]).toContain("one of: kjv, web");
+    expect(result.kind === "error" && result.errors[0]).toContain("one of: json, yaml");
   });
 });
 
@@ -191,9 +191,9 @@ describe("defineCommand: aliases, positionals, and environment fallbacks", () =>
       run: (values) => values,
     });
 
-    expect(command.parse(["-v", "kjv", "-V"])).toMatchObject({
+    expect(command.parse(["-v", "json", "-V"])).toMatchObject({
       kind: "values",
-      values: { version: "kjv", verbose: true },
+      values: { version: "json", verbose: true },
     });
     const help = command.parse(["--help"]);
     expect(help.kind === "help" && help.helpText).toContain("-v, --version <string>");
@@ -211,28 +211,28 @@ describe("defineCommand: aliases, positionals, and environment fallbacks", () =>
   it("maps declared positional arguments and keeps negative numeric values valid", () => {
     const command = defineCommand({
       params: {
-        book: { type: "string" },
+        source: { type: "string" },
         offset: { type: "number" },
       },
-      positionals: ["book", "offset"],
+      positionals: ["source", "offset"],
       run: (values) => values,
     });
 
-    expect(command.parse(["genesis", "-3"])).toMatchObject({
+    expect(command.parse(["input", "-3"])).toMatchObject({
       kind: "values",
-      values: { book: "genesis", offset: -3 },
+      values: { source: "input", offset: -3 },
     });
-    expect(command.parse(["genesis", "-10"])).toMatchObject({
+    expect(command.parse(["input", "-10"])).toMatchObject({
       kind: "values",
-      values: { book: "genesis", offset: -10 },
+      values: { source: "input", offset: -10 },
     });
-    expect(command.parse(["genesis", "-3.5"])).toMatchObject({
+    expect(command.parse(["input", "-3.5"])).toMatchObject({
       kind: "values",
-      values: { book: "genesis", offset: -3.5 },
+      values: { source: "input", offset: -3.5 },
     });
-    expect(command.parse(["--book", "genesis", "3"])).toMatchObject({
+    expect(command.parse(["--source", "input", "3"])).toMatchObject({
       kind: "values",
-      values: { book: "genesis", offset: 3 },
+      values: { source: "input", offset: 3 },
     });
   });
 
@@ -268,18 +268,18 @@ describe("defineCommand: aliases, positionals, and environment fallbacks", () =>
 
   it("uses environment fallbacks after argv, before defaults", () => {
     const command = defineCommand({
-      params: { version: { type: "string", default: "web", env: "TUBELESS_VERSION" } },
+      params: { version: { type: "string", default: "yaml", env: "TUBELESS_VERSION" } },
       run: (values) => values,
     });
-    const context = { env: { TUBELESS_VERSION: "kjv" } };
+    const context = { env: { TUBELESS_VERSION: "json" } };
 
     expect(command.parse([], context)).toMatchObject({
       kind: "values",
-      values: { version: "kjv" },
+      values: { version: "json" },
     });
-    expect(command.parse(["--version", "asv"], context)).toMatchObject({
+    expect(command.parse(["--version", "toml"], context)).toMatchObject({
       kind: "values",
-      values: { version: "asv" },
+      values: { version: "toml" },
     });
   });
 
@@ -638,9 +638,9 @@ describe("defineCommand: built-in --dry-run", () => {
       params: { version: { type: "string" } },
       run: (v) => v,
     });
-    expect(command.parse(["--version", "kjv", "--dry-run"])).toMatchObject({
+    expect(command.parse(["--version", "json", "--dry-run"])).toMatchObject({
       kind: "values",
-      values: { version: "kjv", dryRun: true },
+      values: { version: "json", dryRun: true },
     });
   });
 
@@ -746,7 +746,7 @@ describe("defineCommand: path params", () => {
 describe("defineCommand: unknown/malformed args", () => {
   it("reports unknown options", () => {
     const command = defineCommand({ params: { version: { type: "string" } }, run: (v) => v });
-    const result = command.parse(["--version", "kjv", "--bogus"]);
+    const result = command.parse(["--version", "json", "--bogus"]);
     expect(result.kind).toBe("error");
     expect(result.kind === "error" && result.errors).toContain("Unknown option: --bogus");
   });
@@ -760,9 +760,9 @@ describe("defineCommand: unknown/malformed args", () => {
 
   it("reports a bare positional argument", () => {
     const command = defineCommand({ params: {}, run: () => undefined });
-    const result = command.parse(["genesis"]);
+    const result = command.parse(["leftover"]);
     expect(result.kind).toBe("error");
-    expect(result.kind === "error" && result.errors[0]).toContain("Unexpected argument: genesis");
+    expect(result.kind === "error" && result.errors[0]).toContain("Unexpected argument: leftover");
   });
 
   it("throws at definition time when two keys derive the same flag", () => {
@@ -783,7 +783,7 @@ describe("defineCommand: --help", () => {
     const command = defineCommand({
       description: "Example command.",
       params: {
-        version: { type: "string", choices: ["kjv", "web"], description: "Bible version" },
+        version: { type: "string", choices: ["json", "yaml"], description: "Output format" },
         limit: { type: "number", optional: true },
       },
       run: () => undefined,
@@ -791,7 +791,7 @@ describe("defineCommand: --help", () => {
     const result = command.parse(["--help"]);
     expect(result.kind).toBe("help");
     expect(result.kind === "help" && result.helpText).toContain("--version <string>");
-    expect(result.kind === "help" && result.helpText).toContain("one of: kjv, web");
+    expect(result.kind === "help" && result.helpText).toContain("one of: json, yaml");
     expect(result.kind === "help" && result.helpText).toContain("--limit <number>");
     expect(result.kind === "help" && result.helpText).toContain("Example command.");
   });

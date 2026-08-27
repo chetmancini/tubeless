@@ -703,7 +703,7 @@ describe("child-pipeline composition", () => {
       const lifecycle: string[] = [];
       const progress: Array<{ completed: number; message?: string; total?: number }> = [];
       const result = await parent.run(
-        { source: "verses.json" },
+        { source: "rows.json" },
         {
           cwd: "/repo",
           hooks: {

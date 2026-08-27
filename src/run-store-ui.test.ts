@@ -130,7 +130,7 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("step-status-icon");
     expect(html).toContain("status-mark");
     expect(html).not.toContain("mode-tabs");
-    expect(html).not.toContain("Bible");
+    expect(html).not.toContain("Pipes");
 
     const snapshot = await fetch(`${server.url}/api/snapshot`).then((response) => response.json());
     expect(snapshot).toMatchObject({

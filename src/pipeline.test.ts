@@ -75,7 +75,7 @@ describe("definePipeline", () => {
     });
 
     const result = await pipeline.run(
-      { source: "verses.json" },
+      { source: "rows.json" },
       {
         cwd: "/tmp",
         log,
@@ -100,7 +100,7 @@ describe("definePipeline", () => {
       id: "load",
       status: "complete",
     });
-    expect(log.log).toHaveBeenCalledWith("loading", "verses.json");
+    expect(log.log).toHaveBeenCalledWith("loading", "rows.json");
   });
 
   it("validates and transforms options, step outputs, and final results", async () => {
