@@ -61,8 +61,11 @@ name; recheck immediately before the first publish.
 - [x] Decide whether `docs`, `examples`, and `evals` should all ship in the npm
       tarball. Keep only artifacts that improve the installed-package
       experience, then update the pack verifier to enforce that policy.
-- [ ] Add `CONTRIBUTING.md`, `SECURITY.md`, a code of conduct, support policy,
-      issue/PR templates, and a changelog or release-notes convention.
+- [x] Add `CONTRIBUTING.md`. Pull requests are accepted for now; the
+      maintainer set stays small.
+- [x] Add `SECURITY.md` with private GitHub vulnerability reporting.
+- [ ] Add a code of conduct, support policy, issue/PR templates, and a
+      changelog or release-notes convention.
 - [ ] Add API compatibility review to pull requests by making changes to the
       generated API report explicit and reviewable.
 - [ ] Add runnable examples to CI and smoke-test the README commands from a

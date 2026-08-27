@@ -17,7 +17,8 @@ The `tubeless` CLI is separate: it requires Bun 1.3.14 or later.
 bunx tubeless --help
 ```
 
-`npx tubeless` is not supported.
+`npx tubeless` is not supported. Command-by-command usage is in
+[the CLI](./cli.md).
 
 ## Runtime support
 
@@ -65,8 +66,8 @@ const normalize = step("normalize", {
 });
 ```
 
-IDs should remain stable: plans, reports, hooks, tracing, and `stepIds` selection
-all use them.
+IDs should remain stable: plans, reports, hooks, tracing, and CLI selection all
+use them.
 
 ## 3. Define the result
 
@@ -106,25 +107,8 @@ const diagram = ImportPipeline.toMermaid({ direction: "LR" });
 
 Required data dependencies use solid arrows. Optional inputs and failure gates
 use labeled dotted arrows. Set `includeDescriptions: true` when the extra node
-text is useful.
-
-Generate the same source directly from a pipeline module without writing a
-wrapper script:
-
-```sh
-bunx tubeless inspect ./pipelines/import-pipeline.ts
-bunx tubeless plan ./pipelines/import-pipeline.ts --target normalize --explain
-bunx tubeless graph ./pipelines/import-pipeline.ts
-```
-
-The read-only workbench discovers a single exported pipeline automatically.
-`inspect` prints identity (`id`, targets, exact steps) plus the default
-structural plan. `plan` previews target or exact-step selection without
-executing or requiring domain options; it accepts a pipeline or a marked
-command and prefers the command when both are exported. Use `--dry-run`,
-`--explain`, or `--json` as needed. `graph` emits Mermaid and accepts
-`--markdown`. Pass `--export ImportPipeline` when the module exports several
-pipelines.
+text is useful. The same source is available from `tubeless graph`; see
+[the CLI](./cli.md).
 
 ## 5. Pick an execution method
 
@@ -141,12 +125,13 @@ const normalizePlan = ImportPipeline.plan({ targets: ["normalize"] });
 - `run` always returns the structured pipeline result.
 - `plan` describes executor selection without requiring or validating domain options.
 - `targets` selects declared downstream goals plus their required inputs and
-  failure gates. Optional-only inputs remain excluded. `stepIds` remains an
-  exact low-level filter for any step, and cannot be combined with `targets`.
-- Every planned step has structured `selectionReasons`, so tools can explain a
-  direct target, prerequisite, failure gate, or omission without rebuilding the
-  dependency graph. `command.plan()` and `tubeless plan` render the same
-  provenance for humans.
+  failure gates. `stepIds` is an exact low-level filter and cannot be combined
+  with `targets`. See [core concepts](./concepts.md) for selection provenance.
+
+Library callers invoke the pipeline directly. Scripts should use
+`definePipelineCommand` so help, `--target`, `--step`, dry run, and
+cancellation stay generated instead of hand-parsed. See [the CLI](./cli.md)
+and [`cli-job.ts`](../examples/cli-job.ts).
 
 ## 6. Test with deterministic runtime plumbing
 
@@ -167,118 +152,11 @@ an abort controller and provides typed `runOrThrow` and `plan` helpers. It has
 no test-framework dependency; use ordinary assertions against its structured
 captures and pipeline results.
 
-## 7. Add an interface only at the edge
-
-Library callers can invoke the pipeline directly. Scripts should use
-`definePipelineCommand` for generated help, exact `--step` filtering,
-dependency-aware `--target` execution for declared goals, dry run, plan mode,
-reporting, checkpoints, and SIGINT cancellation. Commands omit `--target` when
-the pipeline declares no public targets.
-
-When declared flags already satisfy same-name pipeline options,
-`definePipelineCommand` forwards them without `mapOptions`. TypeScript keeps
-`mapOptions` required when the command must rename, transform, load, or derive
-an option—for example, reading `--source` into the pipeline's `lines` array.
-
-Run an exported pipeline command through the same workbench:
-
-```sh
-bunx tubeless run ./scripts/import.ts -- --source rows.txt --target normalize
-```
-
-The workbench never executes a raw pipeline or guesses its domain options. It
-discovers a `definePipelineCommand` export, then delegates every argument after
-`--` to that command's parser, validator, and option mapper. Pass `--export
-ImportCommand` before the file when the module exports multiple commands.
+## Next
 
 Continue with the [recipe index](./recipes.md), or read
 [core concepts](./concepts.md) before implementing failure-sensitive writes.
 
-For untrusted boundary values, use the dependency-free Standard Schema support
-shown in [`validated-boundaries.ts`](../examples/validated-boundaries.ts).
-`createSteps(optionsSchema)` infers caller and validated option types,
-`outputSchema` checks values before a step publishes them, and `resultSchema`
-checks the finalized public result. Both synchronous and asynchronous schema
-validators are supported by `run`; `plan()` remains a schema-free synchronous
-preview.
-
-`run()` also returns a versioned `PipelineRun`. It includes the run identity,
-terminal status, start and finish timestamps, errors, and one terminal report
-per step. Executed step reports expose the same `attemptId` available to the
-step context, plus their start and finish timestamps. Structural skips and
-steps cancelled before starting intentionally have no attempt ID or start
-timestamp. Supply `runId` or `parentRunId` in the runtime context when an
-external job system owns those identities; otherwise core generates the run
-ID. Use hooks or tracing for streaming logs and progress rather than duplicating
-those streams in the terminal run record.
-
-## Optional local run studio
-
-Normal pipeline and CLI execution remains storage-free. Opt into the local
-append-only SQLite event store for one workbench run by placing `--store` before
-the command file:
-
-```sh
-bunx tubeless run --store .tubeless/runs.sqlite ./scripts/import.ts -- --source rows.txt
-```
-
-Open the separate studio only when you want it:
-
-```sh
-bunx tubeless ui --store .tubeless/runs.sqlite
-```
-
-That form is read-only. Explicitly register one or more pipeline command modules
-to make a **Run pipeline** action available:
-
-```sh
-bunx tubeless ui \
-  --store .tubeless/runs.sqlite \
-  --command ./scripts/import.ts \
-  --command ./scripts/publish.ts
-```
-
-The studio does not guess executable modules from recorded definitions. It
-accepts only marked `definePipelineCommand` exports supplied at startup, remains
-loopback-only when launching is enabled, and renders each command's structured
-schema as native controls: booleans become checkboxes, constrained strings
-become selects, numbers retain their bounds, and paths and unconstrained values
-use text fields. Submitted values still go through the normal typed command
-parser without involving a shell; an advanced argument field covers uncommon
-fallback cases. **Preview plan** uses the dry-run and step/target values from
-the same launch form and expands the structural plan inline. Domain fields stay
-available for the eventual run but are not interpreted by the planner;
-previewing never creates a run, and it is always optional before **Run**. Steps
-that invoke a nested pipeline are labeled with the child pipeline and its
-declared steps; runtime fan-out is identified without guessing its item count.
-
-For a repeatable project catalog, declare module references once:
-
-```ts
-// tubeless.studio.ts
-import { definePipelineStudio } from "tubeless/workbench/studio";
-
-export default definePipelineStudio({
-  cwd: ".",
-  commands: [
-    { file: "./scripts/import.ts", export: "ImportCommand", name: "Import rows" },
-    { file: "./scripts/publish.ts", export: "PublishCommand" },
-  ],
-});
-```
-
-```sh
-bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.studio.ts
-```
-
-Command paths and `cwd` are relative to the manifest file. The versioned helper
-rejects empty or duplicate registrations before the studio starts.
-
-The studio combines active and historical runs in one running-first view. Child
-pipeline executions stay beneath their top-level run and are navigable from its
-details instead of flooding the main list. Run details include step attempts,
-progress, logs, and structured errors.
-Programmatic callers can compose the same pieces from `tubeless/run-store/sqlite` and
-`tubeless/run-store/ui`; see
-[`local-observability.ts`](../examples/local-observability.ts). Neither module
-is imported by the core executor or by ordinary CLI runs.
+For untrusted boundary values, use the Standard Schema support in
+[`validated-boundaries.ts`](../examples/validated-boundaries.ts). Persist and
+inspect local runs with [the studio](./studio.md).

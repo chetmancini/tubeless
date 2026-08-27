@@ -47,3 +47,5 @@ from the API inventory.
    from `tubeless`.
 
 For semantics behind these choices, read [core concepts](./concepts.md).
+For workbench commands, read [the CLI](./cli.md). For the local run UI, read
+[the studio](./studio.md).

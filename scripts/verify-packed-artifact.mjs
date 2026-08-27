@@ -58,10 +58,12 @@ try {
     "docs/api-reference.md",
     "docs/api-report.json",
     "docs/child-pipeline-composition.md",
+    "docs/cli.md",
     "docs/concepts.md",
     "docs/getting-started.md",
     "docs/llms.txt",
     "docs/recipes.md",
+    "docs/studio.md",
     "examples/typed-import.ts",
   ]) {
     if (!existsSync(join(installedPackage, relativePath))) {

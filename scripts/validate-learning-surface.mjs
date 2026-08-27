@@ -30,8 +30,8 @@ function validateMarkdownLinks(filePath) {
 const readmePath = join(packageRoot, "README.md");
 const readmeLines = readFileSync(readmePath, "utf8").trimEnd().split("\n").length;
 assert(
-  readmeLines <= 160,
-  `README.md is ${readmeLines} lines; keep the entrypoint at 160 or fewer`
+  readmeLines <= 120,
+  `README.md is ${readmeLines} lines; keep the entrypoint at 120 or fewer`
 );
 
 for (const filePath of [readmePath, ...filesUnder(join(packageRoot, "docs"), ".md")]) {
@@ -89,10 +89,12 @@ const requiredDocuments = [
   "README.md",
   "docs/README.md",
   "docs/agent-guide.md",
+  "docs/cli.md",
   "docs/concepts.md",
   "docs/getting-started.md",
   "docs/llms.txt",
   "docs/recipes.md",
+  "docs/studio.md",
   "evals/agent-cases.json",
 ];
 for (const document of requiredDocuments) {

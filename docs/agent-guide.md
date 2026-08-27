@@ -145,6 +145,9 @@ or shared helpers in this repository.
 ## Required references
 
 - Read [core concepts](./concepts.md) for skip, failure, or selection changes.
+- Read [the CLI](./cli.md) for inspect, plan, graph, run, and exit codes.
+- Read [the studio](./studio.md) before changing `tubeless ui` or
+  `definePipelineStudio`.
 - Read [child composition](./child-pipeline-composition.md) before changing child
   propagation, progress, or parent/child selection.
 - Read the relevant executable example linked from the

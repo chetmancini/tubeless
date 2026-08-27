@@ -4,11 +4,18 @@
 
 | Document                                | Use it for                                            |
 | --------------------------------------- | ----------------------------------------------------- |
-| [Package README](../README.md)          | Quick start and capability overview                   |
-| [Getting started](./getting-started.md) | Building and running a first pipeline                 |
-| [Core concepts](./concepts.md)          | Dependencies, skips, failures, dry runs, and contexts |
+| [Package README](../README.md)          | What it is, a first example, and a pattern table      |
+| [Getting started](./getting-started.md) | Building, running, and testing a first pipeline       |
 | [Recipe index](./recipes.md)            | Choosing an executable example by intent              |
+| [Core concepts](./concepts.md)          | Dependencies, skips, failures, dry runs, and contexts |
 | [Agent guide](./agent-guide.md)         | Rules for generating and modifying pipeline code      |
+
+## How to
+
+| Document                    | Use it for                                        |
+| --------------------------- | ------------------------------------------------- |
+| [CLI](./cli.md)             | `inspect`, `plan`, `graph`, `run`, and exit codes |
+| [Local studio](./studio.md) | Optional run history, `tubeless ui`, and catalogs |
 
 ## Deeper reference
 

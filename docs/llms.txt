@@ -6,6 +6,8 @@ Start:
 
 - README: ../README.md
 - First pipeline: ./getting-started.md
+- CLI: ./cli.md
+- Local studio: ./studio.md
 - Choose a pattern: ./recipes.md
 - Execution semantics: ./concepts.md
 

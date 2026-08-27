@@ -421,6 +421,9 @@ operational descriptions to node labels.
 
 ## Module workbench
 
+Command-by-command usage lives in [the CLI](./cli.md). The optional local UI is
+documented in [the studio](./studio.md).
+
 `tubeless inspect` and `tubeless graph` load a pipeline module without executing
 steps or requiring domain options. `tubeless plan` accepts either a pipeline or a
 marked `definePipelineCommand` and prefers the command when both are exported.
