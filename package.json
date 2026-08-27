@@ -1,8 +1,30 @@
 {
   "name": "tubeless",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Typed pipeline primitives for composable data-processing workflows.",
+  "author": {
+    "name": "Chet Mancini",
+    "url": "https://github.com/chetmancini"
+  },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chetmancini/tubeless.git"
+  },
+  "homepage": "https://github.com/chetmancini/tubeless#readme",
+  "bugs": {
+    "url": "https://github.com/chetmancini/tubeless/issues"
+  },
+  "keywords": [
+    "pipeline",
+    "workflow",
+    "typescript",
+    "cli",
+    "esm"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "private": true,
   "packageManager": "bun@1.3.14",
   "engines": {

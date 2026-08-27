@@ -10,10 +10,10 @@ name; recheck immediately before the first publish.
 
 ## Release blockers
 
-- [ ] Choose the first public semantic version (`0.1.0` is the conservative
-      choice while the API is still being proven), update `version`, and remove
-      `private: true` only in the release change.
-- [ ] Add complete npm metadata: `repository`, `homepage`, `bugs`, `keywords`,
+- [x] Choose the first public semantic version (`0.1.0` is the conservative
+      choice while the API is still being proven) and update `version`.
+      Keep `private: true` until the first registry publish.
+- [x] Add complete npm metadata: `repository`, `homepage`, `bugs`, `keywords`,
       author/maintainers, supported runtime `engines`, and explicit public
       `publishConfig`.
 - [x] Decide and document the support contract: ESM-only imports, minimum Node
