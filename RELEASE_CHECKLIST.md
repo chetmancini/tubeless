@@ -30,7 +30,7 @@ name; recheck immediately before the first publish.
 - [ ] Review the local studio threat model. Confirm loopback binding remains the
       safe default, document the risk of non-loopback binding, and test the
       launch/clear-history request guards.
-- [ ] Add CI on the declared Node/Bun support matrix. It must run the complete
+- [x] Add CI on the declared Node/Bun support matrix. It must run the complete
       `make check` gate and fail on stale generated API artifacts.
 - [ ] Validate the exact tarball in clean consumers: inspect `npm pack --dry-run`,
       check size and contents, install the tarball, import every export path,
