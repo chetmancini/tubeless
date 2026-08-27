@@ -32,7 +32,7 @@ name; recheck immediately before the first publish.
       launch/clear-history request guards.
 - [x] Add CI on the declared Node/Bun support matrix. It must run the complete
       `make check` gate and fail on stale generated API artifacts.
-- [ ] Validate the exact tarball in clean consumers: inspect `npm pack --dry-run`,
+- [x] Validate the exact tarball in clean consumers: inspect `npm pack --dry-run`,
       check size and contents, install the tarball, import every export path,
       run the executable, and confirm the executable bit and Bun shebang.
 - [ ] Configure npm account security and a recovery path. Require 2FA for human
@@ -52,7 +52,7 @@ name; recheck immediately before the first publish.
 - [ ] Explain why the project is called Tubeless, what problem it solves, its
       maturity level, and how it compares with task runners and workflow
       engines without overpromising stability.
-- [ ] Decide whether `docs`, `examples`, and `evals` should all ship in the npm
+- [x] Decide whether `docs`, `examples`, and `evals` should all ship in the npm
       tarball. Keep only artifacts that improve the installed-package
       experience, then update the pack verifier to enforce that policy.
 - [ ] Add `CONTRIBUTING.md`, `SECURITY.md`, a code of conduct, support policy,

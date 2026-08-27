@@ -50,26 +50,29 @@ try {
   );
 
   const installedPackage = join(consumerRoot, "node_modules", packageJson.name);
-  if (!existsSync(join(installedPackage, "docs", "child-pipeline-composition.md"))) {
-    throw new Error("Packed tubeless artifact is missing docs/child-pipeline-composition.md");
-  }
-  for (const document of [
+  for (const relativePath of [
     "README.md",
-    "agent-evaluations.md",
-    "agent-guide.md",
-    "api-reference.md",
-    "api-report.json",
-    "concepts.md",
-    "getting-started.md",
-    "llms.txt",
-    "recipes.md",
+    "LICENSE",
+    "docs/README.md",
+    "docs/agent-guide.md",
+    "docs/api-reference.md",
+    "docs/api-report.json",
+    "docs/child-pipeline-composition.md",
+    "docs/concepts.md",
+    "docs/getting-started.md",
+    "docs/llms.txt",
+    "docs/recipes.md",
+    "examples/typed-import.ts",
   ]) {
-    if (!existsSync(join(installedPackage, "docs", document))) {
-      throw new Error(`Packed tubeless artifact is missing docs/${document}`);
+    if (!existsSync(join(installedPackage, relativePath))) {
+      throw new Error(`Packed tubeless artifact is missing ${relativePath}`);
     }
   }
-  if (!existsSync(join(installedPackage, "evals", "agent-cases.json"))) {
-    throw new Error("Packed tubeless artifact is missing evals/agent-cases.json");
+  if (existsSync(join(installedPackage, "evals"))) {
+    throw new Error("Packed tubeless artifact must not include evals/");
+  }
+  if (existsSync(join(installedPackage, "docs", "agent-evaluations.md"))) {
+    throw new Error("Packed tubeless artifact must not include docs/agent-evaluations.md");
   }
 
   const smokeProgram = Object.keys(packageJson.exports)
