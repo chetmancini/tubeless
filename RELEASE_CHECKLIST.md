@@ -47,7 +47,7 @@ name; recheck immediately before the first publish.
 
 ## Documentation and project quality
 
-- [ ] Add installation examples for npm, pnpm, yarn, and Bun, plus one minimal
+- [x] Add installation examples for npm, pnpm, yarn, and Bun, plus one minimal
       library example that runs on the declared minimum Node version.
 - [ ] Explain why the project is called Tubeless, what problem it solves, its
       maturity level, and how it compares with task runners and workflow

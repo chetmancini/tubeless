@@ -1,5 +1,24 @@
 # Getting started
 
+## Install
+
+Library consumers install the package and import it from Node.js 22 or later:
+
+```sh
+npm install tubeless
+```
+
+The same package works with `pnpm add tubeless`, `yarn add tubeless`, and
+`bun add tubeless`. The README quick start is a complete first program.
+
+The `tubeless` CLI is separate: it requires Bun 1.3.14 or later.
+
+```sh
+bunx tubeless --help
+```
+
+`npx tubeless` is not supported.
+
 ## Runtime support
 
 Library imports (`tubeless` and every subpath) are ESM-only and require

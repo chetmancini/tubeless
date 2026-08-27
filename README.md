@@ -2,6 +2,13 @@
 
 Dependency-free TypeScript primitives for typed, observable data pipelines and CLIs.
 
+```sh
+npm install tubeless
+```
+
+Also: `pnpm add tubeless`, `yarn add tubeless`, `bun add tubeless`. See
+[Install](./docs/getting-started.md#install).
+
 ## Quick start
 
 ```ts
@@ -43,8 +50,7 @@ The definition's `targets: [normalize]` declares `normalize` as a supported
 downstream goal. Pass `{ lines, targets: ["normalize"] }` to run that goal with its
 required inputs and failure gates. Use `stepIds: ["normalize"]` only for exact
 low-level filtering; it intentionally does not add prerequisites. `requireOutputs`
-makes the outputs needed by a valid final result non-optional. A declared target
-whose closure cannot satisfy those outputs is rejected when the pipeline is defined.
+makes the outputs needed by a valid final result non-optional. A declared target whose closure cannot satisfy those outputs is rejected when the pipeline is defined.
 
 Use `runOrThrow` when failure should throw. Use `run` when the caller needs the
 complete structured report, `plan` when nothing should execute, and `toMermaid`
@@ -147,12 +153,7 @@ The [API report](./docs/api-report.json) makes public surface changes reviewable
 
 ## Validate changes
 
-```sh
-make install
-make check
-```
-
-All tooling is package-local. Run `make help` for pipeline-author and maintainer commands.
+From a clone, `make install` then `make check`. Run `make help` for more.
 
 ## License
 
