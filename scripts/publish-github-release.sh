@@ -10,9 +10,16 @@ if [[ "${tag}" != "v${version}" ]]; then
 	exit 1
 fi
 
+repo="${GITHUB_REPOSITORY:-}"
+if [[ -z "${repo}" ]]; then
+	repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+fi
+
 subject="$(git tag -l --format='%(contents:subject)' "${tag}")"
 body="$(git tag -l --format='%(contents:body)' "${tag}")"
 notes="$(mktemp)"
+trap 'rm -f "${notes}"' EXIT
+
 {
 	if [[ -n "${subject}" ]]; then
 		printf '%s\n' "${subject}"
@@ -21,28 +28,23 @@ notes="$(mktemp)"
 		fi
 		printf '\n'
 	fi
-} >"${notes}"
-
-extra=()
-if [[ "${version}" == *-* ]]; then
-	extra+=(--prerelease --latest=false)
-fi
-
-if gh release view "${tag}" >/dev/null 2>&1; then
-	generated="$(gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+	generated="$(gh api "repos/${repo}/releases/generate-notes" \
 		-f tag_name="${tag}" --jq .body)"
 	if [[ -n "${generated}" ]]; then
-		printf '%s\n' "${generated}" >>"${notes}"
+		printf '%s\n' "${generated}"
 	fi
+} >"${notes}"
+
+if gh release view "${tag}" >/dev/null 2>&1; then
 	edit_args=(--title "${tag}" --notes-file "${notes}")
 	if [[ "${version}" == *-* ]]; then
 		edit_args+=(--prerelease)
 	fi
 	gh release edit "${tag}" "${edit_args[@]}"
 else
-	create_args=(--title "${tag}" --generate-notes --verify-tag)
-	if [[ -s "${notes}" ]]; then
-		create_args+=(--notes-file "${notes}")
+	create_args=(--title "${tag}" --notes-file "${notes}" --verify-tag)
+	if [[ "${version}" == *-* ]]; then
+		create_args+=(--prerelease --latest=false)
 	fi
-	gh release create "${tag}" "${create_args[@]}" "${extra[@]}"
+	gh release create "${tag}" "${create_args[@]}"
 fi

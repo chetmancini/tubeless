@@ -42,23 +42,10 @@ the Actions runs. Omit `NOTES` to write the annotation in your editor.
 `NOTES_FILE=notes.md`, `DRY=1`, `PUSH=0`, `WATCH=0`, and `SKIP_CHECK=1`
 are optional.
 
-Or Actions → **publish** → **Run workflow** on `main`. Fill in notes to
-cut a new tag (that run also opens the GitHub Release and publishes to
-npm). Notes can be omitted when retrying a version whose tag already
-exists.
-
-```sh
-git tag -a v0.1.1 -m "$(cat <<'EOF'
-Short summary of the release.
-
-- User-facing change
-- Another change
-EOF
-)"
-git push origin v0.1.1
-```
-
-is the same cut as `make release` if you want to tag by hand.
+Without a checkout: Actions → **publish** → **Run workflow** on `main`.
+Fill in notes to cut a new tag (that run also opens the GitHub Release
+and publishes to npm). Omit notes only when retrying a version whose tag
+already exists.
 
 Do not `npm publish` from a laptop. Do not attach npm tarballs to GitHub
 Releases; npm is the artifact.

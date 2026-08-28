@@ -49,12 +49,12 @@ fi
 
 echo "release ${tag} at $(git rev-parse --short HEAD)"
 
-if [[ -n "${DRY:-}" ]]; then
+if [[ "${DRY:-}" == "1" ]]; then
 	echo "dry run: would tag ${tag} and push to origin"
 	exit 0
 fi
 
-if [[ -z "${SKIP_CHECK:-}" ]]; then
+if [[ "${SKIP_CHECK:-}" != "1" ]]; then
 	make check
 fi
 
@@ -101,4 +101,6 @@ publish_id="$(wait_for_run publish.yml)"
 gh run watch "${publish_id}" --exit-status
 if release_id="$(wait_for_run github-release.yml)"; then
 	gh run watch "${release_id}" --exit-status
+else
+	echo "npm publish finished; watch the GitHub Release at https://github.com/chetmancini/tubeless/actions" >&2
 fi
