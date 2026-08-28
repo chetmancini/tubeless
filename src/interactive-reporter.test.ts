@@ -404,9 +404,202 @@ describe("createPipelineReporter", () => {
       expect(new Set(runningFrames).size).toBeGreaterThanOrEqual(3);
       expect(rendered).toContain("\u001B[?25l");
       expect(rendered).toContain("\u001B[?25h");
+      expect(rendered).not.toContain("\u0004");
+      expect(rendered).not.toContain("\u0005");
     } finally {
       closeSync(fd);
       unlinkSync(path);
     }
+  });
+
+  it("shimmers on the worker ticker during CPU-bound work", async () => {
+    const { closeSync, openSync, readFileSync, unlinkSync, writeSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const path = join(tmpdir(), `tubeless-shimmer-${process.pid}-${Date.now()}.log`);
+    const fd = openSync(path, "w");
+    try {
+      const reporter = createPipelineReporter({
+        color: "always",
+        log: captureLog(),
+        mode: "interactive",
+        output: {
+          columns: 100,
+          fd,
+          isTTY: true,
+          write: (chunk) => {
+            writeSync(fd, chunk);
+          },
+        },
+        refreshIntervalMs: 40,
+        symbols: "ascii",
+        terminal: { color: true, isTTY: true, unicode: false },
+      });
+      const step = createSteps();
+      const busy = step("busy", {
+        run: () => {
+          const end = Date.now() + 220;
+          while (Date.now() < end) {
+            // Busy-wait: the live ticker must not share this thread.
+          }
+          return "done";
+        },
+      });
+      const pipeline = definePipeline({
+        id: "cpu-shimmer",
+        steps: [busy],
+        finalize: (outputs) => outputs.busy,
+      });
+
+      await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+      reporter.dispose();
+
+      const rendered = readFileSync(path, "utf8");
+      const plain = rendered.replace(/\u001B\[[0-9;]*m/g, "");
+      expect(plain).toMatch(/[-\\|\/] busy/);
+      expect(rendered).toContain("\u001B[0;1;36m");
+      expect(rendered).toContain("\u001B[0;2;36m");
+      expect(rendered).not.toContain("\u0004");
+      expect(rendered).not.toContain("\u0005");
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+    }
+  });
+
+  it("does not leak shimmer tokens without color", async () => {
+    const output = captureOutput();
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      mode: "interactive",
+      output,
+      refreshIntervalMs: 10_000,
+      symbols: "ascii",
+      terminal: { color: false, isTTY: true, unicode: false },
+    });
+    const step = createSteps();
+    const load = step("load", {
+      run: async (_inputs, context) => {
+        context.reportProgress({
+          completed: 1,
+          total: 2,
+          details: [{ id: "shard-b", label: "write", status: "running" }],
+        });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return "done";
+      },
+    });
+    const pipeline = definePipeline({
+      id: "no-color-shimmer",
+      steps: [load],
+      finalize: async (outputs) => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return outputs.load;
+      },
+    });
+
+    await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    reporter.dispose();
+
+    const rendered = output.chunks.join("");
+    expect(rendered).toContain("load");
+    expect(rendered).toContain("shard-b");
+    expect(rendered).toContain("finalize");
+    expect(rendered).not.toContain("\u0004");
+    expect(rendered).not.toContain("\u0005");
+  });
+
+  it("shimmers running names, nested running details, and finalize only", async () => {
+    const output = captureOutput();
+    const reporter = createPipelineReporter({
+      color: "always",
+      log: captureLog(),
+      mode: "interactive",
+      output,
+      refreshIntervalMs: 10_000,
+      symbols: "ascii",
+      terminal: { color: true, isTTY: true, unicode: false },
+    });
+    const step = createSteps();
+    const load = step("load", {
+      name: "Load Data",
+      run: async (_inputs, context) => {
+        context.reportProgress({
+          completed: 1,
+          total: 2,
+          message: "items",
+          details: [
+            { id: "shard-b", label: "write", status: "running" },
+            { id: "shard-a", label: "parse", status: "completed" },
+          ],
+        });
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return "done";
+      },
+    });
+    const write = step("write", {
+      dependsOn: [load],
+      run: () => "written",
+    });
+    const pipeline = definePipeline({
+      id: "shimmer-test",
+      steps: [load, write],
+      finalize: async (outputs) => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return outputs.write;
+      },
+    });
+
+    await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    reporter.dispose();
+
+    const frames = output.chunks.filter((chunk) => chunk.endsWith("\n"));
+    const strip = (value: string) => value.replace(/\u001B\[[0-9;]*m/g, "");
+    const runningLoad = frames.find(
+      (chunk) => strip(chunk).includes("Load Data") && strip(chunk).includes("shard-b")
+    );
+    const runningFinalize = frames.find((chunk) => {
+      const plain = strip(chunk);
+      return plain.includes("finalize") && !plain.includes("ok finalize");
+    });
+    const completed = frames.at(-1) ?? "";
+
+    expect(runningLoad).toBeDefined();
+    expect(runningLoad).toMatch(/\u001B\[0;[12];36m/);
+    expect(strip(runningLoad ?? "")).toMatch(/Load Data/);
+    expect(strip(runningLoad ?? "")).toMatch(/shard-b write/);
+    expect(strip(runningLoad ?? "")).toContain("shard-a");
+    expect(runningLoad).not.toContain("\u0004");
+
+    const loadLine = (runningLoad ?? "")
+      .split("\n")
+      .find((line) => strip(line).includes("Load Data"));
+    const runningDetail = (runningLoad ?? "")
+      .split("\n")
+      .find((line) => strip(line).includes("shard-b"));
+    const completedDetail = (runningLoad ?? "")
+      .split("\n")
+      .find((line) => strip(line).includes("shard-a"));
+    const waitingWrite = (runningLoad ?? "")
+      .split("\n")
+      .find((line) => strip(line).includes("write") && strip(line).includes("waiting"));
+
+    expect(loadLine).toMatch(/\u001B\[0m\u001B\[0;[12];36m/);
+    expect(runningDetail).toMatch(/\u001B\[0;[12];36m/);
+    expect(runningDetail).not.toContain("\u001B[2m");
+    expect(completedDetail).toContain("\u001B[2m");
+    expect(completedDetail).not.toMatch(/\u001B\[0;[12];36m/);
+    expect(waitingWrite).not.toMatch(/\u001B\[0;[12];36m/);
+
+    expect(runningFinalize).toBeDefined();
+    const finalizeLine = (runningFinalize ?? "")
+      .split("\n")
+      .find((line) => strip(line).includes("finalize") && !strip(line).includes("ok finalize"));
+    expect(finalizeLine).toMatch(/\u001B\[0;[12];36m/);
+    expect(strip(completed)).toMatch(/ok finalize \(\d+ms\)/);
+    expect(completed.split("\n").find((line) => strip(line).includes("ok finalize"))).not.toMatch(
+      /\u001B\[0;[12];36m/
+    );
   });
 });

@@ -9,7 +9,13 @@ import type {
   PipelineStepStatus,
 } from "./pipeline.js";
 import { hasVisibleStepProgress } from "./progress.js";
-import { createLiveTicker, elapsedToken, SPINNER_TOKEN, type LiveTicker } from "./live-ticker.js";
+import {
+  createLiveTicker,
+  elapsedToken,
+  shimmerToken,
+  SPINNER_TOKEN,
+  type LiveTicker,
+} from "./live-ticker.js";
 import {
   createReporterTheme,
   createRunReporter,
@@ -24,9 +30,9 @@ export type ResolvedPipelineReporterMode = Exclude<PipelineReporterMode, "auto">
 export interface ReporterOutput {
   readonly columns?: number;
   /**
-   * File descriptor for live frames. When set, spinner and elapsed time paint on a
-   * worker thread so they keep moving during CPU-bound steps. Defaults to stdout's
-   * fd when `output` is `process.stdout`.
+   * File descriptor for live frames. When set, spinner, elapsed time, and shimmer
+   * paint on a worker thread so they keep moving during CPU-bound steps. Defaults
+   * to stdout's fd when `output` is `process.stdout`.
    */
   readonly fd?: number;
   readonly isTTY?: boolean;
@@ -146,8 +152,16 @@ function renderProgressDetail(
           : status === "pending"
             ? theme.styled.description(theme.symbols.pending)
             : theme.styled.start(spinner);
-  const label = detail.label ? ` ${theme.styled.description(safeTerminalText(detail.label))}` : "";
-  return `    ${symbol} ${safeTerminalText(detail.id)}${label}`;
+  const id = safeTerminalText(detail.id);
+  const labelText = detail.label ? safeTerminalText(detail.label) : "";
+  const running =
+    status !== "completed" && status !== "failed" && status !== "skipped" && status !== "pending";
+  const body = labelText ? `${id} ${labelText}` : id;
+  const paintedBody =
+    running && theme.colorEnabled
+      ? shimmerToken(body)
+      : `${id}${labelText ? ` ${theme.styled.description(labelText)}` : ""}`;
+  return `    ${symbol} ${paintedBody}`;
 }
 
 function renderStep(
@@ -168,7 +182,9 @@ function renderStep(
         state.startedAtMs !== undefined
           ? ` ${theme.styled.duration(elapsedToken(state.startedAtMs))}`
           : "";
-      const lines = [`  ${theme.styled.start(spinner)} ${displayName}${progress}${elapsed}`];
+      const lines = [
+        `  ${theme.styled.start(spinner)} ${shimmerToken(displayName)}${progress}${elapsed}`,
+      ];
       const details = state.progress?.details;
       if (details && details.length > 0) {
         for (const detail of details) {
@@ -259,7 +275,7 @@ function createInteractiveReporter<TResult>(
       lines.push(...renderStep(state, theme, SPINNER_TOKEN, progressBarWidth));
     }
     if (finalize.status === "running") {
-      lines.push(`  ${theme.styled.start(SPINNER_TOKEN)} finalize`);
+      lines.push(`  ${theme.styled.start(SPINNER_TOKEN)} ${shimmerToken("finalize")}`);
     } else if (finalize.status === "completed") {
       lines.push(
         `  ${theme.styled.complete(theme.symbols.complete)} finalize ${theme.styled.duration(
@@ -279,6 +295,7 @@ function createInteractiveReporter<TResult>(
   const ensureTicker = (): LiveTicker => {
     if (!ticker) {
       ticker = createLiveTicker({
+        color: theme.colorEnabled,
         columns: output.columns,
         getColumns: () => output.columns,
         fd: reporterOutputFd(output),

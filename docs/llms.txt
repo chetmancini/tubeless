@@ -59,4 +59,5 @@ Executable examples:
 - ../examples/resumable-enrichment.ts
 - ../examples/cli-job.ts
 - ../examples/cancellation-and-testing.ts
+- ../examples/live-tui.ts
 - ../examples/tracing.ts

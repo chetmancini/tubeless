@@ -77,6 +77,7 @@ The CLI loads TypeScript modules with Bun. `run` executes a
 | Reuse a pipeline inside another           | [Child pipeline](./examples/child-pipeline.ts)                            |
 | Run one child pipeline for many items     | [Fan-out and progress](./examples/fan-out-progress.ts)                    |
 | Resume long API work safely               | [Retry, rate limit, and checkpoint](./examples/resumable-enrichment.ts)   |
+| Watch the live TTY reporter               | [Live TUI](./examples/live-tui.ts)                                        |
 | Turn a pipeline into a typed script       | [Pipeline CLI](./examples/cli-job.ts)                                     |
 | Render plans and errors consistently      | [Human and JSON rendering](./examples/rendering.ts)                       |
 | Test deterministic execution              | [Cancellation and test injection](./examples/cancellation-and-testing.ts) |
