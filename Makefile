@@ -2,7 +2,7 @@
 
 .PHONY: help verify inspect plan graph run ui require-file install build lint format \
 	format-check typecheck test docs-check api-check api-generate eval-verify pack \
-	pack-verify tubeless check release
+	pack-verify tubeless check release release-notes
 
 export_arg = $(if $(strip $(EXPORT)),--export "$(EXPORT)",)
 store_arg = $(if $(strip $(STORE)),--store "$(STORE)",)
@@ -34,7 +34,8 @@ help:
 	@echo "  make format        Format package sources and documentation"
 	@echo "  make api-generate  Regenerate checked public API documentation"
 	@echo "  make pack          Inspect and verify the publishable artifact"
-	@echo "  make release       Tag package.json version and push (NOTES='...' optional)"
+	@echo "  make release-notes Print generated notes for package.json version"
+	@echo "  make release       Tag and push; edit generated notes first (EDIT=0 to skip)"
 
 require-file:
 	@if [ -z "$(FILE)" ]; then \
@@ -111,6 +112,10 @@ tubeless:
 check:
 	bun run check
 
+release-notes:
+	@bash scripts/generate-release-notes.sh
+
 release:
 	@NOTES="$(NOTES)" NOTES_FILE="$(NOTES_FILE)" DRY="$(DRY)" PUSH="$(PUSH)" \
-		WATCH="$(WATCH)" SKIP_CHECK="$(SKIP_CHECK)" bash scripts/cut-release.sh
+		WATCH="$(WATCH)" SKIP_CHECK="$(SKIP_CHECK)" EDIT="$(EDIT)" \
+		bash scripts/cut-release.sh

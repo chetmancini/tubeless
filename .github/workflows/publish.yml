@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       notes:
-        description: "Release notes to cut a new tag (first line is the summary). Optional when the version tag already exists (retry publish)."
+        description: "Optional. Override generated release notes. Leave empty to auto-generate from commits and GitHub notes (or to retry when the tag already exists)."
         required: false
         type: string
 
@@ -49,13 +49,19 @@ jobs:
             fi
             exit 0
           fi
-          if [[ -z "${NOTES}" ]]; then
-            echo "notes input is required to cut ${tag}" >&2
+          notes_path="$(mktemp)"
+          if [[ -n "${NOTES}" ]]; then
+            printf '%s\n' "${NOTES}" > "${notes_path}"
+          else
+            bash scripts/generate-release-notes.sh "${tag}" > "${notes_path}"
+          fi
+          if ! grep -q '[^[:space:]]' "${notes_path}"; then
+            echo "release notes are empty" >&2
             exit 1
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "${tag}" -m "${NOTES}"
+          git tag -a "${tag}" -F "${notes_path}"
           git push origin "${tag}"
           bash scripts/publish-github-release.sh "${tag}"
 

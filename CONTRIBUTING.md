@@ -25,27 +25,24 @@ package imports.
 
 Merging to `main` does not publish. Land the `package.json` `version` bump
 first (keep `private: true`). The tag name must be `v` plus that version.
-The annotation is the changelog; GitHub appends generated notes (merged
-pull requests, grouped by `.github/release.yml`).
 
-From a clean `main` that matches `origin/main`:
+Notes start generated: commits since the last version tag, plus GitHub's
+pull-request notes (`.github/release.yml`). Refine that draft, then tag.
 
 ```sh
-make release NOTES='Short summary of the release.
-
-- User-facing change
-- Another change'
+make release-notes
+make release
 ```
 
-That runs `make check`, creates the annotated tag, pushes it, and watches
-the Actions runs. Omit `NOTES` to write the annotation in your editor.
-`NOTES_FILE=notes.md`, `DRY=1`, `PUSH=0`, `WATCH=0`, and `SKIP_CHECK=1`
-are optional.
+`make release` opens the draft in `$EDITOR`. Save to accept or rewrite.
+`EDIT=0` ships the generated notes as-is. `NOTES='...'` or
+`NOTES_FILE=notes.md` skip generation. `DRY=1`, `PUSH=0`, `WATCH=0`, and
+`SKIP_CHECK=1` are optional.
 
 Without a checkout: Actions → **publish** → **Run workflow** on `main`.
-Fill in notes to cut a new tag (that run also opens the GitHub Release
-and publishes to npm). Omit notes only when retrying a version whose tag
-already exists.
+Leave notes empty to auto-generate and cut the tag (that run also opens
+the GitHub Release and publishes to npm). Fill in notes to override.
+Empty notes also retry a version whose tag already exists.
 
 Do not `npm publish` from a laptop. Do not attach npm tarballs to GitHub
 Releases; npm is the artifact.

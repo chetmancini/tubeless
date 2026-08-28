@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Cut an annotated version tag matching package.json and push it.
-# That tag runs npm publish and opens the GitHub Release.
+# Notes start from scripts/generate-release-notes.sh; refine in $EDITOR.
 #
 #   make release
+#   make release EDIT=0
 #   make release NOTES='Summary
 #
 #   - Change'
@@ -16,6 +17,8 @@ cd "${root}"
 
 version="$(node -p 'require("./package.json").version')"
 tag="v${version}"
+notes_path="$(mktemp)"
+trap 'rm -f "${notes_path}"' EXIT
 
 if [[ -n "$(git status --porcelain)" ]]; then
 	echo "working tree is dirty; commit or stash first" >&2
@@ -49,6 +52,27 @@ fi
 
 echo "release ${tag} at $(git rev-parse --short HEAD)"
 
+if [[ -n "${NOTES_FILE:-}" ]]; then
+	cat "${NOTES_FILE}" >"${notes_path}"
+elif [[ -n "${NOTES:-}" ]]; then
+	printf '%s\n' "${NOTES}" >"${notes_path}"
+else
+	bash "${root}/scripts/generate-release-notes.sh" "${tag}" >"${notes_path}"
+	if [[ "${EDIT:-1}" == "1" && -t 0 ]]; then
+		editor="${VISUAL:-${EDITOR:-vi}}"
+		"${editor}" "${notes_path}"
+	fi
+fi
+
+if ! grep -q '[^[:space:]]' "${notes_path}"; then
+	echo "release notes are empty" >&2
+	exit 1
+fi
+
+echo "--- release notes ---"
+cat "${notes_path}"
+echo "---"
+
 if [[ "${DRY:-}" == "1" ]]; then
 	echo "dry run: would tag ${tag} and push to origin"
 	exit 0
@@ -58,13 +82,7 @@ if [[ "${SKIP_CHECK:-}" != "1" ]]; then
 	make check
 fi
 
-if [[ -n "${NOTES_FILE:-}" ]]; then
-	git tag -a "${tag}" -F "${NOTES_FILE}"
-elif [[ -n "${NOTES:-}" ]]; then
-	git tag -a "${tag}" -m "${NOTES}"
-else
-	git tag -a "${tag}"
-fi
+git tag -a "${tag}" -F "${notes_path}"
 
 if [[ "${PUSH:-1}" == "0" ]]; then
 	echo "created ${tag} locally (PUSH=0). Push with: git push origin ${tag}"

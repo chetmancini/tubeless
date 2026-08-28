@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Create or update the GitHub Release for an annotated version tag.
-# Prepends the tag annotation, then GitHub's generated notes.
+# Uses the tag annotation. If the tag has no message, generates a draft.
 set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "${root}"
 
 tag="${1:-${GITHUB_REF_NAME:?tag is required}}"
 version="$(node -p 'require("./package.json").version')"
@@ -10,30 +13,21 @@ if [[ "${tag}" != "v${version}" ]]; then
 	exit 1
 fi
 
-repo="${GITHUB_REPOSITORY:-}"
-if [[ -z "${repo}" ]]; then
-	repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
-fi
-
 subject="$(git tag -l --format='%(contents:subject)' "${tag}")"
 body="$(git tag -l --format='%(contents:body)' "${tag}")"
 notes="$(mktemp)"
 trap 'rm -f "${notes}"' EXIT
 
-{
-	if [[ -n "${subject}" ]]; then
+if [[ -n "${subject}" ]]; then
+	{
 		printf '%s\n' "${subject}"
 		if [[ -n "${body}" ]]; then
 			printf '\n%s\n' "${body}"
 		fi
-		printf '\n'
-	fi
-	generated="$(gh api "repos/${repo}/releases/generate-notes" \
-		-f tag_name="${tag}" --jq .body)"
-	if [[ -n "${generated}" ]]; then
-		printf '%s\n' "${generated}"
-	fi
-} >"${notes}"
+	} >"${notes}"
+else
+	bash "${root}/scripts/generate-release-notes.sh" "${tag}" >"${notes}"
+fi
 
 if gh release view "${tag}" >/dev/null 2>&1; then
 	edit_args=(--title "${tag}" --notes-file "${notes}")
