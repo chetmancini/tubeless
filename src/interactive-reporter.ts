@@ -9,6 +9,7 @@ import type {
   PipelineStepStatus,
 } from "./pipeline.js";
 import { hasVisibleStepProgress } from "./progress.js";
+import { createLiveTicker, elapsedToken, SPINNER_TOKEN, type LiveTicker } from "./live-ticker.js";
 import {
   createReporterTheme,
   createRunReporter,
@@ -22,6 +23,12 @@ export type ResolvedPipelineReporterMode = Exclude<PipelineReporterMode, "auto">
 
 export interface ReporterOutput {
   readonly columns?: number;
+  /**
+   * File descriptor for live frames. When set, spinner and elapsed time paint on a
+   * worker thread so they keep moving during CPU-bound steps. Defaults to stdout's
+   * fd when `output` is `process.stdout`.
+   */
+  readonly fd?: number;
   readonly isTTY?: boolean;
   write(chunk: string): unknown;
 }
@@ -60,22 +67,6 @@ type FinalizeState =
   | { durationMs: number; status: "completed" }
   | { durationMs: number; error: PipelineError; status: "failed" };
 
-const ANSI = {
-  clearDown: "\u001B[J",
-  hideCursor: "\u001B[?25l",
-  reset: "\u001B[0m",
-  showCursor: "\u001B[?25h",
-} as const;
-
-const SPINNERS = {
-  ascii: ["-", "\\", "|", "/"],
-  unicode: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
-} as const;
-
-const ANSI_STYLE = /\u001B\[[0-9;]*m/g;
-const ANSI_STYLE_PREFIX = /^\u001B\[[0-9;]*m/;
-const COMBINING_MARK = /\p{Mark}/u;
-const EMOJI = /\p{Extended_Pictographic}/u;
 const TERMINAL_OSC = /(?:\u001B\]|\u009D)[\s\S]*?(?:\u0007|\u001B\\|\u009C)/g;
 const TERMINAL_STRING = /(?:\u001B[P_X^]|\u0090|\u0098|\u009E|\u009F)[\s\S]*?(?:\u001B\\|\u009C)/g;
 const TERMINAL_CSI = /(?:\u001B\[|\u009B)[0-?]*[ -/]*[@-~]/g;
@@ -117,57 +108,6 @@ function safeTerminalText(value: string): string {
 
 function safeTerminalLog(value: string): string {
   return stripTerminalControls(value.replace(/\r\n?/g, "\n").replaceAll("\t", " "));
-}
-
-function characterWidth(character: string): number {
-  if (COMBINING_MARK.test(character) || character === "\u200D") return 0;
-  if (EMOJI.test(character)) return 2;
-  const codePoint = character.codePointAt(0) ?? 0;
-  return codePoint >= 0x1100 &&
-    (codePoint <= 0x115f ||
-      codePoint === 0x2329 ||
-      codePoint === 0x232a ||
-      (codePoint >= 0x2e80 && codePoint <= 0xa4cf) ||
-      (codePoint >= 0xac00 && codePoint <= 0xd7a3) ||
-      (codePoint >= 0xf900 && codePoint <= 0xfaff) ||
-      (codePoint >= 0xfe10 && codePoint <= 0xfe6f) ||
-      (codePoint >= 0xff00 && codePoint <= 0xff60) ||
-      (codePoint >= 0xffe0 && codePoint <= 0xffe6) ||
-      (codePoint >= 0x20000 && codePoint <= 0x3fffd))
-    ? 2
-    : 1;
-}
-
-function visibleWidth(value: string): number {
-  return [...value].reduce((width, character) => width + characterWidth(character), 0);
-}
-
-function fitLine(value: string, columns: number | undefined): string {
-  if (!columns || columns <= 1) return value;
-  const maxWidth = columns - 1;
-  const plain = value.replace(ANSI_STYLE, "");
-  if (visibleWidth(plain) <= maxWidth) return value;
-  const targetWidth = Math.max(0, maxWidth - 1);
-  let width = 0;
-  let truncated = "";
-  let index = 0;
-  let hasStyle = false;
-  while (index < value.length) {
-    const style = value.slice(index).match(ANSI_STYLE_PREFIX)?.[0];
-    if (style) {
-      truncated += style;
-      index += style.length;
-      hasStyle = true;
-      continue;
-    }
-    const character = String.fromCodePoint(value.codePointAt(index) ?? 0);
-    const nextWidth = width + characterWidth(character);
-    if (nextWidth > targetWidth) break;
-    truncated += character;
-    width = nextWidth;
-    index += character.length;
-  }
-  return `${truncated}${hasStyle ? ANSI.reset : ""}…`;
 }
 
 function formatCount(value: number): string {
@@ -214,8 +154,7 @@ function renderStep(
   state: StepState,
   theme: ReporterTheme,
   spinner: string,
-  progressBarWidth: number,
-  nowMs: number
+  progressBarWidth: number
 ): string[] {
   const { step } = state;
   const displayName = safeTerminalText(step.name ?? step.id);
@@ -227,7 +166,7 @@ function renderStep(
           : "";
       const elapsed =
         state.startedAtMs !== undefined
-          ? ` ${theme.styled.duration(formatDurationMs(Math.max(0, nowMs - state.startedAtMs)))}`
+          ? ` ${theme.styled.duration(elapsedToken(state.startedAtMs))}`
           : "";
       const lines = [`  ${theme.styled.start(spinner)} ${displayName}${progress}${elapsed}`];
       const details = state.progress?.details;
@@ -269,6 +208,14 @@ function renderStep(
   }
 }
 
+function reporterOutputFd(output: ReporterOutput): number | undefined {
+  const stdoutFd = output === process.stdout ? process.stdout.fd : undefined;
+  for (const fd of [output.fd, stdoutFd]) {
+    if (fd !== undefined && Number.isInteger(fd) && fd >= 0) return fd;
+  }
+  return undefined;
+}
+
 function createInteractiveReporter<TResult>(
   options: PipelineReporterOptions,
   output: ReporterOutput
@@ -278,7 +225,6 @@ function createInteractiveReporter<TResult>(
     ...options,
     terminal: { isTTY: terminalIsTTY, ...options.terminal },
   });
-  const spinnerFrames = theme.capabilities.unicode ? SPINNERS.unicode : SPINNERS.ascii;
   const progressBarWidth = Math.max(4, Math.floor(options.progressBarWidth ?? 20));
   // ~12.5 fps keeps braille spinners smooth without flooding the terminal.
   const refreshIntervalMs = Math.max(16, Math.floor(options.refreshIntervalMs ?? 80));
@@ -286,29 +232,11 @@ function createInteractiveReporter<TResult>(
   let plan: PipelinePlan | undefined;
   let result: PipelineRun<TResult> | undefined;
   let finalize: FinalizeState = { status: "idle" };
-  let frameLineCount = 0;
   let lastProgressRedrawAt = Number.NEGATIVE_INFINITY;
   let progressDirty = false;
   let disposed = false;
-  let cursorHidden = false;
-  let timer: ReturnType<typeof setInterval> | undefined;
+  let ticker: LiveTicker | undefined;
   let exitListener: (() => void) | undefined;
-
-  /** Wall-clock spinner so progress redraws animate even if the interval is delayed. */
-  const currentSpinner = (): string => {
-    const frame = Math.floor(Date.now() / refreshIntervalMs) % spinnerFrames.length;
-    return spinnerFrames[frame] ?? spinnerFrames[0]!;
-  };
-
-  const hasLiveWork = (): boolean =>
-    finalize.status === "running" ||
-    [...steps.values()].some((state) => state.status === "running");
-
-  const clearFrame = (): void => {
-    if (frameLineCount === 0) return;
-    output.write(`\u001B[${frameLineCount}F${ANSI.clearDown}`);
-    frameLineCount = 0;
-  };
 
   const frameLines = (): string[] => {
     if (!plan) return [];
@@ -327,13 +255,11 @@ function createInteractiveReporter<TResult>(
             : theme.styled.pipeline(header)
       );
     }
-    const spinner = currentSpinner();
-    const nowMs = Date.now();
     for (const state of steps.values()) {
-      lines.push(...renderStep(state, theme, spinner, progressBarWidth, nowMs));
+      lines.push(...renderStep(state, theme, SPINNER_TOKEN, progressBarWidth));
     }
     if (finalize.status === "running") {
-      lines.push(`  ${theme.styled.start(spinner)} finalize`);
+      lines.push(`  ${theme.styled.start(SPINNER_TOKEN)} finalize`);
     } else if (finalize.status === "completed") {
       lines.push(
         `  ${theme.styled.complete(theme.symbols.complete)} finalize ${theme.styled.duration(
@@ -347,16 +273,30 @@ function createInteractiveReporter<TResult>(
         )}`
       );
     }
-    return lines.map((line) => fitLine(line, output.columns));
+    return lines;
+  };
+
+  const ensureTicker = (): LiveTicker => {
+    if (!ticker) {
+      ticker = createLiveTicker({
+        columns: output.columns,
+        getColumns: () => output.columns,
+        fd: reporterOutputFd(output),
+        refreshIntervalMs,
+        unicode: theme.capabilities.unicode,
+        write: (chunk) => {
+          output.write(chunk);
+        },
+      });
+    }
+    return ticker;
   };
 
   const redraw = (): void => {
     if (disposed) return;
-    clearFrame();
     const lines = frameLines();
     if (lines.length === 0) return;
-    output.write(`${lines.join("\n")}\n`);
-    frameLineCount = lines.length;
+    ensureTicker().setLines(lines);
   };
 
   const flushProgress = (): void => {
@@ -366,18 +306,11 @@ function createInteractiveReporter<TResult>(
     redraw();
   };
 
-  const restoreCursor = (): void => {
-    if (!cursorHidden) return;
-    output.write(ANSI.showCursor);
-    cursorHidden = false;
-  };
-
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
-    if (timer) clearInterval(timer);
-    timer = undefined;
-    restoreCursor();
+    ticker?.dispose();
+    ticker = undefined;
     if (exitListener) process.off("exit", exitListener);
     exitListener = undefined;
   };
@@ -391,9 +324,15 @@ function createInteractiveReporter<TResult>(
         : level === "warn"
           ? `${theme.styled.skip("!")} `
           : "";
-    if (!disposed) clearFrame();
-    output.write(`${prefix}${safeRendered}\n`);
-    if (!disposed) redraw();
+    const text = `${prefix}${safeRendered}\n`;
+    if (disposed) {
+      output.write(text);
+      return;
+    }
+    ensureTicker().writeLog(text);
+    progressDirty = false;
+    lastProgressRedrawAt = Date.now();
+    redraw();
   };
 
   const log: PipelineLogger = {
@@ -408,22 +347,11 @@ function createInteractiveReporter<TResult>(
       for (const step of nextPlan.steps) {
         steps.set(step.id, { pipelineId: nextPlan.pipelineId, status: "planned", step });
       }
-      output.write(ANSI.hideCursor);
-      cursorHidden = true;
       if (output === process.stdout) {
-        exitListener = restoreCursor;
+        exitListener = dispose;
         process.once("exit", exitListener);
       }
       redraw();
-      // Keep a tick alive while work runs. Do not unref: long CPU-bound stretches
-      // between awaits still need the interval scheduled; wall-clock frames handle
-      // animation between ticks when progress redraws.
-      timer = setInterval(() => {
-        if (!hasLiveWork()) return;
-        progressDirty = false;
-        lastProgressRedrawAt = Date.now();
-        redraw();
-      }, refreshIntervalMs);
     },
     onStepStatus: (event) => {
       const previous = steps.get(event.step.id);

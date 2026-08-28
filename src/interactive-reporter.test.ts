@@ -355,4 +355,58 @@ describe("createPipelineReporter", () => {
     expect(runningFrames.length).toBeGreaterThanOrEqual(2);
     expect(uniqueRunning.size).toBeGreaterThanOrEqual(2);
   });
+
+  it("animates spinner while a step burns CPU without progress", async () => {
+    const { closeSync, openSync, readFileSync, unlinkSync, writeSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const path = join(tmpdir(), `tubeless-spinner-${process.pid}-${Date.now()}.log`);
+    const fd = openSync(path, "w");
+    try {
+      const reporter = createPipelineReporter({
+        color: "never",
+        log: captureLog(),
+        mode: "interactive",
+        output: {
+          columns: 100,
+          fd,
+          isTTY: true,
+          write: (chunk) => {
+            writeSync(fd, chunk);
+          },
+        },
+        refreshIntervalMs: 40,
+        symbols: "ascii",
+        terminal: { color: false, isTTY: true, unicode: false },
+      });
+      const step = createSteps();
+      const busy = step("busy", {
+        run: () => {
+          const end = Date.now() + 220;
+          while (Date.now() < end) {
+            // Busy-wait: the live ticker must not share this thread.
+          }
+          return "done";
+        },
+      });
+      const pipeline = definePipeline({
+        id: "cpu-only",
+        steps: [busy],
+        finalize: (outputs) => outputs.busy,
+      });
+
+      await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+      reporter.dispose();
+
+      const rendered = readFileSync(path, "utf8");
+      const runningFrames = [...rendered.matchAll(/[-\\|\/] busy/g)].map((match) => match[0]);
+      expect(runningFrames.length).toBeGreaterThanOrEqual(3);
+      expect(new Set(runningFrames).size).toBeGreaterThanOrEqual(3);
+      expect(rendered).toContain("\u001B[?25l");
+      expect(rendered).toContain("\u001B[?25h");
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+    }
+  });
 });
