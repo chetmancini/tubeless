@@ -10,6 +10,7 @@ Start:
 - Local studio: ./studio.md
 - Choose a pattern: ./recipes.md
 - Execution semantics: ./concepts.md
+- Comparison: ./comparison.md
 
 Agent instructions:
 

@@ -9,6 +9,7 @@
 | [Recipe index](./recipes.md)            | Choosing an executable example by intent              |
 | [Core concepts](./concepts.md)          | Dependencies, skips, failures, dry runs, and contexts |
 | [Agent guide](./agent-guide.md)         | Rules for generating and modifying pipeline code      |
+| [Comparison](./comparison.md)           | When to use tubeless vs other tools                   |
 
 ## How to
 

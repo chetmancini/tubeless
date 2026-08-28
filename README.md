@@ -94,6 +94,7 @@ The [recipe index](./docs/recipes.md) explains when to use each pattern.
 - [CLI](./docs/cli.md)
 - [Local studio](./docs/studio.md)
 - [Core concepts](./docs/concepts.md)
+- [Comparison](./docs/comparison.md)
 - [Documentation map](./docs/README.md)
 - [Generated API inventory](./docs/api-reference.md)
 - [Agent guide](./docs/agent-guide.md)
