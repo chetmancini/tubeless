@@ -1,0 +1,67 @@
+name: github-release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  github-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="$(node -p 'require("./package.json").version')"
+          if [[ "${tag}" != "v${version}" ]]; then
+            echo "tag ${tag} does not match package.json version ${version}" >&2
+            exit 1
+          fi
+
+          subject="$(git tag -l --format='%(contents:subject)' "${tag}")"
+          body="$(git tag -l --format='%(contents:body)' "${tag}")"
+          notes="$(mktemp)"
+          {
+            if [[ -n "${subject}" ]]; then
+              printf '%s\n' "${subject}"
+              if [[ -n "${body}" ]]; then
+                printf '\n%s\n' "${body}"
+              fi
+              printf '\n'
+            fi
+          } > "${notes}"
+
+          extra=()
+          if [[ "${version}" == *-* ]]; then
+            extra+=(--prerelease --latest=false)
+          fi
+
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            generated="$(gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+              -f tag_name="${tag}" --jq .body)"
+            if [[ -n "${generated}" ]]; then
+              printf '%s\n' "${generated}" >> "${notes}"
+            fi
+            edit_args=(--title "${tag}" --notes-file "${notes}")
+            if [[ "${version}" == *-* ]]; then
+              edit_args+=(--prerelease)
+            fi
+            gh release edit "${tag}" "${edit_args[@]}"
+          else
+            create_args=(--title "${tag}" --generate-notes --verify-tag)
+            if [[ -s "${notes}" ]]; then
+              create_args+=(--notes-file "${notes}")
+            fi
+            gh release create "${tag}" "${create_args[@]}" "${extra[@]}"
+          fi

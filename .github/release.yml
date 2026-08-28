@@ -1,0 +1,31 @@
+# Categories for GitHub's generated release notes (merged pull requests).
+# The tag annotation is still the human changelog; this only sorts the
+# generated "What's Changed" section. See CONTRIBUTING.md.
+
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+  categories:
+    - title: Breaking Changes
+      labels:
+        - breaking
+        - breaking-change
+    - title: Features
+      labels:
+        - enhancement
+        - feature
+    - title: Fixes
+      labels:
+        - bug
+        - fix
+    - title: Documentation
+      labels:
+        - documentation
+        - docs
+    - title: Dependencies
+      labels:
+        - dependencies
+    - title: Other Changes
+      labels:
+        - "*"

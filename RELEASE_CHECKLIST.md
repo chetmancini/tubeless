@@ -41,18 +41,26 @@ name; recheck immediately before the first publish.
 - [x] Operator: enable 2FA on the npm account (auth-and-writes), then register
       GitHub Actions as the trusted publisher for `tubeless`: Organization or
       user `chetmancini`, repository `tubeless`, workflow filename `publish.yml`,
-      environment `npm`, allowed action `npm publish`. Rechecked `npm view
-      tubeless` (name was free). The GitHub Environment `npm` already existed.
+      environment `npm`, allowed action `npm publish`. Rechecked that the
+      unscoped name was free. The GitHub Environment `npm` already existed.
       Trusted publisher id `837d83b1-a87f-4f95-9e4a-5116be724dac`.
 - [x] Operator: `tubeless@0.1.0` had to be published once from this machine so
       the trusted publisher could be attached (`npm trust` requires an existing
-      package). Then `git tag v0.1.0` on `083e021` and `git push origin
-      v0.1.0`. The tag workflow skipped republish. Set `npm access set
-      mfa=publish`. The stronger npm UI toggle (require 2FA and disallow tokens)
-      remains optional.
-- [ ] Define the release trigger and rollback process: protected version tags,
-      GitHub Releases, prerelease dist-tags, deprecation guidance, and who can
-      publish or yank/deprecate a broken version.
+      package). Then tagged `v0.1.0` on `083e021` and pushed that tag. The
+      tag workflow skipped republish. Set `npm access set mfa=publish`. The
+      stronger npm UI toggle (require 2FA and disallow tokens) remains
+      optional.
+- [x] Define the release trigger and rollback process. Cut an annotated
+      `vX.Y.Z` tag matching `package.json` `version` (see CONTRIBUTING).
+      Pushing the tag publishes to npm (`publish.yml`) and opens a GitHub
+      Release (`github-release.yml`). The tag annotation is the changelog;
+      GitHub appends generated notes (merged PRs via `.github/release.yml`).
+      Prerelease tags (`vX.Y.Z-rc.N`) are GitHub prereleases and npm `next`.
+      Who: repository admins. Do not `npm publish` from a laptop. Rollback:
+      `npm deprecate tubeless@version "reason"` and point `latest` at the
+      previous good version with `npm dist-tag add`. Prefer that over
+      `npm unpublish` (72-hour window, discouraged). Edit the GitHub Release
+      with a yanked warning. Optional later: a ruleset on `refs/tags/v*`.
 
 ## Documentation and project quality
 
@@ -67,8 +75,10 @@ name; recheck immediately before the first publish.
 - [x] Add `CONTRIBUTING.md`. Pull requests are accepted for now; the
       maintainer set stays small.
 - [x] Add `SECURITY.md` with private GitHub vulnerability reporting.
-- [ ] Add a code of conduct, support policy, issue/PR templates, and a
-      changelog or release-notes convention.
+- [x] Changelog / release-notes convention: GitHub Releases from annotated
+      version tags, plus generated notes configured in `.github/release.yml`.
+      No `CHANGELOG.md`.
+- [ ] Add a code of conduct, support policy, and issue/PR templates.
 - [ ] Add API compatibility review to pull requests by making changes to the
       generated API report explicit and reviewable.
 - [ ] Add runnable examples to CI and smoke-test the README commands from a
