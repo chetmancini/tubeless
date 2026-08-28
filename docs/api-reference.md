@@ -12,7 +12,7 @@ Package: `tubeless`
 | `tubeless/batch`            | `./dist/batch.d.ts`            | `2ae7ccbf0fb6582243d2a395c2d2b0fe561fd19d3850309321b7d270c5a8d015` |                5 |
 | `tubeless/cli`              | `./dist/cli.d.ts`              | `fa8aeac9a22f491ef6b90da82fd15523e87d6185a93efcc57568337dff2086fb` |               36 |
 | `tubeless/node`             | `./dist/node.d.ts`             | `d6f70752eb9e0ea752b8e2bfb9418f5d30bd46d790360504434fdfeb6a6f7414` |                8 |
-| `tubeless/rate-limit`       | `./dist/rate-limit.d.ts`       | `2376474470b4fdc671f45daa90cb47cb0fd94653ba77ee9f03dcd10af7c0b022` |                1 |
+| `tubeless/rate-limit`       | `./dist/rate-limit.d.ts`       | `a6b8642be882b01931597b1e0294094cb0a23fd9075c4d22aefe22d1ad1e5330` |                1 |
 | `tubeless/render`           | `./dist/render.d.ts`           | `1e9e3c4f18d8cf6992ec48c7f793ebbfc3bc43219d8694fb6cee76da83d98479` |                6 |
 | `tubeless/reporter`         | `./dist/reporter-entry.d.ts`   | `c2cf9ffaa7f5f80d1cb936b373782baeb2a33b1f2847fd7dbe3b36d7cc6dc199` |               13 |
 | `tubeless/retry`            | `./dist/retry.d.ts`            | `8b93425242c618f533498fa9d1670d321e69c4bab7bfaa000ab2464c1b755f4a` |                4 |
