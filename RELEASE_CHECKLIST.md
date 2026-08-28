@@ -84,8 +84,9 @@ name; recheck immediately before the first publish.
 - [ ] Add a code of conduct, support policy, and issue/PR templates.
 - [ ] Add API compatibility review to pull requests by making changes to the
       generated API report explicit and reviewable.
-- [ ] Add runnable examples to CI and smoke-test the README commands from a
-      clean checkout.
+- [x] Add runnable examples to CI and smoke-test the README commands from a
+      clean checkout. `scripts/verify-packed-artifact.mjs` runs packed
+      `examples/` and the inspect/plan/graph/run verbs.
 - [ ] Add dependency and workflow maintenance (Dependabot or Renovate), minimal
       GitHub Actions permissions, pinned action policy, and a secret-scanning
       check appropriate for a public repository.

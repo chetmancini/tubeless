@@ -73,6 +73,171 @@ function assertPackedDocumentationLinks(installedPackage) {
   assertPackedLlmsLinks(packedDocs);
 }
 
+function assertPackedExampleCli(tubelessBin, installedPackage, consumerRoot) {
+  const typedImport = join(installedPackage, "examples", "typed-import.ts");
+  const cliJob = join(installedPackage, "examples", "cli-job.ts");
+  const inspection = JSON.parse(
+    run(tubelessBin, ["inspect", "--json", "--export", "ImportPipeline", typedImport], consumerRoot)
+  );
+  if (inspection.pipelineId !== "import") {
+    throw new Error(
+      `Packed example inspect returned an invalid inspection:\n${JSON.stringify(inspection)}`
+    );
+  }
+  const plan = JSON.parse(
+    run(
+      tubelessBin,
+      [
+        "plan",
+        "--json",
+        "--export",
+        "ImportPipeline",
+        "--target",
+        "normalize-rows",
+        "--explain",
+        typedImport,
+      ],
+      consumerRoot
+    )
+  );
+  const normalizeRows = plan.steps?.find(({ id }) => id === "normalize-rows");
+  if (plan.ok !== true || normalizeRows?.selected !== true) {
+    throw new Error(`Packed example plan returned an invalid plan:\n${JSON.stringify(plan)}`);
+  }
+  const diagram = run(
+    tubelessBin,
+    ["graph", "--export", "ImportPipeline", typedImport],
+    consumerRoot
+  );
+  if (!diagram.includes("-->")) {
+    throw new Error(`Packed example graph omitted a Mermaid edge:\n${diagram}`);
+  }
+  const sourceFile = join(consumerRoot, "import-source.txt");
+  writeFileSync(sourceFile, "Alpha\nBeta\n");
+  const successfulRun = runWithStatus(
+    tubelessBin,
+    ["run", "--export", "ImportCommand", cliJob, "--", "--source", sourceFile],
+    consumerRoot,
+    0
+  );
+  if (!successfulRun.stdout.includes("Normalized")) {
+    throw new Error(`Packed example run omitted summarize output:\n${successfulRun.stdout}`);
+  }
+}
+
+function assertPackedExampleModules(consumerRoot, installedPackage) {
+  const packedExamples = join(installedPackage, "examples");
+  const examplesDirectory = join(consumerRoot, "packed-examples");
+  mkdirSync(examplesDirectory);
+  for (const name of readdirSync(packedExamples)) {
+    if (!name.endsWith(".ts")) continue;
+    writeFileSync(join(examplesDirectory, name), readFileSync(join(packedExamples, name)));
+  }
+  const recipesPath = join(installedPackage, "docs", "recipes.md");
+  const checkpointPath = join(consumerRoot, "enrichment-checkpoint.json");
+  const program = `
+const { existsSync, readFileSync } = await import("node:fs");
+const { join } = await import("node:path");
+const { pathToFileURL } = await import("node:url");
+
+const examplesDirectory = ${JSON.stringify(examplesDirectory)};
+const recipesPath = ${JSON.stringify(recipesPath)};
+const checkpointPath = ${JSON.stringify(checkpointPath)};
+
+function fail(example, detail) {
+  throw new Error(example + ": " + detail);
+}
+
+function defined(value, example) {
+  if (value === undefined) fail(example, "returned undefined");
+  return value;
+}
+
+async function loadExample(file) {
+  return import(pathToFileURL(join(examplesDirectory, file)).href);
+}
+
+const runners = {
+  "typed-import.ts": async (mod) => {
+    defined(await mod.runImportExample(), "typed-import.ts");
+  },
+  "validated-boundaries.ts": async (mod) => {
+    defined(await mod.runValidatedExample(), "validated-boundaries.ts");
+  },
+  "publish-with-gates.ts": async (mod) => {
+    defined(await mod.runPublishDryRunExample(), "publish-with-gates.ts");
+  },
+  "conditional-step.ts": async (mod) => {
+    defined(await mod.runConditionalCacheExample(), "conditional-step.ts");
+  },
+  "best-effort.ts": async (mod) => {
+    defined(await mod.runBestEffortExample(), "best-effort.ts");
+  },
+  "child-pipeline.ts": async (mod) => {
+    defined(await mod.runChildPipelineExample(), "child-pipeline.ts");
+  },
+  "fan-out-progress.ts": async (mod) => {
+    defined(
+      await mod.FanOutPipeline.runOrThrow({
+        concurrency: 1,
+        shards: [{ id: "s", records: ["a"] }],
+      }),
+      "fan-out-progress.ts"
+    );
+  },
+  "live-tui.ts": async (mod) => {
+    defined(await mod.LiveTuiPipeline.runOrThrow({ delay: 0 }), "live-tui.ts");
+  },
+  "resumable-enrichment.ts": async (mod) => {
+    const result = await mod.EnrichmentPipeline.run({
+      checkpointPath: "enrichment-checkpoint.json",
+      dryRun: true,
+      items: ["a"],
+    });
+    if (result.status !== "completed") fail("resumable-enrichment.ts", "status " + result.status);
+    if (existsSync(checkpointPath)) fail("resumable-enrichment.ts", "dry-run created a checkpoint");
+  },
+  "cli-job.ts": async (mod) => {
+    defined(mod.ImportCommand, "cli-job.ts");
+  },
+  "rendering.ts": async (mod) => {
+    if (typeof mod.humanPlan !== "string") fail("rendering.ts", "humanPlan is not a string");
+    if (typeof mod.jsonPlan !== "string" || mod.jsonPlan.length === 0) {
+      fail("rendering.ts", "jsonPlan is empty");
+    }
+    if (!mod.humanPlan.includes("publish") && !mod.humanPlan.includes("release")) {
+      fail("rendering.ts", "humanPlan omitted publish or release");
+    }
+  },
+  "cancellation-and-testing.ts": async (mod) => {
+    defined(await mod.runWithTestRuntime(), "cancellation-and-testing.ts");
+  },
+  "tracing.ts": async (mod) => {
+    const value = await mod.runTracingExample([" Alpha "]);
+    if (!Array.isArray(value) || value.some((row) => row !== row.toLowerCase())) {
+      fail("tracing.ts", "expected a lowercased array");
+    }
+  },
+  "local-observability.ts": async (mod) => {
+    const snapshot = mod.snapshotFromPages([[]]);
+    if (!snapshot || !Array.isArray(snapshot.runs)) {
+      fail("local-observability.ts", "snapshotFromPages omitted a runs array");
+    }
+  },
+};
+
+const recipes = readFileSync(recipesPath, "utf8");
+const linked = [
+  ...new Set([...recipes.matchAll(/\\.\\.\\/examples\\/([a-z0-9-]+\\.ts)/g)].map((match) => match[1])),
+];
+for (const file of linked) {
+  const runner = runners[file];
+  if (!runner) fail(file, "no packed-example runner");
+  await runner(await loadExample(file));
+}
+`;
+  run("node", ["--input-type=module", "--eval", program], consumerRoot);
+}
 try {
   const packedStdout = run(
     npm,
@@ -247,8 +412,11 @@ export const FixtureCommand = definePipelineCommand(FixturePipeline, {
     throw new Error(`Packed tubeless run omitted cancellation output:\n${cancelledRun.stderr}`);
   }
 
+  assertPackedExampleCli(tubelessBin, installedPackage, consumerRoot);
+  assertPackedExampleModules(consumerRoot, installedPackage);
+
   process.stdout.write(
-    "Packed tubeless artifact imports, executable, and documentation verified.\n"
+    "Packed tubeless artifact imports, executable, documentation, and examples verified.\n"
   );
 } finally {
   rmSync(temporaryRoot, { force: true, recursive: true });
