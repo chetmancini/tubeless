@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "caseId": "sequential-import",
+  "expectations": [
+    {
+      "category": "mustDemonstrate",
+      "expectation": "typed options",
+      "status": "pass",
+      "evidence": "ImportOptions types context.options.lines."
+    },
+    {
+      "category": "mustDemonstrate",
+      "expectation": "required step dependency",
+      "status": "pass",
+      "evidence": "normalize-rows declares dependsOn: [loadRows]."
+    },
+    {
+      "category": "mustDemonstrate",
+      "expectation": "requireOutputs finalizer",
+      "status": "pass",
+      "evidence": "The finalizer requires normalize-rows and returns count plus values."
+    },
+    {
+      "category": "mustAvoid",
+      "expectation": "string-only dependency lookup",
+      "status": "pass",
+      "evidence": "The dependency is the loadRows step object."
+    },
+    {
+      "category": "mustAvoid",
+      "expectation": "manual output type map",
+      "status": "pass",
+      "evidence": "Outputs are inferred from step declarations."
+    }
+  ]
+}

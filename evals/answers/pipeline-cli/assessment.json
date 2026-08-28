@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "caseId": "pipeline-cli",
+  "expectations": [
+    {
+      "category": "mustDemonstrate",
+      "expectation": "definePipelineCommand",
+      "status": "pass",
+      "evidence": "ImportCommand is definePipelineCommand(ImportPipeline, …)."
+    },
+    {
+      "category": "mustDemonstrate",
+      "expectation": "path validation",
+      "status": "pass",
+      "evidence": "source is type path with mustExist and kind file."
+    },
+    {
+      "category": "mustDemonstrate",
+      "expectation": "numeric validation",
+      "status": "pass",
+      "evidence": "concurrency is a positive integer with min 1."
+    },
+    {
+      "category": "mustDemonstrate",
+      "expectation": "built-in pipeline flags",
+      "status": "pass",
+      "evidence": "The command does not redeclare dry-run, step, or target flags."
+    },
+    {
+      "category": "mustDemonstrate",
+      "expectation": "explicit source-to-domain option mapping",
+      "status": "pass",
+      "evidence": "mapOptions reads --source into lines and forwards concurrency."
+    },
+    {
+      "category": "mustAvoid",
+      "expectation": "manual process.argv parsing",
+      "status": "pass",
+      "evidence": "Flags are declared on definePipelineCommand params."
+    },
+    {
+      "category": "mustAvoid",
+      "expectation": "redeclared dry-run flag",
+      "status": "pass",
+      "evidence": "params has no dryRun or dry-run field."
+    },
+    {
+      "category": "mustAvoid",
+      "expectation": "process.exit",
+      "status": "pass",
+      "evidence": "The module exports ImportCommand and does not call process.exit."
+    }
+  ]
+}

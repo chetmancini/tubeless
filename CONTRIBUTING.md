@@ -16,7 +16,8 @@ make check
 `make check` is the same gate CI runs. `make help` lists the rest.
 
 Before changing usage or public behavior, read
-[`docs/agent-guide.md`](./docs/agent-guide.md). Do not edit
+[`docs/agent-guide.md`](./docs/agent-guide.md) and the repository-local
+[`tubeless` skill](./skills/tubeless/SKILL.md). Do not edit
 `docs/api-reference.md` or `docs/api-report.json` by hand; after an intentional
 public-surface change, run `bun run api:generate`. Keep examples on public
 package imports.

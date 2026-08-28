@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "caseId": "fan-out-children",
+  "expectations": [
+    {
+      "category": "mustDemonstrate",
+      "expectation": "forEachPipeline",
+      "status": "pass",
+      "evidence": "process-shards is declared with fanOutStep.forEachPipeline."
+    },
+    {
+      "category": "mustDemonstrate",
+      "expectation": "stable keys",
+      "status": "pass",
+      "evidence": "key: (shard) => shard.id uses the caller's shard identity."
+    },
+    {
+      "category": "mustDemonstrate",
+      "expectation": "concurrency set to four",
+      "status": "pass",
+      "evidence": "concurrency is 4."
+    },
+    {
+      "category": "mustDemonstrate",
+      "expectation": "progress metadata",
+      "status": "pass",
+      "evidence": "The parent reports itemNoun shards and the child calls reportProgress."
+    },
+    {
+      "category": "mustAvoid",
+      "expectation": "Promise.all across all shards",
+      "status": "pass",
+      "evidence": "Fan-out uses forEachPipeline concurrency instead of Promise.all."
+    },
+    {
+      "category": "mustAvoid",
+      "expectation": "flattening child steps into the parent",
+      "status": "pass",
+      "evidence": "ShardPipeline remains a separate pipeline with its own process-records step."
+    }
+  ]
+}

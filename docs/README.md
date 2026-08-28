@@ -2,14 +2,15 @@
 
 ## Start here
 
-| Document                                | Use it for                                            |
-| --------------------------------------- | ----------------------------------------------------- |
-| [Package README](../README.md)          | What it is, a first example, and a pattern table      |
-| [Getting started](./getting-started.md) | Building, running, and testing a first pipeline       |
-| [Recipe index](./recipes.md)            | Choosing an executable example by intent              |
-| [Core concepts](./concepts.md)          | Dependencies, skips, failures, dry runs, and contexts |
-| [Agent guide](./agent-guide.md)         | Rules for generating and modifying pipeline code      |
-| [Comparison](./comparison.md)           | When to use tubeless vs other tools                   |
+| Document                                                  | Use it for                                            |
+| --------------------------------------------------------- | ----------------------------------------------------- |
+| [Package README](../README.md)                            | What it is, a first example, and a pattern table      |
+| [Getting started](./getting-started.md)                   | Building, running, and testing a first pipeline       |
+| [Recipe index](./recipes.md)                              | Choosing an executable example by intent              |
+| [Project catalog](../examples/catalog/tubeless.studio.ts) | File layout, stable IDs, and studio registration      |
+| [Core concepts](./concepts.md)                            | Dependencies, skips, failures, dry runs, and contexts |
+| [Agent guide](./agent-guide.md)                           | Rules for generating and modifying pipeline code      |
+| [Comparison](./comparison.md)                             | When to use tubeless vs other tools                   |
 
 ## How to
 

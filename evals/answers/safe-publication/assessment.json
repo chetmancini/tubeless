@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "caseId": "safe-publication",
+  "expectations": [
+    {
+      "category": "mustDemonstrate",
+      "expectation": "dryRun skip policy on publication",
+      "status": "pass",
+      "evidence": "publish-artifact sets dryRun: \"skip\" so the write does not run during dry run."
+    },
+    {
+      "category": "mustDemonstrate",
+      "expectation": "failure gate",
+      "status": "pass",
+      "evidence": "publish-artifact uses skipAfterFailureOf: [validateArtifact]."
+    },
+    {
+      "category": "mustDemonstrate",
+      "expectation": "continueOnError-aware design",
+      "status": "pass",
+      "evidence": "check-diagnostics is independent of validation, and runBestEffortPublish calls run({ continueOnError: true })."
+    },
+    {
+      "category": "mustAvoid",
+      "expectation": "side effects during dry run",
+      "status": "pass",
+      "evidence": "The only write step is publish-artifact, which skips on dry run."
+    },
+    {
+      "category": "mustAvoid",
+      "expectation": "policy skip swallowing validation failure",
+      "status": "pass",
+      "evidence": "Validation failure is a thrown error gated by skipAfterFailureOf, not step.skippable."
+    }
+  ]
+}
