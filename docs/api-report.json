@@ -148,7 +148,7 @@
     {
       "declaration": "./dist/rate-limit.d.ts",
       "exports": ["RateLimiter"],
-      "sha256": "2376474470b4fdc671f45daa90cb47cb0fd94653ba77ee9f03dcd10af7c0b022",
+      "sha256": "a6b8642be882b01931597b1e0294094cb0a23fd9075c4d22aefe22d1ad1e5330",
       "specifier": "tubeless/rate-limit"
     },
     {
