@@ -38,15 +38,18 @@ name; recheck immediately before the first publish.
 - [x] Configure npm Trusted Publishing from a GitHub-hosted Actions runner with
       least-privilege `contents: read` and `id-token: write` permissions on
       `.github/workflows/publish.yml`. Do not store an `NPM_TOKEN`.
-- [ ] Operator: enable 2FA on the npm account (auth-and-writes), then register
-      GitHub Actions as the trusted publisher for `tubeless`: - Organization or user: `chetmancini` - Repository: `tubeless` - Workflow filename: `publish.yml` (filename only) - Environment: `npm` - Allowed action: `npm publish`
-      Recheck `npm view tubeless` immediately before the first tag. If the name
-      is taken, STOP. Create the empty GitHub Environment `npm` (Settings →
-      Environments) if Actions has not created it yet.
-- [ ] Operator: first publish is `git tag v0.1.0` on the commit you intend, then
-      `git push origin v0.1.0`. Do not `npm publish` from a laptop. After it
-      succeeds, set package publishing to trusted-publisher-only / disallow
-      tokens if the npm UI offers that.
+- [x] Operator: enable 2FA on the npm account (auth-and-writes), then register
+      GitHub Actions as the trusted publisher for `tubeless`: Organization or
+      user `chetmancini`, repository `tubeless`, workflow filename `publish.yml`,
+      environment `npm`, allowed action `npm publish`. Rechecked `npm view
+      tubeless` (name was free). The GitHub Environment `npm` already existed.
+      Trusted publisher id `837d83b1-a87f-4f95-9e4a-5116be724dac`.
+- [x] Operator: `tubeless@0.1.0` had to be published once from this machine so
+      the trusted publisher could be attached (`npm trust` requires an existing
+      package). Then `git tag v0.1.0` on `083e021` and `git push origin
+      v0.1.0`. The tag workflow skips republish when the version is already on
+      the registry. After it succeeds, set package publishing to
+      trusted-publisher-only / disallow tokens if the npm UI offers that.
 - [ ] Define the release trigger and rollback process: protected version tags,
       GitHub Releases, prerelease dist-tags, deprecation guidance, and who can
       publish or yank/deprecate a broken version.
