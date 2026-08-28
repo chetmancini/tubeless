@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // Classify a semver bump between a previous v* tag and a new version.
-// Usage: node scripts/semver-bump.mjs --from 0.1.0 --to 0.1.1
+// Usage:
+//   node scripts/semver-bump.mjs --from 0.1.0 --to 0.1.1
+//   node scripts/semver-bump.mjs --from 0.1.0 --next patch|minor|major|prerelease
+
+const BUMP_KINDS = new Set(["major", "minor", "patch", "prerelease"]);
 
 function parse(raw) {
   const value = String(raw ?? "")
@@ -115,13 +119,71 @@ function classify(fromRaw, toRaw) {
   };
 }
 
+function incrementPrerelease(pre) {
+  const parts = pre.split(".");
+  const last = parts[parts.length - 1];
+  if (/^\d+$/.test(last)) {
+    parts[parts.length - 1] = String(Number(last) + 1);
+    return parts.join(".");
+  }
+  return `${pre}.0`;
+}
+
+function formatVersion(parsed) {
+  const core = `${parsed.major}.${parsed.minor}.${parsed.patch}`;
+  return parsed.pre ? `${core}-${parsed.pre}` : core;
+}
+
+function nextVersion(fromRaw, kind) {
+  const from = parse(fromRaw);
+  if (!from || !BUMP_KINDS.has(kind)) return "";
+
+  if (kind === "major") {
+    if (from.minor !== 0 || from.patch !== 0 || !from.pre) from.major += 1;
+    from.minor = 0;
+    from.patch = 0;
+    from.pre = "";
+  } else if (kind === "minor") {
+    if (from.patch !== 0 || !from.pre) from.minor += 1;
+    from.patch = 0;
+    from.pre = "";
+  } else if (kind === "patch") {
+    if (!from.pre) from.patch += 1;
+    from.pre = "";
+  } else if (!from.pre) {
+    from.patch += 1;
+    from.pre = "rc.0";
+  } else {
+    from.pre = incrementPrerelease(from.pre);
+  }
+  return formatVersion(from);
+}
+
 function arg(name) {
   const index = process.argv.indexOf(name);
   if (index === -1) return "";
   return process.argv[index + 1] ?? "";
 }
 
-const bump = classify(arg("--from"), arg("--to"));
+function fail(message) {
+  process.stderr.write(`${message}\n`);
+  process.exit(1);
+}
+
+const nextKind = arg("--next");
+const toArg = arg("--to");
+if (nextKind && toArg) fail("use --next or --to, not both");
+
+let to = toArg;
+if (nextKind) {
+  if (!BUMP_KINDS.has(nextKind)) {
+    fail(`unknown bump ${nextKind}; use major, minor, patch, or prerelease`);
+  }
+  to = nextVersion(arg("--from"), nextKind);
+  if (!to) fail(`cannot bump ${arg("--from") || "(empty)"} with ${nextKind}`);
+}
+
+const bump = classify(arg("--from"), to);
 if (process.argv.includes("--sh")) {
   for (const [key, value] of Object.entries(bump)) {
     process.stdout.write(`${key}=${JSON.stringify(value)}\n`);

@@ -2,7 +2,11 @@
 # Cut an annotated version tag matching package.json and push it.
 # Notes start from scripts/generate-release-notes.sh; refine in $EDITOR.
 #
-#   make release
+#   make release                 # patch (default)
+#   make release BUMP=minor
+#   make release BUMP=major
+#   make release BUMP=prerelease # 0.1.0 → 0.1.1-rc.0; 0.1.1-rc.0 → 0.1.1-rc.1
+#   make release VERSION=0.2.0
 #   make release EDIT=0
 #   make release NOTES='Summary
 #
@@ -12,11 +16,34 @@
 #   make release PUSH=0 WATCH=0 SKIP_CHECK=1
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+root="${repo_root}"
+if [[ -n "${RELEASE_ROOT:-}" ]]; then
+	root="$(cd "${RELEASE_ROOT}" && pwd)"
+fi
 cd "${root}"
 
-version="$(node -p 'require("./package.json").version')"
-tag="v${version}"
+package_version() {
+	node -p 'require("./package.json").version'
+}
+
+write_package_version() {
+	local next="$1"
+	node -e '
+		const fs = require("fs");
+		const version = process.argv[1];
+		const path = "package.json";
+		const raw = fs.readFileSync(path, "utf8");
+		const updated = raw.replace(/("version"\s*:\s*")[^"]+(")/, `$1${version}$2`);
+		if (updated === raw) {
+			console.error("failed to update package.json version");
+			process.exit(1);
+		}
+		fs.writeFileSync(path, updated);
+	' "${next}"
+}
+
+current="$(package_version)"
 notes_path="$(mktemp)"
 trap 'rm -f "${notes_path}"' EXIT
 
@@ -41,13 +68,34 @@ if [[ "${head}" != "${remote}" ]]; then
 fi
 
 last="$(git tag -l 'v*' --sort=-version:refname | awk '{ print; exit }')"
-eval "$(node "${root}/scripts/semver-bump.mjs" --from "${last}" --to "${version}" --sh)"
-echo "release ${tag} at $(git rev-parse --short HEAD) — ${summary}"
-if [[ "${kind}" == "same" ]]; then
-	echo "package.json is still ${version}; bump it before cutting a release" >&2
+eval "$(node "${repo_root}/scripts/semver-bump.mjs" --from "${last}" --to "${current}" --sh)"
+
+wrote=0
+if [[ -n "${VERSION:-}" ]]; then
+	if [[ -n "${BUMP:-}" ]]; then
+		echo "use VERSION= or BUMP=, not both" >&2
+		exit 1
+	fi
+	version="${VERSION}"
+	if [[ "${version}" != "${current}" ]]; then
+		wrote=1
+	fi
+elif [[ "${kind}" == "same" ]]; then
+	eval "$(node "${repo_root}/scripts/semver-bump.mjs" --from "${current}" --next "${BUMP:-patch}" --sh)"
+	version="${to}"
+	wrote=1
+elif [[ "${kind}" == "downgrade" || "${kind}" == "invalid" ]]; then
+	echo "refusing ${summary}" >&2
 	exit 1
+else
+	# Already a valid committed bump; tag HEAD as-is.
+	version="${current}"
 fi
-if [[ "${kind}" == "downgrade" || "${kind}" == "invalid" ]]; then
+
+eval "$(node "${repo_root}/scripts/semver-bump.mjs" --from "${last}" --to "${version}" --sh)"
+tag="v${version}"
+echo "release ${tag} at $(git rev-parse --short HEAD) — ${summary}"
+if [[ "${kind}" == "same" || "${kind}" == "downgrade" || "${kind}" == "invalid" ]]; then
 	echo "refusing ${summary}" >&2
 	exit 1
 fi
@@ -67,7 +115,7 @@ if [[ -n "${NOTES_FILE:-}" ]]; then
 elif [[ -n "${NOTES:-}" ]]; then
 	printf '%s\n' "${NOTES}" >"${notes_path}"
 else
-	bash "${root}/scripts/generate-release-notes.sh" "${tag}" >"${notes_path}"
+	bash "${repo_root}/scripts/generate-release-notes.sh" "${tag}" >"${notes_path}"
 	if [[ "${EDIT:-1}" == "1" && -t 0 ]]; then
 		editor="${VISUAL:-${EDITOR:-vi}}"
 		"${editor}" "${notes_path}"
@@ -84,21 +132,48 @@ cat "${notes_path}"
 echo "---"
 
 if [[ "${DRY:-}" == "1" ]]; then
-	echo "dry run: would tag ${tag} and push to origin"
+	if [[ "${wrote}" == "1" ]]; then
+		echo "dry run: would bump package.json to ${version}, commit, tag ${tag}, and push origin main then ${tag}"
+	else
+		echo "dry run: would tag ${tag} and push to origin"
+	fi
 	exit 0
 fi
 
+if [[ "${wrote}" == "1" ]]; then
+	write_package_version "${version}"
+fi
+
 if [[ "${SKIP_CHECK:-}" != "1" ]]; then
-	make check
+	if ! make check; then
+		if [[ "${wrote}" == "1" ]]; then
+			echo "check failed after writing ${version}; restore with: git checkout -- package.json" >&2
+		fi
+		exit 1
+	fi
+fi
+
+if [[ "${wrote}" == "1" ]]; then
+	git add package.json
+	git commit -m "Bump version to ${version}."
 fi
 
 git tag -a "${tag}" -F "${notes_path}"
 
 if [[ "${PUSH:-1}" == "0" ]]; then
-	echo "created ${tag} locally (PUSH=0). Push with: git push origin ${tag}"
+	if [[ "${wrote}" == "1" ]]; then
+		echo "created ${tag} locally (PUSH=0). Push with:"
+		echo "  git push origin main"
+		echo "  git push origin ${tag}"
+	else
+		echo "created ${tag} locally (PUSH=0). Push with: git push origin ${tag}"
+	fi
 	exit 0
 fi
 
+if [[ "${wrote}" == "1" ]]; then
+	git push origin main
+fi
 git push origin "${tag}"
 echo "pushed ${tag}"
 echo "https://github.com/chetmancini/tubeless/releases/tag/${tag}"

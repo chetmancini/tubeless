@@ -23,30 +23,47 @@ package imports.
 
 ## Cutting a release
 
-Merging to `main` does not publish. Land the `package.json` `version` bump
-first (keep `private: true`). The tag name must be `v` plus that version.
-The draft names the bump: **patch**, **minor**, **major**, or
-**prerelease** (and whether it is a 0.x minor).
+Merging to `main` does not publish. `make release` bumps `package.json`
+(keep `private: true`), runs `make check`, commits the version, tags `v`
+plus that version, and pushes `main` then the tag. The draft names the
+bump: **patch**, **minor**, **major**, or **prerelease** (and whether it
+is a 0.x minor).
 
 Notes start generated: bump type, commits since the last version tag, plus
 GitHub's pull-request notes (`.github/release.yml`). Refine that draft,
-then tag.
+then the script tags.
 
 ```sh
 make release-notes
-make release
+make release                 # patch
+make release BUMP=minor
+make release BUMP=major
+make release BUMP=prerelease
+make release VERSION=0.2.0
 ```
+
+Default bump is patch (`0.1.0` → `0.1.1`). `BUMP=prerelease` starts at
+the next patch-rc (`0.1.0` → `0.1.1-rc.0`) and increments an existing
+prerelease (`0.1.1-rc.0` → `0.1.1-rc.1`). `BUMP=patch` from a prerelease
+finalizes (`0.1.1-rc.0` → `0.1.1`). Named prereleases such as
+`0.2.0-rc.1` use `VERSION=`. If `package.json` is already a valid bump
+ahead of the last `v*` tag, the script tags HEAD as-is and does not
+commit.
 
 `make release` opens the draft in `$EDITOR`. The first line looks like
 `tubeless 0.1.1 (patch)`. Save to accept or rewrite. `EDIT=0` ships the
 generated notes as-is. `NOTES='...'` or `NOTES_FILE=notes.md` skip
-generation. `DRY=1`, `PUSH=0`, `WATCH=0`, and `SKIP_CHECK=1` are
-optional.
+generation. `DRY=1` prints the would-be version and stops before writing.
+`PUSH=0` creates the local commit (when bumping) and tag without pushing;
+it prints `git push origin main` and `git push origin vX.Y.Z`. `WATCH=0`
+and `SKIP_CHECK=1` are optional. If check fails after the version is
+written, restore with `git checkout -- package.json`.
 
 Without a checkout: Actions → **publish** → **Run workflow** on `main`.
-Leave notes empty to auto-generate (including the bump label) and cut
-the tag. Fill in notes to override. Empty notes also retry a version
-whose tag already exists.
+That path does not bump `package.json`; land the version first (or use
+`make release`). Leave notes empty to auto-generate (including the bump
+label) and cut the tag. Fill in notes to override. Empty notes also retry
+a version whose tag already exists.
 
 Do not `npm publish` from a laptop. Do not attach npm tarballs to GitHub
 Releases; npm is the artifact.

@@ -35,7 +35,7 @@ help:
 	@echo "  make api-generate  Regenerate checked public API documentation"
 	@echo "  make pack          Inspect and verify the publishable artifact"
 	@echo "  make release-notes Print generated notes, labeled patch/minor/major"
-	@echo "  make release       Tag and push; edit generated notes first (EDIT=0 to skip)"
+	@echo "  make release       Bump patch, check, commit, tag, and push (BUMP=/VERSION=)"
 
 require-file:
 	@if [ -z "$(FILE)" ]; then \
@@ -118,4 +118,5 @@ release-notes:
 release:
 	@NOTES="$(NOTES)" NOTES_FILE="$(NOTES_FILE)" DRY="$(DRY)" PUSH="$(PUSH)" \
 		WATCH="$(WATCH)" SKIP_CHECK="$(SKIP_CHECK)" EDIT="$(EDIT)" \
+		BUMP="$(BUMP)" VERSION="$(VERSION)" \
 		bash scripts/cut-release.sh
