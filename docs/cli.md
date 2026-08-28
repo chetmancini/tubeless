@@ -15,20 +15,21 @@ workbench around those same exports.
 
 | Command            | Accepts                          | Does                                                                          |
 | ------------------ | -------------------------------- | ----------------------------------------------------------------------------- |
-| `tubeless inspect` | A pipeline export                | Prints identity (`id`, targets, exact steps) plus the default structural plan |
+| `tubeless inspect` | A pipeline or command export     | Prints identity (`id`, targets, exact steps) plus the default structural plan |
 | `tubeless plan`    | A pipeline or command export     | Previews selection without executing or requiring domain options              |
-| `tubeless graph`   | A pipeline export                | Writes Mermaid flowchart source                                               |
+| `tubeless graph`   | A pipeline or command export     | Writes Mermaid flowchart source                                               |
 | `tubeless run`     | A `definePipelineCommand` export | Executes the command's own validated CLI contract                             |
 | `tubeless ui`      | An optional studio catalog       | Serves the local run studio; see [studio](./studio.md)                        |
 
 The workbench discovers a single matching export automatically. Pass
-`--export Name` when the file exports more than one. `plan` prefers a marked
-command when a module exports both a pipeline and a command.
+`--export Name` when the file exports more than one. `inspect`, `plan`, and
+`graph` prefer a marked command when a module exports both a pipeline and a
+command.
 
 ```sh
-bunx tubeless inspect ./pipelines/import-pipeline.ts
-bunx tubeless plan ./pipelines/import-pipeline.ts --target normalize --explain
-bunx tubeless graph ./pipelines/import-pipeline.ts --markdown
+bunx tubeless inspect ./scripts/import.ts
+bunx tubeless plan ./scripts/import.ts --target normalize --explain
+bunx tubeless graph ./scripts/import.ts --markdown
 bunx tubeless run ./scripts/import.ts -- --source rows.txt --target normalize
 ```
 
@@ -48,10 +49,10 @@ tubeless run ./scripts/import.ts -- --help
 ## Inspect
 
 ```
-tubeless inspect [options] <pipeline-file>
+tubeless inspect [options] <pipeline-or-command-file>
 ```
 
-- `-e, --export <name>` selects a pipeline export
+- `-e, --export <name>` selects a pipeline or command export
 - `--json` emits identity and the default plan as JSON
 
 ## Plan
@@ -73,15 +74,16 @@ Do not simulate planning with a `--plan` flag on the command itself. Use
 ## Graph
 
 ```
-tubeless graph [options] <pipeline-file>
+tubeless graph [options] <pipeline-or-command-file>
 ```
 
-- `-e, --export <name>` selects a pipeline export
+- `-e, --export <name>` selects a pipeline or command export
 - `-d, --direction <value>` is `BT`, `LR`, `RL`, `TB`, or `TD` (default `TD`)
 - `--descriptions` includes step descriptions in node labels
 - `--markdown` wraps the result in a fenced Mermaid block
 
-The same graph is available in process as `pipeline.toMermaid()`.
+The same graph is available in process as `pipeline.toMermaid()` or
+`command.toMermaid()`.
 
 ## Run
 

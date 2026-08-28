@@ -410,6 +410,9 @@ describe("tubeless workbench", () => {
         toMermaid: () => "flowchart TD",
       };
       export const FixtureCommand = markPipelineCommand({
+        id: "from-command",
+        stepIds: ["work"],
+        targetIds: ["work"],
         descriptor: { name: "fixture", parameters: [] },
         plan: () => ({
           dryRun: false,
@@ -420,6 +423,7 @@ describe("tubeless workbench", () => {
         }),
         parse: () => ({ kind: "values" }),
         run: async () => undefined,
+        toMermaid: () => "flowchart TD",
       });
     `);
     const io = captureIo(directory);
@@ -428,6 +432,125 @@ describe("tubeless workbench", () => {
 
     expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
     expect(JSON.parse(io.output.join(""))).toMatchObject({ pipelineId: "from-command" });
+  });
+
+  it("inspects a module that exports only a marked pipeline command", async () => {
+    const cliModuleUrl = pathToFileURL(path.resolve("dist/cli.js")).href;
+    const pipelineModuleUrl = pathToFileURL(path.resolve("dist/pipeline.js")).href;
+    const { directory } = await writeModule(`
+      import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
+      import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
+      const step = createSteps();
+      const work = step("work", {
+        run: () => { throw new Error("inspect must not execute work"); },
+      });
+      const pipeline = definePipeline({
+        id: "command-only-fixture",
+        steps: [work],
+        targets: [work],
+        finalize: (outputs) => outputs.work,
+      });
+      export const FixtureCommand = definePipelineCommand(pipeline, {
+        mapOptions: () => ({}),
+        reporter: false,
+      });
+    `);
+    const io = captureIo(directory);
+
+    const exitCode = await runWorkbenchCli(["inspect", "--json", "pipeline.mjs"], io);
+
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(io.errors).toEqual([]);
+    expect(JSON.parse(io.output.join(""))).toMatchObject({
+      pipelineId: "command-only-fixture",
+      stepIds: ["work"],
+      targetIds: ["work"],
+      plan: {
+        ok: true,
+        pipelineId: "command-only-fixture",
+        steps: [expect.objectContaining({ id: "work", selected: true })],
+      },
+    });
+  });
+
+  it("graphs a module that exports only a marked pipeline command", async () => {
+    const cliModuleUrl = pathToFileURL(path.resolve("dist/cli.js")).href;
+    const pipelineModuleUrl = pathToFileURL(path.resolve("dist/pipeline.js")).href;
+    const { directory } = await writeModule(`
+      import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
+      import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
+      const step = createSteps();
+      const work = step("work", {
+        name: "Do Work",
+        run: () => { throw new Error("graph must not execute work"); },
+      });
+      export const FixtureCommand = definePipelineCommand(
+        definePipeline({
+          id: "command-only-graph",
+          steps: [work],
+          targets: [work],
+          finalize: (outputs) => outputs.work,
+        }),
+        { mapOptions: () => ({}), reporter: false }
+      );
+    `);
+    const io = captureIo(directory);
+
+    const exitCode = await runWorkbenchCli(["graph", "pipeline.mjs"], io);
+
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(io.errors).toEqual([]);
+    expect(io.output.join("")).toBe(["flowchart TD", '  step0["Do Work"]', ""].join("\n"));
+  });
+
+  it("prefers a marked command for inspect and graph when a module exports both", async () => {
+    const markerModuleUrl = pathToFileURL(path.resolve("dist/pipeline-command-marker.js")).href;
+    const { directory } = await writeModule(`
+      import { markPipelineCommand } from ${JSON.stringify(markerModuleUrl)};
+      export const PlanningPipeline = {
+        id: "from-pipeline",
+        stepIds: ["work"],
+        targetIds: ["work"],
+        plan: () => ({
+          dryRun: false,
+          errors: [],
+          ok: true,
+          pipelineId: "from-pipeline",
+          steps: [],
+        }),
+        toMermaid: () => "flowchart TD\\n  from-pipeline",
+      };
+      export const FixtureCommand = markPipelineCommand({
+        id: "from-command",
+        stepIds: ["command-work"],
+        targetIds: ["command-work"],
+        descriptor: { name: "fixture", parameters: [] },
+        plan: () => ({
+          dryRun: false,
+          errors: [],
+          ok: true,
+          pipelineId: "from-command",
+          steps: [],
+        }),
+        parse: () => ({ kind: "values" }),
+        run: async () => undefined,
+        toMermaid: () => "flowchart TD\\n  from-command",
+      });
+    `);
+    const inspectIo = captureIo(directory);
+    const graphIo = captureIo(directory);
+
+    const inspectExit = await runWorkbenchCli(["inspect", "--json", "pipeline.mjs"], inspectIo);
+    const graphExit = await runWorkbenchCli(["graph", "pipeline.mjs"], graphIo);
+
+    expect(inspectExit).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(JSON.parse(inspectIo.output.join(""))).toMatchObject({
+      pipelineId: "from-command",
+      stepIds: ["command-work"],
+      targetIds: ["command-work"],
+    });
+    expect(graphExit).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(graphIo.output.join("")).toBe("flowchart TD\n  from-command\n");
   });
 
   it("runs a discovered pipeline command with application arguments after the boundary", async () => {

@@ -4,9 +4,7 @@ import type { CliContext } from "./cli.js";
 import { PipelineDefinitionError, type PipelineContext, type PipelineError } from "./pipeline.js";
 import {
   loadPipelineCommandModuleWithName,
-  loadPipelineModule,
   loadPlanSourceModule,
-  type WorkbenchPipeline,
   type WorkbenchPipelineCommand,
   type WorkbenchPlanSource,
 } from "./pipeline-module.js";
@@ -106,25 +104,6 @@ export function toExitCode(error: unknown): number {
     return TUBELESS_WORKBENCH_EXIT_CODE.execution;
   }
   return TUBELESS_WORKBENCH_EXIT_CODE.execution;
-}
-
-export async function loadPipeline(
-  fileArgument: string,
-  exportName: string | undefined,
-  io: WorkbenchCliIo
-): Promise<{ pipeline: WorkbenchPipeline } | { exitCode: number }> {
-  const filePath = path.resolve(io.cwd, fileArgument);
-  try {
-    const fileStat = await stat(filePath);
-    if (!fileStat.isFile()) throw new Error(`${filePath} is not a file.`);
-    return { pipeline: await loadPipelineModule(filePath, exportName) };
-  } catch (error) {
-    const exitCode = isDefinitionError(error)
-      ? TUBELESS_WORKBENCH_EXIT_CODE.definition
-      : TUBELESS_WORKBENCH_EXIT_CODE.load;
-    io.stderr.write(`Error: ${errorMessage(error)}\n`);
-    return { exitCode };
-  }
 }
 
 export async function loadPipelineCommand(

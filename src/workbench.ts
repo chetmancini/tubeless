@@ -11,7 +11,7 @@ import { runUi } from "./workbench-ui.js";
 
 export { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "./workbench-shared.js";
 
-const WORKBENCH_USAGE = `Usage: tubeless <command> [options] <pipeline-file>
+const WORKBENCH_USAGE = `Usage: tubeless <command> [options] <pipeline-or-command-file>
 
 Inspect, plan, visualize, or safely run exported tubeless workflows.
 

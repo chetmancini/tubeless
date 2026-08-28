@@ -133,6 +133,19 @@ describe("definePipelineCommand", () => {
     });
   });
 
+  it("exposes the owned pipeline identity and static graph", () => {
+    const pipeline = makeMiniPipeline();
+    const command = definePipelineCommand(pipeline, { mapOptions: () => ({}) });
+
+    expect(command.id).toBe(pipeline.id);
+    expect(command.stepIds).toBe(pipeline.stepIds);
+    expect(command.targetIds).toBe(pipeline.targetIds);
+    expect(command.toMermaid()).toBe(pipeline.toMermaid());
+    expect(command.toMermaid({ direction: "LR", includeDescriptions: true })).toBe(
+      pipeline.toMermaid({ direction: "LR", includeDescriptions: true })
+    );
+  });
+
   it("omits --target when a pipeline declares no public targets", () => {
     const step = createSteps();
     const internal = step("internal", { run: () => true });
