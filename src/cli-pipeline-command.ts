@@ -14,6 +14,7 @@ import { markPipelineCommand } from "./pipeline-command-marker.js";
 import {
   type Pipeline,
   type PipelineHooks,
+  type PipelineMermaidOptions,
   type PipelinePlan,
   type PipelineRunControls,
   type PipelineRunOptions,
@@ -47,8 +48,16 @@ export interface PipelineCommandPlanInput {
 
 export interface PipelineCommand<TSchema extends CliParamsSchema, TResult> {
   readonly descriptor: CliCommandDescriptor;
+  /** Stable identity of the wrapped pipeline. */
+  readonly id: string;
+  /** Stable definition-order step ids for discovery surfaces such as CLI help. */
+  readonly stepIds: readonly string[];
+  /** Stable declared goal ids that support dependency-aware target execution. */
+  readonly targetIds: readonly string[];
   /** Plan without parsing or requiring domain parameters. */
   plan(input?: PipelineCommandPlanInput): PipelinePlan;
+  /** Generate a static Mermaid flowchart without running or planning the pipeline. */
+  toMermaid(options?: PipelineMermaidOptions): string;
   parse(argv?: readonly string[], context?: Partial<CliContext>): PipelineCliParseResult<TSchema>;
   /** Validate structured form values without tokenizing argv. */
   parseValues(
@@ -337,6 +346,9 @@ export function definePipelineCommand<
 
   return markPipelineCommand({
     descriptor: command.descriptor,
+    id: pipeline.id,
+    stepIds: pipeline.stepIds,
+    targetIds: pipeline.targetIds,
     execute: (values, contextOverrides) =>
       // SAFETY: `execute` receives `PipelineCliValues<TSchema>` from the public interface,
       // which is a subtype of `CliParams<PipelineCliBuiltins & TSchema>`.
@@ -344,6 +356,7 @@ export function definePipelineCommand<
     parse,
     parseValues,
     plan,
+    toMermaid: (options) => pipeline.toMermaid(options),
     run: command.run,
     main: command.main,
   });

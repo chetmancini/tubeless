@@ -47,13 +47,14 @@ or shared helpers in this repository.
   render that structured parameter contract instead of parsing help text.
   Use `command.plan()` or `tubeless plan` for a selection-only preview. Do not
   simulate planning with `--plan`.
-- Use `pipeline.toMermaid()` when documentation needs the static graph; do not
-  duplicate dependency edges by hand.
-- Use `tubeless inspect <pipeline-file>` for a module inventory, `tubeless plan` to
-  preview selection without domain options or execution, and `tubeless graph`
-  when generating documentation. `tubeless plan` accepts a pipeline or a marked
-  command and prefers the command when both are exported. Let the workbench
-  discover the sole matching export or pass `--export`.
+- Use `pipeline.toMermaid()` or `command.toMermaid()` when documentation needs
+  the static graph; do not duplicate dependency edges by hand.
+- Use `tubeless inspect <pipeline-or-command-file>` for a module inventory,
+  `tubeless plan` to preview selection without domain options or execution, and
+  `tubeless graph` when generating documentation. `inspect`, `plan`, and `graph`
+  accept a pipeline or a marked command and prefer the command when both are
+  exported. Let the workbench discover the sole matching export or pass
+  `--export`.
 - Use `tubeless run <command-file> -- <command-args>` only for modules exporting a
   `definePipelineCommand`. Keep application flags after `--`; the command must
   continue to own domain validation and option mapping.

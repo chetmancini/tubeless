@@ -20,20 +20,25 @@ export type WorkbenchPipelineCommandParseResult =
 
 export interface WorkbenchPipelineCommand {
   readonly descriptor: CliCommandDescriptor;
+  readonly id: string;
+  readonly stepIds: readonly string[];
+  readonly targetIds: readonly string[];
   parse(
     argv?: readonly string[],
     context?: Partial<CliContext>
   ): WorkbenchPipelineCommandParseResult;
   plan(input?: PipelineCommandPlanInput): PipelinePlan;
   run(argv?: readonly string[], context?: Partial<CliContext>): Promise<unknown>;
+  toMermaid(options?: PipelineMermaidOptions): string;
 }
 
-/** Runtime surface accepted by `tubeless plan`: a pipeline or a marked command. */
+/** Runtime surface accepted by `tubeless plan`, `inspect`, and `graph`. */
 export type WorkbenchPlanSource =
   | { kind: "command"; command: WorkbenchPipelineCommand }
   | { kind: "pipeline"; pipeline: WorkbenchPipeline };
 
 function isWorkbenchPipeline(value: unknown): value is WorkbenchPipeline {
+  if (isMarkedPipelineCommand(value)) return false;
   return (
     (typeof value === "object" || typeof value === "function") &&
     value !== null &&
@@ -59,12 +64,20 @@ function isWorkbenchPipelineCommand(value: unknown): value is WorkbenchPipelineC
     "descriptor" in candidate &&
     typeof candidate.descriptor === "object" &&
     candidate.descriptor !== null &&
+    "id" in candidate &&
+    typeof candidate.id === "string" &&
+    "stepIds" in candidate &&
+    Array.isArray(candidate.stepIds) &&
+    "targetIds" in candidate &&
+    Array.isArray(candidate.targetIds) &&
     "plan" in candidate &&
     typeof candidate.plan === "function" &&
     "parse" in candidate &&
     typeof candidate.parse === "function" &&
     "run" in candidate &&
-    typeof candidate.run === "function"
+    typeof candidate.run === "function" &&
+    "toMermaid" in candidate &&
+    typeof candidate.toMermaid === "function"
   );
 }
 
@@ -243,7 +256,7 @@ export async function loadPipelineCommandModuleWithName(
   return selectPipelineCommandExportWithName(moduleExports, exportName);
 }
 
-/** Load a marked command when present, otherwise a pipeline, for `tubeless plan`. */
+/** Load a marked command when present, otherwise a pipeline, for inspect/plan/graph. */
 export async function loadPlanSourceModule(
   filePath: string,
   exportName?: string

@@ -2,7 +2,7 @@ import { parseArgs } from "node:util";
 import type { PipelineMermaidDirection } from "./pipeline.js";
 import {
   errorMessage,
-  loadPipeline,
+  loadPlanSource,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
   type WorkbenchCliIo,
@@ -16,12 +16,12 @@ function isMermaidDirection(value: string): value is PipelineMermaidDirection {
   return (MERMAID_DIRECTIONS as readonly string[]).includes(value);
 }
 
-const GRAPH_USAGE = `Usage: tubeless graph [options] <pipeline-file>
+const GRAPH_USAGE = `Usage: tubeless graph [options] <pipeline-or-command-file>
 
-Generate Mermaid flowchart source from an exported tubeless pipeline.
+Generate Mermaid flowchart source from an exported tubeless pipeline or command.
 
 Options:
-  -e, --export <name>       Select a pipeline export when the file has more than one
+  -e, --export <name>       Select a pipeline or command export when the file has more than one
   -d, --direction <value>   Flowchart direction: BT, LR, RL, TB, or TD (default: TD)
       --descriptions        Include step descriptions in node labels
       --markdown            Wrap the result in a fenced Mermaid Markdown block
@@ -56,7 +56,7 @@ export async function runGraph(argv: readonly string[], io: WorkbenchCliIo): Pro
     return TUBELESS_WORKBENCH_EXIT_CODE.success;
   }
   if (parsed.positionals.length !== 1) {
-    return writeUsageError(io, "Pass exactly one pipeline file.", GRAPH_USAGE);
+    return writeUsageError(io, "Pass exactly one pipeline or command file.", GRAPH_USAGE);
   }
 
   const direction = parsed.values.direction ?? "TD";
@@ -64,10 +64,11 @@ export async function runGraph(argv: readonly string[], io: WorkbenchCliIo): Pro
     return writeUsageError(io, `Invalid direction ${JSON.stringify(direction)}.`, GRAPH_USAGE);
   }
 
-  const loaded = await loadPipeline(parsed.positionals[0]!, parsed.values.export, io);
+  const loaded = await loadPlanSource(parsed.positionals[0]!, parsed.values.export, io);
   if ("exitCode" in loaded) return loaded.exitCode;
 
-  const source = loaded.pipeline.toMermaid({
+  const view = loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
+  const source = view.toMermaid({
     direction,
     includeDescriptions: parsed.values.descriptions,
   });

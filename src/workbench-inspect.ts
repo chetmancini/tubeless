@@ -2,18 +2,18 @@ import { parseArgs } from "node:util";
 import { renderPipelinePlan } from "./render.js";
 import {
   errorMessage,
-  loadPipeline,
+  loadPlanSource,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
 
-const INSPECT_USAGE = `Usage: tubeless inspect [options] <pipeline-file>
+const INSPECT_USAGE = `Usage: tubeless inspect [options] <pipeline-or-command-file>
 
 Show pipeline identity plus the default structural plan.
 
 Options:
-  -e, --export <name>   Select a pipeline export when the file has more than one
+  -e, --export <name>   Select a pipeline or command export when the file has more than one
       --json            Emit identity and the default plan as JSON
   -h, --help            Show this help
 `;
@@ -48,20 +48,21 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
     return TUBELESS_WORKBENCH_EXIT_CODE.success;
   }
   if (parsed.positionals.length !== 1) {
-    return writeUsageError(io, "Pass exactly one pipeline file.", INSPECT_USAGE);
+    return writeUsageError(io, "Pass exactly one pipeline or command file.", INSPECT_USAGE);
   }
 
-  const loaded = await loadPipeline(parsed.positionals[0]!, parsed.values.export, io);
+  const loaded = await loadPlanSource(parsed.positionals[0]!, parsed.values.export, io);
   if ("exitCode" in loaded) return loaded.exitCode;
 
-  const plan = loaded.pipeline.plan({});
+  const view = loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
+  const plan = view.plan();
   if (parsed.values.json) {
     io.stdout.write(
       `${JSON.stringify(
         {
-          pipelineId: loaded.pipeline.id,
-          targetIds: [...loaded.pipeline.targetIds],
-          stepIds: [...loaded.pipeline.stepIds],
+          pipelineId: view.id,
+          targetIds: [...view.targetIds],
+          stepIds: [...view.stepIds],
           plan,
         },
         null,
@@ -73,9 +74,9 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
 
   io.stdout.write(
     [
-      `Pipeline ${loaded.pipeline.id}`,
-      `Targets: ${list(loaded.pipeline.targetIds)}`,
-      `Exact steps: ${list(loaded.pipeline.stepIds)}`,
+      `Pipeline ${view.id}`,
+      `Targets: ${list(view.targetIds)}`,
+      `Exact steps: ${list(view.stepIds)}`,
       renderPipelinePlan(plan, { explain: false }),
       "",
     ].join("\n")

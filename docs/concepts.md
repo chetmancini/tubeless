@@ -424,14 +424,13 @@ operational descriptions to node labels.
 Command-by-command usage lives in [the CLI](./cli.md). The optional local UI is
 documented in [the studio](./studio.md).
 
-`tubeless inspect` and `tubeless graph` load a pipeline module without executing
-steps or requiring domain options. `tubeless plan` accepts either a pipeline or a
-marked `definePipelineCommand` and prefers the command when both are exported.
-`tubeless run` deliberately accepts only a command created by
-`definePipelineCommand`, because that export carries the application-owned
-parser, validation, option mapping, reporter, and result summary needed for
-safe execution. A raw pipeline is not executable through the workbench.
-Inspect still requires a pipeline export.
+`tubeless inspect`, `tubeless plan`, and `tubeless graph` load a pipeline or a
+marked `definePipelineCommand` without executing steps or requiring domain
+options, and prefer the command when both are exported. `tubeless run`
+deliberately accepts only a command created by `definePipelineCommand`, because
+that export carries the application-owned parser, validation, option mapping,
+reporter, and result summary needed for safe execution. A raw pipeline is not
+executable through the workbench.
 
 `definePipelineCommand` defaults to a same-name mapping when its validated flag
 values structurally satisfy the pipeline's domain options. Command-only values
