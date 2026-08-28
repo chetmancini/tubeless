@@ -4,6 +4,10 @@ import * as path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openCheckpoint, withCheckpointedBatch } from "./checkpoint";
 
+// ESM `fs` exports are non-configurable, so `vi.spyOn(fs, ...)` throws.
+// `{ spy: true }` wraps the same module `checkpoint.ts` imports.
+vi.mock("fs", { spy: true });
+
 describe("openCheckpoint", () => {
   let dir: string;
   let filePath: string;
@@ -100,6 +104,44 @@ describe("openCheckpoint", () => {
     const onDisk = JSON.parse(fs.readFileSync(filePath, "utf8"));
     expect(onDisk).toEqual({ a: { attempt: 1 } });
     expect(fs.readdirSync(dir)).toEqual([path.basename(filePath)]);
+  });
+
+  it("failed rename leaves no temp file and preserves the previous complete checkpoint", () => {
+    const checkpoint = openCheckpoint(filePath);
+    checkpoint.record("a", { attempt: 1 });
+    checkpoint.flush();
+    checkpoint.record("b", { attempt: 2 });
+
+    vi.mocked(fs.renameSync).mockImplementation(() => {
+      throw new Error("rename exploded");
+    });
+    try {
+      expect(() => checkpoint.flush()).toThrow("rename exploded");
+      expect(fs.readdirSync(dir).filter((name) => name.includes(".tmp-"))).toEqual([]);
+      expect(JSON.parse(fs.readFileSync(filePath, "utf8"))).toEqual({ a: { attempt: 1 } });
+    } finally {
+      vi.mocked(fs.renameSync).mockRestore();
+    }
+  });
+
+  it("failed writeFileSync leaves no temp file and preserves the previous complete checkpoint", async () => {
+    const checkpoint = openCheckpoint(filePath);
+    checkpoint.record("a", { attempt: 1 });
+    checkpoint.flush();
+    checkpoint.record("b", { attempt: 2 });
+
+    const actualFs = await vi.importActual<typeof import("fs")>("fs");
+    vi.mocked(fs.writeFileSync).mockImplementation((target, data, options) => {
+      actualFs.writeFileSync(target, data, options as never);
+      throw new Error("write exploded");
+    });
+    try {
+      expect(() => checkpoint.flush()).toThrow("write exploded");
+      expect(fs.readdirSync(dir).filter((name) => name.includes(".tmp-"))).toEqual([]);
+      expect(JSON.parse(fs.readFileSync(filePath, "utf8"))).toEqual({ a: { attempt: 1 } });
+    } finally {
+      vi.mocked(fs.writeFileSync).mockRestore();
+    }
   });
 });
 

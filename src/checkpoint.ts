@@ -83,8 +83,17 @@ export function openCheckpoint<TMeta = unknown>(
       // atomic on the same filesystem, so the checkpoint file is always either the
       // previous complete flush or the new complete one, never a partial write.
       const tmpPath = `${filePath}.tmp-${process.pid}`;
-      fs.writeFileSync(tmpPath, `${json}\n`);
-      fs.renameSync(tmpPath, filePath);
+      try {
+        fs.writeFileSync(tmpPath, `${json}\n`);
+        fs.renameSync(tmpPath, filePath);
+      } catch (error) {
+        try {
+          fs.rmSync(tmpPath, { force: true });
+        } catch {
+          // Best-effort cleanup; surface the original write/rename error.
+        }
+        throw error;
+      }
     },
     clear: () => {
       entries.clear();
