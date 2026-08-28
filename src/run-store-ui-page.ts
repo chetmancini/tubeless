@@ -329,7 +329,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
   </div>
   <div class="toast hidden" id="toast" role="status"></div>
   <script>
-    const state = { snapshot: null, commands: [], view: "runs", selectedRunId: null, query: "", loading: false, launching: false, planning: false, clearing: false, canClearHistory: false, planVersion: 0 };
+    const state = { snapshot: null, detail: null, detailFingerprint: null, commands: [], view: "runs", selectedRunId: null, query: "", loading: false, launching: false, planning: false, clearing: false, canClearHistory: false, planVersion: 0 };
     const $ = (selector) => document.querySelector(selector);
     const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"})[char]);
     const statusMark = (value) => value === 'completed' || value === 'complete' ? '✓' : value === 'skipped' ? '×' : value === 'cancelled' ? '■' : value === 'failed' ? '!' : value === 'planned' ? '…' : '';
@@ -586,14 +586,14 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
         .filter((run) => !query || [run, ...descendantsOf(run.runId)].some((candidate) => candidate.pipelineId.toLowerCase().includes(query) || candidate.runId.toLowerCase().includes(query)))
         .sort((left, right) => Number([right, ...descendantsOf(right.runId)].some((run) => run.status === 'running')) - Number([left, ...descendantsOf(left.runId)].some((run) => run.status === 'running')) || right.startedAtMs - left.startedAtMs);
       if (!state.selectedRunId || !roots.some((run) => run.runId === rootRunId(state.selectedRunId))) state.selectedRunId = roots[0]?.runId ?? null;
-      const selected = state.snapshot.runs.find((run) => run.runId === state.selectedRunId);
+      const selected = state.detail?.run?.runId === state.selectedRunId ? state.detail.run : null;
       const activeRuns = roots.filter((root) => [root, ...descendantsOf(root.runId)].some((run) => run.status === 'running'));
       const historicalRuns = roots.filter((root) => !activeRuns.includes(root));
       const activeList = activeRuns.length ? '<div class="run-group">Running now · ' + activeRuns.length + '</div>' + activeRuns.map(runRow).join('') : '';
       const historyList = historicalRuns.length ? '<div class="run-group">Recent · ' + historicalRuns.length + '</div>' + historicalRuns.map(runRow).join('') : '';
       $('#content').innerHTML = '<div class="content-grid"><section class="sheet"><div class="sheet-head"><div><div class="sheet-title">Pipeline runs</div><div class="sheet-subtitle">Top-level runs · nested work stays with its parent</div></div><span class="sheet-subtitle">' + roots.length + ' top-level · ' + state.snapshot.runs.length + ' total</span></div><div class="run-list">' + (roots.length ? activeList + historyList : empty('No recorded runs', 'Choose Pipelines to start a run and create local history.')) + '</div></section>' + runDetail(selected) + '</div>';
-      document.querySelectorAll('[data-run-id]').forEach((button) => button.addEventListener('click', () => { state.selectedRunId = button.dataset.runId; render(); }));
-      document.querySelectorAll('[data-detail-run-id]').forEach((button) => button.addEventListener('click', () => { state.selectedRunId = button.dataset.detailRunId; render(); }));
+      document.querySelectorAll('[data-run-id]').forEach((button) => button.addEventListener('click', () => { void selectRun(button.dataset.runId); }));
+      document.querySelectorAll('[data-detail-run-id]').forEach((button) => button.addEventListener('click', () => { void selectRun(button.dataset.detailRunId); }));
     }
     function renderPipelines() {
       const query = state.query.toLowerCase();
@@ -615,6 +615,43 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
       document.querySelectorAll('[data-view]').forEach((button) => button.classList.toggle('active', button.dataset.view === state.view));
       isPipelines ? renderPipelines() : renderRuns();
     }
+    function selectedRunFingerprint() {
+      const run = state.snapshot && state.snapshot.runs.find((item) => item.runId === state.selectedRunId);
+      return run ? [run.runId, run.eventCount, run.status].join(':') : null;
+    }
+    async function loadSelectedRunDetail() {
+      if (!state.selectedRunId) {
+        state.detail = null;
+        state.detailFingerprint = null;
+        return;
+      }
+      const requestedRunId = state.selectedRunId;
+      const fingerprint = selectedRunFingerprint();
+      if (!fingerprint) {
+        state.detail = null;
+        state.detailFingerprint = null;
+        return;
+      }
+      if (fingerprint === state.detailFingerprint && state.detail) return;
+      const response = await fetch('/api/runs/' + encodeURIComponent(requestedRunId), { cache: 'no-store' });
+      if (state.selectedRunId !== requestedRunId) return;
+      if (response.status === 404) {
+        state.detail = null;
+        state.detailFingerprint = null;
+        return;
+      }
+      if (!response.ok) return;
+      const detail = await response.json();
+      if (state.selectedRunId !== requestedRunId) return;
+      state.detail = detail;
+      state.detailFingerprint = fingerprint;
+    }
+    async function selectRun(runId) {
+      state.selectedRunId = runId;
+      render();
+      await loadSelectedRunDetail();
+      render();
+    }
     async function refresh(manual = false) {
       if (state.loading) return;
       state.loading = true;
@@ -623,6 +660,8 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
         const response = await fetch('/api/snapshot', { cache: 'no-store' });
         if (!response.ok) throw new Error('Snapshot request failed');
         state.snapshot = await response.json();
+        render();
+        await loadSelectedRunDetail();
         $('#connectionLabel').textContent = 'Connected · local';
         $('.pulse').style.background = '#63d297';
         render();

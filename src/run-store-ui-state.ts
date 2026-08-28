@@ -20,10 +20,9 @@ export class PipelineRunStudioHistoryBusyError extends Error {
 
 /** Serializes incremental store reads and history clearing for one studio server. */
 export class PipelineRunStudioEventState {
-  #events: readonly StoredPipelineEvent[] = [];
   #lastEventId: number | undefined;
   #operation: Promise<void> = Promise.resolve();
-  #projector = createPipelineRunProjector();
+  #projector = createPipelineRunProjector({ retainLogs: false });
 
   constructor(private readonly store: PipelineRunEventStore) {}
 
@@ -36,7 +35,7 @@ export class PipelineRunStudioEventState {
     return result;
   }
 
-  async #appendNewEvents(): Promise<readonly StoredPipelineEvent[]> {
+  async #appendNewEvents(): Promise<void> {
     let cursor = this.#lastEventId;
     for (;;) {
       const query: PipelineRunEventQuery = { limit: 100_000 };
@@ -46,16 +45,31 @@ export class PipelineRunStudioEventState {
         .filter((event) => cursor === undefined || event.id > cursor)
         .sort((left, right) => left.id - right.id);
       if (next.length === 0) break;
-      this.#events = [...this.#events, ...next];
       this.#projector.append(next);
       cursor = next.at(-1)!.id;
     }
     this.#lastEventId = cursor;
-    return this.#events;
   }
 
-  readAll(): Promise<readonly StoredPipelineEvent[]> {
-    return this.#serialize(() => this.#appendNewEvents());
+  async #listRunEvents(runId: string): Promise<readonly StoredPipelineEvent[]> {
+    const events: StoredPipelineEvent[] = [];
+    let cursor: number | undefined;
+    for (;;) {
+      const query: PipelineRunEventQuery = { limit: 100_000, runId };
+      if (cursor !== undefined) query.afterId = cursor;
+      const page = await this.store.listEvents(query);
+      const next = [...page]
+        .filter((event) => event.runId === runId && (cursor === undefined || event.id > cursor))
+        .sort((left, right) => left.id - right.id);
+      if (next.length === 0) break;
+      events.push(...next);
+      cursor = next.at(-1)!.id;
+    }
+    return events;
+  }
+
+  readRun(runId: string): Promise<readonly StoredPipelineEvent[]> {
+    return this.#serialize(() => this.#listRunEvents(runId));
   }
 
   snapshot(now?: number): Promise<PipelineRunStoreSnapshot> {
@@ -70,13 +84,15 @@ export class PipelineRunStudioEventState {
   ): Promise<{ eventCount: number; runCount: number }> {
     return this.#serialize(async () => {
       if (await history.isBusy?.()) throw new PipelineRunStudioHistoryBusyError();
-      const events = await this.#appendNewEvents();
+      await this.#appendNewEvents();
       const snapshot = this.#projector.snapshot();
       await history.clear();
-      this.#events = [];
       this.#lastEventId = undefined;
       this.#projector.clear();
-      return { eventCount: events.length, runCount: snapshot.runs.length };
+      return {
+        eventCount: snapshot.runs.reduce((n, run) => n + run.eventCount, 0),
+        runCount: snapshot.runs.length,
+      };
     });
   }
 }

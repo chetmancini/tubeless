@@ -133,7 +133,11 @@ export async function startPipelineRunStudio(
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/snapshot") {
-        writeJson(response, await eventState.snapshot());
+        const snapshot = await eventState.snapshot();
+        writeJson(response, {
+          ...snapshot,
+          runs: snapshot.runs.map((run) => ({ ...run, logs: [] })),
+        });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/capabilities") {
@@ -143,7 +147,7 @@ export async function startPipelineRunStudio(
       const runMatch = /^\/api\/runs\/([^/]+)$/.exec(url.pathname);
       if (request.method === "GET" && runMatch) {
         const runId = decodeURIComponent(runMatch[1]!);
-        const events = (await eventState.readAll()).filter((event) => event.runId === runId);
+        const events = await eventState.readRun(runId);
         if (events.length === 0) {
           writeJson(response, { error: "Run not found." }, 404);
           return;

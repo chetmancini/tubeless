@@ -64,12 +64,14 @@ function memoryStore(events: readonly StoredPipelineEvent[]): PipelineRunEventSt
     close() {},
     export() {},
     async listEvents(query = {}) {
-      return events.filter(
-        (event) =>
-          (query.runId === undefined || event.runId === query.runId) &&
-          (query.pipelineId === undefined || event.pipelineId === query.pipelineId) &&
-          (query.afterId === undefined || event.id > query.afterId)
-      );
+      return events
+        .filter(
+          (event) =>
+            (query.runId === undefined || event.runId === query.runId) &&
+            (query.pipelineId === undefined || event.pipelineId === query.pipelineId) &&
+            (query.afterId === undefined || event.id > query.afterId)
+        )
+        .slice(0, query.limit);
     },
   };
 }
@@ -157,6 +159,11 @@ describe("local pipeline run studio", () => {
     const html = await page.text();
     expect(html).toContain("Tubeless — Local Studio");
     expect(html).toContain("nested work stays with its parent");
+    expect(html).toContain("/api/runs/");
+    expect(html).toContain("function selectedRunFingerprint");
+    expect(html).toContain("fingerprint === state.detailFingerprint && state.detail");
+    expect(html).toContain("const requestedRunId = state.selectedRunId");
+    expect(html).toContain("if (state.selectedRunId !== requestedRunId) return");
     expect(html).not.toContain('data-view="active"');
     expect(html).not.toContain('data-view="definitions"');
     expect(html).toContain("Run pipeline");
@@ -352,6 +359,111 @@ describe("local pipeline run studio", () => {
       fetch(`${server.url}/api/snapshot`).then((response) => response.json())
     ).resolves.toMatchObject({ completedRunCount: 2, lastEventId: 4 });
     expect(cursors.slice(-3)).toEqual([2, 3, 4]);
+  });
+
+  it("reads one run from the store and omits snapshot log bodies", async () => {
+    const queries: { afterId?: number; runId?: string }[] = [];
+    const stored: StoredPipelineEvent[] = [
+      {
+        attributes: { dry_run: false },
+        id: 1,
+        name: "pipeline.started",
+        pipelineId: "studio-fixture",
+        runId: "run-1",
+        timestampMs: 10,
+        version: 1,
+      },
+      {
+        attributes: { level: "log", message: "loaded rows" },
+        id: 2,
+        name: "pipeline.log",
+        pipelineId: "studio-fixture",
+        runId: "run-1",
+        stepId: "load",
+        timestampMs: 12,
+        version: 1,
+      },
+      {
+        attributes: { status: "completed" },
+        durationMs: 5,
+        id: 3,
+        name: "pipeline.completed",
+        pipelineId: "studio-fixture",
+        runId: "run-1",
+        timestampMs: 15,
+        version: 1,
+      },
+      {
+        attributes: { dry_run: false },
+        id: 4,
+        name: "pipeline.started",
+        pipelineId: "other",
+        runId: "run-2",
+        timestampMs: 20,
+        version: 1,
+      },
+      {
+        attributes: { level: "warn", message: "other run only" },
+        id: 5,
+        name: "pipeline.log",
+        pipelineId: "other",
+        runId: "run-2",
+        timestampMs: 21,
+        version: 1,
+      },
+    ];
+    const store: PipelineRunEventStore = {
+      close() {},
+      export() {},
+      async listEvents(query = {}) {
+        queries.push({ afterId: query.afterId, runId: query.runId });
+        return stored
+          .filter(
+            (event) =>
+              (query.runId === undefined || event.runId === query.runId) &&
+              (query.afterId === undefined || event.id > query.afterId)
+          )
+          .slice(0, query.limit);
+      },
+    };
+    const server = await startPipelineRunStudio({ port: 0, store });
+    servers.push(server);
+
+    const snapshot = await fetch(`${server.url}/api/snapshot`).then((response) => response.json());
+    expect(JSON.stringify(snapshot)).not.toContain("loaded rows");
+    expect(JSON.stringify(snapshot)).not.toContain("other run only");
+    expect(snapshot.runs).toEqual([
+      expect.objectContaining({
+        eventCount: 2,
+        logCount: 1,
+        logs: [],
+        runId: "run-2",
+        status: "running",
+      }),
+      expect.objectContaining({
+        eventCount: 3,
+        logCount: 1,
+        logs: [],
+        runId: "run-1",
+        status: "completed",
+      }),
+    ]);
+
+    queries.length = 0;
+    const detail = await fetch(`${server.url}/api/runs/run-1`).then((response) => response.json());
+    expect(detail.events.map((event: { id: number }) => event.id)).toEqual([1, 2, 3]);
+    expect(detail.run).toMatchObject({
+      logCount: 1,
+      logs: [{ message: "loaded rows" }],
+      runId: "run-1",
+      status: "completed",
+    });
+    expect(queries.length).toBeGreaterThan(0);
+    expect(queries.every((query) => query.runId === "run-1")).toBe(true);
+
+    const missing = await fetch(`${server.url}/api/runs/missing`);
+    expect(missing.status).toBe(404);
+    await expect(missing.json()).resolves.toEqual({ error: "Run not found." });
   });
 
   it("includes a first store event whose id is zero in snapshots", async () => {

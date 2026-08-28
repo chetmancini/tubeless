@@ -209,7 +209,7 @@
         "StoredPipelineRunStatus",
         "StoredPipelineStep"
       ],
-      "sha256": "2031752bcabe730abce31dacf5d439159e8bb1bfed0ac6793092b6d5968555fe",
+      "sha256": "c5306a72d9063f56f8e10b2703860e8a51db52d523dc947d38467981d4955150",
       "specifier": "tubeless/run-store"
     },
     {

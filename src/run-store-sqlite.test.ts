@@ -13,6 +13,23 @@ afterEach(async () => {
   );
 });
 
+async function openTempStore() {
+  const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+  directories.push(directory);
+  return openSqlitePipelineRunStore(path.join(directory, "runs.sqlite"));
+}
+
+function startedEvent(runId: string, timestampMs: number, pipelineId = "import") {
+  return {
+    attributes: { dry_run: false },
+    name: "pipeline.started" as const,
+    pipelineId,
+    runId,
+    timestampMs,
+    version: 1 as const,
+  };
+}
+
 describe("SQLite pipeline run store", () => {
   it("persists ordered events and rejects mutation", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
@@ -108,5 +125,74 @@ describe("SQLite pipeline run store", () => {
       "pipeline_run_events is append-only"
     );
     database.close();
+  });
+
+  it("treats afterId as an exclusive ascending cursor", async () => {
+    const store = await openTempStore();
+    await store.export(startedEvent("run-1", 10));
+    await store.export(startedEvent("run-1", 11));
+    await store.export(startedEvent("run-1", 12));
+
+    const [first, second, third] = await store.listEvents();
+    expect(await store.listEvents({ afterId: first!.id })).toEqual([
+      expect.objectContaining({ id: second!.id, timestampMs: 11 }),
+      expect.objectContaining({ id: third!.id, timestampMs: 12 }),
+    ]);
+    await store.close();
+  });
+
+  it("clamps listEvents limit to a non-empty page", async () => {
+    const store = await openTempStore();
+    for (let timestampMs = 10; timestampMs <= 14; timestampMs += 1) {
+      await store.export(startedEvent("run-1", timestampMs));
+    }
+
+    expect(await store.listEvents({ limit: 2 })).toEqual([
+      expect.objectContaining({ id: 1, timestampMs: 10 }),
+      expect.objectContaining({ id: 2, timestampMs: 11 }),
+    ]);
+    expect(await store.listEvents({ limit: 0 })).toEqual([
+      expect.objectContaining({ id: 1, timestampMs: 10 }),
+    ]);
+    expect(await store.listEvents({ limit: 999_999 })).toHaveLength(5);
+    await store.close();
+  });
+
+  it("composes runId and pipelineId filters with afterId", async () => {
+    const store = await openTempStore();
+    await store.export(startedEvent("run-1", 10, "import"));
+    await store.export(startedEvent("run-2", 11, "publish"));
+    await store.export(startedEvent("run-1", 12, "import"));
+    await store.export(startedEvent("run-2", 13, "publish"));
+
+    const [first] = await store.listEvents({ runId: "run-1" });
+    expect(await store.listEvents({ afterId: first!.id, runId: "run-1" })).toEqual([
+      expect.objectContaining({ id: 3, runId: "run-1", pipelineId: "import" }),
+    ]);
+    expect(await store.listEvents({ afterId: first!.id, pipelineId: "import" })).toEqual([
+      expect.objectContaining({ id: 3, pipelineId: "import", runId: "run-1" }),
+    ]);
+    await store.close();
+  });
+
+  it("returns every stored row when the default limit is used", async () => {
+    const store = await openTempStore();
+    await store.export(startedEvent("run-1", 10));
+    await store.export(startedEvent("run-1", 11));
+    await store.export(startedEvent("run-1", 12));
+
+    expect(await store.listEvents()).toHaveLength(3);
+    await store.close();
+  });
+
+  it("keeps the first inserted row when paging after id 0", async () => {
+    const store = await openTempStore();
+    await store.export(startedEvent("run-1", 10));
+    await store.export(startedEvent("run-1", 11));
+
+    const events = await store.listEvents();
+    expect(events[0]?.id).toBe(1);
+    expect(await store.listEvents({ afterId: 0 })).toEqual(events);
+    await store.close();
   });
 });
