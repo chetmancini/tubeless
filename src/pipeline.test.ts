@@ -2146,6 +2146,177 @@ describe("definePipeline", () => {
     ]);
   });
 
+  it("records a skip-predicate throw as a failed PipelineRun instead of rejecting", async () => {
+    const step = createSteps();
+    let ran = false;
+    const skipEvents: string[] = [];
+    const failEvents: string[] = [];
+    const gate = step.skippable("gate", {
+      skip: () => {
+        throw new Error("skip exploded");
+      },
+      run: () => {
+        ran = true;
+        return "ran";
+      },
+    });
+    const after = step("after", {
+      dependsOn: [gate],
+      run: () => "after",
+    });
+    const pipeline = definePipeline({
+      id: "skip-throw",
+      steps: [gate, after],
+      finalize: (outputs) => outputs.after,
+    });
+    let completedRun: unknown;
+    const result = await pipeline.run(
+      {},
+      {
+        cwd: "/tmp",
+        hooks: {
+          onPipelineComplete: (event) => {
+            completedRun = event;
+          },
+          onStepFail: ({ step }) => {
+            failEvents.push(step.id);
+          },
+          onStepSkip: ({ step }) => {
+            skipEvents.push(step.id);
+          },
+        },
+        log: console,
+      }
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.finalized).toBe(false);
+    expect(ran).toBe(false);
+    expect(
+      result.steps.map((report) => [
+        report.id,
+        report.status,
+        report.status === "skipped" ? report.reason : undefined,
+      ])
+    ).toEqual([
+      ["gate", "failed", undefined],
+      ["after", "skipped", "fail-fast"],
+    ]);
+    expect(result.steps[0]).toMatchObject({
+      error: {
+        code: "TUBELESS_STEP_FAILED",
+        kind: "step",
+        message: "skip exploded",
+        phase: "execution",
+        stepId: "gate",
+      },
+      status: "failed",
+    });
+    expect(failEvents).toEqual(["gate"]);
+    expect(skipEvents).not.toContain("gate");
+    expect(completedRun).toBe(result);
+  });
+
+  it("records a skip-predicate abort as a cancelled PipelineRun and runOrThrow wraps it", async () => {
+    vi.useFakeTimers();
+    const step = createSteps();
+    let ran = false;
+    const gate = step.skippable("gate", {
+      skip: async (_inputs, context) => {
+        await context.sleep(100, context.signal);
+        return false;
+      },
+      run: () => {
+        ran = true;
+        return "ran";
+      },
+    });
+    const pipeline = definePipeline({
+      id: "skip-abort",
+      steps: [gate],
+      finalize: (outputs) => outputs.gate,
+    });
+    const context = { cwd: "/tmp", log: console };
+
+    try {
+      const runController = new AbortController();
+      const runPromise = pipeline.run({}, { ...context, signal: runController.signal });
+      await vi.advanceTimersByTimeAsync(50);
+      runController.abort("stop");
+      const result = await runPromise;
+
+      expect(result.status).toBe("cancelled");
+      expect(ran).toBe(false);
+      expect(result.steps[0]).toMatchObject({
+        error: {
+          code: "TUBELESS_RUN_CANCELLED",
+          kind: "cancellation",
+          stepId: "gate",
+        },
+        status: "cancelled",
+      });
+
+      const throwController = new AbortController();
+      const throwPromise = pipeline.runOrThrow({}, { ...context, signal: throwController.signal });
+      await vi.advanceTimersByTimeAsync(50);
+      throwController.abort("stop");
+      let thrown: unknown;
+      try {
+        await throwPromise;
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(PipelineExecutionError);
+      expect((thrown as PipelineExecutionError).result.status).toBe("cancelled");
+      expect((thrown as PipelineExecutionError).result).toMatchObject({
+        status: "cancelled",
+        steps: [
+          {
+            error: {
+              code: "TUBELESS_RUN_CANCELLED",
+              kind: "cancellation",
+              stepId: "gate",
+            },
+            status: "cancelled",
+          },
+        ],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("continues independent later work when a skip predicate throws with continueOnError", async () => {
+    const step = createSteps();
+    let laterRan = false;
+    const gate = step.skippable("gate", {
+      skip: () => {
+        throw new Error("skip exploded");
+      },
+      run: () => "ran",
+    });
+    const later = step("later", {
+      run: () => {
+        laterRan = true;
+        return "later";
+      },
+    });
+    const pipeline = definePipeline({
+      id: "skip-throw-continue",
+      steps: [gate, later],
+      finalize: (outputs) => outputs,
+    });
+
+    const result = await pipeline.run({ continueOnError: true }, { cwd: "/tmp", log: console });
+
+    expect(result.status).toBe("failed");
+    expect(laterRan).toBe(true);
+    expect(result.steps.map((report) => [report.id, report.status])).toEqual([
+      ["gate", "failed"],
+      ["later", "complete"],
+    ]);
+  });
+
   it("types skippable steps as TOut | undefined for dependents", () => {
     const step = createSteps();
 
