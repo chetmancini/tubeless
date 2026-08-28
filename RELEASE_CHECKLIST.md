@@ -47,9 +47,9 @@ name; recheck immediately before the first publish.
 - [x] Operator: `tubeless@0.1.0` had to be published once from this machine so
       the trusted publisher could be attached (`npm trust` requires an existing
       package). Then `git tag v0.1.0` on `083e021` and `git push origin
-      v0.1.0`. The tag workflow skips republish when the version is already on
-      the registry. After it succeeds, set package publishing to
-      trusted-publisher-only / disallow tokens if the npm UI offers that.
+      v0.1.0`. The tag workflow skipped republish. Set `npm access set
+      mfa=publish`. The stronger npm UI toggle (require 2FA and disallow tokens)
+      remains optional.
 - [ ] Define the release trigger and rollback process: protected version tags,
       GitHub Releases, prerelease dist-tags, deprecation guidance, and who can
       publish or yank/deprecate a broken version.
