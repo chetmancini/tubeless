@@ -78,8 +78,9 @@ Browser plan, launch, and clear-history requests send
 `x-tubeless-studio-plan`, `x-tubeless-studio-launch`, and
 `x-tubeless-studio-clear-history`. Those requests also require a `Host` header
 that matches the bound authority, and plan/launch require `application/json`.
-The header names are part of the local studio protocol. They are same-origin
-guards, not authentication.
+A successful launch response (HTTP 202) means the run id is already queryable
+from the store. The header names are part of the local studio protocol. They are
+same-origin guards, not authentication.
 
 Programmatic callers can compose the same pieces from
 `tubeless/run-store/sqlite` and `tubeless/run-store/ui`. See

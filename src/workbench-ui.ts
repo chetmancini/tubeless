@@ -4,7 +4,12 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { createRunId } from "./pipeline.js";
 import type { PipelineStudioConfig } from "./workbench-studio.js";
-import type { PipelineRunStudioCommand, PipelineRunStudioLauncher } from "./run-store-ui.js";
+import type { PipelineRunEventStore } from "./run-store.js";
+import type {
+  PipelineRunStudioCommand,
+  PipelineRunStudioLaunchResult,
+  PipelineRunStudioLauncher,
+} from "./run-store-ui.js";
 import {
   executePipelineCommandValues,
   type WorkbenchStructuredPipelineCommand,
@@ -31,6 +36,30 @@ Options:
       --port <number>   HTTP port (default: 4317)
   -h, --help            Show this help
 `;
+
+/** Resolve a studio launch only after the run store has the run, or after a silent exit. */
+async function acknowledgeRecordedLaunch(
+  store: PipelineRunEventStore,
+  runId: string,
+  execution: Promise<number>
+): Promise<PipelineRunStudioLaunchResult> {
+  let exitCode: number | undefined;
+  const settled = execution.then((code) => {
+    exitCode = code;
+    return code;
+  });
+  while (exitCode === undefined) {
+    const events = await store.listEvents({ runId, limit: 1 });
+    if (events.length > 0) return { accepted: true, runId };
+    await Promise.race([settled, new Promise<void>((resolve) => setTimeout(resolve, 10))]);
+  }
+  const events = await store.listEvents({ runId, limit: 1 });
+  if (events.length > 0) return { accepted: true, runId };
+  return {
+    accepted: false,
+    errors: [`Pipeline command exited (${exitCode}) before recording a run.`],
+  };
+}
 
 function parseUiArgs(argv: readonly string[]) {
   return parseArgs({
@@ -270,7 +299,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
               );
               activeLaunches.add(execution);
               void execution.finally(() => activeLaunches.delete(execution));
-              return { accepted: true, runId };
+              return await acknowledgeRecordedLaunch(store!, runId, execution);
             },
           };
     const studioOptions: Parameters<typeof startPipelineRunStudio>[0] = {
