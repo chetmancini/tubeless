@@ -2605,6 +2605,74 @@ export function definePipeline<
       }
     };
 
+    const recordStepExecutionFailure = (
+      error: unknown,
+      plannedStep: PipelinePlanStep,
+      step: AnyStep<TOptions>,
+      stepId: string,
+      stepIndex: number,
+      attempt: { attemptId: string; startedAtMs: number }
+    ): boolean => {
+      const cancelled = isPipelineCancellation(error, runtime);
+      const childFailure =
+        error instanceof PipelineExecutionError || error instanceof PipelineChildError;
+      const validationFailure = error instanceof PipelineBoundaryValidationError;
+      const pipelineError = toPipelineError(error, {
+        code: cancelled
+          ? "TUBELESS_RUN_CANCELLED"
+          : validationFailure
+            ? "TUBELESS_STEP_OUTPUT_VALIDATION_FAILED"
+            : childFailure
+              ? "TUBELESS_CHILD_FAILED"
+              : "TUBELESS_STEP_FAILED",
+        kind: cancelled
+          ? "cancellation"
+          : validationFailure
+            ? "validation"
+            : childFailure
+              ? "child"
+              : "step",
+        phase: "execution",
+        stepId,
+      });
+      errors.push(pipelineError);
+      const finishedAtMs = runtime.now();
+      const report: PipelineStepCancelledReport | PipelineStepFailedReport = cancelled
+        ? {
+            attemptId: attempt.attemptId,
+            id: stepId,
+            name: step.name,
+            description: step.description,
+            error: pipelineError,
+            finishedAtMs,
+            startedAtMs: attempt.startedAtMs,
+            status: "cancelled",
+          }
+        : {
+            attemptId: attempt.attemptId,
+            id: stepId,
+            name: step.name,
+            description: step.description,
+            error: pipelineError,
+            finishedAtMs,
+            startedAtMs: attempt.startedAtMs,
+            status: "failed",
+          };
+      reports.push(report);
+      reportsByStepId.set(stepId, report);
+      publishStepReport(plannedStep, report);
+      completed = false;
+      if (!controls.continueOnError) {
+        recordRemainingStates(
+          stepIndex + 1,
+          stepId,
+          report.status === "cancelled" ? pipelineError : undefined
+        );
+        return true;
+      }
+      return false;
+    };
+
     for (const [stepIndex, step] of orderedSteps.entries()) {
       const stepId = step.id;
       const plannedStep = plannedSteps.get(stepId) ?? stepToPlanStep(step, true);
@@ -2658,9 +2726,26 @@ export function definePipeline<
       }
 
       if (typeof step.skip === "function") {
-        const skipDecision = normalizeStepSkipDecision(
-          await step.skip(inputs, { ...executionContext, log: tracedLogger(stepId) })
-        );
+        let skipDecision: ReturnType<typeof normalizeStepSkipDecision>;
+        try {
+          skipDecision = normalizeStepSkipDecision(
+            await step.skip(inputs, { ...executionContext, log: tracedLogger(stepId) })
+          );
+        } catch (error) {
+          const skipAttempt = beginAttempt(stepId, runtime.now());
+          publishStepStatus({
+            attemptId: skipAttempt.attemptId,
+            pipelineId: definition.id,
+            status: "running",
+            step: plannedStep,
+          });
+          if (
+            recordStepExecutionFailure(error, plannedStep, step, stepId, stepIndex, skipAttempt)
+          ) {
+            break;
+          }
+          continue;
+        }
         if (skipDecision) {
           let skippedOutput = skipDecision.value;
           let policyAttemptId: string | undefined;
@@ -2793,61 +2878,7 @@ export function definePipeline<
         reportsByStepId.set(stepId, report);
         publishStepReport(plannedStep, report);
       } catch (error) {
-        const cancelled = isPipelineCancellation(error, runtime);
-        const childFailure =
-          error instanceof PipelineExecutionError || error instanceof PipelineChildError;
-        const validationFailure = error instanceof PipelineBoundaryValidationError;
-        const pipelineError = toPipelineError(error, {
-          code: cancelled
-            ? "TUBELESS_RUN_CANCELLED"
-            : validationFailure
-              ? "TUBELESS_STEP_OUTPUT_VALIDATION_FAILED"
-              : childFailure
-                ? "TUBELESS_CHILD_FAILED"
-                : "TUBELESS_STEP_FAILED",
-          kind: cancelled
-            ? "cancellation"
-            : validationFailure
-              ? "validation"
-              : childFailure
-                ? "child"
-                : "step",
-          phase: "execution",
-          stepId,
-        });
-        errors.push(pipelineError);
-        const finishedAtMs = runtime.now();
-        const report: PipelineStepCancelledReport | PipelineStepFailedReport = cancelled
-          ? {
-              attemptId: attempt.attemptId,
-              id: stepId,
-              name: step.name,
-              description: step.description,
-              error: pipelineError,
-              finishedAtMs,
-              startedAtMs: attempt.startedAtMs,
-              status: "cancelled",
-            }
-          : {
-              attemptId: attempt.attemptId,
-              id: stepId,
-              name: step.name,
-              description: step.description,
-              error: pipelineError,
-              finishedAtMs,
-              startedAtMs: attempt.startedAtMs,
-              status: "failed",
-            };
-        reports.push(report);
-        reportsByStepId.set(stepId, report);
-        publishStepReport(plannedStep, report);
-        completed = false;
-        if (!controls.continueOnError) {
-          recordRemainingStates(
-            stepIndex + 1,
-            stepId,
-            report.status === "cancelled" ? pipelineError : undefined
-          );
+        if (recordStepExecutionFailure(error, plannedStep, step, stepId, stepIndex, attempt)) {
           break;
         }
       }
