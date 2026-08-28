@@ -90,6 +90,19 @@ elif [[ "${kind}" == "downgrade" || "${kind}" == "invalid" ]]; then
 else
 	# Already a valid committed bump; tag HEAD as-is.
 	version="${current}"
+	if [[ -n "${BUMP:-}" ]]; then
+		matched=0
+		if [[ "${BUMP}" == "${kind}" ]]; then
+			matched=1
+		elif [[ "${BUMP}" == "patch" && "${kind}" == "stable" ]]; then
+			matched=1
+		fi
+		if [[ "${matched}" != "1" ]]; then
+			echo "package.json is already ${current} (${kind}); refusing BUMP=${BUMP}" >&2
+			exit 1
+		fi
+		echo "package.json is already ${current} (${kind}); ignoring BUMP=${BUMP}" >&2
+	fi
 fi
 
 eval "$(node "${repo_root}/scripts/semver-bump.mjs" --from "${last}" --to "${version}" --sh)"
@@ -145,7 +158,10 @@ if [[ "${wrote}" == "1" ]]; then
 fi
 
 if [[ "${SKIP_CHECK:-}" != "1" ]]; then
-	if ! make check; then
+	# Release flags stay in this process; make check must not inherit them or
+	# scripts/cut-release.test.ts sees both BUMP and VERSION and refuses.
+	if ! env -u BUMP -u VERSION -u NOTES -u NOTES_FILE -u DRY -u PUSH -u WATCH \
+		-u EDIT -u RELEASE_ROOT -u SKIP_CHECK make check; then
 		if [[ "${wrote}" == "1" ]]; then
 			echo "check failed after writing ${version}; restore with: git checkout -- package.json" >&2
 		fi

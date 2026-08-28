@@ -48,7 +48,8 @@ prerelease (`0.1.1-rc.0` → `0.1.1-rc.1`). `BUMP=patch` from a prerelease
 finalizes (`0.1.1-rc.0` → `0.1.1`). Named prereleases such as
 `0.2.0-rc.1` use `VERSION=`. If `package.json` is already a valid bump
 ahead of the last `v*` tag, the script tags HEAD as-is and does not
-commit.
+commit. An explicit `BUMP` that disagrees with that version is refused;
+a matching `BUMP` is ignored with a warning.
 
 `make release` opens the draft in `$EDITOR`. The first line looks like
 `tubeless 0.1.1 (patch)`. Save to accept or rewrite. `EDIT=0` ships the

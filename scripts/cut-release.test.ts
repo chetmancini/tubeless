@@ -66,6 +66,13 @@ function setupRepo(version = "0.1.0", tag = "v0.1.0") {
   return dir;
 }
 
+function commitVersion(dir: string, version: string) {
+  writePackage(dir, version);
+  git(dir, ["add", "package.json"]);
+  git(dir, ["commit", "-m", `Prepare ${version}`]);
+  git(dir, ["push", "origin", "main"]);
+}
+
 function release(cwd: string, env: NodeJS.ProcessEnv = {}) {
   return run("bash", [cutRelease], cwd, {
     RELEASE_ROOT: cwd,
@@ -74,6 +81,8 @@ function release(cwd: string, env: NodeJS.ProcessEnv = {}) {
     WATCH: "0",
     NOTES: "test notes",
     PUSH: "0",
+    BUMP: "",
+    VERSION: "",
     ...env,
   });
 }
@@ -96,10 +105,7 @@ describe("cut-release version bump", () => {
 
   it("tags an already-bumped package.json without committing", () => {
     const dir = setupRepo();
-    writePackage(dir, "0.1.1");
-    git(dir, ["add", "package.json"]);
-    git(dir, ["commit", "-m", "Prepare 0.1.1"]);
-    git(dir, ["push", "origin", "main"]);
+    commitVersion(dir, "0.1.1");
     const before = git(dir, ["rev-parse", "HEAD"]);
 
     const result = release(dir);
@@ -110,6 +116,30 @@ describe("cut-release version bump", () => {
     expect(git(dir, ["tag", "-l", "v0.1.1"])).toBe("v0.1.1");
     expect(result.stdout).not.toContain("git push origin main");
     expect(result.stdout).toContain("git push origin v0.1.1");
+  });
+
+  it("refuses BUMP when it disagrees with an already-bumped package.json", () => {
+    const dir = setupRepo();
+    commitVersion(dir, "0.1.1");
+
+    const result = release(dir, { BUMP: "minor" });
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/refusing BUMP=minor/);
+    expect(packageVersion(dir)).toBe("0.1.1");
+    expect(git(dir, ["tag", "-l", "v0.1.1"])).toBe("");
+    expect(git(dir, ["tag", "-l", "v0.2.0"])).toBe("");
+  });
+
+  it("warns when BUMP matches an already-bumped package.json", () => {
+    const dir = setupRepo();
+    commitVersion(dir, "0.1.1");
+
+    const result = release(dir, { BUMP: "patch" });
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(packageVersion(dir)).toBe("0.1.1");
+    expect(git(dir, ["log", "-1", "--pretty=%s"])).toBe("Prepare 0.1.1");
+    expect(git(dir, ["tag", "-l", "v0.1.1"])).toBe("v0.1.1");
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/ignoring BUMP=patch/);
   });
 
   it("stops before writing when DRY=1", () => {
@@ -140,9 +170,16 @@ describe("cut-release version bump", () => {
 
   it("honors an explicit VERSION", () => {
     const dir = setupRepo();
-    const result = release(dir, { VERSION: "0.2.0-rc.1" });
-    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(packageVersion(dir)).toBe("0.2.0-rc.1");
+    const previousBump = process.env.BUMP;
+    process.env.BUMP = "minor";
+    try {
+      const result = release(dir, { VERSION: "0.2.0-rc.1" });
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect(packageVersion(dir)).toBe("0.2.0-rc.1");
+    } finally {
+      if (previousBump === undefined) delete process.env.BUMP;
+      else process.env.BUMP = previousBump;
+    }
   });
 
   it("writes the version and leaves it uncommitted when check fails", () => {

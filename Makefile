@@ -118,5 +118,6 @@ release-notes:
 release:
 	@NOTES="$(NOTES)" NOTES_FILE="$(NOTES_FILE)" DRY="$(DRY)" PUSH="$(PUSH)" \
 		WATCH="$(WATCH)" SKIP_CHECK="$(SKIP_CHECK)" EDIT="$(EDIT)" \
-		BUMP="$(BUMP)" VERSION="$(VERSION)" \
+		$(if $(strip $(BUMP)),BUMP="$(BUMP)",) \
+		$(if $(strip $(VERSION)),VERSION="$(VERSION)",) \
 		bash scripts/cut-release.sh
