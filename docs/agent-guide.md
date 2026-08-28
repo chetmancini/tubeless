@@ -117,8 +117,10 @@ or shared helpers in this repository.
 - Use `createPipelineRunProjector` from `tubeless/run-store` when a custom
   reader pages `listEvents({ afterId })`. Append each newer page and call
   `snapshot()`; a refresh with no new ids returns the cached view. Duplicate
-  and out-of-order ids are ignored; `0` is a valid first id. Use
-  `projectPipelineRunStore` only for a one-shot fold of a complete list. See
+  and out-of-order ids are ignored; `0` is a valid first id. Pass
+  `{ retainLogs: false }` only when the snapshot should keep `logCount`
+  without log bodies. Use `projectPipelineRunStore` only for a one-shot fold
+  of a complete list. See
   [`local-observability.ts`](../examples/local-observability.ts).
 - Pass caller-owned `runId` and `parentRunId` values through `PipelineContext`
   when joining an external execution tree. Do not derive correlation from step

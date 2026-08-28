@@ -346,4 +346,25 @@ describe("incremental pipeline run projector", () => {
     expect(refreshed.definitions).toBe(first.definitions);
     expect(refreshed.lastEventId).toBe(first.lastEventId);
   });
+
+  it("counts logs without retaining bodies when retainLogs is false", () => {
+    const projector = createPipelineRunProjector({ retainLogs: false });
+    projector.append([
+      event(1, "pipeline.started"),
+      event(2, "pipeline.log", {
+        attributes: { level: "log", message: "secret payload" },
+        stepId: "load",
+      }),
+      event(3, "pipeline.completed", { attributes: { status: "completed" } }),
+    ]);
+
+    const snapshot = projector.snapshot(1);
+    expect(snapshot.runs[0]).toMatchObject({
+      eventCount: 3,
+      logCount: 1,
+      logs: [],
+      status: "completed",
+    });
+    expect(JSON.stringify(snapshot)).not.toContain("secret payload");
+  });
 });

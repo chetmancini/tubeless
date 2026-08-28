@@ -187,7 +187,9 @@ interface MutableRunProjection {
   completed: StoredPipelineEvent | undefined;
   eventCount: number;
   first: StoredPipelineEvent;
+  logCount: number;
   logs: StoredPipelineLog[];
+  retainLogs: boolean;
   started: StoredPipelineEvent;
   stepOrder: string[];
   steps: Map<string, StoredPipelineStep>;
@@ -211,6 +213,8 @@ function applyRunEvent(projection: MutableRunProjection, event: StoredPipelineEv
   }
   if (event.name === "pipeline.completed") projection.completed = event;
   if (event.name === "pipeline.log") {
+    projection.logCount += 1;
+    if (!projection.retainLogs) return;
     const level = stringAttribute(event.attributes, "level");
     const log: StoredPipelineLog = {
       id: event.id,
@@ -281,12 +285,14 @@ function applyRunEvent(projection: MutableRunProjection, event: StoredPipelineEv
   }
 }
 
-function createRunProjection(event: StoredPipelineEvent): MutableRunProjection {
+function createRunProjection(event: StoredPipelineEvent, retainLogs = true): MutableRunProjection {
   const projection: MutableRunProjection = {
     completed: undefined,
     eventCount: 0,
     first: event,
+    logCount: 0,
     logs: [],
+    retainLogs,
     started: event,
     stepOrder: [],
     steps: new Map(),
@@ -313,8 +319,8 @@ function materializeRun(projection: MutableRunProjection): StoredPipelineRun {
   const run: StoredPipelineRun = {
     dryRun: booleanAttribute(started.attributes, "dry_run") ?? false,
     eventCount,
-    logCount: logs.length,
-    logs: logs.map((log) => ({ ...log })),
+    logCount: projection.logCount,
+    logs: projection.retainLogs ? logs.map((log) => ({ ...log })) : [],
     pipelineId: first.pipelineId,
     runId: first.runId,
     startedAtMs: started.timestampMs,
@@ -406,8 +412,14 @@ export interface PipelineRunProjector {
   snapshot(now?: number): PipelineRunStoreSnapshot;
 }
 
-/** Incrementally fold accepted store events into the current run-history snapshot. */
-export function createPipelineRunProjector(): PipelineRunProjector {
+/**
+ * Incrementally fold accepted store events into the current run-history snapshot.
+ * `{ retainLogs: false }` keeps `logCount` without retaining or cloning log bodies.
+ */
+export function createPipelineRunProjector(
+  options: { readonly retainLogs?: boolean } = {}
+): PipelineRunProjector {
+  const retainLogs = options.retainLogs !== false;
   const pipelines = new Map<string, MutablePipelineProjection>();
   const runs = new Map<string, MutableRunProjection>();
   let cached: PipelineRunStoreSnapshot | undefined;
@@ -416,7 +428,7 @@ export function createPipelineRunProjector(): PipelineRunProjector {
   function applyEvent(event: StoredPipelineEvent): void {
     const run = runs.get(event.runId);
     if (run) applyRunEvent(run, event);
-    else runs.set(event.runId, createRunProjection(event));
+    else runs.set(event.runId, createRunProjection(event, retainLogs));
 
     const pipeline = pipelines.get(event.pipelineId);
     if (pipeline) applyPipelineEvent(pipeline, event);

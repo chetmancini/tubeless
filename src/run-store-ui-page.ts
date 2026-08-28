@@ -329,7 +329,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
   </div>
   <div class="toast hidden" id="toast" role="status"></div>
   <script>
-    const state = { snapshot: null, detail: null, commands: [], view: "runs", selectedRunId: null, query: "", loading: false, launching: false, planning: false, clearing: false, canClearHistory: false, planVersion: 0 };
+    const state = { snapshot: null, detail: null, detailFingerprint: null, commands: [], view: "runs", selectedRunId: null, query: "", loading: false, launching: false, planning: false, clearing: false, canClearHistory: false, planVersion: 0 };
     const $ = (selector) => document.querySelector(selector);
     const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"})[char]);
     const statusMark = (value) => value === 'completed' || value === 'complete' ? '✓' : value === 'skipped' ? '×' : value === 'cancelled' ? '■' : value === 'failed' ? '!' : value === 'planned' ? '…' : '';
@@ -615,18 +615,32 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
       document.querySelectorAll('[data-view]').forEach((button) => button.classList.toggle('active', button.dataset.view === state.view));
       isPipelines ? renderPipelines() : renderRuns();
     }
+    function selectedRunFingerprint() {
+      const run = state.snapshot && state.snapshot.runs.find((item) => item.runId === state.selectedRunId);
+      return run ? [run.runId, run.eventCount, run.status].join(':') : null;
+    }
     async function loadSelectedRunDetail() {
       if (!state.selectedRunId) {
         state.detail = null;
+        state.detailFingerprint = null;
         return;
       }
+      const fingerprint = selectedRunFingerprint();
+      if (!fingerprint) {
+        state.detail = null;
+        state.detailFingerprint = null;
+        return;
+      }
+      if (fingerprint === state.detailFingerprint && state.detail) return;
       const response = await fetch('/api/runs/' + encodeURIComponent(state.selectedRunId), { cache: 'no-store' });
       if (response.status === 404) {
         state.detail = null;
+        state.detailFingerprint = null;
         return;
       }
       if (!response.ok) return;
       state.detail = await response.json();
+      state.detailFingerprint = fingerprint;
     }
     async function selectRun(runId) {
       state.selectedRunId = runId;

@@ -160,6 +160,8 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("Tubeless — Local Studio");
     expect(html).toContain("nested work stays with its parent");
     expect(html).toContain("/api/runs/");
+    expect(html).toContain("function selectedRunFingerprint");
+    expect(html).toContain("fingerprint === state.detailFingerprint && state.detail");
     expect(html).not.toContain('data-view="active"');
     expect(html).not.toContain('data-view="definitions"');
     expect(html).toContain("Run pipeline");
@@ -426,6 +428,8 @@ describe("local pipeline run studio", () => {
     servers.push(server);
 
     const snapshot = await fetch(`${server.url}/api/snapshot`).then((response) => response.json());
+    expect(JSON.stringify(snapshot)).not.toContain("loaded rows");
+    expect(JSON.stringify(snapshot)).not.toContain("other run only");
     expect(snapshot.runs).toEqual([
       expect.objectContaining({
         eventCount: 2,
