@@ -114,7 +114,12 @@ async function writeActualPipelineCommandModule(): Promise<{
   `);
 }
 
-async function writeStudioConfig(directory: string): Promise<void> {
+async function writeStudioConfig(
+  directory: string,
+  command: { exportName?: string; name?: string } = {}
+): Promise<void> {
+  const exportName = command.exportName ?? "FixtureCommand";
+  const name = command.name ?? "Studio fixture";
   const studioModuleUrl = pathToFileURL(path.resolve("dist/workbench-studio.js")).href;
   const configDirectory = path.join(directory, "config");
   await mkdir(configDirectory);
@@ -126,12 +131,42 @@ async function writeStudioConfig(directory: string): Promise<void> {
         cwd: "..",
         commands: [{
           file: "../pipeline.mjs",
-          export: "FixtureCommand",
-          name: "Studio fixture",
+          export: ${JSON.stringify(exportName)},
+          name: ${JSON.stringify(name)},
         }],
       });
     `
   );
+}
+
+async function writeGatedPipelineCommandModule(options: {
+  mapOptionsSource: string;
+}): Promise<{ directory: string; filePath: string }> {
+  const cliModuleUrl = pathToFileURL(path.resolve("dist/cli.js")).href;
+  const pipelineModuleUrl = pathToFileURL(path.resolve("dist/pipeline.js")).href;
+  return writeModule(`
+    import { existsSync } from "node:fs";
+    import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
+    import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
+    const step = createSteps();
+    const work = step("work", {
+      description: "No-op gated command.",
+      run: () => undefined,
+    });
+    export const GatedCommand = definePipelineCommand(
+      definePipeline({
+        id: "gated-fixture",
+        steps: [work],
+        targets: [work],
+        finalize: () => undefined,
+      }),
+      {
+        params: { message: { type: "string" } },
+        mapOptions: ${options.mapOptionsSource},
+        reporter: false,
+      }
+    );
+  `);
 }
 
 const fixturePipeline = `
@@ -559,6 +594,10 @@ describe("tubeless workbench", () => {
     expect(launched.status).toBe(202);
     const launch = (await launched.json()) as { runId: string };
     expect(launch.runId).toContain("command-fixture");
+    const recorded = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
+      runs: { runId: string }[];
+    };
+    expect(recorded.runs).toContainEqual(expect.objectContaining({ runId: launch.runId }));
     await vi.waitFor(async () => {
       const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
         runs: { runId: string; status: string }[];
@@ -569,6 +608,172 @@ describe("tubeless workbench", () => {
     });
 
     controller.abort();
+    await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+  });
+
+  it("holds the launch POST until mapOptions records a store row", async () => {
+    const gateDirectory = await mkdtemp(path.join(os.tmpdir(), "tubeless-gate-"));
+    const gateFile = path.join(gateDirectory, "gate");
+    const { directory } = await writeGatedPipelineCommandModule({
+      mapOptionsSource: `async (values) => {
+        const gateFile = ${JSON.stringify(gateFile)};
+        while (!existsSync(gateFile)) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        return values;
+      }`,
+    });
+    await writeStudioConfig(directory, { exportName: "GatedCommand", name: "Gated fixture" });
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), signal: controller.signal };
+    const command = runWorkbenchCli(
+      [
+        "ui",
+        "--store",
+        path.join(directory, "runs.sqlite"),
+        "--port",
+        "0",
+        "config/tubeless.studio.mjs",
+      ],
+      io
+    );
+
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
+    expect(url).toBeDefined();
+    const commands = (await fetch(`${url}/api/commands`).then((response) => response.json())) as {
+      commands: { id: string }[];
+    };
+    const commandId = commands.commands[0]?.id;
+    expect(commandId).toBeDefined();
+
+    const launchPromise = fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+      body: JSON.stringify({ values: { message: "x" } }),
+      headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
+      method: "POST",
+    });
+    const pending = await Promise.race([
+      launchPromise.then(() => "resolved" as const),
+      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 80)),
+    ]);
+    expect(pending).toBe("pending");
+    await writeFile(gateFile, "go");
+    const launched = await launchPromise;
+    expect(launched.status).toBe(202);
+    const launch = (await launched.json()) as { runId: string };
+    const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
+      runs: { runId: string }[];
+    };
+    expect(snapshot.runs).toContainEqual(expect.objectContaining({ runId: launch.runId }));
+
+    controller.abort();
+    await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+  });
+
+  it("rejects a launch when mapOptions throws before recording a run", async () => {
+    const { directory } = await writeGatedPipelineCommandModule({
+      mapOptionsSource: `async () => {
+        throw new Error("map exploded");
+      }`,
+    });
+    await writeStudioConfig(directory, { exportName: "GatedCommand", name: "Gated fixture" });
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), signal: controller.signal };
+    const command = runWorkbenchCli(
+      [
+        "ui",
+        "--store",
+        path.join(directory, "runs.sqlite"),
+        "--port",
+        "0",
+        "config/tubeless.studio.mjs",
+      ],
+      io
+    );
+
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
+    expect(url).toBeDefined();
+    const commands = (await fetch(`${url}/api/commands`).then((response) => response.json())) as {
+      commands: { id: string }[];
+    };
+    const commandId = commands.commands[0]?.id;
+    expect(commandId).toBeDefined();
+
+    const failed = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+      body: JSON.stringify({ values: { message: "x" } }),
+      headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
+      method: "POST",
+    });
+    expect(failed.status).toBe(400);
+    await expect(failed.json()).resolves.toEqual({
+      accepted: false,
+      errors: [
+        `Pipeline command exited (${TUBELESS_WORKBENCH_EXIT_CODE.execution}) before recording a run.`,
+      ],
+    });
+    await expect(
+      fetch(`${url}/api/snapshot`).then((response) => response.json())
+    ).resolves.toMatchObject({ runs: [] });
+
+    controller.abort();
+    await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+  });
+
+  it("rejects a pending launch when the studio shuts down", async () => {
+    const gateDirectory = await mkdtemp(path.join(os.tmpdir(), "tubeless-gate-"));
+    const gateFile = path.join(gateDirectory, "gate");
+    const { directory } = await writeGatedPipelineCommandModule({
+      mapOptionsSource: `async (values, context) => {
+        const gateFile = ${JSON.stringify(gateFile)};
+        while (!existsSync(gateFile)) {
+          if (context.signal?.aborted) throw context.signal.reason;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        return values;
+      }`,
+    });
+    await writeStudioConfig(directory, { exportName: "GatedCommand", name: "Gated fixture" });
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), signal: controller.signal };
+    const command = runWorkbenchCli(
+      [
+        "ui",
+        "--store",
+        path.join(directory, "runs.sqlite"),
+        "--port",
+        "0",
+        "config/tubeless.studio.mjs",
+      ],
+      io
+    );
+
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
+    expect(url).toBeDefined();
+    const commands = (await fetch(`${url}/api/commands`).then((response) => response.json())) as {
+      commands: { id: string }[];
+    };
+    const commandId = commands.commands[0]?.id;
+    expect(commandId).toBeDefined();
+
+    const launchPromise = fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+      body: JSON.stringify({ values: { message: "x" } }),
+      headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
+      method: "POST",
+    });
+    const pending = await Promise.race([
+      launchPromise.then(() => "resolved" as const),
+      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 80)),
+    ]);
+    expect(pending).toBe("pending");
+    controller.abort();
+    const failed = await launchPromise;
+    expect(failed.status).toBe(400);
+    await expect(failed.json()).resolves.toEqual({
+      accepted: false,
+      errors: ["The local studio is stopping."],
+    });
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
   });
 

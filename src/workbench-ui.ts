@@ -4,7 +4,12 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { createRunId } from "./pipeline.js";
 import type { PipelineStudioConfig } from "./workbench-studio.js";
-import type { PipelineRunStudioCommand, PipelineRunStudioLauncher } from "./run-store-ui.js";
+import type { PipelineRunEventStore } from "./run-store.js";
+import type {
+  PipelineRunStudioCommand,
+  PipelineRunStudioLaunchResult,
+  PipelineRunStudioLauncher,
+} from "./run-store-ui.js";
 import {
   executePipelineCommandValues,
   type WorkbenchStructuredPipelineCommand,
@@ -31,6 +36,42 @@ Options:
       --port <number>   HTTP port (default: 4317)
   -h, --help            Show this help
 `;
+
+/** Resolve a studio launch only after the run store has the run, or after a silent exit. */
+async function acknowledgeRecordedLaunch(
+  store: PipelineRunEventStore,
+  runId: string,
+  execution: Promise<number>,
+  stopping: Promise<void>
+): Promise<PipelineRunStudioLaunchResult> {
+  let exitCode: number | undefined;
+  let stopped = false;
+  const settled = execution.then((code) => {
+    exitCode = code;
+    return code;
+  });
+  const stoppedOnce = stopping.then(() => {
+    stopped = true;
+  });
+  while (exitCode === undefined && !stopped) {
+    const events = await store.listEvents({ runId, limit: 1 });
+    if (events.length > 0) return { accepted: true, runId };
+    await Promise.race([
+      settled,
+      stoppedOnce,
+      new Promise<void>((resolve) => setTimeout(resolve, 10)),
+    ]);
+  }
+  const events = await store.listEvents({ runId, limit: 1 });
+  if (events.length > 0) return { accepted: true, runId };
+  if (stopped) {
+    return { accepted: false, errors: ["The local studio is stopping."] };
+  }
+  return {
+    accepted: false,
+    errors: [`Pipeline command exited (${exitCode}) before recording a run.`],
+  };
+}
 
 function parseUiArgs(argv: readonly string[]) {
   return parseArgs({
@@ -173,6 +214,10 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
 
   const launchController = new AbortController();
   const activeLaunches = new Set<Promise<number>>();
+  let markStudioStopping = (): void => undefined;
+  const studioStopping = new Promise<void>((resolve) => {
+    markStudioStopping = resolve;
+  });
   const registrations: {
     command: WorkbenchStructuredPipelineCommand;
     commandIo: WorkbenchCliIo;
@@ -270,7 +315,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
               );
               activeLaunches.add(execution);
               void execution.finally(() => activeLaunches.delete(execution));
-              return { accepted: true, runId };
+              return await acknowledgeRecordedLaunch(store!, runId, execution, studioStopping);
             },
           };
     const studioOptions: Parameters<typeof startPipelineRunStudio>[0] = {
@@ -296,29 +341,34 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
     io.stdout.write("Press Ctrl-C to stop.\n");
 
     await new Promise<void>((resolve) => {
-      if (io.signal?.aborted) {
+      const stop = (): void => {
+        markStudioStopping();
         resolve();
+      };
+      if (io.signal?.aborted) {
+        stop();
         return;
       }
       if (io.signal) {
-        io.signal.addEventListener("abort", () => resolve(), { once: true });
+        io.signal.addEventListener("abort", stop, { once: true });
         return;
       }
-      const stop = (): void => {
-        process.removeListener("SIGINT", stop);
-        process.removeListener("SIGTERM", stop);
-        resolve();
+      const onProcessStop = (): void => {
+        process.removeListener("SIGINT", onProcessStop);
+        process.removeListener("SIGTERM", onProcessStop);
+        stop();
       };
-      process.once("SIGINT", stop);
-      process.once("SIGTERM", stop);
+      process.once("SIGINT", onProcessStop);
+      process.once("SIGTERM", onProcessStop);
     });
     return TUBELESS_WORKBENCH_EXIT_CODE.success;
   } catch (error) {
     io.stderr.write(`Error: ${errorMessage(error)}\n`);
     return TUBELESS_WORKBENCH_EXIT_CODE.execution;
   } finally {
-    await server?.close();
+    markStudioStopping();
     launchController.abort(new DOMException("The local studio is stopping.", "AbortError"));
+    await server?.close();
     await Promise.allSettled(activeLaunches);
     await store?.close();
   }
