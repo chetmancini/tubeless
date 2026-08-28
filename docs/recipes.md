@@ -1,8 +1,9 @@
 # Recipe index
 
-Every linked TypeScript example is compiled by the package typecheck. Start with
-the smallest example matching the workflow rather than assembling primitives
-from the API inventory.
+Every linked TypeScript example is compiled by the package typecheck. `pack:verify`
+also executes these modules from the published tarball. Start with the smallest
+example matching the workflow rather than assembling primitives from the API
+inventory.
 
 | Intent                                        | Executable recipe                                                        | Main primitives                                                    |
 | --------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------ |
