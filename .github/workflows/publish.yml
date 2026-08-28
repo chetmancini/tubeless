@@ -5,19 +5,68 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      notes:
+        description: "Release notes to cut a new tag (first line is the summary). Optional when the version tag already exists (retry publish)."
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
+  cut:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Cut version tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "Cut releases from main (ref ${GITHUB_REF})" >&2
+            exit 1
+          fi
+          version="$(node -p 'require("./package.json").version')"
+          tag="v${version}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "${tag} already exists; skipping tag"
+            if ! gh release view "${tag}" >/dev/null 2>&1; then
+              git fetch origin "refs/tags/${tag}:refs/tags/${tag}"
+              bash scripts/publish-github-release.sh "${tag}"
+            fi
+            exit 0
+          fi
+          if [[ -z "${NOTES}" ]]; then
+            echo "notes input is required to cut ${tag}" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" -m "${NOTES}"
+          git push origin "${tag}"
+          bash scripts/publish-github-release.sh "${tag}"
+
   publish:
+    needs: [cut]
+    if: always() && !cancelled() && (github.event_name == 'push' || needs.cut.result == 'success')
     runs-on: ubuntu-latest
     environment: npm
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Require tag to match package.json
