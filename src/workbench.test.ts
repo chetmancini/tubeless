@@ -720,6 +720,63 @@ describe("tubeless workbench", () => {
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
   });
 
+  it("rejects a pending launch when the studio shuts down", async () => {
+    const gateDirectory = await mkdtemp(path.join(os.tmpdir(), "tubeless-gate-"));
+    const gateFile = path.join(gateDirectory, "gate");
+    const { directory } = await writeGatedPipelineCommandModule({
+      mapOptionsSource: `async (values, context) => {
+        const gateFile = ${JSON.stringify(gateFile)};
+        while (!existsSync(gateFile)) {
+          if (context.signal?.aborted) throw context.signal.reason;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        return values;
+      }`,
+    });
+    await writeStudioConfig(directory, { exportName: "GatedCommand", name: "Gated fixture" });
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), signal: controller.signal };
+    const command = runWorkbenchCli(
+      [
+        "ui",
+        "--store",
+        path.join(directory, "runs.sqlite"),
+        "--port",
+        "0",
+        "config/tubeless.studio.mjs",
+      ],
+      io
+    );
+
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
+    expect(url).toBeDefined();
+    const commands = (await fetch(`${url}/api/commands`).then((response) => response.json())) as {
+      commands: { id: string }[];
+    };
+    const commandId = commands.commands[0]?.id;
+    expect(commandId).toBeDefined();
+
+    const launchPromise = fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+      body: JSON.stringify({ values: { message: "x" } }),
+      headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
+      method: "POST",
+    });
+    const pending = await Promise.race([
+      launchPromise.then(() => "resolved" as const),
+      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 80)),
+    ]);
+    expect(pending).toBe("pending");
+    controller.abort();
+    const failed = await launchPromise;
+    expect(failed.status).toBe(400);
+    await expect(failed.json()).resolves.toEqual({
+      accepted: false,
+      errors: ["The local studio is stopping."],
+    });
+    await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+  });
+
   it("rejects browser-triggered execution on a non-loopback host", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     const commandIo = captureIo(directory);
