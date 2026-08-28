@@ -625,6 +625,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
         state.detailFingerprint = null;
         return;
       }
+      const requestedRunId = state.selectedRunId;
       const fingerprint = selectedRunFingerprint();
       if (!fingerprint) {
         state.detail = null;
@@ -632,14 +633,17 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
         return;
       }
       if (fingerprint === state.detailFingerprint && state.detail) return;
-      const response = await fetch('/api/runs/' + encodeURIComponent(state.selectedRunId), { cache: 'no-store' });
+      const response = await fetch('/api/runs/' + encodeURIComponent(requestedRunId), { cache: 'no-store' });
+      if (state.selectedRunId !== requestedRunId) return;
       if (response.status === 404) {
         state.detail = null;
         state.detailFingerprint = null;
         return;
       }
       if (!response.ok) return;
-      state.detail = await response.json();
+      const detail = await response.json();
+      if (state.selectedRunId !== requestedRunId) return;
+      state.detail = detail;
       state.detailFingerprint = fingerprint;
     }
     async function selectRun(runId) {

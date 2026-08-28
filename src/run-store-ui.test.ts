@@ -162,6 +162,8 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("/api/runs/");
     expect(html).toContain("function selectedRunFingerprint");
     expect(html).toContain("fingerprint === state.detailFingerprint && state.detail");
+    expect(html).toContain("const requestedRunId = state.selectedRunId");
+    expect(html).toContain("if (state.selectedRunId !== requestedRunId) return");
     expect(html).not.toContain('data-view="active"');
     expect(html).not.toContain('data-view="definitions"');
     expect(html).toContain("Run pipeline");
