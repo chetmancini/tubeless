@@ -45,7 +45,7 @@ Advanced:
 - Child pipelines: ./child-pipeline-composition.md
 - Public exports: ./api-reference.md
 - Machine-readable surface: ./api-report.json
-- Agent evaluation cases: ./agent-evaluations.md
+- Agent evaluation cases: https://github.com/chetmancini/tubeless/blob/main/docs/agent-evaluations.md
 
 Executable examples:
 
@@ -58,6 +58,8 @@ Executable examples:
 - ../examples/fan-out-progress.ts
 - ../examples/resumable-enrichment.ts
 - ../examples/cli-job.ts
+- ../examples/rendering.ts
 - ../examples/cancellation-and-testing.ts
 - ../examples/live-tui.ts
 - ../examples/tracing.ts
+- ../examples/local-observability.ts

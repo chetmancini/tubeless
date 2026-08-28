@@ -19,13 +19,13 @@
 
 ## Deeper reference
 
-| Document                                                      | Use it for                                           |
-| ------------------------------------------------------------- | ---------------------------------------------------- |
-| [Child-pipeline composition](./child-pipeline-composition.md) | Opaque child and fan-out semantics                   |
-| [Generated API inventory](./api-reference.md)                 | Entrypoints, exported symbols, and surface hashes    |
-| [Machine-readable API report](./api-report.json)              | Automated public-surface review                      |
-| [Agent evaluations](./agent-evaluations.md)                   | Forward-testing the guidance against realistic tasks |
-| [LLM index](./llms.txt)                                       | Compact machine-readable documentation map           |
+| Document                                                                                         | Use it for                                           |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| [Child-pipeline composition](./child-pipeline-composition.md)                                    | Opaque child and fan-out semantics                   |
+| [Generated API inventory](./api-reference.md)                                                    | Entrypoints, exported symbols, and surface hashes    |
+| [Machine-readable API report](./api-report.json)                                                 | Automated public-surface review                      |
+| [Agent evaluations](https://github.com/chetmancini/tubeless/blob/main/docs/agent-evaluations.md) | Forward-testing the guidance against realistic tasks |
+| [LLM index](./llms.txt)                                                                          | Compact machine-readable documentation map           |
 
 The generated API inventory is an audit artifact, not a tutorial. Prefer the
 recipe index when deciding how to implement a workflow.
