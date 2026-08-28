@@ -29,6 +29,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          fetch-tags: true
       - name: Cut version tag and GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -41,6 +42,9 @@ jobs:
           fi
           version="$(node -p 'require("./package.json").version')"
           tag="v${version}"
+          last="$(git tag -l 'v*' --sort=-version:refname | awk '{ print; exit }')"
+          eval "$(node scripts/semver-bump.mjs --from "${last}" --to "${version}" --sh)"
+          echo "cut ${tag} — ${summary}"
           if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
             echo "${tag} already exists; skipping tag"
             if ! gh release view "${tag}" >/dev/null 2>&1; then
@@ -48,6 +52,10 @@ jobs:
               bash scripts/publish-github-release.sh "${tag}"
             fi
             exit 0
+          fi
+          if [[ "${kind}" == "same" || "${kind}" == "downgrade" || "${kind}" == "invalid" ]]; then
+            echo "refusing ${summary}" >&2
+            exit 1
           fi
           notes_path="$(mktemp)"
           if [[ -n "${NOTES}" ]]; then

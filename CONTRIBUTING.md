@@ -25,24 +25,28 @@ package imports.
 
 Merging to `main` does not publish. Land the `package.json` `version` bump
 first (keep `private: true`). The tag name must be `v` plus that version.
+The draft names the bump: **patch**, **minor**, **major**, or
+**prerelease** (and whether it is a 0.x minor).
 
-Notes start generated: commits since the last version tag, plus GitHub's
-pull-request notes (`.github/release.yml`). Refine that draft, then tag.
+Notes start generated: bump type, commits since the last version tag, plus
+GitHub's pull-request notes (`.github/release.yml`). Refine that draft,
+then tag.
 
 ```sh
 make release-notes
 make release
 ```
 
-`make release` opens the draft in `$EDITOR`. Save to accept or rewrite.
-`EDIT=0` ships the generated notes as-is. `NOTES='...'` or
-`NOTES_FILE=notes.md` skip generation. `DRY=1`, `PUSH=0`, `WATCH=0`, and
-`SKIP_CHECK=1` are optional.
+`make release` opens the draft in `$EDITOR`. The first line looks like
+`tubeless 0.1.1 (patch)`. Save to accept or rewrite. `EDIT=0` ships the
+generated notes as-is. `NOTES='...'` or `NOTES_FILE=notes.md` skip
+generation. `DRY=1`, `PUSH=0`, `WATCH=0`, and `SKIP_CHECK=1` are
+optional.
 
 Without a checkout: Actions → **publish** → **Run workflow** on `main`.
-Leave notes empty to auto-generate and cut the tag (that run also opens
-the GitHub Release and publishes to npm). Fill in notes to override.
-Empty notes also retry a version whose tag already exists.
+Leave notes empty to auto-generate (including the bump label) and cut
+the tag. Fill in notes to override. Empty notes also retry a version
+whose tag already exists.
 
 Do not `npm publish` from a laptop. Do not attach npm tarballs to GitHub
 Releases; npm is the artifact.

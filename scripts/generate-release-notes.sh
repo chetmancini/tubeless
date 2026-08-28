@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Print a draft changelog for package.json's version (or $1).
-# Commits since the latest existing v* tag, plus GitHub's generated notes
-# (merged pull requests via .github/release.yml) when the tag is new.
+# First line names the bump (patch / minor / major / prerelease).
+# Then commits since the latest existing v* tag, plus GitHub's generated
+# notes (merged pull requests via .github/release.yml) when the tag is new.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,6 +25,7 @@ if [[ -z "${repo}" ]]; then
 fi
 
 last="$(git tag -l 'v*' --sort=-version:refname | awk '{ print; exit }')"
+eval "$(node "${root}/scripts/semver-bump.mjs" --from "${last}" --to "${title_version}" --sh)"
 
 if [[ -n "${last}" ]]; then
 	commits="$(git log --no-merges --pretty=format:'- %s' "${last}..HEAD")"
@@ -32,7 +34,7 @@ else
 fi
 
 generated=""
-if command -v gh >/dev/null 2>&1 && [[ -n "${tag}" && "${tag}" != "${last}" ]]; then
+if command -v gh >/dev/null 2>&1 && [[ "${tag}" != "${last}" ]]; then
 	api_args=(-f tag_name="${tag}" -f target_commitish="$(git rev-parse HEAD)")
 	if [[ -n "${last}" ]]; then
 		api_args+=(-f previous_tag_name="${last}")
@@ -59,7 +61,12 @@ if [[ -z "${generated}" ]]; then
 	fi
 fi
 
-printf 'tubeless %s\n\n' "${title_version}"
+printf 'tubeless %s (%s)\n\n' "${title_version}" "${title}"
+printf '%s\n\n' "${summary}"
+if [[ "${kind}" == "same" ]]; then
+	printf 'Bump package.json before cutting a release. Unreleased commits since v%s are below.\n\n' "${from}"
+fi
+
 if printf '%s\n' "${generated}" | grep -q '^\* '; then
 	printf '%s\n' "${generated}"
 	if [[ -n "${commits}" ]]; then

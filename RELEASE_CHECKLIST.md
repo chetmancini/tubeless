@@ -54,9 +54,10 @@ name; recheck immediately before the first publish.
       `vX.Y.Z` tag matching `package.json` `version` (`make release`, or
       Actions → publish → Run workflow). See CONTRIBUTING. Pushing the tag
       publishes to npm (`publish.yml`) and opens a GitHub Release
-      (`github-release.yml`). Notes start generated (commits since the last
-      tag, plus GitHub PR notes via `.github/release.yml`) and can be
-      refined in `$EDITOR` or the workflow notes input.
+      (`github-release.yml`). Notes start generated: bump type (patch /
+      minor / major / prerelease), commits since the last tag, plus GitHub
+      PR notes via `.github/release.yml`, and can be refined in `$EDITOR`
+      or the workflow notes input.
       Prerelease tags (`vX.Y.Z-rc.N`) are GitHub prereleases and npm `next`.
       Who: repository admins. Do not `npm publish` from a laptop. Rollback:
       `npm deprecate tubeless@version "reason"` and point `latest` at the

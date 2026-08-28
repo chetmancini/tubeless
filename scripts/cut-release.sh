@@ -40,6 +40,18 @@ if [[ "${head}" != "${remote}" ]]; then
 	exit 1
 fi
 
+last="$(git tag -l 'v*' --sort=-version:refname | awk '{ print; exit }')"
+eval "$(node "${root}/scripts/semver-bump.mjs" --from "${last}" --to "${version}" --sh)"
+echo "release ${tag} at $(git rev-parse --short HEAD) — ${summary}"
+if [[ "${kind}" == "same" ]]; then
+	echo "package.json is still ${version}; bump it before cutting a release" >&2
+	exit 1
+fi
+if [[ "${kind}" == "downgrade" || "${kind}" == "invalid" ]]; then
+	echo "refusing ${summary}" >&2
+	exit 1
+fi
+
 if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
 	echo "local tag ${tag} already exists" >&2
 	exit 1
@@ -49,8 +61,6 @@ if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; t
 	echo "origin already has ${tag}" >&2
 	exit 1
 fi
-
-echo "release ${tag} at $(git rev-parse --short HEAD)"
 
 if [[ -n "${NOTES_FILE:-}" ]]; then
 	cat "${NOTES_FILE}" >"${notes_path}"

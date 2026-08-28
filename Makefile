@@ -34,7 +34,7 @@ help:
 	@echo "  make format        Format package sources and documentation"
 	@echo "  make api-generate  Regenerate checked public API documentation"
 	@echo "  make pack          Inspect and verify the publishable artifact"
-	@echo "  make release-notes Print generated notes for package.json version"
+	@echo "  make release-notes Print generated notes, labeled patch/minor/major"
 	@echo "  make release       Tag and push; edit generated notes first (EDIT=0 to skip)"
 
 require-file:
