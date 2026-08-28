@@ -39,7 +39,7 @@ loopback host (`127.0.0.1`, `::1`, or `localhost`). Non-loopback binding is
 rejected when any command is registered. A non-loopback `--host` without
 commands is allowed and stays read-only: the store is visible to anyone who
 can reach the port, and clear-history is not wired. That bind is a risk you
-enable; see [SECURITY.md](../SECURITY.md).
+enable; see [SECURITY.md](https://github.com/chetmancini/tubeless/blob/main/SECURITY.md).
 
 ## Checked-in catalog
 

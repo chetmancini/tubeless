@@ -1,6 +1,14 @@
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { packedTarballFilename, resolveNpm } from "./resolve-npm.mjs";
@@ -28,6 +36,41 @@ function runWithStatus(command, args, cwd, expectedStatus) {
     );
   }
   return result;
+}
+
+function assertPackedMarkdownLinks(filePath, packedName) {
+  const source = readFileSync(filePath, "utf8");
+  const links = source.matchAll(/\[[^\]]*\]\(([^)]+)\)/g);
+  for (const match of links) {
+    const target = match[1].replace(/^<|>$/g, "").split("#", 1)[0];
+    if (!target || /^(?:https?:|mailto:)/.test(target)) continue;
+    const resolved = resolve(dirname(filePath), decodeURIComponent(target));
+    if (!existsSync(resolved)) {
+      throw new Error(`Packed ${packedName} links to missing ${target}`);
+    }
+  }
+}
+
+function assertPackedLlmsLinks(docsDirectory) {
+  const source = readFileSync(join(docsDirectory, "llms.txt"), "utf8");
+  for (const line of source.split("\n")) {
+    const match = line.match(/(?:\.\.\/|\.\/)\S+/);
+    if (!match) continue;
+    const target = match[0].split("#", 1)[0];
+    const resolved = resolve(docsDirectory, decodeURIComponent(target));
+    if (!existsSync(resolved)) {
+      throw new Error(`Packed docs/llms.txt links to missing ${target}`);
+    }
+  }
+}
+
+function assertPackedDocumentationLinks(installedPackage) {
+  const packedDocs = join(installedPackage, "docs");
+  for (const name of readdirSync(packedDocs)) {
+    if (!name.endsWith(".md")) continue;
+    assertPackedMarkdownLinks(join(packedDocs, name), `docs/${name}`);
+  }
+  assertPackedLlmsLinks(packedDocs);
 }
 
 try {
@@ -76,6 +119,7 @@ try {
   if (existsSync(join(installedPackage, "docs", "agent-evaluations.md"))) {
     throw new Error("Packed tubeless artifact must not include docs/agent-evaluations.md");
   }
+  assertPackedDocumentationLinks(installedPackage);
 
   const smokeProgram = Object.keys(packageJson.exports)
     .map((subpath) =>
