@@ -2,7 +2,6 @@
 
 <img width="2816" height="1536" alt="Gemini_Generated_Image_6qp28g6qp28g6qp2" src="https://github.com/user-attachments/assets/e41b0e6f-a94c-4684-805a-5ccd21d88f53" />
 
-
 Typed, observable data pipelines you import from TypeScript or run from a Bun
 CLI. It is a library, not a hosted workflow engine or a Make/npm-scripts
 replacement.
