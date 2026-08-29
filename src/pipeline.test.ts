@@ -1415,6 +1415,67 @@ describe("definePipeline", () => {
     ]);
   });
 
+  it("preserves a planned dry-run skip after fail-fast even when skipAfterFailureOf matches the failed step", async () => {
+    const step = createSteps();
+    const failing = step("failing", {
+      run: () => {
+        throw new Error("failed");
+      },
+    });
+    const later = step("later", {
+      dryRun: "skip",
+      skipAfterFailureOf: [failing],
+      run: () => "unreachable",
+    });
+    const pipeline = definePipeline({
+      id: "fail-fast-dry-run-skip",
+      steps: [failing, later],
+      finalize: () => undefined,
+    });
+    const skipEvents: unknown[] = [];
+
+    const result = await pipeline.run(
+      { dryRun: true },
+      {
+        cwd: "/tmp",
+        log: console,
+        hooks: {
+          onStepSkip: (event) => {
+            skipEvents.push({
+              dependencyId: event.dependencyId,
+              reason: event.reason,
+              stepId: event.step.id,
+            });
+          },
+        },
+      }
+    );
+
+    expect(
+      pipeline.plan({ dryRun: true }).steps.map((planned) => [planned.id, planned.skipReason])
+    ).toEqual([
+      ["failing", undefined],
+      ["later", "dry-run"],
+    ]);
+    expect(
+      result.steps.map((report) => [
+        report.id,
+        report.status,
+        report.status === "skipped" ? report.reason : undefined,
+      ])
+    ).toEqual([
+      ["failing", "failed", undefined],
+      ["later", "skipped", "dry-run"],
+    ]);
+    expect(skipEvents).toEqual([
+      {
+        dependencyId: undefined,
+        reason: "dry-run",
+        stepId: "later",
+      },
+    ]);
+  });
+
   it("preserves a thrown error code in the step report and run result", async () => {
     const step = createSteps();
     const failing = step("failing", {
@@ -2314,6 +2375,52 @@ describe("definePipeline", () => {
     expect(result.steps.map((report) => [report.id, report.status])).toEqual([
       ["gate", "failed"],
       ["later", "complete"],
+    ]);
+  });
+
+  it("records an invalid policy-skip value with the live-run output-validation taxonomy", async () => {
+    const rejectedOutput = standardSchema<string, string>(() => ({
+      issues: [{ message: "Not publishable", path: ["slug"] }],
+    }));
+    const step = createSteps();
+    const publish = step.skippable("publish", {
+      outputSchema: rejectedOutput,
+      skip: () => ({ reason: "preview only", value: "draft" }),
+      run: () => "live",
+    });
+    const after = step("after", {
+      dependsOn: [publish],
+      run: () => "after",
+    });
+    const pipeline = definePipeline({
+      id: "invalid-skip-output",
+      steps: [publish, after],
+      finalize: () => undefined,
+    });
+
+    const result = await pipeline.run({});
+
+    expect(result.status).toBe("failed");
+    expect(result.finalized).toBe(false);
+    expect(result.steps[0]).toMatchObject({
+      error: {
+        code: "TUBELESS_STEP_OUTPUT_VALIDATION_FAILED",
+        issues: [{ message: "Not publishable", path: ["slug"] }],
+        kind: "validation",
+        phase: "execution",
+        stepId: "publish",
+      },
+      status: "failed",
+    });
+    expect(
+      result.steps.map((report) => [
+        report.id,
+        report.status,
+        report.status === "skipped" ? report.reason : undefined,
+      ])
+    ).toEqual([
+      ["publish", "failed", undefined],
+      ["after", "skipped", "fail-fast"],
     ]);
   });
 

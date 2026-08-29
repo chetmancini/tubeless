@@ -1572,7 +1572,6 @@ type StepDispositionInput<TOptions extends object> = {
   planned: PipelinePlanStep;
   reportsByStepId: ReadonlyMap<string, PipelineStepReport>;
   step: AnyStep<TOptions>;
-  stoppedAfter?: { stepId: string; cancelled: boolean };
 };
 
 type StepDisposition =
@@ -1582,53 +1581,38 @@ type StepDisposition =
       reason: PipelineStepSkipReason;
       dependencyId?: string;
       message?: string;
-    }
-  | { kind: "cancelled" };
+    };
 
 /**
- * Single skip ladder for plan, live execution, and fail-fast/cancel remainder.
+ * Single skip ladder for plan and live execution.
  * Policy skips stay outside: they run only after a step is scheduled.
- *
- * When `stoppedAfter` is set, live failed/cancelled deps and fail-fast remainder
- * skips do not reclassify the step as unmet-dependency — those become fail-fast
- * or cancelled so the whole remainder keeps today's abort attribution. Structural
- * skip reports (filtered / unmet-dependency / dry-run / failed-dependency) still
- * win so plan-time chains survive remainder recording.
+ * Remainder copies plan `skipReason` for structural skips and marks planned-run
+ * steps fail-fast or cancelled, so this ladder has no abort/fail-fast mode.
  */
 function decideStepDisposition<TOptions extends object>(
   input: StepDispositionInput<TOptions>
 ): StepDisposition {
-  const { dryRun, planned, reportsByStepId, step, stoppedAfter } = input;
+  const { dryRun, planned, reportsByStepId, step } = input;
 
   if (!planned.selected) {
     return { kind: "skip", reason: "filtered" };
   }
 
-  if (!stoppedAfter) {
-    const unsuccessfulAncestor = (step.skipAfterFailureOf ?? []).find((dep) => {
-      const status = reportsByStepId.get(dep.id)?.status;
-      return status === "failed" || status === "cancelled";
-    });
-    if (unsuccessfulAncestor) {
-      return {
-        kind: "skip",
-        reason: "failed-dependency",
-        dependencyId: unsuccessfulAncestor.id,
-      };
-    }
+  const unsuccessfulAncestor = (step.skipAfterFailureOf ?? []).find((dep) => {
+    const status = reportsByStepId.get(dep.id)?.status;
+    return status === "failed" || status === "cancelled";
+  });
+  if (unsuccessfulAncestor) {
+    return {
+      kind: "skip",
+      reason: "failed-dependency",
+      dependencyId: unsuccessfulAncestor.id,
+    };
   }
 
-  const unmetDependency = (step.dependsOn ?? []).find((dep) => {
-    const report = reportsByStepId.get(dep.id);
-    if (stoppedAfter) {
-      // Only structural skips propagate under abort remainder. Failed/cancelled
-      // deps and fail-fast skips fall through so the step is fail-fast/cancelled.
-      return (
-        report?.status === "skipped" && report.reason !== "policy" && report.reason !== "fail-fast"
-      );
-    }
-    return !isRequiredDependencyMet(report);
-  });
+  const unmetDependency = (step.dependsOn ?? []).find(
+    (dep) => !isRequiredDependencyMet(reportsByStepId.get(dep.id))
+  );
   if (unmetDependency) {
     return {
       kind: "skip",
@@ -1639,22 +1623,6 @@ function decideStepDisposition<TOptions extends object>(
 
   if (dryRun && skipsInDryRun(step)) {
     return { kind: "skip", reason: "dry-run" };
-  }
-
-  if (stoppedAfter) {
-    if (stoppedAfter.cancelled) {
-      return { kind: "cancelled" };
-    }
-    const failedStepId = stoppedAfter.stepId;
-    const disposition: StepDisposition = {
-      kind: "skip",
-      reason: "fail-fast",
-      message: failedStepId
-        ? `Not run because fail-fast stopped after ${failedStepId} failed.`
-        : "Not run because the pipeline was aborted before this step started.",
-    };
-    if (failedStepId) disposition.dependencyId = failedStepId;
-    return disposition;
   }
 
   return { kind: "run" };
@@ -2338,6 +2306,595 @@ function planStepById(plan: PipelinePlan): Map<string, PipelinePlanStep> {
   return new Map(plan.steps.map((step) => [step.id, step]));
 }
 
+async function executePlannedRun<
+  TSteps extends readonly AnyStep[],
+  TResult,
+  TTargets extends readonly TSteps[number][],
+  TResultSchema extends StandardSchemaV1 | undefined,
+>(input: {
+  controls: PipelineRunControls;
+  definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>;
+  domainOptions: object;
+  optionsSchema: StandardSchemaV1 | undefined;
+  plan: PipelinePlan;
+  runtime: PipelineRuntime;
+  targetIds: readonly string[];
+}): Promise<
+  PipelineRun<TResultSchema extends StandardSchemaV1 ? InferSchemaOutput<TResultSchema> : TResult>
+> {
+  type TPipelineResult = TResultSchema extends StandardSchemaV1
+    ? InferSchemaOutput<TResultSchema>
+    : TResult;
+  const { controls, definition, optionsSchema, runtime, targetIds } = input;
+  type TOptions = StepsOptions<TSteps>;
+  // SAFETY: `domainOptions` is the user-supplied options object; if a schema
+  // is present it is re-validated below before assignment to `pipelineOptions`.
+  let pipelineOptions = input.domainOptions as TOptions;
+  const startedAt = runtime.now();
+  const runId = runtime.runId ?? createRunId(definition.id);
+  const parentRunId = runtime.parentRunId;
+  const identity: PipelineRunIdentity = { runId };
+  if (parentRunId) identity.parentRunId = parentRunId;
+  const dryRun = controls.dryRun === true;
+  const trace = createPipelineTraceEmitter(
+    definition.id,
+    runtime.tracing,
+    basePipelineLogger(runtime.log),
+    {
+      ...identity,
+      itemKey: runtime.tracing?.itemKey,
+    },
+    runtime.now
+  );
+  const lifecycle = createPipelineLifecycleObserver(definition.id, runtime, trace);
+  const tracedLogger = (stepId?: string, attemptId?: string): PipelineLogger => {
+    if (!trace) return runtime.log;
+    const base = basePipelineLogger(runtime.log);
+    const log: TracedPipelineLogger = {
+      error: (message, ...params) => {
+        lifecycle.log("error", message, params, stepId, attemptId);
+        base.error(message, ...params);
+      },
+      log: (message, ...params) => {
+        lifecycle.log("log", message, params, stepId, attemptId);
+        base.log(message, ...params);
+      },
+      warn: (message, ...params) => {
+        lifecycle.log("warn", message, params, stepId, attemptId);
+        base.warn(message, ...params);
+      },
+    };
+    log[PIPELINE_LOGGER_BASE] = base;
+    return log;
+  };
+  let nextAttemptSequence = 0;
+  const beginAttempt = (stepId: string, startedAtMs = runtime.now()) => ({
+    attemptId: `${runId}:attempt:${(nextAttemptSequence += 1).toString(36)}`,
+    startedAtMs,
+    stepId,
+  });
+  const currentStepStatuses = new Map<string, PipelineStepStatus["status"]>();
+  const publishStepStatus = (event: PipelineStepStatus, traceStatus = true): void => {
+    const previous = currentStepStatuses.get(event.step.id);
+    const valid =
+      (previous === undefined && event.status === "planned") ||
+      (previous === "planned" &&
+        (event.status === "running" ||
+          event.status === "skipped" ||
+          event.status === "cancelled")) ||
+      (previous === "running" &&
+        (event.status === "running" ||
+          event.status === "complete" ||
+          event.status === "skipped" ||
+          event.status === "cancelled" ||
+          event.status === "failed"));
+    if (!valid) {
+      throw new Error(
+        `Invalid step status transition for ${event.step.id}: ${previous ?? "unobserved"} -> ${event.status}`
+      );
+    }
+    currentStepStatuses.set(event.step.id, event.status);
+    lifecycle.stepStatus(event, traceStatus);
+  };
+  const publishStepReport = (step: PipelinePlanStep, report: PipelineStepReport): void => {
+    switch (report.status) {
+      case "cancelled":
+      case "failed":
+      case "skipped":
+      case "complete":
+        publishStepStatus({ ...report, pipelineId: definition.id, step });
+    }
+  };
+  const runPlan = input.plan;
+  const plannedSteps = planStepById(runPlan);
+  lifecycle.pipelineStart(runPlan, targetIds);
+  if (!runPlan.ok) {
+    const result = errorRunResult<TPipelineResult>(
+      runtime,
+      definition.id,
+      dryRun,
+      startedAt,
+      runPlan.errors,
+      identity
+    );
+    lifecycle.pipelineComplete(result);
+    await lifecycle.flush();
+    return result;
+  }
+  if (optionsSchema) {
+    try {
+      const validated = await validateStandardSchema(
+        optionsSchema,
+        input.domainOptions,
+        `Pipeline ${definition.id} options`
+      );
+      if (typeof validated !== "object" || validated === null || Array.isArray(validated)) {
+        throw new PipelineBoundaryValidationError(
+          `Pipeline ${definition.id} options schema returned a non-object value`,
+          [{ message: "Expected the validated options value to be an object" }]
+        );
+      }
+      // SAFETY: the schema validated the value against `TOptions` and the
+      // object-shape check above passed, so the value is a `TOptions`.
+      pipelineOptions = validated as TOptions;
+    } catch (error) {
+      const pipelineError = toPipelineError(error, {
+        code: "TUBELESS_OPTIONS_VALIDATION_FAILED",
+        kind: "validation",
+        phase: "execution",
+      });
+      const result = errorRunResult<TPipelineResult>(
+        runtime,
+        definition.id,
+        dryRun,
+        startedAt,
+        [pipelineError],
+        identity
+      );
+      lifecycle.pipelineComplete(result);
+      await lifecycle.flush();
+      return result;
+    }
+  }
+  for (const step of runPlan.steps) {
+    publishStepStatus({ pipelineId: definition.id, status: "planned", step });
+  }
+
+  const outputs = new Map<string, unknown>();
+  const reports: PipelineStepReport[] = [];
+  const errors: PipelineError[] = [];
+  const reportsByStepId = new Map<string, PipelineStepReport>();
+  let completed = true;
+
+  const executionContext: PipelineExecutionContext<TOptions> = {
+    ...runtime,
+    dryRun,
+    log: tracedLogger(),
+    options: pipelineOptions,
+    runId,
+    trace: trace?.context,
+  };
+  if (parentRunId) executionContext.parentRunId = parentRunId;
+
+  const stepsById = new Map(definition.steps.map((step) => [step.id, step]));
+  // `runPlan.steps` is already topologically ordered. Rehydrate from the original step
+  // objects so callers still get the typed `run` functions rather than plan metadata.
+  // SAFETY: every planned step id originates from `definition.steps`, so the
+  // map lookup always finds the matching `AnyStep<TOptions>`.
+  const orderedSteps = runPlan.steps.map((step) => stepsById.get(step.id) as AnyStep<TOptions>);
+
+  const recordRemainingStates = (
+    fromIndex: number,
+    failedStepId?: string,
+    cancellationError?: PipelineError
+  ): void => {
+    for (let index = fromIndex; index < orderedSteps.length; index++) {
+      const step = orderedSteps[index]!;
+      const plannedStep = plannedSteps.get(step.id) ?? stepToPlanStep(step, true);
+      if (plannedStep.skipReason) {
+        const dependencyId =
+          plannedStep.skipReason === "unmet-dependency"
+            ? plannedStep.dependencies.find((id) => plannedSteps.get(id)?.skipReason !== undefined)
+            : undefined;
+        const report = recordSkip(
+          step,
+          step.id,
+          reports,
+          reportsByStepId,
+          plannedStep.skipReason,
+          undefined,
+          dependencyId,
+          undefined,
+          undefined,
+          runtime.now()
+        );
+        publishStepReport(plannedStep, report);
+        continue;
+      }
+      if (cancellationError) {
+        const report: PipelineStepCancelledReport = {
+          id: step.id,
+          name: step.name,
+          description: step.description,
+          error: { ...cancellationError, stepId: step.id },
+          finishedAtMs: runtime.now(),
+          status: "cancelled",
+        };
+        reports.push(report);
+        reportsByStepId.set(step.id, report);
+        publishStepReport(plannedStep, report);
+        continue;
+      }
+      const report = recordSkip(
+        step,
+        step.id,
+        reports,
+        reportsByStepId,
+        "fail-fast",
+        failedStepId
+          ? `Not run because fail-fast stopped after ${failedStepId} failed.`
+          : "Not run because the pipeline was aborted before this step started.",
+        failedStepId,
+        undefined,
+        undefined,
+        runtime.now()
+      );
+      publishStepReport(plannedStep, report);
+    }
+  };
+
+  const recordStepExecutionFailure = (
+    error: unknown,
+    plannedStep: PipelinePlanStep,
+    step: AnyStep<TOptions>,
+    stepId: string,
+    stepIndex: number,
+    attempt: { attemptId: string; startedAtMs: number }
+  ): boolean => {
+    const cancelled = isPipelineCancellation(error, runtime);
+    const childFailure =
+      error instanceof PipelineExecutionError || error instanceof PipelineChildError;
+    const validationFailure = error instanceof PipelineBoundaryValidationError;
+    const pipelineError = toPipelineError(error, {
+      code: cancelled
+        ? "TUBELESS_RUN_CANCELLED"
+        : validationFailure
+          ? "TUBELESS_STEP_OUTPUT_VALIDATION_FAILED"
+          : childFailure
+            ? "TUBELESS_CHILD_FAILED"
+            : "TUBELESS_STEP_FAILED",
+      kind: cancelled
+        ? "cancellation"
+        : validationFailure
+          ? "validation"
+          : childFailure
+            ? "child"
+            : "step",
+      phase: "execution",
+      stepId,
+    });
+    errors.push(pipelineError);
+    const finishedAtMs = runtime.now();
+    const report: PipelineStepCancelledReport | PipelineStepFailedReport = cancelled
+      ? {
+          attemptId: attempt.attemptId,
+          id: stepId,
+          name: step.name,
+          description: step.description,
+          error: pipelineError,
+          finishedAtMs,
+          startedAtMs: attempt.startedAtMs,
+          status: "cancelled",
+        }
+      : {
+          attemptId: attempt.attemptId,
+          id: stepId,
+          name: step.name,
+          description: step.description,
+          error: pipelineError,
+          finishedAtMs,
+          startedAtMs: attempt.startedAtMs,
+          status: "failed",
+        };
+    reports.push(report);
+    reportsByStepId.set(stepId, report);
+    publishStepReport(plannedStep, report);
+    completed = false;
+    if (!controls.continueOnError) {
+      recordRemainingStates(
+        stepIndex + 1,
+        stepId,
+        report.status === "cancelled" ? pipelineError : undefined
+      );
+      return true;
+    }
+    return false;
+  };
+
+  const recordPublishedStepValue = async (args: {
+    attempt?: { attemptId: string; startedAtMs: number };
+    kind: "complete" | "policy-skip";
+    plannedStep: PipelinePlanStep;
+    skipMessage?: string;
+    step: AnyStep<TOptions>;
+    stepId: string;
+    stepIndex: number;
+    value: unknown;
+  }): Promise<boolean> => {
+    let published = args.value;
+    let attempt = args.attempt;
+    if (args.step.outputSchema) {
+      if (!attempt) {
+        attempt = beginAttempt(args.stepId, runtime.now());
+        publishStepStatus({
+          attemptId: attempt.attemptId,
+          pipelineId: definition.id,
+          status: "running",
+          step: args.plannedStep,
+        });
+      }
+      try {
+        published = await validateStandardSchema(
+          args.step.outputSchema,
+          published,
+          `Pipeline ${definition.id} step ${args.stepId} output`
+        );
+      } catch (error) {
+        return recordStepExecutionFailure(
+          error,
+          args.plannedStep,
+          args.step,
+          args.stepId,
+          args.stepIndex,
+          attempt
+        );
+      }
+    }
+    outputs.set(args.stepId, published);
+    if (args.kind === "complete") {
+      const completeAttempt = attempt!;
+      const report: PipelineStepCompleteReport = {
+        attemptId: completeAttempt.attemptId,
+        id: args.stepId,
+        name: args.step.name,
+        description: args.step.description,
+        finishedAtMs: runtime.now(),
+        startedAtMs: completeAttempt.startedAtMs,
+        status: "complete",
+      };
+      reports.push(report);
+      reportsByStepId.set(args.stepId, report);
+      publishStepReport(args.plannedStep, report);
+      return false;
+    }
+    const report = recordSkip(
+      args.step,
+      args.stepId,
+      reports,
+      reportsByStepId,
+      "policy",
+      args.skipMessage,
+      undefined,
+      attempt?.attemptId,
+      attempt?.startedAtMs,
+      runtime.now()
+    );
+    publishStepReport(args.plannedStep, report);
+    return false;
+  };
+
+  for (const [stepIndex, step] of orderedSteps.entries()) {
+    const stepId = step.id;
+    const plannedStep = plannedSteps.get(stepId) ?? stepToPlanStep(step, true);
+
+    try {
+      throwIfAborted(runtime);
+    } catch (error) {
+      const pipelineError = toPipelineError(error, {
+        code: "TUBELESS_RUN_CANCELLED",
+        kind: "cancellation",
+        phase: "execution",
+        stepId,
+      });
+      errors.push(pipelineError);
+      completed = false;
+      recordRemainingStates(stepIndex, undefined, pipelineError);
+      break;
+    }
+
+    const disposition = decideStepDisposition({
+      dryRun,
+      planned: plannedStep,
+      reportsByStepId,
+      step,
+    });
+    if (disposition.kind === "skip") {
+      const report = recordSkip(
+        step,
+        stepId,
+        reports,
+        reportsByStepId,
+        disposition.reason,
+        disposition.message,
+        disposition.dependencyId,
+        undefined,
+        undefined,
+        runtime.now()
+      );
+      publishStepReport(plannedStep, report);
+      continue;
+    }
+
+    const inputs: Record<string, unknown> = {};
+    for (const dep of step.dependsOn ?? []) {
+      inputs[dep.id] = outputs.get(dep.id);
+    }
+    for (const dep of step.optionalDependsOn ?? []) {
+      if (outputs.has(dep.id)) {
+        inputs[dep.id] = outputs.get(dep.id);
+      }
+    }
+
+    if (typeof step.skip === "function") {
+      let skipDecision: ReturnType<typeof normalizeStepSkipDecision>;
+      try {
+        skipDecision = normalizeStepSkipDecision(
+          await step.skip(inputs, { ...executionContext, log: tracedLogger(stepId) })
+        );
+      } catch (error) {
+        const skipAttempt = beginAttempt(stepId, runtime.now());
+        publishStepStatus({
+          attemptId: skipAttempt.attemptId,
+          pipelineId: definition.id,
+          status: "running",
+          step: plannedStep,
+        });
+        if (recordStepExecutionFailure(error, plannedStep, step, stepId, stepIndex, skipAttempt)) {
+          break;
+        }
+        continue;
+      }
+      if (skipDecision) {
+        if (
+          await recordPublishedStepValue({
+            kind: "policy-skip",
+            plannedStep,
+            skipMessage: skipDecision.reason,
+            step,
+            stepId,
+            stepIndex,
+            value: skipDecision.value,
+          })
+        ) {
+          break;
+        }
+        continue;
+      }
+    }
+
+    const stepStartedAt = runtime.now();
+    const attempt = beginAttempt(stepId, stepStartedAt);
+    publishStepStatus({
+      attemptId: attempt.attemptId,
+      pipelineId: definition.id,
+      status: "running",
+      step: plannedStep,
+    });
+    try {
+      let acceptsProgress = true;
+      const publishProgress = (progress: PipelineStepProgress): void => {
+        if (!acceptsProgress) return;
+        publishStepStatus({
+          attemptId: attempt.attemptId,
+          pipelineId: definition.id,
+          progress,
+          status: "running",
+          step: plannedStep,
+        });
+      };
+      const stepContext: PipelineStepContext<TOptions> = {
+        ...executionContext,
+        attemptId: attempt.attemptId,
+        log: tracedLogger(stepId, attempt.attemptId),
+        reportAttempt: (attempt, attributes) => {
+          lifecycle.reportAttempt(stepId, attempt, attributes, stepContext.attemptId);
+        },
+        reportProgress: (progress) => {
+          publishProgress(progress);
+        },
+      };
+      let output: unknown;
+      try {
+        const runStep = dryRun && typeof step.dryRun === "function" ? step.dryRun : step.run;
+        output = await runStep(inputs, stepContext);
+      } finally {
+        acceptsProgress = false;
+      }
+      if (
+        await recordPublishedStepValue({
+          attempt,
+          kind: "complete",
+          plannedStep,
+          step,
+          stepId,
+          stepIndex,
+          value: output,
+        })
+      ) {
+        break;
+      }
+    } catch (error) {
+      if (recordStepExecutionFailure(error, plannedStep, step, stepId, stepIndex, attempt)) {
+        break;
+      }
+    }
+  }
+
+  let value: TPipelineResult | undefined;
+  let finalized = false;
+  if (completed || controls.continueOnError) {
+    const finalizeStartedAt = runtime.now();
+    lifecycle.finalizeStart();
+    try {
+      throwIfAborted(runtime);
+      // SAFETY: `outputs` maps step ids to their produced values, which is
+      // exactly the shape `Partial<PipelineOutputs<TSteps>>` describes.
+      const finalOutputs = Object.fromEntries(outputs) as Partial<PipelineOutputs<TSteps>>;
+      const finalizedValue = await definition.finalize(finalOutputs, {
+        ...executionContext,
+        log: tracedLogger(PIPELINE_FINALIZE_STEP_ID),
+      });
+      // SAFETY: with a result schema the value is validated against
+      // `TPipelineResult`; without one the finalizer's declared return type
+      // is `TPipelineResult`, so the cast only restores that type.
+      value = definition.resultSchema
+        ? ((await validateStandardSchema(
+            definition.resultSchema,
+            finalizedValue,
+            `Pipeline ${definition.id} final result`
+          )) as TPipelineResult)
+        : (finalizedValue as TPipelineResult);
+      finalized = true;
+      lifecycle.finalizeComplete(runtime.now() - finalizeStartedAt, value);
+    } catch (error) {
+      const cancelled = isPipelineCancellation(error, runtime);
+      const validationFailure = error instanceof PipelineBoundaryValidationError;
+      const pipelineError = toPipelineError(error, {
+        code: cancelled
+          ? "TUBELESS_FINALIZATION_CANCELLED"
+          : validationFailure
+            ? "TUBELESS_FINAL_RESULT_VALIDATION_FAILED"
+            : "TUBELESS_FINALIZATION_FAILED",
+        kind: cancelled ? "cancellation" : validationFailure ? "validation" : "finalization",
+        phase: "finalization",
+        stepId: PIPELINE_FINALIZE_STEP_ID,
+      });
+      errors.push(pipelineError);
+      lifecycle.finalizeError(pipelineError, runtime.now() - finalizeStartedAt);
+      completed = false;
+    }
+  }
+
+  const finishedAtMs = runtime.now();
+  const result: PipelineRun<TPipelineResult> = {
+    pipelineId: definition.id,
+    dryRun,
+    errors,
+    finalized,
+    finishedAtMs,
+    runId,
+    startedAtMs: startedAt,
+    status: terminalRunStatus(errors),
+    steps: reports,
+    value,
+    version: RUN_MODEL_VERSION,
+  };
+  if (parentRunId) result.parentRunId = parentRunId;
+  lifecycle.pipelineComplete(result);
+  await lifecycle.flush();
+  return result;
+}
+
 export function definePipeline<
   const TSteps extends readonly AnyStep[],
   TResult = unknown,
@@ -2389,564 +2946,15 @@ export function definePipeline<
     context: Partial<PipelineContext> = defaultPipelineContext()
   ): Promise<PipelineRun<TPipelineResult>> {
     const { controls, domainOptions } = splitPipelineRunOptions(options);
-    // SAFETY: `domainOptions` is the user-supplied options object; if a schema
-    // is present it is re-validated below before assignment to `pipelineOptions`.
-    let pipelineOptions = domainOptions as TOptions;
-    const runtime = resolvePipelineRuntime(context);
-    const startedAt = runtime.now();
-    const runId = runtime.runId ?? createRunId(definition.id);
-    const parentRunId = runtime.parentRunId;
-    const identity: PipelineRunIdentity = { runId };
-    if (parentRunId) identity.parentRunId = parentRunId;
-    const dryRun = controls.dryRun === true;
-    const trace = createPipelineTraceEmitter(
-      definition.id,
-      runtime.tracing,
-      basePipelineLogger(runtime.log),
-      {
-        ...identity,
-        itemKey: runtime.tracing?.itemKey,
-      },
-      runtime.now
-    );
-    const lifecycle = createPipelineLifecycleObserver(definition.id, runtime, trace);
-    const tracedLogger = (stepId?: string, attemptId?: string): PipelineLogger => {
-      if (!trace) return runtime.log;
-      const base = basePipelineLogger(runtime.log);
-      const log: TracedPipelineLogger = {
-        error: (message, ...params) => {
-          lifecycle.log("error", message, params, stepId, attemptId);
-          base.error(message, ...params);
-        },
-        log: (message, ...params) => {
-          lifecycle.log("log", message, params, stepId, attemptId);
-          base.log(message, ...params);
-        },
-        warn: (message, ...params) => {
-          lifecycle.log("warn", message, params, stepId, attemptId);
-          base.warn(message, ...params);
-        },
-      };
-      log[PIPELINE_LOGGER_BASE] = base;
-      return log;
-    };
-    let nextAttemptSequence = 0;
-    const beginAttempt = (stepId: string, startedAtMs = runtime.now()) => ({
-      attemptId: `${runId}:attempt:${(nextAttemptSequence += 1).toString(36)}`,
-      startedAtMs,
-      stepId,
+    return executePlannedRun({
+      controls,
+      definition,
+      domainOptions,
+      optionsSchema,
+      plan: plan(controls),
+      runtime: resolvePipelineRuntime(context),
+      targetIds,
     });
-    const currentStepStatuses = new Map<string, PipelineStepStatus["status"]>();
-    const publishStepStatus = (event: PipelineStepStatus, traceStatus = true): void => {
-      const previous = currentStepStatuses.get(event.step.id);
-      const valid =
-        (previous === undefined && event.status === "planned") ||
-        (previous === "planned" &&
-          (event.status === "running" ||
-            event.status === "skipped" ||
-            event.status === "cancelled")) ||
-        (previous === "running" &&
-          (event.status === "running" ||
-            event.status === "complete" ||
-            event.status === "skipped" ||
-            event.status === "cancelled" ||
-            event.status === "failed"));
-      if (!valid) {
-        throw new Error(
-          `Invalid step status transition for ${event.step.id}: ${previous ?? "unobserved"} -> ${event.status}`
-        );
-      }
-      currentStepStatuses.set(event.step.id, event.status);
-      lifecycle.stepStatus(event, traceStatus);
-    };
-    const publishStepReport = (step: PipelinePlanStep, report: PipelineStepReport): void => {
-      switch (report.status) {
-        case "cancelled":
-        case "failed":
-        case "skipped":
-        case "complete":
-          publishStepStatus({ ...report, pipelineId: definition.id, step });
-      }
-    };
-    const runPlan = plan(controls);
-    const plannedSteps = planStepById(runPlan);
-    lifecycle.pipelineStart(runPlan, targetIds);
-    if (!runPlan.ok) {
-      const result = errorRunResult<TPipelineResult>(
-        runtime,
-        definition.id,
-        dryRun,
-        startedAt,
-        runPlan.errors,
-        identity
-      );
-      lifecycle.pipelineComplete(result);
-      await lifecycle.flush();
-      return result;
-    }
-    if (optionsSchema) {
-      try {
-        const validated = await validateStandardSchema(
-          optionsSchema,
-          domainOptions,
-          `Pipeline ${definition.id} options`
-        );
-        if (typeof validated !== "object" || validated === null || Array.isArray(validated)) {
-          throw new PipelineBoundaryValidationError(
-            `Pipeline ${definition.id} options schema returned a non-object value`,
-            [{ message: "Expected the validated options value to be an object" }]
-          );
-        }
-        // SAFETY: the schema validated the value against `TOptions` and the
-        // object-shape check above passed, so the value is a `TOptions`.
-        pipelineOptions = validated as TOptions;
-      } catch (error) {
-        const pipelineError = toPipelineError(error, {
-          code: "TUBELESS_OPTIONS_VALIDATION_FAILED",
-          kind: "validation",
-          phase: "execution",
-        });
-        const result = errorRunResult<TPipelineResult>(
-          runtime,
-          definition.id,
-          dryRun,
-          startedAt,
-          [pipelineError],
-          identity
-        );
-        lifecycle.pipelineComplete(result);
-        await lifecycle.flush();
-        return result;
-      }
-    }
-    for (const step of runPlan.steps) {
-      publishStepStatus({ pipelineId: definition.id, status: "planned", step });
-    }
-
-    const outputs = new Map<string, unknown>();
-    const reports: PipelineStepReport[] = [];
-    const errors: PipelineError[] = [];
-    const reportsByStepId = new Map<string, PipelineStepReport>();
-    let completed = true;
-
-    const executionContext: PipelineExecutionContext<TOptions> = {
-      ...runtime,
-      dryRun,
-      log: tracedLogger(),
-      options: pipelineOptions,
-      runId,
-      trace: trace?.context,
-    };
-    if (parentRunId) executionContext.parentRunId = parentRunId;
-
-    const stepsById = new Map(definition.steps.map((step) => [step.id, step]));
-    // `runPlan.steps` is already topologically ordered. Rehydrate from the original step
-    // objects so callers still get the typed `run` functions rather than plan metadata.
-    // SAFETY: every planned step id originates from `definition.steps`, so the
-    // map lookup always finds the matching `AnyStep<TOptions>`.
-    const orderedSteps = runPlan.steps.map((step) => stepsById.get(step.id) as AnyStep<TOptions>);
-
-    const recordRemainingStates = (
-      fromIndex: number,
-      failedStepId?: string,
-      cancellationError?: PipelineError
-    ): void => {
-      const stoppedAfter = {
-        stepId: failedStepId ?? "",
-        cancelled: cancellationError !== undefined,
-      };
-      for (let index = fromIndex; index < orderedSteps.length; index++) {
-        const step = orderedSteps[index]!;
-        const plannedStep = plannedSteps.get(step.id) ?? stepToPlanStep(step, true);
-        const disposition = decideStepDisposition({
-          dryRun,
-          planned: plannedStep,
-          reportsByStepId,
-          step,
-          stoppedAfter,
-        });
-        if (disposition.kind === "cancelled" && cancellationError) {
-          const report: PipelineStepCancelledReport = {
-            id: step.id,
-            name: step.name,
-            description: step.description,
-            error: { ...cancellationError, stepId: step.id },
-            finishedAtMs: runtime.now(),
-            status: "cancelled",
-          };
-          reports.push(report);
-          reportsByStepId.set(step.id, report);
-          publishStepReport(plannedStep, report);
-          continue;
-        }
-        const skip =
-          disposition.kind === "skip"
-            ? disposition
-            : {
-                reason: "fail-fast" as const,
-                dependencyId: failedStepId,
-                message: failedStepId
-                  ? `Not run because fail-fast stopped after ${failedStepId} failed.`
-                  : "Not run because the pipeline was aborted before this step started.",
-              };
-        const report = recordSkip(
-          step,
-          step.id,
-          reports,
-          reportsByStepId,
-          skip.reason,
-          skip.message,
-          skip.dependencyId,
-          undefined,
-          undefined,
-          runtime.now()
-        );
-        publishStepReport(plannedStep, report);
-      }
-    };
-
-    const recordStepExecutionFailure = (
-      error: unknown,
-      plannedStep: PipelinePlanStep,
-      step: AnyStep<TOptions>,
-      stepId: string,
-      stepIndex: number,
-      attempt: { attemptId: string; startedAtMs: number }
-    ): boolean => {
-      const cancelled = isPipelineCancellation(error, runtime);
-      const childFailure =
-        error instanceof PipelineExecutionError || error instanceof PipelineChildError;
-      const validationFailure = error instanceof PipelineBoundaryValidationError;
-      const pipelineError = toPipelineError(error, {
-        code: cancelled
-          ? "TUBELESS_RUN_CANCELLED"
-          : validationFailure
-            ? "TUBELESS_STEP_OUTPUT_VALIDATION_FAILED"
-            : childFailure
-              ? "TUBELESS_CHILD_FAILED"
-              : "TUBELESS_STEP_FAILED",
-        kind: cancelled
-          ? "cancellation"
-          : validationFailure
-            ? "validation"
-            : childFailure
-              ? "child"
-              : "step",
-        phase: "execution",
-        stepId,
-      });
-      errors.push(pipelineError);
-      const finishedAtMs = runtime.now();
-      const report: PipelineStepCancelledReport | PipelineStepFailedReport = cancelled
-        ? {
-            attemptId: attempt.attemptId,
-            id: stepId,
-            name: step.name,
-            description: step.description,
-            error: pipelineError,
-            finishedAtMs,
-            startedAtMs: attempt.startedAtMs,
-            status: "cancelled",
-          }
-        : {
-            attemptId: attempt.attemptId,
-            id: stepId,
-            name: step.name,
-            description: step.description,
-            error: pipelineError,
-            finishedAtMs,
-            startedAtMs: attempt.startedAtMs,
-            status: "failed",
-          };
-      reports.push(report);
-      reportsByStepId.set(stepId, report);
-      publishStepReport(plannedStep, report);
-      completed = false;
-      if (!controls.continueOnError) {
-        recordRemainingStates(
-          stepIndex + 1,
-          stepId,
-          report.status === "cancelled" ? pipelineError : undefined
-        );
-        return true;
-      }
-      return false;
-    };
-
-    for (const [stepIndex, step] of orderedSteps.entries()) {
-      const stepId = step.id;
-      const plannedStep = plannedSteps.get(stepId) ?? stepToPlanStep(step, true);
-
-      try {
-        throwIfAborted(runtime);
-      } catch (error) {
-        const pipelineError = toPipelineError(error, {
-          code: "TUBELESS_RUN_CANCELLED",
-          kind: "cancellation",
-          phase: "execution",
-          stepId,
-        });
-        errors.push(pipelineError);
-        completed = false;
-        recordRemainingStates(stepIndex, undefined, pipelineError);
-        break;
-      }
-
-      const disposition = decideStepDisposition({
-        dryRun,
-        planned: plannedStep,
-        reportsByStepId,
-        step,
-      });
-      if (disposition.kind === "skip") {
-        const report = recordSkip(
-          step,
-          stepId,
-          reports,
-          reportsByStepId,
-          disposition.reason,
-          disposition.message,
-          disposition.dependencyId,
-          undefined,
-          undefined,
-          runtime.now()
-        );
-        publishStepReport(plannedStep, report);
-        continue;
-      }
-
-      const inputs: Record<string, unknown> = {};
-      for (const dep of step.dependsOn ?? []) {
-        inputs[dep.id] = outputs.get(dep.id);
-      }
-      for (const dep of step.optionalDependsOn ?? []) {
-        if (outputs.has(dep.id)) {
-          inputs[dep.id] = outputs.get(dep.id);
-        }
-      }
-
-      if (typeof step.skip === "function") {
-        let skipDecision: ReturnType<typeof normalizeStepSkipDecision>;
-        try {
-          skipDecision = normalizeStepSkipDecision(
-            await step.skip(inputs, { ...executionContext, log: tracedLogger(stepId) })
-          );
-        } catch (error) {
-          const skipAttempt = beginAttempt(stepId, runtime.now());
-          publishStepStatus({
-            attemptId: skipAttempt.attemptId,
-            pipelineId: definition.id,
-            status: "running",
-            step: plannedStep,
-          });
-          if (
-            recordStepExecutionFailure(error, plannedStep, step, stepId, stepIndex, skipAttempt)
-          ) {
-            break;
-          }
-          continue;
-        }
-        if (skipDecision) {
-          let skippedOutput = skipDecision.value;
-          let policyAttemptId: string | undefined;
-          let policyStartedAtMs: number | undefined;
-          let policyFinishedAtMs: number | undefined;
-          if (step.outputSchema) {
-            const validationStartedAt = runtime.now();
-            const attempt = beginAttempt(stepId, validationStartedAt);
-            policyAttemptId = attempt.attemptId;
-            policyStartedAtMs = attempt.startedAtMs;
-            publishStepStatus({
-              attemptId: attempt.attemptId,
-              pipelineId: definition.id,
-              status: "running",
-              step: plannedStep,
-            });
-            try {
-              skippedOutput = await validateStandardSchema(
-                step.outputSchema,
-                skippedOutput,
-                `Pipeline ${definition.id} step ${stepId} output`
-              );
-            } catch (error) {
-              const pipelineError = toPipelineError(error, {
-                code: "TUBELESS_STEP_OUTPUT_VALIDATION_FAILED",
-                kind: "validation",
-                phase: "execution",
-                stepId,
-              });
-              errors.push(pipelineError);
-              const finishedAtMs = runtime.now();
-              const report: PipelineStepFailedReport = {
-                attemptId: attempt.attemptId,
-                id: stepId,
-                name: step.name,
-                description: step.description,
-                error: pipelineError,
-                finishedAtMs,
-                startedAtMs: attempt.startedAtMs,
-                status: "failed",
-              };
-              reports.push(report);
-              reportsByStepId.set(stepId, report);
-              publishStepReport(plannedStep, report);
-              completed = false;
-              if (!controls.continueOnError) {
-                recordRemainingStates(stepIndex + 1, stepId);
-                break;
-              }
-              continue;
-            }
-            policyFinishedAtMs = runtime.now();
-          }
-          // Always publish an output slot so optionalDependsOn can observe the skip.
-          outputs.set(stepId, skippedOutput);
-          const report = recordSkip(
-            step,
-            stepId,
-            reports,
-            reportsByStepId,
-            "policy",
-            skipDecision.reason,
-            undefined,
-            policyAttemptId,
-            policyStartedAtMs,
-            policyFinishedAtMs ?? runtime.now()
-          );
-          publishStepReport(plannedStep, report);
-          continue;
-        }
-      }
-
-      const stepStartedAt = runtime.now();
-      const attempt = beginAttempt(stepId, stepStartedAt);
-      publishStepStatus({
-        attemptId: attempt.attemptId,
-        pipelineId: definition.id,
-        status: "running",
-        step: plannedStep,
-      });
-      try {
-        let acceptsProgress = true;
-        const publishProgress = (progress: PipelineStepProgress): void => {
-          if (!acceptsProgress) return;
-          publishStepStatus({
-            attemptId: attempt.attemptId,
-            pipelineId: definition.id,
-            progress,
-            status: "running",
-            step: plannedStep,
-          });
-        };
-        const stepContext: PipelineStepContext<TOptions> = {
-          ...executionContext,
-          attemptId: attempt.attemptId,
-          log: tracedLogger(stepId, attempt.attemptId),
-          reportAttempt: (attempt, attributes) => {
-            lifecycle.reportAttempt(stepId, attempt, attributes, stepContext.attemptId);
-          },
-          reportProgress: (progress) => {
-            publishProgress(progress);
-          },
-        };
-        let output: unknown;
-        try {
-          const runStep = dryRun && typeof step.dryRun === "function" ? step.dryRun : step.run;
-          output = await runStep(inputs, stepContext);
-          if (step.outputSchema) {
-            output = await validateStandardSchema(
-              step.outputSchema,
-              output,
-              `Pipeline ${definition.id} step ${stepId} output`
-            );
-          }
-        } finally {
-          acceptsProgress = false;
-        }
-        outputs.set(stepId, output);
-        const finishedAtMs = runtime.now();
-        const report: PipelineStepCompleteReport = {
-          attemptId: attempt.attemptId,
-          id: stepId,
-          name: step.name,
-          description: step.description,
-          finishedAtMs,
-          startedAtMs: attempt.startedAtMs,
-          status: "complete",
-        };
-        reports.push(report);
-        reportsByStepId.set(stepId, report);
-        publishStepReport(plannedStep, report);
-      } catch (error) {
-        if (recordStepExecutionFailure(error, plannedStep, step, stepId, stepIndex, attempt)) {
-          break;
-        }
-      }
-    }
-
-    let value: TPipelineResult | undefined;
-    let finalized = false;
-    if (completed || controls.continueOnError) {
-      const finalizeStartedAt = runtime.now();
-      lifecycle.finalizeStart();
-      try {
-        throwIfAborted(runtime);
-        // SAFETY: `outputs` maps step ids to their produced values, which is
-        // exactly the shape `Partial<PipelineOutputs<TSteps>>` describes.
-        const finalOutputs = Object.fromEntries(outputs) as Partial<PipelineOutputs<TSteps>>;
-        const finalizedValue = await definition.finalize(finalOutputs, {
-          ...executionContext,
-          log: tracedLogger(PIPELINE_FINALIZE_STEP_ID),
-        });
-        // SAFETY: with a result schema the value is validated against
-        // `TPipelineResult`; without one the finalizer's declared return type
-        // is `TPipelineResult`, so the cast only restores that type.
-        value = definition.resultSchema
-          ? ((await validateStandardSchema(
-              definition.resultSchema,
-              finalizedValue,
-              `Pipeline ${definition.id} final result`
-            )) as TPipelineResult)
-          : (finalizedValue as TPipelineResult);
-        finalized = true;
-        lifecycle.finalizeComplete(runtime.now() - finalizeStartedAt, value);
-      } catch (error) {
-        const cancelled = isPipelineCancellation(error, runtime);
-        const validationFailure = error instanceof PipelineBoundaryValidationError;
-        const pipelineError = toPipelineError(error, {
-          code: cancelled
-            ? "TUBELESS_FINALIZATION_CANCELLED"
-            : validationFailure
-              ? "TUBELESS_FINAL_RESULT_VALIDATION_FAILED"
-              : "TUBELESS_FINALIZATION_FAILED",
-          kind: cancelled ? "cancellation" : validationFailure ? "validation" : "finalization",
-          phase: "finalization",
-          stepId: PIPELINE_FINALIZE_STEP_ID,
-        });
-        errors.push(pipelineError);
-        lifecycle.finalizeError(pipelineError, runtime.now() - finalizeStartedAt);
-        completed = false;
-      }
-    }
-
-    const finishedAtMs = runtime.now();
-    const result: PipelineRun<TPipelineResult> = {
-      pipelineId: definition.id,
-      dryRun,
-      errors,
-      finalized,
-      finishedAtMs,
-      runId,
-      startedAtMs: startedAt,
-      status: terminalRunStatus(errors),
-      steps: reports,
-      value,
-      version: RUN_MODEL_VERSION,
-    };
-    if (parentRunId) result.parentRunId = parentRunId;
-    lifecycle.pipelineComplete(result);
-    await lifecycle.flush();
-    return result;
   }
 
   async function runOrThrow(
