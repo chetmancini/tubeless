@@ -21,7 +21,7 @@ if ("Bun" in globalThis) {
 } else {
   const { fileURLToPath } = await import("node:url");
   const { createNodeTrampolineIo, runTrampoline } = await import("./workbench-trampoline.js");
-  process.exitCode = runTrampoline(
+  process.exitCode = await runTrampoline(
     fileURLToPath(import.meta.url),
     process.argv.slice(2),
     createNodeTrampolineIo()
