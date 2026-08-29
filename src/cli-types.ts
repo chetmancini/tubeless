@@ -13,6 +13,8 @@ export type CliParamType = "string" | "number" | "boolean" | "path";
 interface CliParamBase {
   /** Shown next to the flag in generated `--help` output. */
   description?: string;
+  /** UI adapters place execution controls in one section. Built-ins set this. */
+  group?: "execution";
   /** Overrides the derived `--flag-name`; defaults to the kebab-case of the schema key. */
   flag?: string;
   /** Optional one-letter alias, for example `short: "v"` enables `-v`. */
@@ -72,6 +74,7 @@ export interface CliParameterDescriptor {
   readonly description?: string;
   readonly environment?: string;
   readonly flag: string;
+  readonly group?: "execution";
   readonly integer?: boolean;
   readonly key: string;
   readonly max?: number;

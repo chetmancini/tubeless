@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import type { CliCommandDescriptor, CliContext, PipelineCommandPlanInput } from "./cli.js";
+import type { CliCommandDescriptor, CliContext } from "./cli.js";
 import { isMarkedPipelineCommand } from "./pipeline-command-marker.js";
 import type { PipelineMermaidOptions, PipelinePlan, PipelineRunControls } from "./pipeline.js";
 
@@ -27,7 +27,7 @@ export interface WorkbenchPipelineCommand {
     argv?: readonly string[],
     context?: Partial<CliContext>
   ): WorkbenchPipelineCommandParseResult;
-  plan(input?: PipelineCommandPlanInput): PipelinePlan;
+  plan(controls?: PipelineRunControls): PipelinePlan;
   run(argv?: readonly string[], context?: Partial<CliContext>): Promise<unknown>;
   toMermaid(options?: PipelineMermaidOptions): string;
 }

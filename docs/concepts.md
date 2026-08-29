@@ -448,8 +448,8 @@ name, description, and immutable parameter metadata for flags, types, defaults,
 choices, numeric constraints, repeatability, paths, and positional support. It
 is presentation-neutral; consumers still submit argv through `parse` or `run`
 so one validation and execution path remains authoritative.
-`command.plan()` always exposes structural planning from `dryRun`, `step`, and
-`target` input only. It deliberately skips domain parsing, option mapping,
+`command.plan()` always exposes structural planning from `PipelineRunControls`
+(`dryRun`, `stepIds`, and `targets`) only. It deliberately skips domain parsing, option mapping,
 execution, and persistence. Use `command.plan()` or `tubeless plan`; do not
 simulate planning with `--plan`.
 
