@@ -7,7 +7,8 @@ provider invocation remain provider-neutral.
 ## Generate a submission
 
 1. Start a clean agent session with access to the repository.
-2. Tell it to use the repository-local `tubeless` skill.
+2. Tell it to use the repository-local `tubeless` skill
+   ([`skills/tubeless/SKILL.md`](../skills/tubeless/SKILL.md)).
 3. Give it exactly one case's `prompt`; do not reveal the expectations.
 4. Have it write into a disposable submission directory outside production
    paths.
@@ -68,7 +69,10 @@ submission file names, every semantic expectation in case order,
 
 `make check` runs four representative fixtures: a valid assessed
 pipeline, compiler-rejected invented API usage, artifact-specific declarations,
-and a multi-file TSX submission.
+and a multi-file TSX submission. It also compiles every `learningSurfaceGate`
+case's assessed answer under [`evals/answers/`](../evals/answers) and fails when
+compilation or any assessed expectation fails. The evaluator still does not
+execute submission code.
 
 ## Passing standard
 
@@ -79,6 +83,7 @@ and a multi-file TSX submission.
   cancellation safety.
 - The agent finds the relevant recipe without reading executor implementation.
 
-Run at least the simple, safety-sensitive, fan-out, and CLI cases when changing
-the learning surface. Run all cases before a public release or declaration API
-redesign.
+The simple, safety-sensitive, fan-out, and CLI cases are `learningSurfaceGate`
+cases. Their answers run on every `make check`. Re-run those four against a
+fresh agent when changing the learning surface, and run all cases before a
+public release or declaration API redesign.

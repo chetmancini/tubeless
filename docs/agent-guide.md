@@ -6,7 +6,8 @@ or shared helpers in this repository.
 ## Workflow
 
 1. Read the [recipe index](./recipes.md) and open the smallest matching example.
-2. Inspect a nearby production pipeline for domain conventions.
+2. Copy file layout and stable IDs from the
+   [project catalog](../examples/catalog/tubeless.studio.ts).
 3. Declare stable IDs and operational descriptions. Add `name` only when printed
    output needs a friendlier display name.
 4. Model data dependencies before failure policy or CLI concerns.
@@ -155,6 +156,8 @@ or shared helpers in this repository.
   propagation, progress, or parent/child selection.
 - Read the relevant executable example linked from the
   [recipe index](./recipes.md) before writing new usage.
+- Copy consumer layout, export names, and IDs from the
+  [project catalog](../examples/catalog/tubeless.studio.ts).
 - Use the [generated API inventory](./api-reference.md) only to verify exports;
   it is not implementation guidance.
 

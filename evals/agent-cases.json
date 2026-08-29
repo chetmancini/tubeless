@@ -3,12 +3,14 @@
   "cases": [
     {
       "id": "sequential-import",
+      "learningSurfaceGate": true,
       "prompt": "Create a typed pipeline that loads caller-provided lines, normalizes non-empty values, and returns their count and values.",
       "mustDemonstrate": ["typed options", "required step dependency", "requireOutputs finalizer"],
       "mustAvoid": ["string-only dependency lookup", "manual output type map"]
     },
     {
       "id": "safe-publication",
+      "learningSurfaceGate": true,
       "prompt": "Create a build, validate, and publish pipeline that supports a useful dry run and can continue independent diagnostics after validation failure without publishing.",
       "mustDemonstrate": [
         "dryRun skip policy on publication",
@@ -25,14 +27,15 @@
     },
     {
       "id": "fan-out-children",
+      "learningSurfaceGate": true,
       "prompt": "Create a parent pipeline that maps a reusable child pipeline over runtime shards with concurrency four, stable shard keys, input-order results, and visible progress.",
       "mustDemonstrate": [
         "forEachPipeline",
         "stable keys",
-        "bounded concurrency",
+        "concurrency set to four",
         "progress metadata"
       ],
-      "mustAvoid": ["unbounded Promise.all", "flattening child steps into the parent"]
+      "mustAvoid": ["Promise.all across all shards", "flattening child steps into the parent"]
     },
     {
       "id": "resumable-api-work",
@@ -47,6 +50,7 @@
     },
     {
       "id": "pipeline-cli",
+      "learningSurfaceGate": true,
       "prompt": "Expose an existing pipeline as a typed CLI with one required input file and optional positive concurrency. It should support help, dry run, plan, dependency-aware target selection, reporting, and SIGINT cancellation.",
       "mustDemonstrate": [
         "definePipelineCommand",
@@ -131,6 +135,44 @@
         "reflecting over TypeScript options",
         "application flags before --"
       ]
+    },
+    {
+      "id": "reusable-child",
+      "prompt": "Compose an independently useful child pipeline into a parent with fromPipeline, mapping parent options into the child and mapping the child result back.",
+      "mustDemonstrate": ["fromPipeline", "child mapOptions", "child mapResult"],
+      "mustAvoid": ["flattening child steps into the parent", "unexported child pipeline"]
+    },
+    {
+      "id": "validated-boundaries",
+      "prompt": "Create a pipeline that validates domain options, a step output, and the finalized result with Standard Schema, without adding a schema library to tubeless core.",
+      "mustDemonstrate": ["createSteps optionsSchema", "outputSchema", "resultSchema"],
+      "mustAvoid": [
+        "schema library imported into tubeless core",
+        "invoking schemas during synchronous plan"
+      ]
+    },
+    {
+      "id": "local-studio",
+      "prompt": "Persist pipeline runs in a local SQLite store and expose a checked-in studio catalog of explicit definePipelineCommand modules.",
+      "mustDemonstrate": [
+        "SQLite run store",
+        "definePipelineStudio",
+        "explicit command registration"
+      ],
+      "mustAvoid": [
+        "pipeline definition depending on storage",
+        "inferring executables from history"
+      ]
+    },
+    {
+      "id": "deterministic-testing",
+      "prompt": "Test a long-polling pipeline deterministically with captured logs, statuses, latest progress, and injected cancellation.",
+      "mustDemonstrate": [
+        "createPipelineTestRuntime",
+        "captured statuses",
+        "injected cancellation"
+      ],
+      "mustAvoid": ["real wall-clock timers", "asserting by parsing console output"]
     }
   ]
 }

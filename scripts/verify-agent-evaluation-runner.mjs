@@ -8,6 +8,8 @@ import { packedTarballFilename, resolveNpm } from "./resolve-npm.mjs";
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const runnerPath = join(packageRoot, "scripts", "evaluate-agent-submission.mjs");
 const fixtureRoot = join(packageRoot, "scripts", "fixtures", "agent-evaluation");
+const answerRoot = join(packageRoot, "evals", "answers");
+const casesPath = join(packageRoot, "evals", "agent-cases.json");
 const temporaryRoot = mkdtempSync(join(tmpdir(), "tubeless-agent-eval-verifier-"));
 const npm = resolveNpm();
 
@@ -19,13 +21,13 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function evaluate(name, packageArtifact, reportPath) {
+function evaluate(submissionPath, packageArtifact, reportPath, caseId) {
   const args = [
     runnerPath,
     "--case",
-    "sequential-import",
+    caseId,
     "--submission",
-    join(fixtureRoot, name),
+    submissionPath,
     "--package",
     packageArtifact,
   ];
@@ -36,10 +38,14 @@ function evaluate(name, packageArtifact, reportPath) {
     report = JSON.parse(result.stdout);
   } catch {
     throw new Error(
-      `Evaluation ${name} returned invalid JSON:\n${result.stdout}\n${result.stderr}`
+      `Evaluation ${caseId} at ${submissionPath} returned invalid JSON:\n${result.stdout}\n${result.stderr}`
     );
   }
   return { report, result };
+}
+
+function evaluateFixture(name, packageArtifact, reportPath) {
+  return evaluate(join(fixtureRoot, name), packageArtifact, reportPath, "sequential-import");
 }
 
 function createArtifactMetadataPackage() {
@@ -90,7 +96,7 @@ try {
   const packageArtifact = join(temporaryRoot, packedTarballFilename(packed.stdout));
 
   const validReportPath = join(temporaryRoot, "reports", "valid.json");
-  const valid = evaluate("valid", packageArtifact, validReportPath);
+  const valid = evaluateFixture("valid", packageArtifact, validReportPath);
   assert(valid.result.status === 0, `Valid evaluation failed:\n${valid.result.stderr}`);
   assert(valid.report.ok === true, "Valid evaluation should pass.");
   assert(valid.report.mechanicalStatus === "passed", "Valid mechanical status should pass.");
@@ -103,25 +109,54 @@ try {
     "File and stdout reports differ."
   );
 
-  const invented = evaluate("invented-api", packageArtifact);
+  const invented = evaluateFixture("invented-api", packageArtifact);
   assert(invented.result.status === 1, "Invented API evaluation should fail.");
   assert(invented.report.compile.status === "failed", "Invented API should not compile.");
   assert(invented.report.mechanicalStatus === "failed", "Invented API mechanics should fail.");
 
-  const artifactMetadata = evaluate("artifact-metadata", createArtifactMetadataPackage());
+  const artifactMetadata = evaluateFixture("artifact-metadata", createArtifactMetadataPackage());
   assert(artifactMetadata.result.status === 0, "Artifact-specific export should pass.");
   assert(
     artifactMetadata.report.package.version === "9.9.9-eval",
     "Artifact-specific version was not reported."
   );
 
-  const tsxHelper = evaluate("tsx-helper", packageArtifact);
+  const tsxHelper = evaluateFixture("tsx-helper", packageArtifact);
   assert(tsxHelper.result.status === 0, "TSX helper evaluation should pass.");
   assert(tsxHelper.report.compile.status === "passed", "TSX helper should compile.");
   assert(tsxHelper.report.submission.files.includes("helper.tsx"), "TSX helper was not included.");
 
+  const cases = JSON.parse(readFileSync(casesPath, "utf8"));
+  const gated = cases.cases.filter((evaluation) => evaluation.learningSurfaceGate === true);
+  assert(gated.length >= 4, "Need at least four learning-surface gate cases.");
+  for (const evaluation of gated) {
+    const answer = evaluate(
+      join(answerRoot, evaluation.id),
+      packageArtifact,
+      undefined,
+      evaluation.id
+    );
+    assert(
+      answer.result.status === 0,
+      `Answer ${evaluation.id} failed:\n${answer.result.stderr}\n${answer.result.stdout}`
+    );
+    assert(answer.report.ok === true, `Answer ${evaluation.id} should pass.`);
+    assert(
+      answer.report.mechanicalStatus === "passed",
+      `Answer ${evaluation.id} should compile against public declarations.`
+    );
+    assert(
+      answer.report.assessmentStatus === "passed",
+      `Answer ${evaluation.id} must fully assess every expectation.`
+    );
+    assert(
+      answer.report.case.id === evaluation.id,
+      `Answer ${evaluation.id} reported the wrong case.`
+    );
+  }
+
   process.stdout.write(
-    "Agent evaluation compile, artifact, assessment, TSX, and report fixtures verified.\n"
+    "Agent evaluation compile, artifact, assessment, TSX, report, and answer fixtures verified.\n"
   );
 } finally {
   rmSync(temporaryRoot, { force: true, recursive: true });

@@ -24,6 +24,7 @@ inventory.
 | Handle cancellation and deterministic testing | [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts) | `createPipelineTestRuntime`, captured status/progress              |
 | Export JSON or OpenTelemetry lifecycle events | [`tracing.ts`](../examples/tracing.ts)                                   | trace context, attempt events, JSON exporter                       |
 | Persist, inspect, and explicitly launch runs  | [`local-observability.ts`](../examples/local-observability.ts)           | SQLite store, `createPipelineRunProjector`, `definePipelineStudio` |
+| Project layout, IDs, and studio catalog       | [`tubeless.studio.ts`](../examples/catalog/tubeless.studio.ts)           | `pipelines/`, `scripts/`, `definePipelineStudio`                   |
 
 ## Selection rules
 
@@ -47,6 +48,9 @@ inventory.
    presentation boundary; do not duplicate selection-reason or error formatting.
    Use `tubeless/reporter` for optional TTY run reporters; do not import them
    from `tubeless`.
+9. Copy consumer file layout, export names, and IDs from the
+   [project catalog](../examples/catalog/tubeless.studio.ts). Register studio
+   commands explicitly; do not infer executable modules from run history.
 
 For semantics behind these choices, read [core concepts](./concepts.md).
 For workbench commands, read [the CLI](./cli.md). For the local run UI, read

@@ -15,6 +15,7 @@ Start:
 Agent instructions:
 
 - Canonical guide: ./agent-guide.md
+- Project catalog: ../examples/catalog/tubeless.studio.ts
 - Maintain stable step IDs.
 - Use optional step names only as display overrides; dependencies and selection use IDs.
 - Use pipeline.toMermaid() to generate static graph documentation.
@@ -50,6 +51,7 @@ Advanced:
 
 Executable examples:
 
+- ../examples/catalog/tubeless.studio.ts
 - ../examples/typed-import.ts
 - ../examples/validated-boundaries.ts
 - ../examples/publish-with-gates.ts

@@ -34,7 +34,8 @@ assert(
   `README.md is ${readmeLines} lines; keep the entrypoint at 120 or fewer`
 );
 
-for (const filePath of [readmePath, ...filesUnder(join(packageRoot, "docs"), ".md")]) {
+const skillPath = join(packageRoot, "skills", "tubeless", "SKILL.md");
+for (const filePath of [readmePath, skillPath, ...filesUnder(join(packageRoot, "docs"), ".md")]) {
   validateMarkdownLinks(filePath);
 }
 
@@ -57,10 +58,11 @@ const evaluationPath = join(packageRoot, "evals", "agent-cases.json");
 const evaluations = JSON.parse(readFileSync(evaluationPath, "utf8"));
 assert(evaluations.schemaVersion === 1, "Agent evaluation schemaVersion must be 1");
 assert(
-  Array.isArray(evaluations.cases) && evaluations.cases.length >= 6,
-  "Need at least six agent cases"
+  Array.isArray(evaluations.cases) && evaluations.cases.length >= 16,
+  "Need at least sixteen agent cases"
 );
 const evaluationIds = new Set();
+const gatedCaseIds = [];
 for (const evaluation of evaluations.cases) {
   assert(typeof evaluation.id === "string" && evaluation.id.length > 0, "Agent case needs an id");
   assert(!evaluationIds.has(evaluation.id), `Duplicate agent case id: ${evaluation.id}`);
@@ -71,12 +73,64 @@ for (const evaluation of evaluations.cases) {
   );
   assert(evaluation.mustDemonstrate?.length > 0, `${evaluation.id} needs mustDemonstrate checks`);
   assert(evaluation.mustAvoid?.length > 0, `${evaluation.id} needs mustAvoid checks`);
+  if (evaluation.learningSurfaceGate === true) gatedCaseIds.push(evaluation.id);
+}
+for (const requiredId of [
+  "sequential-import",
+  "safe-publication",
+  "fan-out-children",
+  "pipeline-cli",
+  "reusable-child",
+  "validated-boundaries",
+  "local-studio",
+  "deterministic-testing",
+]) {
+  assert(evaluationIds.has(requiredId), `Agent cases must include ${requiredId}`);
+}
+assert(
+  gatedCaseIds.length >= 4,
+  "Need at least four learning-surface gate cases with assessed answers"
+);
+for (const caseId of gatedCaseIds) {
+  const answerRoot = join(packageRoot, "evals", "answers", caseId);
+  assert(
+    existsSync(join(answerRoot, "solution.ts")) &&
+      statSync(join(answerRoot, "solution.ts")).isFile(),
+    `Learning-surface gate ${caseId} is missing evals/answers/${caseId}/solution.ts`
+  );
+  assert(
+    existsSync(join(answerRoot, "assessment.json")) &&
+      statSync(join(answerRoot, "assessment.json")).isFile(),
+    `Learning-surface gate ${caseId} is missing evals/answers/${caseId}/assessment.json`
+  );
 }
 
 const evaluationGuide = readFileSync(join(packageRoot, "docs", "agent-evaluations.md"), "utf8");
 assert(
   evaluationGuide.includes("bun run eval:agent"),
   "Agent evaluation guide must document the executable verifier"
+);
+assert(
+  evaluationGuide.includes("skills/tubeless"),
+  "Agent evaluation guide must name the repository-local skill path"
+);
+assert(
+  evaluationGuide.includes("evals/answers"),
+  "Agent evaluation guide must name the assessed answer submissions"
+);
+
+const agentGuide = readFileSync(join(packageRoot, "docs", "agent-guide.md"), "utf8");
+assert(
+  !agentGuide.includes("nearby production pipeline"),
+  "Agent guide must not send authors to a production pipeline outside this package"
+);
+assert(
+  agentGuide.includes("examples/catalog"),
+  "Agent guide must point authors at the project catalog"
+);
+assert(
+  recipes.includes("examples/catalog"),
+  "Recipe index must point authors at the project catalog"
 );
 for (const script of [
   "scripts/evaluate-agent-submission.mjs",
@@ -96,6 +150,13 @@ const requiredDocuments = [
   "docs/recipes.md",
   "docs/studio.md",
   "evals/agent-cases.json",
+  "skills/tubeless/SKILL.md",
+  "examples/catalog/tubeless.studio.ts",
+  "examples/catalog/pipelines/import.ts",
+  "examples/catalog/pipelines/normalize.ts",
+  "examples/catalog/pipelines/publish.ts",
+  "examples/catalog/scripts/import.ts",
+  "examples/catalog/scripts/publish.ts",
 ];
 for (const document of requiredDocuments) {
   const path = join(packageRoot, document);

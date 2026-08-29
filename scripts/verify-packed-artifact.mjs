@@ -273,6 +273,9 @@ try {
     "docs/recipes.md",
     "docs/studio.md",
     "examples/typed-import.ts",
+    "examples/catalog/tubeless.studio.ts",
+    "examples/catalog/pipelines/import.ts",
+    "examples/catalog/scripts/import.ts",
   ]) {
     if (!existsSync(join(installedPackage, relativePath))) {
       throw new Error(`Packed tubeless artifact is missing ${relativePath}`);
