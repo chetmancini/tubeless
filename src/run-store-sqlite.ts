@@ -129,7 +129,12 @@ async function openDatabase(
     try {
       return openReadableDatabase(Database, filename, { readOnly: true });
     } catch (error) {
-      if (await sqliteSidecarExists(`${filename}-wal`)) throw error;
+      if (
+        (await sqliteSidecarExists(`${filename}-wal`)) ||
+        (await sqliteSidecarExists(`${filename}-journal`))
+      ) {
+        throw error;
+      }
       return openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=ro&immutable=1`);
     }
   }
