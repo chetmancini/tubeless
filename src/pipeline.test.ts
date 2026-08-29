@@ -2367,4 +2367,144 @@ describe("definePipeline", () => {
     // @ts-expect-error Reusable definitions cannot bypass step.skippable.
     step("reusable-skip-requires-skippable", reusableSkippingDefinition);
   });
+
+  it("defaults targets and finalize to the last declared step", async () => {
+    const step = createSteps();
+    const build = step("build", { run: () => "built" });
+    const write = step("write", {
+      dependsOn: [build],
+      run: (inputs) => `${inputs.build}:written`,
+    });
+    const pipeline = definePipeline({ id: "default-targets-finalize", steps: [build, write] });
+
+    expect(pipeline.targetIds).toEqual(["write"]);
+    expectTypeOf(pipeline.targetIds).toEqualTypeOf<readonly ["write"]>();
+    expectTypeOf(pipeline.run({}))
+      .resolves.toHaveProperty("value")
+      .toEqualTypeOf<string | undefined>();
+
+    const plan = pipeline.plan({ targets: ["write"] });
+    expect(plan.ok).toBe(true);
+
+    const result = await pipeline.runOrThrow({});
+    expect(result).toBe("built:written");
+  });
+
+  it("emits undefined from the default finalizer when nothing was published", async () => {
+    const step = createSteps();
+    const read = step("read", { dryRun: "skip", run: () => "read" });
+    const pipeline = definePipeline({ id: "default-finalize-dry-run", steps: [read] });
+
+    // A dry run structurally skips the step, so no output slot is published
+    // and the default finalizer emits `undefined` while still finalizing.
+    const result = await pipeline.run({ dryRun: true });
+    expect(result.status).toBe("completed");
+    expect(result.finalized).toBe(true);
+    expect(result.value).toBeUndefined();
+  });
+
+  it("returns undefined from the default finalizer when the last step did not run", async () => {
+    const step = createSteps();
+    const build = step("build", { run: () => "built" });
+    const write = step("write", {
+      dependsOn: [build],
+      run: (inputs) => `${inputs.build}:written`,
+    });
+    const pipeline = definePipeline({ id: "default-finalize-filtered", steps: [build, write] });
+
+    // Only `build` runs. The default finalizer reads just the last declared
+    // step's slot, so a filtered run finalizes with `undefined` rather than
+    // leaking an earlier step's differently-typed output.
+    const filtered = await pipeline.run({ stepIds: ["build"] });
+    expect(filtered.status).toBe("completed");
+    expect(filtered.finalized).toBe(true);
+    expect(filtered.value).toBeUndefined();
+  });
+
+  it("still allows an explicit empty target list to opt out", async () => {
+    const step = createSteps();
+    const internal = step("internal", { run: () => true });
+    const pipeline = definePipeline({
+      id: "explicit-empty-targets",
+      steps: [internal],
+      targets: [],
+    });
+
+    expect(pipeline.targetIds).toEqual([]);
+
+    const undeclared = pipeline.plan({ targets: ["internal"] });
+    expect(undeclared.ok).toBe(false);
+    expect(undeclared.errors[0]?.code).toBe("TUBELESS_PLANNING_TARGET_UNDECLARED");
+
+    const result = await pipeline.runOrThrow({});
+    expect(result).toBe(true);
+  });
+
+  it("checks required finalizer outputs against implicit targets", () => {
+    const step = createSteps();
+    // Independent steps: the implicit `write` target's closure cannot reach
+    // `build`, so an explicit requireOutputs([build]) is a mismatch.
+    const build = step("build", { run: () => "built" });
+    const write = step("write", { run: () => "written" });
+
+    expect(() =>
+      definePipeline({
+        id: "implicit-target-mismatch",
+        steps: [build, write],
+        finalize: requireOutputs([build], ({ build }) => build),
+      })
+    ).toThrow("target write cannot satisfy required finalizer output(s): build");
+  });
+
+  it("keeps a widened step array's implicit target usable", () => {
+    const step = createSteps();
+    const build = step("build", { run: () => "built" });
+    const write = step("write", {
+      dependsOn: [build],
+      run: (inputs) => `${inputs.build}:written`,
+    });
+    // A widened array loses the tuple type; the implicit default must still
+    // expose the last step as a public target instead of `never`.
+    const widened = [build, write] as readonly AnyStep[];
+    const pipeline = definePipeline({ id: "widened-default-targets", steps: widened });
+
+    expect(pipeline.targetIds).toEqual(["write"]);
+    expectTypeOf(pipeline.plan({ targets: ["write"] }).ok).toEqualTypeOf<boolean>();
+    expect(pipeline.plan({ targets: ["write"] }).ok).toBe(true);
+  });
+
+  it("omitting finalize with a compatible resultSchema keeps the default finalizer", async () => {
+    const step = createSteps();
+    const load = step("load", { run: () => "rows" });
+    const resultSchema = standardSchema<string, string>((value) => ({
+      value: typeof value === "string" ? value.toUpperCase() : value,
+    }));
+    const pipeline = definePipeline({
+      id: "compatible-result-schema",
+      steps: [load],
+      resultSchema,
+    });
+
+    // The last step's `string` output satisfies the schema's `string` input,
+    // so no explicit finalizer is needed and the schema transforms it.
+    const value = await pipeline.runOrThrow({});
+    expectTypeOf(value).toEqualTypeOf<string>();
+    expect(value).toBe("ROWS");
+  });
+
+  it("requires an explicit finalize when the last step output cannot feed resultSchema", () => {
+    const step = createSteps();
+    const load = step("load", { run: () => "rows" });
+    const numberResultSchema = standardSchema<number, number>((value) => ({ value }));
+
+    // `string` cannot satisfy the schema's `number` input, so the default
+    // finalizer would fail every normal run during finalization; the type
+    // boundary mirrors the check a supplied finalizer already faces.
+    definePipeline({
+      id: "incompatible-result-schema",
+      steps: [load],
+      resultSchema: numberResultSchema,
+      // @ts-expect-error A finalize compatible with the schema is required.
+    });
+  });
 });

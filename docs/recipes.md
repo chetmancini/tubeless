@@ -40,10 +40,12 @@ inventory.
    when the script is not centered on a pipeline. Preview selection with
    `command.plan()` or `tubeless plan`; do not simulate planning with `--plan`.
 7. Declare public goals with `targets: [step]` on the pipeline, select their IDs
-   for goal-oriented execution, and use `stepIds` only for an exact filter. Use
-   `requireOutputs` when the final domain result is not meaningful without
-   specific step outputs. Read plan `selectionReasons` instead of recreating
-   target-closure logic in a CLI or application.
+   for goal-oriented execution, and use `stepIds` only for an exact filter.
+   Omitted `targets` default to the last declared step and omitted `finalize`
+   emits that step's output. Use `requireOutputs` when the final domain result
+   is not meaningful without specific step outputs. Read plan
+   `selectionReasons` instead of recreating target-closure logic in a CLI or
+   application.
 8. Use `tubeless/render` when plans or diagnostics cross a human or JSON
    presentation boundary; do not duplicate selection-reason or error formatting.
    Use `tubeless/reporter` for optional TTY run reporters; do not import them

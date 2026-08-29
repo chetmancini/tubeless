@@ -1283,6 +1283,33 @@ type StepIds<TSteps extends readonly AnyStep[]> = TSteps[number]["id"];
 
 type TargetIds<TTargets extends readonly AnyStep[]> = TTargets[number]["id"];
 
+/**
+ * Output type of the last declared step: the result an omitted `finalize`
+ * emits when the run published it, and `undefined` when it did not.
+ */
+type LastStepOutput<TSteps extends readonly AnyStep[]> = TSteps extends readonly [
+  ...(readonly AnyStep[]),
+  infer TLast,
+]
+  ? StepOutput<TLast>
+  : TSteps extends readonly AnyStep[]
+    ? StepOutput<TSteps[number]>
+    : unknown;
+
+/**
+ * Implicit `targets` when a definition omits them: the last declared step.
+ * A pipeline with no steps has no implicit target. Widened, non-tuple step
+ * arrays still get a one-element default typed by their element step.
+ */
+type DefaultTargets<TSteps extends readonly AnyStep[]> = TSteps extends readonly [
+  ...(readonly AnyStep[]),
+  infer TLast,
+]
+  ? readonly [TLast]
+  : TSteps extends readonly AnyStep[]
+    ? readonly [TSteps[number]]
+    : readonly [];
+
 type DuplicateStepIds<
   TSteps extends readonly AnyStep[],
   TSeen extends string = never,
@@ -1344,17 +1371,26 @@ export function requireOutputs<const TRequiredSteps extends readonly AnyStep[], 
 
 export interface PipelineDefinition<
   TSteps extends readonly AnyStep[],
-  TResult,
-  TTargets extends readonly TSteps[number][] = readonly [],
+  TResult = LastStepOutput<TSteps> | undefined,
+  TTargets extends readonly TSteps[number][] = DefaultTargets<TSteps>,
   TResultSchema extends StandardSchemaV1 | undefined = undefined,
 > {
   id: string;
   steps: TSteps;
-  /** Public downstream goals that callers may select with `targets`. */
+  /**
+   * Public downstream goals that callers may select with `targets`. Omitted
+   * defaults to the last declared step; an explicit `[]` opts out of public
+   * targets.
+   */
   targets?: TTargets;
   /** Optional Standard Schema for the finalized result. */
   resultSchema?: TResultSchema;
-  finalize(
+  /**
+   * Finalizes the run's outputs into a result. Omitted defaults to a lenient
+   * finalizer that emits the last declared step's output when the run
+   * published it and `undefined` otherwise.
+   */
+  finalize?(
     outputs: Partial<PipelineOutputs<TSteps>>,
     context: PipelineExecutionContext<StepsOptions<TSteps>>
   ):
@@ -2074,12 +2110,17 @@ function validatePipelineDefinition<
 
   // SAFETY: `requireOutputs` stamps the required step ids onto the finalizer
   // function under `REQUIRED_FINALIZER_OUTPUTS`; the intersection only widens
-  // the function type to expose that optional property.
+  // the function type to expose that optional property. An omitted `finalize`
+  // carries no stamp and skips the required-output checks below.
+  type FinalizerWithStamp = ((...args: never[]) => unknown) & {
+    [REQUIRED_FINALIZER_OUTPUTS]?: readonly AnyStep<TOptions>[];
+  };
+  // SAFETY: a user-supplied finalizer is an arbitrary function; reading the
+  // optional symbol stamp through the widened type is the same check
+  // `requireOutputs` performs when stamping.
   const requiredFinalizerSteps = (
-    definition.finalize as typeof definition.finalize & {
-      [REQUIRED_FINALIZER_OUTPUTS]?: readonly AnyStep<TOptions>[];
-    }
-  )[REQUIRED_FINALIZER_OUTPUTS];
+    (definition.finalize ?? undefined) as FinalizerWithStamp | undefined
+  )?.[REQUIRED_FINALIZER_OUTPUTS];
   const missingFinalizerSteps = (requiredFinalizerSteps ?? []).filter(
     (step) => !knownSteps.has(step)
   );
@@ -2340,19 +2381,66 @@ function planStepById(plan: PipelinePlan): Map<string, PipelinePlanStep> {
 
 export function definePipeline<
   const TSteps extends readonly AnyStep[],
-  TResult = unknown,
-  const TTargets extends readonly TSteps[number][] = readonly [],
+  TResult = LastStepOutput<TSteps> | undefined,
+  const TTargets extends readonly TSteps[number][] = DefaultTargets<TSteps>,
   const TResultSchema extends StandardSchemaV1 | undefined = undefined,
 >(
   definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema> &
-    CheckedStepTuple<TSteps>
+    CheckedStepTuple<TSteps> &
+    // An omitted `finalize` feeds the last declared step's output to
+    // `resultSchema`; when that output cannot satisfy the schema's input
+    // type, an explicit finalizer is the only sound boundary, matching the
+    // check a supplied finalizer already faces.
+    (TResultSchema extends StandardSchemaV1
+      ? [LastStepOutput<TSteps>] extends [InferSchemaInput<TResultSchema>]
+        ? unknown
+        : {
+            finalize: NonNullable<
+              PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>["finalize"]
+            >;
+          }
+      : unknown)
 ): Pipeline<
   StepsInputOptions<TSteps>,
   TResultSchema extends StandardSchemaV1 ? InferSchemaOutput<TResultSchema> : TResult,
   StepIds<TSteps>,
   TargetIds<TTargets>
 > {
-  const definitionErrors = validatePipelineDefinition(definition);
+  // Omitted `targets` default to the last declared step; an explicit `[]`
+  // stays an opt-out with no public targets.
+  // SAFETY: `definition.steps` is a non-empty tuple here whenever a target is
+  // produced, and each step is a member of `TTargets`, so the cast only
+  // restores the tuple type the array literal lost.
+  const effectiveTargets = (definition.targets ??
+    (definition.steps.length > 0
+      ? [definition.steps[definition.steps.length - 1]!]
+      : [])) as TTargets;
+  const defaultFinalize = (outputs: Partial<PipelineOutputs<TSteps>>): TResult => {
+    // SAFETY: `PipelineOutputs` is a plain keyed record of step ids to values,
+    // so an indexed string lookup mirrors the declared property access.
+    const record = outputs as Record<string, unknown>;
+    const lastStep = definition.steps[definition.steps.length - 1];
+    // SAFETY: the default finalizer reads only the last declared step's slot,
+    // which is exactly the `TResult` default's `LastStepOutput` arm; a
+    // published `undefined` still counts as an output.
+    return lastStep !== undefined && Object.prototype.hasOwnProperty.call(record, lastStep.id)
+      ? (record[lastStep.id] as TResult)
+      : (undefined as TResult);
+  };
+  // SAFETY: the default finalizer returns the last declared step's published
+  // output, which matches the `TResult` default; the cast covers the
+  // unresolved result-schema conditional in the finalize signature.
+  const finalizer = (definition.finalize ?? defaultFinalize) as NonNullable<
+    PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>["finalize"]
+  >;
+  // Spreading preserves the user's finalizer function object, so a
+  // `requireOutputs` stamp survives as an own enumerable-property-safe symbol.
+  const normalized: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema> = {
+    ...definition,
+    targets: effectiveTargets,
+    finalize: finalizer,
+  };
+  const definitionErrors = validatePipelineDefinition(normalized);
   if (definitionErrors.length > 0) {
     throw new PipelineDefinitionError(definition.id, definitionErrors);
   }
@@ -2366,18 +2454,17 @@ export function definePipeline<
   // SAFETY: each step id is a string key of `TSteps`, so the frozen id list is
   // exactly the declared `TStepId` union.
   const stepIds = Object.freeze(definition.steps.map((step) => step.id)) as readonly TStepId[];
-  // SAFETY: each target id is a string key of `TTargets`, so the frozen list is
-  // exactly the declared `TTargetId` union.
-  const targetIds = Object.freeze(
-    (definition.targets ?? []).map((step) => step.id)
-  ) as readonly TTargetId[];
+  // SAFETY: each target id is a string key of `TTargets` (explicit or the
+  // implicit last-step default), so the frozen list is exactly the declared
+  // `TTargetId` union.
+  const targetIds = Object.freeze(effectiveTargets.map((step) => step.id)) as readonly TTargetId[];
   const optionsSchema = definition.steps[0]?.[STEP_OPTIONS_SCHEMA];
   // SAFETY: every step in `definition.steps` is an `AnyStep<TOptions>`; the
   // cast only restores the generic type parameter that the tuple lost.
   const orderedDefinitionSteps = topologicalSort(definition.steps as readonly AnyStep<TOptions>[])!;
 
   function plan(controls: PipelineRunControls<TStepId, TTargetId> = {}): PipelinePlan {
-    return buildPipelinePlan(definition, controls);
+    return buildPipelinePlan(normalized, controls);
   }
 
   function toMermaid(options: PipelineMermaidOptions = {}): string {
@@ -2894,7 +2981,7 @@ export function definePipeline<
         // SAFETY: `outputs` maps step ids to their produced values, which is
         // exactly the shape `Partial<PipelineOutputs<TSteps>>` describes.
         const finalOutputs = Object.fromEntries(outputs) as Partial<PipelineOutputs<TSteps>>;
-        const finalizedValue = await definition.finalize(finalOutputs, {
+        const finalizedValue = await finalizer(finalOutputs, {
           ...executionContext,
           log: tracedLogger(PIPELINE_FINALIZE_STEP_ID),
         });

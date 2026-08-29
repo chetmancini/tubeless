@@ -8,7 +8,7 @@ Package: `tubeless`
 
 | Entrypoint                  | Declaration                    | Surface hash                                                       | Exported symbols |
 | --------------------------- | ------------------------------ | ------------------------------------------------------------------ | ---------------: |
-| `tubeless`                  | `./dist/pipeline.d.ts`         | `e0c9802d5dcb71b319562d301c452446d74ea1c67d18b3ad76617467127bca71` |               68 |
+| `tubeless`                  | `./dist/pipeline.d.ts`         | `24cd19bd94fa4730b60f922bc8bcf927407c1de19ad7f22af315df2ffbd3ac14` |               68 |
 | `tubeless/batch`            | `./dist/batch.d.ts`            | `2ae7ccbf0fb6582243d2a395c2d2b0fe561fd19d3850309321b7d270c5a8d015` |                5 |
 | `tubeless/cli`              | `./dist/cli.d.ts`              | `fa8aeac9a22f491ef6b90da82fd15523e87d6185a93efcc57568337dff2086fb` |               36 |
 | `tubeless/node`             | `./dist/node.d.ts`             | `d6f70752eb9e0ea752b8e2bfb9418f5d30bd46d790360504434fdfeb6a6f7414` |                8 |

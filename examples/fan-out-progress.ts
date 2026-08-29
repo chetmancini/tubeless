@@ -26,7 +26,6 @@ const processRecords = shardStep("process-records", {
 export const ShardPipeline = definePipeline({
   id: "process-shard",
   steps: [processRecords],
-  finalize: (outputs) => outputs["process-records"],
 });
 
 interface FanOutOptions {

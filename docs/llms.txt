@@ -30,13 +30,14 @@ Agent instructions:
 - Use definePipelineCommand for pipeline-backed scripts.
 - Omit mapOptions only when validated CLI flags already satisfy same-name pipeline options; map renamed, loaded, or derived values explicitly.
 - Declare public goals with targets: [step] on definePipeline, then select their
-  IDs to include required inputs and failure gates. stepIds is an exact filter
+  IDs to include required inputs and failure gates. Omitted targets default to
+  the last declared step; targets: [] opts out. stepIds is an exact filter
   for any step and cannot be combined with targets.
 - Use PipelinePlanStep.selectionReasons for selection explanations; it includes
   target IDs and immediate dependents, so consumers should not rebuild the graph.
 - Branch on PipelineError code/phase/kind, not message text. Original thrown
   codes use sourceCode; failed and dependency-blocked reports expose diagnostic metadata.
-- Use requireOutputs for finalizers that need specific completed step outputs.
+- Omit finalize when the result is the last declared step's output; the default finalizer emits it or undefined when nothing published. Use requireOutputs for finalizers that need specific completed step outputs.
 - Use createSteps(optionsSchema), outputSchema, and resultSchema for optional
   dependency-free Standard Schema validation. run supports async schemas;
   synchronous plan does not invoke schemas.

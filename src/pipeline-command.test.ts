@@ -152,6 +152,8 @@ describe("definePipelineCommand", () => {
     const pipeline = definePipeline({
       id: "no-targets",
       steps: [internal],
+      // An explicit empty list opts out of the last-step target default.
+      targets: [],
       finalize: (outputs) => outputs.internal,
     });
     const command = definePipelineCommand(pipeline, { mapOptions: () => ({}) });

@@ -22,7 +22,7 @@ untested. See [install and runtime](./docs/getting-started.md#install).
 ## Quick start
 
 ```ts
-import { createSteps, definePipeline, requireOutputs } from "tubeless";
+import { createSteps, definePipeline } from "tubeless";
 
 interface ImportOptions {
   lines: readonly string[];
@@ -42,8 +42,6 @@ const normalize = step("normalize", {
 export const ImportPipeline = definePipeline({
   id: "import",
   steps: [load, normalize],
-  targets: [normalize],
-  finalize: requireOutputs([normalize], ({ normalize }) => normalize),
 });
 
 const rows = await ImportPipeline.runOrThrow({ lines: [" Alpha ", "", "Beta"] });
