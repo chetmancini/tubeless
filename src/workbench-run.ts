@@ -1,7 +1,6 @@
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import { isAbortError } from "./abort.js";
-import type { CliContext } from "./cli.js";
 import type { PipelineContext } from "./pipeline.js";
 import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import { renderPipelineError } from "./render.js";
@@ -19,14 +18,6 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-
-export interface WorkbenchStructuredPipelineCommand extends WorkbenchPipelineCommand {
-  execute(values: Record<string, unknown>, context?: Partial<CliContext>): Promise<unknown>;
-  parseValues(
-    values: Record<string, unknown>,
-    context?: Partial<CliContext>
-  ): ReturnType<WorkbenchPipelineCommand["parse"]>;
-}
 
 const RUN_USAGE = `Usage: tubeless run [options] <command-file> [-- <command-args...>]
 
@@ -77,7 +68,7 @@ export async function executePipelineCommand(
 
 /** Execute already validated structured command values through the normal workbench errors. */
 export async function executePipelineCommandValues(
-  command: WorkbenchStructuredPipelineCommand,
+  command: WorkbenchPipelineCommand,
   values: Record<string, unknown>,
   io: WorkbenchCliIo,
   signal: AbortSignal,

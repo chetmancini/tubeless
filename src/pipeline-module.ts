@@ -27,6 +27,11 @@ export interface WorkbenchPipelineCommand {
     argv?: readonly string[],
     context?: Partial<CliContext>
   ): WorkbenchPipelineCommandParseResult;
+  parseValues(
+    values: Record<string, unknown>,
+    context?: Partial<CliContext>
+  ): WorkbenchPipelineCommandParseResult;
+  execute(values: Record<string, unknown>, context?: Partial<CliContext>): Promise<unknown>;
   plan(controls?: PipelineRunControls): PipelinePlan;
   run(argv?: readonly string[], context?: Partial<CliContext>): Promise<unknown>;
   toMermaid(options?: PipelineMermaidOptions): string;
@@ -36,6 +41,11 @@ export interface WorkbenchPipelineCommand {
 export type WorkbenchPlanSource =
   | { kind: "command"; command: WorkbenchPipelineCommand }
   | { kind: "pipeline"; pipeline: WorkbenchPipeline };
+
+export type SelectUniqueExportOptions = {
+  hintExport?: boolean;
+  retainName?: boolean;
+};
 
 function isWorkbenchPipeline(value: unknown): value is WorkbenchPipeline {
   if (isMarkedPipelineCommand(value)) return false;
@@ -81,12 +91,40 @@ function isWorkbenchPipelineCommand(value: unknown): value is WorkbenchPipelineC
   );
 }
 
-function selectUniqueExport<T>(
+function uniqueNamedExports<T>(
+  moduleExports: Record<string, unknown>,
+  predicate: (value: unknown) => value is T
+): [string, T][] {
+  const candidates = Object.entries(moduleExports).filter((entry): entry is [string, T] =>
+    predicate(entry[1])
+  );
+  return candidates.filter(
+    ([, value], index) => candidates.findIndex(([, other]) => other === value) === index
+  );
+}
+
+/** Select one matching export, deduplicating aliases. Optionally keep the chosen name. */
+export function selectUniqueExport<T>(
   moduleExports: Record<string, unknown>,
   exportName: string | undefined,
   predicate: (value: unknown) => value is T,
-  label: string
-): T {
+  label: string,
+  options: SelectUniqueExportOptions & { retainName: true }
+): { exportName: string; value: T };
+export function selectUniqueExport<T>(
+  moduleExports: Record<string, unknown>,
+  exportName: string | undefined,
+  predicate: (value: unknown) => value is T,
+  label: string,
+  options?: SelectUniqueExportOptions & { retainName?: false }
+): T;
+export function selectUniqueExport<T>(
+  moduleExports: Record<string, unknown>,
+  exportName: string | undefined,
+  predicate: (value: unknown) => value is T,
+  label: string,
+  options?: SelectUniqueExportOptions
+): T | { exportName: string; value: T } {
   if (exportName !== undefined) {
     if (!Object.prototype.hasOwnProperty.call(moduleExports, exportName)) {
       throw new Error(`Module does not export ${JSON.stringify(exportName)}.`);
@@ -95,25 +133,20 @@ function selectUniqueExport<T>(
     if (!predicate(selected)) {
       throw new Error(`Export ${JSON.stringify(exportName)} is not an tubeless ${label}.`);
     }
-    return selected;
+    return options?.retainName === true ? { exportName, value: selected } : selected;
   }
 
-  const candidates = Object.entries(moduleExports).filter((entry): entry is [string, T] =>
-    predicate(entry[1])
-  );
-  const unique = candidates.filter(
-    ([, value], index) => candidates.findIndex(([, other]) => other === value) === index
-  );
-
+  const unique = uniqueNamedExports(moduleExports, predicate);
   if (unique.length === 0) {
     throw new Error(`Module does not export an tubeless ${label}.`);
   }
   if (unique.length > 1) {
-    throw new Error(
-      `Module exports multiple ${label}s (${unique.map(([name]) => name).join(", ")}); pass --export <name>.`
-    );
+    const names = unique.map(([name]) => name).join(", ");
+    const hint = options?.hintExport === false ? "" : "; pass --export <name>";
+    throw new Error(`Module exports multiple ${label}s (${names})${hint}.`);
   }
-  return unique[0]![1];
+  const [name, value] = unique[0]!;
+  return options?.retainName === true ? { exportName: name, value } : value;
 }
 
 /** Select one real pipeline from a loaded module, deduplicating export aliases. */
@@ -129,45 +162,11 @@ export function selectPipelineCommandExport(
   moduleExports: Record<string, unknown>,
   exportName?: string
 ): WorkbenchPipelineCommand {
-  return selectPipelineCommandExportWithName(moduleExports, exportName).command;
-}
-
-/** Select one command and retain the stable name of the export that selected it. */
-export function selectPipelineCommandExportWithName(
-  moduleExports: Record<string, unknown>,
-  exportName?: string
-) {
-  if (exportName !== undefined) {
-    if (!Object.prototype.hasOwnProperty.call(moduleExports, exportName)) {
-      throw new Error(`Module does not export ${JSON.stringify(exportName)}.`);
-    }
-    const selected = moduleExports[exportName];
-    if (!isWorkbenchPipelineCommand(selected)) {
-      throw new Error(`Export ${JSON.stringify(exportName)} is not an tubeless pipeline command.`);
-    }
-    return { command: selected, exportName };
-  }
-  const candidates = uniqueNamedExports(moduleExports, isWorkbenchPipelineCommand);
-  if (candidates.length === 0) {
-    throw new Error("Module does not export an tubeless pipeline command.");
-  }
-  if (candidates.length > 1) {
-    throw new Error(
-      `Module exports multiple pipeline commands (${candidates.map(([name]) => name).join(", ")}); pass --export <name>.`
-    );
-  }
-  return { command: candidates[0]![1], exportName: candidates[0]![0] };
-}
-
-function uniqueNamedExports<T>(
-  moduleExports: Record<string, unknown>,
-  predicate: (value: unknown) => value is T
-): [string, T][] {
-  const candidates = Object.entries(moduleExports).filter((entry): entry is [string, T] =>
-    predicate(entry[1])
-  );
-  return candidates.filter(
-    ([, value], index) => candidates.findIndex(([, other]) => other === value) === index
+  return selectUniqueExport(
+    moduleExports,
+    exportName,
+    isWorkbenchPipelineCommand,
+    "pipeline command"
   );
 }
 
@@ -217,43 +216,36 @@ export function selectPlanSourceExport(
   throw new Error("Module does not export an tubeless pipeline or pipeline command.");
 }
 
+/** Import a JS/TS module as a string-keyed export namespace. */
+export async function importModuleNamespace(filePath: string): Promise<Record<string, unknown>> {
+  // SAFETY: a dynamic import of a JS/TS module always yields a module namespace
+  // object whose exports are string-keyed values, so the cast to
+  // Record<string, unknown> documents the import result's shape; selectors
+  // validate each export at runtime before use.
+  return (await import(pathToFileURL(filePath).href)) as Record<string, unknown>;
+}
+
 /** Load and select a pipeline from an absolute module path. */
 export async function loadPipelineModule(
   filePath: string,
   exportName?: string
 ): Promise<WorkbenchPipeline> {
-  // SAFETY: a dynamic import of a JS/TS module always yields a module namespace
-  // object whose exports are string-keyed values, so the cast to
-  // Record<string, unknown> documents the import result's shape; selectors
-  // validate each export at runtime before use.
-  const moduleExports = (await import(pathToFileURL(filePath).href)) as Record<string, unknown>;
-  return selectPipelineExport(moduleExports, exportName);
-}
-
-/** Load and select a pipeline command from an absolute module path. */
-export async function loadPipelineCommandModule(
-  filePath: string,
-  exportName?: string
-): Promise<WorkbenchPipelineCommand> {
-  // SAFETY: a dynamic import of a JS/TS module always yields a module namespace
-  // object whose exports are string-keyed values, so the cast to
-  // Record<string, unknown> documents the import result's shape; selectors
-  // validate each export at runtime before use.
-  const moduleExports = (await import(pathToFileURL(filePath).href)) as Record<string, unknown>;
-  return selectPipelineCommandExport(moduleExports, exportName);
+  return selectPipelineExport(await importModuleNamespace(filePath), exportName);
 }
 
 /** Load a command and its export name for a stable external registration identity. */
-export async function loadPipelineCommandModuleWithName(
+export async function loadPipelineCommandModule(
   filePath: string,
   exportName?: string
 ): Promise<{ command: WorkbenchPipelineCommand; exportName: string }> {
-  // SAFETY: a dynamic import of a JS/TS module always yields a module namespace
-  // object whose exports are string-keyed values, so the cast to
-  // Record<string, unknown> documents the import result's shape; selectors
-  // validate each export at runtime before use.
-  const moduleExports = (await import(pathToFileURL(filePath).href)) as Record<string, unknown>;
-  return selectPipelineCommandExportWithName(moduleExports, exportName);
+  const selected = selectUniqueExport(
+    await importModuleNamespace(filePath),
+    exportName,
+    isWorkbenchPipelineCommand,
+    "pipeline command",
+    { retainName: true }
+  );
+  return { command: selected.value, exportName: selected.exportName };
 }
 
 /** Load a marked command when present, otherwise a pipeline, for inspect/plan/graph. */
@@ -261,10 +253,5 @@ export async function loadPlanSourceModule(
   filePath: string,
   exportName?: string
 ): Promise<WorkbenchPlanSource> {
-  // SAFETY: a dynamic import of a JS/TS module always yields a module namespace
-  // object whose exports are string-keyed values, so the cast to
-  // Record<string, unknown> documents the import result's shape; selectors
-  // validate each export at runtime before use.
-  const moduleExports = (await import(pathToFileURL(filePath).href)) as Record<string, unknown>;
-  return selectPlanSourceExport(moduleExports, exportName);
+  return selectPlanSourceExport(await importModuleNamespace(filePath), exportName);
 }

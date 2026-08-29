@@ -1,7 +1,11 @@
 import { stat } from "node:fs/promises";
 import * as path from "node:path";
-import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import {
+  importModuleNamespace,
+  selectUniqueExport,
+  type WorkbenchPipelineCommand,
+} from "./pipeline-module.js";
 import { createRunId } from "./pipeline.js";
 import type { PipelineStudioConfig } from "./workbench-studio.js";
 import type { PipelineRunEventStore } from "./run-store.js";
@@ -10,10 +14,7 @@ import type {
   PipelineRunStudioLaunchResult,
   PipelineRunStudioLauncher,
 } from "./run-store-ui.js";
-import {
-  executePipelineCommandValues,
-  type WorkbenchStructuredPipelineCommand,
-} from "./workbench-run.js";
+import { executePipelineCommandValues } from "./workbench-run.js";
 import {
   commandContext,
   errorMessage,
@@ -111,28 +112,18 @@ async function loadPipelineStudioConfig(
     if (!fileStat.isFile()) throw new Error(`${filePath} is not a file.`);
     const [{ isPipelineStudioConfig }, moduleExports] = await Promise.all([
       import("./workbench-studio.js"),
-      // SAFETY: A dynamic import of an arbitrary user module yields an untyped
-      // export namespace; every value is validated by isPipelineStudioConfig
-      // before use, so the Record<string, unknown> shape is the module boundary.
-      import(pathToFileURL(filePath).href) as Promise<Record<string, unknown>>,
+      importModuleNamespace(filePath),
     ]);
-    const configs = Object.entries(moduleExports).filter((entry) =>
-      isPipelineStudioConfig(entry[1])
-    );
-    const unique = configs.filter(
-      ([, value], index) => configs.findIndex(([, other]) => other === value) === index
-    );
-    if (unique.length === 0) {
-      throw new Error("Module does not export a definePipelineStudio config.");
-    }
-    if (unique.length > 1) {
-      throw new Error(
-        `Module exports multiple studio configs (${unique.map(([name]) => name).join(", ")}).`
-      );
-    }
-    // SAFETY: unique[0] passed isPipelineStudioConfig, whose type guard
-    // establishes the PipelineStudioConfig shape before it is returned.
-    return { config: unique[0]![1] as PipelineStudioConfig, filePath };
+    return {
+      config: selectUniqueExport(
+        moduleExports,
+        undefined,
+        isPipelineStudioConfig,
+        "studio config",
+        { hintExport: false }
+      ),
+      filePath,
+    };
   } catch (error) {
     io.stderr.write(`Error: ${errorMessage(error)}\n`);
     return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load };
@@ -221,7 +212,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
     markStudioStopping = resolve;
   });
   const registrations: {
-    command: WorkbenchStructuredPipelineCommand;
+    command: WorkbenchPipelineCommand;
     commandIo: WorkbenchCliIo;
     descriptor: PipelineRunStudioCommand;
     runIdPrefix: string;
@@ -230,19 +221,6 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
     const commandIo = { ...io, cwd: spec.cwd };
     const loaded = await loadPipelineCommand(spec.filePath, spec.exportName, commandIo);
     if ("exitCode" in loaded) return loaded.exitCode;
-    if (
-      !("parseValues" in loaded.command) ||
-      typeof loaded.command.parseValues !== "function" ||
-      !("execute" in loaded.command) ||
-      typeof loaded.command.execute !== "function"
-    ) {
-      io.stderr.write(`Error: ${spec.filePath} does not support structured studio launches.\n`);
-      return TUBELESS_WORKBENCH_EXIT_CODE.load;
-    }
-    // SAFETY: the guard above verified the cross-realm loaded command exposes
-    // both parseValues and execute as functions, matching the
-    // WorkbenchStructuredPipelineCommand runtime surface.
-    const launchableCommand = loaded.command as WorkbenchStructuredPipelineCommand;
     const commandName = spec.name ?? loaded.command.descriptor.name;
     const descriptor: PipelineRunStudioCommand = {
       canPlan: true,
@@ -254,7 +232,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
       descriptor.description = loaded.command.descriptor.description;
     }
     registrations.push({
-      command: launchableCommand,
+      command: loaded.command,
       commandIo,
       descriptor,
       runIdPrefix: loaded.command.descriptor.name,
@@ -297,7 +275,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
               const runController = new AbortController();
               const signal = AbortSignal.any([studioStopController.signal, runController.signal]);
               launchControllers.set(runId, runController);
-              let parsedCommand: ReturnType<WorkbenchStructuredPipelineCommand["parseValues"]>;
+              let parsedCommand: ReturnType<WorkbenchPipelineCommand["parseValues"]>;
               try {
                 parsedCommand = registration.command.parseValues(
                   values,

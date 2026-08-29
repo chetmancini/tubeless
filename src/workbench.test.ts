@@ -4,7 +4,11 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { defineCommand, definePipelineCommand } from "./cli";
-import { selectPipelineCommandExport, selectPipelineExport } from "./pipeline-module";
+import {
+  selectPipelineCommandExport,
+  selectPipelineExport,
+  selectUniqueExport,
+} from "./pipeline-module";
 import { createSteps, definePipeline } from "./pipeline";
 import { projectPipelineRun } from "./run-store";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite";
@@ -1327,6 +1331,31 @@ describe("tubeless workbench", () => {
       toMermaid: () => "flowchart TD",
     };
     expect(selectPipelineExport({ Pipeline: pipeline, default: pipeline })).toBe(pipeline);
+  });
+
+  it("selects a unique export and can retain its name", () => {
+    const isNumber = (value: unknown): value is number => typeof value === "number";
+    expect(
+      selectUniqueExport({ only: 7, alias: 7, other: "x" }, undefined, isNumber, "number")
+    ).toBe(7);
+    expect(
+      selectUniqueExport({ only: 7, alias: 7, other: "x" }, undefined, isNumber, "number", {
+        retainName: true,
+      })
+    ).toEqual({ exportName: "only", value: 7 });
+    expect(
+      selectUniqueExport({ First: 1, Second: 2 }, "Second", isNumber, "number", {
+        retainName: true,
+      })
+    ).toEqual({ exportName: "Second", value: 2 });
+    expect(() =>
+      selectUniqueExport({ First: 1, Second: 2 }, undefined, isNumber, "number")
+    ).toThrow("Module exports multiple numbers (First, Second); pass --export <name>.");
+    expect(() =>
+      selectUniqueExport({ First: 1, Second: 2 }, undefined, isNumber, "number", {
+        hintExport: false,
+      })
+    ).toThrow("Module exports multiple numbers (First, Second).");
   });
 
   it("discovers only pipeline commands, deduplicates aliases, and supports explicit selection", () => {
