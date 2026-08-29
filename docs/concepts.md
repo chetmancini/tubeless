@@ -246,7 +246,10 @@ capability and may report its own known live writers through `isBusy()`.
 Trace-enabled contexts route calls made through `context.log` into correlated
 `pipeline.log` events while still forwarding them to the injected logger.
 Definition metadata is attached to `step.planned` records, so the studio can
-render observed graphs without importing application pipeline modules. The
+render observed graphs without importing application pipeline modules.
+Opaque child steps include `nested_pipeline` on those records. Progress-bearing
+`step.running` events carry the parent summary plus bounded `details` rows so
+history can show the same per-item status as the live TTY. The
 first planned step from a newer run replaces that pipeline ID's observed targets
 and steps, so a changed definition does not retain older structure while a run
 that fails validation before planning does not erase the last usable graph.

@@ -1,3 +1,4 @@
+import type { PipelineStepProgressDetail } from "./pipeline.js";
 import type {
   PipelineTraceAttributeValue,
   PipelineTraceError,
@@ -56,8 +57,14 @@ export interface StoredPipelineStep {
   finishedAtMs?: number;
   id: string;
   name?: string;
+  nestedPipeline?: {
+    mode: "for-each" | "single";
+    pipelineId: string;
+    stepIds: string[];
+  };
   progress?: {
     completed: number;
+    details?: PipelineStepProgressDetail[];
     message?: string;
     total?: number;
   };
@@ -87,6 +94,11 @@ export interface StoredPipelineDefinitionStep {
   dryRun: string;
   id: string;
   name?: string;
+  nestedPipeline?: {
+    mode: "for-each" | "single";
+    pipelineId: string;
+    stepIds: string[];
+  };
   optionalDependencies: string[];
   runtimeSkipPossible: boolean;
   skipAfterFailureOf: string[];
@@ -164,6 +176,77 @@ function stringArrayAttribute(
   }
 }
 
+function parseProgressDetails(
+  attributes: Readonly<Record<string, PipelineTraceAttributeValue | undefined>>
+): PipelineStepProgressDetail[] | undefined {
+  const value = stringAttribute(attributes, "details");
+  if (!value) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return undefined;
+    const details = parsed.flatMap((item): PipelineStepProgressDetail[] => {
+      if (item === null || Array.isArray(item) || !(item instanceof Object)) return [];
+      // SAFETY: JSON.parse leaves object fields untyped; isStringValue keeps strings only.
+      const id = item.id as PipelineTraceAttributeValue | undefined;
+      if (!("id" in item) || !isStringValue(id) || id.length === 0) return [];
+      const detail: PipelineStepProgressDetail = { id: id.slice(0, 4_096) };
+      // SAFETY: JSON.parse leaves object fields untyped; isStringValue keeps strings only.
+      const label = ("label" in item ? item.label : undefined) as
+        | PipelineTraceAttributeValue
+        | undefined;
+      if (isStringValue(label) && label) {
+        detail.label = label.slice(0, 4_096);
+      }
+      // SAFETY: JSON.parse leaves object fields untyped; isStringValue keeps strings only.
+      const status = ("status" in item ? item.status : undefined) as
+        | PipelineTraceAttributeValue
+        | undefined;
+      if (
+        isStringValue(status) &&
+        (status === "completed" ||
+          status === "failed" ||
+          status === "pending" ||
+          status === "running" ||
+          status === "skipped")
+      ) {
+        detail.status = status;
+      }
+      return [detail];
+    });
+    return details.length > 0 ? details.slice(0, 128) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseNestedPipeline(
+  attributes: Readonly<Record<string, PipelineTraceAttributeValue | undefined>>
+): NonNullable<StoredPipelineStep["nestedPipeline"]> | undefined {
+  const value = stringAttribute(attributes, "nested_pipeline");
+  if (!value) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (parsed === null || Array.isArray(parsed) || !(parsed instanceof Object)) return undefined;
+    if (!("mode" in parsed) || !("pipelineId" in parsed) || !("stepIds" in parsed))
+      return undefined;
+    if (parsed.mode !== "for-each" && parsed.mode !== "single") return undefined;
+    // SAFETY: JSON.parse leaves object fields untyped; isStringValue keeps strings only.
+    const pipelineId = parsed.pipelineId as PipelineTraceAttributeValue | undefined;
+    if (!isStringValue(pipelineId) || pipelineId.length === 0) return undefined;
+    if (!Array.isArray(parsed.stepIds)) return undefined;
+    return {
+      mode: parsed.mode,
+      pipelineId: pipelineId.slice(0, 4_096),
+      stepIds: parsed.stepIds
+        .filter(isStringValue)
+        .slice(0, 128)
+        .map((item) => item.slice(0, 4_096)),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 function terminalStepStatus(event: StoredPipelineEvent): StoredPipelineStep["status"] | undefined {
   switch (event.name) {
     case "step.cancelled":
@@ -238,6 +321,8 @@ function applyRunEvent(projection: MutableRunProjection, event: StoredPipelineEv
   if (event.name === "step.planned") {
     step.name = stringAttribute(event.attributes, "name");
     step.description = stringAttribute(event.attributes, "description");
+    const nestedPipeline = parseNestedPipeline(event.attributes);
+    if (nestedPipeline) step.nestedPipeline = nestedPipeline;
     return;
   }
   if (event.attemptId) {
@@ -272,6 +357,8 @@ function applyRunEvent(projection: MutableRunProjection, event: StoredPipelineEv
       if (message) progress.message = message;
       const total = numberAttribute(event.attributes, "total");
       if (total !== undefined) progress.total = total;
+      const details = parseProgressDetails(event.attributes);
+      if (details) progress.details = details;
       step.progress = progress;
     }
     return;
@@ -304,7 +391,14 @@ function createRunProjection(event: StoredPipelineEvent, retainLogs = true): Mut
 function cloneStep(step: StoredPipelineStep): StoredPipelineStep {
   const cloned: StoredPipelineStep = { ...step };
   if (step.attempt) cloned.attempt = { ...step.attempt, retries: [...step.attempt.retries] };
-  if (step.progress) cloned.progress = { ...step.progress };
+  if (step.progress) {
+    cloned.progress = { ...step.progress };
+    if (step.progress.details)
+      cloned.progress.details = step.progress.details.map((detail) => ({ ...detail }));
+  }
+  if (step.nestedPipeline) {
+    cloned.nestedPipeline = { ...step.nestedPipeline, stepIds: [...step.nestedPipeline.stepIds] };
+  }
   return cloned;
 }
 
@@ -356,6 +450,8 @@ function definitionStep(event: StoredPipelineEvent): StoredPipelineDefinitionSte
   if (description) step.description = description;
   const name = stringAttribute(event.attributes, "name");
   if (name) step.name = name;
+  const nestedPipeline = parseNestedPipeline(event.attributes);
+  if (nestedPipeline) step.nestedPipeline = nestedPipeline;
   return step;
 }
 
@@ -398,12 +494,16 @@ function applyPipelineEvent(
 }
 
 function cloneDefinitionStep(step: StoredPipelineDefinitionStep): StoredPipelineDefinitionStep {
-  return {
+  const cloned: StoredPipelineDefinitionStep = {
     ...step,
     dependencies: [...step.dependencies],
     optionalDependencies: [...step.optionalDependencies],
     skipAfterFailureOf: [...step.skipAfterFailureOf],
   };
+  if (step.nestedPipeline) {
+    cloned.nestedPipeline = { ...step.nestedPipeline, stepIds: [...step.nestedPipeline.stepIds] };
+  }
+  return cloned;
 }
 
 export interface PipelineRunProjector {

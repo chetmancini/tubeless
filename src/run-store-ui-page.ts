@@ -145,6 +145,15 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
     .progress { height: 3px; margin-top: 10px; overflow: hidden; border-radius: 2px; background: #e7e9e2; }
     .progress > i { display: block; height: 100%; background: var(--blue); transition: width .3s ease; }
     .progress-copy { margin-top: 5px; color: var(--faint); font-size: 9px; }
+    .step .plan-nested { margin-top: 8px; }
+    .progress-details { margin-top: 8px; display: grid; gap: 3px; }
+    .progress-detail { min-width: 0; display: flex; align-items: baseline; gap: 6px; color: var(--muted); font: 9px/1.4 var(--mono); }
+    .progress-detail b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+    .progress-detail span { color: var(--faint); }
+    .progress-detail.completed { color: var(--green); }
+    .progress-detail.failed { color: var(--red); }
+    .progress-detail.running { color: var(--blue); }
+    .progress-detail.pending, .progress-detail.skipped { color: var(--amber); }
     .error-card { padding: 12px; border: 1px solid #efcbc8; border-radius: 8px; background: #fff8f7; }
     .error-code { color: var(--red); font: 10px var(--mono); }
     .error-message { margin-top: 6px; font-size: 11px; line-height: 1.5; }
@@ -535,8 +544,11 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
       const progressTotal = step.progress?.total;
       const progressWidth = progressTotal ? Math.max(0, Math.min(100, step.progress.completed / progressTotal * 100)) : (step.status === "complete" ? 100 : 18);
       const execution = step.attempt ? '<span class="execution-summary" title="' + esc(step.attempt.attemptId) + '"><b>Execution</b> · ' + esc(shortId(step.attempt.attemptId)) + (step.attempt.retries.length ? ' · ' + step.attempt.retries.length + ' retr' + (step.attempt.retries.length === 1 ? 'y' : 'ies') : '') + '</span>' : '';
-      const progress = step.progress ? '<div class="progress"><i style="width:' + progressWidth + '%"></i></div><div class="progress-copy">' + esc(step.progress.message || (step.progress.completed + (progressTotal ? ' / ' + progressTotal : '') + ' complete')) + '</div>' : '';
-      return '<article class="step ' + esc(step.status) + '">' + stepStatusIcon(step.status) + '<div class="step-head"><strong>' + esc(step.name || step.id) + '</strong>' + (step.name ? '<code>' + esc(step.id) + '</code>' : '') + '<span class="step-duration">' + duration(step.durationMs) + '</span></div>' + (step.description ? '<div class="step-description">' + esc(step.description) + '</div>' : '') + (execution ? '<div class="execution">' + execution + '</div>' : '') + progress + '</article>';
+      const nested = step.nestedPipeline;
+      const nestedDetail = nested ? '<div class="plan-nested"><strong>' + esc(nested.pipelineId) + '</strong><span>' + nested.stepIds.length + ' declared steps' + (nested.mode === 'for-each' ? ' per runtime item' : '') + '</span>' + nested.stepIds.map((stepId) => '<code>' + esc(stepId) + '</code>').join('') + '</div>' : '';
+      const detailRows = step.progress?.details?.length ? '<div class="progress-details">' + step.progress.details.map((detail) => '<div class="progress-detail ' + esc(detail.status || 'running') + '"><b>' + esc(detail.id) + '</b>' + (detail.label ? '<span>' + esc(detail.label) + '</span>' : '') + '</div>').join('') + '</div>' : '';
+      const progress = step.progress ? '<div class="progress"><i style="width:' + progressWidth + '%"></i></div><div class="progress-copy">' + esc(step.progress.message || (step.progress.completed + (progressTotal ? ' / ' + progressTotal : '') + ' complete')) + '</div>' + detailRows : '';
+      return '<article class="step ' + esc(step.status) + '">' + stepStatusIcon(step.status) + '<div class="step-head"><strong>' + esc(step.name || step.id) + '</strong>' + (step.name ? '<code>' + esc(step.id) + '</code>' : '') + '<span class="step-duration">' + duration(step.durationMs) + '</span></div>' + (step.description ? '<div class="step-description">' + esc(step.description) + '</div>' : '') + nestedDetail + (execution ? '<div class="execution">' + execution + '</div>' : '') + progress + '</article>';
     }
     function stepStatusIcon(value) {
       const label = value === 'complete' ? 'Completed' : value.charAt(0).toUpperCase() + value.slice(1);

@@ -93,9 +93,16 @@ describe("pipeline tracing", () => {
       attemptId: result.steps.find(({ id }) => id === "succeed")?.attemptId,
       stepId: "succeed",
     });
-    expect(events.find((event) => event.name === "step.running")?.attributes).not.toHaveProperty(
-      "detail_count"
-    );
+    const runningEvents = events.filter((event) => event.name === "step.running");
+    expect(runningEvents[0]?.attributes).not.toHaveProperty("detail_count");
+    expect(runningEvents[0]?.attributes).not.toHaveProperty("details");
+    expect(runningEvents.find((event) => event.attributes.completed === 1)?.attributes).toEqual({
+      completed: 1,
+      detail_count: 1,
+      details: JSON.stringify([{ id: "source", label: "prepared", status: "running" }]),
+      message: "prepared",
+      total: 2,
+    });
     expect(events.find((event) => event.name === "pipeline.log")).toMatchObject({
       attributes: { level: "log", message: "normalized 12" },
       attemptId: result.steps.find(({ id }) => id === "succeed")?.attemptId,
@@ -206,6 +213,18 @@ describe("pipeline tracing", () => {
         (event) => event.name === "pipeline.started" && event.pipelineId === "trace-child"
       )
     ).toMatchObject({ parentRunId: "parent-run" });
+    expect(
+      events.find((event) => event.name === "step.planned" && event.pipelineId === "trace-parent")
+    ).toMatchObject({
+      attributes: {
+        nested_pipeline: JSON.stringify({
+          mode: "single",
+          pipelineId: "trace-child",
+          stepIds: ["inside"],
+        }),
+      },
+      stepId: "child-stage",
+    });
   });
 
   it("adds stable mapped item keys to descendant runs", async () => {
@@ -255,5 +274,81 @@ describe("pipeline tracing", () => {
     expect(childStarts).toHaveLength(2);
     expect(childStarts.map((event) => event.itemKey).sort()).toEqual(["first", "second"]);
     expect(childStarts.every((event) => event.parentRunId === "mapped-parent-run")).toBe(true);
+  });
+
+  it("bounds progress details and records the original detail count", async () => {
+    const step = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        context.reportProgress({
+          completed: 1,
+          details: Array.from({ length: 130 }, (_, index) => ({
+            id: index === 0 ? "x".repeat(5_000) : `item-${index}`,
+            label: index === 0 ? "y".repeat(5_000) : "scan",
+            status: "running",
+          })),
+          message: "items",
+          total: 130,
+        });
+        return "ok";
+      },
+    });
+    const pipeline = definePipeline({
+      id: "traced-details",
+      steps: [work],
+      finalize: () => "ok",
+    });
+    const events: PipelineTraceEvent[] = [];
+
+    await pipeline.run(
+      {},
+      {
+        ...defaultPipelineContext(),
+        log: createLogger(),
+        tracing: { exporter: { export: (event) => events.push(event) } },
+      }
+    );
+
+    const progress = events.find(
+      (event) => event.name === "step.running" && event.attributes.completed === 1
+    );
+    expect(progress?.attributes.detail_count).toBe(130);
+    const details = JSON.parse(String(progress?.attributes.details)) as Array<{
+      id: string;
+      label?: string;
+    }>;
+    expect(details).toHaveLength(128);
+    expect(details[0]?.id).toHaveLength(4_096);
+    expect(details[0]?.label).toHaveLength(4_096);
+  });
+
+  it("omits detail attributes when progress has no detail rows", async () => {
+    const step = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        context.reportProgress({ completed: 1, message: "batches", total: 2 });
+        return "ok";
+      },
+    });
+    const pipeline = definePipeline({
+      id: "traced-plain-progress",
+      steps: [work],
+      finalize: () => "ok",
+    });
+    const events: PipelineTraceEvent[] = [];
+
+    await pipeline.run(
+      {},
+      {
+        ...defaultPipelineContext(),
+        log: createLogger(),
+        tracing: { exporter: { export: (event) => events.push(event) } },
+      }
+    );
+
+    expect(
+      events.find((event) => event.name === "step.running" && event.attributes.completed === 1)
+        ?.attributes
+    ).toEqual({ completed: 1, message: "batches", total: 2 });
   });
 });
