@@ -3,7 +3,7 @@ import * as path from "node:path";
 import type { CliContext } from "./cli.js";
 import { PipelineDefinitionError, type PipelineContext, type PipelineError } from "./pipeline.js";
 import {
-  loadPipelineCommandModuleWithName,
+  loadPipelineCommandModule,
   loadPlanSourceModule,
   type WorkbenchPipelineCommand,
   type WorkbenchPlanSource,
@@ -114,16 +114,16 @@ export function toExitCode(error: unknown): number {
   return TUBELESS_WORKBENCH_EXIT_CODE.execution;
 }
 
-export async function loadPipelineCommand(
+async function loadWorkbenchModule<T>(
   fileArgument: string,
-  exportName: string | undefined,
-  io: WorkbenchCliIo
-): Promise<{ command: WorkbenchPipelineCommand; exportName: string } | { exitCode: number }> {
+  io: WorkbenchCliIo,
+  load: (filePath: string) => Promise<T>
+): Promise<T | { exitCode: number }> {
   const filePath = path.resolve(io.cwd, fileArgument);
   try {
     const fileStat = await stat(filePath);
     if (!fileStat.isFile()) throw new Error(`${filePath} is not a file.`);
-    return await loadPipelineCommandModuleWithName(filePath, exportName);
+    return await load(filePath);
   } catch (error) {
     const exitCode = isDefinitionError(error)
       ? TUBELESS_WORKBENCH_EXIT_CODE.definition
@@ -133,23 +133,24 @@ export async function loadPipelineCommand(
   }
 }
 
+export async function loadPipelineCommand(
+  fileArgument: string,
+  exportName: string | undefined,
+  io: WorkbenchCliIo
+): Promise<{ command: WorkbenchPipelineCommand; exportName: string } | { exitCode: number }> {
+  return loadWorkbenchModule(fileArgument, io, (filePath) =>
+    loadPipelineCommandModule(filePath, exportName)
+  );
+}
+
 export async function loadPlanSource(
   fileArgument: string,
   exportName: string | undefined,
   io: WorkbenchCliIo
 ): Promise<{ source: WorkbenchPlanSource } | { exitCode: number }> {
-  const filePath = path.resolve(io.cwd, fileArgument);
-  try {
-    const fileStat = await stat(filePath);
-    if (!fileStat.isFile()) throw new Error(`${filePath} is not a file.`);
-    return { source: await loadPlanSourceModule(filePath, exportName) };
-  } catch (error) {
-    const exitCode = isDefinitionError(error)
-      ? TUBELESS_WORKBENCH_EXIT_CODE.definition
-      : TUBELESS_WORKBENCH_EXIT_CODE.load;
-    io.stderr.write(`Error: ${errorMessage(error)}\n`);
-    return { exitCode };
-  }
+  return loadWorkbenchModule(fileArgument, io, async (filePath) => ({
+    source: await loadPlanSourceModule(filePath, exportName),
+  }));
 }
 
 export function writeCommandLine(

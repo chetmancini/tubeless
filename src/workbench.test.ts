@@ -4,7 +4,12 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { defineCommand, definePipelineCommand } from "./cli";
-import { selectPipelineCommandExport, selectPipelineExport } from "./pipeline-module";
+import { markPipelineCommand } from "./pipeline-command-marker";
+import {
+  selectPipelineCommandExport,
+  selectPipelineExport,
+  selectUniqueExport,
+} from "./pipeline-module";
 import { createSteps, definePipeline } from "./pipeline";
 import { projectPipelineRun } from "./run-store";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite";
@@ -424,6 +429,8 @@ describe("tubeless workbench", () => {
           steps: [],
         }),
         parse: () => ({ kind: "values" }),
+        parseValues: () => ({ kind: "values" }),
+        execute: async () => undefined,
         run: async () => undefined,
         toMermaid: () => "flowchart TD",
       });
@@ -535,6 +542,8 @@ describe("tubeless workbench", () => {
           steps: [],
         }),
         parse: () => ({ kind: "values" }),
+        parseValues: () => ({ kind: "values" }),
+        execute: async () => undefined,
         run: async () => undefined,
         toMermaid: () => "flowchart TD\\n  from-command",
       });
@@ -1329,6 +1338,31 @@ describe("tubeless workbench", () => {
     expect(selectPipelineExport({ Pipeline: pipeline, default: pipeline })).toBe(pipeline);
   });
 
+  it("selects a unique export and can retain its name", () => {
+    const isNumber = (value: unknown): value is number => typeof value === "number";
+    expect(
+      selectUniqueExport({ only: 7, alias: 7, other: "x" }, undefined, isNumber, "number")
+    ).toBe(7);
+    expect(
+      selectUniqueExport({ only: 7, alias: 7, other: "x" }, undefined, isNumber, "number", {
+        retainName: true,
+      })
+    ).toEqual({ exportName: "only", value: 7 });
+    expect(
+      selectUniqueExport({ First: 1, Second: 2 }, "Second", isNumber, "number", {
+        retainName: true,
+      })
+    ).toEqual({ exportName: "Second", value: 2 });
+    expect(() =>
+      selectUniqueExport({ First: 1, Second: 2 }, undefined, isNumber, "number")
+    ).toThrow("Module exports multiple numbers (First, Second); pass --export <name>.");
+    expect(() =>
+      selectUniqueExport({ First: 1, Second: 2 }, undefined, isNumber, "number", {
+        hintExport: false,
+      })
+    ).toThrow("Module exports multiple numbers (First, Second).");
+  });
+
   it("discovers only pipeline commands, deduplicates aliases, and supports explicit selection", () => {
     const step = createSteps();
     const work = step("work", { run: () => "done" });
@@ -1349,6 +1383,22 @@ describe("tubeless workbench", () => {
       "Module exports multiple pipeline commands (First, Second); pass --export <name>."
     );
     expect(() => selectPipelineCommandExport({ Generic: generic })).toThrow(
+      "Module does not export an tubeless pipeline command."
+    );
+  });
+
+  it("rejects a marked command that is missing structured launch methods", () => {
+    const incomplete = markPipelineCommand({
+      id: "from-command",
+      stepIds: ["work"],
+      targetIds: ["work"],
+      descriptor: { name: "fixture", parameters: [] },
+      plan: () => ({ dryRun: false, errors: [], ok: true, pipelineId: "from-command", steps: [] }),
+      parse: () => ({ kind: "values" }),
+      run: async () => undefined,
+      toMermaid: () => "flowchart TD",
+    });
+    expect(() => selectPipelineCommandExport({ Incomplete: incomplete })).toThrow(
       "Module does not export an tubeless pipeline command."
     );
   });
