@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { chmod, mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -231,10 +231,21 @@ describe("SQLite pipeline run store", () => {
     }
   });
 
+  it("rejects a missing path when initialize is false without creating it", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "missing", "runs.sqlite");
+    await expect(openSqlitePipelineRunStore(filename, { initialize: false })).rejects.toThrow();
+    await expect(stat(filename)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(path.dirname(filename))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("rejects an uninitialized file when initialize is false", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
     directories.push(directory);
     const filename = path.join(directory, "empty.sqlite");
+    const database = new DatabaseSync(filename);
+    database.close();
     await expect(openSqlitePipelineRunStore(filename, { initialize: false })).rejects.toThrow(
       "is not a pipeline run store"
     );

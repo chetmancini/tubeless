@@ -113,20 +113,34 @@ async function loadSqliteModule(): Promise<SqliteModule> {
   return (await import(specifier)) as SqliteModule;
 }
 
-async function openDatabase(filename: string, readOnly = false): Promise<SqliteDatabase> {
+async function openDatabase(
+  filename: string,
+  options: { create?: boolean; readOnly?: boolean } = {}
+): Promise<SqliteDatabase> {
   const module = await loadSqliteModule();
   const Database = module.Database ?? module.DatabaseSync;
   if (!Database) throw new Error("No synchronous SQLite database implementation is available.");
-  if (!readOnly) return new Database(filename);
-  try {
-    return openReadableDatabase(Database, filename, {
-      create: false,
-      readOnly: true,
-      readonly: true,
-    });
-  } catch {
-    return openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=ro&immutable=1`);
+  const create = options.create !== false;
+  const readOnly = options.readOnly === true;
+  if (readOnly) {
+    try {
+      return openReadableDatabase(Database, filename, {
+        create: false,
+        readOnly: true,
+        readonly: true,
+      });
+    } catch {
+      return openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=ro&immutable=1`);
+    }
   }
+  if (!create) {
+    try {
+      return openReadableDatabase(Database, filename, { create: false });
+    } catch {
+      return openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=rw`);
+    }
+  }
+  return new Database(filename);
 }
 
 function openReadableDatabase(
@@ -172,7 +186,8 @@ function mapRow(row: StoredEventRow): StoredPipelineEvent {
 /** Options for `openSqlitePipelineRunStore`. */
 export interface OpenSqlitePipelineRunStoreOptions {
   /**
-   * When `false`, reject a file that is not already a versioned run store.
+   * When `false`, reject a path that is not already a versioned run store
+   * and do not create parent directories or a database file.
    * Defaults to `true` so `run --store` and `ui` can create the database.
    */
   readonly initialize?: boolean;
@@ -194,10 +209,10 @@ export async function openSqlitePipelineRunStore(
   const readOnly = options.readOnly === true;
   const initialize = options.initialize !== false && !readOnly;
   const resolvedFilename = filename === ":memory:" ? filename : path.resolve(filename);
-  if (resolvedFilename !== ":memory:" && !readOnly) {
+  if (resolvedFilename !== ":memory:" && initialize) {
     await mkdir(path.dirname(resolvedFilename), { recursive: true });
   }
-  const database = await openDatabase(resolvedFilename, readOnly);
+  const database = await openDatabase(resolvedFilename, { create: initialize, readOnly });
   try {
     // SAFETY: `PRAGMA user_version` always returns a single row with a
     // `user_version` column, so the first result row matches this shape.
