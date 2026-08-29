@@ -1415,6 +1415,67 @@ describe("definePipeline", () => {
     ]);
   });
 
+  it("preserves a planned dry-run skip after fail-fast even when skipAfterFailureOf matches the failed step", async () => {
+    const step = createSteps();
+    const failing = step("failing", {
+      run: () => {
+        throw new Error("failed");
+      },
+    });
+    const later = step("later", {
+      dryRun: "skip",
+      skipAfterFailureOf: [failing],
+      run: () => "unreachable",
+    });
+    const pipeline = definePipeline({
+      id: "fail-fast-dry-run-skip",
+      steps: [failing, later],
+      finalize: () => undefined,
+    });
+    const skipEvents: unknown[] = [];
+
+    const result = await pipeline.run(
+      { dryRun: true },
+      {
+        cwd: "/tmp",
+        log: console,
+        hooks: {
+          onStepSkip: (event) => {
+            skipEvents.push({
+              dependencyId: event.dependencyId,
+              reason: event.reason,
+              stepId: event.step.id,
+            });
+          },
+        },
+      }
+    );
+
+    expect(
+      pipeline.plan({ dryRun: true }).steps.map((planned) => [planned.id, planned.skipReason])
+    ).toEqual([
+      ["failing", undefined],
+      ["later", "dry-run"],
+    ]);
+    expect(
+      result.steps.map((report) => [
+        report.id,
+        report.status,
+        report.status === "skipped" ? report.reason : undefined,
+      ])
+    ).toEqual([
+      ["failing", "failed", undefined],
+      ["later", "skipped", "dry-run"],
+    ]);
+    expect(skipEvents).toEqual([
+      {
+        dependencyId: undefined,
+        reason: "dry-run",
+        stepId: "later",
+      },
+    ]);
+  });
+
   it("preserves a thrown error code in the step report and run result", async () => {
     const step = createSteps();
     const failing = step("failing", {

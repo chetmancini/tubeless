@@ -2492,28 +2492,18 @@ async function executePlannedRun<
       const step = orderedSteps[index]!;
       const plannedStep = plannedSteps.get(step.id) ?? stepToPlanStep(step, true);
       if (plannedStep.skipReason) {
-        const disposition = decideStepDisposition({
-          dryRun,
-          planned: plannedStep,
-          reportsByStepId,
-          step,
-        });
-        const skip =
-          disposition.kind === "skip"
-            ? disposition
-            : {
-                reason: plannedStep.skipReason,
-                message: undefined,
-                dependencyId: undefined,
-              };
+        const dependencyId =
+          plannedStep.skipReason === "unmet-dependency"
+            ? plannedStep.dependencies.find((id) => plannedSteps.get(id)?.skipReason !== undefined)
+            : undefined;
         const report = recordSkip(
           step,
           step.id,
           reports,
           reportsByStepId,
-          skip.reason,
-          skip.message,
-          skip.dependencyId,
+          plannedStep.skipReason,
+          undefined,
+          dependencyId,
           undefined,
           undefined,
           runtime.now()
