@@ -4,6 +4,7 @@ import { definePipelineStudio } from "tubeless/workbench/studio";
 // labels from these commands. Use --store when launching so that structure
 // survives after the live TTY closes.
 
+/** Checked-in catalog. Studio can cancel one live launch from the running detail pane without stopping the server. */
 export default definePipelineStudio({
   cwd: ".",
   commands: [

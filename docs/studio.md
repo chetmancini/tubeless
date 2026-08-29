@@ -77,13 +77,16 @@ per-item `details` rows under the parent bar. Truncated lists keep the original
 `detail_count` and nested `step_count` so history can say how many rows were
 omitted.
 
-Browser plan, launch, and clear-history requests send
-`x-tubeless-studio-plan`, `x-tubeless-studio-launch`, and
-`x-tubeless-studio-clear-history`. Those requests also require a `Host` header
-that matches the bound authority, and plan/launch require `application/json`.
-A successful launch response (HTTP 202) means the run id is already queryable
-from the store. The header names are part of the local studio protocol. They are
-same-origin guards, not authentication.
+Browser plan, launch, cancel, and clear-history requests send
+`x-tubeless-studio-plan`, `x-tubeless-studio-launch`,
+`x-tubeless-studio-cancel`, and `x-tubeless-studio-clear-history`. Those
+requests also require a `Host` header that matches the bound authority, and
+plan/launch require `application/json`. A successful launch response (HTTP 202)
+means the run id is already queryable from the store. Cancel aborts one live
+studio launch without stopping the server; it is not crash-resume. The Cancel
+run control appears only for top-level launches this studio process still owns.
+The header names are part of the local studio protocol. They are same-origin
+guards, not authentication.
 
 Programmatic callers can compose the same pieces from
 `tubeless/run-store/sqlite` and `tubeless/run-store/ui`. See

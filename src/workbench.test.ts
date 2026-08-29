@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { defineCommand, definePipelineCommand } from "./cli";
 import { selectPipelineCommandExport, selectPipelineExport } from "./pipeline-module";
 import { createSteps, definePipeline } from "./pipeline";
+import { projectPipelineRun } from "./run-store";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite";
 import { DUPLICATE_SIGNAL_WINDOW_MS, onFirstProcessSignal } from "./workbench-shared";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli, type WorkbenchCliIo } from "./workbench";
@@ -627,7 +628,7 @@ describe("tubeless workbench", () => {
     await expect(fetch(url!)).resolves.toMatchObject({ status: 200 });
     await expect(
       fetch(`${url}/api/capabilities`).then((response) => response.json())
-    ).resolves.toEqual({ canClearHistory: true });
+    ).resolves.toEqual({ canCancel: false, canClearHistory: true });
     const cleared = await fetch(`${url}/api/history`, {
       headers: { "x-tubeless-studio-clear-history": "1" },
       method: "DELETE",
@@ -901,6 +902,105 @@ describe("tubeless workbench", () => {
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
   });
 
+  it("cancels one live studio launch without aborting a sibling", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    await writeStudioConfig(directory);
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), signal: controller.signal };
+    const command = runWorkbenchCli(
+      [
+        "ui",
+        "--store",
+        path.join(directory, "runs.sqlite"),
+        "--port",
+        "0",
+        "config/tubeless.studio.mjs",
+      ],
+      io
+    );
+
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
+    expect(url).toBeDefined();
+    await expect(
+      fetch(`${url}/api/capabilities`).then((response) => response.json())
+    ).resolves.toEqual({ canCancel: true, canClearHistory: true });
+    const commands = (await fetch(`${url}/api/commands`).then((response) => response.json())) as {
+      commands: { id: string }[];
+    };
+    const commandId = commands.commands[0]?.id;
+    expect(commandId).toBeDefined();
+
+    const launchWait = async (message: string) => {
+      const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+        body: JSON.stringify({ values: { message, mode: "wait" } }),
+        headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
+        method: "POST",
+      });
+      expect(launched.status).toBe(202);
+      return (await launched.json()) as { runId: string };
+    };
+    const first = await launchWait("first");
+    const second = await launchWait("second");
+    await vi.waitFor(async () => {
+      const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
+        liveRunIds: string[];
+        runs: { runId: string; status: string }[];
+      };
+      expect(snapshot.runs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ runId: first.runId, status: "running" }),
+          expect.objectContaining({ runId: second.runId, status: "running" }),
+        ])
+      );
+      expect(snapshot.liveRunIds).toEqual(expect.arrayContaining([first.runId, second.runId]));
+      expect(snapshot.liveRunIds).toHaveLength(2);
+    });
+
+    const cancelled = await fetch(`${url}/api/runs/${encodeURIComponent(first.runId)}/cancel`, {
+      headers: { "x-tubeless-studio-cancel": "1" },
+      method: "POST",
+    });
+    expect(cancelled.status).toBe(202);
+    await expect(cancelled.json()).resolves.toEqual({ cancelled: true, runId: first.runId });
+    await vi.waitFor(async () => {
+      const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
+        liveRunIds: string[];
+        runs: { error?: { message: string }; runId: string; status: string }[];
+      };
+      expect(snapshot.runs).toContainEqual(
+        expect.objectContaining({
+          runId: first.runId,
+          status: "cancelled",
+          error: expect.objectContaining({ message: expect.stringContaining("run was cancelled") }),
+        })
+      );
+      expect(snapshot.runs).toContainEqual(
+        expect.objectContaining({ runId: second.runId, status: "running" })
+      );
+      expect(snapshot.liveRunIds).toEqual([second.runId]);
+    });
+    const stale = await fetch(`${url}/api/runs/${encodeURIComponent(first.runId)}/cancel`, {
+      headers: { "x-tubeless-studio-cancel": "1" },
+      method: "POST",
+    });
+    expect(stale.status).toBe(404);
+
+    controller.abort();
+    await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    const store = await openSqlitePipelineRunStore(path.join(directory, "runs.sqlite"));
+    try {
+      const sibling = projectPipelineRun(await store.listEvents({ runId: second.runId }));
+      expect(sibling).toMatchObject({
+        runId: second.runId,
+        status: "cancelled",
+        error: { message: expect.stringContaining("local studio is stopping") },
+      });
+    } finally {
+      await store.close();
+    }
+  });
+
   it("rejects browser-triggered execution on a non-loopback host", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     const commandIo = captureIo(directory);
@@ -941,7 +1041,7 @@ describe("tubeless workbench", () => {
     expect(url).toMatch(/^http:\/\/0\.0\.0\.0:\d+$/);
     await expect(
       fetch(`${url}/api/capabilities`).then((response) => response.json())
-    ).resolves.toEqual({ canClearHistory: false });
+    ).resolves.toEqual({ canCancel: false, canClearHistory: false });
     await expect(
       fetch(`${url}/api/history`, {
         headers: { "x-tubeless-studio-clear-history": "1" },

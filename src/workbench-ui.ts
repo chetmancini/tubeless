@@ -213,7 +213,8 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
     return writeUsageError(io, "Browser-triggered execution requires a loopback --host.", UI_USAGE);
   }
 
-  const launchController = new AbortController();
+  const studioStopController = new AbortController();
+  const launchControllers = new Map<string, AbortController>();
   const activeLaunches = new Set<Promise<number>>();
   let markStudioStopping = (): void => undefined;
   const studioStopping = new Promise<void>((resolve) => {
@@ -293,31 +294,49 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
                 return { accepted: false, errors: ["Pipeline command not found."] };
               const runId = createRunId(registration.runIdPrefix);
               const pipelineContext = { runId, tracing: { exporter: store! } };
+              const runController = new AbortController();
+              const signal = AbortSignal.any([studioStopController.signal, runController.signal]);
+              launchControllers.set(runId, runController);
               let parsedCommand: ReturnType<WorkbenchStructuredPipelineCommand["parseValues"]>;
               try {
                 parsedCommand = registration.command.parseValues(
                   values,
-                  commandContext(registration.commandIo, launchController.signal, pipelineContext)
+                  commandContext(registration.commandIo, signal, pipelineContext)
                 );
               } catch (error) {
+                launchControllers.delete(runId);
                 return { accepted: false, errors: [errorMessage(error)] };
               }
               if (parsedCommand.kind === "error") {
+                launchControllers.delete(runId);
                 return { accepted: false, errors: parsedCommand.errors };
               }
               if (parsedCommand.kind === "help") {
+                launchControllers.delete(runId);
                 return { accepted: false, errors: ["Help is not a launchable value set."] };
               }
               const execution = executePipelineCommandValues(
                 registration.command,
                 parsedCommand.values,
                 registration.commandIo,
-                launchController.signal,
+                signal,
                 pipelineContext
               );
               activeLaunches.add(execution);
-              void execution.finally(() => activeLaunches.delete(execution));
+              void execution.finally(() => {
+                activeLaunches.delete(execution);
+                launchControllers.delete(runId);
+              });
               return await acknowledgeRecordedLaunch(store!, runId, execution, studioStopping);
+            },
+            cancel(runId) {
+              const controller = launchControllers.get(runId);
+              if (!controller) return { cancelled: false };
+              controller.abort(new DOMException("The run was cancelled.", "AbortError"));
+              return { cancelled: true, runId };
+            },
+            liveRunIds() {
+              return [...launchControllers.keys()];
             },
           };
     const studioOptions: Parameters<typeof startPipelineRunStudio>[0] = {
@@ -366,7 +385,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
     return TUBELESS_WORKBENCH_EXIT_CODE.execution;
   } finally {
     markStudioStopping();
-    launchController.abort(new DOMException("The local studio is stopping.", "AbortError"));
+    studioStopController.abort(new DOMException("The local studio is stopping.", "AbortError"));
     await server?.close();
     await Promise.allSettled(activeLaunches);
     await store?.close();

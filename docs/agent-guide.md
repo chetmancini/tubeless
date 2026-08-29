@@ -136,6 +136,8 @@ or shared helpers in this repository.
   default. Use `definePipelineStudio` for a checked-in command catalog, and
   register only explicit `definePipelineCommand` modules; never make execution
   require the studio server or infer executable modules from observed history.
+  Cancel a live top-level launch from the running detail pane; that abort is
+  process-local, leaves sibling launches running, and is not crash-resume.
 
 ## Failure and safety rules
 

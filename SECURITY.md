@@ -26,7 +26,7 @@ non-loopback studio binding you enable yourself.
 
 The studio is a local process. It is not an authenticated network service.
 
-`tubeless ui` binds `127.0.0.1` by default. Browser-triggered plan and launch
+`tubeless ui` binds `127.0.0.1` by default. Browser-triggered plan, launch, and cancel
 are refused unless `--host` is `127.0.0.1`, `::1`, or `localhost` (compared
 case-insensitively). Clear-history is wired only on those same hosts.
 
@@ -39,7 +39,7 @@ out of scope; you enabled it.
 non-loopback host plus an injected launcher or history capability. That
 combination is out of scope.
 
-Browser plan, launch, and clear-history require a `Host` header that matches
+Browser plan, launch, cancel, and clear-history require a `Host` header that matches
 the bound authority, a custom `x-tubeless-studio-*` header, and
 `application/json` for plan and launch. Those checks stop ordinary cross-site
 form posts. They are not authentication. Do not expose studio to a network you

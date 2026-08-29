@@ -32,6 +32,10 @@ export type PipelineRunStudioLaunchResult =
   | { accepted: true; runId: string }
   | { accepted: false; errors: readonly string[] };
 
+export type PipelineRunStudioCancelResult =
+  | { cancelled: true; runId: string }
+  | { cancelled: false };
+
 export interface PipelineRunStudioLaunchRequest {
   readonly values: Record<
     string,
@@ -45,6 +49,9 @@ export interface PipelineRunStudioLauncher {
     commandId: string,
     values: PipelineRunStudioLaunchRequest["values"]
   ): Promise<PipelineRunStudioLaunchResult>;
+  cancel?(runId: string): PipelineRunStudioCancelResult | Promise<PipelineRunStudioCancelResult>;
+  /** Process-local live launch ids. Required with `cancel` for studio to advertise Cancel run. */
+  liveRunIds?(): readonly string[];
   plan?(commandId: string, input: PipelineCommandPlanInput): PipelinePlan | Promise<PipelinePlan>;
 }
 

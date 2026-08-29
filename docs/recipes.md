@@ -23,7 +23,7 @@ inventory.
 | Render plans and diagnostics                  | [`rendering.ts`](../examples/rendering.ts)                               | `renderPipelinePlan`, `renderPipelineError`                        |
 | Handle cancellation and deterministic testing | [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts) | `createPipelineTestRuntime`, captured status/progress              |
 | Export JSON or OpenTelemetry lifecycle events | [`tracing.ts`](../examples/tracing.ts)                                   | trace context, attempt events, JSON exporter                       |
-| Persist, inspect, and explicitly launch runs  | [`local-observability.ts`](../examples/local-observability.ts)           | SQLite store, recorded `details`, nested labels, studio projector  |
+| Persist, inspect, launch, or cancel live runs | [`local-observability.ts`](../examples/local-observability.ts)           | SQLite store, recorded `details`, nested labels, studio projector  |
 | Project layout, IDs, and studio catalog       | [`tubeless.studio.ts`](../examples/catalog/tubeless.studio.ts)           | `pipelines/`, `scripts/`, `definePipelineStudio`                   |
 
 ## Selection rules
@@ -51,6 +51,8 @@ inventory.
 9. Copy consumer file layout, export names, and IDs from the
    [project catalog](../examples/catalog/tubeless.studio.ts). Register studio
    commands explicitly; do not infer executable modules from run history.
+   Cancel only a live launch owned by the current studio process; it is not
+   crash-resume and does not abort sibling launches.
 
 For semantics behind these choices, read [core concepts](./concepts.md).
 For workbench commands, read [the CLI](./cli.md). For the local run UI, read

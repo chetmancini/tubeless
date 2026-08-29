@@ -235,6 +235,7 @@
     {
       "declaration": "./dist/run-store-ui.d.ts",
       "exports": [
+        "PipelineRunStudioCancelResult",
         "PipelineRunStudioCommand",
         "PipelineRunStudioHistoryMaintenance",
         "PipelineRunStudioLauncher",
@@ -244,7 +245,7 @@
         "PipelineRunStudioServer",
         "startPipelineRunStudio"
       ],
-      "sha256": "b0c27f8b7d3481709b72912d7cae2ce325bb940315d432e53e3529dde7272e70",
+      "sha256": "d207e9aba052d83ad2f4268b91644d932b7835e6c1a3eecb89df622a61db2041",
       "specifier": "tubeless/run-store/ui"
     },
     {

@@ -123,13 +123,14 @@ These names are the 0.1.0 contract. Treat a change as a breaking change.
 | Error codes        | `TUBELESS_*` on `PipelineErrorCode`                                                                                                                                                                                                                                                                                                               | Prefix and current spellings stay.                                                                                                                             |
 | CLI exit codes     | `TUBELESS_WORKBENCH_EXIT_CODE` from `tubeless/cli`                                                                                                                                                                                                                                                                                                | `0`–`7`: success, usage, load, definition, validation, planning, execution, cancellation.                                                                      |
 | Storage            | `.tubeless/runs.sqlite`                                                                                                                                                                                                                                                                                                                           | Default studio/CLI store path.                                                                                                                                 |
-| Studio headers     | `x-tubeless-studio-plan`, `x-tubeless-studio-launch`, `x-tubeless-studio-clear-history`                                                                                                                                                                                                                                                           | Local studio protocol.                                                                                                                                         |
+| Studio headers     | `x-tubeless-studio-plan`, `x-tubeless-studio-launch`, `x-tubeless-studio-cancel`, `x-tubeless-studio-clear-history`                                                                                                                                                                                                                               | Local studio protocol.                                                                                                                                         |
 | Runtime symbols    | `Symbol.for("tubeless/pipeline-command")`, `Symbol.for("tubeless/pipeline-studio-config/v1")`                                                                                                                                                                                                                                                     | Cross-instance markers. Consumers should not set these.                                                                                                        |
 | Other constants    | `PIPELINE_FINALIZE_STEP_ID` (`__finalize__`), `RUN_MODEL_VERSION` (`1`), `PIPELINE_STUDIO_CONFIG_VERSION` (`1`)                                                                                                                                                                                                                                   | Reserved finalize id and stored-run/studio versions.                                                                                                           |
 
 `tubeless/run-store/ui` also re-exports `PipelineRunStudioCommand`,
 `PipelineRunStudioLauncher`, `PipelineRunStudioLaunchResult`,
-`PipelineRunStudioLaunchRequest`, and `PipelineRunStudioHistoryMaintenance`.
+`PipelineRunStudioLaunchRequest`, `PipelineRunStudioCancelResult`, and
+`PipelineRunStudioHistoryMaintenance`.
 The inventory generator now counts `export type { … }` blocks so those names
 stay reviewable.
 
@@ -172,7 +173,7 @@ The studio is a local process, not an authenticated network service.
   non-loopback host plus an injected launcher or history capability. That
   combination is out of scope, same as a non-loopback CLI bind the user
   enables.
-- Plan, launch, and clear-history require a `Host` matching the bound
+- Plan, launch, cancel, and clear-history require a `Host` matching the bound
   authority, a custom `x-tubeless-studio-*` header, and `application/json`
   for plan and launch. Those are same-origin guards, not authentication.
 
