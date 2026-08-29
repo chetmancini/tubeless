@@ -805,6 +805,36 @@ describe("tubeless workbench", () => {
     expect(aliasIo.errors.join("")).toMatch(/same path/i);
   });
 
+  it("rejects a dangling symlink that aliases --store as --trace", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const storePath = path.join(directory, "history", "runs.sqlite");
+    const tracePath = path.join(directory, "traces", "dangling.ndjson");
+    await mkdir(path.dirname(storePath), { recursive: true });
+    await mkdir(path.dirname(tracePath), { recursive: true });
+    await symlink(storePath, tracePath);
+
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          storePath,
+          "--trace",
+          tracePath,
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(io.errors.join("")).toMatch(/same path/i);
+  });
+
   it("lists and shows projected history from the run store", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     const io = captureIo(directory);

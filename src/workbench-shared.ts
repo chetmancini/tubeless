@@ -35,8 +35,32 @@ export const DEFAULT_PIPELINE_RUN_STORE = ".tubeless/runs.sqlite";
 export interface WorkbenchCliIo {
   cwd: string;
   signal?: AbortSignal;
-  stderr: { write(chunk: string): void };
-  stdout: { write(chunk: string): void };
+  stderr: { write(chunk: string): boolean | void };
+  stdout: { write(chunk: string): boolean | void };
+}
+
+/** Write a chunk and wait when the destination applies backpressure. */
+export async function writeCliChunk(
+  output: { write(chunk: string): boolean | void },
+  chunk: string
+): Promise<void> {
+  if (output.write(chunk) !== false) return;
+  // SAFETY: write() returning false is the Node writable-stream backpressure
+  // signal, so the destination implements once/off for drain and error.
+  const stream = output as NodeJS.WritableStream;
+  if (typeof stream.once !== "function") return;
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => {
+      stream.off("drain", onDrain);
+      reject(error);
+    };
+    const onDrain = () => {
+      stream.off("error", onError);
+      resolve();
+    };
+    stream.once("error", onError);
+    stream.once("drain", onDrain);
+  });
 }
 
 export function writeUsageError(io: WorkbenchCliIo, message: string, usage: string): number {

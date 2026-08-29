@@ -12,6 +12,7 @@ import {
   DEFAULT_PIPELINE_RUN_STORE,
   errorMessage,
   TUBELESS_WORKBENCH_EXIT_CODE,
+  writeCliChunk,
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
@@ -46,7 +47,7 @@ function parseHistoryArgs(argv: readonly string[]) {
 async function forEachEventPage(
   store: PipelineRunEventStore,
   query: PipelineRunEventQuery,
-  onPage: (page: readonly StoredPipelineEvent[]) => void
+  onPage: (page: readonly StoredPipelineEvent[]) => void | Promise<void>
 ): Promise<number> {
   let afterId: number | undefined;
   let eventCount = 0;
@@ -54,7 +55,7 @@ async function forEachEventPage(
     const page = await store.listEvents({ ...query, afterId, limit: EVENT_PAGE_SIZE });
     if (page.length === 0) break;
     eventCount += page.length;
-    onPage(page);
+    await onPage(page);
     afterId = page[page.length - 1]!.id;
     if (page.length < EVENT_PAGE_SIZE) break;
   }
@@ -109,9 +110,12 @@ function formatRunDetail(run: StoredPipelineRun): string {
   return `${lines.join("\n")}\n`;
 }
 
-function writeEvents(io: WorkbenchCliIo, events: readonly StoredPipelineEvent[]): void {
+async function writeEvents(
+  io: WorkbenchCliIo,
+  events: readonly StoredPipelineEvent[]
+): Promise<void> {
   for (const event of events) {
-    io.stdout.write(`${JSON.stringify(event)}\n`);
+    await writeCliChunk(io.stdout, `${JSON.stringify(event)}\n`);
   }
 }
 

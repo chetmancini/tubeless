@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, readlink, realpath, stat } from "node:fs/promises";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import { isAbortError } from "./abort.js";
@@ -7,7 +7,6 @@ import type { PipelineContext } from "./pipeline.js";
 import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import { renderPipelineError } from "./render.js";
 import type { PipelineRunEventStore } from "./run-store.js";
-import { createJsonTraceExporter } from "./tracing-json.js";
 import type { PipelineTraceExporter } from "./tracing.js";
 import {
   commandContext,
@@ -19,6 +18,7 @@ import {
   manageWorkbenchSignal,
   TUBELESS_WORKBENCH_EXIT_CODE,
   toExitCode,
+  writeCliChunk,
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
@@ -219,16 +219,27 @@ function composeTraceExporters(exporters: readonly PipelineTraceExporter[]): Pip
   if (exporters.length === 1) return exporters[0]!;
   return {
     async export(event) {
-      for (const exporter of exporters) {
-        await exporter.export(event);
-      }
+      await invokeEveryExporter(exporters, (exporter) => exporter.export(event));
     },
     async flush() {
-      for (const exporter of exporters) {
-        await exporter.flush?.();
-      }
+      await invokeEveryExporter(exporters, (exporter) => exporter.flush?.());
     },
   };
+}
+
+async function invokeEveryExporter(
+  exporters: readonly PipelineTraceExporter[],
+  invoke: (exporter: PipelineTraceExporter) => void | Promise<void>
+): Promise<void> {
+  let firstError: unknown;
+  for (const exporter of exporters) {
+    try {
+      await invoke(exporter);
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+  if (firstError !== undefined) throw firstError;
 }
 
 async function createRunTraceWriter(
@@ -238,9 +249,11 @@ async function createRunTraceWriter(
   if (destination === "-") {
     return {
       close: async () => undefined,
-      exporter: createJsonTraceExporter({
-        write: (line) => io.stdout.write(`${line}\n`),
-      }),
+      exporter: {
+        async export(event) {
+          await writeCliChunk(io.stdout, `${JSON.stringify(event)}\n`);
+        },
+      },
     };
   }
 
@@ -267,36 +280,39 @@ async function createRunTraceWriter(
     exporter: {
       async export(event) {
         if (writeError) throw writeError;
-        if (!stream.write(`${JSON.stringify(event)}\n`) && !writeError) {
-          await waitForStreamDrain(stream);
-        }
+        await writeCliChunk(stream, `${JSON.stringify(event)}\n`);
         if (writeError) throw writeError;
       },
     },
   };
 }
 
+async function canonicalDestination(filename: string, depth = 0): Promise<string> {
+  if (depth > 32) return path.resolve(filename);
+  try {
+    return await realpath(filename);
+  } catch {
+    // Missing leaf or dangling symlink.
+  }
+  try {
+    const target = await readlink(filename);
+    return canonicalDestination(path.resolve(path.dirname(filename), target), depth + 1);
+  } catch {
+    // Not a symlink.
+  }
+  try {
+    return path.join(await realpath(path.dirname(filename)), path.basename(filename));
+  } catch {
+    return path.resolve(filename);
+  }
+}
+
 async function pathsShareIdentity(left: string, right: string): Promise<boolean> {
-  if (left === right) return true;
+  if ((await canonicalDestination(left)) === (await canonicalDestination(right))) return true;
   try {
     const [leftStat, rightStat] = await Promise.all([stat(left), stat(right)]);
     return leftStat.dev === rightStat.dev && leftStat.ino === rightStat.ino;
   } catch {
     return false;
   }
-}
-
-function waitForStreamDrain(stream: NodeJS.WritableStream): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const onError = (error: Error) => {
-      stream.off("drain", onDrain);
-      reject(error);
-    };
-    const onDrain = () => {
-      stream.off("error", onError);
-      resolve();
-    };
-    stream.once("error", onError);
-    stream.once("drain", onDrain);
-  });
 }
