@@ -683,7 +683,7 @@ describe("tubeless workbench", () => {
     );
 
     const planResponse = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/plan`, {
-      body: JSON.stringify({ dryRun: true, step: [], target: ["work"] }),
+      body: JSON.stringify({ dryRun: true, targets: ["work"] }),
       headers: { "content-type": "application/json", "x-tubeless-studio-plan": "1" },
       method: "POST",
     });
@@ -712,7 +712,7 @@ describe("tubeless workbench", () => {
     });
 
     const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
-      body: JSON.stringify({ values: { message: "from-studio", target: ["work"] } }),
+      body: JSON.stringify({ values: { message: "from-studio", targets: ["work"] } }),
       headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
       method: "POST",
     });

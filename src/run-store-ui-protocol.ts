@@ -1,18 +1,20 @@
-import type { CliParameterDescriptor, PipelineCommandPlanInput } from "./cli.js";
-import type { PipelinePlan } from "./pipeline.js";
+import type { CliParameterDescriptor } from "./cli.js";
+import type { PipelinePlan, PipelineRunControls } from "./pipeline.js";
 
 /** Untyped wire shape of a studio plan input; fields validated before use. */
 interface StudioPlanInputWire {
   dryRun?: unknown;
-  step?: unknown;
-  target?: unknown;
+  stepIds?: unknown;
+  targets?: unknown;
 }
 
 /** Untyped wire shape of a studio parameter; fields validated before use. */
 interface StudioParameterWire {
   choices?: unknown;
   default?: unknown;
+  exclusive?: unknown;
   flag?: unknown;
+  group?: unknown;
   key?: unknown;
   multiple?: unknown;
   positional?: unknown;
@@ -52,7 +54,7 @@ export interface PipelineRunStudioLauncher {
   cancel?(runId: string): PipelineRunStudioCancelResult | Promise<PipelineRunStudioCancelResult>;
   /** Process-local live launch ids. Required with `cancel` for studio to advertise Cancel run. */
   liveRunIds?(): readonly string[];
-  plan?(commandId: string, input: PipelineCommandPlanInput): PipelinePlan | Promise<PipelinePlan>;
+  plan?(commandId: string, input: PipelineRunControls): PipelinePlan | Promise<PipelinePlan>;
 }
 
 export function parseStudioLaunchRequest(
@@ -86,27 +88,32 @@ export function parseStudioLaunchRequest(
   return { values: values as PipelineRunStudioLaunchRequest["values"] };
 }
 
-export function parseStudioPlanInput(value: unknown): PipelineCommandPlanInput | undefined {
+export function parseStudioPlanInput(value: unknown): PipelineRunControls | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
   // SAFETY: The object guard above narrows `value` to a non-null object; this
   // wire shape only names the fields we read, leaving their values unchecked.
   const input = value as StudioPlanInputWire;
   if (input.dryRun !== undefined && typeof input.dryRun !== "boolean") return undefined;
-  const selection = (key: "step" | "target"): readonly string[] | undefined => {
+  const selection = (key: "stepIds" | "targets"): readonly string[] | false | undefined => {
     const selected = input[key];
-    if (selected === undefined) return [];
+    if (selected === undefined) return undefined;
     if (
       !Array.isArray(selected) ||
       selected.length > 128 ||
       !selected.every((item) => typeof item === "string" && item.length <= 4_096)
     ) {
-      return undefined;
+      return false;
     }
     return selected;
   };
-  const step = selection("step");
-  const target = selection("target");
-  return step && target ? { dryRun: input.dryRun === true, step, target } : undefined;
+  const stepIds = selection("stepIds");
+  const targets = selection("targets");
+  if (stepIds === false || targets === false) return undefined;
+  const controls: PipelineRunControls = {};
+  if (input.dryRun === true) controls.dryRun = true;
+  if (stepIds !== undefined) controls.stepIds = stepIds;
+  if (targets !== undefined) controls.targets = targets;
+  return controls;
 }
 
 export function isPipelineRunStudioParameter(value: unknown): value is CliParameterDescriptor {
@@ -138,6 +145,12 @@ export function isPipelineRunStudioParameter(value: unknown): value is CliParame
     typeof parameter.default !==
       (parameter.type === "boolean" ? "boolean" : parameter.type === "number" ? "number" : "string")
   ) {
+    return false;
+  }
+  if (parameter.group !== undefined && parameter.group !== "execution") {
+    return false;
+  }
+  if (parameter.exclusive !== undefined && parameter.exclusive !== true) {
     return false;
   }
   return true;

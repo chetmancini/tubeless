@@ -395,19 +395,22 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
       return command.parameters.map((parameter, index) => keys.has(parameter.key) ? parameterControl(parameter, index, scope) : '').join('');
     }
     function bindExclusiveSelections(command, scope) {
-      const control = (key) => {
-        const index = command.parameters.findIndex((parameter) => parameter.key === key);
-        return index < 0 ? null : document.querySelector('[data-' + scope + '-parameter-index="' + index + '"]');
-      };
-      const step = control('step');
-      const target = control('target');
+      const fields = command.parameters.flatMap((parameter, index) => {
+        if (!parameter.exclusive || !parameter.multiple) return [];
+        const field = document.querySelector('[data-' + scope + '-parameter-index="' + index + '"]');
+        return field ? [field] : [];
+      });
       const clear = (field) => {
-        if (!field) return;
         if (field.tagName === 'SELECT') Array.from(field.options).forEach((option) => { option.selected = false; });
         else field.value = '';
       };
-      step?.addEventListener('change', () => { if (step.selectedOptions?.length || step.value) clear(target); });
-      target?.addEventListener('change', () => { if (target.selectedOptions?.length || target.value) clear(step); });
+      fields.forEach((field) => {
+        field.addEventListener('change', () => {
+          if (field.selectedOptions?.length || field.value) {
+            fields.forEach((other) => { if (other !== field) clear(other); });
+          }
+        });
+      });
     }
     function renderCommandForm() {
       const command = selectedCommand();
@@ -418,9 +421,8 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
         $('#previewPlan').classList.add('hidden');
         return;
       }
-      const executionKeyNames = new Set(['dryRun', 'resume', 'step', 'target', 'continueOnError']);
-      const domainKeys = new Set(command.parameters.filter((parameter) => parameter.key !== 'plan' && !executionKeyNames.has(parameter.key)).map((parameter) => parameter.key));
-      const executionKeys = new Set(command.parameters.filter((parameter) => executionKeyNames.has(parameter.key)).map((parameter) => parameter.key));
+      const domainKeys = new Set(command.parameters.filter((parameter) => parameter.group !== 'execution').map((parameter) => parameter.key));
+      const executionKeys = new Set(command.parameters.filter((parameter) => parameter.group === 'execution').map((parameter) => parameter.key));
       const section = (title, note, keys) => keys.size ? '<section class="form-section"><div class="form-section-head"><strong>' + title + '</strong><span>' + note + '</span></div><div class="parameter-grid">' + renderParameters(command, 'run', keys) + '</div></section>' : '';
       $('#parameterFields').innerHTML = section('Pipeline inputs', domainKeys.size + ' parameter' + (domainKeys.size === 1 ? '' : 's'), domainKeys) + section('Execution controls', 'Built into Tubeless', executionKeys);
       bindExclusiveSelections(command, 'run');
@@ -458,12 +460,15 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
       return values;
     }
     function currentPlanInput(command) {
-      const input = { dryRun: false, step: [], target: [] };
+      const input = {};
       command.parameters.forEach((parameter, index) => {
+        if (parameter.group !== 'execution') return;
         const values = parameterValues(parameter, index, 'run');
-        if (parameter.key === 'dryRun') input.dryRun = values[0] === true;
-        if (parameter.key === 'step') input.step = values;
-        if (parameter.key === 'target') input.target = values;
+        if (parameter.type === 'boolean') {
+          if (values[0] === true) input[parameter.key] = true;
+          return;
+        }
+        if (parameter.multiple && values.length) input[parameter.key] = values;
       });
       return input;
     }

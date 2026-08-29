@@ -132,6 +132,40 @@ assert(
   recipes.includes("examples/catalog"),
   "Recipe index must point authors at the project catalog"
 );
+const concepts = readFileSync(join(packageRoot, "docs", "concepts.md"), "utf8");
+const cliGuide = readFileSync(join(packageRoot, "docs", "cli.md"), "utf8");
+const cliJob = readFileSync(join(packageRoot, "examples", "cli-job.ts"), "utf8");
+assert(
+  concepts.includes("`resume`, `stepIds`, and `targets`") &&
+    !concepts.includes("`resume`, `step`, and `target`"),
+  "Concepts must name command-only CLI values as stepIds/targets, not step/target"
+);
+assert(
+  agentGuide.includes("`--step`") &&
+    agentGuide.includes("`stepIds`") &&
+    agentGuide.includes("`targets`"),
+  "Agent guide must distinguish --step/--target flags from stepIds/targets values"
+);
+assert(
+  recipes.includes("`--step`") && recipes.includes("`stepIds`") && recipes.includes("`targets`"),
+  "Recipe index must distinguish --step/--target flags from stepIds/targets values"
+);
+assert(
+  cliGuide.includes("`--step`") && cliGuide.includes("`stepIds`") && cliGuide.includes("`targets`"),
+  "CLI guide must distinguish --step/--target flags from stepIds/targets values"
+);
+assert(
+  cliJob.includes("`--step`") && cliJob.includes("`stepIds`") && cliJob.includes("`targets`"),
+  "CLI recipe must distinguish --step/--target flags from stepIds/targets values"
+);
+const catalog = readFileSync(
+  join(packageRoot, "examples", "catalog", "tubeless.studio.ts"),
+  "utf8"
+);
+assert(
+  catalog.includes("--step/--target") && catalog.includes("stepIds") && catalog.includes("targets"),
+  "Project catalog must distinguish --step/--target flags from stepIds/targets values"
+);
 for (const script of [
   "scripts/evaluate-agent-submission.mjs",
   "scripts/verify-agent-evaluation-runner.mjs",

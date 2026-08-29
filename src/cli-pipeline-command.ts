@@ -23,14 +23,14 @@ import { createPipelineReporter, type PipelineReporterConfig } from "./reporter-
 import { TUBELESS_WORKBENCH_EXIT_CODE } from "./workbench-shared.js";
 
 export type PipelineCliBuiltins = {
-  step: CliStringParam & { multiple: true };
-  target: CliStringParam & { multiple: true };
+  stepIds: CliStringParam & { multiple: true };
+  targets: CliStringParam & { multiple: true };
   continueOnError: CliBooleanParam;
 };
 
 export type PipelineCliValues<TSchema extends CliParamsSchema> = CliParams<TSchema> & {
-  step: readonly string[];
-  target: readonly string[];
+  stepIds: readonly string[];
+  targets: readonly string[];
   continueOnError: boolean;
 };
 
@@ -38,13 +38,6 @@ export type PipelineCliParseResult<TSchema extends CliParamsSchema> =
   | { kind: "values"; values: PipelineCliValues<TSchema> }
   | { kind: "help"; helpText: string }
   | { kind: "error"; errors: readonly string[]; helpText: string };
-
-/** Selection-only input for a side-effect-free pipeline command plan. */
-export interface PipelineCommandPlanInput {
-  dryRun?: boolean;
-  step?: readonly string[];
-  target?: readonly string[];
-}
 
 export interface PipelineCommand<TSchema extends CliParamsSchema, TResult> {
   readonly descriptor: CliCommandDescriptor;
@@ -55,7 +48,7 @@ export interface PipelineCommand<TSchema extends CliParamsSchema, TResult> {
   /** Stable declared goal ids that support dependency-aware target execution. */
   readonly targetIds: readonly string[];
   /** Plan without parsing or requiring domain parameters. */
-  plan(input?: PipelineCommandPlanInput): PipelinePlan;
+  plan(controls?: PipelineRunControls): PipelinePlan;
   /** Generate a static Mermaid flowchart without running or planning the pipeline. */
   toMermaid(options?: PipelineMermaidOptions): string;
   parse(argv?: readonly string[], context?: Partial<CliContext>): PipelineCliParseResult<TSchema>;
@@ -90,7 +83,7 @@ type PipelineCommandMapOptions<TOptions extends object, TSchema extends CliParam
 
 type DefaultPipelineCommandOptions<TSchema extends CliParamsSchema> = Omit<
   PipelineCliValues<TSchema>,
-  "continueOnError" | "dryRun" | "resume" | "step" | "target"
+  "continueOnError" | "dryRun" | "resume" | "stepIds" | "targets"
 >;
 
 type CanDefaultPipelineCommandOptions<TOptions extends object, TSchema extends CliParamsSchema> =
@@ -138,8 +131,8 @@ export type DefinePipelineCommandConfig<
         mapOptions: PipelineCommandMapOptions<TOptions, TSchema>;
       });
 
-const PIPELINE_COMMAND_KEYS = new Set(["continueOnError", "plan", "step", "target"]);
-const PIPELINE_COMMAND_FLAGS = new Set(["continue-on-error", "plan", "step", "target"]);
+const PIPELINE_COMMAND_KEYS = new Set(["continueOnError", "stepIds", "targets"]);
+const PIPELINE_COMMAND_FLAGS = new Set(["continue-on-error", "step", "target"]);
 
 function assertNoPipelineCommandConflicts(params: CliParamsSchema): void {
   for (const [key, param] of Object.entries(params)) {
@@ -161,16 +154,31 @@ function normalizePipelineCliValues<TSchema extends CliParamsSchema>(
   values: CliParams<PipelineCliBuiltins & TSchema>
 ): PipelineCliValues<TSchema> {
   // SAFETY: `PipelineCliValues<TSchema>` is `CliParams<TSchema>` plus the builtin
-  // `step`/`target`/`continueOnError` keys, all of which `CliParams<PipelineCliBuiltins & TSchema>`
+  // `stepIds`/`targets`/`continueOnError` keys, all of which `CliParams<PipelineCliBuiltins & TSchema>`
   // already provides, so the runtime shape matches the target type.
   const pipelineValues = values as PipelineCliValues<TSchema>;
-  const { continueOnError, step, target } = pipelineValues;
+  const { continueOnError, stepIds, targets } = pipelineValues;
   return {
     ...pipelineValues,
     continueOnError,
-    step,
-    target: target ?? [],
+    stepIds,
+    targets: targets ?? [],
   };
+}
+
+function pipelineRunControlsFromCliValues(values: {
+  continueOnError: boolean;
+  dryRun: boolean;
+  stepIds: readonly string[];
+  targets: readonly string[];
+}): PipelineRunControls {
+  const controls: PipelineRunControls = {
+    dryRun: values.dryRun,
+    continueOnError: values.continueOnError,
+  };
+  if (values.stepIds.length > 0) controls.stepIds = values.stepIds;
+  if (values.targets.length > 0) controls.targets = values.targets;
+  return controls;
 }
 
 function normalizePipelineHookSets<TResult>(
@@ -192,7 +200,7 @@ function isHookConfigFunction<TResult, TSchema extends CliParamsSchema>(
 function defaultPipelineCommandOptions<TSchema extends CliParamsSchema>(
   values: PipelineCliValues<TSchema>
 ): DefaultPipelineCommandOptions<TSchema> {
-  const { continueOnError, dryRun, resume, step, target, ...domainValues } = values;
+  const { continueOnError, dryRun, resume, stepIds, targets, ...domainValues } = values;
   return domainValues;
 }
 
@@ -212,21 +220,28 @@ export function definePipelineCommand<
 
   const targetFlagEnabled = pipeline.targetIds.length > 0;
   const bridgeParams: CliParamsSchema = {
-    step: {
+    stepIds: {
       type: "string",
       multiple: true,
+      flag: "step",
+      group: "execution",
+      exclusive: true,
       choices: pipeline.stepIds,
       description: `Run exactly this step. Steps: ${pipeline.stepIds.join(", ")}`,
     },
     continueOnError: {
       type: "boolean",
+      group: "execution",
       description: "Continue independent work after a step fails.",
     },
   };
   if (targetFlagEnabled) {
-    bridgeParams.target = {
+    bridgeParams.targets = {
       type: "string",
       multiple: true,
+      flag: "target",
+      group: "execution",
+      exclusive: true,
       choices: pipeline.targetIds,
       description: `Run this declared target and its prerequisites. Targets: ${pipeline.targetIds.join(", ")}`,
     };
@@ -245,7 +260,7 @@ export function definePipelineCommand<
     validate: (values, context) => {
       const pipelineValues = normalizePipelineCliValues<TSchema>(values);
       const errors = config.validate?.(pipelineValues, context) ?? [];
-      if (pipelineValues.step.length > 0 && pipelineValues.target.length > 0) {
+      if (pipelineValues.stepIds.length > 0 && pipelineValues.targets.length > 0) {
         return ["--step and --target cannot be used together.", ...errors];
       }
       return errors.length > 0 ? errors : undefined;
@@ -260,16 +275,12 @@ export function definePipelineCommand<
         // `CanDefaultPipelineCommandOptions` constraint guarantees map to `TOptions`.
         mapped = defaultPipelineCommandOptions(pipelineValues) as TOptions;
       }
-      const controls: PipelineRunControls = {
+      const controls = pipelineRunControlsFromCliValues({
         dryRun: values.dryRun,
         continueOnError: pipelineValues.continueOnError,
-      };
-      if (pipelineValues.step.length > 0) {
-        controls.stepIds = pipelineValues.step;
-      }
-      if (targetFlagEnabled && pipelineValues.target.length > 0) {
-        controls.targets = pipelineValues.target;
-      }
+        stepIds: pipelineValues.stepIds,
+        targets: targetFlagEnabled ? pipelineValues.targets : [],
+      });
 
       const reporter =
         config.reporter === false
@@ -321,16 +332,7 @@ export function definePipelineCommand<
       : result;
   }
 
-  function plan(input: PipelineCommandPlanInput = {}): PipelinePlan {
-    const controls: PipelineRunControls = {
-      dryRun: input.dryRun === true,
-    };
-    if (input.step && input.step.length > 0) {
-      controls.stepIds = input.step;
-    }
-    if (input.target && input.target.length > 0) {
-      controls.targets = input.target;
-    }
+  function plan(controls: PipelineRunControls = {}): PipelinePlan {
     return pipeline.plan(controls);
   }
 

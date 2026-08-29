@@ -28,7 +28,6 @@ export {
   type PipelineCommandHookConfig,
   type PipelineCommandHookContext,
   type PipelineCommandHookSets,
-  type PipelineCommandPlanInput,
 } from "./cli-pipeline-command.js";
 export {
   normalizeMultiSelectChoices,

@@ -41,9 +41,11 @@ or shared helpers in this repository.
 - Use `runConcurrent` for bounded lightweight functions that do not need child
   lifecycle events.
 - Use `definePipelineCommand` for scripts centered on a pipeline. Do not parse
-  `process.argv` manually or redeclare built-in dry-run, step, or target flags.
-  Omit `mapOptions` when validated flags already satisfy same-name pipeline
-  options; provide it when names, types, defaults, or derived values differ.
+  `process.argv` manually or redeclare built-in dry-run, `--step`, or `--target`
+  flags. `mapOptions`, validation, and hooks receive `stepIds` and `targets`,
+  not `step` or `target`. Omit `mapOptions` when validated flags already satisfy
+  same-name pipeline options; provide it when names, types, defaults, or derived
+  values differ.
   The returned command exposes an immutable `descriptor`; UI adapters should
   render that structured parameter contract instead of parsing help text.
   Use `command.plan()` or `tubeless plan` for a selection-only preview. Do not

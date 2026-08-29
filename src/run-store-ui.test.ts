@@ -172,6 +172,8 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("Pipeline inputs");
     expect(html).toContain("Execution controls");
     expect(html).toContain("Built into Tubeless");
+    expect(html).toContain("if (!parameter.exclusive || !parameter.multiple) return []");
+    expect(html).not.toContain("parameter.group !== 'execution' || !parameter.multiple");
     expect(html).toContain("if (checked !== Boolean(parameter.default))");
     expect(html).toContain("Clear run history?");
     expect(html).toContain("Cancel run");
@@ -223,7 +225,7 @@ describe("local pipeline run studio", () => {
 
   it("exposes only injected commands and delegates bounded structured launch values", async () => {
     const launches: { commandId: string; values: Record<string, unknown> }[] = [];
-    const plans: { commandId: string; dryRun?: boolean; target?: readonly string[] }[] = [];
+    const plans: { commandId: string; dryRun?: boolean; targets?: readonly string[] }[] = [];
     const server = await startPipelineRunStudio({
       launcher: {
         commands: [
@@ -236,7 +238,7 @@ describe("local pipeline run studio", () => {
           },
         ],
         plan(commandId, input) {
-          plans.push({ commandId, dryRun: input.dryRun, target: input.target });
+          plans.push({ commandId, dryRun: input.dryRun, targets: input.targets });
           return {
             dryRun: input.dryRun === true,
             errors: [],
@@ -269,7 +271,7 @@ describe("local pipeline run studio", () => {
       ],
     });
     const planResponse = await fetch(`${server.url}/api/commands/fixture/plan`, {
-      body: JSON.stringify({ dryRun: true, step: [], target: ["publish"] }),
+      body: JSON.stringify({ dryRun: true, targets: ["publish"] }),
       headers: { "content-type": "application/json", "x-tubeless-studio-plan": "1" },
       method: "POST",
     });
@@ -277,7 +279,7 @@ describe("local pipeline run studio", () => {
     await expect(planResponse.json()).resolves.toMatchObject({
       plan: { dryRun: true, ok: true, pipelineId: "fixture" },
     });
-    expect(plans).toEqual([{ commandId: "fixture", dryRun: true, target: ["publish"] }]);
+    expect(plans).toEqual([{ commandId: "fixture", dryRun: true, targets: ["publish"] }]);
     const response = await fetch(`${server.url}/api/commands/fixture/runs`, {
       body: JSON.stringify({
         values: { dryRun: false, message: "hello world", retries: [1, 2], tags: ["one", "two"] },

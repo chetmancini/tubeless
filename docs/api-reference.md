@@ -10,7 +10,7 @@ Package: `tubeless`
 | --------------------------- | ------------------------------ | ------------------------------------------------------------------ | ---------------: |
 | `tubeless`                  | `./dist/pipeline.d.ts`         | `e0c9802d5dcb71b319562d301c452446d74ea1c67d18b3ad76617467127bca71` |               68 |
 | `tubeless/batch`            | `./dist/batch.d.ts`            | `2ae7ccbf0fb6582243d2a395c2d2b0fe561fd19d3850309321b7d270c5a8d015` |                5 |
-| `tubeless/cli`              | `./dist/cli.d.ts`              | `fa8aeac9a22f491ef6b90da82fd15523e87d6185a93efcc57568337dff2086fb` |               36 |
+| `tubeless/cli`              | `./dist/cli.d.ts`              | `7c44bb570491f7c418452c1e2c58ee73741bafc241bc914ae071a18b39e14bb4` |               35 |
 | `tubeless/node`             | `./dist/node.d.ts`             | `d6f70752eb9e0ea752b8e2bfb9418f5d30bd46d790360504434fdfeb6a6f7414` |                8 |
 | `tubeless/rate-limit`       | `./dist/rate-limit.d.ts`       | `a6b8642be882b01931597b1e0294094cb0a23fd9075c4d22aefe22d1ad1e5330` |                1 |
 | `tubeless/render`           | `./dist/render.d.ts`           | `1e9e3c4f18d8cf6992ec48c7f793ebbfc3bc43219d8694fb6cee76da83d98479` |                6 |
@@ -140,7 +140,6 @@ Package: `tubeless`
 - `PipelineCommandHookConfig`
 - `PipelineCommandHookContext`
 - `PipelineCommandHookSets`
-- `PipelineCommandPlanInput`
 - `promptMultiSelect`
 - `PromptMultiSelectOptions`
 - `TUBELESS_WORKBENCH_EXIT_CODE`

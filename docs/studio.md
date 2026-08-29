@@ -31,7 +31,7 @@ forms render each command's structured parameter contract: booleans as
 checkboxes, constrained strings as selects, numbers with their bounds, and
 paths or unconstrained values as text fields. Submitted values go through the
 normal typed command parser without a shell. **Preview plan** uses the dry-run
-and step/target values from the same form; it never creates a run.
+and stepIds/targets values from the same form; it never creates a run.
 
 Default bind address is `127.0.0.1`, default port is `4317`, and the default
 store is `.tubeless/runs.sqlite`. Browser-triggered execution requires a

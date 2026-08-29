@@ -27,6 +27,7 @@ const DRY_RUN_KEY = "dryRun";
 const DRY_RUN_PARAM: CliBooleanParam = {
   type: "boolean",
   description: "Preview without making changes.",
+  group: "execution",
 };
 const RESUME_KEY = "resume";
 const RESERVED_FLAG_NAMES: ReadonlySet<string> = new Set([
@@ -54,6 +55,7 @@ export function buildEffectiveSchema(
     type: "boolean",
     description: "Resume: skip work that's already done instead of starting fresh.",
     default: checkpoint?.defaultResume ?? false,
+    group: "execution",
   };
   return {
     [DRY_RUN_KEY]: DRY_RUN_PARAM,
@@ -102,6 +104,12 @@ export function commandDescriptor(
       required,
       type: param.type,
     };
+    if (param.group !== undefined) {
+      descriptor.group = param.group;
+    }
+    if (param.exclusive === true) {
+      descriptor.exclusive = true;
+    }
     if (param.type === "string" && param.choices) {
       descriptor.choices = Object.freeze([...param.choices]);
     }
@@ -412,7 +420,9 @@ type MutableCliParameterDescriptor = {
   default?: string | number | boolean;
   description?: string;
   environment?: string;
+  exclusive?: true;
   flag: string;
+  group?: "execution";
   integer?: boolean;
   key: string;
   max?: number;

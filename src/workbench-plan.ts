@@ -1,5 +1,4 @@
 import { parseArgs } from "node:util";
-import type { PipelineCommandPlanInput } from "./cli.js";
 import type { PipelineRunControls } from "./pipeline.js";
 import { renderPipelinePlan } from "./render.js";
 import {
@@ -65,13 +64,8 @@ export async function runPlan(argv: readonly string[], io: WorkbenchCliIo): Prom
   };
   if (parsed.values.step !== undefined) controls.stepIds = parsed.values.step;
   if (parsed.values.target !== undefined) controls.targets = parsed.values.target;
-  const planInput: PipelineCommandPlanInput = { dryRun: controls.dryRun };
-  if (controls.stepIds !== undefined) planInput.step = controls.stepIds;
-  if (controls.targets !== undefined) planInput.target = controls.targets;
-  const plan =
-    loaded.source.kind === "command"
-      ? loaded.source.command.plan(planInput)
-      : loaded.source.pipeline.plan(controls);
+  const view = loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
+  const plan = view.plan(controls);
   const rendered = parsed.values.json
     ? renderPipelinePlan(plan, { format: "json", pretty: true })
     : renderPipelinePlan(plan, { explain: parsed.values.explain ?? false });

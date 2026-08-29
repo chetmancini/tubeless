@@ -64,7 +64,9 @@ describe("definePipelineCommand", () => {
     expect(seen[0]).not.toHaveProperty("plan");
     expect(seen[0]).not.toHaveProperty("resume");
     expect(seen[0]).not.toHaveProperty("step");
+    expect(seen[0]).not.toHaveProperty("stepIds");
     expect(seen[0]).not.toHaveProperty("target");
+    expect(seen[0]).not.toHaveProperty("targets");
   });
 
   it("defaults same-name validated flags into compatible required domain options", async () => {
@@ -112,6 +114,35 @@ describe("definePipelineCommand", () => {
     expect(result.helpText).toContain("one of: first, second");
     expect(result.helpText).toContain("--continue-on-error");
     expect(result.helpText).not.toContain("--plan");
+    expect(
+      command.descriptor.parameters
+        .filter((parameter) => parameter.group === "execution")
+        .map((parameter) => parameter.key)
+    ).toEqual(["dryRun", "resume", "stepIds", "continueOnError", "targets"]);
+    expect(
+      command.descriptor.parameters
+        .filter((parameter) => parameter.exclusive === true)
+        .map((parameter) => parameter.key)
+    ).toEqual(["stepIds", "targets"]);
+  });
+
+  it("does not treat a custom execution-group parameter as exclusive with step or target", () => {
+    const command = definePipelineCommand(makeMiniPipeline(), {
+      params: {
+        tags: { type: "string", multiple: true, group: "execution" },
+      },
+      mapOptions: () => ({}),
+    });
+
+    expect(command.descriptor.parameters.find((parameter) => parameter.key === "tags")?.group).toBe(
+      "execution"
+    );
+    expect(
+      command.descriptor.parameters.find((parameter) => parameter.key === "tags")?.exclusive
+    ).toBeUndefined();
+    expect(
+      command.descriptor.parameters.find((parameter) => parameter.key === "stepIds")?.exclusive
+    ).toBe(true);
   });
 
   it("plans from selection controls without requiring domain parameters", () => {
@@ -120,7 +151,7 @@ describe("definePipelineCommand", () => {
       mapOptions: () => ({}),
     });
 
-    const plan = command.plan({ dryRun: true, target: ["first"] });
+    const plan = command.plan({ dryRun: true, targets: ["first"] });
 
     expect(plan).toMatchObject({
       dryRun: true,
@@ -131,6 +162,19 @@ describe("definePipelineCommand", () => {
         { id: "second", selected: false, skipReason: "filtered" },
       ],
     });
+  });
+
+  it("forwards PipelineRunControls to pipeline.plan without remapping empty arrays", () => {
+    const command = definePipelineCommand(makeMiniPipeline(), { mapOptions: () => ({}) });
+    const pipeline = makeMiniPipeline();
+
+    const empty = command.plan({ stepIds: [] });
+    expect(empty.ok).toBe(false);
+    expect(empty.errors[0]?.code).toBe("TUBELESS_PLANNING_STEP_SELECTION_EMPTY");
+    expect(empty.errors[0]?.code).toBe(pipeline.plan({ stepIds: [] }).errors[0]?.code);
+
+    const conflict = command.plan({ stepIds: ["first"], targets: ["second"] });
+    expect(conflict.errors[0]?.code).toBe("TUBELESS_PLANNING_SELECTION_CONFLICT");
   });
 
   it("exposes the owned pipeline identity and static graph", () => {
@@ -160,7 +204,7 @@ describe("definePipelineCommand", () => {
     expect(pipeline.targetIds).toEqual([]);
     expect(result.kind === "help" && result.helpText).not.toContain("--target");
 
-    const undeclared = command.plan({ target: ["internal"] });
+    const undeclared = command.plan({ targets: ["internal"] });
     expect(undeclared.ok).toBe(false);
     expect(undeclared.errors[0]?.code).toBe("TUBELESS_PLANNING_TARGET_UNDECLARED");
   });
@@ -402,7 +446,7 @@ describe("definePipelineCommand", () => {
       { mapOptions: () => ({}) }
     );
 
-    const plan = command.plan({ step: ["first"] });
+    const plan = command.plan({ stepIds: ["first"] });
     expect(ran).toBe(false);
     expect(renderPipelinePlan(plan).split("\n")).toEqual([
       "Pipeline mini: plan (ok=true, dryRun=false, steps=2)",
@@ -420,7 +464,7 @@ describe("definePipelineCommand", () => {
       { mapOptions: () => ({}), reporter: false }
     );
 
-    const plan = command.plan({ target: ["first", "first"] });
+    const plan = command.plan({ targets: ["first", "first"] });
 
     expect(plan.ok).toBe(false);
     expect(plan.errors[0]).toMatchObject({
@@ -452,7 +496,7 @@ describe("definePipelineCommand", () => {
       reporter: false,
     });
 
-    const plan = command.plan({ target: ["publish"] });
+    const plan = command.plan({ targets: ["publish"] });
 
     expect(renderPipelinePlan(plan).split("\n")).toEqual([
       "Pipeline explained-target: plan (ok=true, dryRun=false, steps=3)",
@@ -590,10 +634,17 @@ describe("definePipelineCommand", () => {
   it("rejects bridge parameter and flag collisions at definition time", () => {
     expect(() =>
       definePipelineCommand(makeMiniPipeline(), {
+        params: { stepIds: { type: "string" } as never },
+        mapOptions: () => ({}),
+      })
+    ).toThrow(/"stepIds" is a reserved parameter/);
+
+    expect(() =>
+      definePipelineCommand(makeMiniPipeline(), {
         params: { step: { type: "string" } as never },
         mapOptions: () => ({}),
       })
-    ).toThrow(/"step" is a reserved parameter/);
+    ).toThrow(/--step is a reserved flag/);
 
     expect(() =>
       definePipelineCommand(makeMiniPipeline(), {
@@ -601,20 +652,17 @@ describe("definePipelineCommand", () => {
         mapOptions: () => ({}),
       })
     ).toThrow(/--continue-on-error is a reserved flag/);
+  });
 
-    expect(() =>
-      definePipelineCommand(makeMiniPipeline(), {
-        params: { plan: { type: "boolean" } },
-        mapOptions: () => ({}),
-      })
-    ).toThrow(/"plan" is a reserved parameter/);
+  it("does not reserve a ghost plan parameter or --plan flag", () => {
+    const command = definePipelineCommand(makeMiniPipeline(), {
+      params: { plan: { type: "boolean" } },
+      mapOptions: () => ({}),
+    });
+    const result = command.parse(["--plan"]);
 
-    expect(() =>
-      definePipelineCommand(makeMiniPipeline(), {
-        params: { preview: { type: "boolean", flag: "plan" } },
-        mapOptions: () => ({}),
-      })
-    ).toThrow(/--plan is a reserved flag/);
+    expect(result.kind).toBe("values");
+    expect(result.kind === "values" && result.values.plan).toBe(true);
   });
 
   it("treats --plan as an unknown pipeline-command flag", () => {

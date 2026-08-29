@@ -103,7 +103,8 @@ tubeless run [options] <command-file> [-- <command-args...>]
 `run` accepts only a `definePipelineCommand` export. That export owns parsing,
 validation, option mapping, reporting, and the result summary. Omit `mapOptions`
 when validated flags already satisfy same-name pipeline options; keep it when
-names, types, defaults, or derived values differ.
+names, types, defaults, or derived values differ. `--step` and `--target` stay
+the flag names; the parsed keys are `stepIds` and `targets`.
 
 A first script is [`cli-job.ts`](../examples/cli-job.ts). Local history with
 `--store` is covered in [the studio](./studio.md).

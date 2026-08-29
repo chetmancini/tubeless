@@ -39,6 +39,8 @@ inventory.
 6. Use `definePipelineCommand` for pipeline scripts; use `defineCommand` only
    when the script is not centered on a pipeline. Preview selection with
    `command.plan()` or `tubeless plan`; do not simulate planning with `--plan`.
+   `--step` and `--target` are argv flags; `mapOptions` and hooks read `stepIds`
+   and `targets`.
 7. Declare public goals with `targets: [step]` on the pipeline, select their IDs
    for goal-oriented execution, and use `stepIds` only for an exact filter. Use
    `requireOutputs` when the final domain result is not meaningful without
