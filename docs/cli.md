@@ -103,8 +103,9 @@ tubeless run [options] <command-file> [-- <command-args...>]
 - `--trace <path>` writes NDJSON traces to a file, or `-` for stdout
 
 `--store` and `--trace` can be combined. Traces stay off stdout unless `--trace -`
-is set, so the TTY reporter and command result stay intact. The binary does not
-attach OpenTelemetry; keep that SDK at the application exporter boundary.
+is set. When `--trace -` is set, the TTY reporter and command result go to
+stderr so stdout stays valid NDJSON. The binary does not attach OpenTelemetry;
+keep that SDK at the application exporter boundary.
 
 `run` accepts only a `definePipelineCommand` export. That export owns parsing,
 validation, option mapping, reporting, and the result summary. Omit `mapOptions`

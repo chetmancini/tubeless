@@ -31,6 +31,7 @@ Options:
   -e, --export <name>   Select a command export when the file has more than one
       --store <path>    Append run events to a local SQLite database
       --trace <path>    Write NDJSON traces to a file, or - for stdout
+                        (command output then goes to stderr)
   -h, --help            Show this workbench help
 
 Pass application flags after --. For command help, use: tubeless run <file> -- --help
@@ -155,6 +156,7 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
   const managedSignal = manageWorkbenchSignal(io);
   let store: PipelineRunEventStore | undefined;
   let closeTrace: (() => Promise<void>) | undefined;
+  let exitCode: number = TUBELESS_WORKBENCH_EXIT_CODE.execution;
   try {
     const exporters: PipelineTraceExporter[] = [];
     if (parsed.parsed.values.store) {
@@ -171,21 +173,31 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
       exporters.length > 0
         ? { tracing: { exporter: composeTraceExporters(exporters) } }
         : undefined;
-    const exitCode = await executePipelineCommand(
+    const commandIo = parsed.parsed.values.trace === "-" ? { ...io, stdout: io.stderr } : io;
+    exitCode = await executePipelineCommand(
       loaded.command,
       parsed.commandArgs,
-      io,
+      commandIo,
       managedSignal.signal,
       pipelineContext
     );
-    return exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success && managedSignal.wasInterrupted()
-      ? TUBELESS_WORKBENCH_EXIT_CODE.cancellation
-      : exitCode;
+    if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success && managedSignal.wasInterrupted()) {
+      exitCode = TUBELESS_WORKBENCH_EXIT_CODE.cancellation;
+    }
+  } catch (error) {
+    io.stderr.write(`Error: ${errorMessage(error)}\n`);
+    exitCode = toExitCode(error);
   } finally {
-    await closeTrace?.();
+    try {
+      await closeTrace?.();
+    } catch (error) {
+      io.stderr.write(`Error: ${errorMessage(error)}\n`);
+      if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success) exitCode = toExitCode(error);
+    }
     await store?.close();
     managedSignal.cleanup();
   }
+  return exitCode;
 }
 
 function composeTraceExporters(exporters: readonly PipelineTraceExporter[]): PipelineTraceExporter {
@@ -220,16 +232,26 @@ async function createRunTraceWriter(
   const filename = path.resolve(io.cwd, destination);
   await mkdir(path.dirname(filename), { recursive: true });
   const stream = createWriteStream(filename);
+  let writeError: Error | undefined;
+  stream.on("error", (error) => {
+    writeError = error;
+  });
   return {
     close: () =>
       new Promise((resolve, reject) => {
+        if (writeError) {
+          reject(writeError);
+          return;
+        }
         stream.end((error?: Error | null) => {
           if (error) reject(error);
+          else if (writeError) reject(writeError);
           else resolve();
         });
       }),
     exporter: createJsonTraceExporter({
       write: (line) => {
+        if (writeError) throw writeError;
         stream.write(`${line}\n`);
       },
     }),

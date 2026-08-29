@@ -61,8 +61,9 @@ or shared helpers in this repository.
 - Use `tubeless run <command-file> -- <command-args>` only for modules exporting a
   `definePipelineCommand`. Keep application flags after `--`; the command must
   continue to own domain validation and option mapping. Pass `--trace <path>` for
-  NDJSON traces (`-` writes to stdout) and `--store` for SQLite; they compose.
-  Use `tubeless history` to list or show recorded runs.
+  NDJSON traces (`-` writes NDJSON to stdout and moves command output to stderr)
+  and `--store` for SQLite; they compose. Use `tubeless history` to list or show
+  recorded runs.
 
 ## Runtime rules
 

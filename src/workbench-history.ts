@@ -2,7 +2,7 @@ import { stat } from "node:fs/promises";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import {
-  projectPipelineRunStore,
+  createPipelineRunProjector,
   type PipelineRunEventQuery,
   type PipelineRunEventStore,
   type StoredPipelineEvent,
@@ -43,20 +43,22 @@ function parseHistoryArgs(argv: readonly string[]) {
   });
 }
 
-async function listAllEvents(
+async function forEachEventPage(
   store: PipelineRunEventStore,
-  query: PipelineRunEventQuery = {}
-): Promise<StoredPipelineEvent[]> {
-  const events: StoredPipelineEvent[] = [];
+  query: PipelineRunEventQuery,
+  onPage: (page: readonly StoredPipelineEvent[]) => void
+): Promise<number> {
   let afterId: number | undefined;
+  let eventCount = 0;
   while (true) {
     const page = await store.listEvents({ ...query, afterId, limit: EVENT_PAGE_SIZE });
     if (page.length === 0) break;
-    events.push(...page);
+    eventCount += page.length;
+    onPage(page);
     afterId = page[page.length - 1]!.id;
     if (page.length < EVENT_PAGE_SIZE) break;
   }
-  return events;
+  return eventCount;
 }
 
 interface HistoryRunSummary {
@@ -143,17 +145,19 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
 
   const { openSqlitePipelineRunStore } = await import("./run-store-sqlite.js");
   const store = await openSqlitePipelineRunStore(filename);
+  const query: PipelineRunEventQuery = runId === undefined ? {} : { runId };
   try {
-    const events = await listAllEvents(store, runId === undefined ? {} : { runId });
     if (parsed.values.events) {
-      if (runId !== undefined && events.length === 0) {
+      const eventCount = await forEachEventPage(store, query, (page) => writeEvents(io, page));
+      if (runId !== undefined && eventCount === 0) {
         return writeUsageError(io, `Unknown run ${JSON.stringify(runId)}.`, HISTORY_USAGE);
       }
-      writeEvents(io, events);
       return TUBELESS_WORKBENCH_EXIT_CODE.success;
     }
 
-    const snapshot = projectPipelineRunStore(events);
+    const projector = createPipelineRunProjector({ retainLogs: runId !== undefined });
+    await forEachEventPage(store, query, (page) => projector.append(page));
+    const snapshot = projector.snapshot();
     if (runId !== undefined) {
       const run = snapshot.runs.find((candidate) => candidate.runId === runId);
       if (!run) {

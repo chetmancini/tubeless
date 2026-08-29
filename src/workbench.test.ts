@@ -672,10 +672,33 @@ describe("tubeless workbench", () => {
     );
 
     expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
-    expect(io.output.join("")).toContain("completed:hello");
-    const events = parseNdjson(io.output.join(""));
+    expect(io.errors.join("")).toContain("completed:hello");
+    const stdout = io.output.join("");
+    expect(stdout).not.toContain("completed:hello");
+    const lines = stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    expect(lines.every((line) => line.startsWith("{"))).toBe(true);
+    const events = parseNdjson(stdout);
+    expect(events).toHaveLength(lines.length);
     expect(events.map(({ name }) => name)).toContain("pipeline.started");
     expect(events.map(({ name }) => name)).toContain("pipeline.completed");
+  });
+
+  it("reports a late write failure from --trace without crashing", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const tracePath = path.join(directory, "traces");
+    await mkdir(tracePath, { recursive: true });
+
+    const exitCode = await runWorkbenchCli(
+      ["run", "--trace", tracePath, "pipeline.mjs", "--", "--message", "hello", "--target", "work"],
+      io
+    );
+
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.execution);
+    expect(io.errors.join("")).toMatch(/EISDIR|directory|Error/i);
   });
 
   it("records JSON traces and SQLite events together", async () => {
