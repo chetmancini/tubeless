@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
@@ -727,6 +728,31 @@ describe("tubeless workbench", () => {
     expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.execution);
     expect(io.errors.join("")).toMatch(/broken pipe|Error/i);
   });
+
+  it.skipIf(!existsSync("/dev/full"))(
+    "fails the run when --trace writes to a full device",
+    async () => {
+      const { directory } = await writeActualPipelineCommandModule();
+      const io = captureIo(directory);
+      const exitCode = await runWorkbenchCli(
+        [
+          "run",
+          "--trace",
+          "/dev/full",
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      );
+      expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.execution);
+      expect(io.errors.join("")).toMatch(/ENOSPC|Error/i);
+      expect(io.output.join("")).not.toContain("completed:hello");
+    }
+  );
 
   it("records JSON traces and SQLite events together", async () => {
     const { directory } = await writeActualPipelineCommandModule();

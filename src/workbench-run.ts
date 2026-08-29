@@ -309,13 +309,15 @@ async function createRunTraceWriter(
     bindSignal,
     close: () =>
       new Promise((resolve, reject) => {
+        const retainedError =
+          writeError ?? (stream.errored instanceof Error ? stream.errored : undefined);
+        if (retainedError) {
+          reject(retainedError);
+          return;
+        }
         if (writeSignal?.aborted || stream.destroyed) {
           destroyOnAbort();
           resolve();
-          return;
-        }
-        if (writeError) {
-          reject(writeError);
           return;
         }
         stream.end((error?: Error | null) => {
