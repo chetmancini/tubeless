@@ -23,6 +23,10 @@ interface ObservedIo extends TrampolineIo {
 interface FakeRelayConfig {
   probeResult: TrampolineProbeResult;
   relayOutcome: TrampolineRelayOutcome;
+  /** Fake relay child pid; undefined simulates a failed spawn. */
+  childPid?: number;
+  /** Value `processGroupOf` reports for the relay child. */
+  relayProcessGroup?: number;
 }
 
 function fakeIo(config: FakeRelayConfig): ObservedIo {
@@ -39,11 +43,14 @@ function fakeIo(config: FakeRelayConfig): ObservedIo {
       relays.push([binPath, argv]);
       return {
         outcome: Promise.resolve(config.relayOutcome),
+        childPid: config.childPid,
         sendSignal: (signal) => {
           forwarded.push(signal);
         },
       };
     },
+    processGroupOf: (pid) => (pid === config.childPid ? config.relayProcessGroup : undefined),
+    ownProcessGroup: 1000,
     pid: 4242,
     writeError: (message) => {
       errors.push(message);
@@ -129,13 +136,42 @@ describe("runTrampoline", () => {
   });
 
   it("registers forwarding for supervisor signals and relays them to the Bun child", async () => {
-    const io = fakeIo({ probeResult: { status: 0 }, relayOutcome: { status: 0, signal: null } });
+    const io = fakeIo({
+      probeResult: { status: 0 },
+      relayOutcome: { status: 0, signal: null },
+      childPid: 777,
+      relayProcessGroup: 2000,
+    });
 
     await runTrampoline("/bin/tubeless.js", [], io);
     expect(io.signalHandlers).toHaveLength(1);
     io.signalHandlers[0]("SIGTERM");
     io.signalHandlers[0]("SIGINT");
     expect(io.forwarded).toEqual(["SIGTERM", "SIGINT"]);
+  });
+
+  it("skips forwarding when the relay shares the trampoline's process group", async () => {
+    const io = fakeIo({
+      probeResult: { status: 0 },
+      relayOutcome: { status: 0, signal: null },
+      childPid: 777,
+      relayProcessGroup: 1000,
+    });
+
+    await runTrampoline("/bin/tubeless.js", [], io);
+    expect(io.signalHandlers).toHaveLength(0);
+  });
+
+  it("forwards when the relay's process group cannot be read", async () => {
+    const io = fakeIo({
+      probeResult: { status: 0 },
+      relayOutcome: { status: 0, signal: null },
+      childPid: 777,
+      relayProcessGroup: undefined,
+    });
+
+    await runTrampoline("/bin/tubeless.js", [], io);
+    expect(io.signalHandlers).toHaveLength(1);
   });
 
   it("forwards every declared supervisor signal", () => {
@@ -146,6 +182,8 @@ describe("runTrampoline", () => {
     const io = fakeIo({
       probeResult: { status: 0 },
       relayOutcome: { status: null, signal: "SIGTERM" },
+      childPid: 777,
+      relayProcessGroup: 2000,
     });
 
     expect(await runTrampoline("/bin/tubeless.js", [], io)).toBe(MISSING_BUN_EXIT_CODE);

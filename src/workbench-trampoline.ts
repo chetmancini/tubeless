@@ -1,5 +1,14 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import { spawnSync } from "node:child_process";
+import { type ChildProcess, execSync, spawn, spawnSync } from "node:child_process";
+
+function readOwnProcessGroup(): number {
+  try {
+    const output = execSync(`ps -o pgid= -p ${process.pid}`, { encoding: "utf8" });
+    const pgid = Number.parseInt(output.trim(), 10);
+    return Number.isNaN(pgid) ? process.pid : pgid;
+  } catch {
+    return process.pid;
+  }
+}
 
 /** Exit code used when Bun cannot be launched to run the workbench. */
 export const MISSING_BUN_EXIT_CODE = 127;
@@ -20,6 +29,14 @@ export interface TrampolineRelayOutcome {
   signal?: NodeJS.Signals | null;
 }
 
+/** Handle for a started relay child. */
+export interface TrampolineRelayHandle {
+  outcome: Promise<TrampolineRelayOutcome>;
+  /** Pid of the relay child, or undefined when the spawn failed. */
+  childPid: number | undefined;
+  sendSignal: (signal: NodeJS.Signals) => void;
+}
+
 /** Process plumbing the trampoline needs; injectable for tests. */
 export interface TrampolineIo {
   /**
@@ -32,17 +49,15 @@ export interface TrampolineIo {
    * must stop resolving once the child exits, dies by signal, or fails to
    * spawn, and must deliver signals sent to `sendSignal` to the child.
    */
-  readonly startRelay: (
-    binPath: string,
-    argv: readonly string[]
-  ) => {
-    outcome: Promise<TrampolineRelayOutcome>;
-    sendSignal: (signal: NodeJS.Signals) => void;
-  };
+  readonly startRelay: (binPath: string, argv: readonly string[]) => TrampolineRelayHandle;
   /** Write a diagnostic or install message to the operator. */
   readonly writeError: (message: string) => void;
+  /** Process group of the given pid, or undefined when it cannot be read. */
+  readonly processGroupOf: (pid: number) => number | undefined;
   /** Current process id, used to re-raise relay signal deaths. */
   readonly pid: number;
+  /** Current process group id, used to decide signal forwarding. */
+  readonly ownProcessGroup: number;
   /** Send a signal to a process, used to re-raise relay signal deaths. */
   readonly kill: (pid: number, signal: NodeJS.Signals) => void;
   /** Register a handler for supervisor signals, return a disposer. */
@@ -107,6 +122,7 @@ export function createNodeTrampolineIo(): TrampolineIo {
       });
       return {
         outcome,
+        childPid: child.pid,
         sendSignal: (signal) => {
           child.kill(signal);
         },
@@ -115,7 +131,17 @@ export function createNodeTrampolineIo(): TrampolineIo {
     writeError: (message) => {
       process.stderr.write(message);
     },
+    processGroupOf: (pid) => {
+      try {
+        const output = execSync(`ps -o pgid= -p ${pid}`, { encoding: "utf8" });
+        const pgid = Number.parseInt(output.trim(), 10);
+        return Number.isNaN(pgid) ? undefined : pgid;
+      } catch {
+        return undefined;
+      }
+    },
     pid: process.pid,
+    ownProcessGroup: readOwnProcessGroup(),
     kill: (pid, signal) => {
       process.kill(pid, signal);
     },
@@ -142,6 +168,12 @@ export function createNodeTrampolineIo(): TrampolineIo {
  * cannot outlive a cancelled caller; the relay's exit status or signal is
  * then forwarded.
  *
+ * Forwarding is skipped when the relay shares the trampoline's process
+ * group: an interactive terminal already delivers terminal signals to both
+ * processes, and a second, forwarded copy would hit the workbench's
+ * one-shot SIGINT handler after cleanup already started, cutting pipeline
+ * teardown and run-store closing short.
+ *
  * `engines.bun` is a tested-with pin rather than a hard floor — the previous
  * bun shebang ran with any installed Bun — so no version gate runs here.
  */
@@ -156,9 +188,19 @@ export async function runTrampoline(
     return MISSING_BUN_EXIT_CODE;
   }
   const relay = io.startRelay(binPath, argv);
-  const disposeSignalForwarding = io.onSignal(FORWARDED_SIGNALS, (signal) => {
-    relay.sendSignal(signal);
-  });
+  // Forward supervisor signals only when the relay lives outside this
+  // process group. In an interactive POSIX terminal the relay shares the
+  // trampoline's foreground group, so Ctrl-C already reaches both — a
+  // forwarded copy would be a second SIGINT hitting the workbench's
+  // one-shot handler after cleanup began. When the group cannot be read,
+  // forward anyway: an orphaned pipeline is the worse failure.
+  const relayGroup = relay.childPid === undefined ? undefined : io.processGroupOf(relay.childPid);
+  const skipForwarding = relayGroup !== undefined && relayGroup === io.ownProcessGroup;
+  const disposeSignalForwarding = skipForwarding
+    ? () => {}
+    : io.onSignal(FORWARDED_SIGNALS, (signal) => {
+        relay.sendSignal(signal);
+      });
   try {
     const outcome = await relay.outcome;
     // Dispose forwarding before computing the exit code: `relayExitCode`
