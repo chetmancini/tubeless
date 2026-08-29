@@ -1,4 +1,8 @@
-import type { PipelineStepProgressDetail } from "./pipeline.js";
+import type {
+  PipelineRunStatus,
+  PipelineStepLifecycleStatus,
+  PipelineStepProgressDetail,
+} from "./pipeline.js";
 import { hasVisibleStepProgress } from "./progress.js";
 import type {
   PipelineTraceAttributeValue,
@@ -30,7 +34,7 @@ export interface PipelineRunEventStore extends PipelineTraceExporter {
   listEvents(query?: PipelineRunEventQuery): Promise<readonly StoredPipelineEvent[]>;
 }
 
-export type StoredPipelineRunStatus = "cancelled" | "completed" | "failed" | "running";
+export type StoredPipelineRunStatus = PipelineRunStatus | "running";
 
 export interface StoredNestedPipeline {
   mode: "for-each" | "single";
@@ -54,7 +58,7 @@ export interface StoredPipelineAttempt {
   finishedAtMs?: number;
   retries: number[];
   startedAtMs: number;
-  status: "cancelled" | "complete" | "failed" | "running" | "skipped";
+  status: Exclude<PipelineStepLifecycleStatus, "planned">;
 }
 
 export interface StoredPipelineStep {
@@ -74,7 +78,7 @@ export interface StoredPipelineStep {
     total?: number;
   };
   startedAtMs?: number;
-  status: "cancelled" | "complete" | "failed" | "planned" | "running" | "skipped";
+  status: PipelineStepLifecycleStatus;
 }
 
 export interface StoredPipelineRun {
@@ -261,7 +265,8 @@ function terminalStepStatus(event: StoredPipelineEvent): StoredPipelineStep["sta
     case "step.cancelled":
       return "cancelled";
     case "step.complete":
-      return "complete";
+      // Shipped trace name; projected snapshot uses the live success token.
+      return "completed";
     case "step.failed":
       return "failed";
     case "step.skipped":

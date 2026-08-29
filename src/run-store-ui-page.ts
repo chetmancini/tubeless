@@ -104,7 +104,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
     .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--line-strong); }
     .status { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 999px; font-size: 9px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
     .status-mark { width: 9px; height: 9px; display: inline-grid; place-items: center; font: 800 10px/1 var(--sans); letter-spacing: 0; }
-    .status.completed, .status.complete { color: var(--green); background: var(--green-soft); }
+    .status.completed { color: var(--green); background: var(--green-soft); }
     .status.failed, .status.cancelled { color: var(--red); background: var(--red-soft); }
     .status.running { color: var(--blue); background: var(--blue-soft); }
     .status.running .status-mark { border: 1.5px solid #b9c9fa; border-top-color: currentColor; border-radius: 50%; animation: spin .8s linear infinite; font-size: 0; }
@@ -128,7 +128,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
     .step:not(:last-child)::after { content: ""; position: absolute; top: 31px; bottom: -7px; left: 22px; width: 1px; background: var(--line); }
     .step-status-icon { position: absolute; top: 13px; left: 13px; z-index: 1; width: 19px; height: 19px; border: 1px solid var(--line); border-radius: 5px; background: #f7f8f5; color: var(--faint); display: grid; place-items: center; }
     .step-status-icon svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
-    .step-status-icon.complete { border-color: #bddfce; background: var(--green-soft); color: var(--green); }
+    .step-status-icon.completed { border-color: #bddfce; background: var(--green-soft); color: var(--green); }
     .step-status-icon.running { border-color: #cad6fa; background: var(--blue-soft); color: var(--blue); }
     .step-status-icon.running i { width: 10px; height: 10px; border: 2px solid #bdcaf1; border-top-color: currentColor; border-radius: 50%; animation: spin .8s linear infinite; }
     .step-status-icon.skipped { border-color: #ead5ac; background: var(--amber-soft); color: var(--amber); }
@@ -342,7 +342,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
     const state = { snapshot: null, detail: null, detailFingerprint: null, commands: [], view: "runs", selectedRunId: null, query: "", loading: false, launching: false, planning: false, clearing: false, cancelling: false, canCancel: false, canClearHistory: false, planVersion: 0 };
     const $ = (selector) => document.querySelector(selector);
     const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"})[char]);
-    const statusMark = (value) => value === 'completed' || value === 'complete' ? '✓' : value === 'skipped' ? '×' : value === 'cancelled' ? '■' : value === 'failed' ? '!' : value === 'planned' ? '…' : '';
+    const statusMark = (value) => value === 'completed' ? '✓' : value === 'skipped' ? '×' : value === 'cancelled' ? '■' : value === 'failed' ? '!' : value === 'planned' ? '…' : '';
     const status = (value) => '<span class="status ' + esc(value) + '"><i class="status-mark" aria-hidden="true">' + statusMark(value) + '</i>' + esc(value) + '</span>';
     const duration = (ms) => ms == null ? "—" : ms < 1000 ? Math.max(0, Math.round(ms)) + " ms" : ms < 60000 ? (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + " s" : Math.floor(ms / 60000) + "m " + Math.round((ms % 60000) / 1000) + "s";
     const clock = (ms) => new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(ms);
@@ -548,7 +548,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
     }
     function stepRow(step) {
       const progressTotal = step.progress?.total;
-      const progressWidth = progressTotal ? Math.max(0, Math.min(100, step.progress.completed / progressTotal * 100)) : (step.status === "complete" ? 100 : 18);
+      const progressWidth = progressTotal ? Math.max(0, Math.min(100, step.progress.completed / progressTotal * 100)) : (step.status === "completed" ? 100 : 18);
       const execution = step.attempt ? '<span class="execution-summary" title="' + esc(step.attempt.attemptId) + '"><b>Execution</b> · ' + esc(shortId(step.attempt.attemptId)) + (step.attempt.retries.length ? ' · ' + step.attempt.retries.length + ' retr' + (step.attempt.retries.length === 1 ? 'y' : 'ies') : '') + '</span>' : '';
       const nested = step.nestedPipeline;
       const nestedCount = nested ? (nested.stepCount ?? nested.stepIds.length) : 0;
@@ -561,13 +561,13 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
       return '<article class="step ' + esc(step.status) + '">' + stepStatusIcon(step.status) + '<div class="step-head"><strong>' + esc(step.name || step.id) + '</strong>' + (step.name ? '<code>' + esc(step.id) + '</code>' : '') + '<span class="step-duration">' + duration(step.durationMs) + '</span></div>' + (step.description ? '<div class="step-description">' + esc(step.description) + '</div>' : '') + nestedDetail + (execution ? '<div class="execution">' + execution + '</div>' : '') + progress + '</article>';
     }
     function stepStatusIcon(value) {
-      const label = value === 'complete' ? 'Completed' : value.charAt(0).toUpperCase() + value.slice(1);
-      const icon = value === 'complete' ? '<svg viewBox="0 0 12 12"><path d="m2 6 2.4 2.4L10 3"/></svg>' : value === 'running' ? '<i></i>' : value === 'skipped' ? '<svg viewBox="0 0 12 12"><path d="m3 3 6 6M9 3 3 9"/></svg>' : value === 'cancelled' ? '<svg viewBox="0 0 12 12"><rect x="3" y="3" width="6" height="6" rx="1" fill="currentColor" stroke="none"/></svg>' : value === 'failed' ? '!' : '…';
+      const label = value.charAt(0).toUpperCase() + value.slice(1);
+      const icon = value === 'completed' ? '<svg viewBox="0 0 12 12"><path d="m2 6 2.4 2.4L10 3"/></svg>' : value === 'running' ? '<i></i>' : value === 'skipped' ? '<svg viewBox="0 0 12 12"><path d="m3 3 6 6M9 3 3 9"/></svg>' : value === 'cancelled' ? '<svg viewBox="0 0 12 12"><rect x="3" y="3" width="6" height="6" rx="1" fill="currentColor" stroke="none"/></svg>' : value === 'failed' ? '!' : '…';
       return '<span class="step-status-icon ' + esc(value) + '" role="img" aria-label="' + label + '" title="' + label + '">' + icon + '</span>';
     }
     function stepSummary(run) {
-      const labels = { running: 'running', failed: 'failed', cancelled: 'cancelled', skipped: 'skipped', complete: 'complete', planned: 'planned' };
-      const order = ['running', 'failed', 'cancelled', 'skipped', 'complete', 'planned'];
+      const labels = { running: 'running', failed: 'failed', cancelled: 'cancelled', skipped: 'skipped', completed: 'completed', planned: 'planned' };
+      const order = ['running', 'failed', 'cancelled', 'skipped', 'completed', 'planned'];
       return order.map((value) => [value, run.steps.filter((step) => step.status === value).length]).filter(([, count]) => count).map(([value, count]) => count + ' ' + labels[value]).join(' · ') || 'No steps';
     }
     function runDetail(run) {

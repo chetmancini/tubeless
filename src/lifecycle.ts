@@ -88,7 +88,7 @@ export function createPipelineLifecycleObserver(
         case "skipped":
           emitHook(runtime, (hooks) => hooks.onStepSkip?.(event));
           break;
-        case "complete":
+        case "completed":
           emitHook(runtime, (hooks) => hooks.onStepComplete?.(event));
           break;
       }

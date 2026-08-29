@@ -193,7 +193,7 @@ function renderStep(
       }
       return lines;
     }
-    case "complete":
+    case "completed":
       return [
         `  ${theme.styled.complete(theme.symbols.complete)} ${displayName} ${theme.styled.duration(
           `(${formatDurationMs(state.finishedAtMs - state.startedAtMs)})`

@@ -199,7 +199,7 @@ attempt model.
 The terminal record deliberately does not copy log or progress streams. Use the
 injected logger and hooks for live observation, or tracing when durable event
 export is required. Errors and cancellation remain represented directly in the
-run and terminal step reports. The run currently has `version: 1`, also exported
+run and terminal step reports. The run currently has `version: 2`, also exported
 as `RUN_MODEL_VERSION`; persist that field and branch on it before decoding a
 stored run. Durations are derived by subtracting the relevant timestamps.
 

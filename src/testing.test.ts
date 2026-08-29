@@ -42,7 +42,7 @@ describe("createPipelineTestRuntime", () => {
       "running",
       "running",
       "running",
-      "complete",
+      "completed",
     ]);
     expect(test.latestProgress.get("work")).toEqual({ completed: 2, total: 2 });
   });

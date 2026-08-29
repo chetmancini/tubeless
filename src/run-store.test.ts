@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { PipelineRunStatus, PipelineStepLifecycleStatus } from "./pipeline.js";
 import {
   createPipelineRunProjector,
   projectPipelineRunStore,
+  type StoredPipelineAttempt,
   type StoredPipelineEvent,
+  type StoredPipelineRunStatus,
+  type StoredPipelineStep,
 } from "./run-store.js";
 
 function event(
@@ -119,6 +123,14 @@ function snapshotFromChunks(events: readonly StoredPipelineEvent[], generatedAtM
 }
 
 describe("pipeline run store projections", () => {
+  it("reuses live status unions for stored run, step, and attempt records", () => {
+    expectTypeOf<StoredPipelineRunStatus>().toEqualTypeOf<PipelineRunStatus | "running">();
+    expectTypeOf<StoredPipelineStep["status"]>().toEqualTypeOf<PipelineStepLifecycleStatus>();
+    expectTypeOf<StoredPipelineAttempt["status"]>().toEqualTypeOf<
+      Exclude<PipelineStepLifecycleStatus, "planned">
+    >();
+  });
+
   it("projects definitions, active history, attempts, progress, logs, and errors", () => {
     const events = historyFixture;
 
@@ -206,7 +218,7 @@ describe("pipeline run store projections", () => {
     expect(snapshot.runs[0]?.steps[0]).toMatchObject({
       id: "children",
       nestedPipeline: nested,
-      status: "complete",
+      status: "completed",
     });
     expect(snapshot.definitions[0]?.steps[0]).toMatchObject({
       id: "children",

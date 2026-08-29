@@ -12,7 +12,6 @@
         "FormatMappedChildProgressOptions",
         "InferSchemaInput",
         "InferSchemaOutput",
-        "MappedChildProgressDetail",
         "mappedChildProgressDetails",
         "MappedChildProgressOptions",
         "MappedChildProgressSnapshot",
@@ -48,11 +47,14 @@
         "PipelineStepContext",
         "PipelineStepFailedEvent",
         "PipelineStepFailedReport",
+        "PipelineStepLifecycleStatus",
         "PipelineStepPlannedEvent",
         "PipelineStepProgress",
         "PipelineStepProgressDetail",
+        "PipelineStepProgressDetailStatus",
         "PipelineStepProgressEvent",
         "PipelineStepReport",
+        "PipelineStepReportStatus",
         "PipelineStepSelectionReason",
         "PipelineStepSkippedEvent",
         "PipelineStepSkippedReport",
@@ -72,7 +74,7 @@
         "toMappedChildStepProgress",
         "ToMappedChildStepProgressOptions"
       ],
-      "sha256": "e0c9802d5dcb71b319562d301c452446d74ea1c67d18b3ad76617467127bca71",
+      "sha256": "d676afc877cae2c2630574ffaf580869b6c2aafd8be70e395ca9f634642c9c4d",
       "specifier": "tubeless"
     },
     {
@@ -209,7 +211,7 @@
         "StoredPipelineRunStatus",
         "StoredPipelineStep"
       ],
-      "sha256": "69a01a381babc298e0e91a7ab0050e7d8c8a52ee8b993eac59271bfd7c68546c",
+      "sha256": "ff5c7537686279f87f2d4757af163770943b09ac121f5bcde3b76be24d33ac7f",
       "specifier": "tubeless/run-store"
     },
     {
