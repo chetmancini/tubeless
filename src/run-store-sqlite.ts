@@ -263,26 +263,35 @@ export async function openSqlitePipelineRunStore(
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   let closed = false;
+  let exportError: Error | undefined;
 
   return {
     export(event) {
       if (closed) throw new Error("Cannot append to a closed pipeline run store.");
-      insert.run(
-        event.version,
-        event.runId,
-        event.parentRunId ?? null,
-        event.pipelineId,
-        event.stepId ?? null,
-        event.attemptId ?? null,
-        event.itemKey ?? null,
-        event.name,
-        event.timestampMs,
-        event.durationMs ?? null,
-        JSON.stringify(event.attributes),
-        event.error ? JSON.stringify(event.error) : null
-      );
+      if (exportError) throw exportError;
+      try {
+        insert.run(
+          event.version,
+          event.runId,
+          event.parentRunId ?? null,
+          event.pipelineId,
+          event.stepId ?? null,
+          event.attemptId ?? null,
+          event.itemKey ?? null,
+          event.name,
+          event.timestampMs,
+          event.durationMs ?? null,
+          JSON.stringify(event.attributes),
+          event.error ? JSON.stringify(event.error) : null
+        );
+      } catch (error) {
+        exportError = error instanceof Error ? error : new Error(String(error));
+        throw exportError;
+      }
     },
-    flush() {},
+    flush() {
+      if (exportError) throw exportError;
+    },
     async listEvents(query: PipelineRunEventQuery = {}) {
       if (closed) throw new Error("Cannot query a closed pipeline run store.");
       const predicates: string[] = [];
@@ -333,6 +342,7 @@ export async function openSqlitePipelineRunStore(
       if (closed) return;
       closed = true;
       database.close();
+      if (exportError) throw exportError;
     },
   };
 }

@@ -214,7 +214,12 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
       io.stderr.write(`Error: ${errorMessage(error)}\n`);
       if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success) exitCode = toExitCode(error);
     }
-    await store?.close();
+    try {
+      await store?.close();
+    } catch (error) {
+      io.stderr.write(`Error: ${errorMessage(error)}\n`);
+      if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success) exitCode = toExitCode(error);
+    }
     managedSignal?.cleanup();
   }
   return exitCode;

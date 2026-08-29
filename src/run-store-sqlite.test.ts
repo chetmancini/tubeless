@@ -256,6 +256,20 @@ describe("SQLite pipeline run store", () => {
     }
   );
 
+  it("surfaces the first append failure from flush and close", async () => {
+    const store = await openTempStore();
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    expect(() => {
+      void store.export({
+        ...startedEvent("run-1", 10),
+        attributes: cycle,
+      });
+    }).toThrow(/circular/i);
+    expect(() => store.flush()).toThrow(/circular/i);
+    expect(() => store.close()).toThrow(/circular/i);
+  });
+
   it("rejects a missing path when initialize is false without creating it", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
     directories.push(directory);
