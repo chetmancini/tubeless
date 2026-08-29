@@ -897,6 +897,7 @@ describe("tubeless workbench", () => {
   it("does not hang when writing to a destroyed stream", async () => {
     const { PassThrough } = await import("node:stream");
     const stream = new PassThrough();
+    stream.on("error", () => undefined);
     stream.destroy(new Error("broken pipe"));
     await expect(writeCliChunk(stream, "x\n")).rejects.toThrow(/broken pipe|closed stream/);
   });
