@@ -7,7 +7,7 @@ import { defineCommand, definePipelineCommand } from "./cli";
 import { selectPipelineCommandExport, selectPipelineExport } from "./pipeline-module";
 import { createSteps, definePipeline } from "./pipeline";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite";
-import { DUPLICATE_SIGINT_WINDOW_MS } from "./workbench-shared";
+import { DUPLICATE_SIGINT_WINDOW_MS, onFirstProcessSignal } from "./workbench-shared";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli, type WorkbenchCliIo } from "./workbench";
 
 function captureIo(cwd: string): WorkbenchCliIo & { errors: string[]; output: string[] } {
@@ -1118,6 +1118,35 @@ describe("tubeless workbench", () => {
       killSpy.mockRestore();
       onSpy.mockRestore();
       removeListenerSpy.mockRestore();
+    }
+  });
+
+  it("swallows a duplicate queued behind a blocking first dispatch", async () => {
+    const events: string[] = [];
+    const onSpy = vi.spyOn(process, "on");
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+
+    try {
+      const dispose = onFirstProcessSignal(["SIGINT"], () => {
+        events.push("first");
+        // Simulate >300ms of synchronous cleanup work inside the abort
+        // dispatch: the trampoline's duplicate waits behind this call.
+        const start = Date.now();
+        while (Date.now() - start < 400) {
+          // busy-wait
+        }
+      });
+      const registration = onSpy.mock.calls.find(([event]) => event === "SIGINT");
+      expect(registration).toBeDefined();
+      (registration?.[1] as () => void)(); // first: window arms after return
+      (registration?.[1] as () => void)(); // queued duplicate: swallowed
+
+      expect(events).toEqual(["first"]);
+      expect(killSpy).not.toHaveBeenCalled();
+      dispose();
+    } finally {
+      killSpy.mockRestore();
+      onSpy.mockRestore();
     }
   });
 

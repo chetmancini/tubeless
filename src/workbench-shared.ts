@@ -199,6 +199,55 @@ export interface ManagedWorkbenchSignal {
   wasInterrupted(): boolean;
 }
 
+/**
+ * Watch for the first delivery of each terminal signal with a persistent
+ * listener that also swallows the immediate duplicates a Ctrl-C produces
+ * under the Node trampoline (direct terminal delivery plus the forwarded
+ * copy) while a cleanup's synchronous phase is still blocking. A later
+ * signal is a deliberate force-quit: the listener removes itself and
+ * re-raises the signal so default termination takes over.
+ */
+export function onFirstProcessSignal(
+  signals: readonly NodeJS.Signals[],
+  onFirst: (signal: NodeJS.Signals) => void
+): () => void {
+  const listeners = signals.map((signal) => {
+    // Per-signal state: a window armed by SIGINT must not silence a
+    // first SIGTERM's graceful stop or turn it into a force-quit.
+    let armed = false;
+    let armedUntil = 0;
+    const listener = (): void => {
+      // A duplicate can arrive while the first delivery's synchronous
+      // work still blocks, or queued behind it in the event loop: the
+      // window is armed after `onFirst` returns, so the queued copy of
+      // the same press still lands inside it.
+      if (armed) {
+        if (Date.now() < armedUntil) return;
+        // Past the window this is a second, deliberate press: drop
+        // every listener and re-raise so default termination force-quits
+        // a cleanup that will not finish.
+        removeAll();
+        process.kill(process.pid, signal);
+        return;
+      }
+      armed = true;
+      onFirst(signal);
+      // Arm after `onFirst` returns: its synchronous work (abort
+      // dispatch) may block past the wall-clock window, and the queued
+      // duplicate must still be classified as part of this press.
+      armedUntil = Date.now() + DUPLICATE_SIGINT_WINDOW_MS;
+    };
+    process.on(signal, listener);
+    return { signal, listener };
+  });
+  const removeAll = (): void => {
+    for (const { signal, listener } of listeners) {
+      process.removeListener(signal, listener);
+    }
+  };
+  return removeAll;
+}
+
 export function manageWorkbenchSignal(io: WorkbenchCliIo): ManagedWorkbenchSignal {
   if (io.signal) {
     return {
@@ -210,29 +259,13 @@ export function manageWorkbenchSignal(io: WorkbenchCliIo): ManagedWorkbenchSigna
 
   const controller = new AbortController();
   let interrupted = false;
-  let swallowDuplicatesUntil = 0;
-  const onSigint = (): void => {
-    // A duplicate SIGINT can arrive immediately after the first: the Node
-    // trampoline forwards terminal signals to this process, and an
-    // interactive Ctrl-C also delivers SIGINT directly. Only the copy
-    // within this window is swallowed; a later Ctrl-C is a deliberate
-    // force-quit from an operator whose cleanup is not finishing.
-    if (interrupted) {
-      if (Date.now() < swallowDuplicatesUntil) return;
-      process.removeListener("SIGINT", onSigint);
-      process.kill(process.pid, "SIGINT");
-      return;
-    }
+  const dispose = onFirstProcessSignal(["SIGINT"], () => {
     interrupted = true;
-    swallowDuplicatesUntil = Date.now() + DUPLICATE_SIGINT_WINDOW_MS;
     io.stderr.write("SIGINT received; cancelling pipeline work.\n");
     controller.abort();
-  };
-  // `process.on` (not `once`): the immediate duplicate must be swallowed by
-  // this listener rather than trigger Node's default termination.
-  process.on("SIGINT", onSigint);
+  });
   return {
-    cleanup: () => process.removeListener("SIGINT", onSigint),
+    cleanup: dispose,
     signal: controller.signal,
     wasInterrupted: () => interrupted,
   };
