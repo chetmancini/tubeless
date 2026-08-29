@@ -150,7 +150,7 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
   const { openSqlitePipelineRunStore } = await import("./run-store-sqlite.js");
   let store: PipelineRunEventStore;
   try {
-    store = await openSqlitePipelineRunStore(filename, { initialize: false });
+    store = await openSqlitePipelineRunStore(filename, { initialize: false, readOnly: true });
   } catch (error) {
     io.stderr.write(`Error: ${errorMessage(error)}\n`);
     return TUBELESS_WORKBENCH_EXIT_CODE.load;

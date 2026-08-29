@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import type { PipelineTraceEvent } from "./tracing.js";
 import type {
   PipelineRunEventQuery,
@@ -19,9 +20,15 @@ interface SqliteDatabase {
   query?(sql: string): SqliteStatement;
 }
 
+interface SqliteOpenOptions {
+  create?: boolean;
+  readOnly?: boolean;
+  readonly?: boolean;
+}
+
 interface SqliteModule {
-  Database?: new (filename: string) => SqliteDatabase;
-  DatabaseSync?: new (filename: string) => SqliteDatabase;
+  Database?: new (filename: string, options?: SqliteOpenOptions) => SqliteDatabase;
+  DatabaseSync?: new (filename: string, options?: SqliteOpenOptions) => SqliteDatabase;
 }
 
 interface StoredEventRow {
@@ -106,11 +113,35 @@ async function loadSqliteModule(): Promise<SqliteModule> {
   return (await import(specifier)) as SqliteModule;
 }
 
-async function openDatabase(filename: string): Promise<SqliteDatabase> {
+async function openDatabase(filename: string, readOnly = false): Promise<SqliteDatabase> {
   const module = await loadSqliteModule();
   const Database = module.Database ?? module.DatabaseSync;
   if (!Database) throw new Error("No synchronous SQLite database implementation is available.");
-  return new Database(filename);
+  if (!readOnly) return new Database(filename);
+  try {
+    return openReadableDatabase(Database, filename, {
+      create: false,
+      readOnly: true,
+      readonly: true,
+    });
+  } catch {
+    return openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=ro&immutable=1`);
+  }
+}
+
+function openReadableDatabase(
+  Database: new (filename: string, options?: SqliteOpenOptions) => SqliteDatabase,
+  filename: string,
+  options?: SqliteOpenOptions
+): SqliteDatabase {
+  const database = options === undefined ? new Database(filename) : new Database(filename, options);
+  try {
+    statement(database, "PRAGMA user_version").all();
+    return database;
+  } catch (error) {
+    database.close();
+    throw error;
+  }
 }
 
 function mapRow(row: StoredEventRow): StoredPipelineEvent {
@@ -145,6 +176,11 @@ export interface OpenSqlitePipelineRunStoreOptions {
    * Defaults to `true` so `run --store` and `ui` can create the database.
    */
   readonly initialize?: boolean;
+  /**
+   * Open the file without creating it or writing WAL/sidecars.
+   * `history` uses this so a read-only artifact or mount can still be inspected.
+   */
+  readonly readOnly?: boolean;
 }
 
 /**
@@ -155,12 +191,13 @@ export async function openSqlitePipelineRunStore(
   filename: string,
   options: OpenSqlitePipelineRunStoreOptions = {}
 ): Promise<SqlitePipelineRunStore> {
-  const initialize = options.initialize !== false;
+  const readOnly = options.readOnly === true;
+  const initialize = options.initialize !== false && !readOnly;
   const resolvedFilename = filename === ":memory:" ? filename : path.resolve(filename);
-  if (resolvedFilename !== ":memory:") {
+  if (resolvedFilename !== ":memory:" && !readOnly) {
     await mkdir(path.dirname(resolvedFilename), { recursive: true });
   }
-  const database = await openDatabase(resolvedFilename);
+  const database = await openDatabase(resolvedFilename, readOnly);
   try {
     // SAFETY: `PRAGMA user_version` always returns a single row with a
     // `user_version` column, so the first result row matches this shape.

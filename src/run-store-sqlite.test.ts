@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -207,6 +207,28 @@ describe("SQLite pipeline run store", () => {
     const reopened = await openSqlitePipelineRunStore(filename, { initialize: false });
     expect(await reopened.listEvents()).toHaveLength(1);
     await reopened.close();
+  });
+
+  it("reads an initialized store from a read-only file and directory", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+    await chmod(filename, 0o444);
+    await chmod(directory, 0o555);
+    try {
+      const reopened = await openSqlitePipelineRunStore(filename, {
+        initialize: false,
+        readOnly: true,
+      });
+      expect(await reopened.listEvents()).toHaveLength(1);
+      await reopened.close();
+    } finally {
+      await chmod(directory, 0o755);
+      await chmod(filename, 0o644);
+    }
   });
 
   it("rejects an uninitialized file when initialize is false", async () => {

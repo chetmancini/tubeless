@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 import * as os from "node:os";
@@ -1100,6 +1100,42 @@ describe("tubeless workbench", () => {
       TUBELESS_WORKBENCH_EXIT_CODE.success
     );
     expect(historyIo.output.join("")).toContain("command-fixture");
+  });
+
+  it("reads history from a read-only store file and directory", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const databasePath = path.join(directory, "history", "runs.sqlite");
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          databasePath,
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    await chmod(databasePath, 0o444);
+    await chmod(path.dirname(databasePath), 0o555);
+    await chmod(directory, 0o555);
+    try {
+      const historyIo = captureIo(directory);
+      expect(await runWorkbenchCli(["history", "--store", databasePath], historyIo)).toBe(
+        TUBELESS_WORKBENCH_EXIT_CODE.success
+      );
+      expect(historyIo.output.join("")).toContain("command-fixture");
+    } finally {
+      await chmod(directory, 0o755);
+      await chmod(path.dirname(databasePath), 0o755);
+      await chmod(databasePath, 0o644);
+    }
   });
 
   it("rejects a missing store, unknown run, and combined json/events flags", async () => {
