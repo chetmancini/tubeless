@@ -1,4 +1,4 @@
-import { createSteps, definePipeline } from "tubeless";
+import { createSteps, definePipeline, requireOutputs } from "tubeless";
 
 interface ShardOptions {
   records: readonly string[];
@@ -48,5 +48,5 @@ const processShards = fanOutStep.forEachPipeline("process-shards", {
 export const FanOutPipeline = definePipeline({
   id: "fan-out",
   steps: [processShards],
-  finalize: (outputs) => outputs["process-shards"] ?? [],
+  finalize: requireOutputs([processShards], (outputs) => outputs["process-shards"]),
 });
