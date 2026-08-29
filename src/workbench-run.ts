@@ -1,4 +1,4 @@
-import { createWriteStream } from "node:fs";
+import { createWriteStream, type WriteStream } from "node:fs";
 import { mkdir, readlink, realpath, stat } from "node:fs/promises";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
@@ -163,7 +163,7 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
   if (
     storePath !== undefined &&
     tracePath !== undefined &&
-    (await pathsShareIdentity(storePath, tracePath))
+    (await destinationsConflict(storePath, tracePath))
   ) {
     return writeUsageError(io, "--store and --trace cannot write to the same path.", RUN_USAGE);
   }
@@ -247,11 +247,20 @@ async function createRunTraceWriter(
   io: WorkbenchCliIo
 ): Promise<{ close(): Promise<void>; exporter: PipelineTraceExporter }> {
   if (destination === "-") {
+    let writeError: Error | undefined;
     return {
-      close: async () => undefined,
+      close: async () => {
+        if (writeError) throw writeError;
+      },
       exporter: {
         async export(event) {
-          await writeCliChunk(io.stdout, `${JSON.stringify(event)}\n`);
+          if (writeError) throw writeError;
+          try {
+            await writeCliChunk(io.stdout, `${JSON.stringify(event)}\n`);
+          } catch (error) {
+            writeError = error instanceof Error ? error : new Error(String(error));
+            throw writeError;
+          }
         },
       },
     };
@@ -264,6 +273,7 @@ async function createRunTraceWriter(
   stream.on("error", (error) => {
     writeError = error;
   });
+  await waitForWriteStreamOpen(stream);
   return {
     close: () =>
       new Promise((resolve, reject) => {
@@ -285,6 +295,31 @@ async function createRunTraceWriter(
       },
     },
   };
+}
+
+async function waitForWriteStreamOpen(stream: WriteStream): Promise<void> {
+  if (stream.errored) throw stream.errored;
+  if (!stream.pending) return;
+  await new Promise<void>((resolve, reject) => {
+    const onOpen = () => {
+      stream.off("error", onError);
+      resolve();
+    };
+    const onError = (error: Error) => {
+      stream.off("open", onOpen);
+      reject(error);
+    };
+    stream.once("open", onOpen);
+    stream.once("error", onError);
+  });
+}
+
+async function destinationsConflict(storePath: string, tracePath: string): Promise<boolean> {
+  if (await pathsShareIdentity(storePath, tracePath)) return true;
+  for (const suffix of ["-journal", "-shm", "-wal"] as const) {
+    if (await pathsShareIdentity(`${storePath}${suffix}`, tracePath)) return true;
+  }
+  return false;
 }
 
 async function canonicalDestination(filename: string, depth = 0): Promise<string> {

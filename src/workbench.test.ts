@@ -704,6 +704,24 @@ describe("tubeless workbench", () => {
 
     expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.execution);
     expect(io.errors.join("")).toMatch(/EISDIR|directory|Error/i);
+    expect(io.errors.join("")).not.toContain("completed:hello");
+    expect(io.output.join("")).not.toContain("completed:hello");
+  });
+
+  it("fails the run when --trace - cannot write stdout", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    io.stdout.write = () => {
+      throw new Error("broken pipe");
+    };
+
+    const exitCode = await runWorkbenchCli(
+      ["run", "--trace", "-", "pipeline.mjs", "--", "--message", "hello", "--target", "work"],
+      io
+    );
+
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.execution);
+    expect(io.errors.join("")).toMatch(/broken pipe|Error/i);
   });
 
   it("records JSON traces and SQLite events together", async () => {
@@ -881,6 +899,32 @@ describe("tubeless workbench", () => {
           path.join(directory, "runs.sqlite"),
           "--trace",
           path.join(directory, "RUNS.sqlite"),
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(io.errors.join("")).toMatch(/same path/i);
+  });
+
+  it("rejects a trace path that is a SQLite sidecar of --store", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const storePath = path.join(directory, "history", "runs.sqlite");
+
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          storePath,
+          "--trace",
+          `${storePath}-wal`,
           "pipeline.mjs",
           "--",
           "--message",
