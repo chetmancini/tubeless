@@ -2472,4 +2472,39 @@ describe("definePipeline", () => {
     expectTypeOf(pipeline.plan({ targets: ["write"] }).ok).toEqualTypeOf<boolean>();
     expect(pipeline.plan({ targets: ["write"] }).ok).toBe(true);
   });
+
+  it("omitting finalize with a compatible resultSchema keeps the default finalizer", async () => {
+    const step = createSteps();
+    const load = step("load", { run: () => "rows" });
+    const resultSchema = standardSchema<string, string>((value) => ({
+      value: typeof value === "string" ? value.toUpperCase() : value,
+    }));
+    const pipeline = definePipeline({
+      id: "compatible-result-schema",
+      steps: [load],
+      resultSchema,
+    });
+
+    // The last step's `string` output satisfies the schema's `string` input,
+    // so no explicit finalizer is needed and the schema transforms it.
+    const value = await pipeline.runOrThrow({});
+    expectTypeOf(value).toEqualTypeOf<string>();
+    expect(value).toBe("ROWS");
+  });
+
+  it("requires an explicit finalize when the last step output cannot feed resultSchema", () => {
+    const step = createSteps();
+    const load = step("load", { run: () => "rows" });
+    const numberResultSchema = standardSchema<number, number>((value) => ({ value }));
+
+    // `string` cannot satisfy the schema's `number` input, so the default
+    // finalizer would fail every normal run during finalization; the type
+    // boundary mirrors the check a supplied finalizer already faces.
+    definePipeline({
+      id: "incompatible-result-schema",
+      steps: [load],
+      resultSchema: numberResultSchema,
+      // @ts-expect-error A finalize compatible with the schema is required.
+    });
+  });
 });

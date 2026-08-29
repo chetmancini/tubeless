@@ -296,6 +296,7 @@ snapshot instead of re-folding history. Store-local event ids are monotonic and
 may start at `0`. Duplicate or out-of-order ids are ignored. Use
 `projectPipelineRunStore` when the caller already holds a complete event list
 and does not need incremental refresh. History therefore continues past an
+adapter's per-query safety cap without reloading the entire database on every
 refresh.
 
 Finalizer inputs remain partial because dry-run policy, exact filtering, and

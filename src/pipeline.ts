@@ -2386,7 +2386,20 @@ export function definePipeline<
   const TResultSchema extends StandardSchemaV1 | undefined = undefined,
 >(
   definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema> &
-    CheckedStepTuple<TSteps>
+    CheckedStepTuple<TSteps> &
+    // An omitted `finalize` feeds the last declared step's output to
+    // `resultSchema`; when that output cannot satisfy the schema's input
+    // type, an explicit finalizer is the only sound boundary, matching the
+    // check a supplied finalizer already faces.
+    (TResultSchema extends StandardSchemaV1
+      ? [LastStepOutput<TSteps>] extends [InferSchemaInput<TResultSchema>]
+        ? unknown
+        : {
+            finalize: NonNullable<
+              PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>["finalize"]
+            >;
+          }
+      : unknown)
 ): Pipeline<
   StepsInputOptions<TSteps>,
   TResultSchema extends StandardSchemaV1 ? InferSchemaOutput<TResultSchema> : TResult,
