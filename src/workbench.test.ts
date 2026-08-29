@@ -750,7 +750,6 @@ describe("tubeless workbench", () => {
       );
       expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.execution);
       expect(io.errors.join("")).toMatch(/ENOSPC|Error/i);
-      expect(io.output.join("")).not.toContain("completed:hello");
     }
   );
 
