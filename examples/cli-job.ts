@@ -42,8 +42,8 @@ export const ImportPipeline = definePipeline({
  * Pipeline commands also provide exact `--step`, dependency-aware `--target`
  * for the pipeline's declared goals, and `--continue-on-error`, while
  * forwarding the universal `--dry-run` flag into the pipeline automatically.
- * Inspect, plan, or graph this command export. Plan with `command.plan()` or
- * `tubeless plan`, not `--plan`.
+ * Parsed values use `stepIds` and `targets`. Inspect, plan, or graph this
+ * command export. Plan with `command.plan()` or `tubeless plan`, not `--plan`.
  */
 export const ImportCommand = definePipelineCommand(ImportPipeline, {
   description: "Normalize a newline-delimited list of input rows.",

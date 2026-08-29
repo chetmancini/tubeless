@@ -437,11 +437,12 @@ executable through the workbench.
 
 `definePipelineCommand` defaults to a same-name mapping when its validated flag
 values structurally satisfy the pipeline's domain options. Command-only values
-such as `resume`, `step`, and `target` are removed before execution;
-bridge-owned selection and failure controls are applied separately. If flags
-do not satisfy required domain options, `mapOptions` remains required at
-compile time. Keep explicit mapping for renamed fields, file loading, adaptive
-defaults, prompts, or other derived values.
+such as `resume`, `stepIds`, and `targets` are removed before execution;
+bridge-owned selection and failure controls are applied separately. The argv
+flags stay `--resume`, `--step`, and `--target`. If flags do not satisfy
+required domain options, `mapOptions` remains required at compile time. Keep
+explicit mapping for renamed fields, file loading, adaptive defaults, prompts,
+or other derived values.
 
 The returned command's `descriptor` is the non-terminal view of that contract:
 name, description, and immutable parameter metadata for flags, types, defaults,
