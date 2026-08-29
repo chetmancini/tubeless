@@ -144,7 +144,7 @@ export async function startPipelineRunStudio(
       }
       if (request.method === "GET" && url.pathname === "/api/capabilities") {
         writeJson(response, {
-          canCancel: launcher?.cancel !== undefined,
+          canCancel: launcher?.cancel !== undefined && launcher.liveRunIds !== undefined,
           canClearHistory: history !== undefined,
         });
         return;

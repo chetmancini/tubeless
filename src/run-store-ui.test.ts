@@ -333,6 +333,37 @@ describe("local pipeline run studio", () => {
     expect(cancelWithoutCapability.status).toBe(405);
   });
 
+  it("does not advertise cancel when liveRunIds is missing", async () => {
+    const server = await startPipelineRunStudio({
+      launcher: {
+        commands: [
+          {
+            canPlan: false,
+            id: "fixture",
+            name: "Fixture",
+            parameters: fixtureParameters,
+          },
+        ],
+        async launch() {
+          return { accepted: true, runId: "live-run" };
+        },
+        async cancel(runId) {
+          return { cancelled: true, runId };
+        },
+      },
+      port: 0,
+      store: memoryStore(events),
+    });
+    servers.push(server);
+
+    await expect(
+      fetch(`${server.url}/api/capabilities`).then((response) => response.json())
+    ).resolves.toEqual({ canCancel: false, canClearHistory: false });
+    await expect(
+      fetch(`${server.url}/api/snapshot`).then((response) => response.json())
+    ).resolves.toMatchObject({ liveRunIds: [] });
+  });
+
   it("cancels a live launch only through an injected launcher cancel", async () => {
     const cancelled: string[] = [];
     const server = await startPipelineRunStudio({
