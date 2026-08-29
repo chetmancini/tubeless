@@ -187,6 +187,9 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
       io.stdout.write(`${snapshot.runs.map(formatRunListLine).join("\n")}\n`);
     }
     return TUBELESS_WORKBENCH_EXIT_CODE.success;
+  } catch (error) {
+    io.stderr.write(`Error: ${errorMessage(error)}\n`);
+    return TUBELESS_WORKBENCH_EXIT_CODE.load;
   } finally {
     await store.close();
   }

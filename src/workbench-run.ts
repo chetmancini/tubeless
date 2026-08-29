@@ -300,11 +300,10 @@ async function canonicalDestination(filename: string, depth = 0): Promise<string
   } catch {
     // Not a symlink.
   }
-  try {
-    return path.join(await realpath(path.dirname(filename)), path.basename(filename));
-  } catch {
-    return path.resolve(filename);
-  }
+  const resolved = path.resolve(filename);
+  const parent = path.dirname(resolved);
+  if (parent === resolved) return resolved;
+  return path.join(await canonicalDestination(parent, depth + 1), path.basename(resolved));
 }
 
 async function pathsShareIdentity(left: string, right: string): Promise<boolean> {

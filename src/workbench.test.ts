@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { DatabaseSync } from "node:sqlite";
 import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -835,6 +836,35 @@ describe("tubeless workbench", () => {
     expect(io.errors.join("")).toMatch(/same path/i);
   });
 
+  it("rejects dests that share a missing directory under aliased parents", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const shared = path.join(directory, "shared");
+    await mkdir(shared);
+    await symlink(shared, path.join(directory, "left"));
+    await symlink(shared, path.join(directory, "right"));
+
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          path.join(directory, "left", "new", "runs.sqlite"),
+          "--trace",
+          path.join(directory, "right", "new", "runs.sqlite"),
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(io.errors.join("")).toMatch(/same path/i);
+  });
+
   it("lists and shows projected history from the run store", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     const io = captureIo(directory);
@@ -1017,6 +1047,27 @@ describe("tubeless workbench", () => {
       TUBELESS_WORKBENCH_EXIT_CODE.load
     );
     expect(emptyIo.errors.join("")).toMatch(/not a pipeline run store|Error:/);
+
+    const damagedPath = path.join(directory, "history", "damaged.sqlite");
+    const goodStore = await openSqlitePipelineRunStore(damagedPath);
+    await goodStore.export({
+      attributes: { dry_run: false },
+      name: "pipeline.started",
+      pipelineId: "command-fixture",
+      runId: "run-1",
+      timestampMs: 1,
+      version: 1,
+    });
+    await goodStore.close();
+    const database = new DatabaseSync(damagedPath);
+    database.exec("DROP TRIGGER IF EXISTS pipeline_run_events_no_update");
+    database.exec("UPDATE pipeline_run_events SET attributes_json = 'not-json'");
+    database.close();
+    const damagedIo = captureIo(directory);
+    expect(await runWorkbenchCli(["history", "--store", damagedPath], damagedIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(damagedIo.errors.join("")).toMatch(/Error:/);
 
     const unknownIo = captureIo(directory);
     expect(
