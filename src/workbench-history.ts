@@ -144,7 +144,13 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
   }
 
   const { openSqlitePipelineRunStore } = await import("./run-store-sqlite.js");
-  const store = await openSqlitePipelineRunStore(filename);
+  let store: PipelineRunEventStore;
+  try {
+    store = await openSqlitePipelineRunStore(filename);
+  } catch (error) {
+    io.stderr.write(`Error: ${errorMessage(error)}\n`);
+    return TUBELESS_WORKBENCH_EXIT_CODE.load;
+  }
   const query: PipelineRunEventQuery = runId === undefined ? {} : { runId };
   try {
     if (parsed.values.events) {

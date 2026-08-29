@@ -153,6 +153,17 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
   );
   if ("exitCode" in loaded) return loaded.exitCode;
 
+  const storePath = parsed.parsed.values.store
+    ? path.resolve(io.cwd, parsed.parsed.values.store)
+    : undefined;
+  const tracePath =
+    parsed.parsed.values.trace && parsed.parsed.values.trace !== "-"
+      ? path.resolve(io.cwd, parsed.parsed.values.trace)
+      : undefined;
+  if (storePath !== undefined && storePath === tracePath) {
+    return writeUsageError(io, "--store and --trace cannot write to the same path.", RUN_USAGE);
+  }
+
   const managedSignal = manageWorkbenchSignal(io);
   let store: PipelineRunEventStore | undefined;
   let closeTrace: (() => Promise<void>) | undefined;

@@ -733,6 +733,32 @@ describe("tubeless workbench", () => {
     expect(traced.map(({ name }) => name)).toContain("pipeline.completed");
   });
 
+  it("rejects the same path for --store and --trace", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const sharedPath = path.join(directory, "shared.sqlite");
+
+    const exitCode = await runWorkbenchCli(
+      [
+        "run",
+        "--store",
+        sharedPath,
+        "--trace",
+        sharedPath,
+        "pipeline.mjs",
+        "--",
+        "--message",
+        "hello",
+        "--target",
+        "work",
+      ],
+      io
+    );
+
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(io.errors.join("")).toMatch(/same path/i);
+  });
+
   it("lists and shows projected history from the run store", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     const io = captureIo(directory);
@@ -899,6 +925,14 @@ describe("tubeless workbench", () => {
       )
     ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.load);
     expect(missingIo.errors.join("")).toContain("missing.sqlite");
+
+    const invalidPath = path.join(directory, "not-a-store.sqlite");
+    await writeFile(invalidPath, "not sqlite");
+    const invalidIo = captureIo(directory);
+    expect(await runWorkbenchCli(["history", "--store", invalidPath], invalidIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(invalidIo.errors.join("")).toMatch(/Error:/);
 
     const unknownIo = captureIo(directory);
     expect(
