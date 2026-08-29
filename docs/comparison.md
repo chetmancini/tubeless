@@ -52,5 +52,6 @@ job is a gated, typed graph.
   orchestrator.
 - The unit of work is one item, tens of thousands of times. Queue the items.
 - The consumer is a data platform, not a TypeScript repo. Use the platform.
-- You need a stable 1.x API, Windows, or `npx`. This package is `0.1.0`,
-  Windows is untested, and the CLI requires Bun 1.3.14+.
+- You need a stable 1.x API or Windows. This package is `0.1.0`, and Windows
+  is untested. The CLI runs through Bun; `npx tubeless` works wherever Bun is
+  installed and otherwise prints Bun install instructions.

@@ -15,7 +15,8 @@ npm install tubeless
 
 Also: `pnpm add tubeless`, `yarn add tubeless`, `bun add tubeless`. Library
 imports are ESM-only on Node.js 22+. The `tubeless` CLI requires Bun 1.3.14+;
-`npx tubeless` is not supported. Linux and macOS are supported; Windows is
+`npx tubeless` works anywhere with Bun installed and otherwise prints Bun
+install instructions. Linux and macOS are supported; Windows is
 untested. See [install and runtime](./docs/getting-started.md#install).
 
 ## Quick start

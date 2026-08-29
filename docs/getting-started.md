@@ -17,8 +17,7 @@ The `tubeless` CLI is separate: it requires Bun 1.3.14 or later.
 bunx tubeless --help
 ```
 
-`npx tubeless` is not supported. Command-by-command usage is in
-[the CLI](./cli.md).
+Command-by-command usage is in [the CLI](./cli.md).
 
 ## Runtime support
 
@@ -26,8 +25,9 @@ Library imports (`tubeless` and every subpath) are ESM-only and require
 Node.js 22 or later. They are dependency-free compiled JavaScript.
 
 The `tubeless` CLI requires Bun 1.3.14 or later. Its shebang is
-`#!/usr/bin/env bun`, and Bun loads TypeScript pipeline modules directly.
-`npx tubeless` is not a supported way to run the binary.
+`#!/usr/bin/env node`: the binary relaunches itself with Bun when run under
+Node, and Bun loads TypeScript pipeline modules directly. When Bun is missing,
+the binary prints install instructions instead of a raw interpreter error.
 
 Supported operating systems are Linux and macOS. Windows is untested.
 

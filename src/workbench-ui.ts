@@ -18,6 +18,7 @@ import {
   commandContext,
   errorMessage,
   loadPipelineCommand,
+  onFirstProcessSignal,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
   type WorkbenchCliIo,
@@ -266,6 +267,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
   let server:
     | Awaited<ReturnType<typeof import("./run-store-ui.js").startPipelineRunStudio>>
     | undefined;
+  let disposeProcessSignals: (() => void) | undefined;
   try {
     const { openSqlitePipelineRunStore } = await import("./run-store-sqlite.js");
     const { startPipelineRunStudio } = await import("./run-store-ui.js");
@@ -353,13 +355,10 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
         io.signal.addEventListener("abort", stop, { once: true });
         return;
       }
-      const onProcessStop = (): void => {
-        process.removeListener("SIGINT", onProcessStop);
-        process.removeListener("SIGTERM", onProcessStop);
-        stop();
-      };
-      process.once("SIGINT", onProcessStop);
-      process.once("SIGTERM", onProcessStop);
+      // Same de-dup pattern as `manageWorkbenchSignal`: the trampoline's
+      // forwarded copy of a terminal Ctrl-C must not fall through to
+      // default termination while the server, launches, and store close.
+      disposeProcessSignals = onFirstProcessSignal(["SIGINT", "SIGTERM"], () => stop());
     });
     return TUBELESS_WORKBENCH_EXIT_CODE.success;
   } catch (error) {
@@ -371,5 +370,6 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
     await server?.close();
     await Promise.allSettled(activeLaunches);
     await store?.close();
+    disposeProcessSignals?.();
   }
 }

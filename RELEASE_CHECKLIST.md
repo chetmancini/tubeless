@@ -34,7 +34,8 @@ name; recheck immediately before the first publish.
       `make check` gate and fail on stale generated API artifacts.
 - [x] Validate the exact tarball in clean consumers: inspect `npm pack --dry-run`,
       check size and contents, install the tarball, import every export path,
-      run the executable, and confirm the executable bit and Bun shebang.
+      run the executable, and confirm the executable bit and Node trampoline
+      shebang.
 - [x] Configure npm Trusted Publishing from a GitHub-hosted Actions runner with
       least-privilege `contents: read` and `id-token: write` permissions on
       `.github/workflows/publish.yml`. Do not store an `NPM_TOKEN`.
