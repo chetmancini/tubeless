@@ -7,6 +7,7 @@ import { defineCommand, definePipelineCommand } from "./cli";
 import { selectPipelineCommandExport, selectPipelineExport } from "./pipeline-module";
 import { createSteps, definePipeline } from "./pipeline";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite";
+import { DUPLICATE_SIGINT_WINDOW_MS } from "./workbench-shared";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli, type WorkbenchCliIo } from "./workbench";
 
 function captureIo(cwd: string): WorkbenchCliIo & { errors: string[]; output: string[] } {
@@ -1067,8 +1068,8 @@ describe("tubeless workbench", () => {
       const registration = onSpy.mock.calls.find(([event]) => event === "SIGINT");
       expect(registration).toBeDefined();
       (registration?.[1] as () => void)();
-      // A forwarded duplicate (trampoline + direct terminal delivery)
-      // must not cut cleanup short: it is swallowed by the same listener.
+      // The forwarded duplicate (trampoline + direct terminal delivery)
+      // lands inside the swallow window and must not re-trigger anything.
       (registration?.[1] as () => void)();
 
       expect(await runPromise).toBe(TUBELESS_WORKBENCH_EXIT_CODE.execution);
@@ -1077,6 +1078,46 @@ describe("tubeless workbench", () => {
       expect(io.errors.join("").match(/SIGINT received/g)).toHaveLength(1);
     } finally {
       onSpy.mockRestore();
+    }
+  });
+
+  it("re-raises a SIGINT after the duplicate window as a force-quit", async () => {
+    const { directory, filePath } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const onSpy = vi.spyOn(process, "on");
+    const removeListenerSpy = vi.spyOn(process, "removeListener");
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+
+    try {
+      const runPromise = runWorkbenchCli(
+        ["run", "pipeline.mjs", "--", "--message", "hello", "--mode", "wait"],
+        io
+      );
+      const fixture = (await import(pathToFileURL(filePath).href)) as { started: Promise<void> };
+      await fixture.started;
+      const registration = onSpy.mock.calls.find(([event]) => event === "SIGINT");
+      expect(registration).toBeDefined();
+      (registration?.[1] as () => void)();
+
+      // Past the swallow window, a second SIGINT is a deliberate force-quit:
+      // the listener removes itself and re-raises SIGINT on this process so
+      // default termination takes over.
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.now() + DUPLICATE_SIGINT_WINDOW_MS + 1000);
+      (registration?.[1] as () => void)();
+
+      expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGINT");
+      expect(removeListenerSpy.mock.calls).toContainEqual(["SIGINT", registration?.[1]]);
+      expect(io.errors.join("").match(/SIGINT received/g)).toHaveLength(1);
+
+      // The mocked kill means the run never actually dies; await it so the
+      // finally in runCommand still cleans up.
+      await runPromise;
+    } finally {
+      vi.useRealTimers();
+      killSpy.mockRestore();
+      onSpy.mockRestore();
+      removeListenerSpy.mockRestore();
     }
   });
 

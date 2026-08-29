@@ -21,6 +21,14 @@ export const TUBELESS_WORKBENCH_EXIT_CODE = {
   cancellation: 7,
 } as const;
 
+/**
+ * How long after the first SIGINT a repeat is treated as the trampoline's
+ * forwarded duplicate of the same terminal Ctrl-C rather than a deliberate
+ * force-quit. The forwarded copy lands within milliseconds; an operator
+ * pressing Ctrl-C again needs at least a second.
+ */
+export const DUPLICATE_SIGINT_WINDOW_MS = 300;
+
 export interface WorkbenchCliIo {
   cwd: string;
   signal?: AbortSignal;
@@ -202,19 +210,26 @@ export function manageWorkbenchSignal(io: WorkbenchCliIo): ManagedWorkbenchSigna
 
   const controller = new AbortController();
   let interrupted = false;
+  let swallowDuplicatesUntil = 0;
   const onSigint = (): void => {
-    // A duplicate SIGINT can arrive while cleanup runs: the Node
+    // A duplicate SIGINT can arrive immediately after the first: the Node
     // trampoline forwards terminal signals to this process, and an
-    // interactive Ctrl-C also delivers SIGINT directly. The first one
-    // cancels the work; later ones are ignored so cleanup — including
-    // run-store closing — is never cut short by default termination.
-    if (interrupted) return;
+    // interactive Ctrl-C also delivers SIGINT directly. Only the copy
+    // within this window is swallowed; a later Ctrl-C is a deliberate
+    // force-quit from an operator whose cleanup is not finishing.
+    if (interrupted) {
+      if (Date.now() < swallowDuplicatesUntil) return;
+      process.removeListener("SIGINT", onSigint);
+      process.kill(process.pid, "SIGINT");
+      return;
+    }
     interrupted = true;
+    swallowDuplicatesUntil = Date.now() + DUPLICATE_SIGINT_WINDOW_MS;
     io.stderr.write("SIGINT received; cancelling pipeline work.\n");
     controller.abort();
   };
-  // `process.on` (not `once`): a second SIGINT must be swallowed by this
-  // listener rather than re-enable Node's default termination.
+  // `process.on` (not `once`): the immediate duplicate must be swallowed by
+  // this listener rather than trigger Node's default termination.
   process.on("SIGINT", onSigint);
   return {
     cleanup: () => process.removeListener("SIGINT", onSigint),
