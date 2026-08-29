@@ -24,6 +24,7 @@ interface SqliteOpenOptions {
   create?: boolean;
   readOnly?: boolean;
   readonly?: boolean;
+  readwrite?: boolean;
 }
 
 interface SqliteModule {
@@ -120,20 +121,21 @@ async function openDatabase(
   const module = await loadSqliteModule();
   const Database = module.Database ?? module.DatabaseSync;
   if (!Database) throw new Error("No synchronous SQLite database implementation is available.");
+  const bunSqlite = "Bun" in globalThis;
   const create = options.create !== false;
   const readOnly = options.readOnly === true;
   if (readOnly) {
+    if (bunSqlite) return openReadableDatabase(Database, filename, { readonly: true });
     try {
-      return openReadableDatabase(Database, filename, {
-        create: false,
-        readOnly: true,
-        readonly: true,
-      });
+      return openReadableDatabase(Database, filename, { readOnly: true });
     } catch {
       return openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=ro&immutable=1`);
     }
   }
   if (!create) {
+    if (bunSqlite) {
+      return openReadableDatabase(Database, filename, { create: false, readwrite: true });
+    }
     try {
       return openReadableDatabase(Database, filename, { create: false });
     } catch {
