@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { defineCommand, definePipelineCommand } from "./cli";
+import { markPipelineCommand } from "./pipeline-command-marker";
 import {
   selectPipelineCommandExport,
   selectPipelineExport,
@@ -428,6 +429,8 @@ describe("tubeless workbench", () => {
           steps: [],
         }),
         parse: () => ({ kind: "values" }),
+        parseValues: () => ({ kind: "values" }),
+        execute: async () => undefined,
         run: async () => undefined,
         toMermaid: () => "flowchart TD",
       });
@@ -539,6 +542,8 @@ describe("tubeless workbench", () => {
           steps: [],
         }),
         parse: () => ({ kind: "values" }),
+        parseValues: () => ({ kind: "values" }),
+        execute: async () => undefined,
         run: async () => undefined,
         toMermaid: () => "flowchart TD\\n  from-command",
       });
@@ -1378,6 +1383,22 @@ describe("tubeless workbench", () => {
       "Module exports multiple pipeline commands (First, Second); pass --export <name>."
     );
     expect(() => selectPipelineCommandExport({ Generic: generic })).toThrow(
+      "Module does not export an tubeless pipeline command."
+    );
+  });
+
+  it("rejects a marked command that is missing structured launch methods", () => {
+    const incomplete = markPipelineCommand({
+      id: "from-command",
+      stepIds: ["work"],
+      targetIds: ["work"],
+      descriptor: { name: "fixture", parameters: [] },
+      plan: () => ({ dryRun: false, errors: [], ok: true, pipelineId: "from-command", steps: [] }),
+      parse: () => ({ kind: "values" }),
+      run: async () => undefined,
+      toMermaid: () => "flowchart TD",
+    });
+    expect(() => selectPipelineCommandExport({ Incomplete: incomplete })).toThrow(
       "Module does not export an tubeless pipeline command."
     );
   });

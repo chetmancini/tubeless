@@ -84,6 +84,10 @@ function isWorkbenchPipelineCommand(value: unknown): value is WorkbenchPipelineC
     typeof candidate.plan === "function" &&
     "parse" in candidate &&
     typeof candidate.parse === "function" &&
+    "parseValues" in candidate &&
+    typeof candidate.parseValues === "function" &&
+    "execute" in candidate &&
+    typeof candidate.execute === "function" &&
     "run" in candidate &&
     typeof candidate.run === "function" &&
     "toMermaid" in candidate &&
