@@ -9,6 +9,13 @@ Record one workbench run by placing `--store` before the command file:
 bunx tubeless run --store .tubeless/runs.sqlite ./scripts/import.ts -- --source rows.txt
 ```
 
+Inspect recorded runs without a browser:
+
+```sh
+bunx tubeless history --store .tubeless/runs.sqlite
+bunx tubeless history --json <run-id>
+```
+
 Open the studio only when you want a browser view:
 
 ```sh

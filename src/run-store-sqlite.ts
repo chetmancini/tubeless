@@ -139,8 +139,8 @@ function mapRow(row: StoredEventRow): StoredPipelineEvent {
 }
 
 /**
- * Open the optional local SQLite trace store used by `tubeless run --store` and
- * `tubeless ui`. The main executor never imports this module.
+ * Open the optional local SQLite trace store used by `tubeless run --store`,
+ * `tubeless history`, and `tubeless ui`. The main executor never imports this module.
  */
 export async function openSqlitePipelineRunStore(
   filename: string

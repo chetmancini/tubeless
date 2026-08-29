@@ -1,4 +1,5 @@
 import { runGraph } from "./workbench-graph.js";
+import { runHistory } from "./workbench-history.js";
 import { runInspect } from "./workbench-inspect.js";
 import { runPlan } from "./workbench-plan.js";
 import { runCommand } from "./workbench-run.js";
@@ -20,6 +21,7 @@ Commands:
   tubeless plan      Preview step selection without executing the pipeline
   tubeless graph     Generate Mermaid flowchart source
   tubeless run       Execute an exported definePipelineCommand
+  tubeless history   Show recorded runs from the local SQLite store
   tubeless ui        Open the optional local run studio
 
 Run tubeless <command> --help for command-specific options.
@@ -42,6 +44,7 @@ export async function runWorkbenchCli(
   if (command === "plan") return runPlan(commandArgs, io);
   if (command === "graph") return runGraph(commandArgs, io);
   if (command === "run") return runCommand(commandArgs, io);
+  if (command === "history") return runHistory(commandArgs, io);
   if (command === "ui") return runUi(commandArgs, io);
   return writeUsageError(io, `Unknown command ${JSON.stringify(command)}.`, WORKBENCH_USAGE);
 }

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -15,6 +15,20 @@ import { projectPipelineRun } from "./run-store";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite";
 import { DUPLICATE_SIGNAL_WINDOW_MS, onFirstProcessSignal } from "./workbench-shared";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli, type WorkbenchCliIo } from "./workbench";
+
+function parseNdjson(text: string): { name?: string; pipelineId?: string; runId?: string }[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line) as { name?: string; pipelineId?: string; runId?: string }];
+      } catch {
+        return [];
+      }
+    });
+}
 
 function captureIo(cwd: string): WorkbenchCliIo & { errors: string[]; output: string[] } {
   const errors: string[] = [];
@@ -620,6 +634,260 @@ describe("tubeless workbench", () => {
     expect(events.find(({ name }) => name === "step.planned")?.attributes).toMatchObject({
       description: "Exercise workbench execution.",
     });
+  });
+
+  it("writes JSON traces from tubeless run without opening a store", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const tracePath = path.join(directory, "traces", "run.ndjson");
+
+    const exitCode = await runWorkbenchCli(
+      ["run", "--trace", tracePath, "pipeline.mjs", "--", "--message", "hello", "--target", "work"],
+      io
+    );
+
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(io.output.join("")).toContain("completed:hello");
+    expect(io.output.join("")).not.toContain('"name":"pipeline.started"');
+    const events = parseNdjson(await readFile(tracePath, "utf8"));
+    expect(events.map(({ name }) => name)).toEqual([
+      "pipeline.started",
+      "step.planned",
+      "step.running",
+      "pipeline.log",
+      "step.complete",
+      "pipeline.finalize.started",
+      "pipeline.finalize.completed",
+      "pipeline.completed",
+    ]);
+  });
+
+  it("writes JSON traces to stdout when --trace is -", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+
+    const exitCode = await runWorkbenchCli(
+      ["run", "--trace", "-", "pipeline.mjs", "--", "--message", "hello", "--target", "work"],
+      io
+    );
+
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(io.output.join("")).toContain("completed:hello");
+    const events = parseNdjson(io.output.join(""));
+    expect(events.map(({ name }) => name)).toContain("pipeline.started");
+    expect(events.map(({ name }) => name)).toContain("pipeline.completed");
+  });
+
+  it("records JSON traces and SQLite events together", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const databasePath = path.join(directory, "history", "runs.sqlite");
+    const tracePath = path.join(directory, "traces", "run.ndjson");
+
+    const exitCode = await runWorkbenchCli(
+      [
+        "run",
+        "--store",
+        databasePath,
+        "--trace",
+        tracePath,
+        "pipeline.mjs",
+        "--",
+        "--message",
+        "hello",
+        "--target",
+        "work",
+      ],
+      io
+    );
+
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    const store = await openSqlitePipelineRunStore(databasePath);
+    const stored = await store.listEvents();
+    await store.close();
+    const traced = parseNdjson(await readFile(tracePath, "utf8"));
+    expect(stored.map(({ name }) => name)).toEqual(traced.map(({ name }) => name));
+    expect(traced.map(({ name }) => name)).toContain("pipeline.completed");
+  });
+
+  it("lists and shows projected history from the run store", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const databasePath = path.join(directory, "history", "runs.sqlite");
+
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          databasePath,
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+
+    const store = await openSqlitePipelineRunStore(databasePath);
+    const events = await store.listEvents();
+    await store.close();
+    const runId = events[0]?.runId;
+    expect(runId).toEqual(expect.any(String));
+
+    const listIo = captureIo(directory);
+    expect(await runWorkbenchCli(["history", "--store", databasePath], listIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(listIo.output.join("")).toContain(runId!);
+    expect(listIo.output.join("")).toContain("command-fixture");
+    expect(listIo.output.join("")).toContain("completed");
+
+    const jsonListIo = captureIo(directory);
+    expect(await runWorkbenchCli(["history", "--json", "--store", databasePath], jsonListIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(JSON.parse(jsonListIo.output.join(""))).toMatchObject({
+      runs: [{ pipelineId: "command-fixture", runId, status: "completed" }],
+    });
+
+    const showIo = captureIo(directory);
+    expect(await runWorkbenchCli(["history", "--store", databasePath, runId!], showIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(showIo.output.join("")).toContain(runId!);
+    expect(showIo.output.join("")).toContain("work");
+    expect(showIo.output.join("")).toContain("worked:hello");
+
+    const jsonShowIo = captureIo(directory);
+    expect(
+      await runWorkbenchCli(["history", "--json", "--store", databasePath, runId!], jsonShowIo)
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(JSON.parse(jsonShowIo.output.join(""))).toMatchObject({
+      logs: [expect.objectContaining({ message: "worked:hello", stepId: "work" })],
+      pipelineId: "command-fixture",
+      runId,
+      status: "completed",
+      steps: [expect.objectContaining({ id: "work", status: "complete" })],
+    });
+  });
+
+  it("emits raw store events as NDJSON", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const databasePath = path.join(directory, "history", "runs.sqlite");
+
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          databasePath,
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+
+    const store = await openSqlitePipelineRunStore(databasePath);
+    const stored = await store.listEvents();
+    await store.close();
+    const runId = stored[0]?.runId;
+
+    const eventsIo = captureIo(directory);
+    expect(await runWorkbenchCli(["history", "--events", "--store", databasePath], eventsIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    const listed = parseNdjson(eventsIo.output.join(""));
+    expect(listed.map(({ name }) => name)).toEqual(stored.map(({ name }) => name));
+
+    const scopedIo = captureIo(directory);
+    expect(
+      await runWorkbenchCli(["history", "--events", "--store", databasePath, runId!], scopedIo)
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(parseNdjson(scopedIo.output.join("")).every((event) => event.runId === runId)).toBe(
+      true
+    );
+  });
+
+  it("reads history from the default studio store path", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          ".tubeless/runs.sqlite",
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+
+    const historyIo = captureIo(directory);
+    expect(await runWorkbenchCli(["history"], historyIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(historyIo.output.join("")).toContain("command-fixture");
+  });
+
+  it("rejects a missing store, unknown run, and combined json/events flags", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const databasePath = path.join(directory, "history", "runs.sqlite");
+
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          databasePath,
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+
+    const missingIo = captureIo(directory);
+    expect(
+      await runWorkbenchCli(
+        ["history", "--store", path.join(directory, "missing.sqlite")],
+        missingIo
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.load);
+    expect(missingIo.errors.join("")).toContain("missing.sqlite");
+
+    const unknownIo = captureIo(directory);
+    expect(
+      await runWorkbenchCli(["history", "--store", databasePath, "missing-run"], unknownIo)
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(unknownIo.errors.join("")).toContain("missing-run");
+
+    const conflictIo = captureIo(directory);
+    expect(
+      await runWorkbenchCli(["history", "--json", "--events", "--store", databasePath], conflictIo)
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(conflictIo.errors.join("")).toMatch(/json|events/i);
   });
 
   it("serves and cleanly stops the optional local studio command", async () => {
@@ -1430,6 +1698,7 @@ describe("tubeless workbench", () => {
     const inspectIo = captureIo("/tmp");
     const planIo = captureIo("/tmp");
     const runIo = captureIo("/tmp");
+    const historyIo = captureIo("/tmp");
     const uiIo = captureIo("/tmp");
 
     expect(await runWorkbenchCli(["--help"], topLevelIo)).toBe(
@@ -1444,6 +1713,9 @@ describe("tubeless workbench", () => {
     expect(await runWorkbenchCli(["run", "--help"], runIo)).toBe(
       TUBELESS_WORKBENCH_EXIT_CODE.success
     );
+    expect(await runWorkbenchCli(["history", "--help"], historyIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
     expect(await runWorkbenchCli(["ui", "--help"], uiIo)).toBe(
       TUBELESS_WORKBENCH_EXIT_CODE.success
     );
@@ -1451,11 +1723,16 @@ describe("tubeless workbench", () => {
     expect(topLevelIo.output.join("")).toContain("tubeless plan");
     expect(topLevelIo.output.join("")).toContain("tubeless graph");
     expect(topLevelIo.output.join("")).toContain("tubeless run");
+    expect(topLevelIo.output.join("")).toContain("tubeless history");
     expect(inspectIo.output.join("")).toContain("--json");
     expect(inspectIo.output.join("")).not.toContain("direction");
     expect(planIo.output.join("")).toContain("--target <id>");
     expect(planIo.output.join("")).toContain("--explain");
     expect(runIo.output.join("")).toContain("definePipelineCommand");
+    expect(runIo.output.join("")).toContain("--trace");
+    expect(historyIo.output.join("")).toContain("--store");
+    expect(historyIo.output.join("")).toContain("--json");
+    expect(historyIo.output.join("")).toContain("--events");
     expect(uiIo.output.join("")).toContain("append-only SQLite run store");
     expect(uiIo.output.join("")).toContain("--command <path>");
   });

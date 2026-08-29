@@ -259,8 +259,9 @@ The main `tubeless` entrypoint never imports SQLite or the UI. The optional
 `tubeless/run-store/sqlite` adapter selects the runtime-provided SQLite
 implementation, and `tubeless/run-store/ui` is a separate HTTP projection.
 It is read-only unless the caller injects a `PipelineRunStudioLauncher`.
-Likewise, ordinary `tubeless run` remains unchanged; pass `--store` to record a run
-and invoke `tubeless ui` only when a browser view is useful.
+Likewise, ordinary `tubeless run` remains unchanged; pass `--store` to record a run,
+`--trace` for NDJSON, `tubeless history` to inspect the store, and `tubeless ui`
+only when a browser view is useful.
 
 Observed definitions are never treated as executable registrations: an event
 stream does not contain a trusted module path or a command's domain contract.
@@ -434,7 +435,8 @@ options, and prefer the command when both are exported. `tubeless run`
 deliberately accepts only a command created by `definePipelineCommand`, because
 that export carries the application-owned parser, validation, option mapping,
 reporter, and result summary needed for safe execution. A raw pipeline is not
-executable through the workbench.
+executable through the workbench. `tubeless history` reads the optional local
+SQLite store; `tubeless run --trace` writes NDJSON without requiring a store.
 
 `definePipelineCommand` defaults to a same-name mapping when its validated flag
 values structurally satisfy the pipeline's domain options. Command-only values

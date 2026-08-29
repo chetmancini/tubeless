@@ -66,7 +66,8 @@ bunx tubeless run ./pipelines/my-command.ts -- --source input.json --target publ
 
 The CLI loads TypeScript modules with Bun. `inspect`, `plan`, and `graph`
 accept a pipeline or a `definePipelineCommand` export. `run` executes only a
-command export; application flags go after `--`. See
+command export; application flags go after `--`. `history` lists recorded
+`--store` runs without opening the studio. See
 [the CLI](./docs/cli.md) and [the local studio](./docs/studio.md).
 
 ## Choose the right pattern

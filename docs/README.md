@@ -14,10 +14,10 @@
 
 ## How to
 
-| Document                    | Use it for                                        |
-| --------------------------- | ------------------------------------------------- |
-| [CLI](./cli.md)             | `inspect`, `plan`, `graph`, `run`, and exit codes |
-| [Local studio](./studio.md) | Optional run history, `tubeless ui`, and catalogs |
+| Document                    | Use it for                                                   |
+| --------------------------- | ------------------------------------------------------------ |
+| [CLI](./cli.md)             | `inspect`, `plan`, `graph`, `run`, `history`, and exit codes |
+| [Local studio](./studio.md) | Optional run history, `tubeless ui`, and catalogs            |
 
 ## Deeper reference
 

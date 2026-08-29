@@ -25,6 +25,7 @@ prints install instructions instead of failing with
 | `tubeless plan`    | A pipeline or command export     | Previews selection without executing or requiring domain options              |
 | `tubeless graph`   | A pipeline or command export     | Writes Mermaid flowchart source                                               |
 | `tubeless run`     | A `definePipelineCommand` export | Executes the command's own validated CLI contract                             |
+| `tubeless history` | An optional run id               | Lists or shows recorded runs from the local SQLite store                      |
 | `tubeless ui`      | An optional studio catalog       | Serves the local run studio; see [studio](./studio.md)                        |
 
 The workbench discovers a single matching export automatically. Pass
@@ -99,6 +100,11 @@ tubeless run [options] <command-file> [-- <command-args...>]
 
 - `-e, --export <name>` selects a command export
 - `--store <path>` appends run events to a local SQLite database
+- `--trace <path>` writes NDJSON traces to a file, or `-` for stdout
+
+`--store` and `--trace` can be combined. Traces stay off stdout unless `--trace -`
+is set, so the TTY reporter and command result stay intact. The binary does not
+attach OpenTelemetry; keep that SDK at the application exporter boundary.
 
 `run` accepts only a `definePipelineCommand` export. That export owns parsing,
 validation, option mapping, reporting, and the result summary. Omit `mapOptions`
@@ -107,7 +113,28 @@ names, types, defaults, or derived values differ. `--step` and `--target` stay
 the flag names; the parsed keys are `stepIds` and `targets`.
 
 A first script is [`cli-job.ts`](../examples/cli-job.ts). Local history with
-`--store` is covered in [the studio](./studio.md).
+`--store` is covered in [the studio](./studio.md) and `tubeless history`.
+
+## History
+
+```
+tubeless history [options] [run-id]
+```
+
+- `--store <path>` selects the SQLite database (default `.tubeless/runs.sqlite`)
+- `--json` emits the projected run list, or one projected run when `run-id` is set
+- `--events` emits raw store events as NDJSON (run-scoped when `run-id` is set)
+
+`--json` and `--events` cannot be combined. The default print is the projection:
+a run list, or one run's steps, logs, and error. A missing store exits `2`. An
+unknown run id exits `1`.
+
+```sh
+bunx tubeless run --store .tubeless/runs.sqlite --trace run.ndjson ./scripts/import.ts -- --source rows.txt
+bunx tubeless history
+bunx tubeless history --json <run-id>
+bunx tubeless history --events <run-id>
+```
 
 ## Exit codes
 

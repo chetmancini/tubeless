@@ -29,6 +29,9 @@ export const TUBELESS_WORKBENCH_EXIT_CODE = {
  */
 export const DUPLICATE_SIGNAL_WINDOW_MS = 300;
 
+/** Default local SQLite path shared by `tubeless run --store`, `history`, and `ui`. */
+export const DEFAULT_PIPELINE_RUN_STORE = ".tubeless/runs.sqlite";
+
 export interface WorkbenchCliIo {
   cwd: string;
   signal?: AbortSignal;

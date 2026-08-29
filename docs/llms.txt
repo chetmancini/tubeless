@@ -22,7 +22,8 @@ Agent instructions:
 - Use tubeless inspect with a pipeline or marked command module for a read-only inventory of identity plus the default plan. Prefer the marked command when both are exported.
 - Use tubeless plan with a pipeline or marked command module to preview target, exact-step, and dry-run selection without executing or supplying domain options. Prefer the marked command when both are exported. Use command.plan() or tubeless plan; do not simulate planning with --plan.
 - Use tubeless graph with a pipeline or marked command module to print Mermaid without a wrapper script. Prefer the marked command when both are exported. Command files expose the same graph as command.toMermaid().
-- Use tubeless run only with a definePipelineCommand module; put the command's validated application arguments after --.
+- Use tubeless run only with a definePipelineCommand module; put the command's validated application arguments after --. Pass --trace for NDJSON traces and --store for SQLite; they compose.
+- Use tubeless history to list or show recorded runs from the local SQLite store. Default print is the projection; --events emits raw NDJSON.
 - Set dryRun: "skip" on external side effects, or provide a side-effect-free dryRun handler.
 - Use context.log, context.signal, context.sleep, and progress APIs.
 - Use createPipelineTestRuntime from tubeless/testing for deterministic tests with captured logs, statuses, progress, clock, and cancellation.

@@ -17,6 +17,7 @@ import type {
 import { executePipelineCommandValues } from "./workbench-run.js";
 import {
   commandContext,
+  DEFAULT_PIPELINE_RUN_STORE,
   errorMessage,
   loadPipelineCommand,
   onFirstProcessSignal,
@@ -239,7 +240,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
     });
   }
 
-  const filename = path.resolve(io.cwd, parsed.values.store ?? ".tubeless/runs.sqlite");
+  const filename = path.resolve(io.cwd, parsed.values.store ?? DEFAULT_PIPELINE_RUN_STORE);
   let store:
     | Awaited<ReturnType<typeof import("./run-store-sqlite.js").openSqlitePipelineRunStore>>
     | undefined;

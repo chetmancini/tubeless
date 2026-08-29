@@ -1,3 +1,5 @@
+import { createWriteStream } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import { isAbortError } from "./abort.js";
@@ -5,6 +7,8 @@ import type { PipelineContext } from "./pipeline.js";
 import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import { renderPipelineError } from "./render.js";
 import type { PipelineRunEventStore } from "./run-store.js";
+import { createJsonTraceExporter } from "./tracing-json.js";
+import type { PipelineTraceExporter } from "./tracing.js";
 import {
   commandContext,
   errorMessage,
@@ -26,6 +30,7 @@ Execute an exported definePipelineCommand using its own validated CLI contract.
 Options:
   -e, --export <name>   Select a command export when the file has more than one
       --store <path>    Append run events to a local SQLite database
+      --trace <path>    Write NDJSON traces to a file, or - for stdout
   -h, --help            Show this workbench help
 
 Pass application flags after --. For command help, use: tubeless run <file> -- --help
@@ -44,6 +49,7 @@ function parseRunArgs(argv: readonly string[]) {
         export: { type: "string", short: "e" },
         help: { type: "boolean", short: "h" },
         store: { type: "string" },
+        trace: { type: "string" },
       },
       strict: true,
     }),
@@ -148,13 +154,23 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
 
   const managedSignal = manageWorkbenchSignal(io);
   let store: PipelineRunEventStore | undefined;
+  let closeTrace: (() => Promise<void>) | undefined;
   try {
-    let pipelineContext: Omit<PipelineContext, "cwd" | "log" | "signal"> | undefined;
+    const exporters: PipelineTraceExporter[] = [];
     if (parsed.parsed.values.store) {
       const { openSqlitePipelineRunStore } = await import("./run-store-sqlite.js");
       store = await openSqlitePipelineRunStore(path.resolve(io.cwd, parsed.parsed.values.store));
-      pipelineContext = { tracing: { exporter: store } };
+      exporters.push(store);
     }
+    if (parsed.parsed.values.trace) {
+      const writer = await createRunTraceWriter(parsed.parsed.values.trace, io);
+      closeTrace = writer.close;
+      exporters.push(writer.exporter);
+    }
+    const pipelineContext =
+      exporters.length > 0
+        ? { tracing: { exporter: composeTraceExporters(exporters) } }
+        : undefined;
     const exitCode = await executePipelineCommand(
       loaded.command,
       parsed.commandArgs,
@@ -166,7 +182,56 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
       ? TUBELESS_WORKBENCH_EXIT_CODE.cancellation
       : exitCode;
   } finally {
+    await closeTrace?.();
     await store?.close();
     managedSignal.cleanup();
   }
+}
+
+function composeTraceExporters(exporters: readonly PipelineTraceExporter[]): PipelineTraceExporter {
+  if (exporters.length === 1) return exporters[0]!;
+  return {
+    async export(event) {
+      for (const exporter of exporters) {
+        await exporter.export(event);
+      }
+    },
+    async flush() {
+      for (const exporter of exporters) {
+        await exporter.flush?.();
+      }
+    },
+  };
+}
+
+async function createRunTraceWriter(
+  destination: string,
+  io: WorkbenchCliIo
+): Promise<{ close(): Promise<void>; exporter: PipelineTraceExporter }> {
+  if (destination === "-") {
+    return {
+      close: async () => undefined,
+      exporter: createJsonTraceExporter({
+        write: (line) => io.stdout.write(`${line}\n`),
+      }),
+    };
+  }
+
+  const filename = path.resolve(io.cwd, destination);
+  await mkdir(path.dirname(filename), { recursive: true });
+  const stream = createWriteStream(filename);
+  return {
+    close: () =>
+      new Promise((resolve, reject) => {
+        stream.end((error?: Error | null) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      }),
+    exporter: createJsonTraceExporter({
+      write: (line) => {
+        stream.write(`${line}\n`);
+      },
+    }),
+  };
 }
