@@ -339,7 +339,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
   </div>
   <div class="toast hidden" id="toast" role="status"></div>
   <script>
-    const state = { snapshot: null, detail: null, detailFingerprint: null, commands: [], view: "runs", selectedRunId: null, query: "", loading: false, launching: false, planning: false, clearing: false, canClearHistory: false, planVersion: 0 };
+    const state = { snapshot: null, detail: null, detailFingerprint: null, commands: [], view: "runs", selectedRunId: null, query: "", loading: false, launching: false, planning: false, clearing: false, cancelling: false, canCancel: false, canClearHistory: false, planVersion: 0 };
     const $ = (selector) => document.querySelector(selector);
     const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"})[char]);
     const statusMark = (value) => value === 'completed' || value === 'complete' ? '✓' : value === 'skipped' ? '×' : value === 'cancelled' ? '■' : value === 'failed' ? '!' : value === 'planned' ? '…' : '';
@@ -573,7 +573,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
       const nested = children.length ? '<div class="section-title"><span>Nested runs</span><span>' + children.length + ' direct · ' + descendantsOf(run.runId).length + ' total</span></div><div class="nested-runs">' + children.map((child) => '<button class="nested-run" type="button" data-detail-run-id="' + esc(child.runId) + '">' + status(child.status) + '<strong>' + esc(child.pipelineId) + '</strong><small>' + duration(child.durationMs) + ' · ' + child.steps.length + ' steps' + (descendantsOf(child.runId).length ? ' · ' + descendantsOf(child.runId).length + ' nested' : '') + '</small></button>').join('') + '</div>' : '';
       const error = run.error ? '<div class="section-title"><span>Error</span></div><div class="error-card"><div class="error-code">' + esc(run.error.code) + ' · ' + esc(run.error.phase) + '</div><div class="error-message">' + esc(run.error.message) + '</div></div>' : '';
       const logs = run.logs.length ? '<div class="section-title"><span>Logs</span><span>' + run.logs.length + '</span></div><div class="logs">' + run.logs.map((log) => '<div class="log-line"><time class="log-time">' + clock(log.timestampMs) + '</time><span class="log-level ' + esc(log.level) + '">' + esc(log.level) + '</span><span class="log-message">' + (log.stepId ? '<b>' + esc(log.stepId) + '</b> · ' : '') + esc(log.message) + '</span></div>').join('') + '</div>' : '';
-      return '<article class="sheet detail"><div class="detail-body">' + parentage + '<div class="detail-heading"><div style="min-width:0"><div class="detail-kicker">' + (run.parentRunId ? 'Nested run' : 'Top-level run') + ' · ' + relative(run.startedAtMs) + '</div><h2>' + esc(run.pipelineId) + '</h2><div class="run-id">' + esc(run.runId) + '</div></div><div style="margin-left:auto">' + status(run.status) + '</div></div><div class="detail-meta"><div><label>Started</label><span title="' + esc(isoTime(run.startedAtMs)) + '">' + esc(dateTime(run.startedAtMs)) + '</span></div><div><label>Duration</label><span>' + duration(run.durationMs) + '</span></div><div><label>Steps</label><span>' + run.steps.length + '</span></div><div><label>Events</label><span>' + run.eventCount + '</span></div></div>' + nested + '<div class="section-title"><span>Step timeline</span><span>' + stepSummary(run) + '</span></div>' + (run.steps.length ? '<div class="step-list">' + run.steps.map(stepRow).join('') + '</div>' : empty('No planned steps', 'This run ended before a step plan was recorded.')) + error + logs + '</div></article>';
+      return '<article class="sheet detail"><div class="detail-body">' + parentage + '<div class="detail-heading"><div style="min-width:0"><div class="detail-kicker">' + (run.parentRunId ? 'Nested run' : 'Top-level run') + ' · ' + relative(run.startedAtMs) + '</div><h2>' + esc(run.pipelineId) + '</h2><div class="run-id">' + esc(run.runId) + '</div></div><div style="margin-left:auto;display:flex;align-items:center;gap:8px">' + status(run.status) + (state.canCancel && run.status === 'running' && !run.parentRunId ? '<button class="danger-button" type="button" data-cancel-run-id="' + esc(run.runId) + '"' + (state.cancelling ? ' disabled' : '') + '>Cancel run</button>' : '') + '</div></div><div class="detail-meta"><div><label>Started</label><span title="' + esc(isoTime(run.startedAtMs)) + '">' + esc(dateTime(run.startedAtMs)) + '</span></div><div><label>Duration</label><span>' + duration(run.durationMs) + '</span></div><div><label>Steps</label><span>' + run.steps.length + '</span></div><div><label>Events</label><span>' + run.eventCount + '</span></div></div>' + nested + '<div class="section-title"><span>Step timeline</span><span>' + stepSummary(run) + '</span></div>' + (run.steps.length ? '<div class="step-list">' + run.steps.map(stepRow).join('') + '</div>' : empty('No planned steps', 'This run ended before a step plan was recorded.')) + error + logs + '</div></article>';
     }
     function runById(runId) { return state.snapshot?.runs.find((run) => run.runId === runId); }
     function childrenOf(runId) { return state.snapshot.runs.filter((run) => run.parentRunId === runId).sort((left, right) => right.startedAtMs - left.startedAtMs); }
@@ -611,6 +611,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
       $('#content').innerHTML = '<div class="content-grid"><section class="sheet"><div class="sheet-head"><div><div class="sheet-title">Pipeline runs</div><div class="sheet-subtitle">Top-level runs · nested work stays with its parent</div></div><span class="sheet-subtitle">' + roots.length + ' top-level · ' + state.snapshot.runs.length + ' total</span></div><div class="run-list">' + (roots.length ? activeList + historyList : empty('No recorded runs', 'Choose Pipelines to start a run and create local history.')) + '</div></section>' + runDetail(selected) + '</div>';
       document.querySelectorAll('[data-run-id]').forEach((button) => button.addEventListener('click', () => { void selectRun(button.dataset.runId); }));
       document.querySelectorAll('[data-detail-run-id]').forEach((button) => button.addEventListener('click', () => { void selectRun(button.dataset.detailRunId); }));
+      document.querySelectorAll('[data-cancel-run-id]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); void cancelRun(button.dataset.cancelRunId); }));
     }
     function renderPipelines() {
       const query = state.query.toLowerCase();
@@ -710,6 +711,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
         if (!response.ok) return;
         const capabilities = await response.json();
         state.canClearHistory = capabilities.canClearHistory === true;
+        state.canCancel = capabilities.canCancel === true;
         $('#clearHistoryButton').classList.toggle('hidden', !state.canClearHistory);
         render();
       } catch {}
@@ -753,6 +755,26 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
         $('#previewPlan').disabled = false;
         $('#previewPlan').textContent = 'Preview plan';
         $('#submitLaunch').disabled = false;
+      }
+    }
+    async function cancelRun(runId) {
+      if (!state.canCancel || !runId || state.cancelling) return;
+      state.cancelling = true;
+      render();
+      try {
+        const response = await fetch('/api/runs/' + encodeURIComponent(runId) + '/cancel', {
+          method: 'POST',
+          headers: { 'x-tubeless-studio-cancel': '1' },
+        });
+        const result = await response.json();
+        if (!response.ok || !result.cancelled) throw new Error(result.error || 'Run could not be cancelled.');
+        showToast('Run cancelled · ' + shortId(runId));
+        setTimeout(() => refresh(true), 80);
+      } catch (error) {
+        showToast(error.message || String(error));
+      } finally {
+        state.cancelling = false;
+        render();
       }
     }
     async function launch(event) {

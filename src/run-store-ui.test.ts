@@ -174,6 +174,9 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("Built into Tubeless");
     expect(html).toContain("if (checked !== Boolean(parameter.default))");
     expect(html).toContain("Clear run history?");
+    expect(html).toContain("Cancel run");
+    expect(html).toContain("x-tubeless-studio-cancel");
+    expect(html).toContain("data-cancel-run-id");
     expect(html).toContain("step-status-icon");
     expect(html).toContain("status-mark");
     expect(html).toContain("progress-details");
@@ -197,7 +200,7 @@ describe("local pipeline run studio", () => {
     ).resolves.toEqual({ commands: [] });
     await expect(
       fetch(`${server.url}/api/capabilities`).then((response) => response.json())
-    ).resolves.toEqual({ canClearHistory: false });
+    ).resolves.toEqual({ canCancel: false, canClearHistory: false });
     const clear = await fetch(`${server.url}/api/history`, {
       headers: { "x-tubeless-studio-clear-history": "1" },
       method: "DELETE",
@@ -209,6 +212,11 @@ describe("local pipeline run studio", () => {
       method: "POST",
     });
     expect(mutation.status).toBe(405);
+    const cancel = await fetch(`${server.url}/api/runs/run-1/cancel`, {
+      headers: { "x-tubeless-studio-cancel": "1" },
+      method: "POST",
+    });
+    expect(cancel.status).toBe(405);
   });
 
   it("exposes only injected commands and delegates bounded structured launch values", async () => {
@@ -313,6 +321,66 @@ describe("local pipeline run studio", () => {
     expect(forgedHost.status).toBe(403);
     expect(forgedHost.body).toEqual({ error: "The launch request host is not trusted." });
     expect(launches).toHaveLength(1);
+    await expect(
+      fetch(`${server.url}/api/capabilities`).then((response) => response.json())
+    ).resolves.toEqual({ canCancel: false, canClearHistory: false });
+    const cancelWithoutCapability = await fetch(`${server.url}/api/runs/studio-run-1/cancel`, {
+      headers: { "x-tubeless-studio-cancel": "1" },
+      method: "POST",
+    });
+    expect(cancelWithoutCapability.status).toBe(405);
+  });
+
+  it("cancels a live launch only through an injected launcher cancel", async () => {
+    const cancelled: string[] = [];
+    const server = await startPipelineRunStudio({
+      launcher: {
+        commands: [
+          {
+            canPlan: false,
+            id: "fixture",
+            name: "Fixture",
+            parameters: fixtureParameters,
+          },
+        ],
+        async launch() {
+          return { accepted: true, runId: "live-run" };
+        },
+        async cancel(runId) {
+          cancelled.push(runId);
+          return runId === "live-run" ? { cancelled: true, runId } : { cancelled: false };
+        },
+      },
+      port: 0,
+      store: memoryStore(events),
+    });
+    servers.push(server);
+
+    await expect(
+      fetch(`${server.url}/api/capabilities`).then((response) => response.json())
+    ).resolves.toEqual({ canCancel: true, canClearHistory: false });
+    const missingHeader = await fetch(`${server.url}/api/runs/live-run/cancel`, { method: "POST" });
+    expect(missingHeader.status).toBe(415);
+    const forgedHost = await requestWithHost(`${server.url}/api/runs/live-run/cancel`, {
+      headers: { "x-tubeless-studio-cancel": "1" },
+      host: `evil.example:${new URL(server.url).port}`,
+      method: "POST",
+    });
+    expect(forgedHost.status).toBe(403);
+    expect(forgedHost.body).toEqual({ error: "The cancel request host is not trusted." });
+    const unknown = await fetch(`${server.url}/api/runs/missing-run/cancel`, {
+      headers: { "x-tubeless-studio-cancel": "1" },
+      method: "POST",
+    });
+    expect(unknown.status).toBe(404);
+    await expect(unknown.json()).resolves.toEqual({ error: "The run is not a live launch." });
+    const response = await fetch(`${server.url}/api/runs/live-run/cancel`, {
+      headers: { "x-tubeless-studio-cancel": "1" },
+      method: "POST",
+    });
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ cancelled: true, runId: "live-run" });
+    expect(cancelled).toEqual(["missing-run", "live-run"]);
   });
 
   it("pages beyond a store query cap and incrementally loads newer events", async () => {
@@ -518,7 +586,7 @@ describe("local pipeline run studio", () => {
 
     await expect(
       fetch(`${server.url}/api/capabilities`).then((response) => response.json())
-    ).resolves.toEqual({ canClearHistory: true });
+    ).resolves.toEqual({ canCancel: false, canClearHistory: true });
     const missingHeader = await fetch(`${server.url}/api/history`, { method: "DELETE" });
     expect(missingHeader.status).toBe(415);
     const forgedHost = await requestWithHost(`${server.url}/api/history`, {

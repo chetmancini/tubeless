@@ -15,6 +15,7 @@ import {
 } from "./run-store-ui-state.js";
 
 export type {
+  PipelineRunStudioCancelResult,
   PipelineRunStudioCommand,
   PipelineRunStudioLauncher,
   PipelineRunStudioLaunchResult,
@@ -141,7 +142,10 @@ export async function startPipelineRunStudio(
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/capabilities") {
-        writeJson(response, { canClearHistory: history !== undefined });
+        writeJson(response, {
+          canCancel: launcher?.cancel !== undefined,
+          canClearHistory: history !== undefined,
+        });
         return;
       }
       const runMatch = /^\/api\/runs\/([^/]+)$/.exec(url.pathname);
@@ -153,6 +157,29 @@ export async function startPipelineRunStudio(
           return;
         }
         writeJson(response, { events, run: projectPipelineRun(events) });
+        return;
+      }
+      const cancelMatch = /^\/api\/runs\/([^/]+)\/cancel$/.exec(url.pathname);
+      if (request.method === "POST" && cancelMatch) {
+        if (!launcher?.cancel) {
+          writeJson(response, { error: "Pipeline cancellation is not enabled." }, 405);
+          return;
+        }
+        if (normalizeHttpAuthority(request.headers.host) !== expectedAuthority) {
+          writeJson(response, { error: "The cancel request host is not trusted." }, 403);
+          return;
+        }
+        if (request.headers["x-tubeless-studio-cancel"] !== "1") {
+          writeJson(response, { error: "A same-origin cancel request is required." }, 415);
+          return;
+        }
+        const runId = decodeURIComponent(cancelMatch[1]!);
+        const result = await launcher.cancel(runId);
+        if (!result.cancelled) {
+          writeJson(response, { error: "The run is not a live launch." }, 404);
+          return;
+        }
+        writeJson(response, { cancelled: true, runId: result.runId }, 202);
         return;
       }
       if (request.method === "DELETE" && url.pathname === "/api/history") {

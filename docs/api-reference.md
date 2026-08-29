@@ -19,7 +19,7 @@ Package: `tubeless`
 | `tubeless/run-store`        | `./dist/run-store.d.ts`        | `69a01a381babc298e0e91a7ab0050e7d8c8a52ee8b993eac59271bfd7c68546c` |               16 |
 | `tubeless/run-store/sqlite` | `./dist/run-store-sqlite.d.ts` | `13a9d5b25010b79c1771f81eb681d990e14288a3cefa2520dde21eb9535328ff` |                2 |
 | `tubeless/workbench/studio` | `./dist/workbench-studio.d.ts` | `2afced697589a4d76527107c9517921512c46ad62c074743264cb415a773539c` |                6 |
-| `tubeless/run-store/ui`     | `./dist/run-store-ui.d.ts`     | `b0c27f8b7d3481709b72912d7cae2ce325bb940315d432e53e3529dde7272e70` |                8 |
+| `tubeless/run-store/ui`     | `./dist/run-store-ui.d.ts`     | `d207e9aba052d83ad2f4268b91644d932b7835e6c1a3eecb89df622a61db2041` |                9 |
 | `tubeless/testing`          | `./dist/testing.d.ts`          | `a6e8a051df80bc56942c195d8fe62e4bb1e9436164c618abe703ffd51c9f1c34` |                7 |
 | `tubeless/tracing`          | `./dist/tracing.d.ts`          | `aaa44ca17255d9da1ae3a2e29c0e62e4fc279de16b3526831023289d6d3c1b12` |                8 |
 | `tubeless/tracing/json`     | `./dist/tracing-json.d.ts`     | `dcd58eb97dc8e08e2a5097a4f5435bf1d87901fb8c2b0bc387fcbce6d4caddc0` |                2 |
@@ -227,6 +227,7 @@ Package: `tubeless`
 
 ### `tubeless/run-store/ui`
 
+- `PipelineRunStudioCancelResult`
 - `PipelineRunStudioCommand`
 - `PipelineRunStudioHistoryMaintenance`
 - `PipelineRunStudioLauncher`
