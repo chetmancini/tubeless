@@ -335,6 +335,9 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
               controller.abort(new DOMException("The run was cancelled.", "AbortError"));
               return { cancelled: true, runId };
             },
+            liveRunIds() {
+              return [...launchControllers.keys()];
+            },
           };
     const studioOptions: Parameters<typeof startPipelineRunStudio>[0] = {
       host,

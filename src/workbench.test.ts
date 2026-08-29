@@ -944,6 +944,7 @@ describe("tubeless workbench", () => {
     const second = await launchWait("second");
     await vi.waitFor(async () => {
       const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
+        liveRunIds: string[];
         runs: { runId: string; status: string }[];
       };
       expect(snapshot.runs).toEqual(
@@ -952,6 +953,8 @@ describe("tubeless workbench", () => {
           expect.objectContaining({ runId: second.runId, status: "running" }),
         ])
       );
+      expect(snapshot.liveRunIds).toEqual(expect.arrayContaining([first.runId, second.runId]));
+      expect(snapshot.liveRunIds).toHaveLength(2);
     });
 
     const cancelled = await fetch(`${url}/api/runs/${encodeURIComponent(first.runId)}/cancel`, {
@@ -962,6 +965,7 @@ describe("tubeless workbench", () => {
     await expect(cancelled.json()).resolves.toEqual({ cancelled: true, runId: first.runId });
     await vi.waitFor(async () => {
       const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
+        liveRunIds: string[];
         runs: { error?: { message: string }; runId: string; status: string }[];
       };
       expect(snapshot.runs).toContainEqual(
@@ -974,6 +978,7 @@ describe("tubeless workbench", () => {
       expect(snapshot.runs).toContainEqual(
         expect.objectContaining({ runId: second.runId, status: "running" })
       );
+      expect(snapshot.liveRunIds).toEqual([second.runId]);
     });
     const stale = await fetch(`${url}/api/runs/${encodeURIComponent(first.runId)}/cancel`, {
       headers: { "x-tubeless-studio-cancel": "1" },

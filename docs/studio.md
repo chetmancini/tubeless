@@ -83,9 +83,10 @@ Browser plan, launch, cancel, and clear-history requests send
 requests also require a `Host` header that matches the bound authority, and
 plan/launch require `application/json`. A successful launch response (HTTP 202)
 means the run id is already queryable from the store. Cancel aborts one live
-studio launch without stopping the server; it is not crash-resume. The header
-names are part of the local studio protocol. They are same-origin guards, not
-authentication.
+studio launch without stopping the server; it is not crash-resume. The Cancel
+run control appears only for top-level launches this studio process still owns.
+The header names are part of the local studio protocol. They are same-origin
+guards, not authentication.
 
 Programmatic callers can compose the same pieces from
 `tubeless/run-store/sqlite` and `tubeless/run-store/ui`. See

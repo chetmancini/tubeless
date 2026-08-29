@@ -137,6 +137,7 @@ export async function startPipelineRunStudio(
         const snapshot = await eventState.snapshot();
         writeJson(response, {
           ...snapshot,
+          liveRunIds: launcher?.liveRunIds?.() ?? [],
           runs: snapshot.runs.map((run) => ({ ...run, logs: [] })),
         });
         return;

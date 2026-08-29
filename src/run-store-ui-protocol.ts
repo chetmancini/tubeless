@@ -50,6 +50,7 @@ export interface PipelineRunStudioLauncher {
     values: PipelineRunStudioLaunchRequest["values"]
   ): Promise<PipelineRunStudioLaunchResult>;
   cancel?(runId: string): PipelineRunStudioCancelResult | Promise<PipelineRunStudioCancelResult>;
+  liveRunIds?(): readonly string[];
   plan?(commandId: string, input: PipelineCommandPlanInput): PipelinePlan | Promise<PipelinePlan>;
 }
 

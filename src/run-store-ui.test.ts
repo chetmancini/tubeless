@@ -177,6 +177,7 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("Cancel run");
     expect(html).toContain("x-tubeless-studio-cancel");
     expect(html).toContain("data-cancel-run-id");
+    expect(html).toContain("liveRunIds");
     expect(html).toContain("step-status-icon");
     expect(html).toContain("status-mark");
     expect(html).toContain("progress-details");
@@ -190,6 +191,7 @@ describe("local pipeline run studio", () => {
     expect(snapshot).toMatchObject({
       activeRunCount: 0,
       completedRunCount: 1,
+      liveRunIds: [],
       runs: [{ pipelineId: "studio-fixture", status: "completed" }],
     });
     const run = await fetch(`${server.url}/api/runs/run-1`).then((response) => response.json());
@@ -350,6 +352,9 @@ describe("local pipeline run studio", () => {
           cancelled.push(runId);
           return runId === "live-run" ? { cancelled: true, runId } : { cancelled: false };
         },
+        liveRunIds() {
+          return ["live-run"];
+        },
       },
       port: 0,
       store: memoryStore(events),
@@ -359,6 +364,9 @@ describe("local pipeline run studio", () => {
     await expect(
       fetch(`${server.url}/api/capabilities`).then((response) => response.json())
     ).resolves.toEqual({ canCancel: true, canClearHistory: false });
+    await expect(
+      fetch(`${server.url}/api/snapshot`).then((response) => response.json())
+    ).resolves.toMatchObject({ liveRunIds: ["live-run"] });
     const missingHeader = await fetch(`${server.url}/api/runs/live-run/cancel`, { method: "POST" });
     expect(missingHeader.status).toBe(415);
     const forgedHost = await requestWithHost(`${server.url}/api/runs/live-run/cancel`, {

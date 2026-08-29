@@ -23,7 +23,7 @@ inventory.
 | Render plans and diagnostics                  | [`rendering.ts`](../examples/rendering.ts)                               | `renderPipelinePlan`, `renderPipelineError`                        |
 | Handle cancellation and deterministic testing | [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts) | `createPipelineTestRuntime`, captured status/progress              |
 | Export JSON or OpenTelemetry lifecycle events | [`tracing.ts`](../examples/tracing.ts)                                   | trace context, attempt events, JSON exporter                       |
-| Persist, inspect, and explicitly launch runs  | [`local-observability.ts`](../examples/local-observability.ts)           | SQLite store, recorded `details`, nested labels, studio projector  |
+| Persist, inspect, launch, or cancel live runs | [`local-observability.ts`](../examples/local-observability.ts)           | SQLite store, recorded `details`, nested labels, studio projector  |
 | Project layout, IDs, and studio catalog       | [`tubeless.studio.ts`](../examples/catalog/tubeless.studio.ts)           | `pipelines/`, `scripts/`, `definePipelineStudio`                   |
 
 ## Selection rules
@@ -51,7 +51,26 @@ inventory.
 9. Copy consumer file layout, export names, and IDs from the
    [project catalog](../examples/catalog/tubeless.studio.ts). Register studio
    commands explicitly; do not infer executable modules from run history.
+   Cancel only a live launch owned by the current studio process; it is not
+   crash-resume and does not abort sibling launches.
 
 For semantics behind these choices, read [core concepts](./concepts.md).
 For workbench commands, read [the CLI](./cli.md). For the local run UI, read
 [the studio](./studio.md).
+
+⚠ 1 unresolved conflict detected
+- ours = HEAD
+- theirs = 034977c (Limit Cancel run to live launches and document it)
+- base = parent of 034977c (Limit Cancel run to live launches and document it)
+NOTICE: Inspect a block by reading `conflict://<N>` (add `/ours` / `/theirs` / `/base` to render a single side). Resolve with `write({ path: "conflict://<N>", content })`, or bulk-resolve every registered conflict with `write({ path: "conflict://*", content })`. Writes replace ONLY the marker block (markers + all sides) — never repeat the lines before/after it; they stay in place.
+`content` shorthand: a line that is exactly `@ours` / `@theirs` / `@base` / `@both` expands to that recorded section. `@both` is ours-then-theirs with no separator — only for additive conflicts where each side adds something different; NEVER for competing edits of the same lines (pick a side or write the combined text). Lines that are not a token pass through verbatim, so `"// keep both\n@ours\n@theirs"` literally writes the comment, then ours, then theirs.
+Per-id bulk: `write({ path: "conflict://*", content: "1: @ours\n2: @theirs\n…" })` resolves each listed id with that side in ONE call — the cheapest way through many pick-one conflicts; unlisted ids stay registered.
+Resolve each block faithfully: keep one side (`@ours`/`@theirs`), or combine them when both intents apply — never invent content beyond the recorded sides, and never stack both sides of competing edits. Resolve several conflicts in a single turn by issuing multiple `write` calls at once; ids stay valid as earlier blocks are resolved.
+
+──── #1  L26-32 ────
+<<< ours
+| Persist, inspect, and explicitly launch runs  | [`local-observability.ts`](../examples/local-observability.ts)           | SQLite store, recorded `details`, nested labels, studio projector  |
+=== base
+| Persist, inspect, and explicitly launch runs  | [`local-observability.ts`](../examples/local-observability.ts)           | SQLite store, `createPipelineRunProjector`, `definePipelineStudio` |
+>>> theirs
+| Persist, inspect, launch, or cancel live runs | [`local-observability.ts`](../examples/local-observability.ts)           | SQLite store, `createPipelineRunProjector`, `definePipelineStudio` |
