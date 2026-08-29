@@ -6,10 +6,16 @@ files directly.
 
 ```sh
 bunx tubeless --help
+npx tubeless --help        # Node launcher; relays through Bun automatically
+bunx --bun tubeless --help # Bun-only machines: force the Bun runtime
 ```
 
 Library imports stay dependency-free compiled JavaScript. The CLI is the Bun
-workbench around those same exports.
+workbench around those same exports. The binary's Node shebang makes it
+invocable through `npx` and any Node environment; when Bun is missing it
+prints install instructions instead of failing with
+`env: bun: No such file or directory`. On machines with Bun but no Node,
+`bunx` cannot use the Node shebang — pass `--bun` to force the Bun runtime.
 
 ## Commands
 

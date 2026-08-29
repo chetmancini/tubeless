@@ -203,11 +203,19 @@ export function manageWorkbenchSignal(io: WorkbenchCliIo): ManagedWorkbenchSigna
   const controller = new AbortController();
   let interrupted = false;
   const onSigint = (): void => {
+    // A duplicate SIGINT can arrive while cleanup runs: the Node
+    // trampoline forwards terminal signals to this process, and an
+    // interactive Ctrl-C also delivers SIGINT directly. The first one
+    // cancels the work; later ones are ignored so cleanup — including
+    // run-store closing — is never cut short by default termination.
+    if (interrupted) return;
     interrupted = true;
     io.stderr.write("SIGINT received; cancelling pipeline work.\n");
     controller.abort();
   };
-  process.once("SIGINT", onSigint);
+  // `process.on` (not `once`): a second SIGINT must be swallowed by this
+  // listener rather than re-enable Node's default termination.
+  process.on("SIGINT", onSigint);
   return {
     cleanup: () => process.removeListener("SIGINT", onSigint),
     signal: controller.signal,

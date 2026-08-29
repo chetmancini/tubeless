@@ -33,9 +33,8 @@ export interface TrampolineIo {
    */
   readonly probeBun: () => TrampolineProbeResult;
   /**
-   * Start the relay child with the caller's real stdio but in its own
-   * process group, so terminal signals never reach it directly and this
-   * trampoline is the single signal-delivery path. The returned handle
+   * Start the relay child with the caller's real stdio, in the trampoline's
+   * process group so interactive stdin keeps flowing. The returned handle
    * must stop resolving once the child exits, dies by signal, or fails to
    * spawn, and must deliver signals sent to `sendSignal` to the child.
    */
@@ -90,16 +89,16 @@ export function createNodeTrampolineIo(): TrampolineIo {
       return { error: result.error, status: result.status };
     },
     startRelay: (binPath, argv) => {
-      // `detached: true` puts the Bun child in its own process group, so an
-      // interactive Ctrl-C to the foreground group reaches only the
-      // trampoline, which forwards the signal once — no second copy to hit
-      // the workbench's one-shot SIGINT handler after cleanup began, and
-      // no orphaning when a supervisor signals the trampoline PID alone.
-      // The child is not unref'd: the trampoline must stay alive until the
-      // relay closes so its exit status can be forwarded.
+      // Not detached: the Bun child must stay in the trampoline's
+      // (terminal foreground) process group so interactive stdin keeps
+      // being delivered to it — a detached child stops receiving typed
+      // input, which hangs prompt-style command modules. The resulting
+      // duplicate terminal SIGINT (delivered directly and forwarded) is
+      // tolerated by the workbench's de-duplicating SIGINT handler. The
+      // child is not unref'd: the trampoline stays alive until the relay
+      // closes so its exit status can be forwarded.
       const child: ChildProcess = spawn("bun", [binPath, ...argv], {
         stdio: "inherit",
-        detached: true,
       });
       const outcome = new Promise<TrampolineRelayOutcome>((resolve) => {
         // `spawn` emits `error` for a failure to launch and `close` after a
@@ -149,10 +148,12 @@ export function createNodeTrampolineIo(): TrampolineIo {
  * Relay the CLI through Bun from a Node process. A missing Bun (spawn ENOENT)
  * prints install instructions; any other launch failure reports the raw
  * error. While the relay runs, supervisor signals (SIGINT/SIGTERM/SIGHUP)
- * received by the trampoline are forwarded to the Bun child — which runs in
- * its own process group and receives them from no one else — so the pipeline
- * cannot outlive a cancelled caller and never sees a duplicate signal; the
- * relay's exit status or signal is then forwarded.
+ * received by the trampoline are forwarded to the Bun child — which stays in
+ * the trampoline's process group so interactive stdin keeps flowing — so a
+ * PID-targeted kill cannot orphan the pipeline; the relay's exit status or
+ * signal is then forwarded. An interactive Ctrl-C reaches the child both
+ * directly and via forwarding; the duplicate is tolerated by the workbench's
+ * de-duplicating SIGINT handler, which ignores repeats once cleanup began.
  *
  * `engines.bun` is a tested-with pin rather than a hard floor — the previous
  * bun shebang ran with any installed Bun — so no version gate runs here.

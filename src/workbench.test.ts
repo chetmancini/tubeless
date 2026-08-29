@@ -1029,7 +1029,7 @@ describe("tubeless workbench", () => {
   it("turns SIGINT into cancellation and removes its temporary listener", async () => {
     const { directory, filePath } = await writeActualPipelineCommandModule();
     const io = captureIo(directory);
-    const onceSpy = vi.spyOn(process, "once");
+    const onSpy = vi.spyOn(process, "on");
     const removeListenerSpy = vi.spyOn(process, "removeListener");
 
     try {
@@ -1039,7 +1039,7 @@ describe("tubeless workbench", () => {
       );
       const fixture = (await import(pathToFileURL(filePath).href)) as { started: Promise<void> };
       await fixture.started;
-      const registration = onceSpy.mock.calls.find(([event]) => event === "SIGINT");
+      const registration = onSpy.mock.calls.find(([event]) => event === "SIGINT");
       expect(registration).toBeDefined();
       (registration?.[1] as () => void)();
 
@@ -1047,7 +1047,7 @@ describe("tubeless workbench", () => {
       expect(io.errors.join("")).toContain("SIGINT received; cancelling pipeline work.");
       expect(removeListenerSpy.mock.calls).toContainEqual(["SIGINT", registration?.[1]]);
     } finally {
-      onceSpy.mockRestore();
+      onSpy.mockRestore();
       removeListenerSpy.mockRestore();
     }
   });
@@ -1055,7 +1055,7 @@ describe("tubeless workbench", () => {
   it("preserves a structured execution failure that races with SIGINT", async () => {
     const { directory, filePath } = await writeActualPipelineCommandModule();
     const io = captureIo(directory);
-    const onceSpy = vi.spyOn(process, "once");
+    const onSpy = vi.spyOn(process, "on");
 
     try {
       const runPromise = runWorkbenchCli(
@@ -1064,15 +1064,19 @@ describe("tubeless workbench", () => {
       );
       const fixture = (await import(pathToFileURL(filePath).href)) as { started: Promise<void> };
       await fixture.started;
-      const registration = onceSpy.mock.calls.find(([event]) => event === "SIGINT");
+      const registration = onSpy.mock.calls.find(([event]) => event === "SIGINT");
       expect(registration).toBeDefined();
+      (registration?.[1] as () => void)();
+      // A forwarded duplicate (trampoline + direct terminal delivery)
+      // must not cut cleanup short: it is swallowed by the same listener.
       (registration?.[1] as () => void)();
 
       expect(await runPromise).toBe(TUBELESS_WORKBENCH_EXIT_CODE.execution);
       expect(io.errors.join("")).toContain("TUBELESS_STEP_FAILED");
       expect(io.errors.join("")).toContain("intentional failure after abort");
+      expect(io.errors.join("").match(/SIGINT received/g)).toHaveLength(1);
     } finally {
-      onceSpy.mockRestore();
+      onSpy.mockRestore();
     }
   });
 
