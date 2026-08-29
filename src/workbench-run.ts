@@ -1,5 +1,5 @@
 import { createWriteStream, type WriteStream } from "node:fs";
-import { mkdir, readlink, realpath, stat } from "node:fs/promises";
+import { mkdir, readlink, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import { isAbortError } from "./abort.js";
@@ -401,11 +401,52 @@ async function pathsShareIdentity(left: string, right: string): Promise<boolean>
     canonicalDestination(left),
     canonicalDestination(right),
   ]);
-  if (leftPath === rightPath || leftPath.toLowerCase() === rightPath.toLowerCase()) return true;
+  if (leftPath === rightPath) return true;
   try {
     const [leftStat, rightStat] = await Promise.all([stat(left), stat(right)]);
-    return leftStat.dev === rightStat.dev && leftStat.ino === rightStat.ino;
+    if (leftStat.dev === rightStat.dev && leftStat.ino === rightStat.ino) return true;
+  } catch {
+    // One or both dests do not exist yet.
+  }
+  if (leftPath.toLowerCase() !== rightPath.toLowerCase()) return false;
+  return directoryIgnoresCase(
+    (await nearestExistingDirectory(path.dirname(leftPath))) ??
+      (await nearestExistingDirectory(path.dirname(rightPath)))
+  );
+}
+
+async function nearestExistingDirectory(dir: string): Promise<string | undefined> {
+  let current = dir;
+  while (true) {
+    try {
+      if ((await stat(current)).isDirectory()) return current;
+    } catch {
+      // Missing or not a directory; walk toward the root.
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+}
+
+async function directoryIgnoresCase(dir: string | undefined): Promise<boolean> {
+  if (dir === undefined) return true;
+  const id = `${process.pid.toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  const probe = path.join(dir, `.tubeless-case-${id}-a`);
+  const flipped = path.join(dir, `.tubeless-case-${id}-A`);
+  try {
+    await writeFile(probe, "", { flag: "wx" });
+  } catch {
+    // Cannot probe; treat a case-fold match as a collision so --trace cannot
+    // truncate a store on a case-insensitive volume.
+    return true;
+  }
+  try {
+    const [probeStat, flippedStat] = await Promise.all([stat(probe), stat(flipped)]);
+    return probeStat.dev === flippedStat.dev && probeStat.ino === flippedStat.ino;
   } catch {
     return false;
+  } finally {
+    await unlink(probe).catch(() => {});
   }
 }

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, symlink, unlink, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 import * as os from "node:os";
@@ -25,6 +25,17 @@ import {
   writeCliChunk,
 } from "./workbench-shared";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli, type WorkbenchCliIo } from "./workbench";
+
+async function directoryIgnoresCase(dir: string): Promise<boolean> {
+  const probe = path.join(dir, ".tubeless-case-test-a");
+  const flipped = path.join(dir, ".tubeless-case-test-A");
+  await writeFile(probe, "", { flag: "wx" });
+  try {
+    return existsSync(flipped);
+  } finally {
+    await unlink(probe).catch(() => {});
+  }
+}
 
 function parseNdjson(text: string): { name?: string; pipelineId?: string; runId?: string }[] {
   return text
@@ -916,29 +927,40 @@ describe("tubeless workbench", () => {
     expect(io.errors.join("")).toMatch(/same path/i);
   });
 
-  it("rejects case-insensitive --store and --trace collisions", async () => {
+  it("rejects --store and --trace dests that the filesystem treats as the same path", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     const io = captureIo(directory);
+    const storePath = path.join(directory, "runs.sqlite");
+    const tracePath = path.join(directory, "RUNS.sqlite");
+    const caseInsensitive = await directoryIgnoresCase(directory);
 
-    expect(
-      await runWorkbenchCli(
-        [
-          "run",
-          "--store",
-          path.join(directory, "runs.sqlite"),
-          "--trace",
-          path.join(directory, "RUNS.sqlite"),
-          "pipeline.mjs",
-          "--",
-          "--message",
-          "hello",
-          "--target",
-          "work",
-        ],
-        io
-      )
-    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
-    expect(io.errors.join("")).toMatch(/same path/i);
+    const exitCode = await runWorkbenchCli(
+      [
+        "run",
+        "--store",
+        storePath,
+        "--trace",
+        tracePath,
+        "pipeline.mjs",
+        "--",
+        "--message",
+        "hello",
+        "--target",
+        "work",
+      ],
+      io
+    );
+
+    if (caseInsensitive) {
+      expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+      expect(io.errors.join("")).toMatch(/same path/i);
+      return;
+    }
+
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(existsSync(storePath)).toBe(true);
+    expect(existsSync(tracePath)).toBe(true);
+    expect(io.errors.join("")).not.toMatch(/same path/i);
   });
 
   it("rejects a trace path that is a SQLite sidecar of --store", async () => {
@@ -1100,7 +1122,7 @@ describe("tubeless workbench", () => {
       pipelineId: "command-fixture",
       runId,
       status: "completed",
-      steps: [expect.objectContaining({ id: "work", status: "complete" })],
+      steps: [expect.objectContaining({ id: "work", status: "completed" })],
     });
   });
 
