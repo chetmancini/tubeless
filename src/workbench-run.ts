@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import { isAbortError } from "./abort.js";
@@ -160,7 +160,11 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
     parsed.parsed.values.trace && parsed.parsed.values.trace !== "-"
       ? path.resolve(io.cwd, parsed.parsed.values.trace)
       : undefined;
-  if (storePath !== undefined && storePath === tracePath) {
+  if (
+    storePath !== undefined &&
+    tracePath !== undefined &&
+    (await pathsShareIdentity(storePath, tracePath))
+  ) {
     return writeUsageError(io, "--store and --trace cannot write to the same path.", RUN_USAGE);
   }
 
@@ -260,11 +264,39 @@ async function createRunTraceWriter(
           else resolve();
         });
       }),
-    exporter: createJsonTraceExporter({
-      write: (line) => {
+    exporter: {
+      async export(event) {
         if (writeError) throw writeError;
-        stream.write(`${line}\n`);
+        if (!stream.write(`${JSON.stringify(event)}\n`) && !writeError) {
+          await waitForStreamDrain(stream);
+        }
+        if (writeError) throw writeError;
       },
-    }),
+    },
   };
+}
+
+async function pathsShareIdentity(left: string, right: string): Promise<boolean> {
+  if (left === right) return true;
+  try {
+    const [leftStat, rightStat] = await Promise.all([stat(left), stat(right)]);
+    return leftStat.dev === rightStat.dev && leftStat.ino === rightStat.ino;
+  } catch {
+    return false;
+  }
+}
+
+function waitForStreamDrain(stream: NodeJS.WritableStream): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onError = (error: Error) => {
+      stream.off("drain", onDrain);
+      reject(error);
+    };
+    const onDrain = () => {
+      stream.off("error", onError);
+      resolve();
+    };
+    stream.once("error", onError);
+    stream.once("drain", onDrain);
+  });
 }

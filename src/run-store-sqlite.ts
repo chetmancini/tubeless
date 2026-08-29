@@ -138,13 +138,24 @@ function mapRow(row: StoredEventRow): StoredPipelineEvent {
   return event;
 }
 
+/** Options for `openSqlitePipelineRunStore`. */
+export interface OpenSqlitePipelineRunStoreOptions {
+  /**
+   * When `false`, reject a file that is not already a versioned run store.
+   * Defaults to `true` so `run --store` and `ui` can create the database.
+   */
+  readonly initialize?: boolean;
+}
+
 /**
  * Open the optional local SQLite trace store used by `tubeless run --store`,
  * `tubeless history`, and `tubeless ui`. The main executor never imports this module.
  */
 export async function openSqlitePipelineRunStore(
-  filename: string
+  filename: string,
+  options: OpenSqlitePipelineRunStoreOptions = {}
 ): Promise<SqlitePipelineRunStore> {
+  const initialize = options.initialize !== false;
   const resolvedFilename = filename === ":memory:" ? filename : path.resolve(filename);
   if (resolvedFilename !== ":memory:") {
     await mkdir(path.dirname(resolvedFilename), { recursive: true });
@@ -162,8 +173,13 @@ export async function openSqlitePipelineRunStore(
         `Unsupported pipeline run store schema version ${version}; expected ${RUN_EVENT_STORE_VERSION}.`
       );
     }
-    database.exec(RUN_EVENT_STORE_SCHEMA);
-    database.exec(`PRAGMA user_version = ${RUN_EVENT_STORE_VERSION}`);
+    if (!initialize && version !== RUN_EVENT_STORE_VERSION) {
+      throw new Error(`${resolvedFilename} is not a pipeline run store.`);
+    }
+    if (initialize) {
+      database.exec(RUN_EVENT_STORE_SCHEMA);
+      database.exec(`PRAGMA user_version = ${RUN_EVENT_STORE_VERSION}`);
+    }
   } catch (error) {
     database.close();
     throw error;

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -759,6 +759,52 @@ describe("tubeless workbench", () => {
     expect(io.errors.join("")).toMatch(/same path/i);
   });
 
+  it("rejects a symlink that aliases --store as --trace", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const storePath = path.join(directory, "history", "runs.sqlite");
+    const tracePath = path.join(directory, "traces", "alias.ndjson");
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          storePath,
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    await mkdir(path.dirname(tracePath), { recursive: true });
+    await symlink(storePath, tracePath);
+
+    const aliasIo = captureIo(directory);
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          storePath,
+          "--trace",
+          tracePath,
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        aliasIo
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(aliasIo.errors.join("")).toMatch(/same path/i);
+  });
+
   it("lists and shows projected history from the run store", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     const io = captureIo(directory);
@@ -933,6 +979,14 @@ describe("tubeless workbench", () => {
       TUBELESS_WORKBENCH_EXIT_CODE.load
     );
     expect(invalidIo.errors.join("")).toMatch(/Error:/);
+
+    const emptyPath = path.join(directory, "empty.sqlite");
+    await writeFile(emptyPath, "");
+    const emptyIo = captureIo(directory);
+    expect(await runWorkbenchCli(["history", "--store", emptyPath], emptyIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(emptyIo.errors.join("")).toMatch(/not a pipeline run store|Error:/);
 
     const unknownIo = captureIo(directory);
     expect(

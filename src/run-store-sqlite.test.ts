@@ -195,4 +195,26 @@ describe("SQLite pipeline run store", () => {
     expect(await store.listEvents({ afterId: 0 })).toEqual(events);
     await store.close();
   });
+
+  it("can reopen an existing store without initializing it", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+
+    const reopened = await openSqlitePipelineRunStore(filename, { initialize: false });
+    expect(await reopened.listEvents()).toHaveLength(1);
+    await reopened.close();
+  });
+
+  it("rejects an uninitialized file when initialize is false", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "empty.sqlite");
+    await expect(openSqlitePipelineRunStore(filename, { initialize: false })).rejects.toThrow(
+      "is not a pipeline run store"
+    );
+  });
 });
