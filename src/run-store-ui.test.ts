@@ -172,6 +172,8 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("Pipeline inputs");
     expect(html).toContain("Execution controls");
     expect(html).toContain("Built into Tubeless");
+    expect(html).toContain("if (!parameter.exclusive || !parameter.multiple) return []");
+    expect(html).not.toContain("parameter.group !== 'execution' || !parameter.multiple");
     expect(html).toContain("if (checked !== Boolean(parameter.default))");
     expect(html).toContain("Clear run history?");
     expect(html).toContain("Cancel run");

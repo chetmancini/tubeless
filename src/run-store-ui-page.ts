@@ -396,7 +396,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
     }
     function bindExclusiveSelections(command, scope) {
       const fields = command.parameters.flatMap((parameter, index) => {
-        if (parameter.group !== 'execution' || !parameter.multiple) return [];
+        if (!parameter.exclusive || !parameter.multiple) return [];
         const field = document.querySelector('[data-' + scope + '-parameter-index="' + index + '"]');
         return field ? [field] : [];
       });

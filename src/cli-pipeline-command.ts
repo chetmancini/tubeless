@@ -225,6 +225,7 @@ export function definePipelineCommand<
       multiple: true,
       flag: "step",
       group: "execution",
+      exclusive: true,
       choices: pipeline.stepIds,
       description: `Run exactly this step. Steps: ${pipeline.stepIds.join(", ")}`,
     },
@@ -240,6 +241,7 @@ export function definePipelineCommand<
       multiple: true,
       flag: "target",
       group: "execution",
+      exclusive: true,
       choices: pipeline.targetIds,
       description: `Run this declared target and its prerequisites. Targets: ${pipeline.targetIds.join(", ")}`,
     };

@@ -119,6 +119,30 @@ describe("definePipelineCommand", () => {
         .filter((parameter) => parameter.group === "execution")
         .map((parameter) => parameter.key)
     ).toEqual(["dryRun", "resume", "stepIds", "continueOnError", "targets"]);
+    expect(
+      command.descriptor.parameters
+        .filter((parameter) => parameter.exclusive === true)
+        .map((parameter) => parameter.key)
+    ).toEqual(["stepIds", "targets"]);
+  });
+
+  it("does not treat a custom execution-group parameter as exclusive with step or target", () => {
+    const command = definePipelineCommand(makeMiniPipeline(), {
+      params: {
+        tags: { type: "string", multiple: true, group: "execution" },
+      },
+      mapOptions: () => ({}),
+    });
+
+    expect(command.descriptor.parameters.find((parameter) => parameter.key === "tags")?.group).toBe(
+      "execution"
+    );
+    expect(
+      command.descriptor.parameters.find((parameter) => parameter.key === "tags")?.exclusive
+    ).toBeUndefined();
+    expect(
+      command.descriptor.parameters.find((parameter) => parameter.key === "stepIds")?.exclusive
+    ).toBe(true);
   });
 
   it("plans from selection controls without requiring domain parameters", () => {

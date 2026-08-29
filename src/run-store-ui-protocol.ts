@@ -12,6 +12,7 @@ interface StudioPlanInputWire {
 interface StudioParameterWire {
   choices?: unknown;
   default?: unknown;
+  exclusive?: unknown;
   flag?: unknown;
   group?: unknown;
   key?: unknown;
@@ -147,6 +148,9 @@ export function isPipelineRunStudioParameter(value: unknown): value is CliParame
     return false;
   }
   if (parameter.group !== undefined && parameter.group !== "execution") {
+    return false;
+  }
+  if (parameter.exclusive !== undefined && parameter.exclusive !== true) {
     return false;
   }
   return true;

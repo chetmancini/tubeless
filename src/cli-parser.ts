@@ -107,6 +107,9 @@ export function commandDescriptor(
     if (param.group !== undefined) {
       descriptor.group = param.group;
     }
+    if (param.exclusive === true) {
+      descriptor.exclusive = true;
+    }
     if (param.type === "string" && param.choices) {
       descriptor.choices = Object.freeze([...param.choices]);
     }
@@ -417,6 +420,7 @@ type MutableCliParameterDescriptor = {
   default?: string | number | boolean;
   description?: string;
   environment?: string;
+  exclusive?: true;
   flag: string;
   group?: "execution";
   integer?: boolean;
