@@ -1,4 +1,5 @@
 import type { PipelineStepProgressDetail } from "./pipeline.js";
+import { hasVisibleStepProgress } from "./progress.js";
 import type {
   PipelineTraceAttributeValue,
   PipelineTraceError,
@@ -370,7 +371,7 @@ function applyRunEvent(projection: MutableRunProjection, event: StoredPipelineEv
       const detailCount = numberAttribute(event.attributes, "detail_count");
       if (detailCount !== undefined) progress.detailCount = detailCount;
       else if (details) progress.detailCount = details.length;
-      step.progress = progress;
+      if (!step.progress || hasVisibleStepProgress(progress)) step.progress = progress;
     }
     return;
   }

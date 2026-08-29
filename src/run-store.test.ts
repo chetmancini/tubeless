@@ -262,6 +262,39 @@ describe("pipeline run store projections", () => {
     expect(snapshot.runs[0]?.steps[0]?.progress?.details).toHaveLength(128);
   });
 
+  it("keeps the last visible details when a later snapshot is empty", () => {
+    const details = [{ id: "rows.csv", label: "read", status: "running" as const }];
+    const snapshot = projectPipelineRunStore([
+      event(1, "pipeline.started"),
+      event(2, "step.running", { attemptId: "attempt-1", stepId: "load" }),
+      event(3, "step.running", {
+        attemptId: "attempt-1",
+        attributes: {
+          completed: 4,
+          detail_count: 1,
+          details: JSON.stringify(details),
+          message: "loaded",
+          total: 10,
+        },
+        stepId: "load",
+      }),
+      event(4, "step.running", {
+        attemptId: "attempt-1",
+        attributes: { completed: 0 },
+        stepId: "load",
+      }),
+      event(5, "step.complete", { attemptId: "attempt-1", stepId: "load" }),
+    ]);
+
+    expect(snapshot.runs[0]?.steps[0]?.progress).toEqual({
+      completed: 4,
+      detailCount: 1,
+      details,
+      message: "loaded",
+      total: 10,
+    });
+  });
+
   it("stores repeated reportAttempt telemetry on one execution attempt", () => {
     const snapshot = projectPipelineRunStore([
       event(1, "pipeline.started"),
