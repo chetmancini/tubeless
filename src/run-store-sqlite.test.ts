@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { chmod, mkdtemp, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -230,6 +230,31 @@ describe("SQLite pipeline run store", () => {
       await chmod(filename, 0o644);
     }
   });
+
+  it.skipIf("Bun" in globalThis)(
+    "does not hide WAL events behind an immutable read-only fallback",
+    async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+      directories.push(directory);
+      const filename = path.join(directory, "runs.sqlite");
+      const store = await openSqlitePipelineRunStore(filename);
+      await store.export(startedEvent("run-1", 10));
+      await store.close();
+      await writeFile(`${filename}-wal`, "not a checkpointed wal");
+      await chmod(filename, 0o444);
+      await chmod(`${filename}-wal`, 0o444);
+      await chmod(directory, 0o555);
+      try {
+        await expect(
+          openSqlitePipelineRunStore(filename, { initialize: false, readOnly: true })
+        ).rejects.toThrow();
+      } finally {
+        await chmod(directory, 0o755);
+        await chmod(filename, 0o644);
+        await chmod(`${filename}-wal`, 0o644);
+      }
+    }
+  );
 
   it("rejects a missing path when initialize is false without creating it", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));

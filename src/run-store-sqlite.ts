@@ -128,7 +128,8 @@ async function openDatabase(
     if (bunSqlite) return openReadableDatabase(Database, filename, { readonly: true });
     try {
       return openReadableDatabase(Database, filename, { readOnly: true });
-    } catch {
+    } catch (error) {
+      if (await sqliteSidecarExists(`${filename}-wal`)) throw error;
       return openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=ro&immutable=1`);
     }
   }
@@ -143,6 +144,15 @@ async function openDatabase(
     }
   }
   return new Database(filename);
+}
+
+async function sqliteSidecarExists(filename: string): Promise<boolean> {
+  try {
+    await stat(filename);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function openReadableDatabase(
