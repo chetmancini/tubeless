@@ -863,7 +863,7 @@ describe("child-pipeline composition", () => {
         ])
       ).toEqual([
         ["stage", "skipped", "policy"],
-        ["after", "complete", undefined],
+        ["after", "completed", undefined],
       ]);
     });
 

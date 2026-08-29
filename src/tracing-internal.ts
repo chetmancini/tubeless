@@ -240,7 +240,7 @@ export function createPipelineTraceEmitter(
         });
         return;
       }
-      if (event.status === "complete") {
+      if (event.status === "completed") {
         const fields: EmitFields = {
           attributes: { status: event.status },
           durationMs: elapsedMs(event),

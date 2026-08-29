@@ -1,9 +1,13 @@
+import type { PipelineStepProgressDetail } from "./pipeline.js";
+
+/** Compatibility alias of the shared progress-detail shape. */
+export type MappedChildProgressDetail = PipelineStepProgressDetail;
+
 /**
  * Live state for a `forEachPipeline` fan-out. Domain-agnostic: items can be
  * shards, URLs, files, jobs, or anything else the parent maps over.
  *
- * Kept free of pipeline runtime imports so this module is safe to share with
- * tests, CLIs, and domain packages without circular dependencies.
+ * Runtime-free: only a type-only import of the shared progress detail.
  */
 export interface MappedChildProgressSnapshot {
   /** Item key → short status label for currently in-flight children. */
@@ -32,13 +36,6 @@ export interface MappedChildProgressSnapshot {
 export interface MappedChildProgressUnits {
   completed: number;
   total: number;
-}
-
-/** Shape-compatible with `PipelineStepProgressDetail` without importing the runtime. */
-export interface MappedChildProgressDetail {
-  id: string;
-  label?: string;
-  status?: "completed" | "failed" | "pending" | "running" | "skipped";
 }
 
 export interface FormatMappedChildProgressOptions {

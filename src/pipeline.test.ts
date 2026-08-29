@@ -90,7 +90,7 @@ describe("definePipeline", () => {
       pipelineId: "public-run-model",
       runId: "run-public",
       status: "completed",
-      version: 1,
+      version: 2,
     });
     expect(result.finishedAtMs).toBeGreaterThanOrEqual(result.startedAtMs);
     const report = result.steps[0]!;
@@ -98,9 +98,30 @@ describe("definePipeline", () => {
     expect(report).toMatchObject({
       attemptId: expect.stringMatching(/^run-public:attempt:/),
       id: "load",
-      status: "complete",
+      status: "completed",
     });
     expect(log.log).toHaveBeenCalledWith("loading", "rows.json");
+  });
+
+  it("exports one completed token for run, step, and progress-detail statuses", () => {
+    expectTypeOf<
+      import("./pipeline").PipelineStepCompleteReport["status"]
+    >().toEqualTypeOf<"completed">();
+    expectTypeOf<import("./pipeline").PipelineRunStatus>().toEqualTypeOf<
+      "cancelled" | "completed" | "failed"
+    >();
+    expectTypeOf<import("./pipeline").PipelineStepReportStatus>().toEqualTypeOf<
+      "cancelled" | "completed" | "failed" | "skipped"
+    >();
+    expectTypeOf<import("./pipeline").PipelineStepLifecycleStatus>().toEqualTypeOf<
+      import("./pipeline").PipelineStepStatus["status"]
+    >();
+    expectTypeOf<import("./pipeline").PipelineStepProgressDetailStatus>().toEqualTypeOf<
+      "completed" | "failed" | "pending" | "running" | "skipped"
+    >();
+    expectTypeOf<import("./pipeline").MappedChildProgressDetail>().toEqualTypeOf<
+      import("./pipeline").PipelineStepProgressDetail
+    >();
   });
 
   it("validates and transforms options, step outputs, and final results", async () => {
@@ -275,7 +296,7 @@ describe("definePipeline", () => {
     expect(result.value).toBe("identity");
     expect(result.steps.map(({ id, status }) => [id, status])).toEqual([
       ["fail", "failed"],
-      ["observe", "complete"],
+      ["observe", "completed"],
     ]);
   });
 
@@ -556,13 +577,13 @@ describe("definePipeline", () => {
 
     const allSteps = await pipeline.run({});
     expect(allSteps.steps.map((step) => [step.id, step.status])).toEqual([
-      ["build", "complete"],
-      ["write", "complete"],
+      ["build", "completed"],
+      ["write", "completed"],
     ]);
 
     const selected = await pipeline.run({ stepIds: ["build"] });
     expect(selected.steps.map((step) => [step.id, step.status])).toEqual([
-      ["build", "complete"],
+      ["build", "completed"],
       ["write", "skipped"],
     ]);
   });
@@ -905,8 +926,8 @@ describe("definePipeline", () => {
       stepId: PIPELINE_FINALIZE_STEP_ID,
     });
     expect(result.steps.map((step) => [step.id, step.status])).toEqual([
-      ["build", "complete"],
-      ["write", "complete"],
+      ["build", "completed"],
+      ["write", "completed"],
     ]);
   });
 
@@ -951,7 +972,7 @@ describe("definePipeline", () => {
     const result = await pipeline.run({ stepIds: ["b"] });
     expect(result.steps.map((step) => [step.id, step.status])).toEqual([
       ["a", "skipped"],
-      ["b", "complete"],
+      ["b", "completed"],
     ]);
     expect(result.value).toBe("fallback");
   });
@@ -1157,7 +1178,7 @@ describe("definePipeline", () => {
         expect(got.result.steps).toEqual(
           expect.arrayContaining([
             expect.objectContaining({ id: "dropped", status: "skipped", reason: "filtered" }),
-            expect.objectContaining({ id: "kept", status: "complete" }),
+            expect.objectContaining({ id: "kept", status: "completed" }),
           ])
         );
       },
@@ -1307,8 +1328,8 @@ describe("definePipeline", () => {
         ]);
         expect(got.result.status).toBe("completed");
         expect(got.result.steps).toEqual([
-          expect.objectContaining({ id: "build", status: "complete" }),
-          expect.objectContaining({ id: "write", status: "complete" }),
+          expect.objectContaining({ id: "build", status: "completed" }),
+          expect.objectContaining({ id: "write", status: "completed" }),
         ]);
       },
     },
@@ -1769,9 +1790,9 @@ describe("definePipeline", () => {
       "step:planned:build",
       "step:planned:write",
       "step:running:build",
-      "step:complete:build",
+      "step:completed:build",
       "step:running:write",
-      "step:complete:write",
+      "step:completed:write",
       "finalize:start",
       "finalize:complete",
       "pipeline:complete",
@@ -1902,7 +1923,7 @@ describe("definePipeline", () => {
         hooks: [
           {
             onStepStatus: (event) => {
-              if (event.status === "complete") throw new Error("metrics unavailable");
+              if (event.status === "completed") throw new Error("metrics unavailable");
             },
           },
           {
@@ -2050,8 +2071,8 @@ describe("definePipeline", () => {
     expect(result.status).toBe("completed");
     expect(order).toEqual(["build", "write"]);
     expect(result.steps.map((step) => [step.id, step.status])).toEqual([
-      ["build", "complete"],
-      ["write", "complete"],
+      ["build", "completed"],
+      ["write", "completed"],
     ]);
   });
 
@@ -2153,9 +2174,9 @@ describe("definePipeline", () => {
         step.status === "skipped" ? step.message : undefined,
       ])
     ).toEqual([
-      ["build", "complete", undefined, undefined],
+      ["build", "completed", undefined, undefined],
       ["write", "skipped", "policy", "write disabled by config"],
-      ["after", "complete", undefined, undefined],
+      ["after", "completed", undefined, undefined],
     ]);
     expect(skipEvents).toEqual([
       {
@@ -2203,7 +2224,7 @@ describe("definePipeline", () => {
       ])
     ).toEqual([
       ["write", "skipped", "policy", "write disabled"],
-      ["after", "complete", undefined, undefined],
+      ["after", "completed", undefined, undefined],
     ]);
   });
 
@@ -2374,7 +2395,7 @@ describe("definePipeline", () => {
     expect(laterRan).toBe(true);
     expect(result.steps.map((report) => [report.id, report.status])).toEqual([
       ["gate", "failed"],
-      ["later", "complete"],
+      ["later", "completed"],
     ]);
   });
 

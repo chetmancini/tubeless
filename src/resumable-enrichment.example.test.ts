@@ -19,7 +19,7 @@ describe("resumable enrichment example", () => {
       expect(result.status).toBe("completed");
       expect(result.steps).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ id: "load-pending-items", status: "complete" }),
+          expect.objectContaining({ id: "load-pending-items", status: "completed" }),
           expect.objectContaining({
             id: "enrich-items",
             reason: "dry-run",

@@ -48,11 +48,14 @@
         "PipelineStepContext",
         "PipelineStepFailedEvent",
         "PipelineStepFailedReport",
+        "PipelineStepLifecycleStatus",
         "PipelineStepPlannedEvent",
         "PipelineStepProgress",
         "PipelineStepProgressDetail",
+        "PipelineStepProgressDetailStatus",
         "PipelineStepProgressEvent",
         "PipelineStepReport",
+        "PipelineStepReportStatus",
         "PipelineStepSelectionReason",
         "PipelineStepSkippedEvent",
         "PipelineStepSkippedReport",
@@ -72,7 +75,7 @@
         "toMappedChildStepProgress",
         "ToMappedChildStepProgressOptions"
       ],
-      "sha256": "e0c9802d5dcb71b319562d301c452446d74ea1c67d18b3ad76617467127bca71",
+      "sha256": "90c53d5305a7f76e75fc816fbd7c6b9f5598e076bda9ea763abd359dc672d77e",
       "specifier": "tubeless"
     },
     {
@@ -209,7 +212,7 @@
         "StoredPipelineRunStatus",
         "StoredPipelineStep"
       ],
-      "sha256": "69a01a381babc298e0e91a7ab0050e7d8c8a52ee8b993eac59271bfd7c68546c",
+      "sha256": "be37dc529dc7cfd1f09c196eacb4664194a82bff62846bae94d318ab528d8d8a",
       "specifier": "tubeless/run-store"
     },
     {

@@ -86,13 +86,20 @@ export interface PipelineExecutionContext<TOptions extends object> extends Pipel
  * Optional indented detail row under a parent step's progress.
  * Domain-agnostic: mapped children, nested work units, per-file status, etc.
  */
+export type PipelineStepProgressDetailStatus =
+  | "completed"
+  | "failed"
+  | "pending"
+  | "running"
+  | "skipped";
+
 export interface PipelineStepProgressDetail {
   /** Stable identity for the row (item key, path, job id, …). */
   id: string;
   /** Short status text shown after the id. */
   label?: string;
   /** Controls the detail row symbol. Defaults to `running`. */
-  status?: "completed" | "failed" | "pending" | "running" | "skipped";
+  status?: PipelineStepProgressDetailStatus;
 }
 
 export interface PipelineStepProgress {
@@ -245,7 +252,7 @@ interface PipelineStepReportBase {
 export interface PipelineStepCompleteReport extends PipelineStepReportBase {
   attemptId: string;
   startedAtMs: number;
-  status: "complete";
+  status: "completed";
 }
 
 export interface PipelineStepSkippedReport extends PipelineStepReportBase {
@@ -276,8 +283,10 @@ export type PipelineStepReport =
   | PipelineStepSkippedReport
   | PipelineStepCompleteReport;
 
+export type PipelineStepReportStatus = PipelineStepReport["status"];
+
 /** Current persisted run-record schema version. */
-export const RUN_MODEL_VERSION = 1 as const;
+export const RUN_MODEL_VERSION = 2 as const;
 
 /** Terminal disposition of a completed run record. */
 export type PipelineRunStatus = "cancelled" | "completed" | "failed";
@@ -347,6 +356,8 @@ export type PipelineStepStatus =
   | ({ pipelineId: string; step: PipelinePlanStep } & PipelineStepSkippedReport)
   | ({ pipelineId: string; step: PipelinePlanStep } & PipelineStepCompleteReport);
 
+export type PipelineStepLifecycleStatus = PipelineStepStatus["status"];
+
 export type PipelineStepPlannedEvent = Extract<PipelineStepStatus, { status: "planned" }>;
 type PipelineStepRunningStatus = Extract<PipelineStepStatus, { status: "running" }>;
 export type PipelineStepStartEvent = Omit<PipelineStepRunningStatus, "progress"> & {
@@ -358,7 +369,7 @@ export type PipelineStepProgressEvent = Omit<PipelineStepRunningStatus, "progres
 export type PipelineStepCancelledEvent = Extract<PipelineStepStatus, { status: "cancelled" }>;
 export type PipelineStepFailedEvent = Extract<PipelineStepStatus, { status: "failed" }>;
 export type PipelineStepSkippedEvent = Extract<PipelineStepStatus, { status: "skipped" }>;
-export type PipelineStepCompleteEvent = Extract<PipelineStepStatus, { status: "complete" }>;
+export type PipelineStepCompleteEvent = Extract<PipelineStepStatus, { status: "completed" }>;
 
 export interface PipelineHooks<TResult = unknown> {
   onFinalizeComplete?(event: { durationMs: number; pipelineId: string; value: TResult }): void;
@@ -1563,7 +1574,7 @@ function normalizeStepSkipDecision(
 /** Required dependencies are met when completed, or intentionally policy-skipped. */
 function isRequiredDependencyMet(report: PipelineStepReport | undefined): boolean {
   if (!report) return false;
-  if (report.status === "complete") return true;
+  if (report.status === "completed") return true;
   return report.status === "skipped" && report.reason === "policy";
 }
 
@@ -2288,7 +2299,7 @@ function buildPipelinePlan<
         description: step.description,
         finishedAtMs: 0,
         startedAtMs: 0,
-        status: "complete",
+        status: "completed",
       });
     }
   }
@@ -2384,7 +2395,7 @@ async function executePlannedRun<
           event.status === "cancelled")) ||
       (previous === "running" &&
         (event.status === "running" ||
-          event.status === "complete" ||
+          event.status === "completed" ||
           event.status === "skipped" ||
           event.status === "cancelled" ||
           event.status === "failed"));
@@ -2401,7 +2412,7 @@ async function executePlannedRun<
       case "cancelled":
       case "failed":
       case "skipped":
-      case "complete":
+      case "completed":
         publishStepStatus({ ...report, pipelineId: definition.id, step });
     }
   };
@@ -2660,7 +2671,7 @@ async function executePlannedRun<
         description: args.step.description,
         finishedAtMs: runtime.now(),
         startedAtMs: completeAttempt.startedAtMs,
-        status: "complete",
+        status: "completed",
       };
       reports.push(report);
       reportsByStepId.set(args.stepId, report);

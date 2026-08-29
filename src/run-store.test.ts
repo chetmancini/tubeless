@@ -1,8 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import {
+  RUN_MODEL_VERSION,
+  type PipelineRunStatus,
+  type PipelineStepLifecycleStatus,
+} from "./pipeline.js";
 import {
   createPipelineRunProjector,
   projectPipelineRunStore,
+  type StoredPipelineAttempt,
   type StoredPipelineEvent,
+  type StoredPipelineRun,
+  type StoredPipelineRunStatus,
+  type StoredPipelineStep,
 } from "./run-store.js";
 
 function event(
@@ -119,6 +128,15 @@ function snapshotFromChunks(events: readonly StoredPipelineEvent[], generatedAtM
 }
 
 describe("pipeline run store projections", () => {
+  it("reuses live status unions for stored run, step, and attempt records", () => {
+    expectTypeOf<StoredPipelineRunStatus>().toEqualTypeOf<PipelineRunStatus | "running">();
+    expectTypeOf<StoredPipelineStep["status"]>().toEqualTypeOf<PipelineStepLifecycleStatus>();
+    expectTypeOf<StoredPipelineAttempt["status"]>().toEqualTypeOf<
+      Exclude<PipelineStepLifecycleStatus, "planned">
+    >();
+    expectTypeOf<StoredPipelineRun["version"]>().toEqualTypeOf<typeof RUN_MODEL_VERSION>();
+  });
+
   it("projects definitions, active history, attempts, progress, logs, and errors", () => {
     const events = historyFixture;
 
@@ -147,6 +165,7 @@ describe("pipeline run store projections", () => {
       durationMs: 7,
       logCount: 1,
       status: "failed",
+      version: 2,
       steps: [
         {
           id: "load",
@@ -206,7 +225,7 @@ describe("pipeline run store projections", () => {
     expect(snapshot.runs[0]?.steps[0]).toMatchObject({
       id: "children",
       nestedPipeline: nested,
-      status: "complete",
+      status: "completed",
     });
     expect(snapshot.definitions[0]?.steps[0]).toMatchObject({
       id: "children",
@@ -323,6 +342,7 @@ describe("pipeline run store projections", () => {
 
     expect(snapshot.activeRunCount).toBe(1);
     expect(snapshot.runs[0]?.status).toBe("running");
+    expect(snapshot.runs[0]?.version).toBe(RUN_MODEL_VERSION);
   });
 
   it("replaces an observed definition when a newer run changes its schema", () => {
