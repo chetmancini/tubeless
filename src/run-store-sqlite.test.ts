@@ -234,10 +234,17 @@ describe("SQLite pipeline run store", () => {
   it("rejects a missing path when initialize is false without creating it", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
     directories.push(directory);
-    const filename = path.join(directory, "missing", "runs.sqlite");
-    await expect(openSqlitePipelineRunStore(filename, { initialize: false })).rejects.toThrow();
-    await expect(stat(filename)).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(stat(path.dirname(filename))).rejects.toMatchObject({ code: "ENOENT" });
+    const nested = path.join(directory, "missing", "runs.sqlite");
+    const sibling = path.join(directory, "runs.sqlite");
+    await expect(openSqlitePipelineRunStore(nested, { initialize: false })).rejects.toThrow(
+      "is not a pipeline run store"
+    );
+    await expect(openSqlitePipelineRunStore(sibling, { initialize: false })).rejects.toThrow(
+      "is not a pipeline run store"
+    );
+    await expect(stat(nested)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(path.dirname(nested))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(sibling)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("rejects an uninitialized file when initialize is false", async () => {

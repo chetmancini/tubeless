@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { PipelineTraceEvent } from "./tracing.js";
@@ -213,6 +213,13 @@ export async function openSqlitePipelineRunStore(
   const resolvedFilename = filename === ":memory:" ? filename : path.resolve(filename);
   if (resolvedFilename !== ":memory:" && initialize) {
     await mkdir(path.dirname(resolvedFilename), { recursive: true });
+  }
+  if (resolvedFilename !== ":memory:" && !initialize) {
+    try {
+      await stat(resolvedFilename);
+    } catch {
+      throw new Error(`${resolvedFilename} is not a pipeline run store.`);
+    }
   }
   const database = await openDatabase(resolvedFilename, { create: initialize, readOnly });
   try {
