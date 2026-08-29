@@ -1,8 +1,8 @@
 # CLI
 
 The `tubeless` binary inspects, plans, graphs, and runs exported pipeline
-modules. It requires Bun 1.3.14 or later (`#!/usr/bin/env bun`). Bun loads
-TypeScript pipeline files directly. `npx tubeless` is not supported.
+modules. It requires Bun 1.3.14 or later. Bun loads TypeScript pipeline
+files directly.
 
 ```sh
 bunx tubeless --help

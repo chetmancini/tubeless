@@ -62,7 +62,9 @@ or shared helpers in this repository.
 ## Runtime rules
 
 - Library entrypoints are ESM-only and require Node.js 22 or later. The
-  `tubeless` CLI requires Bun 1.3.14 or later (`#!/usr/bin/env bun`).
+  `tubeless` CLI requires Bun 1.3.14 or later; its `#!/usr/bin/env node`
+  trampoline relaunches the binary with Bun under Node and reports an
+  actionable install message when Bun is missing.
 - Use `context.log`, never direct `console` calls inside steps.
 - Pass `context.signal` into network calls, batching, retry, rate limiting, and
   long waits. Use `context.sleep` for retry-aware or testable delays.
