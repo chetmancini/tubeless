@@ -307,7 +307,11 @@ async function canonicalDestination(filename: string, depth = 0): Promise<string
 }
 
 async function pathsShareIdentity(left: string, right: string): Promise<boolean> {
-  if ((await canonicalDestination(left)) === (await canonicalDestination(right))) return true;
+  const [leftPath, rightPath] = await Promise.all([
+    canonicalDestination(left),
+    canonicalDestination(right),
+  ]);
+  if (leftPath === rightPath || leftPath.toLowerCase() === rightPath.toLowerCase()) return true;
   try {
     const [leftStat, rightStat] = await Promise.all([stat(left), stat(right)]);
     return leftStat.dev === rightStat.dev && leftStat.ino === rightStat.ino;

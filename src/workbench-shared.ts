@@ -44,22 +44,38 @@ export async function writeCliChunk(
   output: { write(chunk: string): boolean | void },
   chunk: string
 ): Promise<void> {
+  interface BackpressuredWriter {
+    destroyed?: boolean;
+    errored?: Error | null;
+    off?(event: string, listener: (...args: never[]) => void): unknown;
+    once?(event: string, listener: (...args: never[]) => void): unknown;
+  }
+  // SAFETY: write() returning false, plus destroyed/errored, are Node writable
+  // stream signals. Test IO objects omit those fields and skip the drain wait.
+  const stream = output as BackpressuredWriter;
+  if (stream.destroyed) {
+    throw stream.errored instanceof Error
+      ? stream.errored
+      : new Error("Cannot write to a closed stream.");
+  }
   if (output.write(chunk) !== false) return;
-  // SAFETY: write() returning false is the Node writable-stream backpressure
-  // signal, so the destination implements once/off for drain and error.
-  const stream = output as NodeJS.WritableStream;
-  if (typeof stream.once !== "function") return;
+  if (typeof stream.once !== "function" || typeof stream.off !== "function") return;
+  if (stream.destroyed) {
+    throw stream.errored instanceof Error
+      ? stream.errored
+      : new Error("Cannot write to a closed stream.");
+  }
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => {
-      stream.off("drain", onDrain);
+      stream.off!("drain", onDrain);
       reject(error);
     };
     const onDrain = () => {
-      stream.off("error", onError);
+      stream.off!("error", onError);
       resolve();
     };
-    stream.once("error", onError);
-    stream.once("drain", onDrain);
+    stream.once!("error", onError);
+    stream.once!("drain", onDrain);
   });
 }
 

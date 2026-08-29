@@ -14,7 +14,11 @@ import {
 import { createSteps, definePipeline } from "./pipeline";
 import { projectPipelineRun } from "./run-store";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite";
-import { DUPLICATE_SIGNAL_WINDOW_MS, onFirstProcessSignal } from "./workbench-shared";
+import {
+  DUPLICATE_SIGNAL_WINDOW_MS,
+  onFirstProcessSignal,
+  writeCliChunk,
+} from "./workbench-shared";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli, type WorkbenchCliIo } from "./workbench";
 
 function parseNdjson(text: string): { name?: string; pipelineId?: string; runId?: string }[] {
@@ -863,6 +867,38 @@ describe("tubeless workbench", () => {
       )
     ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
     expect(io.errors.join("")).toMatch(/same path/i);
+  });
+
+  it("rejects case-insensitive --store and --trace collisions", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          path.join(directory, "runs.sqlite"),
+          "--trace",
+          path.join(directory, "RUNS.sqlite"),
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(io.errors.join("")).toMatch(/same path/i);
+  });
+
+  it("does not hang when writing to a destroyed stream", async () => {
+    const { PassThrough } = await import("node:stream");
+    const stream = new PassThrough();
+    stream.destroy(new Error("broken pipe"));
+    await expect(writeCliChunk(stream, "x\n")).rejects.toThrow(/broken pipe|closed stream/);
   });
 
   it("lists and shows projected history from the run store", async () => {
