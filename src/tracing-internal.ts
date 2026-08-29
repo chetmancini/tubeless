@@ -87,6 +87,7 @@ function serializeNestedPipeline(nested: PipelinePlanStep["nestedPipeline"]): st
   return JSON.stringify({
     mode: nested.mode,
     pipelineId: nested.pipelineId,
+    step_count: nested.stepIds.length,
     stepIds: nested.stepIds.slice(0, TRACE_LIST_LIMIT),
   });
 }

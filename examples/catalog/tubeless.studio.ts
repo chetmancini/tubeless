@@ -1,5 +1,9 @@
 import { definePipelineStudio } from "tubeless/workbench/studio";
 
+// Recorded studio history keeps last reportProgress details and nestedPipeline
+// labels from these commands. Use --store when launching so that structure
+// survives after the live TTY closes.
+
 export default definePipelineStudio({
   cwd: ".",
   commands: [

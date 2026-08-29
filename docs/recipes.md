@@ -16,14 +16,14 @@ inventory.
 | Compose one reusable workflow                 | [`child-pipeline.ts`](../examples/child-pipeline.ts)                     | `fromPipeline`, `mapOptions`, `mapResult`                          |
 | Fan out over runtime items                    | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline`, stable keys, concurrency, progress              |
 | Show determinate progress                     | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `reportProgress`, mapped-child progress                            |
-| Watch the live TTY reporter                   | [`live-tui.ts`](../examples/live-tui.ts)                                 | named steps, nested `details`, `definePipelineCommand`             |
+| Watch the live TTY reporter                   | [`live-tui.ts`](../examples/live-tui.ts)                                 | named steps, nested `details`; persist with `--store`              |
 | Retry and rate-limit remote calls             | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `withRetry`, `RateLimiter`, injected sleep and signal              |
 | Resume durable long-running work              | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `dryRun`, `openCheckpoint`, `withCheckpointedBatch`                |
 | Expose and run a typed command-line program   | [`cli-job.ts`](../examples/cli-job.ts)                                   | `definePipelineCommand`, conditional `mapOptions`, `tubeless run`  |
 | Render plans and diagnostics                  | [`rendering.ts`](../examples/rendering.ts)                               | `renderPipelinePlan`, `renderPipelineError`                        |
 | Handle cancellation and deterministic testing | [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts) | `createPipelineTestRuntime`, captured status/progress              |
 | Export JSON or OpenTelemetry lifecycle events | [`tracing.ts`](../examples/tracing.ts)                                   | trace context, attempt events, JSON exporter                       |
-| Persist, inspect, and explicitly launch runs  | [`local-observability.ts`](../examples/local-observability.ts)           | SQLite store, `createPipelineRunProjector`, `definePipelineStudio` |
+| Persist, inspect, and explicitly launch runs  | [`local-observability.ts`](../examples/local-observability.ts)           | SQLite store, recorded `details`, nested labels, studio projector  |
 | Project layout, IDs, and studio catalog       | [`tubeless.studio.ts`](../examples/catalog/tubeless.studio.ts)           | `pipelines/`, `scripts/`, `definePipelineStudio`                   |
 
 ## Selection rules

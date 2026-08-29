@@ -31,6 +31,13 @@ export interface PipelineRunEventStore extends PipelineTraceExporter {
 
 export type StoredPipelineRunStatus = "cancelled" | "completed" | "failed" | "running";
 
+export interface StoredNestedPipeline {
+  mode: "for-each" | "single";
+  pipelineId: string;
+  stepCount: number;
+  stepIds: string[];
+}
+
 export interface StoredPipelineLog {
   attemptId?: string;
   id: number;
@@ -57,13 +64,10 @@ export interface StoredPipelineStep {
   finishedAtMs?: number;
   id: string;
   name?: string;
-  nestedPipeline?: {
-    mode: "for-each" | "single";
-    pipelineId: string;
-    stepIds: string[];
-  };
+  nestedPipeline?: StoredNestedPipeline;
   progress?: {
     completed: number;
+    detailCount?: number;
     details?: PipelineStepProgressDetail[];
     message?: string;
     total?: number;
@@ -94,11 +98,7 @@ export interface StoredPipelineDefinitionStep {
   dryRun: string;
   id: string;
   name?: string;
-  nestedPipeline?: {
-    mode: "for-each" | "single";
-    pipelineId: string;
-    stepIds: string[];
-  };
+  nestedPipeline?: StoredNestedPipeline;
   optionalDependencies: string[];
   runtimeSkipPossible: boolean;
   skipAfterFailureOf: string[];
@@ -234,13 +234,21 @@ function parseNestedPipeline(
     const pipelineId = parsed.pipelineId as PipelineTraceAttributeValue | undefined;
     if (!isStringValue(pipelineId) || pipelineId.length === 0) return undefined;
     if (!Array.isArray(parsed.stepIds)) return undefined;
+    const stepIds = parsed.stepIds
+      .filter(isStringValue)
+      .slice(0, 128)
+      .map((item) => item.slice(0, 4_096));
+    // SAFETY: JSON.parse leaves object fields untyped; isNumberValue keeps numbers only.
+    const recorded = ("step_count" in parsed ? parsed.step_count : undefined) as
+      | PipelineTraceAttributeValue
+      | undefined;
+    const recordedCount =
+      isNumberValue(recorded) && Number.isFinite(recorded) ? Math.floor(recorded) : stepIds.length;
     return {
       mode: parsed.mode,
       pipelineId: pipelineId.slice(0, 4_096),
-      stepIds: parsed.stepIds
-        .filter(isStringValue)
-        .slice(0, 128)
-        .map((item) => item.slice(0, 4_096)),
+      stepCount: Math.max(stepIds.length, recordedCount),
+      stepIds,
     };
   } catch {
     return undefined;
@@ -359,6 +367,9 @@ function applyRunEvent(projection: MutableRunProjection, event: StoredPipelineEv
       if (total !== undefined) progress.total = total;
       const details = parseProgressDetails(event.attributes);
       if (details) progress.details = details;
+      const detailCount = numberAttribute(event.attributes, "detail_count");
+      if (detailCount !== undefined) progress.detailCount = detailCount;
+      else if (details) progress.detailCount = details.length;
       step.progress = progress;
     }
     return;

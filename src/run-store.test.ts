@@ -152,6 +152,7 @@ describe("pipeline run store projections", () => {
           id: "load",
           progress: {
             completed: 4,
+            detailCount: 1,
             details: [{ id: "rows.csv", label: "read", status: "running" }],
             message: "loaded",
             total: 10,
@@ -177,6 +178,7 @@ describe("pipeline run store projections", () => {
     const nested = {
       mode: "for-each" as const,
       pipelineId: "worker",
+      stepCount: 1,
       stepIds: ["process"],
     };
     const snapshot = projectPipelineRunStore([
@@ -185,7 +187,12 @@ describe("pipeline run store projections", () => {
         attributes: {
           dependencies: "[]",
           dry_run: "run",
-          nested_pipeline: JSON.stringify(nested),
+          nested_pipeline: JSON.stringify({
+            mode: nested.mode,
+            pipelineId: nested.pipelineId,
+            step_count: nested.stepCount,
+            stepIds: nested.stepIds,
+          }),
           optional_dependencies: "[]",
           runtime_skip_possible: false,
           skip_after_failure_of: "[]",
@@ -205,6 +212,54 @@ describe("pipeline run store projections", () => {
       id: "children",
       nestedPipeline: nested,
     });
+  });
+
+  it("keeps original counts when details and nested step IDs are truncated", () => {
+    const snapshot = projectPipelineRunStore([
+      event(1, "pipeline.started", { attributes: { target_ids: "[]" } }),
+      event(2, "step.planned", {
+        attributes: {
+          dependencies: "[]",
+          dry_run: "run",
+          nested_pipeline: JSON.stringify({
+            mode: "single",
+            pipelineId: "wide-child",
+            step_count: 200,
+            stepIds: Array.from({ length: 128 }, (_, index) => `step-${index}`),
+          }),
+          optional_dependencies: "[]",
+          runtime_skip_possible: false,
+          skip_after_failure_of: "[]",
+        },
+        stepId: "child",
+      }),
+      event(3, "step.running", {
+        attemptId: "attempt-1",
+        attributes: {
+          completed: 128,
+          detail_count: 200,
+          details: JSON.stringify(
+            Array.from({ length: 128 }, (_, index) => ({
+              id: `item-${index}`,
+              status: "completed",
+            }))
+          ),
+          total: 200,
+        },
+        stepId: "child",
+      }),
+    ]);
+
+    expect(snapshot.runs[0]?.steps[0]?.nestedPipeline).toMatchObject({
+      pipelineId: "wide-child",
+      stepCount: 200,
+    });
+    expect(snapshot.runs[0]?.steps[0]?.nestedPipeline?.stepIds).toHaveLength(128);
+    expect(snapshot.runs[0]?.steps[0]?.progress).toMatchObject({
+      completed: 128,
+      detailCount: 200,
+    });
+    expect(snapshot.runs[0]?.steps[0]?.progress?.details).toHaveLength(128);
   });
 
   it("stores repeated reportAttempt telemetry on one execution attempt", () => {

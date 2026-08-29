@@ -220,6 +220,7 @@ describe("pipeline tracing", () => {
         nested_pipeline: JSON.stringify({
           mode: "single",
           pipelineId: "trace-child",
+          step_count: 1,
           stepIds: ["inside"],
         }),
       },

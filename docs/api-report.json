@@ -200,6 +200,7 @@
         "PipelineRunStoreSnapshot",
         "projectPipelineRun",
         "projectPipelineRunStore",
+        "StoredNestedPipeline",
         "StoredPipelineAttempt",
         "StoredPipelineDefinition",
         "StoredPipelineDefinitionStep",
@@ -209,7 +210,7 @@
         "StoredPipelineRunStatus",
         "StoredPipelineStep"
       ],
-      "sha256": "ef0b779cf7cc036b8fddc70f60932febd10ebb2f2ff02979711f213cc6dd0e9c",
+      "sha256": "69a01a381babc298e0e91a7ab0050e7d8c8a52ee8b993eac59271bfd7c68546c",
       "specifier": "tubeless/run-store"
     },
     {
