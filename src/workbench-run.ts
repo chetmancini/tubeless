@@ -168,7 +168,7 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
     return writeUsageError(io, "--store and --trace cannot write to the same path.", RUN_USAGE);
   }
 
-  const managedSignal = manageWorkbenchSignal(io);
+  let managedSignal: ReturnType<typeof manageWorkbenchSignal> | undefined;
   let store: PipelineRunEventStore | undefined;
   let closeTrace: (() => Promise<void>) | undefined;
   let exitCode: number = TUBELESS_WORKBENCH_EXIT_CODE.execution;
@@ -180,10 +180,11 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
       exporters.push(store);
     }
     if (parsed.parsed.values.trace) {
-      const writer = await createRunTraceWriter(parsed.parsed.values.trace, io);
+      const writer = await createRunTraceWriter(parsed.parsed.values.trace, io, io.signal);
       closeTrace = writer.close;
       exporters.push(writer.exporter);
     }
+    managedSignal = manageWorkbenchSignal(io);
     const pipelineContext =
       exporters.length > 0
         ? { tracing: { exporter: composeTraceExporters(exporters) } }
@@ -201,7 +202,8 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
     }
   } catch (error) {
     io.stderr.write(`Error: ${errorMessage(error)}\n`);
-    exitCode = toExitCode(error);
+    const interrupted = managedSignal?.wasInterrupted() ?? io.signal?.aborted === true;
+    exitCode = interrupted ? TUBELESS_WORKBENCH_EXIT_CODE.cancellation : toExitCode(error);
   } finally {
     try {
       await closeTrace?.();
@@ -210,7 +212,7 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
       if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success) exitCode = toExitCode(error);
     }
     await store?.close();
-    managedSignal.cleanup();
+    managedSignal?.cleanup();
   }
   return exitCode;
 }
@@ -244,7 +246,8 @@ async function invokeEveryExporter(
 
 async function createRunTraceWriter(
   destination: string,
-  io: WorkbenchCliIo
+  io: WorkbenchCliIo,
+  signal?: AbortSignal
 ): Promise<{ close(): Promise<void>; exporter: PipelineTraceExporter }> {
   if (destination === "-") {
     let writeError: Error | undefined;
@@ -273,7 +276,7 @@ async function createRunTraceWriter(
   stream.on("error", (error) => {
     writeError = error;
   });
-  await waitForWriteStreamOpen(stream);
+  await waitForWriteStreamOpen(stream, signal);
   return {
     close: () =>
       new Promise((resolve, reject) => {
@@ -297,20 +300,36 @@ async function createRunTraceWriter(
   };
 }
 
-async function waitForWriteStreamOpen(stream: WriteStream): Promise<void> {
+async function waitForWriteStreamOpen(stream: WriteStream, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    stream.destroy();
+    throw signal.reason instanceof Error ? signal.reason : new Error("Aborted");
+  }
   if (stream.errored) throw stream.errored;
   if (!stream.pending) return;
   await new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      stream.destroy();
+      reject(signal?.reason instanceof Error ? signal.reason : new Error("Aborted"));
+    };
     const onOpen = () => {
-      stream.off("error", onError);
+      cleanup();
       resolve();
     };
     const onError = (error: Error) => {
-      stream.off("open", onOpen);
+      cleanup();
       reject(error);
+    };
+    const cleanup = () => {
+      stream.off("open", onOpen);
+      stream.off("error", onError);
+      signal?.removeEventListener("abort", onAbort);
     };
     stream.once("open", onOpen);
     stream.once("error", onError);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
   });
 }
 

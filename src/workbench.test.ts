@@ -1,8 +1,12 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
+
+const execFileAsync = promisify(execFile);
 import { describe, expect, it, vi } from "vitest";
 import { defineCommand, definePipelineCommand } from "./cli";
 import { markPipelineCommand } from "./pipeline-command-marker";
@@ -936,6 +940,22 @@ describe("tubeless workbench", () => {
       )
     ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
     expect(io.errors.join("")).toMatch(/same path/i);
+  });
+
+  it("cancels a pending --trace open when the workbench signal aborts", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const fifo = path.join(directory, "trace.fifo");
+    await execFileAsync("mkfifo", [fifo]);
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), signal: controller.signal };
+    const command = runWorkbenchCli(
+      ["run", "--trace", fifo, "pipeline.mjs", "--", "--message", "hello", "--target", "work"],
+      io
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    controller.abort();
+    await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
+    expect(io.output.join("")).not.toContain("completed:hello");
   });
 
   it("does not hang when writing to a destroyed stream", async () => {
