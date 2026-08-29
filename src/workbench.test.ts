@@ -966,6 +966,14 @@ describe("tubeless workbench", () => {
     await expect(writeCliChunk(stream, "x\n")).rejects.toThrow(/broken pipe|closed stream/);
   });
 
+  it("does not hang when a backpressured stream closes without error", async () => {
+    const { PassThrough } = await import("node:stream");
+    const stream = new PassThrough({ highWaterMark: 1 });
+    const pending = writeCliChunk(stream, `${"x".repeat(64)}\n`);
+    stream.destroy();
+    await expect(pending).rejects.toThrow(/closed stream/);
+  });
+
   it("lists and shows projected history from the run store", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     const io = captureIo(directory);

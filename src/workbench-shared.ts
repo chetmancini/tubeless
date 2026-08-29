@@ -66,16 +66,32 @@ export async function writeCliChunk(
       : new Error("Cannot write to a closed stream.");
   }
   await new Promise<void>((resolve, reject) => {
-    const onError = (error: Error) => {
-      stream.off!("drain", onDrain);
+    const fail = (error: Error) => {
+      cleanup();
       reject(error);
     };
+    const onError = (error: Error) => {
+      fail(error);
+    };
+    const onClose = () => {
+      fail(
+        stream.errored instanceof Error
+          ? stream.errored
+          : new Error("Cannot write to a closed stream.")
+      );
+    };
     const onDrain = () => {
-      stream.off!("error", onError);
+      cleanup();
       resolve();
+    };
+    const cleanup = () => {
+      stream.off!("drain", onDrain);
+      stream.off!("error", onError);
+      stream.off!("close", onClose);
     };
     stream.once!("error", onError);
     stream.once!("drain", onDrain);
+    stream.once!("close", onClose);
   });
 }
 
