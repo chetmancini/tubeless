@@ -958,6 +958,22 @@ describe("tubeless workbench", () => {
     expect(io.output.join("")).not.toContain("completed:hello");
   });
 
+  it("cancels a backpressured --trace - write when the workbench signal aborts", async () => {
+    const { PassThrough } = await import("node:stream");
+    const { directory } = await writeActualPipelineCommandModule();
+    const stdout = new PassThrough({ highWaterMark: 1 });
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), stdout, signal: controller.signal };
+    const command = runWorkbenchCli(
+      ["run", "--trace", "-", "pipeline.mjs", "--", "--message", "hello", "--target", "work"],
+      io
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    controller.abort();
+    await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
+    expect(io.output.join("")).not.toContain("completed:hello");
+  });
+
   it("does not hang when writing to a destroyed stream", async () => {
     const { PassThrough } = await import("node:stream");
     const stream = new PassThrough();
@@ -972,6 +988,15 @@ describe("tubeless workbench", () => {
     const pending = writeCliChunk(stream, `${"x".repeat(64)}\n`);
     stream.destroy();
     await expect(pending).rejects.toThrow(/closed stream/);
+  });
+
+  it("aborts a backpressured write when the workbench signal fires", async () => {
+    const { PassThrough } = await import("node:stream");
+    const stream = new PassThrough({ highWaterMark: 1 });
+    const controller = new AbortController();
+    const pending = writeCliChunk(stream, `${"x".repeat(64)}\n`, controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toThrow(/aborted/i);
   });
 
   it("lists and shows projected history from the run store", async () => {
@@ -1144,6 +1169,37 @@ describe("tubeless workbench", () => {
       await chmod(path.dirname(databasePath), 0o755);
       await chmod(databasePath, 0o644);
     }
+  });
+
+  it("fails projected history when stdout cannot be written", async () => {
+    const { PassThrough } = await import("node:stream");
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const databasePath = path.join(directory, "history", "runs.sqlite");
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          databasePath,
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    const stdout = new PassThrough();
+    stdout.on("error", () => undefined);
+    stdout.destroy(new Error("broken pipe"));
+    const historyIo = { ...captureIo(directory), stdout };
+    expect(await runWorkbenchCli(["history", "--json", "--store", databasePath], historyIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(historyIo.errors.join("")).toMatch(/broken pipe|closed stream/);
   });
 
   it("rejects a missing store, unknown run, and combined json/events flags", async () => {

@@ -171,6 +171,7 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
   let managedSignal: ReturnType<typeof manageWorkbenchSignal> | undefined;
   let store: PipelineRunEventStore | undefined;
   let closeTrace: (() => Promise<void>) | undefined;
+  let bindTraceSignal: ((signal: AbortSignal) => void) | undefined;
   let exitCode: number = TUBELESS_WORKBENCH_EXIT_CODE.execution;
   try {
     const exporters: PipelineTraceExporter[] = [];
@@ -181,10 +182,12 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
     }
     if (parsed.parsed.values.trace) {
       const writer = await createRunTraceWriter(parsed.parsed.values.trace, io, io.signal);
+      bindTraceSignal = writer.bindSignal;
       closeTrace = writer.close;
       exporters.push(writer.exporter);
     }
     managedSignal = manageWorkbenchSignal(io);
+    bindTraceSignal?.(managedSignal.signal);
     const pipelineContext =
       exporters.length > 0
         ? { tracing: { exporter: composeTraceExporters(exporters) } }
@@ -248,18 +251,29 @@ async function createRunTraceWriter(
   destination: string,
   io: WorkbenchCliIo,
   signal?: AbortSignal
-): Promise<{ close(): Promise<void>; exporter: PipelineTraceExporter }> {
+): Promise<{
+  bindSignal(signal: AbortSignal): void;
+  close(): Promise<void>;
+  exporter: PipelineTraceExporter;
+}> {
+  let writeSignal = signal;
+  const currentSignal = () => writeSignal;
+
   if (destination === "-") {
     let writeError: Error | undefined;
     return {
+      bindSignal(next) {
+        writeSignal = next;
+      },
       close: async () => {
+        if (writeSignal?.aborted) return;
         if (writeError) throw writeError;
       },
       exporter: {
         async export(event) {
           if (writeError) throw writeError;
           try {
-            await writeCliChunk(io.stdout, `${JSON.stringify(event)}\n`);
+            await writeCliChunk(io.stdout, `${JSON.stringify(event)}\n`, currentSignal());
           } catch (error) {
             writeError = error instanceof Error ? error : new Error(String(error));
             throw writeError;
@@ -276,10 +290,25 @@ async function createRunTraceWriter(
   stream.on("error", (error) => {
     writeError = error;
   });
+  const destroyOnAbort = () => {
+    if (!stream.destroyed) stream.destroy();
+  };
+  const bindSignal = (next: AbortSignal) => {
+    writeSignal = next;
+    if (next.aborted) destroyOnAbort();
+    else next.addEventListener("abort", destroyOnAbort, { once: true });
+  };
   await waitForWriteStreamOpen(stream, signal);
+  if (writeSignal) bindSignal(writeSignal);
   return {
+    bindSignal,
     close: () =>
       new Promise((resolve, reject) => {
+        if (writeSignal?.aborted || stream.destroyed) {
+          destroyOnAbort();
+          resolve();
+          return;
+        }
         if (writeError) {
           reject(writeError);
           return;
@@ -293,7 +322,7 @@ async function createRunTraceWriter(
     exporter: {
       async export(event) {
         if (writeError) throw writeError;
-        await writeCliChunk(stream, `${JSON.stringify(event)}\n`);
+        await writeCliChunk(stream, `${JSON.stringify(event)}\n`, currentSignal());
         if (writeError) throw writeError;
       },
     },

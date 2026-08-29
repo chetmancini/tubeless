@@ -173,18 +173,22 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
       if (!run) {
         return writeUsageError(io, `Unknown run ${JSON.stringify(runId)}.`, HISTORY_USAGE);
       }
-      io.stdout.write(
+      await writeCliChunk(
+        io.stdout,
         parsed.values.json ? `${JSON.stringify(run, null, 2)}\n` : formatRunDetail(run)
       );
       return TUBELESS_WORKBENCH_EXIT_CODE.success;
     }
 
     if (parsed.values.json) {
-      io.stdout.write(`${JSON.stringify({ runs: snapshot.runs.map(summarizeRun) }, null, 2)}\n`);
+      await writeCliChunk(
+        io.stdout,
+        `${JSON.stringify({ runs: snapshot.runs.map(summarizeRun) }, null, 2)}\n`
+      );
       return TUBELESS_WORKBENCH_EXIT_CODE.success;
     }
     if (snapshot.runs.length > 0) {
-      io.stdout.write(`${snapshot.runs.map(formatRunListLine).join("\n")}\n`);
+      await writeCliChunk(io.stdout, `${snapshot.runs.map(formatRunListLine).join("\n")}\n`);
     }
     return TUBELESS_WORKBENCH_EXIT_CODE.success;
   } catch (error) {

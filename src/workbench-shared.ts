@@ -39,10 +39,15 @@ export interface WorkbenchCliIo {
   stdout: { write(chunk: string): boolean | void };
 }
 
+function abortReason(signal?: AbortSignal): Error {
+  return signal?.reason instanceof Error ? signal.reason : new Error("Aborted");
+}
+
 /** Write a chunk and wait when the destination applies backpressure. */
 export async function writeCliChunk(
   output: { write(chunk: string): boolean | void },
-  chunk: string
+  chunk: string,
+  signal?: AbortSignal
 ): Promise<void> {
   interface BackpressuredWriter {
     destroyed?: boolean;
@@ -53,6 +58,7 @@ export async function writeCliChunk(
   // SAFETY: write() returning false, plus destroyed/errored, are Node writable
   // stream signals. Test IO objects omit those fields and skip the drain wait.
   const stream = output as BackpressuredWriter;
+  if (signal?.aborted) throw abortReason(signal);
   if (stream.destroyed) {
     throw stream.errored instanceof Error
       ? stream.errored
@@ -60,6 +66,7 @@ export async function writeCliChunk(
   }
   if (output.write(chunk) !== false) return;
   if (typeof stream.once !== "function" || typeof stream.off !== "function") return;
+  if (signal?.aborted) throw abortReason(signal);
   if (stream.destroyed) {
     throw stream.errored instanceof Error
       ? stream.errored
@@ -69,6 +76,9 @@ export async function writeCliChunk(
     const fail = (error: Error) => {
       cleanup();
       reject(error);
+    };
+    const onAbort = () => {
+      fail(abortReason(signal));
     };
     const onError = (error: Error) => {
       fail(error);
@@ -88,10 +98,13 @@ export async function writeCliChunk(
       stream.off!("drain", onDrain);
       stream.off!("error", onError);
       stream.off!("close", onClose);
+      signal?.removeEventListener("abort", onAbort);
     };
     stream.once!("error", onError);
     stream.once!("drain", onDrain);
     stream.once!("close", onClose);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
   });
 }
 
