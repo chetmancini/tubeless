@@ -382,9 +382,14 @@ describe("createPipelineReporter", () => {
       const step = createSteps();
       const busy = step("busy", {
         run: () => {
-          const end = Date.now() + 220;
-          while (Date.now() < end) {
+          const deadline = Date.now() + 2_000;
+          while (Date.now() < deadline) {
             // Busy-wait: the live ticker must not share this thread.
+            const rendered = readFileSync(path, "utf8");
+            const glyphs = new Set(
+              [...rendered.matchAll(/[-\\|\/] busy/g)].map((match) => match[0])
+            );
+            if (glyphs.size >= 3) return "done";
           }
           return "done";
         },

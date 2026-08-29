@@ -176,6 +176,10 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("Clear run history?");
     expect(html).toContain("step-status-icon");
     expect(html).toContain("status-mark");
+    expect(html).toContain("progress-details");
+    expect(html).toContain("step.nestedPipeline");
+    expect(html).toContain("declared steps");
+    expect(html).toContain("Showing ");
     expect(html).not.toContain("mode-tabs");
     expect(html).not.toContain("Pipes");
 

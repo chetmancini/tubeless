@@ -72,7 +72,10 @@ The studio combines active and historical runs in one running-first view. Child
 pipeline executions stay beneath their top-level run. Run details include step
 attempts, progress, logs, and structured errors. Nested pipeline steps are
 labeled with the child pipeline and its declared steps; runtime fan-out is
-identified without guessing its item count.
+identified without guessing its item count. Recorded progress keeps the last
+per-item `details` rows under the parent bar. Truncated lists keep the original
+`detail_count` and nested `step_count` so history can say how many rows were
+omitted.
 
 Browser plan, launch, and clear-history requests send
 `x-tubeless-studio-plan`, `x-tubeless-studio-launch`, and

@@ -16,7 +16,7 @@ Package: `tubeless`
 | `tubeless/render`           | `./dist/render.d.ts`           | `1e9e3c4f18d8cf6992ec48c7f793ebbfc3bc43219d8694fb6cee76da83d98479` |                6 |
 | `tubeless/reporter`         | `./dist/reporter-entry.d.ts`   | `c2cf9ffaa7f5f80d1cb936b373782baeb2a33b1f2847fd7dbe3b36d7cc6dc199` |               13 |
 | `tubeless/retry`            | `./dist/retry.d.ts`            | `8b93425242c618f533498fa9d1670d321e69c4bab7bfaa000ab2464c1b755f4a` |                4 |
-| `tubeless/run-store`        | `./dist/run-store.d.ts`        | `c5306a72d9063f56f8e10b2703860e8a51db52d523dc947d38467981d4955150` |               15 |
+| `tubeless/run-store`        | `./dist/run-store.d.ts`        | `69a01a381babc298e0e91a7ab0050e7d8c8a52ee8b993eac59271bfd7c68546c` |               16 |
 | `tubeless/run-store/sqlite` | `./dist/run-store-sqlite.d.ts` | `13a9d5b25010b79c1771f81eb681d990e14288a3cefa2520dde21eb9535328ff` |                2 |
 | `tubeless/workbench/studio` | `./dist/workbench-studio.d.ts` | `2afced697589a4d76527107c9517921512c46ad62c074743264cb415a773539c` |                6 |
 | `tubeless/run-store/ui`     | `./dist/run-store-ui.d.ts`     | `b0c27f8b7d3481709b72912d7cae2ce325bb940315d432e53e3529dde7272e70` |                8 |
@@ -201,6 +201,7 @@ Package: `tubeless`
 - `PipelineRunStoreSnapshot`
 - `projectPipelineRun`
 - `projectPipelineRunStore`
+- `StoredNestedPipeline`
 - `StoredPipelineAttempt`
 - `StoredPipelineDefinition`
 - `StoredPipelineDefinitionStep`

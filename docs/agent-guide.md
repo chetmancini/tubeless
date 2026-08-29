@@ -117,7 +117,10 @@ or shared helpers in this repository.
   exporter boundary.
 - Keep durable local observation opt-in. Use the append-only adapter from
   `tubeless/run-store/sqlite` or `tubeless run --store`; do not make pipeline
-  definitions depend on storage or the studio.
+  definitions depend on storage or the studio. Recorded history keeps the last
+  `reportProgress` `details` plus `detail_count`, and opaque child steps keep
+  `nested_pipeline` with the original `step_count`. Studio renders those
+  snapshots; it does not flatten child DAGs into the parent step.
 - Use `createPipelineRunProjector` from `tubeless/run-store` when a custom
   reader pages `listEvents({ afterId })`. Append each newer page and call
   `snapshot()`; a refresh with no new ids returns the cached view. Duplicate

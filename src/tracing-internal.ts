@@ -2,7 +2,9 @@ import type {
   PipelineError,
   PipelineLogger,
   PipelinePlan,
+  PipelinePlanStep,
   PipelineRun,
+  PipelineStepProgress,
   PipelineStepStatus,
 } from "./pipeline.js";
 import type {
@@ -48,6 +50,46 @@ function compactAttributes(
       (entry): entry is [string, PipelineTraceAttributeValue] => entry[1] !== undefined
     )
   );
+}
+
+const TRACE_LIST_LIMIT = 128;
+const TRACE_STRING_LIMIT = 4_096;
+const DETAIL_STATUSES = new Set(["completed", "failed", "pending", "running", "skipped"]);
+
+function boundTraceString(value: string): string {
+  return value.length > TRACE_STRING_LIMIT ? value.slice(0, TRACE_STRING_LIMIT) : value;
+}
+
+interface SerializedProgressDetail {
+  id: string;
+  label?: string;
+  status?: "completed" | "failed" | "pending" | "running" | "skipped";
+}
+
+function serializeProgressDetails(
+  details: PipelineStepProgress["details"]
+): { detail_count: number; details: string } | undefined {
+  if (!details || details.length === 0) return undefined;
+  const serialized = details.slice(0, TRACE_LIST_LIMIT).map((detail) => {
+    const row: SerializedProgressDetail = { id: boundTraceString(detail.id) };
+    if (detail.label) row.label = boundTraceString(detail.label);
+    if (detail.status && DETAIL_STATUSES.has(detail.status)) row.status = detail.status;
+    return row;
+  });
+  return {
+    detail_count: details.length,
+    details: JSON.stringify(serialized),
+  };
+}
+
+function serializeNestedPipeline(nested: PipelinePlanStep["nestedPipeline"]): string | undefined {
+  if (!nested) return undefined;
+  return JSON.stringify({
+    mode: nested.mode,
+    pipelineId: nested.pipelineId,
+    step_count: nested.stepIds.length,
+    stepIds: nested.stepIds.slice(0, TRACE_LIST_LIMIT),
+  });
 }
 
 function toTraceError(error: PipelineError | undefined): PipelineTraceError | undefined {
@@ -170,6 +212,7 @@ export function createPipelineTraceEmitter(
             description: event.step.description,
             dry_run: event.step.dryRun,
             name: event.step.name,
+            nested_pipeline: serializeNestedPipeline(event.step.nestedPipeline),
             optional_dependencies: JSON.stringify(event.step.optionalDependencies),
             runtime_skip_possible: event.step.runtimeSkipPossible,
             selected: event.step.selected,
@@ -186,6 +229,7 @@ export function createPipelineTraceEmitter(
           attributes: event.progress
             ? {
                 completed: event.progress.completed,
+                ...(serializeProgressDetails(event.progress.details) ?? {}),
                 message: event.progress.message,
                 total: event.progress.total,
               }
