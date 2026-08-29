@@ -161,12 +161,18 @@ export async function runTrampoline(
   });
   try {
     const outcome = await relay.outcome;
+    // Dispose forwarding before computing the exit code: `relayExitCode`
+    // re-raises the child's signal on this process, and an active listener
+    // would swallow that self-signal and forward it to the dead child,
+    // turning a real signal death into exit 127.
+    disposeSignalForwarding();
     if (outcome.error) {
       io.writeError(launchMessage(outcome.error));
       return MISSING_BUN_EXIT_CODE;
     }
     return relayExitCode(outcome, io);
   } finally {
+    // Idempotent safety net in case an earlier path is added above.
     disposeSignalForwarding();
   }
 }

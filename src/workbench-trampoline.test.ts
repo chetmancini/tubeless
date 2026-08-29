@@ -17,6 +17,7 @@ interface ObservedIo extends TrampolineIo {
   forwarded: NodeJS.Signals[];
   signalHandlers: Array<(signal: NodeJS.Signals) => void>;
   relays: Array<[string, readonly string[]]>;
+  events: string[];
 }
 
 interface FakeRelayConfig {
@@ -30,6 +31,8 @@ function fakeIo(config: FakeRelayConfig): ObservedIo {
   const forwarded: NodeJS.Signals[] = [];
   const signalHandlers: Array<(signal: NodeJS.Signals) => void> = [];
   const relays: Array<[string, readonly string[]]> = [];
+  const events: string[] = [];
+  let disposed = false;
   const io: ObservedIo = {
     probeBun: () => config.probeResult,
     startRelay: (binPath, argv) => {
@@ -41,22 +44,29 @@ function fakeIo(config: FakeRelayConfig): ObservedIo {
         },
       };
     },
+    pid: 4242,
     writeError: (message) => {
       errors.push(message);
     },
-    pid: 4242,
     kill: (pid, signal) => {
+      events.push(`kill:${signal}`);
       kills.push([pid, signal]);
     },
     onSignal: (_signals, handler) => {
       signalHandlers.push(handler);
-      return () => {};
+      return () => {
+        if (!disposed) {
+          disposed = true;
+          events.push("dispose");
+        }
+      };
     },
     errors,
     kills,
     forwarded,
     signalHandlers,
     relays,
+    events,
   };
   return io;
 }
@@ -130,6 +140,16 @@ describe("runTrampoline", () => {
 
   it("forwards every declared supervisor signal", () => {
     expect([...FORWARDED_SIGNALS]).toEqual(["SIGINT", "SIGTERM", "SIGHUP"]);
+  });
+
+  it("disposes signal forwarding before re-raising the relay's signal", async () => {
+    const io = fakeIo({
+      probeResult: { status: 0 },
+      relayOutcome: { status: null, signal: "SIGTERM" },
+    });
+
+    expect(await runTrampoline("/bin/tubeless.js", [], io)).toBe(MISSING_BUN_EXIT_CODE);
+    expect(io.events).toEqual(["dispose", "kill:SIGTERM"]);
   });
 });
 
