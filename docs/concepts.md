@@ -312,9 +312,10 @@ required-input and failure-gate closure must contain all required finalizer
 steps, so an advertised target cannot complete its work and then fail only
 because it intentionally omitted the pipeline's result. Plain finalizers and
 the default finalizer remain appropriate when selected goals intentionally
-produce a partial domain result; the default walks the step list backwards and
-emits the most recent published output, so filtered or dry-run runs finalize
-leniently instead of failing.
+produce a partial domain result; the default finalizer emits the last declared
+step's output, or `undefined` when a dry run or filter left that slot absent,
+so partial runs finalize leniently instead of failing. Runs that need an
+earlier step's output under filtering should declare an explicit finalizer.
 
 ### Why targets are declared
 

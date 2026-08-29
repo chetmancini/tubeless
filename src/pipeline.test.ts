@@ -2403,7 +2403,7 @@ describe("definePipeline", () => {
     expect(result.value).toBeUndefined();
   });
 
-  it("keeps the last-step default finalize lenient for filtered runs", async () => {
+  it("returns undefined from the default finalizer when the last step did not run", async () => {
     const step = createSteps();
     const build = step("build", { run: () => "built" });
     const write = step("write", {
@@ -2412,10 +2412,13 @@ describe("definePipeline", () => {
     });
     const pipeline = definePipeline({ id: "default-finalize-filtered", steps: [build, write] });
 
-    // Only `build` runs: the default finalizer walks backwards and emits it.
+    // Only `build` runs. The default finalizer reads just the last declared
+    // step's slot, so a filtered run finalizes with `undefined` rather than
+    // leaking an earlier step's differently-typed output.
     const filtered = await pipeline.run({ stepIds: ["build"] });
     expect(filtered.status).toBe("completed");
-    expect(filtered.value).toBe("built");
+    expect(filtered.finalized).toBe(true);
+    expect(filtered.value).toBeUndefined();
   });
 
   it("still allows an explicit empty target list to opt out", async () => {
@@ -2451,5 +2454,22 @@ describe("definePipeline", () => {
         finalize: requireOutputs([build], ({ build }) => build),
       })
     ).toThrow("target write cannot satisfy required finalizer output(s): build");
+  });
+
+  it("keeps a widened step array's implicit target usable", () => {
+    const step = createSteps();
+    const build = step("build", { run: () => "built" });
+    const write = step("write", {
+      dependsOn: [build],
+      run: (inputs) => `${inputs.build}:written`,
+    });
+    // A widened array loses the tuple type; the implicit default must still
+    // expose the last step as a public target instead of `never`.
+    const widened = [build, write] as readonly AnyStep[];
+    const pipeline = definePipeline({ id: "widened-default-targets", steps: widened });
+
+    expect(pipeline.targetIds).toEqual(["write"]);
+    expectTypeOf(pipeline.plan({ targets: ["write"] }).ok).toEqualTypeOf<boolean>();
+    expect(pipeline.plan({ targets: ["write"] }).ok).toBe(true);
   });
 });

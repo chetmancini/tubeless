@@ -1292,18 +1292,23 @@ type LastStepOutput<TSteps extends readonly AnyStep[]> = TSteps extends readonly
   infer TLast,
 ]
   ? StepOutput<TLast>
-  : unknown;
+  : TSteps extends readonly AnyStep[]
+    ? StepOutput<TSteps[number]>
+    : unknown;
 
 /**
  * Implicit `targets` when a definition omits them: the last declared step.
- * A pipeline with no steps has no implicit target.
+ * A pipeline with no steps has no implicit target. Widened, non-tuple step
+ * arrays still get a one-element default typed by their element step.
  */
 type DefaultTargets<TSteps extends readonly AnyStep[]> = TSteps extends readonly [
   ...(readonly AnyStep[]),
   infer TLast,
 ]
   ? readonly [TLast]
-  : readonly [];
+  : TSteps extends readonly AnyStep[]
+    ? readonly [TSteps[number]]
+    : readonly [];
 
 type DuplicateStepIds<
   TSteps extends readonly AnyStep[],
@@ -2401,21 +2406,17 @@ export function definePipeline<
     // SAFETY: `PipelineOutputs` is a plain keyed record of step ids to values,
     // so an indexed string lookup mirrors the declared property access.
     const record = outputs as Record<string, unknown>;
-    for (let index = definition.steps.length - 1; index >= 0; index -= 1) {
-      const step = definition.steps[index]!;
-      if (Object.prototype.hasOwnProperty.call(record, step.id)) {
-        // SAFETY: the default finalizer emits the most recent published step
-        // output, which is the `TResult` default's `LastStepOutput` arm.
-        return record[step.id] as TResult;
-      }
-    }
-    // SAFETY: no step published an output; the default finalizer's contract
-    // (last step output or `undefined`) makes `undefined` the result.
-    return undefined as TResult;
+    const lastStep = definition.steps[definition.steps.length - 1];
+    // SAFETY: the default finalizer reads only the last declared step's slot,
+    // which is exactly the `TResult` default's `LastStepOutput` arm; a
+    // published `undefined` still counts as an output.
+    return lastStep !== undefined && Object.prototype.hasOwnProperty.call(record, lastStep.id)
+      ? (record[lastStep.id] as TResult)
+      : (undefined as TResult);
   };
-  // SAFETY: the default finalizer returns the last published step output,
-  // which matches the `TResult` default; the cast covers the unresolved
-  // result-schema conditional in the finalize signature.
+  // SAFETY: the default finalizer returns the last declared step's published
+  // output, which matches the `TResult` default; the cast covers the
+  // unresolved result-schema conditional in the finalize signature.
   const finalizer = (definition.finalize ?? defaultFinalize) as NonNullable<
     PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>["finalize"]
   >;
