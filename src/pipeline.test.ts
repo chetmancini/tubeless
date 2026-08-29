@@ -2317,6 +2317,52 @@ describe("definePipeline", () => {
     ]);
   });
 
+  it("records an invalid policy-skip value with the live-run output-validation taxonomy", async () => {
+    const rejectedOutput = standardSchema<string, string>(() => ({
+      issues: [{ message: "Not publishable", path: ["slug"] }],
+    }));
+    const step = createSteps();
+    const publish = step.skippable("publish", {
+      outputSchema: rejectedOutput,
+      skip: () => ({ reason: "preview only", value: "draft" }),
+      run: () => "live",
+    });
+    const after = step("after", {
+      dependsOn: [publish],
+      run: () => "after",
+    });
+    const pipeline = definePipeline({
+      id: "invalid-skip-output",
+      steps: [publish, after],
+      finalize: () => undefined,
+    });
+
+    const result = await pipeline.run({});
+
+    expect(result.status).toBe("failed");
+    expect(result.finalized).toBe(false);
+    expect(result.steps[0]).toMatchObject({
+      error: {
+        code: "TUBELESS_STEP_OUTPUT_VALIDATION_FAILED",
+        issues: [{ message: "Not publishable", path: ["slug"] }],
+        kind: "validation",
+        phase: "execution",
+        stepId: "publish",
+      },
+      status: "failed",
+    });
+    expect(
+      result.steps.map((report) => [
+        report.id,
+        report.status,
+        report.status === "skipped" ? report.reason : undefined,
+      ])
+    ).toEqual([
+      ["publish", "failed", undefined],
+      ["after", "skipped", "fail-fast"],
+    ]);
+  });
+
   it("types skippable steps as TOut | undefined for dependents", () => {
     const step = createSteps();
 
