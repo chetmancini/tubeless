@@ -22,12 +22,12 @@ export const TUBELESS_WORKBENCH_EXIT_CODE = {
 } as const;
 
 /**
- * How long after the first SIGINT a repeat is treated as the trampoline's
- * forwarded duplicate of the same terminal Ctrl-C rather than a deliberate
- * force-quit. The forwarded copy lands within milliseconds; an operator
- * pressing Ctrl-C again needs at least a second.
+ * How long after the first delivery of a terminal signal a repeat is
+ * treated as the trampoline's forwarded duplicate of the same keypress
+ * rather than a deliberate force-quit. The forwarded copy lands within
+ * milliseconds; an operator pressing again needs at least a second.
  */
-export const DUPLICATE_SIGINT_WINDOW_MS = 300;
+export const DUPLICATE_SIGNAL_WINDOW_MS = 300;
 
 export interface WorkbenchCliIo {
   cwd: string;
@@ -235,7 +235,7 @@ export function onFirstProcessSignal(
       // Arm after `onFirst` returns: its synchronous work (abort
       // dispatch) may block past the wall-clock window, and the queued
       // duplicate must still be classified as part of this press.
-      armedUntil = Date.now() + DUPLICATE_SIGINT_WINDOW_MS;
+      armedUntil = Date.now() + DUPLICATE_SIGNAL_WINDOW_MS;
     };
     process.on(signal, listener);
     return { signal, listener };

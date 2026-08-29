@@ -7,7 +7,7 @@ import { defineCommand, definePipelineCommand } from "./cli";
 import { selectPipelineCommandExport, selectPipelineExport } from "./pipeline-module";
 import { createSteps, definePipeline } from "./pipeline";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite";
-import { DUPLICATE_SIGINT_WINDOW_MS, onFirstProcessSignal } from "./workbench-shared";
+import { DUPLICATE_SIGNAL_WINDOW_MS, onFirstProcessSignal } from "./workbench-shared";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli, type WorkbenchCliIo } from "./workbench";
 
 function captureIo(cwd: string): WorkbenchCliIo & { errors: string[]; output: string[] } {
@@ -1103,7 +1103,7 @@ describe("tubeless workbench", () => {
       // the listener removes itself and re-raises SIGINT on this process so
       // default termination takes over.
       vi.useFakeTimers();
-      vi.setSystemTime(Date.now() + DUPLICATE_SIGINT_WINDOW_MS + 1000);
+      vi.setSystemTime(Date.now() + DUPLICATE_SIGNAL_WINDOW_MS + 1000);
       (registration?.[1] as () => void)();
 
       expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGINT");
@@ -1146,6 +1146,46 @@ describe("tubeless workbench", () => {
       dispose();
     } finally {
       killSpy.mockRestore();
+      onSpy.mockRestore();
+    }
+  });
+
+  it("keeps per-signal windows independent across SIGINT and SIGTERM", async () => {
+    const events: string[] = [];
+    const onSpy = vi.spyOn(process, "on");
+    const removeListenerSpy = vi.spyOn(process, "removeListener");
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+
+    try {
+      const dispose = onFirstProcessSignal(["SIGINT", "SIGTERM"], (signal) => {
+        events.push(signal);
+      });
+      const sigintRegistration = onSpy.mock.calls.find(([event]) => event === "SIGINT");
+      const sigtermRegistration = onSpy.mock.calls.find(([event]) => event === "SIGTERM");
+      expect(sigintRegistration).toBeDefined();
+      expect(sigtermRegistration).toBeDefined();
+
+      // A SIGINT arms only its own window: a first SIGTERM still gets its
+      // graceful first delivery rather than being silenced or force-quit.
+      (sigintRegistration?.[1] as () => void)();
+      (sigtermRegistration?.[1] as () => void)();
+      expect(events).toEqual(["SIGINT", "SIGTERM"]);
+
+      // A post-window second press removes ALL listeners and re-raises:
+      // neither signal can fire onFirst again mid-teardown.
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.now() + DUPLICATE_SIGNAL_WINDOW_MS + 1000);
+      (sigintRegistration?.[1] as () => void)();
+      expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGINT");
+      expect(removeListenerSpy.mock.calls).toContainEqual(["SIGINT", sigintRegistration?.[1]]);
+      expect(removeListenerSpy.mock.calls).toContainEqual(["SIGTERM", sigtermRegistration?.[1]]);
+      expect(events).toEqual(["SIGINT", "SIGTERM"]);
+
+      dispose();
+    } finally {
+      vi.useRealTimers();
+      killSpy.mockRestore();
+      removeListenerSpy.mockRestore();
       onSpy.mockRestore();
     }
   });
