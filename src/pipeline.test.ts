@@ -119,6 +119,9 @@ describe("definePipeline", () => {
     expectTypeOf<import("./pipeline").PipelineStepProgressDetailStatus>().toEqualTypeOf<
       "completed" | "failed" | "pending" | "running" | "skipped"
     >();
+    expectTypeOf<import("./pipeline").MappedChildProgressDetail>().toEqualTypeOf<
+      import("./pipeline").PipelineStepProgressDetail
+    >();
   });
 
   it("validates and transforms options, step outputs, and final results", async () => {

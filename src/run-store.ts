@@ -1,7 +1,8 @@
-import type {
-  PipelineRunStatus,
-  PipelineStepLifecycleStatus,
-  PipelineStepProgressDetail,
+import {
+  RUN_MODEL_VERSION,
+  type PipelineRunStatus,
+  type PipelineStepLifecycleStatus,
+  type PipelineStepProgressDetail,
 } from "./pipeline.js";
 import { hasVisibleStepProgress } from "./progress.js";
 import type {
@@ -95,6 +96,8 @@ export interface StoredPipelineRun {
   startedAtMs: number;
   status: StoredPipelineRunStatus;
   steps: StoredPipelineStep[];
+  /** Run-record schema version. Projector output is always `RUN_MODEL_VERSION`. */
+  version: typeof RUN_MODEL_VERSION;
 }
 
 export interface StoredPipelineDefinitionStep {
@@ -437,6 +440,7 @@ function materializeRun(projection: MutableRunProjection): StoredPipelineRun {
     startedAtMs: started.timestampMs,
     status,
     steps: stepOrder.map((stepId) => cloneStep(steps.get(stepId)!)),
+    version: RUN_MODEL_VERSION,
   };
   if (completed?.durationMs !== undefined) run.durationMs = completed.durationMs;
   if (completed?.error) run.error = completed.error;

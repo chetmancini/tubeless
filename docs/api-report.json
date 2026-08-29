@@ -12,6 +12,7 @@
         "FormatMappedChildProgressOptions",
         "InferSchemaInput",
         "InferSchemaOutput",
+        "MappedChildProgressDetail",
         "mappedChildProgressDetails",
         "MappedChildProgressOptions",
         "MappedChildProgressSnapshot",
@@ -74,7 +75,7 @@
         "toMappedChildStepProgress",
         "ToMappedChildStepProgressOptions"
       ],
-      "sha256": "d676afc877cae2c2630574ffaf580869b6c2aafd8be70e395ca9f634642c9c4d",
+      "sha256": "90c53d5305a7f76e75fc816fbd7c6b9f5598e076bda9ea763abd359dc672d77e",
       "specifier": "tubeless"
     },
     {
@@ -211,7 +212,7 @@
         "StoredPipelineRunStatus",
         "StoredPipelineStep"
       ],
-      "sha256": "ff5c7537686279f87f2d4757af163770943b09ac121f5bcde3b76be24d33ac7f",
+      "sha256": "be37dc529dc7cfd1f09c196eacb4664194a82bff62846bae94d318ab528d8d8a",
       "specifier": "tubeless/run-store"
     },
     {

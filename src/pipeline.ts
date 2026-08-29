@@ -2989,6 +2989,7 @@ export {
   mappedChildProgressUnits,
   toMappedChildStepProgress,
   type FormatMappedChildProgressOptions,
+  type MappedChildProgressDetail,
   type MappedChildProgressSnapshot,
   type MappedChildProgressUnits,
   type ToMappedChildStepProgressOptions,
