@@ -72,12 +72,31 @@ use them.
 ## 3. Define the result
 
 ```ts
-import { definePipeline, requireOutputs } from "tubeless";
+import { definePipeline } from "tubeless";
 
 const ImportPipeline = definePipeline({
   id: "import",
   steps: [load, normalize],
-  targets: [normalize],
+});
+```
+
+Omitted `targets` default to the last declared step, and an omitted `finalize`
+emits that step's output (or `undefined` when the run published nothing), so a
+single-goal pipeline needs neither field. `runOrThrow` here returns the
+normalized rows.
+
+When the result needs more than the last step's output, provide `finalize`. It
+receives the outputs that completed. `requireOutputs` declares which ones a
+valid result needs, makes them non-optional in the callback, and reports a
+finalization error when a dry run, exact filter, or failure leaves one absent.
+Use a plain finalizer when partial output is itself a valid result:
+
+```ts
+import { requireOutputs } from "tubeless";
+
+const CountingImportPipeline = definePipeline({
+  id: "import",
+  steps: [load, normalize],
   finalize: requireOutputs([normalize], ({ normalize }) => ({
     count: normalize.length,
     rows: normalize,
@@ -85,15 +104,12 @@ const ImportPipeline = definePipeline({
 });
 ```
 
-`finalize` receives the outputs that completed. `requireOutputs` declares which
-ones a valid result needs, makes them non-optional in the callback, and reports
-a finalization error when a dry run, exact filter, or failure leaves one absent.
-Use a plain finalizer when partial output is itself a valid result.
-
 `targets` on the definition declares the pipeline's supported downstream goals.
 Only those literal IDs are accepted by target selection and shown by pipeline
-commands. When `requireOutputs` is used, definition construction rejects a
-declared target whose dependency closure cannot produce the required result.
+commands; omitted, it defaults to the last declared step, and an explicit `[]`
+opts out entirely. When `requireOutputs` is used, definition construction
+rejects a declared target whose dependency closure cannot produce the required
+result.
 
 ## 4. Visualize the static graph
 

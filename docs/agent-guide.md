@@ -78,9 +78,11 @@ or shared helpers in this repository.
   structural skips have no attempt ID or start timestamp. Use hooks or tracing
   for streaming logs and progress. Use `plan` when nothing may run.
 - Declare supported downstream goals with `targets: [step]` on
-  `definePipeline`, then select their literal IDs through run controls. Required
-  inputs and failure gates are selected recursively. Use `stepIds` only when
-  exact low-level filtering of any step is intentional; never combine the two.
+  `definePipeline`, then select their literal IDs through run controls. Omitted
+  `targets` default to the last declared step; an explicit `targets: []` opts
+  out of public targets. Required inputs and failure gates are selected
+  recursively. Use `stepIds` only when exact low-level filtering of any step
+  is intentional; never combine the two.
 - Read `PipelinePlanStep.selectionReasons` when explaining selection. It already
   includes originating targets and immediate dependents; do not reconstruct
   provenance by walking dependency arrays in application or CLI code. Use
@@ -107,9 +109,11 @@ or shared helpers in this repository.
   and have boundary-specific codes for options, step outputs, and final results.
   Async schemas run during `run`; synchronous `plan()` previews graph and
   selection only and never invokes schemas.
-- Wrap normal finalizers in `requireOutputs` when a valid result requires
-  specific step outputs. Use a plain finalizer only when partial output is a
-  valid domain result.
+- Omit `finalize` when the pipeline's result is the last declared step's
+  output; the default finalizer emits it, or `undefined` when a dry run or
+  filter published nothing. Wrap provided finalizers in `requireOutputs` when
+  a valid result requires specific step outputs. Use a plain finalizer only
+  when partial output is a valid domain result.
 - Preserve the dependency-free runtime. Keep application telemetry SDKs at the
   exporter boundary.
 - Keep durable local observation opt-in. Use the append-only adapter from

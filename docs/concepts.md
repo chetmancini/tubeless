@@ -2,7 +2,7 @@
 
 ## Definition model
 
-A pipeline is an ordered declaration of typed steps plus a finalizer.
+A pipeline is an ordered declaration of typed steps plus an optional finalizer.
 `definePipeline` immediately rejects invalid static graphs (duplicate/reserved
 IDs, missing or contradictory dependencies, and cycles). Planning validates
 option-dependent step selection before execution begins.
@@ -62,6 +62,18 @@ definePipeline({
   finalize: requireOutputs([publish], ({ publish }) => publish),
 });
 ```
+
+Both `targets` and `finalize` are optional. Omitted `targets` default to the
+last declared step, and an omitted `finalize` emits that step's output when the
+run published it and `undefined` otherwise, so the common single-goal shape
+needs neither field:
+
+```ts
+definePipeline({ id: "publish", steps: [build, validate, publish] });
+```
+
+An explicit `targets: []` opts out of public targets when every step is an
+implementation detail.
 
 At call sites, `targets` accepts only those declared literal IDs. The planner
 recursively selects each target's required inputs and failure gates, while
@@ -284,19 +296,7 @@ snapshot instead of re-folding history. Store-local event ids are monotonic and
 may start at `0`. Duplicate or out-of-order ids are ignored. Use
 `projectPipelineRunStore` when the caller already holds a complete event list
 and does not need incremental refresh. History therefore continues past an
-adapter's per-query safety cap without reloading the entire database on every
 refresh.
-
-For a reusable catalog, `definePipelineStudio` declares versioned command-module
-references in one dependency-free manifest. Run `tubeless ui ./tubeless.studio.ts` to
-load it. Module paths and the optional execution `cwd` resolve from the manifest
-instead of the caller's shell directory; duplicate or malformed declarations
-fail before the server listens. Presentation-name overrides never change run or
-pipeline identity.
-
-Cancellation is classified from an actual abort error or propagated child
-cancellation, not merely from the signal's current state. An unrelated failure
-that races with `abort()` remains a step or finalization failure.
 
 Finalizer inputs remain partial because dry-run policy, exact filtering, and
 best-effort execution can omit outputs. Wrap a normal finalizer with
@@ -307,11 +307,14 @@ successfully published `undefined` still counts as an output; structural
 absence is determined by whether the slot was published.
 
 When a pipeline uses `requireOutputs`, every declared target is checked during
-definition construction. Its required-input and failure-gate closure must
-contain all required finalizer steps, so an advertised target cannot complete
-its work and then fail only because it intentionally omitted the pipeline's
-result. Plain finalizers remain appropriate when selected goals intentionally
-produce a partial domain result.
+definition construction — including the implicit last-step target. Its
+required-input and failure-gate closure must contain all required finalizer
+steps, so an advertised target cannot complete its work and then fail only
+because it intentionally omitted the pipeline's result. Plain finalizers and
+the default finalizer remain appropriate when selected goals intentionally
+produce a partial domain result; the default walks the step list backwards and
+emits the most recent published output, so filtered or dry-run runs finalize
+leniently instead of failing.
 
 ### Why targets are declared
 

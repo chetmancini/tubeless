@@ -17,8 +17,6 @@ const publish = step("publish", {
 export const ReleasePipeline = definePipeline({
   id: "release",
   steps: [load, publish],
-  targets: [publish],
-  finalize: (outputs) => outputs.publish,
 });
 
 const plan = ReleasePipeline.plan({ targets: ["publish"] });
