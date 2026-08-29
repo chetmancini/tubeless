@@ -9,12 +9,15 @@ import {
   type SingleChildExecutionConfig,
 } from "./child-execution.js";
 import { formatPipelineError } from "./pipeline-diagnostics.js";
+import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { createPipelineTraceEmitter } from "./tracing-internal.js";
 import type {
   PipelineTraceAttributes,
   PipelineTraceContext,
   PipelineTracingOptions,
 } from "./tracing.js";
+
+export { createRunId, RUN_MODEL_VERSION };
 
 export interface PipelineLogger {
   error(message?: unknown, ...optionalParams: unknown[]): void;
@@ -285,9 +288,6 @@ export type PipelineStepReport =
 
 export type PipelineStepReportStatus = PipelineStepReport["status"];
 
-/** Current persisted run-record schema version. */
-export const RUN_MODEL_VERSION = 2 as const;
-
 /** Terminal disposition of a completed run record. */
 export type PipelineRunStatus = "cancelled" | "completed" | "failed";
 
@@ -443,17 +443,6 @@ export interface PipelineMermaidOptions {
 }
 
 const fallbackNow = (): number => Date.now();
-
-let nextRunSequence = 0;
-
-/** Create a dependency-free opaque ID suitable for a pipeline run record. */
-export function createRunId(pipelineId: string): string {
-  nextRunSequence += 1;
-  const random = globalThis.crypto?.randomUUID?.();
-  return random
-    ? `${pipelineId}:${random}`
-    : `${pipelineId}:${Date.now().toString(36)}:${nextRunSequence.toString(36)}`;
-}
 
 function terminalRunStatus(errors: readonly PipelineError[]): PipelineRunStatus {
   if (errors.length === 0) return "completed";

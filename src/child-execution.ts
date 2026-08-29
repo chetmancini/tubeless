@@ -5,20 +5,19 @@ import {
   type MappedChildProgressSnapshot,
   type ToMappedChildStepProgressOptions,
 } from "./mapped-child-progress.js";
+import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { hasVisibleStepProgress } from "./progress.js";
-import {
-  createRunId,
-  RUN_MODEL_VERSION,
-  type Pipeline,
-  type PipelineContext,
-  type PipelineError,
-  type PipelineExecutionContext,
-  type PipelineHooks,
-  type PipelinePlanStep,
-  type PipelineRun,
-  type PipelineRunControls,
-  type PipelineRunOptions,
-  type PipelineStepContext,
+import type {
+  Pipeline,
+  PipelineContext,
+  PipelineError,
+  PipelineExecutionContext,
+  PipelineHooks,
+  PipelinePlanStep,
+  PipelineRun,
+  PipelineRunControls,
+  PipelineRunOptions,
+  PipelineStepContext,
 } from "./pipeline.js";
 import type { PipelineTracingOptions } from "./tracing.js";
 
