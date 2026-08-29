@@ -999,6 +999,21 @@ describe("tubeless workbench", () => {
     expect(io.output.join("")).not.toContain("completed:hello");
   });
 
+  it("rejects after an accepted write later fails", async () => {
+    const { Writable } = await import("node:stream");
+    let writeCallback: ((error?: Error | null) => void) | undefined;
+    const stream = new Writable({
+      write(_chunk, _encoding, callback) {
+        writeCallback = callback;
+      },
+    });
+    stream.on("error", () => undefined);
+    const pending = writeCliChunk(stream, "x\n");
+    expect(writeCallback).toEqual(expect.any(Function));
+    stream.destroy(new Error("broken pipe"));
+    await expect(pending).rejects.toThrow(/broken pipe|closed stream/);
+  });
+
   it("does not hang when writing to a destroyed stream", async () => {
     const { PassThrough } = await import("node:stream");
     const stream = new PassThrough();

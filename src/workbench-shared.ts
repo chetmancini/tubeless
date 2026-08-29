@@ -43,39 +43,45 @@ function abortReason(signal?: AbortSignal): Error {
   return signal?.reason instanceof Error ? signal.reason : new Error("Aborted");
 }
 
-/** Write a chunk and wait when the destination applies backpressure. */
+/** Write a chunk and wait until it is flushed or the destination fails. */
 export async function writeCliChunk(
   output: { write(chunk: string): boolean | void },
   chunk: string,
   signal?: AbortSignal
 ): Promise<void> {
-  interface BackpressuredWriter {
+  interface CallbackWriter {
     destroyed?: boolean;
     errored?: Error | null;
     off?(event: string, listener: (...args: never[]) => void): unknown;
     once?(event: string, listener: (...args: never[]) => void): unknown;
+    write(chunk: string, callback?: (error?: Error | null) => void): boolean | void;
   }
-  // SAFETY: write() returning false, plus destroyed/errored, are Node writable
-  // stream signals. Test IO objects omit those fields and skip the drain wait.
-  const stream = output as BackpressuredWriter;
+  // SAFETY: destroyed/errored/once/off and write(chunk, cb) are Node writable
+  // stream signals. Test IO objects omit those fields and skip the flush wait.
+  const stream = output as CallbackWriter;
   if (signal?.aborted) throw abortReason(signal);
   if (stream.destroyed) {
     throw stream.errored instanceof Error
       ? stream.errored
       : new Error("Cannot write to a closed stream.");
   }
-  if (output.write(chunk) !== false) return;
-  if (typeof stream.once !== "function" || typeof stream.off !== "function") return;
-  if (signal?.aborted) throw abortReason(signal);
-  if (stream.destroyed) {
-    throw stream.errored instanceof Error
-      ? stream.errored
-      : new Error("Cannot write to a closed stream.");
+  if (typeof stream.once !== "function" || typeof stream.off !== "function") {
+    output.write(chunk);
+    return;
   }
   await new Promise<void>((resolve, reject) => {
+    let settled = false;
     const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
       cleanup();
       reject(error);
+    };
+    const succeed = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
     };
     const onAbort = () => {
       fail(abortReason(signal));
@@ -90,21 +96,26 @@ export async function writeCliChunk(
           : new Error("Cannot write to a closed stream.")
       );
     };
-    const onDrain = () => {
-      cleanup();
-      resolve();
-    };
     const cleanup = () => {
-      stream.off!("drain", onDrain);
       stream.off!("error", onError);
       stream.off!("close", onClose);
       signal?.removeEventListener("abort", onAbort);
     };
     stream.once!("error", onError);
-    stream.once!("drain", onDrain);
     stream.once!("close", onClose);
     signal?.addEventListener("abort", onAbort, { once: true });
-    if (signal?.aborted) onAbort();
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    if (stream.destroyed) {
+      onClose();
+      return;
+    }
+    stream.write(chunk, (error) => {
+      if (error) fail(error);
+      else succeed();
+    });
   });
 }
 
