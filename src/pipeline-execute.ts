@@ -1,4 +1,4 @@
-import { isAbortError, throwIfAborted as throwIfSignalAborted } from "./abort.js";
+import { abortableSleep, isAbortError, throwIfAborted as throwIfSignalAborted } from "./abort.js";
 import { PipelineChildError } from "./child-execution.js";
 import { createPipelineLifecycleObserver } from "./lifecycle.js";
 import { formatPipelineError } from "./pipeline-diagnostics.js";
@@ -8,12 +8,13 @@ import {
   decideStepDisposition,
   planStepById,
   stepToPlanStep,
+  type PipelineDefinition,
 } from "./pipeline-plan.js";
 import type { StepsOptions } from "./pipeline-plan.js";
+import type { AnyStep } from "./pipeline-steps.js";
 import type {
-  AnyStep,
   InferSchemaOutput,
-  PipelineDefinition,
+  PipelineContext,
   PipelineError,
   PipelineErrorCause,
   PipelineExecutionContext,
@@ -22,6 +23,7 @@ import type {
   PipelinePlanStep,
   PipelineRun,
   PipelineRunControls,
+  PipelineRunOptions,
   PipelineRunStatus,
   PipelineRuntime,
   PipelineStepCancelledReport,
@@ -38,7 +40,7 @@ import type {
   StandardSchemaV1Issue,
   StandardSchemaV1Result,
   StepSkipDecision,
-} from "./pipeline.js";
+} from "./pipeline-types.js";
 import { createPipelineTraceEmitter } from "./tracing-internal.js";
 
 function terminalRunStatus(errors: readonly PipelineError[]): PipelineRunStatus {
@@ -899,4 +901,113 @@ export async function executePlannedRun<
   lifecycle.pipelineComplete(result);
   await lifecycle.flush();
   return result;
+}
+
+const fallbackNow = (): number => Date.now();
+
+const fallbackSleep = (durationMs: number, signal?: AbortSignal): Promise<void> =>
+  abortableSleep(durationMs, signal, "Pipeline sleep");
+
+export function defaultPipelineContext(): PipelineContext {
+  return { cwd: process.cwd(), log: console, now: fallbackNow, sleep: fallbackSleep };
+}
+
+const PIPELINE_RUN_CONTROL_KEYS = ["continueOnError", "dryRun", "stepIds", "targets"] as const;
+
+function isPipelineRunControlKey(
+  property: PropertyKey
+): property is (typeof PIPELINE_RUN_CONTROL_KEYS)[number] {
+  return (
+    typeof property === "string" &&
+    // SAFETY: `includes` membership over the literal tuple guarantees the cast
+    // target is exactly one of the declared run-control keys.
+    PIPELINE_RUN_CONTROL_KEYS.includes(property as (typeof PIPELINE_RUN_CONTROL_KEYS)[number])
+  );
+}
+
+function createDomainOptionsTarget<TOptions extends object>(options: TOptions): object {
+  const descriptors = Object.fromEntries(
+    Reflect.ownKeys(options)
+      .filter((property) => !isPipelineRunControlKey(property))
+      .map((property) => {
+        const descriptor = Reflect.getOwnPropertyDescriptor(options, property)!;
+        return [property, { ...descriptor, configurable: true }];
+      })
+  );
+  // SAFETY: `Object.create` returns the same prototype shape as `options` with
+  // only its own enumerable descriptors re-applied, so it remains assignable
+  // to the caller's `object` contract.
+  return Object.create(Object.getPrototypeOf(options), descriptors) as object;
+}
+
+function createDomainOptionsView<TOptions extends object>(options: TOptions): TOptions {
+  const target = createDomainOptionsTarget(options);
+  const boundMethods = new WeakMap<object, unknown>();
+  // SAFETY: the Proxy wraps the domain-options target and forwards to the
+  // original options, so its surface is assignable to `TOptions`.
+  return new Proxy(target, {
+    get(_target, property) {
+      if (isPipelineRunControlKey(property)) return undefined;
+      // SAFETY: `property` is a non-control key, so indexing the options object
+      // with it reads a genuine domain property; the cast is the only way to
+      // express dynamic-key access on a generic options type.
+      const value = options[property as keyof TOptions];
+      if (typeof value !== "function") return value;
+      const cached = boundMethods.get(value);
+      if (cached) return cached;
+      const bound = value.bind(options);
+      boundMethods.set(value, bound);
+      return bound;
+    },
+    has(_target, property) {
+      return isPipelineRunControlKey(property) ? false : Reflect.has(options, property);
+    },
+    set(_target, property, value) {
+      if (isPipelineRunControlKey(property)) return true;
+      return Reflect.set(options, property, value, options);
+    },
+    // SAFETY: the Proxy target is the domain-options object, so it is
+    // assignable to the caller's `TOptions` contract.
+  }) as TOptions;
+}
+
+type SplitPipelineRunOptionsResult<
+  TOptions extends object,
+  TStepId extends string,
+  TTargetId extends string,
+> = {
+  controls: PipelineRunControls<TStepId, TTargetId>;
+  domainOptions: TOptions;
+};
+
+export function splitPipelineRunOptions<
+  TOptions extends object,
+  TStepId extends string,
+  TTargetId extends string,
+>(
+  options: PipelineRunOptions<TOptions, TStepId, TTargetId>
+): SplitPipelineRunOptionsResult<TOptions, TStepId, TTargetId> {
+  const controls: PipelineRunControls<TStepId, TTargetId> = {};
+  let hasControls = false;
+  for (const key of PIPELINE_RUN_CONTROL_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(options, key)) continue;
+    hasControls = true;
+    Object.assign(controls, { [key]: options[key] });
+  }
+  return {
+    controls,
+    domainOptions: hasControls ? createDomainOptionsView<TOptions>(options) : options,
+  };
+}
+
+export function resolvePipelineRuntime(context: Partial<PipelineContext> = {}): PipelineRuntime {
+  const defaults = defaultPipelineContext();
+  return {
+    ...defaults,
+    ...context,
+    cwd: context.cwd ?? defaults.cwd,
+    log: context.log ?? defaults.log,
+    now: context.now ?? defaults.now ?? fallbackNow,
+    sleep: context.sleep ?? defaults.sleep ?? fallbackSleep,
+  };
 }
