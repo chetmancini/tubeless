@@ -989,6 +989,37 @@ describe("tubeless workbench", () => {
     expect(io.errors.join("")).toMatch(/same path/i);
   });
 
+  it("rejects a trace path that is a SQLite sidecar of a --store symlink target", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const storePath = path.join(directory, "history", "runs.sqlite");
+    const alias = path.join(directory, "alias", "store.sqlite");
+    await mkdir(path.dirname(storePath), { recursive: true });
+    await mkdir(path.dirname(alias), { recursive: true });
+    await writeFile(storePath, "");
+    await symlink(storePath, alias);
+
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          alias,
+          "--trace",
+          `${storePath}-wal`,
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        io
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(io.errors.join("")).toMatch(/same path/i);
+  });
+
   it("cancels a pending --trace open when the workbench signal aborts", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     const fifo = path.join(directory, "trace.fifo");

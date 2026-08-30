@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { chmod, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -247,6 +247,34 @@ describe("SQLite pipeline run store", () => {
       try {
         await expect(
           openSqlitePipelineRunStore(filename, { initialize: false, readOnly: true })
+        ).rejects.toThrow();
+      } finally {
+        await chmod(directory, 0o755);
+        await chmod(filename, 0o644);
+        await chmod(`${filename}-wal`, 0o644);
+      }
+    }
+  );
+
+  it.skipIf("Bun" in globalThis)(
+    "does not hide WAL events behind an immutable fallback when opened through a symlink",
+    async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+      directories.push(directory);
+      const filename = path.join(directory, "runs.sqlite");
+      const alias = path.join(directory, "alias", "store.sqlite");
+      const store = await openSqlitePipelineRunStore(filename);
+      await store.export(startedEvent("run-1", 10));
+      await store.close();
+      await mkdir(path.dirname(alias));
+      await symlink(filename, alias);
+      await writeFile(`${filename}-wal`, "not a checkpointed wal");
+      await chmod(filename, 0o444);
+      await chmod(`${filename}-wal`, 0o444);
+      await chmod(directory, 0o555);
+      try {
+        await expect(
+          openSqlitePipelineRunStore(alias, { initialize: false, readOnly: true })
         ).rejects.toThrow();
       } finally {
         await chmod(directory, 0o755);

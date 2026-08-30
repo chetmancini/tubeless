@@ -1,4 +1,4 @@
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, realpath, stat } from "node:fs/promises";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { PipelineTraceEvent } from "./tracing.js";
@@ -129,12 +129,7 @@ async function openDatabase(
     try {
       return openReadableDatabase(Database, filename, { readOnly: true });
     } catch (error) {
-      if (
-        (await sqliteSidecarExists(`${filename}-wal`)) ||
-        (await sqliteSidecarExists(`${filename}-journal`))
-      ) {
-        throw error;
-      }
+      if (await sqliteTransactionalSidecarExists(filename)) throw error;
       return openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=ro&immutable=1`);
     }
   }
@@ -158,6 +153,24 @@ async function sqliteSidecarExists(filename: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function sqliteTransactionalSidecarExists(filename: string): Promise<boolean> {
+  const targets = new Set<string>([filename]);
+  try {
+    targets.add(await realpath(filename));
+  } catch {
+    // Missing or unresolvable; still check the given name.
+  }
+  for (const target of targets) {
+    if (
+      (await sqliteSidecarExists(`${target}-wal`)) ||
+      (await sqliteSidecarExists(`${target}-journal`))
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function openReadableDatabase(

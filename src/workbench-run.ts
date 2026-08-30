@@ -371,8 +371,11 @@ async function waitForWriteStreamOpen(stream: WriteStream, signal?: AbortSignal)
 
 async function destinationsConflict(storePath: string, tracePath: string): Promise<boolean> {
   if (await pathsShareIdentity(storePath, tracePath)) return true;
-  for (const suffix of ["-journal", "-shm", "-wal"] as const) {
-    if (await pathsShareIdentity(`${storePath}${suffix}`, tracePath)) return true;
+  const storeTargets = new Set([storePath, await canonicalDestination(storePath)]);
+  for (const storeTarget of storeTargets) {
+    for (const suffix of ["-journal", "-shm", "-wal"] as const) {
+      if (await pathsShareIdentity(`${storeTarget}${suffix}`, tracePath)) return true;
+    }
   }
   return false;
 }
