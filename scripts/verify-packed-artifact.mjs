@@ -188,6 +188,9 @@ const runners = {
   "live-tui.ts": async (mod) => {
     defined(await mod.LiveTuiPipeline.runOrThrow({ delay: 0 }), "live-tui.ts");
   },
+  "peloton.ts": async (mod) => {
+    defined(await mod.runPelotonExample(), "peloton.ts");
+  },
   "resumable-enrichment.ts": async (mod) => {
     const result = await mod.EnrichmentPipeline.run({
       checkpointPath: "enrichment-checkpoint.json",

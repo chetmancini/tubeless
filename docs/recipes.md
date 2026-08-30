@@ -24,6 +24,7 @@ inventory.
 | Handle cancellation and deterministic testing | [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts) | `createPipelineTestRuntime`, captured status/progress              |
 | Export JSON or OpenTelemetry lifecycle events | [`tracing.ts`](../examples/tracing.ts)                                   | trace context, attempt events, JSON exporter                       |
 | Persist, inspect, launch, or cancel live runs | [`local-observability.ts`](../examples/local-observability.ts)           | SQLite store, recorded `details`, nested labels, studio projector  |
+| Watch many primitives in one run              | [`peloton.ts`](../examples/peloton.ts)                                   | delays, logs, children, fan-out, retry, gates, test runtime        |
 | Project layout, IDs, and studio catalog       | [`tubeless.studio.ts`](../examples/catalog/tubeless.studio.ts)           | `pipelines/`, `scripts/`, `definePipelineStudio`                   |
 
 ## Selection rules

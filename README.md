@@ -71,22 +71,23 @@ command export; application flags go after `--`. See
 
 ## Choose the right pattern
 
-| You need to…                              | Start with                                                                |
-| ----------------------------------------- | ------------------------------------------------------------------------- |
-| Run typed steps in dependency order       | [Sequential pipeline](./examples/typed-import.ts)                         |
-| Validate external boundary values         | [Validated boundaries](./examples/validated-boundaries.ts)                |
-| Preview writes safely                     | [Dry runs and write gates](./examples/publish-with-gates.ts)              |
-| Skip work intentionally at runtime        | [Conditional step](./examples/conditional-step.ts)                        |
-| Continue independent work after a failure | [Best-effort execution](./examples/best-effort.ts)                        |
-| Reuse a pipeline inside another           | [Child pipeline](./examples/child-pipeline.ts)                            |
-| Run one child pipeline for many items     | [Fan-out and progress](./examples/fan-out-progress.ts)                    |
-| Resume long API work safely               | [Retry, rate limit, and checkpoint](./examples/resumable-enrichment.ts)   |
-| Watch the live TTY reporter               | [Live TUI](./examples/live-tui.ts)                                        |
-| Turn a pipeline into a typed script       | [Pipeline CLI](./examples/cli-job.ts)                                     |
-| Render plans and errors consistently      | [Human and JSON rendering](./examples/rendering.ts)                       |
-| Test deterministic execution              | [Cancellation and test injection](./examples/cancellation-and-testing.ts) |
-| Export lifecycle telemetry                | [Structured tracing](./examples/tracing.ts)                               |
-| Persist and inspect local runs            | [Local observability](./examples/local-observability.ts)                  |
+| You need to…                                 | Start with                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------- |
+| Run typed steps in dependency order          | [Sequential pipeline](./examples/typed-import.ts)                         |
+| Validate external boundary values            | [Validated boundaries](./examples/validated-boundaries.ts)                |
+| Preview writes safely                        | [Dry runs and write gates](./examples/publish-with-gates.ts)              |
+| Skip work intentionally at runtime           | [Conditional step](./examples/conditional-step.ts)                        |
+| Continue independent work after a failure    | [Best-effort execution](./examples/best-effort.ts)                        |
+| Reuse a pipeline inside another              | [Child pipeline](./examples/child-pipeline.ts)                            |
+| Run one child pipeline for many items        | [Fan-out and progress](./examples/fan-out-progress.ts)                    |
+| Resume long API work safely                  | [Retry, rate limit, and checkpoint](./examples/resumable-enrichment.ts)   |
+| Watch the live TTY reporter                  | [Live TUI](./examples/live-tui.ts)                                        |
+| Watch many primitives on a road-race weekend | [Peloton pipeline](./examples/peloton.ts)                                 |
+| Turn a pipeline into a typed script          | [Pipeline CLI](./examples/cli-job.ts)                                     |
+| Render plans and errors consistently         | [Human and JSON rendering](./examples/rendering.ts)                       |
+| Test deterministic execution                 | [Cancellation and test injection](./examples/cancellation-and-testing.ts) |
+| Export lifecycle telemetry                   | [Structured tracing](./examples/tracing.ts)                               |
+| Persist and inspect local runs               | [Local observability](./examples/local-observability.ts)                  |
 
 The [recipe index](./docs/recipes.md) explains when to use each pattern.
 

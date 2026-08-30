@@ -64,5 +64,6 @@ Executable examples:
 - ../examples/rendering.ts
 - ../examples/cancellation-and-testing.ts
 - ../examples/live-tui.ts
+- ../examples/peloton.ts
 - ../examples/tracing.ts
 - ../examples/local-observability.ts
