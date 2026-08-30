@@ -1,10 +1,12 @@
+import { formatPipelineError } from "./pipeline-diagnostics.js";
+import type { AnyStep, Step, StepOutput } from "./pipeline-steps.js";
 import type {
-  AnyStep,
-  PipelineDefinition,
+  InferSchemaInput,
   PipelineError,
   PipelineErrorCode,
   PipelineErrorKind,
   PipelineErrorPhase,
+  PipelineExecutionContext,
   PipelineMermaidOptions,
   PipelinePlan,
   PipelinePlanStep,
@@ -14,8 +16,7 @@ import type {
   PipelineStepSkipReason,
   PipelineStepSkippedReport,
   StandardSchemaV1,
-  Step,
-} from "./pipeline.js";
+} from "./pipeline-types.js";
 
 export const PIPELINE_FINALIZE_STEP_ID = "__finalize__";
 
@@ -812,4 +813,83 @@ export function buildPipelinePlan<
 
 export function planStepById(plan: PipelinePlan): Map<string, PipelinePlanStep> {
   return new Map(plan.steps.map((step) => [step.id, step]));
+}
+
+/** Programmer error raised immediately when a pipeline graph is invalid. */
+export class PipelineDefinitionError extends Error {
+  constructor(
+    readonly pipelineId: string,
+    readonly errors: readonly PipelineError[]
+  ) {
+    super(
+      errors.length > 0
+        ? `Invalid pipeline ${pipelineId}: ${errors.map((error) => formatPipelineError(error)).join("; ")}`
+        : `Invalid pipeline ${pipelineId}`
+    );
+    this.name = "PipelineDefinitionError";
+  }
+}
+
+type PipelineOutputs<TSteps extends readonly AnyStep[]> = {
+  [S in TSteps[number] as S["id"]]: StepOutput<S>;
+};
+
+type RequiredPipelineOutputs<TSteps extends readonly AnyStep[]> = {
+  [S in TSteps[number] as S["id"]]-?: StepOutput<S>;
+};
+
+/**
+ * Build a finalizer that only runs when every listed step published an output.
+ * Presence is checked by output slot, so a successfully published `undefined`
+ * remains distinct from a structural skip or failure.
+ */
+export function requireOutputs<const TRequiredSteps extends readonly AnyStep[], TResult>(
+  requiredSteps: TRequiredSteps,
+  finalize: (
+    outputs: RequiredPipelineOutputs<TRequiredSteps>,
+    context: PipelineExecutionContext<StepsOptions<TRequiredSteps>>
+  ) => TResult | Promise<TResult>
+): (
+  outputs: Partial<RequiredPipelineOutputs<TRequiredSteps>>,
+  context: PipelineExecutionContext<StepsOptions<TRequiredSteps>>
+) => TResult | Promise<TResult> {
+  const uniqueRequiredSteps = [...new Set(requiredSteps)];
+  const requiredFinalizer = (
+    outputs: Partial<RequiredPipelineOutputs<TRequiredSteps>>,
+    context: PipelineExecutionContext<StepsOptions<TRequiredSteps>>
+  ) => {
+    const missingStepIds = uniqueRequiredSteps
+      .filter((step) => !Object.prototype.hasOwnProperty.call(outputs, step.id))
+      .map((step) => step.id);
+    if (missingStepIds.length > 0) {
+      throw new Error(`Required pipeline outputs missing: ${missingStepIds.join(", ")}`);
+    }
+    // SAFETY: every required step id was verified present above, so the partial
+    // outputs contain all required keys and are a complete required-outputs map.
+    return finalize(outputs as unknown as RequiredPipelineOutputs<TRequiredSteps>, context);
+  };
+  Object.defineProperty(requiredFinalizer, REQUIRED_FINALIZER_OUTPUTS, {
+    value: uniqueRequiredSteps,
+  });
+  return requiredFinalizer;
+}
+
+export interface PipelineDefinition<
+  TSteps extends readonly AnyStep[],
+  TResult,
+  TTargets extends readonly TSteps[number][] = readonly [],
+  TResultSchema extends StandardSchemaV1 | undefined = undefined,
+> {
+  id: string;
+  steps: TSteps;
+  /** Public downstream goals that callers may select with `targets`. */
+  targets?: TTargets;
+  /** Optional Standard Schema for the finalized result. */
+  resultSchema?: TResultSchema;
+  finalize(
+    outputs: Partial<PipelineOutputs<TSteps>>,
+    context: PipelineExecutionContext<StepsOptions<TSteps>>
+  ):
+    | (TResultSchema extends StandardSchemaV1 ? InferSchemaInput<TResultSchema> : TResult)
+    | Promise<TResultSchema extends StandardSchemaV1 ? InferSchemaInput<TResultSchema> : TResult>;
 }

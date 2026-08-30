@@ -1,4 +1,4 @@
-import type { PipelineError, PipelineErrorCause } from "./pipeline.js";
+import type { PipelineError, PipelineErrorCause } from "./pipeline-types.js";
 
 function deepestPipelineCause(
   cause: PipelineErrorCause | undefined

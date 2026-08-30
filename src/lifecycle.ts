@@ -6,7 +6,7 @@ import type {
   PipelineRun,
   PipelineRuntime,
   PipelineStepStatus,
-} from "./pipeline.js";
+} from "./pipeline-types.js";
 import type { PipelineTraceEmitter } from "./tracing-internal.js";
 import type { PipelineTraceAttributes } from "./tracing.js";
 

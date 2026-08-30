@@ -1,4 +1,4 @@
-import type { PipelineStepProgressDetail } from "./pipeline.js";
+import type { PipelineStepProgressDetail } from "./pipeline-types.js";
 
 /** Compatibility alias of the shared progress-detail shape. */
 export type MappedChildProgressDetail = PipelineStepProgressDetail;

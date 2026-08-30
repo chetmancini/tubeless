@@ -18,7 +18,7 @@ import type {
   PipelineRunControls,
   PipelineRunOptions,
   PipelineStepContext,
-} from "./pipeline.js";
+} from "./pipeline-types.js";
 import type { PipelineTracingOptions } from "./tracing.js";
 
 export class PipelineChildError extends Error {

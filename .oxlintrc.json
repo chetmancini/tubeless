@@ -47,7 +47,13 @@
   },
   "overrides": [
     {
-      "files": ["src/pipeline.ts", "src/pipeline-execute.ts"],
+      "files": [
+        "src/pipeline.ts",
+        "src/pipeline-execute.ts",
+        "src/pipeline-plan.ts",
+        "src/pipeline-steps.ts",
+        "src/pipeline-types.ts"
+      ],
       "rules": {
         "anti-slop/no-chained-type-assertions": "off",
         "anti-slop/no-object-parameters": "off",

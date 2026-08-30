@@ -1,4 +1,4 @@
-import type { PipelineStepProgress } from "./pipeline.js";
+import type { PipelineStepProgress } from "./pipeline-types.js";
 
 /** True when progress contains work information rather than an empty snapshot. */
 export function hasVisibleStepProgress(progress: PipelineStepProgress): boolean {
