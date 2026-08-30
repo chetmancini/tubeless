@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -229,6 +229,40 @@ describe("SQLite pipeline run store", () => {
       await chmod(directory, 0o755);
       await chmod(filename, 0o644);
     }
+  });
+
+  it("does not create a shared-memory sidecar during a read-only open of a WAL snapshot", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+    await unlink(`${filename}-shm`).catch(() => {});
+    await writeFile(`${filename}-wal`, "not a checkpointed wal");
+    await expect(
+      openSqlitePipelineRunStore(filename, { initialize: false, readOnly: true })
+    ).rejects.toThrow(/shared-memory|sidecar/i);
+    await expect(stat(`${filename}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not create a shared-memory sidecar when a WAL snapshot is opened through a symlink", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const alias = path.join(directory, "alias", "store.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+    await mkdir(path.dirname(alias));
+    await symlink(filename, alias);
+    await unlink(`${filename}-shm`).catch(() => {});
+    await writeFile(`${filename}-wal`, "not a checkpointed wal");
+    await expect(
+      openSqlitePipelineRunStore(alias, { initialize: false, readOnly: true })
+    ).rejects.toThrow(/shared-memory|sidecar/i);
+    await expect(stat(`${filename}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(`${alias}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it.skipIf("Bun" in globalThis)(

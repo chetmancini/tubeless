@@ -125,6 +125,11 @@ async function openDatabase(
   const create = options.create !== false;
   const readOnly = options.readOnly === true;
   if (readOnly) {
+    if (await sqliteWalMissingSharedMemory(filename)) {
+      throw new Error(
+        `${filename} has a write-ahead log without a shared-memory file; a read-only open would create a sidecar.`
+      );
+    }
     if (bunSqlite) return openReadableDatabase(Database, filename, { readonly: true });
     try {
       return openReadableDatabase(Database, filename, { readOnly: true });
@@ -153,6 +158,23 @@ async function sqliteSidecarExists(filename: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function sqliteWalMissingSharedMemory(filename: string): Promise<boolean> {
+  const targets = new Set<string>([filename]);
+  try {
+    targets.add(await realpath(filename));
+  } catch {
+    // Missing or unresolvable; still check the given name.
+  }
+  for (const target of targets) {
+    const hasWal = await sqliteSidecarExists(`${target}-wal`);
+    const hasShm = await sqliteSidecarExists(`${target}-shm`);
+    if (hasWal && hasShm === false) {
+      return true;
+    }
+  }
+  return false;
 }
 
 async function sqliteTransactionalSidecarExists(filename: string): Promise<boolean> {
