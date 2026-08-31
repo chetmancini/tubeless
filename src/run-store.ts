@@ -44,6 +44,11 @@ export interface StoredNestedPipeline {
   stepIds: string[];
 }
 
+export interface StoredRemote {
+  engine: string;
+  target?: string;
+}
+
 export interface StoredPipelineLog {
   attemptId?: string;
   id: number;
@@ -71,6 +76,7 @@ export interface StoredPipelineStep {
   id: string;
   name?: string;
   nestedPipeline?: StoredNestedPipeline;
+  remote?: StoredRemote;
   progress?: {
     completed: number;
     detailCount?: number;
@@ -107,6 +113,7 @@ export interface StoredPipelineDefinitionStep {
   id: string;
   name?: string;
   nestedPipeline?: StoredNestedPipeline;
+  remote?: StoredRemote;
   optionalDependencies: string[];
   runtimeSkipPossible: boolean;
   skipAfterFailureOf: string[];
@@ -262,6 +269,27 @@ function parseNestedPipeline(
     return undefined;
   }
 }
+function parseRemote(
+  attributes: Readonly<Record<string, PipelineTraceAttributeValue | undefined>>
+): StoredRemote | undefined {
+  const value = stringAttribute(attributes, "remote");
+  if (!value) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (parsed === null || Array.isArray(parsed) || !(parsed instanceof Object)) return undefined;
+    if (!("engine" in parsed)) return undefined;
+    const engine = parsed.engine as PipelineTraceAttributeValue | undefined;
+    if (!isStringValue(engine) || engine.length === 0) return undefined;
+    const remote: StoredRemote = { engine: engine.slice(0, 4_096) };
+    if ("target" in parsed) {
+      const target = parsed.target as PipelineTraceAttributeValue | undefined;
+      if (isStringValue(target) && target.length > 0) remote.target = target.slice(0, 4_096);
+    }
+    return remote;
+  } catch {
+    return undefined;
+  }
+}
 
 function terminalStepStatus(event: StoredPipelineEvent): StoredPipelineStep["status"] | undefined {
   switch (event.name) {
@@ -340,6 +368,8 @@ function applyRunEvent(projection: MutableRunProjection, event: StoredPipelineEv
     step.description = stringAttribute(event.attributes, "description");
     const nestedPipeline = parseNestedPipeline(event.attributes);
     if (nestedPipeline) step.nestedPipeline = nestedPipeline;
+    const remote = parseRemote(event.attributes);
+    if (remote) step.remote = remote;
     return;
   }
   if (event.attemptId) {
@@ -419,6 +449,7 @@ function cloneStep(step: StoredPipelineStep): StoredPipelineStep {
   if (step.nestedPipeline) {
     cloned.nestedPipeline = { ...step.nestedPipeline, stepIds: [...step.nestedPipeline.stepIds] };
   }
+  if (step.remote) cloned.remote = { ...step.remote };
   return cloned;
 }
 
@@ -473,6 +504,8 @@ function definitionStep(event: StoredPipelineEvent): StoredPipelineDefinitionSte
   if (name) step.name = name;
   const nestedPipeline = parseNestedPipeline(event.attributes);
   if (nestedPipeline) step.nestedPipeline = nestedPipeline;
+  const remote = parseRemote(event.attributes);
+  if (remote) step.remote = remote;
   return step;
 }
 
@@ -524,6 +557,7 @@ function cloneDefinitionStep(step: StoredPipelineDefinitionStep): StoredPipeline
   if (step.nestedPipeline) {
     cloned.nestedPipeline = { ...step.nestedPipeline, stepIds: [...step.nestedPipeline.stepIds] };
   }
+  if (step.remote) cloned.remote = { ...step.remote };
   return cloned;
 }
 

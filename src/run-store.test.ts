@@ -233,6 +233,29 @@ describe("pipeline run store projections", () => {
     });
   });
 
+  it("retains remote metadata from step.planned on runs and definitions", () => {
+    const remote = { engine: "lambda", target: "enrich-v2" };
+    const snapshot = projectPipelineRunStore([
+      event(1, "pipeline.started", { attributes: { target_ids: "[]" } }),
+      event(2, "step.planned", {
+        attributes: {
+          dependencies: "[]",
+          dry_run: "run",
+          optional_dependencies: "[]",
+          remote: JSON.stringify(remote),
+          runtime_skip_possible: false,
+          skip_after_failure_of: "[]",
+        },
+        stepId: "enrich",
+      }),
+      event(3, "step.running", { attemptId: "attempt-1", stepId: "enrich" }),
+      event(4, "step.complete", { attemptId: "attempt-1", stepId: "enrich" }),
+    ]);
+
+    expect(snapshot.runs[0]?.steps[0]).toMatchObject({ id: "enrich", remote, status: "completed" });
+    expect(snapshot.definitions[0]?.steps[0]).toMatchObject({ id: "enrich", remote });
+  });
+
   it("keeps original counts when details and nested step IDs are truncated", () => {
     const snapshot = projectPipelineRunStore([
       event(1, "pipeline.started", { attributes: { target_ids: "[]" } }),
