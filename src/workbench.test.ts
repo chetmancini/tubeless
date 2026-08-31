@@ -1962,7 +1962,7 @@ describe("tubeless workbench", () => {
       await fixture.started;
       const registration = onSpy.mock.calls.find(([event]) => event === "SIGINT");
       expect(registration).toBeDefined();
-      (registration?.[1] as () => void)();
+      (registration![1] as () => void)();
 
       expect(await runPromise).toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
       expect(io.errors.join("")).toContain("SIGINT received; cancelling pipeline work.");
@@ -1987,10 +1987,10 @@ describe("tubeless workbench", () => {
       await fixture.started;
       const registration = onSpy.mock.calls.find(([event]) => event === "SIGINT");
       expect(registration).toBeDefined();
-      (registration?.[1] as () => void)();
+      (registration![1] as () => void)();
       // The forwarded duplicate (trampoline + direct terminal delivery)
       // lands inside the swallow window and must not re-trigger anything.
-      (registration?.[1] as () => void)();
+      (registration![1] as () => void)();
 
       expect(await runPromise).toBe(TUBELESS_WORKBENCH_EXIT_CODE.execution);
       expect(io.errors.join("")).toContain("TUBELESS_STEP_FAILED");
@@ -2017,14 +2017,14 @@ describe("tubeless workbench", () => {
       await fixture.started;
       const registration = onSpy.mock.calls.find(([event]) => event === "SIGINT");
       expect(registration).toBeDefined();
-      (registration?.[1] as () => void)();
+      (registration![1] as () => void)();
 
       // Past the swallow window, a second SIGINT is a deliberate force-quit:
       // the listener removes itself and re-raises SIGINT on this process so
       // default termination takes over.
       vi.useFakeTimers();
       vi.setSystemTime(Date.now() + DUPLICATE_SIGNAL_WINDOW_MS + 1000);
-      (registration?.[1] as () => void)();
+      (registration![1] as () => void)();
 
       expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGINT");
       expect(removeListenerSpy.mock.calls).toContainEqual(["SIGINT", registration?.[1]]);
@@ -2058,8 +2058,8 @@ describe("tubeless workbench", () => {
       });
       const registration = onSpy.mock.calls.find(([event]) => event === "SIGINT");
       expect(registration).toBeDefined();
-      (registration?.[1] as () => void)(); // first: window arms after return
-      (registration?.[1] as () => void)(); // queued duplicate: swallowed
+      (registration![1] as () => void)(); // first: window arms after return
+      (registration![1] as () => void)(); // queued duplicate: swallowed
 
       expect(events).toEqual(["first"]);
       expect(killSpy).not.toHaveBeenCalled();
@@ -2087,15 +2087,15 @@ describe("tubeless workbench", () => {
 
       // A SIGINT arms only its own window: a first SIGTERM still gets its
       // graceful first delivery rather than being silenced or force-quit.
-      (sigintRegistration?.[1] as () => void)();
-      (sigtermRegistration?.[1] as () => void)();
+      (sigintRegistration![1] as () => void)();
+      (sigtermRegistration![1] as () => void)();
       expect(events).toEqual(["SIGINT", "SIGTERM"]);
 
       // A post-window second press removes ALL listeners and re-raises:
       // neither signal can fire onFirst again mid-teardown.
       vi.useFakeTimers();
       vi.setSystemTime(Date.now() + DUPLICATE_SIGNAL_WINDOW_MS + 1000);
-      (sigintRegistration?.[1] as () => void)();
+      (sigintRegistration![1] as () => void)();
       expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGINT");
       expect(removeListenerSpy.mock.calls).toContainEqual(["SIGINT", sigintRegistration?.[1]]);
       expect(removeListenerSpy.mock.calls).toContainEqual(["SIGTERM", sigtermRegistration?.[1]]);

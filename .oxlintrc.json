@@ -1,14 +1,10 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "import"],
-  "categories": {
-    "correctness": "off"
-  },
   "ignorePatterns": [
     "dist/**",
     "node_modules/**",
     "scripts/fixtures/**",
-    "src/**/*.test.ts",
     ".agent/**",
     ".agents/**",
     ".claude/**",
@@ -28,6 +24,7 @@
     "no-debugger": "error",
     "no-fallthrough": "error",
     "no-unsafe-optional-chaining": "error",
+    "no-control-regex": "off",
     "typescript/no-require-imports": "error",
     "typescript/prefer-as-const": "error",
     "anti-slop/no-chained-type-assertions": "error",
@@ -118,6 +115,21 @@
       "files": ["examples/validated-boundaries.ts", "scripts/**/*.mjs"],
       "rules": {
         "anti-slop/no-runtime-typeof": "off"
+      }
+    },
+    {
+      // tests: anti-slop rules that conflict with fixture-building
+      "files": ["src/**/*.test.ts"],
+      "rules": {
+        "anti-slop/no-chained-type-assertions": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-module-mocking": "off",
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/no-shape-in-symbol-names": "off",
+        "anti-slop/no-unknown-parameters": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "anti-slop/no-unsafe-dictionary-type": "off",
+        "anti-slop/require-safety-comment-for-type-assertion": "off"
       }
     }
   ]

@@ -64,6 +64,7 @@ export async function runValidatedExample() {
   return result.validated;
 }
 
+// oxlint-disable-next-line no-constant-condition -- typecheck-only compile probe
 if (false) {
   // @ts-expect-error Options are inferred from the schema input.
   ValidatedPipeline.runOrThrow({});

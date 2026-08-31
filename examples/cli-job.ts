@@ -69,6 +69,7 @@ export const ImportCommand = definePipelineCommand(ImportPipeline, {
   summarize: (result) => [`Normalized ${result.count} row(s).`],
 });
 
+// oxlint-disable-next-line no-constant-condition -- typecheck-only compile probe
 if (false) {
   const missingLinesParams = { source: { type: "path" } } as const;
   // @ts-expect-error --source does not supply ImportPipeline's required lines option.

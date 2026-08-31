@@ -366,7 +366,7 @@ describe("createPipelineReporter", () => {
     const liveFrames = output.chunks
       .filter((chunk) => chunk.includes(" slow"))
       .map((chunk) => chunk.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "").trimEnd());
-    const runningFrames = liveFrames.filter((frame) => /[-\\|\/] slow/.test(frame));
+    const runningFrames = liveFrames.filter((frame) => /[-\\|/] slow/.test(frame));
     const uniqueRunning = new Set(runningFrames);
     // Reporter timer (not kernel progress) must animate spinner/elapsed while live.
     expect(runningFrames.length).toBeGreaterThanOrEqual(2);
@@ -404,7 +404,7 @@ describe("createPipelineReporter", () => {
             // Busy-wait: the live ticker must not share this thread.
             const rendered = readFileSync(path, "utf8");
             const glyphs = new Set(
-              [...rendered.matchAll(/[-\\|\/] busy/g)].map((match) => match[0])
+              [...rendered.matchAll(/[-\\|/] busy/g)].map((match) => match[0])
             );
             if (glyphs.size >= 3) return "done";
           }
@@ -421,7 +421,7 @@ describe("createPipelineReporter", () => {
       reporter.dispose();
 
       const rendered = readFileSync(path, "utf8");
-      const runningFrames = [...rendered.matchAll(/[-\\|\/] busy/g)].map((match) => match[0]);
+      const runningFrames = [...rendered.matchAll(/[-\\|/] busy/g)].map((match) => match[0]);
       expect(runningFrames.length).toBeGreaterThanOrEqual(3);
       expect(new Set(runningFrames).size).toBeGreaterThanOrEqual(3);
       expect(rendered).toContain("\u001B[?25l");
@@ -478,7 +478,7 @@ describe("createPipelineReporter", () => {
 
       const rendered = readFileSync(path, "utf8");
       const plain = rendered.replace(/\u001B\[[0-9;]*m/g, "");
-      expect(plain).toMatch(/[-\\|\/] busy/);
+      expect(plain).toMatch(/[-\\|/] busy/);
       expect(rendered).toContain("\u001B[0;1;36m");
       expect(rendered).toContain("\u001B[0;2;36m");
       expect(rendered).not.toContain("\u0004");
