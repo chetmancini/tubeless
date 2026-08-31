@@ -130,7 +130,9 @@ tubeless history [options] [run-id]
 a run list, or one run's steps, logs, and error. A missing store exits `2`. A
 store that cannot be opened read-only — a pending `-wal` or `-journal`,
 multiple hard links, or a file that is not a versioned run store — also exits
-`2` with an `Error:` line. An unknown run id exits `1`.
+`2` with an `Error:` line. An unknown run id exits `1`. An unflushed `export()`
+does not create that sidecar; `tubeless run --store` flushes at completion so a
+finished run is durable. A hard crash before then can lose up to 63 tail events.
 
 ```sh
 bunx tubeless run --store .tubeless/runs.sqlite --trace run.ndjson ./scripts/import.ts -- --source rows.txt

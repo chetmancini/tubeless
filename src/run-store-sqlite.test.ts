@@ -519,11 +519,106 @@ describe("SQLite pipeline run store", () => {
     const writer = await openSqlitePipelineRunStore(filename, { initialize: false });
     try {
       await writer.export(startedEvent("run-2", 20));
+      expect(await reader.listEvents()).toEqual([expect.objectContaining({ runId: "run-1" })]);
+      writer.flush!();
       await expect(reader.listEvents()).rejects.toThrow(/write-ahead|journal|sidecar/i);
     } finally {
       await writer.close();
       await reader.close();
     }
+  });
+
+  it("returns every exported event from listEvents without an explicit flush", async () => {
+    const store = await openTempStore();
+    for (let timestampMs = 10; timestampMs < 110; timestampMs += 1) {
+      await store.export(startedEvent("run-1", timestampMs));
+    }
+    expect(await store.listEvents()).toHaveLength(100);
+    await store.close();
+  });
+
+  it("makes flush durable to a later read-only reopen", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.export(startedEvent("run-1", 11));
+    await store.export(startedEvent("run-1", 12));
+    store.flush!();
+    const peek = new DatabaseSync(filename);
+    expect(
+      (
+        peek.prepare("SELECT COUNT(*) AS n FROM pipeline_run_events").all() as {
+          n: number | bigint;
+        }[]
+      )[0]?.n
+    ).toEqual(3);
+    peek.close();
+    await store.close();
+    const reader = await openSqlitePipelineRunStore(filename, {
+      initialize: false,
+      readOnly: true,
+    });
+    expect(await reader.listEvents()).toEqual([
+      expect.objectContaining({ runId: "run-1", timestampMs: 10 }),
+      expect.objectContaining({ runId: "run-1", timestampMs: 11 }),
+      expect.objectContaining({ runId: "run-1", timestampMs: 12 }),
+    ]);
+    await reader.close();
+  });
+
+  it("keeps the first mid-batch drain failure sticky on export and flush", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.export(startedEvent("run-1", 11));
+    const injector = new DatabaseSync(filename);
+    injector.exec(`
+      CREATE TRIGGER fail_insert BEFORE INSERT ON pipeline_run_events
+      BEGIN
+        SELECT RAISE(ABORT, 'injected insert failure');
+      END;
+    `);
+    injector.close();
+    expect(() => store.flush!()).toThrow(/injected insert failure/);
+    expect(() => store.export(startedEvent("run-1", 12))).toThrow(/injected insert failure/);
+    expect(() => store.flush!()).toThrow(/injected insert failure/);
+    expect(() => store.close()).toThrow(/injected insert failure/);
+  });
+
+  it("surfaces a begin failure from close when another connection holds the lock", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    const locker = new DatabaseSync(filename);
+    locker.exec("BEGIN EXCLUSIVE");
+    try {
+      expect(() => store.close()).toThrow(/busy|locked|database is locked/i);
+    } finally {
+      locker.exec("ROLLBACK");
+      locker.close();
+    }
+  });
+
+  it("persists unflushed exports when close drains the buffer", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.export(startedEvent("run-1", 11));
+    await store.close();
+    const reopened = await openSqlitePipelineRunStore(filename, { initialize: false });
+    expect(await reopened.listEvents()).toEqual([
+      expect.objectContaining({ runId: "run-1", timestampMs: 10 }),
+      expect.objectContaining({ runId: "run-1", timestampMs: 11 }),
+    ]);
+    await reopened.close();
   });
 
   it("does not create a missing file when Node opens an existing-only URI", async () => {

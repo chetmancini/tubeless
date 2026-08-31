@@ -49,6 +49,40 @@ interface StoredEventRow {
 }
 
 const RUN_EVENT_STORE_VERSION = 1;
+/** Larger batches mean fewer commits but more tail loss on crash. */
+const EXPORT_BATCH_SIZE = 64;
+
+type EventRow = readonly [
+  version: PipelineTraceEvent["version"],
+  runId: string,
+  parentRunId: string | null,
+  pipelineId: string,
+  stepId: string | null,
+  attemptId: string | null,
+  itemKey: string | null,
+  name: PipelineTraceEvent["name"],
+  timestampMs: number,
+  durationMs: number | null,
+  attributesJson: string,
+  errorJson: string | null,
+];
+
+function eventRow(event: PipelineTraceEvent): EventRow {
+  return [
+    event.version,
+    event.runId,
+    event.parentRunId ?? null,
+    event.pipelineId,
+    event.stepId ?? null,
+    event.attemptId ?? null,
+    event.itemKey ?? null,
+    event.name,
+    event.timestampMs,
+    event.durationMs ?? null,
+    JSON.stringify(event.attributes),
+    event.error ? JSON.stringify(event.error) : null,
+  ];
+}
 
 const RUN_EVENT_STORE_APPEND_ONLY_TRIGGERS = `
   CREATE TRIGGER IF NOT EXISTS pipeline_run_events_no_update
@@ -284,7 +318,11 @@ export interface OpenSqlitePipelineRunStoreOptions {
 
 /**
  * Open the optional local SQLite trace store used by `tubeless run --store`,
- * `tubeless history`, and `tubeless ui`. The main executor never imports this module.
+ * `tubeless history`, and `tubeless ui`. The main executor never imports this
+ * module. `export()` buffers up to 64 events and commits them in one
+ * transaction, plus on `flush()`, same-instance `listEvents`/`clearHistory`,
+ * and `close()`. Other connections cannot see the unflushed tail; a crash can
+ * lose it. Finished `tubeless run --store` invocations flush at completion.
  */
 export async function openSqlitePipelineRunStore(
   filename: string,
@@ -336,26 +374,31 @@ export async function openSqlitePipelineRunStore(
   );
   let closed = false;
   let exportError: Error | undefined;
+  const pending: EventRow[] = [];
+
+  function drain(): void {
+    if (pending.length === 0) return;
+    try {
+      database.exec("BEGIN IMMEDIATE");
+      for (const row of pending) insert.run(...row);
+      database.exec("COMMIT");
+      pending.length = 0;
+    } catch (error) {
+      try {
+        database.exec("ROLLBACK");
+      } catch {}
+      exportError = error instanceof Error ? error : new Error(String(error));
+      throw exportError;
+    }
+  }
 
   return {
     export(event) {
       if (closed) throw new Error("Cannot append to a closed pipeline run store.");
       if (exportError) throw exportError;
       try {
-        insert.run(
-          event.version,
-          event.runId,
-          event.parentRunId ?? null,
-          event.pipelineId,
-          event.stepId ?? null,
-          event.attemptId ?? null,
-          event.itemKey ?? null,
-          event.name,
-          event.timestampMs,
-          event.durationMs ?? null,
-          JSON.stringify(event.attributes),
-          event.error ? JSON.stringify(event.error) : null
-        );
+        pending.push(eventRow(event));
+        if (pending.length >= EXPORT_BATCH_SIZE) drain();
       } catch (error) {
         exportError = error instanceof Error ? error : new Error(String(error));
         throw exportError;
@@ -363,9 +406,11 @@ export async function openSqlitePipelineRunStore(
     },
     flush() {
       if (exportError) throw exportError;
+      drain();
     },
     async listEvents(query: PipelineRunEventQuery = {}) {
       if (closed) throw new Error("Cannot query a closed pipeline run store.");
+      drain();
       if (readOnly && resolvedFilename !== ":memory:") {
         await sqliteAssertImmutableInspect(resolvedFilename);
       }
@@ -399,6 +444,7 @@ export async function openSqlitePipelineRunStore(
     },
     clearHistory() {
       if (closed) throw new Error("Cannot clear a closed pipeline run store.");
+      drain();
       try {
         database.exec(`
           BEGIN IMMEDIATE;
@@ -419,6 +465,11 @@ export async function openSqlitePipelineRunStore(
     close() {
       if (closed) return;
       closed = true;
+      try {
+        if (!exportError) drain();
+      } catch {
+        // exportError is recorded by drain; close still releases the handle.
+      }
       database.close();
       if (exportError) throw exportError;
     },

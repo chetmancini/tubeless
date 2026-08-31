@@ -52,6 +52,9 @@ export async function runWithLocalHistory(
       tracing: { exporter: store },
     });
   } finally {
+    // close() drains the SQLite buffer. Call store.flush() if another
+    // connection must see events before close, or if you need durability
+    // before the process can crash. A crash can lose up to 63 unflushed events.
     await store.close();
   }
 }

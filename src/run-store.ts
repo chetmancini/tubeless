@@ -29,7 +29,11 @@ export interface PipelineRunEventQuery {
   limit?: number;
 }
 
-/** Append-only persistence boundary used by the local studio. */
+/**
+ * Append-only persistence boundary used by the local studio.
+ * SQLite `export()` may return before the row is durable; call `flush()` or
+ * `close()` before another connection can observe the tail.
+ */
 export interface PipelineRunEventStore extends PipelineTraceExporter {
   close(): void | Promise<void>;
   listEvents(query?: PipelineRunEventQuery): Promise<readonly StoredPipelineEvent[]>;
@@ -327,10 +331,12 @@ interface MutableRunProjection {
 
 interface MutablePipelineProjection {
   definitionRunId: string | undefined;
+  definitionRunStartedAtMs: number;
   definitionRunStartedEventId: number;
   firstSeenAtMs: number;
   lastSeenAtMs: number;
   latestSteps: Map<string, StoredPipelineDefinitionStep>;
+  runStartedAtMs: Map<string, number>;
   runStartedEventIds: Map<string, number>;
   runTargetIds: Map<string, string[]>;
   targetIds: string[];
@@ -514,10 +520,12 @@ function definitionStep(event: StoredPipelineEvent): StoredPipelineDefinitionSte
 function createPipelineProjection(event: StoredPipelineEvent): MutablePipelineProjection {
   const projection: MutablePipelineProjection = {
     definitionRunId: undefined,
+    definitionRunStartedAtMs: Number.NEGATIVE_INFINITY,
     definitionRunStartedEventId: -1,
     firstSeenAtMs: event.timestampMs,
     lastSeenAtMs: event.timestampMs,
     latestSteps: new Map(),
+    runStartedAtMs: new Map(),
     runStartedEventIds: new Map(),
     runTargetIds: new Map(),
     targetIds: [],
@@ -526,20 +534,34 @@ function createPipelineProjection(event: StoredPipelineEvent): MutablePipelinePr
   return projection;
 }
 
+function isNewerObservedDefinition(
+  startedAtMs: number,
+  startedEventId: number,
+  projection: MutablePipelineProjection
+): boolean {
+  if (startedAtMs !== projection.definitionRunStartedAtMs) {
+    return startedAtMs > projection.definitionRunStartedAtMs;
+  }
+  return startedEventId > projection.definitionRunStartedEventId;
+}
+
 function applyPipelineEvent(
   projection: MutablePipelineProjection,
   event: StoredPipelineEvent
 ): void {
   projection.lastSeenAtMs = event.timestampMs;
   if (event.name === "pipeline.started") {
+    projection.runStartedAtMs.set(event.runId, event.timestampMs);
     projection.runStartedEventIds.set(event.runId, event.id);
     projection.runTargetIds.set(event.runId, stringArrayAttribute(event.attributes, "target_ids"));
   }
   if (event.name !== "step.planned" || !event.stepId) return;
   const runStartedEventId = projection.runStartedEventIds.get(event.runId);
-  if (runStartedEventId === undefined) return;
-  if (runStartedEventId > projection.definitionRunStartedEventId) {
+  const runStartedAtMs = projection.runStartedAtMs.get(event.runId);
+  if (runStartedEventId === undefined || runStartedAtMs === undefined) return;
+  if (isNewerObservedDefinition(runStartedAtMs, runStartedEventId, projection)) {
     projection.definitionRunId = event.runId;
+    projection.definitionRunStartedAtMs = runStartedAtMs;
     projection.definitionRunStartedEventId = runStartedEventId;
     projection.latestSteps.clear();
     projection.targetIds = projection.runTargetIds.get(event.runId) ?? [];

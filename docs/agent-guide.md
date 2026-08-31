@@ -133,12 +133,17 @@ or shared helpers in this repository.
 - Keep durable local observation opt-in. Use the append-only adapter from
   `tubeless/run-store/sqlite` or `tubeless run --store`; inspect recorded runs
   with `tubeless history`. `tubeless history` inspects a finished artifact and
-  refuses a store with a live writer or multiple hard links. Do not make
-  pipeline definitions depend on storage or the studio. Recorded history keeps
-  the last
+  refuses a store with a live writer or multiple hard links. SQLite `export()`
+  may return before the row is on disk. Other connections cannot see that tail
+  until a batch of 64, `flush()`, same-instance `listEvents`/`clearHistory`, or
+  `close()`. A crash can lose up to 63 unflushed events; `tubeless run --store`
+  flushes at completion so finished runs are durable. Do not make pipeline
+  definitions depend on storage or the studio. Recorded history keeps the last
   `reportProgress` `details` plus `detail_count`, and opaque child steps keep
   `nested_pipeline` with the original `step_count`. Studio renders those
   snapshots; it does not flatten child DAGs into the parent step.
+  Observed definitions pick the latest `pipeline.started` by `timestampMs`, then
+  store-local id.
 - Use `createPipelineRunProjector` from `tubeless/run-store` when a custom
   reader pages `listEvents({ afterId })`. Append each newer page and call
   `snapshot()`; a refresh with no new ids returns the cached view. Duplicate

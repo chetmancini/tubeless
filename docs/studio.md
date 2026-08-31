@@ -85,7 +85,10 @@ labeled with the child pipeline and its declared steps; runtime fan-out is
 identified without guessing its item count. Recorded progress keeps the last
 per-item `details` rows under the parent bar. Truncated lists keep the original
 `detail_count` and nested `step_count` so history can say how many rows were
-omitted.
+omitted. A writer's unflushed tail stays in that process; read-only history and
+studio inspect committed rows only and refuse after a drain creates a WAL, not
+on a single unflushed `export()`. Observed definitions use the latest
+`pipeline.started` timestamp, not insert order.
 
 Every studio request, including reads, requires a `Host` header that matches
 the bound authority (or, on a wildcard bind, `localhost` or a literal IP on
