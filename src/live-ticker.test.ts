@@ -87,11 +87,18 @@ describe("live ticker worker", () => {
     const supervisor = fileURLToPath(new URL("../dist/live-ticker-supervisor.js", import.meta.url));
     const source = readFileSync(new URL("./live-ticker.ts", import.meta.url), "utf8");
 
+    const supervisorSource = readFileSync(
+      new URL("./live-ticker-supervisor.ts", import.meta.url),
+      "utf8"
+    );
     expect(existsSync(compiled)).toBe(true);
     expect(existsSync(supervisor)).toBe(true);
     expect(source).not.toContain("WORKER_SOURCE");
     expect(source).not.toContain("eval: true");
     expect(source).not.toContain("ISOLATE_DRAIN_MS");
+    expect(supervisorSource).not.toContain("setInterval");
+    expect(supervisorSource).toContain("terminated");
+    expect(source).toContain("terminated");
   });
 
   it("paints, logs, and stops through the compiled worker", () => {
@@ -287,6 +294,71 @@ const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
     } finally {
       closeSync(fd);
       unlinkSync(path);
+    }
+  });
+
+  it("does not paint inline fallback when a requested terminate exits non-zero", async () => {
+    const path = join(tmpdir(), `tubeless-ticker-term-exit-${process.pid}-${Date.now()}.log`);
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-term-exit-worker-${process.pid}-${Date.now()}.mjs`
+    );
+    writeFileSync(
+      workerPath,
+      `
+import { writeSync } from "node:fs";
+import { parentPort, workerData } from "node:worker_threads";
+
+parentPort.on("message", (msg) => {
+  if (msg.type === "lines") {
+    writeSync(workerData.fd, "worker-ready\\n");
+    parentPort.postMessage({ type: "ready" });
+    return;
+  }
+  if (msg.type !== "stop") return;
+  writeSync(workerData.fd, "worker-owned-final\\n");
+  Atomics.store(new Int32Array(workerData.handshakeBuffer), 0, 1);
+  Atomics.notify(new Int32Array(workerData.handshakeBuffer), 0);
+  throw new Error("non-zero exit after stop handshake");
+});
+`
+    );
+    const fd = openSync(path, "w");
+    const inlineWrites: string[] = [];
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          inlineWrites.push(chunk);
+          writeSync(fd, chunk);
+        },
+      });
+      ticker.setLines(["inline-fallback-frame"]);
+
+      const liveDeadline = Date.now() + 2_000;
+      while (Date.now() < liveDeadline) {
+        if (readFileSync(path, "utf8").includes("worker-ready")) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(readFileSync(path, "utf8"), readFileSync(workerPath, "utf8")).toContain(
+        "worker-ready"
+      );
+
+      ticker.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const rendered = readFileSync(path, "utf8");
+      expect(rendered).toContain("worker-owned-final");
+      expect(inlineWrites).toEqual([]);
+      expect(rendered).not.toContain("inline-fallback-frame");
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
     }
   });
 

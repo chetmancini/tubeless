@@ -19,7 +19,8 @@ interface SupervisorData {
 type TickerInboundMessage =
   | { columns?: number; lines: string[]; type: "lines" }
   | { text: string; type: "log" }
-  | { columns?: number; lines: string[]; type: "stop" };
+  | { columns?: number; lines: string[]; type: "stop" }
+  | { type: "terminate" };
 
 type TickerOutboundMessage =
   | { kind: "log"; type: "ack" }
@@ -39,30 +40,36 @@ const ticker = new Worker(new URL(data.tickerUrl), {
   workerData: data.tickerData,
 });
 
+let terminated = false;
+
 const recordExit = (): void => {
   Atomics.store(control, 1, 1);
   Atomics.notify(control, 1);
+};
+
+const terminateTicker = (): void => {
+  if (terminated) return;
+  terminated = true;
+  Atomics.store(control, 0, 1);
+  void ticker.terminate();
 };
 
 ticker.on("message", (msg: TickerOutboundMessage) => {
   port.postMessage(msg);
 });
 ticker.on("error", () => {
-  port.postMessage({ event: "error", type: "supervisor" });
+  port.postMessage({ event: "error", terminated, type: "supervisor" });
 });
 ticker.on("exit", (code: number) => {
   recordExit();
-  port.postMessage({ code, event: "exit", type: "supervisor" });
+  port.postMessage({ code, event: "exit", terminated, type: "supervisor" });
 });
 ticker.unref();
 
-const stopTimer = setInterval(() => {
-  if (Atomics.load(control, 0) !== 1) return;
-  clearInterval(stopTimer);
-  void ticker.terminate();
-}, 1);
-stopTimer.unref();
-
 port.on("message", (msg: TickerInboundMessage) => {
+  if (msg.type === "terminate") {
+    terminateTicker();
+    return;
+  }
   ticker.postMessage(msg);
 });

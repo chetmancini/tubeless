@@ -334,6 +334,11 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   const requestTerminate = (): void => {
     Atomics.store(control, 0, 1);
     Atomics.notify(control, 0);
+    try {
+      worker.postMessage({ type: "terminate" });
+    } catch {
+      void worker.terminate();
+    }
   };
 
   const waitForQuietBeat = (): void => {
@@ -401,22 +406,37 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     inlineFallback = createInlineTicker(options, paintedFrameLineCount());
     replayThrough(inlineFallback);
   };
-  worker.on("error", failToInline);
+  const requestedTerminate = (): boolean => Atomics.load(control, 0) === 1;
+
+  worker.on("error", () => {
+    if (!requestedTerminate()) failToInline();
+  });
   worker.on("exit", (code) => {
-    if (code !== 0) failToInline();
+    if (code !== 0 && !requestedTerminate()) failToInline();
   });
   worker.unref();
-  worker.on("message", (msg: { code?: number; event?: string; kind?: string; type?: string }) => {
-    if (msg.type === "supervisor" && msg.event === "error") {
-      failToInline();
-      return;
+  worker.on(
+    "message",
+    (msg: {
+      code?: number;
+      event?: string;
+      kind?: string;
+      terminated?: boolean;
+      type?: string;
+    }) => {
+      if (msg.type === "supervisor" && msg.event === "error") {
+        if (msg.terminated !== true && !requestedTerminate()) failToInline();
+        return;
+      }
+      if (msg.type === "supervisor" && msg.event === "exit") {
+        if (msg.code !== 0 && msg.terminated !== true && !requestedTerminate()) {
+          failToInline();
+        }
+        return;
+      }
+      if (msg.type === "ack" && msg.kind === "log") dropAcknowledgedLogs();
     }
-    if (msg.type === "supervisor" && msg.event === "exit") {
-      if (msg.code !== 0) failToInline();
-      return;
-    }
-    if (msg.type === "ack" && msg.kind === "log") dropAcknowledgedLogs();
-  });
+  );
 
   return {
     setLines(nextLines) {
@@ -462,7 +482,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
       }
       if (Atomics.wait(handshake, 0, 0, 500) === "timed-out") {
         stopWorker();
-        paintFinalFrame();
+        if (Atomics.load(handshake, 0) !== 1) paintFinalFrame();
         try {
           writeSync(options.fd, ANSI.showCursor);
         } catch {
