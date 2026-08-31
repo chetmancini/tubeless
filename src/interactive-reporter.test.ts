@@ -68,6 +68,7 @@ function detailedPipeline() {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 
 describe("createPipelineReporter", () => {
@@ -623,5 +624,145 @@ describe("createPipelineReporter", () => {
     expect(completed.split("\n").find((line) => strip(line).includes("ok finalize"))).not.toMatch(
       /\u001B\[0;[12];36m/
     );
+  });
+
+  it("flushes a coalesced progress burst after the refresh interval", async () => {
+    vi.useFakeTimers();
+    const refreshIntervalMs = 80;
+    const output = captureOutput();
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      mode: "interactive",
+      output,
+      progressBarWidth: 10,
+      refreshIntervalMs,
+      symbols: "unicode",
+      terminal: { color: false, isTTY: true, unicode: true },
+    });
+    const plan = progressivePipeline().plan();
+    const load = plan.steps.find((step) => step.id === "load");
+    expect(load).toBeDefined();
+    if (!load) return;
+
+    reporter.hooks.onPipelineStart?.(plan);
+    reporter.hooks.onStepStatus?.({
+      attemptId: "attempt-1",
+      pipelineId: plan.pipelineId,
+      progress: { completed: 4, total: 10, message: "records" },
+      status: "running",
+      step: load,
+    });
+    expect(output.chunks.join("")).toContain("4/10 records");
+
+    reporter.hooks.onStepStatus?.({
+      attemptId: "attempt-1",
+      pipelineId: plan.pipelineId,
+      progress: { completed: 8, total: 10, message: "records" },
+      status: "running",
+      step: load,
+    });
+    expect(output.chunks.join("")).not.toContain("8/10 records");
+
+    await vi.advanceTimersByTimeAsync(refreshIntervalMs);
+    expect(output.chunks.join("")).toContain("8/10 records");
+    reporter.dispose();
+  });
+
+  it("cancels the trailing flush when a status event already painted", async () => {
+    vi.useFakeTimers();
+    const refreshIntervalMs = 80;
+    const output = captureOutput();
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      mode: "interactive",
+      output,
+      progressBarWidth: 10,
+      refreshIntervalMs,
+      symbols: "unicode",
+      terminal: { color: false, isTTY: true, unicode: true },
+    });
+    const plan = progressivePipeline().plan();
+    const load = plan.steps.find((step) => step.id === "load");
+    expect(load).toBeDefined();
+    if (!load) return;
+
+    reporter.hooks.onPipelineStart?.(plan);
+    reporter.hooks.onStepStatus?.({
+      attemptId: "attempt-1",
+      pipelineId: plan.pipelineId,
+      progress: { completed: 4, total: 10, message: "records" },
+      status: "running",
+      step: load,
+    });
+    reporter.hooks.onStepStatus?.({
+      attemptId: "attempt-1",
+      pipelineId: plan.pipelineId,
+      progress: { completed: 8, total: 10, message: "records" },
+      status: "running",
+      step: load,
+    });
+    expect(output.chunks.join("")).not.toContain("8/10 records");
+
+    const writesBeforeStatus = output.chunks.length;
+    reporter.hooks.onStepStatus?.({
+      attemptId: "attempt-1",
+      finishedAtMs: Date.now(),
+      id: load.id,
+      pipelineId: plan.pipelineId,
+      startedAtMs: Date.now(),
+      status: "completed",
+      step: load,
+    });
+    const writesAfterStatus = output.chunks.length;
+    expect(writesAfterStatus).toBeGreaterThan(writesBeforeStatus);
+    expect(output.chunks.join("")).toMatch(/✓ load \(\d+ms\)/);
+
+    await vi.advanceTimersByTimeAsync(refreshIntervalMs);
+    expect(output.chunks.length).toBe(writesAfterStatus);
+    reporter.dispose();
+  });
+
+  it("does not write after dispose with a pending trailing flush", async () => {
+    vi.useFakeTimers();
+    const refreshIntervalMs = 80;
+    const output = captureOutput();
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      mode: "interactive",
+      output,
+      progressBarWidth: 10,
+      refreshIntervalMs,
+      symbols: "unicode",
+      terminal: { color: false, isTTY: true, unicode: true },
+    });
+    const plan = progressivePipeline().plan();
+    const load = plan.steps.find((step) => step.id === "load");
+    expect(load).toBeDefined();
+    if (!load) return;
+
+    reporter.hooks.onPipelineStart?.(plan);
+    reporter.hooks.onStepStatus?.({
+      attemptId: "attempt-1",
+      pipelineId: plan.pipelineId,
+      progress: { completed: 4, total: 10, message: "records" },
+      status: "running",
+      step: load,
+    });
+    reporter.hooks.onStepStatus?.({
+      attemptId: "attempt-1",
+      pipelineId: plan.pipelineId,
+      progress: { completed: 8, total: 10, message: "records" },
+      status: "running",
+      step: load,
+    });
+
+    expect(() => reporter.dispose()).not.toThrow();
+    const writesAfterDispose = output.chunks.length;
+    await vi.advanceTimersByTimeAsync(refreshIntervalMs);
+    expect(output.chunks.length).toBe(writesAfterDispose);
+    expect(output.chunks.join("")).not.toContain("8/10 records");
   });
 });
