@@ -325,7 +325,7 @@ describe("local pipeline run studio", () => {
       method: "POST",
     });
     expect(forgedHost.status).toBe(403);
-    expect(forgedHost.body).toEqual({ error: "The launch request host is not trusted." });
+    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
     expect(launches).toHaveLength(1);
     await expect(
       fetch(`${server.url}/api/capabilities`).then((response) => response.json())
@@ -410,7 +410,7 @@ describe("local pipeline run studio", () => {
       method: "POST",
     });
     expect(forgedHost.status).toBe(403);
-    expect(forgedHost.body).toEqual({ error: "The cancel request host is not trusted." });
+    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
     const unknown = await fetch(`${server.url}/api/runs/missing-run/cancel`, {
       headers: { "x-tubeless-studio-cancel": "1" },
       method: "POST",
@@ -638,7 +638,7 @@ describe("local pipeline run studio", () => {
       method: "DELETE",
     });
     expect(forgedHost.status).toBe(403);
-    expect(forgedHost.body).toEqual({ error: "The history request host is not trusted." });
+    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
     expect(clearCount).toBe(0);
     const response = await fetch(`${server.url}/api/history`, {
       headers: { "x-tubeless-studio-clear-history": "1" },
@@ -727,5 +727,82 @@ describe("local pipeline run studio", () => {
     });
     expect(response.status).toBe(200);
     expect(clearCount).toBe(1);
+  });
+
+  it("rejects a snapshot read whose Host does not match the bound authority", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const forgedHost = await requestWithHost(`${server.url}/api/snapshot`, {
+      host: `evil.example:${new URL(server.url).port}`,
+      method: "GET",
+    });
+    expect(forgedHost.status).toBe(403);
+    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+  });
+
+  it("rejects the studio page when Host does not match the bound authority", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const forgedHost = await requestWithHost(server.url, {
+      host: `evil.example:${new URL(server.url).port}`,
+      method: "GET",
+    });
+    expect(forgedHost.status).toBe(403);
+    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+  });
+
+  it("rejects a run read whose Host does not match the bound authority", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const forgedHost = await requestWithHost(`${server.url}/api/runs/some-id`, {
+      host: `evil.example:${new URL(server.url).port}`,
+      method: "GET",
+    });
+    expect(forgedHost.status).toBe(403);
+    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+  });
+
+  it("rejects a literal-IP Host that does not match a specific bind", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const port = new URL(server.url).port;
+    const forgedHost = await requestWithHost(`${server.url}/api/snapshot`, {
+      host: `192.0.2.10:${port}`,
+      method: "GET",
+    });
+    expect(forgedHost.status).toBe(403);
+    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+  });
+
+  it("accepts localhost and literal-IP Hosts on a wildcard bind", async () => {
+    const server = await startPipelineRunStudio({
+      host: "0.0.0.0",
+      port: 0,
+      store: memoryStore(events),
+    });
+    servers.push(server);
+
+    const port = new URL(server.url).port;
+    const snapshotUrl = `http://127.0.0.1:${port}/api/snapshot`;
+    for (const host of [
+      `127.0.0.1:${port}`,
+      `192.0.2.10:${port}`,
+      `localhost:${port}`,
+      `[::1]:${port}`,
+    ]) {
+      const response = await requestWithHost(snapshotUrl, { host, method: "GET" });
+      expect({ host, status: response.status }).toEqual({ host, status: 200 });
+    }
+
+    const forgedHost = await requestWithHost(snapshotUrl, {
+      host: `evil.example:${port}`,
+      method: "GET",
+    });
+    expect(forgedHost.status).toBe(403);
+    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
   });
 });

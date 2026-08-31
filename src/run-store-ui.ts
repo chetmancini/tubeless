@@ -1,5 +1,11 @@
 import { createServer, type Server } from "node:http";
-import { formatHttpUrlHost, normalizeHttpAuthority } from "./run-store-ui-http.js";
+import {
+  formatHttpUrlHost,
+  isLiteralOrLocalhostHttpHost,
+  isUnspecifiedHttpHost,
+  normalizeHttpAuthority,
+  parseHttpAuthority,
+} from "./run-store-ui-http.js";
 import { projectPipelineRun, type PipelineRunEventStore } from "./run-store.js";
 import { PIPELINE_RUN_STUDIO_HTML } from "./run-store-ui-page.js";
 import {
@@ -119,9 +125,28 @@ export async function startPipelineRunStudio(
   }
   const eventState = new PipelineRunStudioEventState(options.store);
   let expectedAuthority: string | undefined;
+  const wildcardBind = isUnspecifiedHttpHost(host);
+  const isTrustedAuthority = (request: import("node:http").IncomingMessage): boolean => {
+    const requestAuthority = normalizeHttpAuthority(request.headers.host);
+    if (!requestAuthority || !expectedAuthority) return false;
+    if (requestAuthority === expectedAuthority) return true;
+    if (!wildcardBind) return false;
+    const requestParts = parseHttpAuthority(requestAuthority);
+    const expectedParts = parseHttpAuthority(expectedAuthority);
+    return (
+      requestParts !== undefined &&
+      expectedParts !== undefined &&
+      requestParts.port === expectedParts.port &&
+      isLiteralOrLocalhostHttpHost(requestParts.hostname)
+    );
+  };
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://studio.local");
+      if (!isTrustedAuthority(request)) {
+        writeJson(response, { error: "The request host is not trusted." }, 403);
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/") {
         response.writeHead(200, {
           "cache-control": "no-store",
@@ -166,10 +191,6 @@ export async function startPipelineRunStudio(
           writeJson(response, { error: "Pipeline cancellation is not enabled." }, 405);
           return;
         }
-        if (normalizeHttpAuthority(request.headers.host) !== expectedAuthority) {
-          writeJson(response, { error: "The cancel request host is not trusted." }, 403);
-          return;
-        }
         if (request.headers["x-tubeless-studio-cancel"] !== "1") {
           writeJson(response, { error: "A same-origin cancel request is required." }, 415);
           return;
@@ -186,10 +207,6 @@ export async function startPipelineRunStudio(
       if (request.method === "DELETE" && url.pathname === "/api/history") {
         if (!history) {
           writeJson(response, { error: "History maintenance is not enabled." }, 405);
-          return;
-        }
-        if (normalizeHttpAuthority(request.headers.host) !== expectedAuthority) {
-          writeJson(response, { error: "The history request host is not trusted." }, 403);
           return;
         }
         if (request.headers["x-tubeless-studio-clear-history"] !== "1") {
@@ -211,10 +228,6 @@ export async function startPipelineRunStudio(
           writeJson(response, { error: "Pipeline planning is not enabled." }, 405);
           return;
         }
-        if (normalizeHttpAuthority(request.headers.host) !== expectedAuthority) {
-          writeJson(response, { error: "The plan request host is not trusted." }, 403);
-          return;
-        }
         if (
           !request.headers["content-type"]?.startsWith("application/json") ||
           request.headers["x-tubeless-studio-plan"] !== "1"
@@ -234,10 +247,6 @@ export async function startPipelineRunStudio(
       if (request.method === "POST" && launchMatch) {
         if (!launcher) {
           writeJson(response, { error: "Pipeline launching is not enabled." }, 405);
-          return;
-        }
-        if (normalizeHttpAuthority(request.headers.host) !== expectedAuthority) {
-          writeJson(response, { error: "The launch request host is not trusted." }, 403);
           return;
         }
         if (
