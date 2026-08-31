@@ -296,6 +296,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   let disposed = false;
   let inlineFallback: LiveTicker | undefined;
   let lines: readonly string[] = [];
+  const pendingLogs: string[] = [];
 
   const send = (message: TickerWorkerMessage): void => {
     if (disposed || inlineFallback) return;
@@ -306,6 +307,10 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     if (disposed || inlineFallback) return;
     inlineFallback = createInlineTicker(options, lines.length);
     inlineFallback.setLines([...lines]);
+    for (const text of pendingLogs) {
+      inlineFallback.writeLog(text);
+    }
+    pendingLogs.length = 0;
   };
   worker.on("error", failToInline);
   worker.on("exit", (code) => {
@@ -331,13 +336,12 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
         writeSync(options.fd, text);
         return;
       }
+      pendingLogs.push(text);
       send({ text, type: "log" });
     },
     dispose() {
       if (disposed) return;
       disposed = true;
-      worker.removeAllListeners("error");
-      worker.removeAllListeners("exit");
       if (inlineFallback) {
         inlineFallback.dispose();
         void worker.terminate();

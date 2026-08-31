@@ -343,4 +343,106 @@ parentPort.on("message", (msg) => {
       unlinkSync(workerPath);
     }
   });
+
+  it("does not crash when dispose races a boot-failing worker", () => {
+    const path = join(tmpdir(), `tubeless-ticker-dispose-race-${process.pid}-${Date.now()}.log`);
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-dispose-race-worker-${process.pid}-${Date.now()}.js`
+    );
+    const scriptPath = join(
+      tmpdir(),
+      `tubeless-ticker-dispose-race-script-${process.pid}-${Date.now()}.mjs`
+    );
+    writeFileSync(workerPath, 'throw new Error("boot failure");\n');
+    const tickerUrl = pathToFileURL(
+      fileURLToPath(new URL("../dist/live-ticker.js", import.meta.url))
+    ).href;
+    writeFileSync(
+      scriptPath,
+      `
+process.on("uncaughtException", (err) => {
+  console.error(err);
+  process.exit(2);
+});
+process.on("unhandledRejection", (err) => {
+  console.error(err);
+  process.exit(3);
+});
+const { closeSync, openSync, unlinkSync } = await import("node:fs");
+const { createLiveTicker, SPINNER_TOKEN } = await import(${JSON.stringify(tickerUrl)});
+const fd = openSync(${JSON.stringify(path)}, "w");
+try {
+  const ticker = createLiveTicker({
+    color: true,
+    columns: 80,
+    fd,
+    refreshIntervalMs: 20,
+    unicode: false,
+    workerUrl: new URL(${JSON.stringify(pathToFileURL(workerPath).href)}),
+    write: () => {},
+  });
+  ticker.setLines([\`\${SPINNER_TOKEN} load\`]);
+  ticker.dispose();
+  await new Promise((resolve) => setTimeout(resolve, 200));
+} finally {
+  closeSync(fd);
+  unlinkSync(${JSON.stringify(path)});
+}
+`
+    );
+    try {
+      const child = spawnSync("node", [scriptPath], {
+        encoding: "utf8",
+        env: { ...process.env, NODE_OPTIONS: "" },
+        timeout: 5_000,
+      });
+      expect(child.status, child.stderr + child.stdout).toBe(0);
+    } finally {
+      unlinkSync(workerPath);
+      unlinkSync(scriptPath);
+    }
+  });
+
+  it("replays logs sent before the worker fails to boot", async () => {
+    const path = join(tmpdir(), `tubeless-ticker-log-replay-${process.pid}-${Date.now()}.log`);
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-log-replay-worker-${process.pid}-${Date.now()}.js`
+    );
+    writeFileSync(workerPath, 'throw new Error("boot failure");\n');
+    const fd = openSync(path, "w");
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          writeSync(fd, chunk);
+        },
+      });
+      ticker.setLines([`${SPINNER_TOKEN} load`]);
+      ticker.writeLog("pre-fallback log\n");
+
+      const paintedDeadline = Date.now() + 2_000;
+      let rendered = "";
+      while (Date.now() < paintedDeadline) {
+        rendered = readFileSync(path, "utf8");
+        if (rendered.includes("pre-fallback log")) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      ticker.dispose();
+      expect(rendered).toContain("pre-fallback log");
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
+    }
+  });
 });
