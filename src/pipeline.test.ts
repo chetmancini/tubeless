@@ -2213,6 +2213,44 @@ describe("definePipeline", () => {
     expect(result.value).toBe("from-class");
   });
 
+  it("runs class steps whose accessors use private fields", async () => {
+    class PrivateStep implements AnyStep {
+      #id: string;
+      #label: string;
+      constructor(id: string, label: string) {
+        this.#id = id;
+        this.#label = label;
+      }
+
+      get id() {
+        return this.#id;
+      }
+
+      get name() {
+        return this.#label;
+      }
+
+      run() {
+        return this.#label;
+      }
+    }
+
+    const work = new PrivateStep("work", "from-private");
+    const pipeline = definePipeline({
+      id: "private-step",
+      steps: [work],
+      finalize: (outputs) => outputs.work,
+    });
+
+    const plan = pipeline.plan();
+    expect(plan.ok).toBe(true);
+    expect(plan.steps.find((planned) => planned.id === "work")?.name).toBe("from-private");
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("from-private");
+  });
+
   it("policy-skips a step with a yellow skip report and unlocks dependents", async () => {
     interface Options {
       enableWrite: boolean;

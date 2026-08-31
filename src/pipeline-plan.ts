@@ -861,20 +861,69 @@ function remapFrozenDependencies<TOptions extends object>(
   );
 }
 
+const COMPILED_STEP_VALUE_FIELDS = [
+  "id",
+  "name",
+  "description",
+  "dryRun",
+  "outputSchema",
+  "skip",
+  "run",
+] as const;
+
+const COMPILED_STEP_GRAPH_FIELDS = [
+  "dependsOn",
+  "optionalDependsOn",
+  "skipAfterFailureOf",
+] as const;
+
+const COMPILED_STEP_SYMBOLS = [STEP_NESTED_PIPELINE, STEP_REMOTE, STEP_OPTIONS_SCHEMA] as const;
+
+function bindToOriginal<T>(original: object, value: T): T {
+  if (typeof value !== "function") return value;
+  // SAFETY: contract methods and dry-run handlers must keep the author's
+  // `this`, including class instances whose implementation uses `#private`.
+  return value.bind(original) as T;
+}
+
+function snapshotContractValue(
+  step: object,
+  field: PropertyKey,
+  enumerable: boolean
+): PropertyDescriptor | undefined {
+  if (!(field in step)) return undefined;
+  return {
+    configurable: true,
+    enumerable,
+    // SAFETY: `field` is an AnyStep contract key; the indexed read is the
+    // public value (or getter result) from the original instance.
+    value: bindToOriginal(step, (step as Record<PropertyKey, unknown>)[field]),
+    writable: true,
+  };
+}
+
 function snapshotCompiledSteps<TOptions extends object>(
   steps: readonly AnyStep<TOptions>[]
 ): Map<AnyStep<TOptions>, AnyStep<TOptions>> {
   const sealedByOriginal = new Map<AnyStep<TOptions>, AnyStep<TOptions>>();
   for (const step of steps) {
-    // SAFETY: placeholders keep the original prototype so inherited contract
-    // members (`run`, `skip`, getters) remain; own descriptors are copied below.
-    sealedByOriginal.set(step, Object.create(Object.getPrototypeOf(step)) as AnyStep<TOptions>);
+    // SAFETY: each placeholder receives materialized contract fields below
+    // before compilePipeline returns, so the object matches AnyStep<TOptions>.
+    sealedByOriginal.set(step, {} as AnyStep<TOptions>);
   }
   for (const step of steps) {
     const sealed = sealedByOriginal.get(step)!;
-    const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(step);
-    for (const field of ["dependsOn", "optionalDependsOn", "skipAfterFailureOf"] as const) {
-      if (!Object.hasOwn(descriptors, field) && !(field in step)) continue;
+    const descriptors: PropertyDescriptorMap = {};
+    for (const field of COMPILED_STEP_VALUE_FIELDS) {
+      const descriptor = snapshotContractValue(step, field, true);
+      if (descriptor) descriptors[field] = descriptor;
+    }
+    for (const symbol of COMPILED_STEP_SYMBOLS) {
+      const descriptor = snapshotContractValue(step, symbol, false);
+      if (descriptor) descriptors[symbol] = descriptor;
+    }
+    for (const field of COMPILED_STEP_GRAPH_FIELDS) {
+      if (!(field in step)) continue;
       descriptors[field] = {
         configurable: true,
         enumerable: true,
