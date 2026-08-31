@@ -374,8 +374,8 @@ export async function openSqlitePipelineRunStore(
 
   function drain(): void {
     if (pending.length === 0) return;
-    database.exec("BEGIN IMMEDIATE");
     try {
+      database.exec("BEGIN IMMEDIATE");
       for (const row of pending) insert.run(...row);
       database.exec("COMMIT");
       pending.length = 0;

@@ -589,6 +589,22 @@ describe("SQLite pipeline run store", () => {
     expect(() => store.close()).toThrow(/injected insert failure/);
   });
 
+  it("surfaces a begin failure from close when another connection holds the lock", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    const locker = new DatabaseSync(filename);
+    locker.exec("BEGIN EXCLUSIVE");
+    try {
+      expect(() => store.close()).toThrow(/busy|locked|database is locked/i);
+    } finally {
+      locker.exec("ROLLBACK");
+      locker.close();
+    }
+  });
+
   it("persists unflushed exports when close drains the buffer", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
     directories.push(directory);
