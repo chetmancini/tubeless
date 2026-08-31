@@ -184,6 +184,8 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("status-mark");
     expect(html).toContain("progress-details");
     expect(html).toContain("step.nestedPipeline");
+    expect(html).toContain("step.remote");
+    expect(html).toContain("Remote step");
     expect(html).toContain("declared steps");
     expect(html).toContain("Showing ");
     expect(html).not.toContain("mode-tabs");

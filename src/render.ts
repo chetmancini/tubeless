@@ -1,4 +1,9 @@
-import type { PipelineError, PipelinePlan, PipelineStepSelectionReason } from "./pipeline.js";
+import type {
+  PipelineError,
+  PipelinePlan,
+  PipelinePlanStep,
+  PipelineStepSelectionReason,
+} from "./pipeline.js";
 import { formatPipelineError } from "./pipeline-diagnostics.js";
 
 export interface PipelineHumanRenderOptions {
@@ -33,6 +38,15 @@ export function renderPipelineError(
 ): string {
   if (options.format === "json") return renderJson(error, options.pretty);
   return formatPipelineError(error);
+}
+
+function describeRemote(step: PipelinePlanStep, planDryRun: boolean): string {
+  if (!step.remote) return "";
+  const target = step.remote.target ? ` (${step.remote.target})` : "";
+  const label = `remote ${step.remote.engine}${target}`;
+  const contactsEngine =
+    planDryRun && step.dryRun === "run" && step.selected && step.skipReason === undefined;
+  return contactsEngine ? ` -> ${label}; dry-run contacts engine` : ` -> ${label}`;
 }
 
 function describeSelectionReason(reason: PipelineStepSelectionReason): string | undefined {
@@ -83,8 +97,9 @@ export function renderPipelinePlan(
     const nested = step.nestedPipeline
       ? ` -> ${step.nestedPipeline.mode === "for-each" ? "fan-out" : "child"} pipeline ${step.nestedPipeline.pipelineId} (${step.nestedPipeline.stepIds.length} declared steps)`
       : "";
+    const remote = describeRemote(step, plan.dryRun);
     lines.push(
-      `  - ${displayName}: ${disposition}${nested}${step.description ? ` - ${step.description}` : ""}`
+      `  - ${displayName}: ${disposition}${nested}${remote}${step.description ? ` - ${step.description}` : ""}`
     );
   }
   for (const error of plan.errors) {

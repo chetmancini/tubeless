@@ -46,6 +46,7 @@ export type {
   PipelineStepProgressDetail,
   PipelineStepProgress,
   PipelineStepContext,
+  RemoteStepAdapter,
   PipelineErrorPhase,
   PipelineErrorKind,
   PipelineErrorCode,

@@ -551,14 +551,16 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
       const progressWidth = progressTotal ? Math.max(0, Math.min(100, step.progress.completed / progressTotal * 100)) : (step.status === "completed" ? 100 : 18);
       const execution = step.attempt ? '<span class="execution-summary" title="' + esc(step.attempt.attemptId) + '"><b>Execution</b> · ' + esc(shortId(step.attempt.attemptId)) + (step.attempt.retries.length ? ' · ' + step.attempt.retries.length + ' retr' + (step.attempt.retries.length === 1 ? 'y' : 'ies') : '') + '</span>' : '';
       const nested = step.nestedPipeline;
+      const remote = step.remote;
       const nestedCount = nested ? (nested.stepCount ?? nested.stepIds.length) : 0;
       const nestedCountLabel = nested && nested.stepIds.length < nestedCount ? nested.stepIds.length + ' of ' + nestedCount + ' declared steps' : nestedCount + ' declared steps';
       const nestedDetail = nested ? '<div class="plan-nested"><strong>' + esc(nested.pipelineId) + '</strong><span>' + nestedCountLabel + (nested.mode === 'for-each' ? ' per runtime item' : '') + '</span>' + nested.stepIds.map((stepId) => '<code>' + esc(stepId) + '</code>').join('') + '</div>' : '';
+      const remoteDetail = remote ? '<div class="plan-nested"><strong>' + esc(remote.engine) + '</strong>' + (remote.target ? '<span>' + esc(remote.target) + '</span>' : '') + '</div>' : '';
       const detailCount = step.progress?.detailCount;
       const truncatedDetails = detailCount && step.progress.details && step.progress.details.length < detailCount ? '<div class="progress-detail-truncated">Showing ' + step.progress.details.length + ' of ' + detailCount + ' items</div>' : '';
       const detailRows = step.progress?.details?.length ? '<div class="progress-details">' + step.progress.details.map((detail) => '<div class="progress-detail ' + esc(detail.status || 'running') + '"><b>' + esc(detail.id) + '</b>' + (detail.label ? '<span>' + esc(detail.label) + '</span>' : '') + '</div>').join('') + truncatedDetails + '</div>' : '';
       const progress = step.progress ? '<div class="progress"><i style="width:' + progressWidth + '%"></i></div><div class="progress-copy">' + esc(step.progress.message || (step.progress.completed + (progressTotal ? ' / ' + progressTotal : '') + ' complete')) + '</div>' + detailRows : '';
-      return '<article class="step ' + esc(step.status) + '">' + stepStatusIcon(step.status) + '<div class="step-head"><strong>' + esc(step.name || step.id) + '</strong>' + (step.name ? '<code>' + esc(step.id) + '</code>' : '') + '<span class="step-duration">' + duration(step.durationMs) + '</span></div>' + (step.description ? '<div class="step-description">' + esc(step.description) + '</div>' : '') + nestedDetail + (execution ? '<div class="execution">' + execution + '</div>' : '') + progress + '</article>';
+      return '<article class="step ' + esc(step.status) + '">' + stepStatusIcon(step.status) + '<div class="step-head"><strong>' + esc(step.name || step.id) + '</strong>' + (step.name ? '<code>' + esc(step.id) + '</code>' : '') + '<span class="step-duration">' + duration(step.durationMs) + '</span></div>' + (step.description ? '<div class="step-description">' + esc(step.description) + '</div>' : '') + nestedDetail + remoteDetail + (execution ? '<div class="execution">' + execution + '</div>' : '') + progress + '</article>';
     }
     function stepStatusIcon(value) {
       const label = value.charAt(0).toUpperCase() + value.slice(1);
@@ -728,9 +730,11 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
         const disposition = !step.selected ? 'Not selected' : step.skipReason === 'dry-run' ? 'Dry-run skip' : step.skipReason ? 'Skipped' : 'Will run';
         const detail = step.description || (step.dependencies.length ? 'After ' + step.dependencies.join(', ') : 'No required dependencies');
         const nested = step.nestedPipeline;
-        const kind = nested ? (nested.mode === 'for-each' ? 'Pipeline fan-out' : 'Nested pipeline') : 'Step';
+        const remote = step.remote;
+        const kind = remote ? 'Remote step' : nested ? (nested.mode === 'for-each' ? 'Pipeline fan-out' : 'Nested pipeline') : 'Step';
         const nestedDetail = nested ? '<div class="plan-nested"><strong>' + esc(nested.pipelineId) + '</strong><span>' + nested.stepIds.length + ' declared steps' + (nested.mode === 'for-each' ? ' per runtime item' : '') + '</span>' + nested.stepIds.map((stepId) => '<code>' + esc(stepId) + '</code>').join('') + '</div>' : '';
-        return '<div class="plan-step"><div class="plan-step-title"><strong>' + esc(step.name || step.id) + '</strong><span class="plan-kind' + (nested ? ' pipeline' : '') + '">' + kind + '</span></div><small>' + esc(detail) + '</small><span class="plan-disposition' + (disposition === 'Will run' ? '' : ' skipped') + '">' + disposition + '</span>' + nestedDetail + '</div>';
+        const remoteDetail = remote ? '<div class="plan-nested"><strong>' + esc(remote.engine) + '</strong>' + (remote.target ? '<span>' + esc(remote.target) + '</span>' : '') + '</div>' : '';
+        return '<div class="plan-step"><div class="plan-step-title"><strong>' + esc(step.name || step.id) + '</strong><span class="plan-kind' + (nested ? ' pipeline' : '') + '">' + kind + '</span></div><small>' + esc(detail) + '</small><span class="plan-disposition' + (disposition === 'Will run' ? '' : ' skipped') + '">' + disposition + '</span>' + nestedDetail + remoteDetail + '</div>';
       }).join('');
       $('#planResult').innerHTML = errors + '<div class="plan-summary"><strong>' + esc(plan.pipelineId) + '</strong><span>' + selected + ' of ' + plan.steps.length + ' steps will run' + (plan.dryRun ? ' · dry run' : '') + '</span></div><div class="plan-steps">' + steps + '</div>';
       $('#planResult').classList.remove('hidden');

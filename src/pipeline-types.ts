@@ -117,6 +117,14 @@ export interface PipelineStepContext<
   reportProgress(progress: PipelineStepProgress): void;
 }
 
+export interface RemoteStepAdapter<TOptions extends object, TPayload, TResult> {
+  /** Presentation only. The kernel never switches on this. */
+  readonly engine: string;
+  /** Function name, workflow type, URL, queue. Presentation only. */
+  readonly target?: string;
+  invoke(payload: TPayload, context: PipelineStepContext<TOptions>): Promise<TResult>;
+}
+
 export type PipelineErrorPhase = "definition" | "execution" | "finalization" | "planning";
 
 export type PipelineErrorKind =
@@ -397,6 +405,11 @@ export interface PipelinePlanStep {
     pipelineId: string;
     /** All declared child step ids; runtime selection may execute only a subset. */
     stepIds: readonly string[];
+  };
+  /** Static remote adapter metadata when this opaque step calls an external engine. */
+  remote?: {
+    engine: string;
+    target?: string;
   };
   optionalDependencies: string[];
   /** True when the step's runtime policy may elect not to run it. */

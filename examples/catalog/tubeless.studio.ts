@@ -11,6 +11,7 @@ export default definePipelineStudio({
   cwd: ".",
   commands: [
     { file: "./scripts/import.ts", export: "ImportCommand", name: "Import rows" },
+    { file: "./scripts/enrich.ts", export: "EnrichCommand", name: "Enrich rows" },
     { file: "./scripts/publish.ts", export: "PublishCommand", name: "Publish artifact" },
   ],
 });

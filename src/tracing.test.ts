@@ -228,6 +228,49 @@ describe("pipeline tracing", () => {
     });
   });
 
+  it("records remote metadata on step.planned without flattening descendant runs", async () => {
+    const schema = {
+      "~standard": {
+        validate: () => ({ value: { ok: true as const } }),
+        vendor: "test",
+        version: 1 as const,
+      },
+    };
+    const step = createSteps();
+    const enrich = step.fromRemote("enrich", {
+      adapter: { engine: "test", target: "enrich-v2", invoke: async () => ({ ok: true as const }) },
+      mapInput: () => ({}),
+      outputSchema: schema,
+    });
+    const pipeline = definePipeline({
+      id: "trace-remote",
+      steps: [enrich],
+      finalize: () => undefined,
+    });
+    const events: PipelineTraceEvent[] = [];
+
+    await pipeline.run(
+      {},
+      {
+        ...defaultPipelineContext(),
+        runId: "remote-run",
+        tracing: {
+          exporter: { export: (event) => events.push(event) },
+        },
+      }
+    );
+
+    expect(events.filter((event) => event.name === "pipeline.started")).toHaveLength(1);
+    expect(
+      events.find((event) => event.name === "step.planned" && event.stepId === "enrich")
+    ).toMatchObject({
+      attributes: {
+        remote: JSON.stringify({ engine: "test", target: "enrich-v2" }),
+      },
+      stepId: "enrich",
+    });
+  });
+
   it("adds stable mapped item keys to descendant runs", async () => {
     interface ChildOptions {
       value: string;

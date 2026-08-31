@@ -63,6 +63,7 @@
         "PipelineStepStartEvent",
         "PipelineStepStatus",
         "PipelineValidationIssue",
+        "RemoteStepAdapter",
         "requireOutputs",
         "RUN_MODEL_VERSION",
         "StandardSchemaV1",
@@ -75,7 +76,7 @@
         "toMappedChildStepProgress",
         "ToMappedChildStepProgressOptions"
       ],
-      "sha256": "a8dd788d1fe880bdae3be51fc0de40665aac092a5369920dc8ae7eca28b8bfbb",
+      "sha256": "a4dc427b04ce99bfc1ad70956466d1a3a4f98105467ae51d662dacae613fefe3",
       "specifier": "tubeless"
     },
     {
@@ -210,9 +211,10 @@
         "StoredPipelineLog",
         "StoredPipelineRun",
         "StoredPipelineRunStatus",
-        "StoredPipelineStep"
+        "StoredPipelineStep",
+        "StoredRemote"
       ],
-      "sha256": "be37dc529dc7cfd1f09c196eacb4664194a82bff62846bae94d318ab528d8d8a",
+      "sha256": "0ec05771638efbea6f0f578bf9363f3148a80c40ee31abcbf25f5514c4f3fe1e",
       "specifier": "tubeless/run-store"
     },
     {

@@ -25,6 +25,7 @@
 | Document                                                                                         | Use it for                                           |
 | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
 | [Child-pipeline composition](./child-pipeline-composition.md)                                    | Opaque child and fan-out semantics                   |
+| [Remote-step composition](./remote-step-composition.md)                                          | Opaque remote steps and mixed-engine placement       |
 | [Generated API inventory](./api-reference.md)                                                    | Entrypoints, exported symbols, and surface hashes    |
 | [Machine-readable API report](./api-report.json)                                                 | Automated public-surface review                      |
 | [Agent evaluations](https://github.com/chetmancini/tubeless/blob/main/docs/agent-evaluations.md) | Forward-testing the guidance against realistic tasks |

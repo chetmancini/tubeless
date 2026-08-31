@@ -415,6 +415,14 @@ hooks; their activity is summarized as progress on the parent step. See
 [child-pipeline composition](./child-pipeline-composition.md) for propagation and
 selection boundaries.
 
+## Remote steps
+
+Use `step.fromRemote` when one parent step's work lives on another engine.
+The parent plan stays local and opaque; `remote.engine` and optional
+`remote.target` are presentation only. Dry-run remains a side-effect gate:
+omitting `dryRun` still calls the adapter. See
+[remote-step composition](./remote-step-composition.md).
+
 ## Mermaid diagrams
 
 Call `pipeline.toMermaid()` to generate a static flowchart without run options

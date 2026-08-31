@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createSteps, definePipeline, type PipelineLogger, type PipelineRun } from "tubeless";
+import {
+  createSteps,
+  definePipeline,
+  type PipelineLogger,
+  type PipelineRun,
+  type RemoteStepAdapter,
+} from "tubeless";
 import { createPipelineReporter, createRunReporter } from "tubeless/reporter";
 import { chunk, runConcurrent } from "tubeless/batch";
 import { parseMultiSelectInput, TUBELESS_WORKBENCH_EXIT_CODE } from "tubeless/cli";
@@ -92,6 +98,35 @@ const ForEachParentPipeline = definePipeline({
   finalize: (outputs) => outputs.children,
 });
 
+const enrichSchema = {
+  "~standard": {
+    validate: (value: unknown) =>
+      value && typeof value === "object" && "ok" in value && (value as { ok: unknown }).ok === true
+        ? { value: value as { ok: true } }
+        : { issues: [{ message: "ok" }] },
+    vendor: "test",
+    version: 1 as const,
+  },
+};
+
+const remoteStep = createSteps<ImportOptions>();
+const remoteAdapter: RemoteStepAdapter<ImportOptions, { lines: readonly string[] }, { ok: true }> =
+  {
+    engine: "test",
+    target: "enrich-v2",
+    invoke: async (payload) => ({ ok: payload.lines.length >= 0 }),
+  };
+const remoteEnrich = remoteStep.fromRemote("remote-enrich", {
+  adapter: remoteAdapter,
+  mapInput: (_inputs, context) => ({ lines: context.options.lines, dryRun: context.dryRun }),
+  outputSchema: enrichSchema,
+});
+const RemotePipeline = definePipeline({
+  id: "remote-enrich",
+  steps: [remoteEnrich],
+  finalize: (outputs) => outputs["remote-enrich"],
+});
+
 function capturingLogger(): PipelineLogger & {
   messages: { error: string[]; log: string[]; warn: string[] };
 } {
@@ -124,6 +159,15 @@ describe("public API example", () => {
     const value = await ParentPipeline.runOrThrow({ lines: [" Alpha ", "Beta "] });
 
     expect(value).toEqual(["Alpha", "Beta"]);
+  });
+
+  it("composes a remote step through the package entrypoint", async () => {
+    const value = await RemotePipeline.runOrThrow({ lines: ["alpha"] });
+    expect(value).toEqual({ ok: true });
+    expect(RemotePipeline.plan({}).steps[0]?.remote).toEqual({
+      engine: "test",
+      target: "enrich-v2",
+    });
   });
 
   it("fans out with forEachPipeline through the package entrypoint", async () => {

@@ -92,6 +92,17 @@ function serializeNestedPipeline(nested: PipelinePlanStep["nestedPipeline"]): st
   });
 }
 
+function serializeRemote(remote: PipelinePlanStep["remote"]): string | undefined {
+  if (!remote) return undefined;
+  if (remote.target) {
+    return JSON.stringify({
+      engine: boundTraceString(remote.engine),
+      target: boundTraceString(remote.target),
+    });
+  }
+  return JSON.stringify({ engine: boundTraceString(remote.engine) });
+}
+
 function toTraceError(error: PipelineError | undefined): PipelineTraceError | undefined {
   if (!error) return undefined;
   const traceError: PipelineTraceError = {
@@ -213,6 +224,7 @@ export function createPipelineTraceEmitter(
             dry_run: event.step.dryRun,
             name: event.step.name,
             nested_pipeline: serializeNestedPipeline(event.step.nestedPipeline),
+            remote: serializeRemote(event.step.remote),
             optional_dependencies: JSON.stringify(event.step.optionalDependencies),
             runtime_skip_possible: event.step.runtimeSkipPossible,
             selected: event.step.selected,
