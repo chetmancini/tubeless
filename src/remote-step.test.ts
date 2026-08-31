@@ -72,7 +72,7 @@ describe("fromRemote", () => {
       finalize: () => undefined,
     });
 
-    const result = await pipeline.run({ dryRun: true });
+    const result = await pipeline.run({}, { dryRun: true });
     expect(result.status).toBe("completed");
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(invoke.mock.calls[0]?.[0]).toEqual({ dryRun: true });
@@ -93,7 +93,7 @@ describe("fromRemote", () => {
       finalize: () => undefined,
     });
 
-    const result = await pipeline.run({ dryRun: true });
+    const result = await pipeline.run({}, { dryRun: true });
     expect(invoke).not.toHaveBeenCalled();
     expect(result.steps[0]).toMatchObject({ status: "skipped", reason: "dry-run" });
     expect(pipeline.plan({ dryRun: true }).steps[0]).toMatchObject({
@@ -117,7 +117,7 @@ describe("fromRemote", () => {
       finalize: () => undefined,
     });
 
-    const result = await pipeline.run({ dryRun: true });
+    const result = await pipeline.run({}, { dryRun: true });
     expect(invoke).not.toHaveBeenCalled();
     expect(result.status).toBe("completed");
     expect(pipeline.plan({ dryRun: true }).steps[0]?.dryRun).toBe("custom");
@@ -197,16 +197,13 @@ describe("fromRemote", () => {
       finalize: () => undefined,
     });
 
-    await pipeline.run(
-      {},
-      {
-        ...defaultPipelineContext(),
-        log,
-        tracing: {
-          exporter: { export: (event) => events.push(event), flush: async () => undefined },
-        },
-      }
-    );
+    await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log,
+      tracing: {
+        exporter: { export: (event) => events.push(event), flush: async () => undefined },
+      },
+    });
 
     expect(log.log).toHaveBeenCalledWith("remote line", 12);
     expect(events.some((event) => event.name === "pipeline.log" && event.stepId === "enrich")).toBe(
@@ -239,7 +236,7 @@ describe("fromRemote", () => {
       finalize: () => undefined,
     });
 
-    const pending = pipeline.run({}, { signal: controller.signal });
+    const pending = pipeline.run({}, undefined, { signal: controller.signal });
     controller.abort();
     const result = await pending;
     expect(result.errors[0]).toMatchObject({

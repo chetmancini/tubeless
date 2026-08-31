@@ -25,11 +25,8 @@ export const TracingExamplePipeline = definePipeline({
 });
 
 export async function runTracingExample(rows: readonly string[]): Promise<readonly string[]> {
-  return TracingExamplePipeline.runOrThrow(
-    { rows },
-    {
-      ...defaultPipelineContext(),
-      tracing: { exporter: createJsonTraceExporter({ log: console }) },
-    }
-  );
+  return TracingExamplePipeline.runOrThrow({ rows }, undefined, {
+    ...defaultPipelineContext(),
+    tracing: { exporter: createJsonTraceExporter({ log: console }) },
+  });
 }

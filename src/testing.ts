@@ -7,7 +7,6 @@ import type {
   PipelinePlan,
   PipelineRun,
   PipelineRunControls,
-  PipelineRunOptions,
   PipelineStepProgress,
   PipelineStepStatus,
 } from "./pipeline.js";
@@ -60,11 +59,13 @@ export interface PipelineTestRuntime {
   ): PipelinePlan;
   run<TOptions extends object, TResult, TStepId extends string, TTargetId extends string>(
     pipeline: Pipeline<TOptions, TResult, TStepId, TTargetId>,
-    options: PipelineRunOptions<TOptions, TStepId, TTargetId>
+    options: TOptions,
+    controls?: PipelineRunControls<TStepId, TTargetId>
   ): Promise<PipelineRun<TResult>>;
   runOrThrow<TOptions extends object, TResult, TStepId extends string, TTargetId extends string>(
     pipeline: Pipeline<TOptions, TResult, TStepId, TTargetId>,
-    options: PipelineRunOptions<TOptions, TStepId, TTargetId>
+    options: TOptions,
+    controls?: PipelineRunControls<TStepId, TTargetId>
   ): Promise<TResult>;
 }
 
@@ -152,7 +153,8 @@ export function createPipelineTestRuntime(
       else abortController.abort(reason);
     },
     plan: (pipeline, controls) => pipeline.plan(controls),
-    run: (pipeline, runOptions) => pipeline.run(runOptions, context),
-    runOrThrow: (pipeline, runOptions) => pipeline.runOrThrow(runOptions, context),
+    run: (pipeline, runOptions, controls) => pipeline.run(runOptions, controls, context),
+    runOrThrow: (pipeline, runOptions, controls) =>
+      pipeline.runOrThrow(runOptions, controls, context),
   };
 }

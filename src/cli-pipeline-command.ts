@@ -17,7 +17,6 @@ import {
   type PipelineMermaidOptions,
   type PipelinePlan,
   type PipelineRunControls,
-  type PipelineRunOptions,
 } from "./pipeline.js";
 import { createPipelineReporter, type PipelineReporterConfig } from "./reporter-entry.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE } from "./workbench-shared.js";
@@ -79,7 +78,7 @@ export type PipelineCommandHookConfig<TResult, TSchema extends CliParamsSchema> 
 type PipelineCommandMapOptions<TOptions extends object, TSchema extends CliParamsSchema> = (
   values: PipelineCliValues<TSchema>,
   context: CliContext
-) => PipelineRunOptions<TOptions> | Promise<PipelineRunOptions<TOptions>>;
+) => TOptions | Promise<TOptions>;
 
 type DefaultPipelineCommandOptions<TSchema extends CliParamsSchema> = Omit<
   PipelineCliValues<TSchema>,
@@ -298,10 +297,7 @@ export function definePipelineCommand<
           ...normalizePipelineHookSets(configuredHooks),
         ];
 
-        // SAFETY: `mapped` is `TOptions` and `controls` is `PipelineRunControls`, so the
-        // merged object satisfies `PipelineRunOptions<TOptions>`.
-        const options = { ...mapped, ...controls } as PipelineRunOptions<TOptions>;
-        result = await pipeline.runOrThrow(options, {
+        result = await pipeline.runOrThrow(mapped, controls, {
           ...cliContext.pipelineContext,
           cwd: runtimeContext.cwd,
           log: runtimeContext.log,

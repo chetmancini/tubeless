@@ -44,6 +44,45 @@ function exportedSymbols(declaration) {
   return [...symbols].sort((left, right) => left.localeCompare(right));
 }
 
+export function resolveImportedDeclaration(fromPath, specifier) {
+  if (!specifier.startsWith(".")) return undefined;
+  const base = resolve(dirname(fromPath), specifier);
+  const candidates = base.endsWith(".d.ts")
+    ? [base]
+    : base.endsWith(".js")
+      ? [`${base.slice(0, -3)}.d.ts`]
+      : [`${base}.d.ts`, resolve(base, "index.d.ts")];
+  return candidates.find((path) => existsSync(path));
+}
+
+export function collectDeclarationSources(entryPath) {
+  const sources = new Map();
+  const pending = [resolve(entryPath)];
+  while (pending.length > 0) {
+    const path = pending.pop();
+    if (sources.has(path)) continue;
+    const source = readFileSync(path, "utf8");
+    sources.set(path, source);
+    for (const match of source.matchAll(/(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/g)) {
+      const next = resolveImportedDeclaration(path, match[1]);
+      if (next) pending.push(next);
+    }
+  }
+  return sources;
+}
+
+export function hashDeclarationSurface(entryPath, root = packageRoot) {
+  const sources = collectDeclarationSources(entryPath);
+  const hash = createHash("sha256");
+  for (const path of [...sources.keys()].sort((left, right) => left.localeCompare(right))) {
+    hash.update(relative(root, path));
+    hash.update("\0");
+    hash.update(sources.get(path));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
 async function generatedFiles() {
   const modules = Object.entries(packageJson.exports).map(([subpath, conditions]) => {
     const declaration = conditions.types;
@@ -58,7 +97,7 @@ async function generatedFiles() {
     return {
       declaration,
       exports: exportedSymbols(source),
-      sha256: createHash("sha256").update(source).digest("hex"),
+      sha256: hashDeclarationSurface(declarationPath),
       specifier: subpath === "." ? packageJson.name : `${packageJson.name}/${subpath.slice(2)}`,
     };
   });
@@ -105,21 +144,26 @@ async function generatedFiles() {
   ]);
 }
 
-const files = await generatedFiles();
-const stale = [];
-for (const [path, contents] of files) {
-  const actual = existsSync(path) ? readFileSync(path, "utf8") : undefined;
-  if (actual === contents) continue;
-  if (check) {
-    stale.push(relative(packageRoot, path));
-  } else {
-    writeFileSync(path, contents);
-    process.stdout.write(`Generated ${relative(packageRoot, path)}\n`);
-  }
-}
+const isMain =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
-if (stale.length > 0) {
-  throw new Error(
-    `Generated tubeless API files are stale: ${stale.join(", ")}. Run: bun run api:generate`
-  );
+if (isMain) {
+  const files = await generatedFiles();
+  const stale = [];
+  for (const [path, contents] of files) {
+    const actual = existsSync(path) ? readFileSync(path, "utf8") : undefined;
+    if (actual === contents) continue;
+    if (check) {
+      stale.push(relative(packageRoot, path));
+    } else {
+      writeFileSync(path, contents);
+      process.stdout.write(`Generated ${relative(packageRoot, path)}\n`);
+    }
+  }
+
+  if (stale.length > 0) {
+    throw new Error(
+      `Generated tubeless API files are stale: ${stale.join(", ")}. Run: bun run api:generate`
+    );
+  }
 }

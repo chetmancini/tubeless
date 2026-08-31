@@ -47,13 +47,10 @@ export async function runWithLocalHistory(
 ): Promise<readonly string[]> {
   const store = await openSqlitePipelineRunStore(filename);
   try {
-    return await LocallyObservedPipeline.runOrThrow(
-      { rows },
-      {
-        ...defaultPipelineContext(),
-        tracing: { exporter: store },
-      }
-    );
+    return await LocallyObservedPipeline.runOrThrow({ rows }, undefined, {
+      ...defaultPipelineContext(),
+      tracing: { exporter: store },
+    });
   } finally {
     await store.close();
   }

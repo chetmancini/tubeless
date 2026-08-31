@@ -18,7 +18,7 @@
       "category": "mustDemonstrate",
       "expectation": "continueOnError-aware design",
       "status": "pass",
-      "evidence": "check-diagnostics is independent of validation, and runBestEffortPublish calls run({ continueOnError: true })."
+      "evidence": "check-diagnostics is independent of validation, and runBestEffortPublish calls run({ source }, { continueOnError: true })."
     },
     {
       "category": "mustAvoid",

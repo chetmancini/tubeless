@@ -3,7 +3,6 @@ import {
   executePlannedRun,
   PipelineExecutionError,
   resolvePipelineRuntime,
-  splitPipelineRunOptions,
 } from "./pipeline-execute.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import {
@@ -114,6 +113,18 @@ type CheckedStepTuple<TSteps extends readonly AnyStep[]> =
           readonly __duplicateStepIds: DuplicateStepIds<TSteps>;
         };
 
+function snapshotRunControls<TStepId extends string, TTargetId extends string>(
+  controls: PipelineRunControls<TStepId, TTargetId>
+): PipelineRunControls<TStepId, TTargetId> {
+  const { continueOnError, dryRun, stepIds, targets } = controls;
+  const snapshot: PipelineRunControls<TStepId, TTargetId> = {};
+  if (continueOnError !== undefined) snapshot.continueOnError = continueOnError;
+  if (dryRun !== undefined) snapshot.dryRun = dryRun;
+  if (stepIds !== undefined) snapshot.stepIds = [...stepIds];
+  if (targets !== undefined) snapshot.targets = [...targets];
+  return snapshot;
+}
+
 export function definePipeline<
   const TSteps extends readonly AnyStep[],
   TResult = unknown,
@@ -161,26 +172,28 @@ export function definePipeline<
   }
 
   async function run(
-    options: PipelineRunOptions<TInputOptions, TStepId, TTargetId>,
+    options: TInputOptions,
+    controls: PipelineRunControls<TStepId, TTargetId> = {},
     context: Partial<PipelineContext> = defaultPipelineContext()
   ): Promise<PipelineRun<TPipelineResult>> {
-    const { controls, domainOptions } = splitPipelineRunOptions(options);
+    const runControls = snapshotRunControls(controls);
     return executePlannedRun({
-      controls,
+      controls: runControls,
       definition,
-      domainOptions,
+      domainOptions: options,
       optionsSchema,
-      plan: plan(controls),
+      plan: plan(runControls),
       runtime: resolvePipelineRuntime(context),
       targetIds,
     });
   }
 
   async function runOrThrow(
-    options: PipelineRunOptions<TInputOptions, TStepId, TTargetId>,
+    options: TInputOptions,
+    controls: PipelineRunControls<TStepId, TTargetId> = {},
     context: Partial<PipelineContext> = defaultPipelineContext()
   ): Promise<TPipelineResult> {
-    const result = await run(options, context);
+    const result = await run(options, controls, context);
     if (result.status !== "completed") {
       throw new PipelineExecutionError(result);
     }

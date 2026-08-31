@@ -96,17 +96,79 @@ function duplicateValues(values: readonly string[]): string[] {
   return [...duplicates];
 }
 
-function childRunOptions(options: PipelineRunOptions, dryRun: boolean): PipelineRunOptions {
-  return { ...options, dryRun };
+const CHILD_RUN_CONTROL_KEYS = ["continueOnError", "dryRun", "stepIds", "targets"] as const;
+
+function isChildRunControlKey(
+  property: PropertyKey
+): property is (typeof CHILD_RUN_CONTROL_KEYS)[number] {
+  return (
+    typeof property === "string" &&
+    // SAFETY: `includes` membership over the literal tuple guarantees the cast
+    // target is exactly one of the declared run-control keys.
+    CHILD_RUN_CONTROL_KEYS.includes(property as (typeof CHILD_RUN_CONTROL_KEYS)[number])
+  );
 }
 
-function childRunControls(options: PipelineRunOptions): PipelineRunControls {
-  return {
-    continueOnError: options.continueOnError,
-    dryRun: options.dryRun,
-    stepIds: options.stepIds,
-    targets: options.targets,
-  };
+interface ChildRunBags {
+  controls: PipelineRunControls;
+  domainOptions: PipelineRunOptions;
+}
+
+function splitChildRunOptions(options: PipelineRunOptions): ChildRunBags {
+  const controls: PipelineRunControls = {};
+  let hasControls = false;
+  for (const key of CHILD_RUN_CONTROL_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(options, key)) continue;
+    hasControls = true;
+    Object.assign(controls, { [key]: options[key] });
+  }
+  if (!hasControls) {
+    return { controls, domainOptions: options };
+  }
+  return { controls, domainOptions: createChildDomainOptionsView(options) };
+}
+
+function createChildDomainOptionsView(options: PipelineRunOptions): PipelineRunOptions {
+  // SAFETY: proxy an empty facade so hiding non-configurable control keys on a
+  // frozen mapOptions bag does not violate proxy invariants. Reads still use
+  // `options` as the receiver so accessors and methods keep their original `this`.
+  return new Proxy({} as PipelineRunOptions, {
+    get(_target, property) {
+      if (isChildRunControlKey(property)) return undefined;
+      const value = readChildOptionProperty(options, property);
+      return value instanceof Function ? value.bind(options) : value;
+    },
+    has(_target, property) {
+      return !isChildRunControlKey(property) && property in options;
+    },
+    ownKeys() {
+      return Reflect.ownKeys(options).filter((property) => !isChildRunControlKey(property));
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      if (isChildRunControlKey(property)) return undefined;
+      const descriptor = Reflect.getOwnPropertyDescriptor(options, property);
+      if (descriptor === undefined) return undefined;
+      return { ...descriptor, configurable: true };
+    },
+    getPrototypeOf() {
+      return Object.getPrototypeOf(options);
+    },
+    set(_target, property, value) {
+      if (isChildRunControlKey(property)) return true;
+      return Reflect.set(options, property, value, options);
+    },
+  });
+}
+
+function readChildOptionProperty(options: PipelineRunOptions, property: PropertyKey): unknown {
+  // SAFETY: child mapOptions is an untyped bag; this index reads the requested
+  // key on that original object so accessors keep it as `this`.
+  return options[property as keyof PipelineRunOptions];
+}
+
+function childRunBags(options: PipelineRunOptions, dryRun: boolean): ChildRunBags {
+  const { controls, domainOptions } = splitChildRunOptions(options);
+  return { controls: { ...controls, dryRun }, domainOptions };
 }
 
 function isConcurrencyFunction<TOptions extends object>(
@@ -120,7 +182,7 @@ function isConcurrencyFunction<TOptions extends object>(
 
 function failedPlanRun(
   pipeline: ChildPipeline,
-  options: PipelineRunOptions,
+  controls: PipelineRunControls,
   context: PipelineContext,
   errors: readonly PipelineError[]
 ): PipelineRun<unknown> {
@@ -128,7 +190,7 @@ function failedPlanRun(
   const startedAtMs = now();
   const result: PipelineRun<unknown> = {
     pipelineId: pipeline.id,
-    dryRun: options.dryRun === true,
+    dryRun: controls.dryRun === true,
     errors: [...errors],
     finalized: false,
     finishedAtMs: now(),
@@ -156,23 +218,24 @@ function firstChildFailure(result: PipelineRun<unknown>) {
 
 async function runChildPipeline(
   pipeline: ChildPipeline,
-  options: PipelineRunOptions,
+  domainOptions: PipelineRunOptions,
+  controls: PipelineRunControls,
   context: PipelineContext,
   hooks: PipelineHooks,
   dependencies: ChildExecutionDependencies<object>,
   messagePrefix = ""
 ): Promise<PipelineRun<unknown>> {
-  const plan = pipeline.plan(childRunControls(options));
+  const plan = pipeline.plan(controls);
   if (!plan.ok) {
     const firstError = plan.errors[0];
-    const result = failedPlanRun(pipeline, options, context, plan.errors);
+    const result = failedPlanRun(pipeline, controls, context, plan.errors);
     throw dependencies.createExecutionError(
       result,
       `${messagePrefix}could not start: ${firstError?.message ?? "invalid plan"}`
     );
   }
 
-  const result = await pipeline.run(options, { ...context, hooks });
+  const result = await pipeline.run(domainOptions, controls, { ...context, hooks });
   if (result.status !== "completed") {
     const { failureLocation, message } = firstChildFailure(result);
     throw dependencies.createExecutionError(
@@ -188,7 +251,10 @@ export function createSingleChildRunner<TParentOptions extends object>(
   dependencies: ChildExecutionDependencies<TParentOptions>
 ): (inputs: ChildInputs, context: PipelineStepContext<TParentOptions>) => Promise<unknown> {
   return async (inputs, context) => {
-    const childOptions = childRunOptions(config.mapOptions(inputs, context), context.dryRun);
+    const { controls, domainOptions } = childRunBags(
+      config.mapOptions(inputs, context),
+      context.dryRun
+    );
     const baseChildContext: PipelineContext = {
       cwd: context.cwd,
       log: context.log,
@@ -199,7 +265,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
       tracing: childTracingOptions(context),
     };
     // Preview plan only for progress totals; invalid plans throw from runChildPipeline.
-    const childPlan = config.pipeline.plan(childRunControls(childOptions));
+    const childPlan = config.pipeline.plan(controls);
     const selectedStepCount = childPlan.ok
       ? childPlan.steps.filter((step) => step.selected).length
       : 0;
@@ -225,7 +291,8 @@ export function createSingleChildRunner<TParentOptions extends object>(
     };
     const childResult = await runChildPipeline(
       config.pipeline,
-      childOptions,
+      domainOptions,
+      controls,
       baseChildContext,
       childHooks,
       dependencies,
@@ -314,12 +381,12 @@ export function createMappedChildRunner<TParentOptions extends object>(
         publishProgress();
         try {
           throwIfAborted(context.signal, `Mapped child pipeline ${config.pipeline.id}`);
-          const childOptions = childRunOptions(
+          const { controls, domainOptions } = childRunBags(
             config.mapOptions(item, itemIndex, inputs, context),
             context.dryRun
           );
           // Preview plan for live fan-out progress; invalid plans throw from runChildPipeline.
-          const childPlan = config.pipeline.plan(childRunControls(childOptions));
+          const childPlan = config.pipeline.plan(controls);
           if (childPlan.ok) {
             const plannedSteps = childPlan.steps.filter((step) => step.selected).length;
             plannedChildSteps += plannedSteps;
@@ -355,7 +422,8 @@ export function createMappedChildRunner<TParentOptions extends object>(
           };
           const childResult = await runChildPipeline(
             config.pipeline,
-            childOptions,
+            domainOptions,
+            controls,
             {
               cwd: context.cwd,
               log: context.log,

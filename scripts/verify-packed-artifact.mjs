@@ -195,11 +195,13 @@ const runners = {
     defined(await mod.runPelotonExample(), "peloton.ts");
   },
   "resumable-enrichment.ts": async (mod) => {
-    const result = await mod.EnrichmentPipeline.run({
-      checkpointPath: "enrichment-checkpoint.json",
-      dryRun: true,
-      items: ["a"],
-    });
+    const result = await mod.EnrichmentPipeline.run(
+      {
+        checkpointPath: "enrichment-checkpoint.json",
+        items: ["a"],
+      },
+      { dryRun: true }
+    );
     if (result.status !== "completed") fail("resumable-enrichment.ts", "status " + result.status);
     if (existsSync(checkpointPath)) fail("resumable-enrichment.ts", "dry-run created a checkpoint");
   },

@@ -52,5 +52,5 @@ export const PublishPipeline = definePipeline({
 });
 
 export async function runPublishDryRunExample() {
-  return PublishPipeline.runOrThrow({ source: "release notes", dryRun: true });
+  return PublishPipeline.runOrThrow({ source: "release notes" }, { dryRun: true });
 }

@@ -74,16 +74,13 @@ describe("definePipeline", () => {
       finalize: requireOutputs([load], ({ load }) => load),
     });
 
-    const result = await pipeline.run(
-      { source: "rows.json" },
-      {
-        cwd: "/tmp",
-        log,
-        now: () => timestampMs++,
-        parentRunId: "run-parent",
-        runId: "run-public",
-      }
-    );
+    const result = await pipeline.run({ source: "rows.json" }, undefined, {
+      cwd: "/tmp",
+      log,
+      now: () => timestampMs++,
+      parentRunId: "run-parent",
+      runId: "run-public",
+    });
 
     expect(result).toMatchObject({
       parentRunId: "run-parent",
@@ -220,7 +217,7 @@ describe("definePipeline", () => {
     });
 
     const input = new InputOptions("4");
-    const value = await pipeline.runOrThrow(Object.assign(input, { dryRun: true }));
+    const value = await pipeline.runOrThrow(input, { dryRun: true });
 
     expectTypeOf(value).toEqualTypeOf<string>();
     expect(value).toBe("total:10");
@@ -240,34 +237,12 @@ describe("definePipeline", () => {
       finalize: requireOutputs([read], ({ read }) => read),
     });
 
-    await expect(pipeline.runOrThrow({ dryRun: true })).resolves.toEqual({
+    await expect(pipeline.runOrThrow({}, { dryRun: true })).resolves.toEqual({
       count: 3,
       dryRun: true,
     });
     expect(reusable).not.toHaveProperty("dryRun");
     await expect(pipeline.runOrThrow({})).resolves.toEqual({ count: 3, dryRun: false });
-  });
-
-  it("keeps flat run controls out of unvalidated step options", async () => {
-    const step = createSteps<{ label: string }>();
-    const read = step("read", {
-      run: (_inputs, context) => {
-        expect(context.options).toEqual({ label: "organic" });
-        expect(context.options).not.toHaveProperty("dryRun");
-        expect("dryRun" in context.options).toBe(false);
-        return { dryRun: context.dryRun, label: context.options.label };
-      },
-    });
-    const pipeline = definePipeline({
-      id: "flat-run-controls",
-      steps: [read],
-      finalize: requireOutputs([read], ({ read }) => read),
-    });
-
-    await expect(pipeline.runOrThrow({ label: "organic", dryRun: true })).resolves.toEqual({
-      dryRun: true,
-      label: "organic",
-    });
   });
 
   it("applies controls independently when an options schema returns its input", async () => {
@@ -289,7 +264,7 @@ describe("definePipeline", () => {
       finalize: (outputs) => outputs.observe,
     });
 
-    const result = await pipeline.run({ label: "identity", continueOnError: true });
+    const result = await pipeline.run({ label: "identity" }, { continueOnError: true });
 
     expect(result.status).not.toBe("completed");
     expect(result.finalized).toBe(true);
@@ -325,7 +300,53 @@ describe("definePipeline", () => {
       finalize: requireOutputs([read], ({ read }) => read),
     });
 
-    await expect(pipeline.runOrThrow({ dryRun: true })).resolves.toBe(7);
+    await expect(pipeline.runOrThrow({}, { dryRun: true })).resolves.toBe(7);
+  });
+
+  it("does not observe continueOnError mutations after run starts", async () => {
+    const controls = { continueOnError: true };
+    const step = createSteps();
+    const fail = step("fail", {
+      run: async () => {
+        controls.continueOnError = false;
+        throw new Error("boom");
+      },
+    });
+    const later = step("later", { run: () => "ok" });
+    const pipeline = definePipeline({
+      id: "snapshot-controls",
+      steps: [fail, later],
+      finalize: (outputs) => outputs.later,
+    });
+
+    const result = await pipeline.run({}, controls);
+
+    expect(result.status).not.toBe("completed");
+    expect(result.finalized).toBe(true);
+    expect(result.value).toBe("ok");
+    expect(result.steps.map(({ id, status }) => [id, status])).toEqual([
+      ["fail", "failed"],
+      ["later", "completed"],
+    ]);
+  });
+
+  it("reads dryRun from prototype getters on the controls object", async () => {
+    class DryRunControls {
+      get dryRun(): boolean {
+        return true;
+      }
+    }
+    const sideEffect = vi.fn();
+    const step = createSteps();
+    const write = step("write", { dryRun: "skip", run: sideEffect });
+    const pipeline = definePipeline({
+      id: "class-dry-run-controls",
+      steps: [write],
+      finalize: () => "ok",
+    });
+
+    await expect(pipeline.runOrThrow({}, new DryRunControls())).resolves.toBe("ok");
+    expect(sideEffect).not.toHaveBeenCalled();
   });
 
   it("reports option validation issues before any step starts", async () => {
@@ -534,7 +555,7 @@ describe("definePipeline", () => {
   });
 
   it("fails before execution when requested step ids are unknown", async () => {
-    const result = await makePipeline("test").run({ stepIds: ["missing"] });
+    const result = await makePipeline("test").run({}, { stepIds: ["missing"] });
     expect(result.status).not.toBe("completed");
     expect(result.steps).toEqual([]);
     expect(result.errors[0]?.message).toContain("requested unknown step ids: missing");
@@ -553,7 +574,7 @@ describe("definePipeline", () => {
       phase: "planning",
     });
 
-    const result = await pipeline.run({ stepIds: [] });
+    const result = await pipeline.run({}, { stepIds: [] });
     expect(result.status).not.toBe("completed");
     expect(result.steps).toEqual([]);
     expect(result.errors[0]?.message).toContain("empty stepIds");
@@ -581,7 +602,7 @@ describe("definePipeline", () => {
       ["write", "completed"],
     ]);
 
-    const selected = await pipeline.run({ stepIds: ["build"] });
+    const selected = await pipeline.run({}, { stepIds: ["build"] });
     expect(selected.steps.map((step) => [step.id, step.status])).toEqual([
       ["build", "completed"],
       ["write", "skipped"],
@@ -650,14 +671,14 @@ describe("definePipeline", () => {
         selectionReasons: [{ kind: "outside-target-closure" }],
       },
     ]);
-    const result = await pipeline.run({ targets: ["publish"] });
+    const result = await pipeline.run({}, { targets: ["publish"] });
     expect(result.status).toBe("completed");
     expect(result.value).toBe("source:none");
     expect(ran).toEqual(["source", "validate", "publish"]);
 
     ran.length = 0;
     failValidation = true;
-    const failedGate = await pipeline.run({ continueOnError: true, targets: ["publish"] });
+    const failedGate = await pipeline.run({}, { continueOnError: true, targets: ["publish"] });
     expect(failedGate.steps.find(({ id }) => id === "publish")).toMatchObject({
       dependencyId: "validate",
       reason: "failed-dependency",
@@ -692,7 +713,7 @@ describe("definePipeline", () => {
       finalize: (outputs) => outputs,
     });
 
-    const skipped = await pipeline.run({ targets: ["valued-skip", "empty-skip"] });
+    const skipped = await pipeline.run({}, { targets: ["valued-skip", "empty-skip"] });
     expect(skipped.status).toBe("completed");
     expect(skipped.value).toMatchObject({ "valued-skip": "cached-value" });
     expect(Object.prototype.hasOwnProperty.call(skipped.value, "empty-skip")).toBe(true);
@@ -714,7 +735,7 @@ describe("definePipeline", () => {
       },
     ]);
 
-    const dryRun = await pipeline.run({ dryRun: true, targets: ["write"] });
+    const dryRun = await pipeline.run({}, { dryRun: true, targets: ["write"] });
     expect(dryRun.status).toBe("completed");
     expect(dryRun.steps.find(({ id }) => id === "write")).toMatchObject({
       reason: "dry-run",
@@ -820,7 +841,7 @@ describe("definePipeline", () => {
 
     await expect(pipeline.runOrThrow({})).resolves.toBe("built:undefined");
 
-    const filtered = await pipeline.run({ stepIds: ["write"] });
+    const filtered = await pipeline.run({}, { stepIds: ["write"] });
     expect(filtered.status).toBe("failed");
     expect(filtered.finalized).toBe(false);
     expect(filtered.errors[0]).toMatchObject({
@@ -898,10 +919,14 @@ describe("definePipeline", () => {
   });
 
   it("skips dependent steps after a failed dependency with continueOnError", async () => {
-    const result = await makePipeline("test").run({
-      failStep: "build",
-      continueOnError: true,
-    });
+    const result = await makePipeline("test").run(
+      {
+        failStep: "build",
+      },
+      {
+        continueOnError: true,
+      }
+    );
     expect(result.status).not.toBe("completed");
     expect(result.finalized).toBe(true);
     expect(result.steps.map((step) => [step.id, step.status])).toEqual([
@@ -913,7 +938,7 @@ describe("definePipeline", () => {
 
   it("throws from runOrThrow when a best-effort run contains errors", async () => {
     await expect(
-      makePipeline("test").runOrThrow({ failStep: "build", continueOnError: true })
+      makePipeline("test").runOrThrow({ failStep: "build" }, { continueOnError: true })
     ).rejects.toThrow("Pipeline test failed");
   });
 
@@ -933,11 +958,15 @@ describe("definePipeline", () => {
 
   it("still throws from runOrThrow when finalize fails while continuing on error", async () => {
     await expect(
-      makePipeline("test").runOrThrow({
-        failStep: "build",
-        failFinalize: true,
-        continueOnError: true,
-      })
+      makePipeline("test").runOrThrow(
+        {
+          failStep: "build",
+          failFinalize: true,
+        },
+        {
+          continueOnError: true,
+        }
+      )
     ).rejects.toThrow("Pipeline test failed");
   });
 
@@ -969,7 +998,7 @@ describe("definePipeline", () => {
       steps: [a, b],
       finalize: (outputs) => outputs.b ?? "",
     });
-    const result = await pipeline.run({ stepIds: ["b"] });
+    const result = await pipeline.run({}, { stepIds: ["b"] });
     expect(result.steps.map((step) => [step.id, step.status])).toEqual([
       ["a", "skipped"],
       ["b", "completed"],
@@ -997,7 +1026,7 @@ describe("definePipeline", () => {
       finalize: (outputs) => outputs,
     });
 
-    const result = await pipeline.run({ failStep: "a", continueOnError: true });
+    const result = await pipeline.run({ failStep: "a" }, { continueOnError: true });
     expect(result.steps.map((step) => [step.id, step.status])).toEqual([
       ["a", "failed"],
       ["b", "skipped"],
@@ -1023,7 +1052,7 @@ describe("definePipeline", () => {
       finalize: (outputs) => outputs,
     });
 
-    const result = await pipeline.run({ continueOnError: true });
+    const result = await pipeline.run({}, { continueOnError: true });
 
     expect(result.steps.map((report) => [report.id, report.status])).toEqual([
       ["cancelled", "cancelled"],
@@ -1054,7 +1083,7 @@ describe("definePipeline", () => {
     });
 
     const plan = pipeline.plan({ dryRun: true });
-    const result = await pipeline.run({ dryRun: true });
+    const result = await pipeline.run({}, { dryRun: true });
 
     expect(plan.steps[0]).toMatchObject({ dryRun: "skip", id: "write" });
     expect(writeRan).not.toHaveBeenCalled();
@@ -1086,7 +1115,7 @@ describe("definePipeline", () => {
     });
 
     const plan = pipeline.plan({ dryRun: true });
-    const result = await pipeline.runOrThrow({ source: " artifact ", dryRun: true });
+    const result = await pipeline.runOrThrow({ source: " artifact " }, { dryRun: true });
 
     expect(plan.steps.map(({ dryRun: policy }) => policy)).toEqual(["run", "custom", "run"]);
     expect(runWrite).not.toHaveBeenCalled();
@@ -1162,7 +1191,7 @@ describe("definePipeline", () => {
         });
         return {
           plan: pipeline.plan({ stepIds: ["kept"] }),
-          result: await pipeline.run({ stepIds: ["kept"] }),
+          result: await pipeline.run({}, { stepIds: ["kept"] }),
         };
       },
       expect: (got: {
@@ -1196,7 +1225,7 @@ describe("definePipeline", () => {
         });
         return {
           plan: pipeline.plan({ stepIds: ["write"] }),
-          result: await pipeline.run({ stepIds: ["write"] }),
+          result: await pipeline.run({}, { stepIds: ["write"] }),
         };
       },
       expect: (got: {
@@ -1230,7 +1259,7 @@ describe("definePipeline", () => {
         });
         return {
           plan: pipeline.plan({ dryRun: true }),
-          result: await pipeline.run({ dryRun: true }),
+          result: await pipeline.run({}, { dryRun: true }),
         };
       },
       expect: (got: {
@@ -1268,7 +1297,7 @@ describe("definePipeline", () => {
         });
         return {
           plan: pipeline.plan({}),
-          result: await pipeline.run({ failStep: "gate", continueOnError: true }),
+          result: await pipeline.run({ failStep: "gate" }, { continueOnError: true }),
         };
       },
       expect: (got: {
@@ -1371,17 +1400,14 @@ describe("definePipeline", () => {
 
   it("emits distinct failed and skipped terminal states", async () => {
     const events: string[] = [];
-    const result = await makePipeline("test").run(
-      { failStep: "build" },
-      {
-        cwd: "/tmp",
-        log: console,
-        hooks: {
-          onStepFail: ({ error, step }) => events.push(`error:${step.id}:${error.message}`),
-          onStepSkip: ({ reason, step }) => events.push(`skip:${step.id}:${reason}`),
-        },
-      }
-    );
+    const result = await makePipeline("test").run({ failStep: "build" }, undefined, {
+      cwd: "/tmp",
+      log: console,
+      hooks: {
+        onStepFail: ({ error, step }) => events.push(`error:${step.id}:${error.message}`),
+        onStepSkip: ({ reason, step }) => events.push(`skip:${step.id}:${reason}`),
+      },
+    });
     expect(result.status).not.toBe("completed");
     expect(events).toEqual(["error:build:build failed", "skip:write:fail-fast"]);
   });
@@ -1406,6 +1432,7 @@ describe("definePipeline", () => {
     const skipEvents: unknown[] = [];
 
     await pipeline.run(
+      {},
       { stepIds: ["failing", "requires-filtered"] },
       {
         cwd: "/tmp",
@@ -1456,6 +1483,7 @@ describe("definePipeline", () => {
     const skipEvents: unknown[] = [];
 
     const result = await pipeline.run(
+      {},
       { dryRun: true },
       {
         cwd: "/tmp",
@@ -1601,7 +1629,7 @@ describe("definePipeline", () => {
       finalize: () => undefined,
     });
 
-    const result = await pipeline.run({ continueOnError: true });
+    const result = await pipeline.run({}, { continueOnError: true });
 
     expect(result.errors.map(({ cause }) => cause)).toEqual([
       { message: "Circular cause" },
@@ -1685,7 +1713,11 @@ describe("definePipeline", () => {
       finalize: () => undefined,
     });
 
-    const result = await pipeline.run({}, { cwd: "/tmp", log: console, signal: controller.signal });
+    const result = await pipeline.run({}, undefined, {
+      cwd: "/tmp",
+      log: console,
+      signal: controller.signal,
+    });
 
     expect(result.errors[0]).toMatchObject({
       code: "TUBELESS_STEP_FAILED",
@@ -1697,7 +1729,8 @@ describe("definePipeline", () => {
   it("emits a skipped state with unmet-dependency metadata when a required step failed", async () => {
     const events: unknown[] = [];
     await makePipeline("test").run(
-      { failStep: "build", continueOnError: true },
+      { failStep: "build" },
+      { continueOnError: true },
       {
         cwd: "/tmp",
         log: console,
@@ -1719,16 +1752,13 @@ describe("definePipeline", () => {
 
   it("emits onFinalizeError with the sentinel step id when finalize throws", async () => {
     const events: unknown[] = [];
-    await makePipeline("test").run(
-      { failFinalize: true },
-      {
-        cwd: "/tmp",
-        log: console,
-        hooks: {
-          onFinalizeError: ({ error }) => events.push(error),
-        },
-      }
-    );
+    await makePipeline("test").run({ failFinalize: true }, undefined, {
+      cwd: "/tmp",
+      log: console,
+      hooks: {
+        onFinalizeError: ({ error }) => events.push(error),
+      },
+    });
     expect(events).toEqual([
       {
         code: "TUBELESS_FINALIZATION_FAILED",
@@ -1754,7 +1784,11 @@ describe("definePipeline", () => {
       },
     });
 
-    const result = await pipeline.run({}, { cwd: "/tmp", log: console, signal: controller.signal });
+    const result = await pipeline.run({}, undefined, {
+      cwd: "/tmp",
+      log: console,
+      signal: controller.signal,
+    });
 
     expect(result.errors[0]).toMatchObject({
       code: "TUBELESS_FINALIZATION_FAILED",
@@ -1766,23 +1800,20 @@ describe("definePipeline", () => {
   it("emits lifecycle hooks in execution order", async () => {
     const events: string[] = [];
     const focusedEvents: string[] = [];
-    const result = await makePipeline("hooked").run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: {
-          onFinalizeComplete: () => events.push("finalize:complete"),
-          onFinalizeStart: () => events.push("finalize:start"),
-          onPipelineComplete: () => events.push("pipeline:complete"),
-          onPipelineStart: () => events.push("pipeline:start"),
-          onStepPlan: ({ step }) => focusedEvents.push(`planned:${step.id}`),
-          onStepStart: ({ step }) => focusedEvents.push(`started:${step.id}`),
-          onStepStatus: ({ status, step }) => events.push(`step:${status}:${step.id}`),
-          onStepComplete: ({ step }) => focusedEvents.push(`complete:${step.id}`),
-        },
-        log: console,
-      }
-    );
+    const result = await makePipeline("hooked").run({}, undefined, {
+      cwd: "/tmp",
+      hooks: {
+        onFinalizeComplete: () => events.push("finalize:complete"),
+        onFinalizeStart: () => events.push("finalize:start"),
+        onPipelineComplete: () => events.push("pipeline:complete"),
+        onPipelineStart: () => events.push("pipeline:start"),
+        onStepPlan: ({ step }) => focusedEvents.push(`planned:${step.id}`),
+        onStepStart: ({ step }) => focusedEvents.push(`started:${step.id}`),
+        onStepStatus: ({ status, step }) => events.push(`step:${status}:${step.id}`),
+        onStepComplete: ({ step }) => focusedEvents.push(`complete:${step.id}`),
+      },
+      log: console,
+    });
 
     expect(result.status).toBe("completed");
     expect(events).toEqual([
@@ -1824,16 +1855,13 @@ describe("definePipeline", () => {
     });
     const events: unknown[] = [];
 
-    await pipeline.run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: {
-          onStepProgress: (event) => events.push(event),
-        },
-        log: console,
-      }
-    );
+    await pipeline.run({}, undefined, {
+      cwd: "/tmp",
+      hooks: {
+        onStepProgress: (event) => events.push(event),
+      },
+      log: console,
+    });
 
     expect(events).toEqual([
       {
@@ -1868,20 +1896,17 @@ describe("definePipeline", () => {
     });
     const progressEvents: Array<{ completed: number; total?: number; message?: string }> = [];
 
-    await pipeline.run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: {
-          onStepProgress: ({ progress, step: progressStep }) => {
-            if (progressStep.id === "slow") {
-              progressEvents.push(progress);
-            }
-          },
+    await pipeline.run({}, undefined, {
+      cwd: "/tmp",
+      hooks: {
+        onStepProgress: ({ progress, step: progressStep }) => {
+          if (progressStep.id === "slow") {
+            progressEvents.push(progress);
+          }
         },
-        log: console,
-      }
-    );
+      },
+      log: console,
+    });
 
     expect(progressEvents).toEqual([]);
   });
@@ -1898,16 +1923,13 @@ describe("definePipeline", () => {
     const pipeline = definePipeline({ id: "late-progress", steps: [work], finalize: () => true });
     const completed: number[] = [];
 
-    await pipeline.run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: {
-          onStepProgress: ({ progress }) => completed.push(progress.completed),
-        },
-        log: console,
-      }
-    );
+    await pipeline.run({}, undefined, {
+      cwd: "/tmp",
+      hooks: {
+        onStepProgress: ({ progress }) => completed.push(progress.completed),
+      },
+      log: console,
+    });
     reportLater?.();
 
     expect(completed).toEqual([1]);
@@ -1916,23 +1938,20 @@ describe("definePipeline", () => {
   it("isolates failures between ordered hook sets", async () => {
     const completedSteps: string[] = [];
     const warn = vi.fn();
-    const result = await makePipeline("isolated-hooks").run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: [
-          {
-            onStepStatus: (event) => {
-              if (event.status === "completed") throw new Error("metrics unavailable");
-            },
+    const result = await makePipeline("isolated-hooks").run({}, undefined, {
+      cwd: "/tmp",
+      hooks: [
+        {
+          onStepStatus: (event) => {
+            if (event.status === "completed") throw new Error("metrics unavailable");
           },
-          {
-            onStepComplete: ({ step }) => completedSteps.push(step.id),
-          },
-        ],
-        log: { error: vi.fn(), log: vi.fn(), warn },
-      }
-    );
+        },
+        {
+          onStepComplete: ({ step }) => completedSteps.push(step.id),
+        },
+      ],
+      log: { error: vi.fn(), log: vi.fn(), warn },
+    });
 
     expect(result.status).toBe("completed");
     expect(completedSteps).toEqual(["build", "write"]);
@@ -1958,14 +1977,11 @@ describe("definePipeline", () => {
       },
     });
 
-    const result = await pipeline.run(
-      {},
-      {
-        cwd: "/tmp",
-        log: console,
-        now: () => currentTime,
-      }
-    );
+    const result = await pipeline.run({}, undefined, {
+      cwd: "/tmp",
+      log: console,
+      now: () => currentTime,
+    });
 
     expect(result.finishedAtMs - result.startedAtMs).toBe(10);
     expect(result.steps[0]!.finishedAtMs - result.steps[0]!.startedAtMs!).toBe(7);
@@ -1987,7 +2003,7 @@ describe("definePipeline", () => {
       finalize: (outputs) => outputs.work,
     });
 
-    const resultPromise = pipeline.run({}, { cwd: "/tmp", log: console });
+    const resultPromise = pipeline.run({}, undefined, { cwd: "/tmp", log: console });
     const assertion = expect(resultPromise).resolves.toMatchObject({
       status: "cancelled",
       errors: [
@@ -2012,14 +2028,11 @@ describe("definePipeline", () => {
     const controller = new AbortController();
     controller.abort("stop");
 
-    const result = await makePipeline("aborted").run(
-      {},
-      {
-        cwd: "/tmp",
-        log: console,
-        signal: controller.signal,
-      }
-    );
+    const result = await makePipeline("aborted").run({}, undefined, {
+      cwd: "/tmp",
+      log: console,
+      signal: controller.signal,
+    });
 
     expect(result.status).toBe("cancelled");
     expect(result.finalized).toBe(false);
@@ -2146,22 +2159,19 @@ describe("definePipeline", () => {
     });
     const skipEvents: unknown[] = [];
 
-    const result = await pipeline.run(
-      { enableWrite: false },
-      {
-        cwd: "/tmp",
-        hooks: {
-          onStepSkip: (event) => {
-            skipEvents.push({
-              message: event.message,
-              reason: event.reason,
-              stepId: event.step.id,
-            });
-          },
+    const result = await pipeline.run({ enableWrite: false }, undefined, {
+      cwd: "/tmp",
+      hooks: {
+        onStepSkip: (event) => {
+          skipEvents.push({
+            message: event.message,
+            reason: event.reason,
+            stepId: event.step.id,
+          });
         },
-        log: console,
-      }
-    );
+      },
+      log: console,
+    });
 
     expect(writeRan).toBe(false);
     expect(result.status).toBe("completed");
@@ -2210,7 +2220,7 @@ describe("definePipeline", () => {
       finalize: (outputs) => outputs.after,
     });
 
-    const result = await pipeline.run({}, { cwd: "/tmp", log: console });
+    const result = await pipeline.run({}, undefined, { cwd: "/tmp", log: console });
 
     expect(writeRan).toBe(false);
     expect(result.status).toBe("completed");
@@ -2252,24 +2262,21 @@ describe("definePipeline", () => {
       finalize: (outputs) => outputs.after,
     });
     let completedRun: unknown;
-    const result = await pipeline.run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: {
-          onPipelineComplete: (event) => {
-            completedRun = event;
-          },
-          onStepFail: ({ step }) => {
-            failEvents.push(step.id);
-          },
-          onStepSkip: ({ step }) => {
-            skipEvents.push(step.id);
-          },
+    const result = await pipeline.run({}, undefined, {
+      cwd: "/tmp",
+      hooks: {
+        onPipelineComplete: (event) => {
+          completedRun = event;
         },
-        log: console,
-      }
-    );
+        onStepFail: ({ step }) => {
+          failEvents.push(step.id);
+        },
+        onStepSkip: ({ step }) => {
+          skipEvents.push(step.id);
+        },
+      },
+      log: console,
+    });
 
     expect(result.status).toBe("failed");
     expect(result.finalized).toBe(false);
@@ -2322,7 +2329,7 @@ describe("definePipeline", () => {
 
     try {
       const runController = new AbortController();
-      const runPromise = pipeline.run({}, { ...context, signal: runController.signal });
+      const runPromise = pipeline.run({}, undefined, { ...context, signal: runController.signal });
       await vi.advanceTimersByTimeAsync(50);
       runController.abort("stop");
       const result = await runPromise;
@@ -2339,7 +2346,10 @@ describe("definePipeline", () => {
       });
 
       const throwController = new AbortController();
-      const throwPromise = pipeline.runOrThrow({}, { ...context, signal: throwController.signal });
+      const throwPromise = pipeline.runOrThrow({}, undefined, {
+        ...context,
+        signal: throwController.signal,
+      });
       await vi.advanceTimersByTimeAsync(50);
       throwController.abort("stop");
       let thrown: unknown;
@@ -2389,7 +2399,7 @@ describe("definePipeline", () => {
       finalize: (outputs) => outputs,
     });
 
-    const result = await pipeline.run({ continueOnError: true }, { cwd: "/tmp", log: console });
+    const result = await pipeline.run({}, { continueOnError: true }, { cwd: "/tmp", log: console });
 
     expect(result.status).toBe("failed");
     expect(laterRan).toBe(true);
