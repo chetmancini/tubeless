@@ -2251,6 +2251,24 @@ describe("definePipeline", () => {
     expect(result.value).toBe("from-private");
   });
 
+  it("invokes a method-style finalizer with the original definition as this", async () => {
+    const step = createSteps();
+    const work = step("work", { run: () => "ok" });
+    const definition = {
+      id: "finalize-this",
+      marker: "from-definition",
+      steps: [work] as const,
+      finalize() {
+        return this.marker;
+      },
+    };
+    const pipeline = definePipeline(definition);
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("from-definition");
+  });
+
   it("policy-skips a step with a yellow skip report and unlocks dependents", async () => {
     interface Options {
       enableWrite: boolean;

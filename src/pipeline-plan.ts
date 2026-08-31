@@ -902,7 +902,10 @@ export function compilePipeline<
   const declaredTargets = (definition.targets ?? []) as readonly AnyStep<TOptions>[];
   return Object.freeze({
     declaredTargets: Object.freeze([...declaredTargets]),
-    finalize: definition.finalize,
+    // Invoke on the author's definition so method-style finalizers keep `this`.
+    // SAFETY: the wrapper only forwards to `definition.finalize`.
+    finalize: ((outputs, context) =>
+      definition.finalize(outputs, context)) as typeof definition.finalize,
     id: definition.id,
     optionsSchema: definition.steps[0]?.[STEP_OPTIONS_SCHEMA],
     orderedSteps: Object.freeze([...orderedSteps]),

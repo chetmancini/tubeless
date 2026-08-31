@@ -3,11 +3,13 @@ import { PipelineChildError } from "./child-execution";
 import { createPipelineReporter, type ReporterOutput } from "./interactive-reporter";
 import {
   createSteps,
+  defaultPipelineContext,
   definePipeline,
   PipelineExecutionError,
   type PipelineExecutionContext,
   type Step,
 } from "./pipeline";
+import type { PipelineTraceEvent } from "./tracing";
 
 function captureOutput(): ReporterOutput & { chunks: string[] } {
   const chunks: string[] = [];
@@ -1234,6 +1236,48 @@ describe("child-pipeline composition", () => {
       expect(runSpy).not.toHaveBeenCalled();
       expect(result.errors[0]?.message).toContain("could not start");
       expect(result.errors[0]?.message).toContain("unknown step ids: missing");
+    });
+
+    it("emits child lifecycle traces when a public child plan is already invalid", async () => {
+      const childStep = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({
+        id: "invalid-trace-child",
+        steps: [work],
+        finalize: () => true,
+      });
+      const publicChild = { ...child };
+      const runSpy = vi.spyOn(publicChild, "run");
+      const parentStep = createSteps();
+      const stage = parentStep.fromPipeline("stage", {
+        pipeline: publicChild,
+        mapOptions: () => ({ stepIds: ["missing" as never] }),
+      });
+      const parent = definePipeline({
+        id: "invalid-trace-parent",
+        steps: [stage],
+        finalize: () => true,
+      });
+      const events: PipelineTraceEvent[] = [];
+      const result = await parent.run({}, undefined, {
+        ...defaultPipelineContext(),
+        runId: "parent-run",
+        tracing: { exporter: { export: (event) => events.push(event) } },
+      });
+
+      expect(result.status).not.toBe("completed");
+      expect(runSpy).not.toHaveBeenCalled();
+      expect(
+        events.find(
+          (event) => event.name === "pipeline.started" && event.pipelineId === "invalid-trace-child"
+        )
+      ).toMatchObject({ parentRunId: "parent-run", attributes: { plan_ok: false } });
+      expect(
+        events.find(
+          (event) =>
+            event.name === "pipeline.completed" && event.pipelineId === "invalid-trace-child"
+        )
+      ).toMatchObject({ parentRunId: "parent-run" });
     });
 
     it("applies a child pipeline's declared target closure through mapOptions", async () => {
