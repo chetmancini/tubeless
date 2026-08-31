@@ -1178,6 +1178,35 @@ describe("child-pipeline composition", () => {
       expect(runSpy).not.toHaveBeenCalled();
     });
 
+    it("runs a public Pipeline child that lacks the compiled execute binding", async () => {
+      const childStep = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({
+        id: "spread-child",
+        steps: [work],
+        finalize: () => "child-ok" as const,
+      });
+      const publicChild = { ...child };
+      const runSpy = vi.spyOn(publicChild, "run");
+      const parentStep = createSteps();
+      const stage = parentStep.fromPipeline("stage", {
+        pipeline: publicChild,
+        mapOptions: () => ({}),
+      });
+      const parent = definePipeline({
+        id: "spread-parent",
+        steps: [stage],
+        finalize: (outputs) => outputs.stage,
+      });
+
+      const result = await parent.run({});
+
+      expect(result.errors.map((error) => error.message)).toEqual([]);
+      expect(result.status).toBe("completed");
+      expect(result.value).toBe("child-ok");
+      expect(runSpy).toHaveBeenCalledOnce();
+    });
+
     it("applies a child pipeline's declared target closure through mapOptions", async () => {
       const ran: string[] = [];
       const childStep = createSteps();

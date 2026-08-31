@@ -34,13 +34,15 @@ export class PipelineChildError extends Error {
 
 type ChildPipeline = Pipeline<object, unknown, string, string>;
 
+type CompiledChildExecute = (
+  plan: PipelinePlan,
+  options: PipelineRunOptions,
+  controls: PipelineRunControls,
+  context?: Partial<PipelineContext>
+) => Promise<PipelineRun<unknown>>;
+
 type ExecutableChild = ChildPipeline & {
-  [EXECUTE_COMPILED_RUN]: (
-    plan: PipelinePlan,
-    options: PipelineRunOptions,
-    controls: PipelineRunControls,
-    context?: Partial<PipelineContext>
-  ) => Promise<PipelineRun<unknown>>;
+  [EXECUTE_COMPILED_RUN]?: CompiledChildExecute;
 };
 
 function executeCompiledChild(
@@ -50,14 +52,14 @@ function executeCompiledChild(
   controls: PipelineRunControls,
   context: PipelineContext
 ): Promise<PipelineRun<unknown>> {
-  // SAFETY: `definePipeline` stamps `EXECUTE_COMPILED_RUN` onto every returned
-  // pipeline object; child runners only receive those compiled pipelines.
-  return (pipeline as ExecutableChild)[EXECUTE_COMPILED_RUN](
-    plan,
-    domainOptions,
-    controls,
-    context
-  );
+  // SAFETY: `definePipeline` stamps `EXECUTE_COMPILED_RUN` as an optional
+  // internal binding. Public `Pipeline` wrappers, mocks, spread clones, and
+  // cross-version instances omit it and must keep using `run()`.
+  const execute = (pipeline as ExecutableChild)[EXECUTE_COMPILED_RUN];
+  if (execute === undefined) {
+    return pipeline.run(domainOptions, controls, context);
+  }
+  return execute(plan, domainOptions, controls, context);
 }
 
 type ChildInputs = Record<string, unknown>;
@@ -297,13 +299,5 @@ export function createSingleChildRunner<TParentOptions extends object>(
       onStepFail: ({ error, step }) => report(step, `failed: ${error.message}`, true),
     };
     const childResult = await runChildPipeline(
-      config.pipeline,
-      domainOptions,
-      controls,
-      baseChildContext,
-      childHooks,
-      dependencies,
-      `Child pipeline ${config.pipeline.id} `,
-      childPlan
 
-[Showing lines 1-300 of 492. Use :301 to continue]
+[Showing lines 1-300 of 310. Use :301 to continue]
