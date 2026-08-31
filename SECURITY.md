@@ -39,10 +39,11 @@ out of scope; you enabled it.
 non-loopback host plus an injected launcher or history capability. That
 combination is out of scope.
 
-Browser plan, launch, cancel, and clear-history require a `Host` header that matches
-the bound authority, a custom `x-tubeless-studio-*` header, and
-`application/json` for plan and launch. Those checks stop ordinary cross-site
-form posts. They are not authentication. Do not expose studio to a network you
-do not trust.
+Every studio route, including reads, requires a `Host` header that matches
+the bound authority. Browser plan, launch, cancel, and clear-history also
+require a custom `x-tubeless-studio-*` header, and `application/json` for
+plan and launch. Those checks stop ordinary cross-site form posts and
+DNS-rebinding reads. They are not authentication. Do not expose studio to
+a network you do not trust.
 
 See [the studio docs](./docs/studio.md).
