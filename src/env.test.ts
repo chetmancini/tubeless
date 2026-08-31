@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { requireEnv } from "./env";
+import { requireEnv } from "./env.js";
 
 describe("requireEnv", () => {
   const originalValue = process.env.REQUIRE_ENV_TEST_VAR;

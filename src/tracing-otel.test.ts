@@ -46,7 +46,14 @@ describe("createOpenTelemetryTraceExporter", () => {
     exporter.export({
       attemptId: "run-1:attempt:1",
       attributes: {},
-      error: { code: "NETWORK", message: "network unavailable" },
+      error: {
+        // SAFETY: fixture uses a non-kernel code the exporter should copy onto
+        // the OTEL event; PipelineTraceError.code is the closed union.
+        code: "NETWORK" as import("./pipeline.js").PipelineErrorCode,
+        kind: "step",
+        message: "network unavailable",
+        phase: "execution",
+      },
       name: "step.failed",
       pipelineId: "import",
       runId: "run-1",

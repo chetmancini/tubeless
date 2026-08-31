@@ -10,7 +10,7 @@ import {
   paintLiveLines,
   shimmerToken,
   SPINNER_TOKEN,
-} from "./live-ticker";
+} from "./live-ticker.js";
 
 const RESET = "\u001B[0m";
 const SHIMMER_BRIGHT = "\u001B[0;1;36m";

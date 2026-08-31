@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { PELOTON_RIDERS, PelotonPipeline, type PelotonResult } from "../examples/peloton";
-import { createPipelineTestRuntime } from "./testing";
+import { PELOTON_RIDERS, PelotonPipeline, type PelotonResult } from "../examples/peloton.js";
+import { createPipelineTestRuntime } from "./testing.js";
 
 const fixture = {
   concurrency: 2,

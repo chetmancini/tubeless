@@ -7,7 +7,7 @@ import {
   type TrampolineIo,
   type TrampolineProbeResult,
   type TrampolineRelayOutcome,
-} from "./workbench-trampoline";
+} from "./workbench-trampoline.js";
 
 interface ObservedIo extends TrampolineIo {
   errors: string[];
@@ -72,7 +72,7 @@ function fakeIo(config: FakeRelayConfig): ObservedIo {
 describe("runTrampoline", () => {
   it("prints install instructions and exits 127 when Bun is missing", async () => {
     const io = fakeIo({
-      probeResult: { error: { message: "spawn bun ENOENT", code: "ENOENT" } },
+      probeResult: { error: { message: "spawn bun ENOENT", code: "ENOENT" }, status: null },
       relayOutcome: { status: 0, signal: null },
     });
 
@@ -87,7 +87,7 @@ describe("runTrampoline", () => {
 
   it("reports the raw error for probe failures that are not ENOENT", async () => {
     const io = fakeIo({
-      probeResult: { error: { message: "spawn bun EACCES", code: "EACCES" } },
+      probeResult: { error: { message: "spawn bun EACCES", code: "EACCES" }, status: null },
       relayOutcome: { status: 0, signal: null },
     });
 

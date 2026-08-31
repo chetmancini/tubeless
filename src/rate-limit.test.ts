@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { RateLimiter } from "./rate-limit";
+import { RateLimiter } from "./rate-limit.js";
 
 describe("RateLimiter", () => {
   it("resolves immediately for the first call", async () => {

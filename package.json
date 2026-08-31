@@ -61,7 +61,7 @@
     "test": "bun run build && bun run test:run",
     "test:run": "vitest run --config vitest.config.ts",
     "typecheck": "bun run build && bun run typecheck:run",
-    "typecheck:run": "tsc -p tsconfig.json --noEmit && tsc -p examples/tsconfig.json --noEmit",
+    "typecheck:run": "tsc -p tsconfig.json --noEmit && tsc -p examples/tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "pack:verify": "node scripts/verify-packed-artifact.mjs"
   },
   "devDependencies": {

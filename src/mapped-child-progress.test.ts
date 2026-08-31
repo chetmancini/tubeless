@@ -5,7 +5,7 @@ import {
   mappedChildProgressUnits,
   toMappedChildStepProgress,
   type MappedChildProgressSnapshot,
-} from "./mapped-child-progress";
+} from "./mapped-child-progress.js";
 
 function snapshot(
   overrides: Partial<MappedChildProgressSnapshot> = {}

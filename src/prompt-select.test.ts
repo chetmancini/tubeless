@@ -3,7 +3,7 @@ import {
   normalizeMultiSelectChoices,
   parseMultiSelectInput,
   type MultiSelectChoice,
-} from "./prompt-select";
+} from "./prompt-select.js";
 
 const choices: MultiSelectChoice[] = [
   { value: "alpha", label: "Alpha item" },
@@ -13,7 +13,13 @@ const choices: MultiSelectChoice[] = [
 
 describe("normalizeMultiSelectChoices", () => {
   it("accepts bare strings and object choices", () => {
-    expect(normalizeMultiSelectChoices(["a", { value: "b", label: "Bee" }])).toEqual([
+    expect(
+      normalizeMultiSelectChoices(
+        // SAFETY: the implementation accepts mixed string/object entries; the
+        // public type is a union of homogeneous arrays.
+        ["a", { value: "b", label: "Bee" }] as unknown as readonly string[]
+      )
+    ).toEqual([
       { value: "a", label: "a" },
       { value: "b", label: "Bee" },
     ]);

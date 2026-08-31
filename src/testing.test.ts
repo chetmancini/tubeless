@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createSteps, definePipeline } from "./pipeline";
-import { createPipelineTestRuntime } from "./testing";
+import { createSteps, definePipeline } from "./pipeline.js";
+import { createPipelineTestRuntime } from "./testing.js";
 
 interface WorkOptions {
   count: number;

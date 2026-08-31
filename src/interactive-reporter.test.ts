@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createPipelineReporter, type ReporterOutput } from "./interactive-reporter";
-import { createSteps, definePipeline, type PipelineLogger } from "./pipeline";
+import { createPipelineReporter, type ReporterOutput } from "./interactive-reporter.js";
+import { createSteps, definePipeline, type PipelineLogger } from "./pipeline.js";
 
 function captureOutput(isTTY = true, columns = 100): ReporterOutput & { chunks: string[] } {
   const chunks: string[] = [];

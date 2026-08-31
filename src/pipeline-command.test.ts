@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { openCheckpoint } from "./checkpoint";
-import { definePipelineCommand, type CliContext } from "./cli";
-import { createSteps, definePipeline, type ReporterOutput } from "./pipeline";
-import { renderPipelinePlan } from "./render";
+import { openCheckpoint } from "./checkpoint.js";
+import { definePipelineCommand, type CliContext } from "./cli.js";
+import { type ReporterOutput } from "./interactive-reporter.js";
+import { createSteps, definePipeline } from "./pipeline.js";
+import { renderPipelinePlan } from "./render.js";
 
 interface MiniOptions {
   limit?: number;
