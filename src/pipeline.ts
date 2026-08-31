@@ -10,6 +10,7 @@ import {
   PipelineDefinitionError,
   requireOutputs,
   buildPipelinePlan,
+  brandCompiledPipeline,
   compilePipeline,
   EXECUTE_COMPILED_RUN,
   renderPipelineMermaid,
@@ -155,7 +156,7 @@ export function definePipeline<
   }
 
   function toMermaid(options: PipelineMermaidOptions = {}): string {
-    return renderPipelineMermaid(compiled.orderedSteps, options);
+    return renderPipelineMermaid(compiled.orderedSteps, options, compiled.stepGraph);
   }
 
   async function executeCompiled(
@@ -205,6 +206,7 @@ export function definePipeline<
     toMermaid,
   };
   Object.defineProperty(pipeline, EXECUTE_COMPILED_RUN, { value: executeCompiled });
+  brandCompiledPipeline(pipeline);
   return pipeline;
 }
 

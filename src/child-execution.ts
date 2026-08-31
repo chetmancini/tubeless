@@ -7,7 +7,7 @@ import {
   type ToMappedChildStepProgressOptions,
 } from "./mapped-child-progress.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
-import { duplicateValues, EXECUTE_COMPILED_RUN } from "./pipeline-plan.js";
+import { duplicateValues, EXECUTE_COMPILED_RUN, isCompiledPipeline } from "./pipeline-plan.js";
 import { hasVisibleStepProgress } from "./progress.js";
 import type {
   Pipeline,
@@ -49,9 +49,10 @@ type ExecutableChild = ChildPipeline & {
 };
 
 function compiledChildExecute(pipeline: ChildPipeline): CompiledChildExecute | undefined {
-  // SAFETY: `definePipeline` stamps `EXECUTE_COMPILED_RUN` as an optional
-  // internal binding. Public `Pipeline` wrappers, mocks, spread clones, and
-  // cross-version instances omit it and must keep using `run()`.
+  if (!isCompiledPipeline(pipeline)) return undefined;
+  // SAFETY: branded pipelines are the `definePipeline` object, which always
+  // stamps `EXECUTE_COMPILED_RUN`. Wrappers that inherit the symbol are rejected
+  // by the identity check above.
   return (pipeline as ExecutableChild)[EXECUTE_COMPILED_RUN];
 }
 

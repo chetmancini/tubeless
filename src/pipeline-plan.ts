@@ -28,6 +28,62 @@ export const REQUIRED_FINALIZER_OUTPUTS: unique symbol = Symbol(
 );
 export const EXECUTE_COMPILED_RUN: unique symbol = Symbol("tubeless.executeCompiledRun");
 
+const compiledPipelines = new WeakSet<object>();
+
+/** Marks the exact object returned by `definePipeline` as a compiled pipeline. */
+export function brandCompiledPipeline(pipeline: object): void {
+  compiledPipelines.add(pipeline);
+}
+
+/** True only for the object `definePipeline` returned, not `Object.create` wrappers. */
+export function isCompiledPipeline(pipeline: object): boolean {
+  return compiledPipelines.has(pipeline);
+}
+
+export interface CompiledStepGraph<TOptions extends object = object> {
+  readonly dependsOn: readonly AnyStep<TOptions>[];
+  readonly optionalDependsOn: readonly AnyStep<TOptions>[];
+  readonly skipAfterFailureOf: readonly AnyStep<TOptions>[];
+}
+
+function liveStepGraph<TOptions extends object>(
+  step: AnyStep<TOptions>
+): CompiledStepGraph<TOptions> {
+  return {
+    dependsOn: step.dependsOn ?? [],
+    optionalDependsOn: step.optionalDependsOn ?? [],
+    skipAfterFailureOf: step.skipAfterFailureOf ?? [],
+  };
+}
+
+function freezeStepList<TOptions extends object>(
+  steps: readonly AnyStep<TOptions>[] | undefined
+): readonly AnyStep<TOptions>[] {
+  return Object.freeze([...(steps ?? [])]);
+}
+
+function snapshotCompiledStepGraph<TOptions extends object>(
+  step: AnyStep<TOptions>
+): CompiledStepGraph<TOptions> {
+  return Object.freeze({
+    dependsOn: freezeStepList(step.dependsOn),
+    optionalDependsOn: freezeStepList(step.optionalDependsOn),
+    skipAfterFailureOf: freezeStepList(step.skipAfterFailureOf),
+  });
+}
+
+export function compiledStepGraph<TOptions extends object>(
+  compiled: Pick<CompiledPipeline, "stepGraph">,
+  step: AnyStep<TOptions>
+): CompiledStepGraph<TOptions> {
+  const graph = compiled.stepGraph.get(step);
+  if (graph === undefined) {
+    throw new Error(`Compiled pipeline graph is missing step ${step.id}`);
+  }
+  // SAFETY: compile stores each original step object as the map key.
+  return graph as CompiledStepGraph<TOptions>;
+}
+
 /**
  * Recovers the options type from the steps themselves rather than taking it as its own
  * generic parameter. A `TOptions` parameter constrained by `TSteps extends
@@ -80,6 +136,7 @@ function isRequiredDependencyMet(report: PipelineStepReport | undefined): boolea
 
 type StepDispositionInput<TOptions extends object> = {
   dryRun: boolean;
+  graph: CompiledStepGraph<TOptions>;
   planned: PipelinePlanStep;
   reportsByStepId: ReadonlyMap<string, PipelineStepReport>;
   step: AnyStep<TOptions>;
@@ -103,13 +160,13 @@ type StepDisposition =
 export function decideStepDisposition<TOptions extends object>(
   input: StepDispositionInput<TOptions>
 ): StepDisposition {
-  const { dryRun, planned, reportsByStepId, step } = input;
+  const { dryRun, graph, planned, reportsByStepId, step } = input;
 
   if (!planned.selected) {
     return { kind: "skip", reason: "filtered" };
   }
 
-  const unsuccessfulAncestor = (step.skipAfterFailureOf ?? []).find((dep) => {
+  const unsuccessfulAncestor = graph.skipAfterFailureOf.find((dep) => {
     const status = reportsByStepId.get(dep.id)?.status;
     return status === "failed" || status === "cancelled";
   });
@@ -121,7 +178,7 @@ export function decideStepDisposition<TOptions extends object>(
     };
   }
 
-  const unmetDependency = (step.dependsOn ?? []).find(
+  const unmetDependency = graph.dependsOn.find(
     (dep) => !isRequiredDependencyMet(reportsByStepId.get(dep.id))
   );
   if (unmetDependency) {
@@ -147,13 +204,12 @@ export function decideStepDisposition<TOptions extends object>(
  * the duplicated `dependentsOf` entries cancel out, but confusing to read and a latent trap
  * for future callers of this helper that assume it returns distinct edges.
  */
-function stepEdges<TOptions extends object>(step: AnyStep<TOptions>): readonly AnyStep<TOptions>[] {
+function stepEdges<TOptions extends object>(
+  step: AnyStep<TOptions>,
+  graph: CompiledStepGraph<TOptions> = liveStepGraph(step)
+): readonly AnyStep<TOptions>[] {
   return [
-    ...new Set([
-      ...(step.dependsOn ?? []),
-      ...(step.optionalDependsOn ?? []),
-      ...(step.skipAfterFailureOf ?? []),
-    ]),
+    ...new Set([...graph.dependsOn, ...graph.optionalDependsOn, ...graph.skipAfterFailureOf]),
   ];
 }
 
@@ -237,7 +293,8 @@ function escapeMermaidLabel(value: string): string {
 
 export function renderPipelineMermaid<TOptions extends object>(
   steps: readonly AnyStep<TOptions>[],
-  options: PipelineMermaidOptions
+  options: PipelineMermaidOptions,
+  stepGraph?: ReadonlyMap<AnyStep, CompiledStepGraph>
 ): string {
   const direction = options.direction ?? "TD";
   if (!(["BT", "LR", "RL", "TB", "TD"] as const).includes(direction)) {
@@ -258,12 +315,13 @@ export function renderPipelineMermaid<TOptions extends object>(
 
   const edgeLines: string[] = [];
   for (const step of steps) {
+    const graph = stepGraph?.get(step) ?? liveStepGraph(step);
     const targetId = nodeIdByStep.get(step)!;
-    const required = new Set(step.dependsOn ?? []);
-    const optional = new Set(step.optionalDependsOn ?? []);
-    const failureGates = new Set(step.skipAfterFailureOf ?? []);
+    const required = new Set(graph.dependsOn);
+    const optional = new Set(graph.optionalDependsOn);
+    const failureGates = new Set(graph.skipAfterFailureOf);
 
-    for (const dependency of stepEdges(step)) {
+    for (const dependency of stepEdges(step, graph)) {
       const sourceId = nodeIdByStep.get(dependency)!;
       if (required.has(dependency)) {
         edgeLines.push(`  ${sourceId} --> ${targetId}`);
@@ -291,19 +349,21 @@ export function stepToPlanStep<TOptions extends object>(
   step: AnyStep<TOptions>,
   selected: boolean,
   skipReason?: PipelineStepSkipReason,
-  selectionReasons: readonly PipelineStepSelectionReason[] = [{ kind: "all" }]
+  selectionReasons?: readonly PipelineStepSelectionReason[],
+  graph: CompiledStepGraph<TOptions> = liveStepGraph(step)
 ): PipelinePlanStep {
+  const reasons = selectionReasons ?? [{ kind: "all" }];
   const planStep: PipelinePlanStep = {
-    dependencies: (step.dependsOn ?? []).map((dep) => dep.id),
+    dependencies: graph.dependsOn.map((dep) => dep.id),
     description: step.description,
     dryRun: step.dryRun === "skip" ? "skip" : step.dryRun !== undefined ? "custom" : "run",
     id: step.id,
     name: step.name,
-    optionalDependencies: (step.optionalDependsOn ?? []).map((dep) => dep.id),
+    optionalDependencies: graph.optionalDependsOn.map((dep) => dep.id),
     runtimeSkipPossible: step.skip !== undefined,
     selected,
-    selectionReasons,
-    skipAfterFailureOf: (step.skipAfterFailureOf ?? []).map((dep) => dep.id),
+    selectionReasons: reasons,
+    skipAfterFailureOf: graph.skipAfterFailureOf.map((dep) => dep.id),
     skipReason,
   };
   if (step[STEP_NESTED_PIPELINE]) {
@@ -332,7 +392,8 @@ function addSelectionReason(
 }
 
 function targetSelectionReasons<TOptions extends object>(
-  targets: readonly AnyStep<TOptions>[]
+  targets: readonly AnyStep<TOptions>[],
+  stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph>
 ): Map<string, PipelineStepSelectionReason[]> {
   const reasonsByStepId = new Map<string, PipelineStepSelectionReason[]>();
 
@@ -343,7 +404,8 @@ function targetSelectionReasons<TOptions extends object>(
       if (expanded.has(step)) return;
       expanded.add(step);
 
-      for (const dependency of step.dependsOn ?? []) {
+      const graph = compiledStepGraph({ stepGraph }, step);
+      for (const dependency of graph.dependsOn) {
         addSelectionReason(reasonsByStepId, dependency.id, {
           dependentId: step.id,
           kind: "required-dependency",
@@ -351,7 +413,7 @@ function targetSelectionReasons<TOptions extends object>(
         });
         includePrerequisites(dependency);
       }
-      for (const dependency of step.skipAfterFailureOf ?? []) {
+      for (const dependency of graph.skipAfterFailureOf) {
         addSelectionReason(reasonsByStepId, dependency.id, {
           dependentId: step.id,
           kind: "failure-gate",
@@ -359,7 +421,7 @@ function targetSelectionReasons<TOptions extends object>(
         });
         includePrerequisites(dependency);
       }
-      for (const dependency of step.optionalDependsOn ?? []) {
+      for (const dependency of graph.optionalDependsOn) {
         addSelectionReason(reasonsByStepId, dependency.id, {
           dependentId: step.id,
           kind: "optional-only",
@@ -745,7 +807,7 @@ export function buildPipelinePlan<
   } else if (controls.targets !== undefined) {
     const stepsById = new Map(steps.map((step) => [step.id, step]));
     const selectedTargets = controls.targets.map((target) => stepsById.get(target)!);
-    selectionReasonsByStepId = targetSelectionReasons(selectedTargets);
+    selectionReasonsByStepId = targetSelectionReasons(selectedTargets, compiled.stepGraph);
     for (const step of steps) {
       const reasons = selectionReasonsByStepId.get(step.id) ?? [];
       const selected = reasons.some(selectsStep);
@@ -770,15 +832,17 @@ export function buildPipelinePlan<
   for (const step of orderedSteps) {
     const selectionReasons = selectionReasonsByStepId.get(step.id)!;
     const selected = selectionReasons.some(selectsStep);
-    const planned = stepToPlanStep(step, selected, undefined, selectionReasons);
+    const graph = compiledStepGraph(compiled, step);
+    const planned = stepToPlanStep(step, selected, undefined, selectionReasons, graph);
     const disposition = decideStepDisposition({
       dryRun,
+      graph,
       planned,
       reportsByStepId: plannedReportsByStepId,
       step,
     });
     const skipReason = disposition.kind === "skip" ? disposition.reason : undefined;
-    const planStep = stepToPlanStep(step, selected, skipReason, selectionReasons);
+    const planStep = stepToPlanStep(step, selected, skipReason, selectionReasons, graph);
     planSteps.push(planStep);
     if (disposition.kind === "skip") {
       const report: PipelineStepSkippedReport = {
@@ -846,28 +910,10 @@ export interface CompiledPipeline<
   readonly optionsSchema: StandardSchemaV1 | undefined;
   readonly orderedSteps: readonly AnyStep<StepsOptions<TSteps>>[];
   readonly requiredFinalizerSteps: readonly AnyStep<StepsOptions<TSteps>>[] | undefined;
+  readonly stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph>;
   readonly resultSchema: TResultSchema | undefined;
   readonly stepIds: readonly string[];
   readonly targetIds: readonly string[];
-}
-
-const COMPILED_STEP_GRAPH_FIELDS = [
-  "dependsOn",
-  "optionalDependsOn",
-  "skipAfterFailureOf",
-] as const;
-
-function snapshotStepGraphMetadata<TOptions extends object>(step: AnyStep<TOptions>): void {
-  for (const field of COMPILED_STEP_GRAPH_FIELDS) {
-    if (!(field in step)) continue;
-    const dependencies = step[field];
-    Object.defineProperty(step, field, {
-      configurable: true,
-      enumerable: true,
-      value: dependencies === undefined ? undefined : Object.freeze([...dependencies]),
-      writable: false,
-    });
-  }
 }
 
 export function compilePipeline<
@@ -886,10 +932,12 @@ export function compilePipeline<
   // SAFETY: `steps` is `TSteps extends readonly AnyStep[]`; the cast restores
   // the `TOptions` generic that the tuple erased, without changing the values.
   const orderedSteps = topologicalSort(definition.steps as readonly AnyStep<TOptions>[])!;
-  // Keep the author's step objects so class `#private` accessors and prototype
-  // `run`/`skip` keep working. Graph arrays are snapshotted onto those objects
-  // as frozen own properties; other contract fields do not need to be own.
-  for (const step of orderedSteps) snapshotStepGraphMetadata(step);
+  // Keep the author's step objects so class private accessors and prototype
+  // `run`/`skip` keep working. Graph arrays live in compiled storage so frozen
+  // or later-mutated caller-owned steps cannot change planning.
+  const stepGraph = new Map<AnyStep, CompiledStepGraph>(
+    orderedSteps.map((step) => [step, snapshotCompiledStepGraph(step)])
+  );
   // SAFETY: `requireOutputs` stamps the required step ids onto the finalizer
   // function under `REQUIRED_FINALIZER_OUTPUTS`; the intersection only widens
   // the function type to expose that optional property.
@@ -909,6 +957,7 @@ export function compilePipeline<
     id: definition.id,
     optionsSchema: definition.steps[0]?.[STEP_OPTIONS_SCHEMA],
     orderedSteps: Object.freeze([...orderedSteps]),
+    stepGraph,
     requiredFinalizerSteps: requiredFinalizerSteps
       ? Object.freeze([...requiredFinalizerSteps])
       : undefined,

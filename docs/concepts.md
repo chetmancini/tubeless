@@ -7,6 +7,8 @@ A pipeline is an ordered declaration of typed steps plus a finalizer.
 IDs, missing or contradictory dependencies, and cycles) and stores a compiled
 graph. Planning applies option-dependent step selection against that compiled
 graph and does not re-validate the definition.
+Dependency arrays are snapshotted in that compiled storage; caller-owned step
+objects are left unchanged.
 
 Literal duplicate step IDs are also rejected by TypeScript at the
 `definePipeline` call. Runtime definition validation remains the backstop for

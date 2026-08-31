@@ -5,6 +5,7 @@ import { formatPipelineError } from "./pipeline-diagnostics.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import {
   PIPELINE_FINALIZE_STEP_ID,
+  compiledStepGraph,
   decideStepDisposition,
   planStepById,
   stepToPlanStep,
@@ -495,7 +496,9 @@ export async function executePlannedRun<
   ): void => {
     for (let index = fromIndex; index < orderedSteps.length; index++) {
       const step = orderedSteps[index]!;
-      const plannedStep = plannedSteps.get(step.id) ?? stepToPlanStep(step, true);
+      const plannedStep =
+        plannedSteps.get(step.id) ??
+        stepToPlanStep(step, true, undefined, undefined, compiledStepGraph(compiled, step));
       if (plannedStep.skipReason) {
         const dependencyId =
           plannedStep.skipReason === "unmet-dependency"
@@ -690,7 +693,9 @@ export async function executePlannedRun<
 
   for (const [stepIndex, step] of orderedSteps.entries()) {
     const stepId = step.id;
-    const plannedStep = plannedSteps.get(stepId) ?? stepToPlanStep(step, true);
+    const graph = compiledStepGraph(compiled, step);
+    const plannedStep =
+      plannedSteps.get(stepId) ?? stepToPlanStep(step, true, undefined, undefined, graph);
 
     try {
       throwIfAborted(runtime);
@@ -709,6 +714,7 @@ export async function executePlannedRun<
 
     const disposition = decideStepDisposition({
       dryRun,
+      graph,
       planned: plannedStep,
       reportsByStepId,
       step,
@@ -731,10 +737,10 @@ export async function executePlannedRun<
     }
 
     const inputs: Record<string, unknown> = {};
-    for (const dep of step.dependsOn ?? []) {
+    for (const dep of graph.dependsOn) {
       inputs[dep.id] = outputs.get(dep.id);
     }
-    for (const dep of step.optionalDependsOn ?? []) {
+    for (const dep of graph.optionalDependsOn) {
       if (outputs.has(dep.id)) {
         inputs[dep.id] = outputs.get(dep.id);
       }

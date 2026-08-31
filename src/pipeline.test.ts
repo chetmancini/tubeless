@@ -2178,6 +2178,51 @@ describe("definePipeline", () => {
     expect(result.steps.map((report) => report.id)).toEqual(["build", "write"]);
   });
 
+  it("defines a pipeline from frozen steps with dependencies", async () => {
+    const step = createSteps();
+    const build = step("build", { run: () => "built" });
+    const write = step("write", {
+      dependsOn: [build],
+      run: ({ build }) => `${build}+write`,
+    });
+    Object.freeze(write);
+    const pipeline = definePipeline({
+      id: "frozen-step",
+      steps: [build, write],
+      finalize: (outputs) => outputs.write,
+    });
+
+    const plan = pipeline.plan();
+    expect(plan.ok).toBe(true);
+    expect(plan.steps.find((planned) => planned.id === "write")?.dependencies).toEqual(["build"]);
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("built+write");
+  });
+
+  it("plans from snapshotted absent dependency fields after define", async () => {
+    const step = createSteps();
+    const later = step("later", { run: () => "later" });
+    const earlier = step("earlier", { run: () => "earlier" });
+    const pipeline = definePipeline({
+      id: "absent-deps",
+      steps: [later, earlier],
+      finalize: (outputs) => `${outputs.later}+${outputs.earlier}`,
+    });
+    Object.assign(later, { dependsOn: [earlier] });
+
+    const plan = pipeline.plan();
+    expect(plan.ok).toBe(true);
+    expect(plan.steps.find((planned) => planned.id === "later")?.dependencies).toEqual([]);
+    expect(plan.steps.find((planned) => planned.id === "later")?.skipReason).toBeUndefined();
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("later+earlier");
+    expect(result.steps.map((report) => report.id)).toEqual(["later", "earlier"]);
+  });
+
   it("runs class steps whose contract members live on the prototype", async () => {
     const deps: AnyStep[] = [];
     class PrototypeStep implements AnyStep {

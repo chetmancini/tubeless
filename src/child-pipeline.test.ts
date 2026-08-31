@@ -1209,6 +1209,37 @@ describe("child-pipeline composition", () => {
       expect(runSpy).toHaveBeenCalledOnce();
     });
 
+    it("uses public run on an Object.create wrapper that overrides run", async () => {
+      const childStep = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({
+        id: "proto-child",
+        steps: [work],
+        finalize: () => "child-ok" as const,
+      });
+      const runSpy = vi.fn(child.run.bind(child));
+      const decorated = Object.create(child, {
+        run: { configurable: true, enumerable: true, value: runSpy, writable: true },
+      }) as typeof child;
+      const parentStep = createSteps();
+      const stage = parentStep.fromPipeline("stage", {
+        pipeline: decorated,
+        mapOptions: () => ({}),
+      });
+      const parent = definePipeline({
+        id: "proto-parent",
+        steps: [stage],
+        finalize: (outputs) => outputs.stage,
+      });
+
+      const result = await parent.run({});
+
+      expect(result.errors.map((error) => error.message)).toEqual([]);
+      expect(result.status).toBe("completed");
+      expect(result.value).toBe("child-ok");
+      expect(runSpy).toHaveBeenCalledOnce();
+    });
+
     it("does not invoke public run when a child plan is already invalid", async () => {
       const childStep = createSteps();
       const work = childStep("work", { run: () => "done" });
