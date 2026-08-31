@@ -1,7 +1,15 @@
-import { existsSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { elapsedToken, paintLiveLines, shimmerToken, SPINNER_TOKEN } from "./live-ticker";
+import {
+  createLiveTicker,
+  elapsedToken,
+  paintLiveLines,
+  shimmerToken,
+  SPINNER_TOKEN,
+} from "./live-ticker";
 
 const RESET = "\u001B[0m";
 const SHIMMER_BRIGHT = "\u001B[0;1;36m";
@@ -72,5 +80,56 @@ describe("live ticker worker", () => {
     expect(existsSync(compiled)).toBe(true);
     expect(source).not.toContain("WORKER_SOURCE");
     expect(source).not.toContain("eval: true");
+  });
+
+  it("paints, logs, and stops through the compiled worker", () => {
+    const path = join(tmpdir(), `tubeless-ticker-${process.pid}-${Date.now()}.log`);
+    const fd = openSync(path, "w");
+    const inlineWrites: string[] = [];
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        write: (chunk) => {
+          inlineWrites.push(chunk);
+        },
+      });
+      ticker.setLines([`${SPINNER_TOKEN} ${shimmerToken("load")}`]);
+
+      const paintedDeadline = Date.now() + 1_000;
+      let rendered = "";
+      while (Date.now() < paintedDeadline) {
+        rendered = readFileSync(path, "utf8");
+        if (rendered.includes("load") && /[-\\|\/] /.test(rendered)) break;
+      }
+
+      ticker.writeLog("logged from parent\n");
+      const loggedDeadline = Date.now() + 500;
+      while (Date.now() < loggedDeadline) {
+        rendered = readFileSync(path, "utf8");
+        if (rendered.includes("logged from parent")) break;
+      }
+
+      const disposeStarted = Date.now();
+      ticker.dispose();
+      expect(Date.now() - disposeStarted).toBeLessThan(200);
+      rendered = readFileSync(path, "utf8");
+      const plain = rendered.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
+
+      expect(inlineWrites).toEqual([]);
+      expect(rendered).toContain("\u001B[?25l");
+      expect(rendered).toContain("\u001B[?25h");
+      expect(plain).toMatch(/[-\\|\/] load/);
+      expect(rendered).toContain("\u001B[0;1;36m");
+      expect(rendered).toContain("logged from parent");
+      expect(rendered).not.toContain("\u0004");
+      expect(rendered).not.toContain("\u0005");
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+    }
   });
 });
