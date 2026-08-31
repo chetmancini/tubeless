@@ -122,8 +122,10 @@ or shared helpers in this repository.
   exporter boundary.
 - Keep durable local observation opt-in. Use the append-only adapter from
   `tubeless/run-store/sqlite` or `tubeless run --store`; inspect recorded runs
-  with `tubeless history`. Do not make pipeline definitions depend on storage or
-  the studio. Recorded history keeps the last
+  with `tubeless history`. `tubeless history` inspects a finished artifact and
+  refuses a store with a live writer or multiple hard links. Do not make
+  pipeline definitions depend on storage or the studio. Recorded history keeps
+  the last
   `reportProgress` `details` plus `detail_count`, and opaque child steps keep
   `nested_pipeline` with the original `step_count`. Studio renders those
   snapshots; it does not flatten child DAGs into the parent step.

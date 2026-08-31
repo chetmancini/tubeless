@@ -1,6 +1,15 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, symlink, unlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  link,
+  mkdir,
+  mkdtemp,
+  readFile,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 import * as os from "node:os";
@@ -1374,6 +1383,46 @@ describe("tubeless workbench", () => {
       await runWorkbenchCli(["history", "--json", "--events", "--store", databasePath], conflictIo)
     ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
     expect(conflictIo.errors.join("")).toMatch(/json|events/i);
+  });
+
+  it("fails history with a load error when the store has a live writer or multiple hard links", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const databasePath = path.join(directory, "history", "runs.sqlite");
+    expect(
+      await runWorkbenchCli(
+        [
+          "run",
+          "--store",
+          databasePath,
+          "pipeline.mjs",
+          "--",
+          "--message",
+          "hello",
+          "--target",
+          "work",
+        ],
+        captureIo(directory)
+      )
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+
+    await writeFile(`${databasePath}-wal`, "not a checkpointed wal");
+    const walIo = captureIo(directory);
+    expect(await runWorkbenchCli(["history", "--store", databasePath], walIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(walIo.errors.join("")).toMatch(/^Error: .*(write-ahead|journal|sidecar)/im);
+    expect(walIo.errors.join("")).not.toMatch(/\sat\s/);
+    await unlink(`${databasePath}-wal`);
+
+    const alias = path.join(directory, "alias", "store.sqlite");
+    await mkdir(path.dirname(alias));
+    await link(databasePath, alias);
+    const linkIo = captureIo(directory);
+    expect(await runWorkbenchCli(["history", "--store", alias], linkIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(linkIo.errors.join("")).toMatch(/^Error: .*hard link/im);
+    expect(linkIo.errors.join("")).not.toMatch(/\sat\s/);
   });
 
   it("serves and cleanly stops the optional local studio command", async () => {

@@ -127,8 +127,10 @@ tubeless history [options] [run-id]
 - `--events` emits raw store events as NDJSON (run-scoped when `run-id` is set)
 
 `--json` and `--events` cannot be combined. The default print is the projection:
-a run list, or one run's steps, logs, and error. A missing store exits `2`. An
-unknown run id exits `1`.
+a run list, or one run's steps, logs, and error. A missing store exits `2`. A
+store that cannot be opened read-only — a pending `-wal` or `-journal`,
+multiple hard links, or a file that is not a versioned run store — also exits
+`2` with an `Error:` line. An unknown run id exits `1`.
 
 ```sh
 bunx tubeless run --store .tubeless/runs.sqlite --trace run.ndjson ./scripts/import.ts -- --source rows.txt
