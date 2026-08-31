@@ -170,6 +170,11 @@ function fail(message) {
   process.exit(1);
 }
 
+// Keys must stay [A-Za-z_][A-Za-z0-9_]* — they are classify() literals, not user input.
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", `'\\''`)}'`;
+}
+
 const nextKind = arg("--next");
 const toArg = arg("--to");
 if (nextKind && toArg) fail("use --next or --to, not both");
@@ -186,7 +191,7 @@ if (nextKind) {
 const bump = classify(arg("--from"), to);
 if (process.argv.includes("--sh")) {
   for (const [key, value] of Object.entries(bump)) {
-    process.stdout.write(`${key}=${JSON.stringify(value)}\n`);
+    process.stdout.write(`${key}=${shellQuote(value)}\n`);
   }
 } else {
   process.stdout.write(`${JSON.stringify(bump)}\n`);
