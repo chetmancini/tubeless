@@ -2178,6 +2178,41 @@ describe("definePipeline", () => {
     expect(result.steps.map((report) => report.id)).toEqual(["build", "write"]);
   });
 
+  it("runs class steps whose contract members live on the prototype", async () => {
+    const deps: AnyStep[] = [];
+    class PrototypeStep implements AnyStep {
+      constructor(readonly id: string) {}
+
+      get dependsOn() {
+        return deps;
+      }
+
+      skip() {
+        return false;
+      }
+
+      run() {
+        return "from-class";
+      }
+    }
+
+    const work = new PrototypeStep("work");
+    const pipeline = definePipeline({
+      id: "class-step",
+      steps: [work],
+      finalize: (outputs) => outputs.work,
+    });
+    deps.push(work);
+
+    const plan = pipeline.plan();
+    expect(plan.ok).toBe(true);
+    expect(plan.steps.find((planned) => planned.id === "work")?.dependencies).toEqual([]);
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("from-class");
+  });
+
   it("policy-skips a step with a yellow skip report and unlocks dependents", async () => {
     interface Options {
       enableWrite: boolean;

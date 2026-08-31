@@ -866,15 +866,15 @@ function snapshotCompiledSteps<TOptions extends object>(
 ): Map<AnyStep<TOptions>, AnyStep<TOptions>> {
   const sealedByOriginal = new Map<AnyStep<TOptions>, AnyStep<TOptions>>();
   for (const step of steps) {
-    // SAFETY: each placeholder receives the original step's descriptors below
-    // before compilePipeline returns, so the object matches AnyStep<TOptions>.
-    sealedByOriginal.set(step, {} as AnyStep<TOptions>);
+    // SAFETY: placeholders keep the original prototype so inherited contract
+    // members (`run`, `skip`, getters) remain; own descriptors are copied below.
+    sealedByOriginal.set(step, Object.create(Object.getPrototypeOf(step)) as AnyStep<TOptions>);
   }
   for (const step of steps) {
     const sealed = sealedByOriginal.get(step)!;
     const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(step);
     for (const field of ["dependsOn", "optionalDependsOn", "skipAfterFailureOf"] as const) {
-      if (!Object.hasOwn(descriptors, field)) continue;
+      if (!Object.hasOwn(descriptors, field) && !(field in step)) continue;
       descriptors[field] = {
         configurable: true,
         enumerable: true,
