@@ -470,6 +470,7 @@ parentPort.on("message", (msg) => {
   if (msg.type !== "log") return;
   writeSync(workerData.fd, msg.text);
   logs += 1;
+  Atomics.add(new Int32Array(workerData.handshakeBuffer), 2, 1);
   parentPort.postMessage({ type: "ack", kind: "log" });
   if (logs >= 2) throw new Error("mid-run crash");
 });
@@ -719,6 +720,73 @@ parentPort.on("message", (msg) => {
       rendered = readFileSync(path, "utf8");
       expect(rendered).toContain("lost-log");
       expect(rendered.match(/lost-log/g)).toHaveLength(1);
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
+    }
+  });
+
+  it("does not replay a log the worker wrote when the ack message is lost", async () => {
+    const path = join(tmpdir(), `tubeless-ticker-log-handshake-${process.pid}-${Date.now()}.log`);
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-log-handshake-worker-${process.pid}-${Date.now()}.mjs`
+    );
+    writeFileSync(
+      workerPath,
+      `
+import { writeSync } from "node:fs";
+import { parentPort, workerData } from "node:worker_threads";
+
+parentPort.on("message", (msg) => {
+  if (msg.type === "lines") {
+    writeSync(workerData.fd, "worker-ready\\n");
+    parentPort.postMessage({ type: "ready" });
+    return;
+  }
+  if (msg.type !== "log") return;
+  writeSync(workerData.fd, msg.text);
+  Atomics.add(new Int32Array(workerData.handshakeBuffer), 2, 1);
+  throw new Error("crash after accepted log");
+});
+`
+    );
+    const fd = openSync(path, "w");
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          writeSync(fd, chunk);
+        },
+      });
+      ticker.setLines(["load"]);
+
+      const liveDeadline = Date.now() + 2_000;
+      while (Date.now() < liveDeadline) {
+        if (readFileSync(path, "utf8").includes("worker-ready")) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      ticker.writeLog("accepted-log\n");
+      const fallbackDeadline = Date.now() + 2_000;
+      let rendered = "";
+      while (Date.now() < fallbackDeadline) {
+        rendered = readFileSync(path, "utf8");
+        if ((rendered.match(/accepted-log/g) ?? []).length >= 1) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      ticker.dispose();
+      rendered = readFileSync(path, "utf8");
+      expect(rendered).toContain("accepted-log");
+      expect(rendered.match(/accepted-log/g)).toHaveLength(1);
     } finally {
       closeSync(fd);
       unlinkSync(path);

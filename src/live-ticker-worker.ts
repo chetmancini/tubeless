@@ -110,6 +110,7 @@ port.on("message", (msg: TickerWorkerMessage) => {
     write(msg.text);
     frameLineCount = 0;
     publishFrame();
+    Atomics.add(handshake, 2, 1);
     announceReady();
     port.postMessage({ type: "ack", kind: "log" });
     return;

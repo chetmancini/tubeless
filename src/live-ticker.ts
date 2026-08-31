@@ -280,7 +280,8 @@ function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[
 }
 
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
-  const handshakeBuffer = new SharedArrayBuffer(8);
+  // [0] stop handshake, [1] painted rows, [2] accepted logs
+  const handshakeBuffer = new SharedArrayBuffer(12);
   const handshake = new Int32Array(handshakeBuffer);
   const worker = new Worker(options.workerUrl ?? resolveLiveTickerWorkerUrl(), {
     execArgv: fileWorkerExecArgv(),
@@ -298,8 +299,16 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   let inlineFallback: LiveTicker | undefined;
   let lines: readonly string[] = [];
   const pendingLogs: string[] = [];
+  let ackedLogs = 0;
 
   const paintedFrameLineCount = (): number => Atomics.load(handshake, 1);
+
+  const dropAcknowledgedLogs = (): void => {
+    const accepted = Atomics.load(handshake, 2);
+    if (accepted <= ackedLogs) return;
+    pendingLogs.splice(0, accepted - ackedLogs);
+    ackedLogs = accepted;
+  };
 
   const send = (message: TickerWorkerMessage): void => {
     if (disposed || inlineFallback) return;
@@ -315,6 +324,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   };
 
   const replayThrough = (ticker: LiveTicker): void => {
+    dropAcknowledgedLogs();
     for (const text of pendingLogs) {
       ticker.writeLog(text);
     }
@@ -349,7 +359,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   });
   worker.unref();
   worker.on("message", (msg: { type?: string; kind?: string }) => {
-    if (msg?.type === "ack" && msg.kind === "log") pendingLogs.shift();
+    if (msg?.type === "ack" && msg.kind === "log") dropAcknowledgedLogs();
   });
 
   return {
@@ -370,6 +380,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
         writeSync(options.fd, text);
         return;
       }
+      dropAcknowledgedLogs();
       pendingLogs.push(text);
       send({ text, type: "log" });
     },
