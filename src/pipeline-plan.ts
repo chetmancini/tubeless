@@ -26,6 +26,7 @@ export const STEP_REMOTE: unique symbol = Symbol("tubeless.stepRemote");
 export const REQUIRED_FINALIZER_OUTPUTS: unique symbol = Symbol(
   "tubeless.requiredFinalizerOutputs"
 );
+export const EXECUTE_COMPILED_RUN: unique symbol = Symbol("tubeless.executeCompiledRun");
 
 /**
  * Recovers the options type from the steps themselves rather than taking it as its own
@@ -48,7 +49,7 @@ export type StepIds<TSteps extends readonly AnyStep[]> = TSteps[number]["id"];
 
 export type TargetIds<TTargets extends readonly AnyStep[]> = TTargets[number]["id"];
 
-function duplicateValues(values: readonly string[]): string[] {
+export function duplicateValues(values: readonly string[]): string[] {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
   for (const value of values) {
@@ -619,16 +620,15 @@ export function buildPipelinePlan<
   TTargets extends readonly TSteps[number][],
   TResultSchema extends StandardSchemaV1 | undefined,
 >(
-  definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>,
+  compiled: CompiledPipeline<TSteps, TResult, TTargets, TResultSchema>,
   controls: PipelineRunControls<StepIds<TSteps>, TargetIds<TTargets>>
 ): PipelinePlan {
   const dryRun = controls.dryRun === true;
-  const steps = definition.steps;
-  const stepIds = steps.map((step) => step.id);
-  const errors = validatePipelineDefinition(definition);
+  const steps = compiled.orderedSteps;
+  const errors: PipelineError[] = [];
 
-  const knownStepIds = new Set(stepIds);
-  const declaredTargetIds = new Set((definition.targets ?? []).map((target) => target.id));
+  const knownStepIds = new Set(compiled.stepIds);
+  const declaredTargetIds = new Set(compiled.declaredTargets.map((target) => target.id));
   const requestedStepIds = controls.stepIds ?? [];
   const requestedTargets = controls.targets ?? [];
   if (controls.stepIds !== undefined && controls.targets !== undefined) {
@@ -637,7 +637,7 @@ export function buildPipelinePlan<
         "TUBELESS_PLANNING_SELECTION_CONFLICT",
         "planning",
         "selection",
-        `Pipeline ${definition.id} cannot combine exact stepIds filtering with dependency-aware targets`
+        `Pipeline ${compiled.id} cannot combine exact stepIds filtering with dependency-aware targets`
       )
     );
   }
@@ -647,7 +647,7 @@ export function buildPipelinePlan<
         "TUBELESS_PLANNING_STEP_SELECTION_EMPTY",
         "planning",
         "selection",
-        `Pipeline ${definition.id} received an empty stepIds array; omit stepIds to run every step, or pass at least one step id`
+        `Pipeline ${compiled.id} received an empty stepIds array; omit stepIds to run every step, or pass at least one step id`
       )
     );
   }
@@ -657,7 +657,7 @@ export function buildPipelinePlan<
         "TUBELESS_PLANNING_TARGET_SELECTION_EMPTY",
         "planning",
         "selection",
-        `Pipeline ${definition.id} received an empty targets array; omit targets to run every step, or pass at least one target step id`
+        `Pipeline ${compiled.id} received an empty targets array; omit targets to run every step, or pass at least one target step id`
       )
     );
   }
@@ -668,7 +668,7 @@ export function buildPipelinePlan<
         "TUBELESS_PLANNING_STEP_SELECTION_DUPLICATE",
         "planning",
         "selection",
-        `Pipeline ${definition.id} requested duplicate step ids: ${duplicateRequestedStepIds.join(", ")}`
+        `Pipeline ${compiled.id} requested duplicate step ids: ${duplicateRequestedStepIds.join(", ")}`
       )
     );
   }
@@ -679,7 +679,7 @@ export function buildPipelinePlan<
         "TUBELESS_PLANNING_STEP_UNKNOWN",
         "planning",
         "selection",
-        `Pipeline ${definition.id} requested unknown step ids: ${unknownRequestedStepIds.join(", ")}`
+        `Pipeline ${compiled.id} requested unknown step ids: ${unknownRequestedStepIds.join(", ")}`
       )
     );
   }
@@ -690,7 +690,7 @@ export function buildPipelinePlan<
         "TUBELESS_PLANNING_TARGET_SELECTION_DUPLICATE",
         "planning",
         "selection",
-        `Pipeline ${definition.id} requested duplicate targets: ${duplicateTargets.join(", ")}`
+        `Pipeline ${compiled.id} requested duplicate targets: ${duplicateTargets.join(", ")}`
       )
     );
   }
@@ -701,7 +701,7 @@ export function buildPipelinePlan<
         "TUBELESS_PLANNING_TARGET_UNKNOWN",
         "planning",
         "selection",
-        `Pipeline ${definition.id} requested unknown targets: ${unknownTargets.join(", ")}`
+        `Pipeline ${compiled.id} requested unknown targets: ${unknownTargets.join(", ")}`
       )
     );
   }
@@ -714,19 +714,19 @@ export function buildPipelinePlan<
         "TUBELESS_PLANNING_TARGET_UNDECLARED",
         "planning",
         "selection",
-        `Pipeline ${definition.id} requested undeclared targets: ${undeclaredTargets.join(", ")}`
+        `Pipeline ${compiled.id} requested undeclared targets: ${undeclaredTargets.join(", ")}`
       )
     );
   }
 
-  const orderedSteps = errors.length === 0 ? topologicalSort(steps) : null;
+  const orderedSteps = steps;
 
   if (errors.length > 0) {
     return {
       dryRun,
       errors,
       ok: false,
-      pipelineId: definition.id,
+      pipelineId: compiled.id,
       steps: [],
     };
   }
@@ -767,7 +767,7 @@ export function buildPipelinePlan<
   // Accumulated planned skip/complete reports so later steps see the same
   // unmet-dependency chain as today's skipReason walk (not one empty map).
   const plannedReportsByStepId = new Map<string, PipelineStepReport>();
-  for (const step of orderedSteps ?? steps) {
+  for (const step of orderedSteps) {
     const selectionReasons = selectionReasonsByStepId.get(step.id)!;
     const selected = selectionReasons.some(selectsStep);
     const planned = stepToPlanStep(step, selected, undefined, selectionReasons);
@@ -810,7 +810,7 @@ export function buildPipelinePlan<
     dryRun,
     errors,
     ok: errors.length === 0,
-    pipelineId: definition.id,
+    pipelineId: compiled.id,
     steps: planSteps,
   };
 }
@@ -832,6 +832,64 @@ export class PipelineDefinitionError extends Error {
     );
     this.name = "PipelineDefinitionError";
   }
+}
+
+export interface CompiledPipeline<
+  TSteps extends readonly AnyStep[] = readonly AnyStep[],
+  TResult = unknown,
+  TTargets extends readonly TSteps[number][] = readonly [],
+  TResultSchema extends StandardSchemaV1 | undefined = undefined,
+> {
+  readonly declaredTargets: readonly AnyStep<StepsOptions<TSteps>>[];
+  readonly finalize: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>["finalize"];
+  readonly id: string;
+  readonly optionsSchema: StandardSchemaV1 | undefined;
+  readonly orderedSteps: readonly AnyStep<StepsOptions<TSteps>>[];
+  readonly requiredFinalizerSteps: readonly AnyStep<StepsOptions<TSteps>>[] | undefined;
+  readonly resultSchema: TResultSchema | undefined;
+  readonly stepIds: readonly string[];
+  readonly targetIds: readonly string[];
+}
+
+export function compilePipeline<
+  TSteps extends readonly AnyStep[],
+  TResult,
+  TTargets extends readonly TSteps[number][],
+  TResultSchema extends StandardSchemaV1 | undefined,
+>(
+  definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>
+): CompiledPipeline<TSteps, TResult, TTargets, TResultSchema> {
+  const errors = validatePipelineDefinition(definition);
+  if (errors.length > 0) {
+    throw new PipelineDefinitionError(definition.id, errors);
+  }
+  type TOptions = StepsOptions<TSteps>;
+  // SAFETY: `steps` is `TSteps extends readonly AnyStep[]`; the cast restores
+  // the `TOptions` generic that the tuple erased, without changing the values.
+  const orderedSteps = topologicalSort(definition.steps as readonly AnyStep<TOptions>[])!;
+  // SAFETY: `requireOutputs` stamps the required step ids onto the finalizer
+  // function under `REQUIRED_FINALIZER_OUTPUTS`; the intersection only widens
+  // the function type to expose that optional property.
+  const requiredFinalizerSteps = (
+    definition.finalize as typeof definition.finalize & {
+      [REQUIRED_FINALIZER_OUTPUTS]?: readonly AnyStep<TOptions>[];
+    }
+  )[REQUIRED_FINALIZER_OUTPUTS];
+  // SAFETY: targets are a subset of `TSteps[number]`, each an `AnyStep<TOptions>`.
+  const declaredTargets = (definition.targets ?? []) as readonly AnyStep<TOptions>[];
+  return Object.freeze({
+    declaredTargets: Object.freeze([...declaredTargets]),
+    finalize: definition.finalize,
+    id: definition.id,
+    optionsSchema: definition.steps[0]?.[STEP_OPTIONS_SCHEMA],
+    orderedSteps: Object.freeze([...orderedSteps]),
+    requiredFinalizerSteps: requiredFinalizerSteps
+      ? Object.freeze([...requiredFinalizerSteps])
+      : undefined,
+    resultSchema: definition.resultSchema,
+    stepIds: Object.freeze(definition.steps.map((step) => step.id)),
+    targetIds: Object.freeze((definition.targets ?? []).map((step) => step.id)),
+  });
 }
 
 type PipelineOutputs<TSteps extends readonly AnyStep[]> = {

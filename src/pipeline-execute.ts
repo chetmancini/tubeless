@@ -8,7 +8,7 @@ import {
   decideStepDisposition,
   planStepById,
   stepToPlanStep,
-  type PipelineDefinition,
+  type CompiledPipeline,
 } from "./pipeline-plan.js";
 import type { StepsOptions } from "./pipeline-plan.js";
 import type { AnyStep } from "./pipeline-steps.js";
@@ -317,32 +317,32 @@ export async function executePlannedRun<
   TTargets extends readonly TSteps[number][],
   TResultSchema extends StandardSchemaV1 | undefined,
 >(input: {
+  compiled: CompiledPipeline<TSteps, TResult, TTargets, TResultSchema>;
   controls: PipelineRunControls;
-  definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>;
   domainOptions: object;
-  optionsSchema: StandardSchemaV1 | undefined;
   plan: PipelinePlan;
   runtime: PipelineRuntime;
-  targetIds: readonly string[];
 }): Promise<
   PipelineRun<TResultSchema extends StandardSchemaV1 ? InferSchemaOutput<TResultSchema> : TResult>
 > {
   type TPipelineResult = TResultSchema extends StandardSchemaV1
     ? InferSchemaOutput<TResultSchema>
     : TResult;
-  const { controls, definition, optionsSchema, runtime, targetIds } = input;
+  const { compiled, controls, runtime } = input;
+  const optionsSchema = compiled.optionsSchema;
+  const targetIds = compiled.targetIds;
   type TOptions = StepsOptions<TSteps>;
   // SAFETY: `domainOptions` is the user-supplied options object; if a schema
   // is present it is re-validated below before assignment to `pipelineOptions`.
   let pipelineOptions = input.domainOptions as TOptions;
   const startedAt = runtime.now();
-  const runId = runtime.runId ?? createRunId(definition.id);
+  const runId = runtime.runId ?? createRunId(compiled.id);
   const parentRunId = runtime.parentRunId;
   const identity: PipelineRunIdentity = { runId };
   if (parentRunId) identity.parentRunId = parentRunId;
   const dryRun = controls.dryRun === true;
   const trace = createPipelineTraceEmitter(
-    definition.id,
+    compiled.id,
     runtime.tracing,
     basePipelineLogger(runtime.log),
     {
@@ -351,7 +351,7 @@ export async function executePlannedRun<
     },
     runtime.now
   );
-  const lifecycle = createPipelineLifecycleObserver(definition.id, runtime, trace);
+  const lifecycle = createPipelineLifecycleObserver(compiled.id, runtime, trace);
   const tracedLogger = (stepId?: string, attemptId?: string): PipelineLogger => {
     if (!trace) return runtime.log;
     const base = basePipelineLogger(runtime.log);
@@ -407,7 +407,7 @@ export async function executePlannedRun<
       case "failed":
       case "skipped":
       case "completed":
-        publishStepStatus({ ...report, pipelineId: definition.id, step });
+        publishStepStatus({ ...report, pipelineId: compiled.id, step });
     }
   };
   const runPlan = input.plan;
@@ -416,7 +416,7 @@ export async function executePlannedRun<
   if (!runPlan.ok) {
     const result = errorRunResult<TPipelineResult>(
       runtime,
-      definition.id,
+      compiled.id,
       dryRun,
       startedAt,
       runPlan.errors,
@@ -431,11 +431,11 @@ export async function executePlannedRun<
       const validated = await validateStandardSchema(
         optionsSchema,
         input.domainOptions,
-        `Pipeline ${definition.id} options`
+        `Pipeline ${compiled.id} options`
       );
       if (typeof validated !== "object" || validated === null || Array.isArray(validated)) {
         throw new PipelineBoundaryValidationError(
-          `Pipeline ${definition.id} options schema returned a non-object value`,
+          `Pipeline ${compiled.id} options schema returned a non-object value`,
           [{ message: "Expected the validated options value to be an object" }]
         );
       }
@@ -450,7 +450,7 @@ export async function executePlannedRun<
       });
       const result = errorRunResult<TPipelineResult>(
         runtime,
-        definition.id,
+        compiled.id,
         dryRun,
         startedAt,
         [pipelineError],
@@ -462,7 +462,7 @@ export async function executePlannedRun<
     }
   }
   for (const step of runPlan.steps) {
-    publishStepStatus({ pipelineId: definition.id, status: "planned", step });
+    publishStepStatus({ pipelineId: compiled.id, status: "planned", step });
   }
 
   const outputs = new Map<string, unknown>();
@@ -481,10 +481,10 @@ export async function executePlannedRun<
   };
   if (parentRunId) executionContext.parentRunId = parentRunId;
 
-  const stepsById = new Map(definition.steps.map((step) => [step.id, step]));
+  const stepsById = new Map(compiled.orderedSteps.map((step) => [step.id, step]));
   // `runPlan.steps` is already topologically ordered. Rehydrate from the original step
   // objects so callers still get the typed `run` functions rather than plan metadata.
-  // SAFETY: every planned step id originates from `definition.steps`, so the
+  // SAFETY: every planned step id originates from `compiled.orderedSteps`, so the
   // map lookup always finds the matching `AnyStep<TOptions>`.
   const orderedSteps = runPlan.steps.map((step) => stepsById.get(step.id) as AnyStep<TOptions>);
 
@@ -633,7 +633,7 @@ export async function executePlannedRun<
         attempt = beginAttempt(args.stepId, runtime.now());
         publishStepStatus({
           attemptId: attempt.attemptId,
-          pipelineId: definition.id,
+          pipelineId: compiled.id,
           status: "running",
           step: args.plannedStep,
         });
@@ -642,7 +642,7 @@ export async function executePlannedRun<
         published = await validateStandardSchema(
           args.step.outputSchema,
           published,
-          `Pipeline ${definition.id} step ${args.stepId} output`
+          `Pipeline ${compiled.id} step ${args.stepId} output`
         );
       } catch (error) {
         return recordStepExecutionFailure(
@@ -750,7 +750,7 @@ export async function executePlannedRun<
         const skipAttempt = beginAttempt(stepId, runtime.now());
         publishStepStatus({
           attemptId: skipAttempt.attemptId,
-          pipelineId: definition.id,
+          pipelineId: compiled.id,
           status: "running",
           step: plannedStep,
         });
@@ -781,7 +781,7 @@ export async function executePlannedRun<
     const attempt = beginAttempt(stepId, stepStartedAt);
     publishStepStatus({
       attemptId: attempt.attemptId,
-      pipelineId: definition.id,
+      pipelineId: compiled.id,
       status: "running",
       step: plannedStep,
     });
@@ -791,7 +791,7 @@ export async function executePlannedRun<
         if (!acceptsProgress) return;
         publishStepStatus({
           attemptId: attempt.attemptId,
-          pipelineId: definition.id,
+          pipelineId: compiled.id,
           progress,
           status: "running",
           step: plannedStep,
@@ -845,20 +845,20 @@ export async function executePlannedRun<
       // SAFETY: `outputs` maps step ids to their produced values, which is
       // exactly the shape the finalizer's outputs parameter describes.
       const finalOutputs = Object.fromEntries(outputs) as Parameters<
-        PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>["finalize"]
+        CompiledPipeline<TSteps, TResult, TTargets, TResultSchema>["finalize"]
       >[0];
-      const finalizedValue = await definition.finalize(finalOutputs, {
+      const finalizedValue = await compiled.finalize(finalOutputs, {
         ...executionContext,
         log: tracedLogger(PIPELINE_FINALIZE_STEP_ID),
       });
       // SAFETY: with a result schema the value is validated against
       // `TPipelineResult`; without one the finalizer's declared return type
       // is `TPipelineResult`, so the cast only restores that type.
-      value = definition.resultSchema
+      value = compiled.resultSchema
         ? ((await validateStandardSchema(
-            definition.resultSchema,
+            compiled.resultSchema,
             finalizedValue,
-            `Pipeline ${definition.id} final result`
+            `Pipeline ${compiled.id} final result`
           )) as TPipelineResult)
         : (finalizedValue as TPipelineResult);
       finalized = true;
@@ -884,7 +884,7 @@ export async function executePlannedRun<
 
   const finishedAtMs = runtime.now();
   const result: PipelineRun<TPipelineResult> = {
-    pipelineId: definition.id,
+    pipelineId: compiled.id,
     dryRun,
     errors,
     finalized,

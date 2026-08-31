@@ -2130,6 +2130,28 @@ describe("definePipeline", () => {
     ).toThrow("dependency cycle");
   });
 
+  it("plans from the compiled graph after define, ignoring later definition mutations", async () => {
+    const step = createSteps();
+    const build = step("build", { run: () => "built" });
+    const definition = {
+      id: "sealed",
+      steps: [build],
+      finalize: () => "ok" as const,
+    };
+    const pipeline = definePipeline(definition);
+    (definition as { steps: AnyStep[] }).steps = [build, build];
+
+    const plan = pipeline.plan();
+    expect(plan.ok).toBe(true);
+    expect(plan.errors).toEqual([]);
+    expect(plan.steps.map((planned) => planned.id)).toEqual(["build"]);
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.steps.map((report) => report.id)).toEqual(["build"]);
+    expect(result.value).toBe("ok");
+  });
+
   it("policy-skips a step with a yellow skip report and unlocks dependents", async () => {
     interface Options {
       enableWrite: boolean;

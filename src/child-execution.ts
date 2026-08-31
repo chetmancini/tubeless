@@ -5,14 +5,14 @@ import {
   type MappedChildProgressSnapshot,
   type ToMappedChildStepProgressOptions,
 } from "./mapped-child-progress.js";
-import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
+import { duplicateValues, EXECUTE_COMPILED_RUN } from "./pipeline-plan.js";
 import { hasVisibleStepProgress } from "./progress.js";
 import type {
   Pipeline,
   PipelineContext,
-  PipelineError,
   PipelineExecutionContext,
   PipelineHooks,
+  PipelinePlan,
   PipelinePlanStep,
   PipelineRun,
   PipelineRunControls,
@@ -33,6 +33,33 @@ export class PipelineChildError extends Error {
 }
 
 type ChildPipeline = Pipeline<object, unknown, string, string>;
+
+type ExecutableChild = ChildPipeline & {
+  [EXECUTE_COMPILED_RUN]: (
+    plan: PipelinePlan,
+    options: PipelineRunOptions,
+    controls: PipelineRunControls,
+    context?: Partial<PipelineContext>
+  ) => Promise<PipelineRun<unknown>>;
+};
+
+function executeCompiledChild(
+  pipeline: ChildPipeline,
+  plan: PipelinePlan,
+  domainOptions: PipelineRunOptions,
+  controls: PipelineRunControls,
+  context: PipelineContext
+): Promise<PipelineRun<unknown>> {
+  // SAFETY: `definePipeline` stamps `EXECUTE_COMPILED_RUN` onto every returned
+  // pipeline object; child runners only receive those compiled pipelines.
+  return (pipeline as ExecutableChild)[EXECUTE_COMPILED_RUN](
+    plan,
+    domainOptions,
+    controls,
+    context
+  );
+}
+
 type ChildInputs = Record<string, unknown>;
 
 interface ChildExecutionDependencies<TParentOptions extends object> {
@@ -84,16 +111,6 @@ function childTracingOptions(
   itemKey = context.trace?.itemKey
 ): PipelineTracingOptions | undefined {
   return context.tracing ? { ...context.tracing, itemKey } : undefined;
-}
-
-function duplicateValues(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const duplicates = new Set<string>();
-  for (const value of values) {
-    if (seen.has(value)) duplicates.add(value);
-    seen.add(value);
-  }
-  return [...duplicates];
 }
 
 const CHILD_RUN_CONTROL_KEYS = ["continueOnError", "dryRun", "stepIds", "targets"] as const;
@@ -180,29 +197,6 @@ function isConcurrencyFunction<TOptions extends object>(
   return typeof concurrency === "function";
 }
 
-function failedPlanRun(
-  pipeline: ChildPipeline,
-  controls: PipelineRunControls,
-  context: PipelineContext,
-  errors: readonly PipelineError[]
-): PipelineRun<unknown> {
-  const now = context.now ?? Date.now;
-  const startedAtMs = now();
-  const result: PipelineRun<unknown> = {
-    pipelineId: pipeline.id,
-    dryRun: controls.dryRun === true,
-    errors: [...errors],
-    finalized: false,
-    finishedAtMs: now(),
-    runId: context.runId ?? createRunId(pipeline.id),
-    startedAtMs,
-    status: "failed",
-    steps: [],
-    version: RUN_MODEL_VERSION,
-  };
-  if (context.parentRunId) result.parentRunId = context.parentRunId;
-  return result;
-}
 
 function firstChildFailure(result: PipelineRun<unknown>) {
   const firstFailedStep = result.steps.find(
@@ -223,19 +217,32 @@ async function runChildPipeline(
   context: PipelineContext,
   hooks: PipelineHooks,
   dependencies: ChildExecutionDependencies<object>,
-  messagePrefix = ""
+  messagePrefix = "",
+  plan: PipelinePlan
 ): Promise<PipelineRun<unknown>> {
-  const plan = pipeline.plan(controls);
+
   if (!plan.ok) {
     const firstError = plan.errors[0];
-    const result = failedPlanRun(pipeline, controls, context, plan.errors);
+    const result = await executeCompiledChild(
+      pipeline,
+      plan,
+      domainOptions,
+      controls,
+      context
+    );
     throw dependencies.createExecutionError(
       result,
       `${messagePrefix}could not start: ${firstError?.message ?? "invalid plan"}`
     );
   }
 
-  const result = await pipeline.run(domainOptions, controls, { ...context, hooks });
+  const result = await executeCompiledChild(
+    pipeline,
+    plan,
+    domainOptions,
+    controls,
+    { ...context, hooks }
+  );
   if (result.status !== "completed") {
     const { failureLocation, message } = firstChildFailure(result);
     throw dependencies.createExecutionError(
@@ -264,7 +271,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
       sleep: context.sleep,
       tracing: childTracingOptions(context),
     };
-    // Preview plan only for progress totals; invalid plans throw from runChildPipeline.
+    // Plan once for progress totals and execution. Invalid plans fail before child.run.
     const childPlan = config.pipeline.plan(controls);
     const selectedStepCount = childPlan.ok
       ? childPlan.steps.filter((step) => step.selected).length
@@ -296,193 +303,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
       baseChildContext,
       childHooks,
       dependencies,
-      `Child pipeline ${config.pipeline.id} `
-    );
+      `Child pipeline ${config.pipeline.id} `,
+      childPlan
 
-    return config.mapResult
-      ? config.mapResult(childResult.value, childResult, context)
-      : childResult.value;
-  };
-}
-
-export function createMappedChildRunner<TParentOptions extends object>(
-  config: MappedChildExecutionConfig<TParentOptions>,
-  dependencies: ChildExecutionDependencies<TParentOptions>
-): (inputs: ChildInputs, context: PipelineStepContext<TParentOptions>) => Promise<unknown[]> {
-  return async (inputs, context) => {
-    const items = [...(await config.items(inputs, context))];
-    const keys = items.map((item, index) => config.key(item, index));
-    const duplicateKeys = duplicateValues(keys);
-    if (duplicateKeys.length > 0) {
-      throw new PipelineChildError(
-        `Mapped child pipeline ${config.pipeline.id} received duplicate item keys: ${duplicateKeys.join(", ")}`
-      );
-    }
-    const concurrency = Math.max(
-      1,
-      isConcurrencyFunction(config.concurrency)
-        ? config.concurrency(inputs, context)
-        : (config.concurrency ?? 1)
-    );
-    type Outcome =
-      | { key: string; ok: true; value: unknown }
-      | { error: Error; key: string; ok: false };
-
-    const active = new Map<string, string>();
-    const childTerminalSteps = new Map<string, Set<string>>();
-    let finishedItems = 0;
-    let failedItems = 0;
-    let stepsPerItem = 0;
-    let plannedChildSteps = 0;
-    let plannedItems = 0;
-    let terminalChildSteps = 0;
-
-    const publishProgress = (spotlight?: string): void => {
-      const snapshot: MappedChildProgressSnapshot = {
-        active,
-        concurrency,
-        failedItems,
-        finishedItems,
-        itemCount: items.length,
-        plannedChildSteps,
-        plannedItems,
-        stepsPerItem,
-        terminalChildSteps,
-        spotlight,
-      };
-      context.reportProgress(toMappedChildStepProgress(snapshot, config.progress));
-    };
-    const markChildTerminal = (itemKey: string, stepId: string, label: string): void => {
-      let seen = childTerminalSteps.get(itemKey);
-      if (!seen) {
-        seen = new Set();
-        childTerminalSteps.set(itemKey, seen);
-      }
-      if (!seen.has(stepId)) {
-        seen.add(stepId);
-        terminalChildSteps += 1;
-      }
-      active.set(itemKey, label);
-      publishProgress();
-    };
-
-    if (items.length === 0) {
-      publishProgress();
-      return [];
-    }
-    publishProgress();
-
-    const outcomes = await runConcurrent(
-      items,
-      { concurrency, signal: context.signal },
-      async (item, itemIndex): Promise<Outcome> => {
-        const key = keys[itemIndex]!;
-        active.set(key, "starting");
-        publishProgress();
-        try {
-          throwIfAborted(context.signal, `Mapped child pipeline ${config.pipeline.id}`);
-          const { controls, domainOptions } = childRunBags(
-            config.mapOptions(item, itemIndex, inputs, context),
-            context.dryRun
-          );
-          // Preview plan for live fan-out progress; invalid plans throw from runChildPipeline.
-          const childPlan = config.pipeline.plan(controls);
-          if (childPlan.ok) {
-            const plannedSteps = childPlan.steps.filter((step) => step.selected).length;
-            plannedChildSteps += plannedSteps;
-            plannedItems += 1;
-            if (plannedSteps > stepsPerItem) stepsPerItem = plannedSteps;
-          }
-
-          const childHooks: PipelineHooks = {
-            onStepStart: ({ step }) => {
-              active.set(key, step.name ?? step.id);
-              publishProgress();
-            },
-            onStepProgress: ({ progress, step }) => {
-              if (!hasVisibleStepProgress(progress)) return;
-              const detail =
-                progress.message ??
-                (progress.total !== undefined
-                  ? `${progress.completed}/${progress.total}`
-                  : `${progress.completed}`);
-              active.set(key, `${step.name ?? step.id}:${detail}`);
-              publishProgress();
-            },
-            onStepComplete: ({ step }) =>
-              markChildTerminal(key, step.id, `${step.name ?? step.id}:complete`),
-            onStepSkip: ({ reason, step }) => {
-              if (reason === "filtered") return;
-              markChildTerminal(key, step.id, `${step.name ?? step.id}:skipped:${reason}`);
-            },
-            onStepCancel: ({ step }) =>
-              markChildTerminal(key, step.id, `${step.name ?? step.id}:cancelled`),
-            onStepFail: ({ step }) =>
-              markChildTerminal(key, step.id, `${step.name ?? step.id}:failed`),
-          };
-          const childResult = await runChildPipeline(
-            config.pipeline,
-            domainOptions,
-            controls,
-            {
-              cwd: context.cwd,
-              log: context.log,
-              now: context.now,
-              parentRunId: context.runId,
-              signal: context.signal,
-              sleep: context.sleep,
-              tracing: childTracingOptions(context, key),
-            },
-            childHooks,
-            dependencies
-          );
-
-          const seen = childTerminalSteps.get(key) ?? new Set<string>();
-          if (childPlan.ok) {
-            for (const planStep of childPlan.steps) {
-              if (!planStep.selected || seen.has(planStep.id)) continue;
-              seen.add(planStep.id);
-              terminalChildSteps += 1;
-            }
-          }
-          childTerminalSteps.set(key, seen);
-
-          const value = config.mapResult
-            ? config.mapResult(childResult.value, childResult, item, itemIndex, context)
-            : childResult.value;
-          active.delete(key);
-          finishedItems += 1;
-          publishProgress(`${key}: completed`);
-          return { key, ok: true, value };
-        } catch (error) {
-          const cause = error instanceof Error ? error : new Error(String(error));
-          active.delete(key);
-          failedItems += 1;
-          publishProgress(`${key}: failed`);
-          return { error: cause, key, ok: false };
-        }
-      }
-    );
-
-    const failures = outcomes.filter(
-      (outcome): outcome is Extract<Outcome, { ok: false }> => !outcome.ok
-    );
-    if (failures.length > 0) {
-      const details = failures.map(({ error, key }) => `${key}: ${error.message}`).join("; ");
-      const cancelled = failures.every(({ error }) => dependencies.isCancellation(error, context));
-      const primaryFailure = cancelled
-        ? failures[0]
-        : (failures.find(({ error }) => !dependencies.isCancellation(error, context)) ??
-          failures[0]);
-      throw new PipelineChildError(
-        `Mapped child pipeline ${config.pipeline.id} failed for ${failures.length} item(s): ${details}`,
-        cancelled,
-        primaryFailure?.error
-      );
-    }
-    // SAFETY: when failures.length === 0 every outcome was produced by the
-    // success branch (return { key, ok: true, value }), so each outcome is
-    // necessarily `{ ok: true }`; the assertion narrows the union accordingly.
-    return outcomes.map((outcome) => (outcome as Extract<Outcome, { ok: true }>).value);
-  };
-}
+[Showing lines 1-300 of 492. Use :301 to continue]

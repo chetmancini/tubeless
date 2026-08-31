@@ -9,14 +9,13 @@ import {
   PIPELINE_FINALIZE_STEP_ID,
   PipelineDefinitionError,
   requireOutputs,
-  STEP_OPTIONS_SCHEMA,
   buildPipelinePlan,
+  compilePipeline,
+  EXECUTE_COMPILED_RUN,
   renderPipelineMermaid,
-  topologicalSort,
-  validatePipelineDefinition,
   type PipelineDefinition,
 } from "./pipeline-plan.js";
-import type { StepIds, StepsInputOptions, StepsOptions, TargetIds } from "./pipeline-plan.js";
+import type { StepIds, StepsInputOptions, TargetIds } from "./pipeline-plan.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import type {
   InferSchemaOutput,
@@ -139,36 +138,39 @@ export function definePipeline<
   StepIds<TSteps>,
   TargetIds<TTargets>
 > {
-  const definitionErrors = validatePipelineDefinition(definition);
-  if (definitionErrors.length > 0) {
-    throw new PipelineDefinitionError(definition.id, definitionErrors);
-  }
-  type TOptions = StepsOptions<TSteps>;
+  const compiled = compilePipeline(definition);
   type TInputOptions = StepsInputOptions<TSteps>;
   type TPipelineResult = TResultSchema extends StandardSchemaV1
     ? InferSchemaOutput<TResultSchema>
     : TResult;
   type TStepId = StepIds<TSteps>;
   type TTargetId = TargetIds<TTargets>;
-  // SAFETY: each step id is a string key of `TSteps`, so the frozen id list is
-  // exactly the declared `TStepId` union.
-  const stepIds = Object.freeze(definition.steps.map((step) => step.id)) as readonly TStepId[];
-  // SAFETY: each target id is a string key of `TTargets`, so the frozen list is
-  // exactly the declared `TTargetId` union.
-  const targetIds = Object.freeze(
-    (definition.targets ?? []).map((step) => step.id)
-  ) as readonly TTargetId[];
-  const optionsSchema = definition.steps[0]?.[STEP_OPTIONS_SCHEMA];
-  // SAFETY: every step in `definition.steps` is an `AnyStep<TOptions>`; the
-  // cast only restores the generic type parameter that the tuple lost.
-  const orderedDefinitionSteps = topologicalSort(definition.steps as readonly AnyStep<TOptions>[])!;
+  // SAFETY: each compiled step id is a string key of `TSteps`.
+  const stepIds = compiled.stepIds as readonly TStepId[];
+  // SAFETY: each compiled target id is a string key of `TTargets`.
+  const targetIds = compiled.targetIds as readonly TTargetId[];
 
   function plan(controls: PipelineRunControls<TStepId, TTargetId> = {}): PipelinePlan {
-    return buildPipelinePlan(definition, controls);
+    return buildPipelinePlan(compiled, controls);
   }
 
   function toMermaid(options: PipelineMermaidOptions = {}): string {
-    return renderPipelineMermaid(orderedDefinitionSteps, options);
+    return renderPipelineMermaid(compiled.orderedSteps, options);
+  }
+
+  async function executeCompiled(
+    runPlan: PipelinePlan,
+    options: TInputOptions,
+    controls: PipelineRunControls<TStepId, TTargetId>,
+    context: Partial<PipelineContext> = defaultPipelineContext()
+  ): Promise<PipelineRun<TPipelineResult>> {
+    return executePlannedRun({
+      compiled,
+      controls,
+      domainOptions: options,
+      plan: runPlan,
+      runtime: resolvePipelineRuntime(context),
+    });
   }
 
   async function run(
@@ -177,15 +179,7 @@ export function definePipeline<
     context: Partial<PipelineContext> = defaultPipelineContext()
   ): Promise<PipelineRun<TPipelineResult>> {
     const runControls = snapshotRunControls(controls);
-    return executePlannedRun({
-      controls: runControls,
-      definition,
-      domainOptions: options,
-      optionsSchema,
-      plan: plan(runControls),
-      runtime: resolvePipelineRuntime(context),
-      targetIds,
-    });
+    return executeCompiled(plan(runControls), options, runControls, context);
   }
 
   async function runOrThrow(
@@ -201,7 +195,17 @@ export function definePipeline<
     return result.value as TPipelineResult;
   }
 
-  return { id: definition.id, stepIds, targetIds, plan, run, runOrThrow, toMermaid };
+  const pipeline: Pipeline<TInputOptions, TPipelineResult, TStepId, TTargetId> = {
+    id: compiled.id,
+    stepIds,
+    targetIds,
+    plan,
+    run,
+    runOrThrow,
+    toMermaid,
+  };
+  Object.defineProperty(pipeline, EXECUTE_COMPILED_RUN, { value: executeCompiled });
+  return pipeline;
 }
 
 export {

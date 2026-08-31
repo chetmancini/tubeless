@@ -306,6 +306,36 @@ describe("child-pipeline composition", () => {
       });
     });
 
+    it("plans each mapped child once per item", async () => {
+      const childStep = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({
+        id: "mapped-once-child",
+        steps: [work],
+        finalize: () => true,
+      });
+      const planSpy = vi.spyOn(child, "plan");
+      const runSpy = vi.spyOn(child, "run");
+      const parentStep = createSteps();
+      const children = parentStep.forEachPipeline("children", {
+        pipeline: child,
+        items: () => [{ id: "a" }, { id: "b" }],
+        key: (item) => item.id,
+        mapOptions: () => ({}),
+      });
+      const parent = definePipeline({
+        id: "mapped-once-parent",
+        steps: [children],
+        finalize: () => true,
+      });
+
+      const result = await parent.run({});
+
+      expect(result.status).toBe("completed");
+      expect(planSpy).toHaveBeenCalledTimes(2);
+      expect(runSpy).not.toHaveBeenCalled();
+    });
+
     it("does not count filtered child steps toward fan-out progress", async () => {
       interface ChildOptions {
         itemId: string;
@@ -1117,6 +1147,35 @@ describe("child-pipeline composition", () => {
       expect(runSpy).not.toHaveBeenCalled();
       expect(result.errors[0]?.message).toContain("Child pipeline planned-child could not start");
       expect(result.errors[0]?.message).toContain("unknown step ids: missing");
+    });
+
+    it("plans a nested child once before execution", async () => {
+      const childStep = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({
+        id: "once-child",
+        steps: [work],
+        finalize: () => true,
+      });
+      const planSpy = vi.spyOn(child, "plan");
+      const runSpy = vi.spyOn(child, "run");
+      const parentStep = createSteps();
+      const stage = parentStep.fromPipeline("stage", {
+        pipeline: child,
+        mapOptions: () => ({}),
+      });
+      const parent = definePipeline({
+        id: "once-parent",
+        steps: [stage],
+        finalize: () => true,
+      });
+
+      const result = await parent.run({});
+
+      expect(result.status).toBe("completed");
+      expect(result.value).toBe(true);
+      expect(planSpy).toHaveBeenCalledOnce();
+      expect(runSpy).not.toHaveBeenCalled();
     });
 
     it("applies a child pipeline's declared target closure through mapOptions", async () => {
