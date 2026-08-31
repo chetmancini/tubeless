@@ -338,6 +338,10 @@ describe("createPipelineReporter", () => {
   });
 
   it("redraws while a long-awaiting step reports no progress", async () => {
+    let releaseWork!: () => void;
+    const workGate = new Promise<void>((resolve) => {
+      releaseWork = resolve;
+    });
     const output = captureOutput();
     const reporter = createPipelineReporter({
       color: "never",
@@ -351,7 +355,7 @@ describe("createPipelineReporter", () => {
     const step = createSteps();
     const slow = step("slow", {
       run: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        await workGate;
         return "done";
       },
     });
@@ -361,17 +365,24 @@ describe("createPipelineReporter", () => {
       finalize: (outputs) => outputs.slow,
     });
 
-    await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    const runPromise = pipeline.run({}, undefined, {
+      cwd: "/tmp",
+      hooks: reporter.hooks,
+      log: reporter.log,
+    });
+    await vi.waitFor(() => {
+      const liveFrames = output.chunks
+        .filter((chunk) => chunk.includes(" slow"))
+        .map((chunk) => chunk.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "").trimEnd());
+      const runningFrames = liveFrames.filter((frame) => /[-\\|/] slow/.test(frame));
+      const uniqueRunning = new Set(runningFrames);
+      // Reporter timer (not kernel progress) must animate spinner/elapsed while live.
+      expect(runningFrames.length).toBeGreaterThanOrEqual(2);
+      expect(uniqueRunning.size).toBeGreaterThanOrEqual(2);
+    });
+    releaseWork();
+    await runPromise;
     reporter.dispose();
-
-    const liveFrames = output.chunks
-      .filter((chunk) => chunk.includes(" slow"))
-      .map((chunk) => chunk.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "").trimEnd());
-    const runningFrames = liveFrames.filter((frame) => /[-\\|/] slow/.test(frame));
-    const uniqueRunning = new Set(runningFrames);
-    // Reporter timer (not kernel progress) must animate spinner/elapsed while live.
-    expect(runningFrames.length).toBeGreaterThanOrEqual(2);
-    expect(uniqueRunning.size).toBeGreaterThanOrEqual(2);
   });
 
   it("animates spinner while a step burns CPU without progress", async () => {

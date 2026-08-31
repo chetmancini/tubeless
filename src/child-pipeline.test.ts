@@ -644,11 +644,15 @@ describe("child-pipeline composition", () => {
     });
 
     it("does not re-publish mapped progress from empty child progress snapshots", async () => {
+      let releaseWork!: () => void;
+      const workGate = new Promise<void>((resolve) => {
+        releaseWork = resolve;
+      });
       const childStep = createSteps();
       const work = childStep("work", {
         run: async (_inputs, context) => {
           context.reportProgress({ completed: 1, total: 2, message: "chunk" });
-          await new Promise((resolve) => setTimeout(resolve, 250));
+          await workGate;
           return "done";
         },
       });
@@ -671,7 +675,7 @@ describe("child-pipeline composition", () => {
       });
       let visibleFanoutPublishes = 0;
       let zeroProgressLabels = 0;
-      const result = await parent.run({}, undefined, {
+      const runPromise = parent.run({}, undefined, {
         cwd: "/tmp",
         hooks: {
           onStepProgress: ({ progress, step }) => {
@@ -690,6 +694,12 @@ describe("child-pipeline composition", () => {
         },
         log: console,
       });
+      await vi.waitFor(() => {
+        expect(visibleFanoutPublishes).toBeGreaterThan(0);
+      });
+      expect(zeroProgressLabels).toBe(0);
+      releaseWork();
+      const result = await runPromise;
 
       expect(result.status).toBe("completed");
       // Real child progress + lifecycle updates only — not empty-progress spam.
@@ -963,11 +973,15 @@ describe("child-pipeline composition", () => {
     });
 
     it("does not bridge empty child progress as visible parent progress", async () => {
+      let releaseWork!: () => void;
+      const workGate = new Promise<void>((resolve) => {
+        releaseWork = resolve;
+      });
       const childStep = createSteps();
       const work = childStep("work", {
         run: async (_inputs, context) => {
           context.reportProgress({ completed: 3, total: 10, message: "batch" });
-          await new Promise((resolve) => setTimeout(resolve, 250));
+          await workGate;
           return "done";
         },
       });
@@ -987,7 +1001,7 @@ describe("child-pipeline composition", () => {
         finalize: (outputs) => outputs.stage,
       });
       const bridged: string[] = [];
-      const result = await parent.run({}, undefined, {
+      const runPromise = parent.run({}, undefined, {
         cwd: "/tmp",
         hooks: {
           onStepProgress: ({ progress, step }) => {
@@ -997,6 +1011,12 @@ describe("child-pipeline composition", () => {
         },
         log: console,
       });
+      await vi.waitFor(() => {
+        expect(bridged.filter((message) => message.includes("batch"))).toHaveLength(1);
+      });
+      expect(bridged.some((message) => message.includes("0 completed"))).toBe(false);
+      releaseWork();
+      const result = await runPromise;
 
       expect(result.status).toBe("completed");
       expect(bridged.filter((message) => message.includes("batch"))).toHaveLength(1);

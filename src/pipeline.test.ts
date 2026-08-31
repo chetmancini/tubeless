@@ -2044,10 +2044,15 @@ describe("definePipeline", () => {
   });
 
   it("does not emit empty running progress while a step awaits", async () => {
+    let releaseWork!: () => void;
+    const workGate = new Promise<void>((resolve) => {
+      releaseWork = resolve;
+    });
+    let started = false;
     const step = createSteps();
     const slow = step("slow", {
       run: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        await workGate;
         return "done";
       },
     });
@@ -2058,9 +2063,12 @@ describe("definePipeline", () => {
     });
     const progressEvents: Array<{ completed: number; total?: number; message?: string }> = [];
 
-    await pipeline.run({}, undefined, {
+    const runPromise = pipeline.run({}, undefined, {
       cwd: "/tmp",
       hooks: {
+        onStepStart: ({ step: startedStep }) => {
+          if (startedStep.id === "slow") started = true;
+        },
         onStepProgress: ({ progress, step: progressStep }) => {
           if (progressStep.id === "slow") {
             progressEvents.push(progress);
@@ -2069,6 +2077,12 @@ describe("definePipeline", () => {
       },
       log: console,
     });
+    await vi.waitFor(() => {
+      expect(started).toBe(true);
+    });
+    expect(progressEvents).toEqual([]);
+    releaseWork();
+    await runPromise;
 
     expect(progressEvents).toEqual([]);
   });
