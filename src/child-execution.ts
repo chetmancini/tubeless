@@ -1,6 +1,6 @@
 import { throwIfAborted } from "./abort.js";
 import { emitRejectedPlanLifecycle } from "./lifecycle.js";
-import { runConcurrent } from "./batch.js";
+import { runConcurrentSettled } from "./batch.js";
 import {
   toMappedChildStepProgress,
   type MappedChildProgressSnapshot,
@@ -436,7 +436,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
     }
     publishProgress();
 
-    const outcomes = await runConcurrent(
+    const settled = await runConcurrentSettled(
       items,
       { concurrency, signal: context.signal },
       async (item, itemIndex): Promise<Outcome> => {
@@ -529,6 +529,13 @@ export function createMappedChildRunner<TParentOptions extends object>(
         }
       }
     );
+
+    const outcomes = settled.results.filter((outcome): outcome is Outcome => outcome !== undefined);
+    if (settled.failure !== undefined) {
+      const error =
+        settled.failure instanceof Error ? settled.failure : new Error(String(settled.failure));
+      outcomes.push({ error, key: "<aborted>", ok: false });
+    }
 
     const failures = outcomes.filter(
       (outcome): outcome is Extract<Outcome, { ok: false }> => !outcome.ok
