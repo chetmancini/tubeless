@@ -393,7 +393,7 @@ type RemoteStepDefinitionBase<
   TPayload,
   TSchema extends StandardSchemaV1,
 > = {
-  adapter: RemoteStepAdapter<TParentOptions, TPayload, InferSchemaOutput<TSchema>>;
+  adapter: RemoteStepAdapter<TParentOptions, TPayload, InferSchemaInput<TSchema>>;
   mapInput(
     inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
     context: PipelineStepContext<TParentOptions>
@@ -438,7 +438,7 @@ interface SkippableFromRemoteConstructor<
     id: TId,
     definition: RemoteStepDefinitionBase<TOptions, TDeps, TOptionalDeps, TPayload, TSchema> & {
       skip:
-        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, InferSchemaOutput<TSchema>>
+        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>>
         | undefined;
     }
   ): Step<

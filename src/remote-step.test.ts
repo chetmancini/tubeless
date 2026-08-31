@@ -306,4 +306,55 @@ describe("fromRemote", () => {
       dryRun: "run",
     });
   });
+
+  it("types adapter invoke and skip values as schema input, not output", () => {
+    const step = createSteps();
+    const transformingSchema = standardSchema<{ n: number }, { n: string }>((value) => {
+      if (value && typeof value === "object" && "n" in value) {
+        const n = (value as { n: unknown }).n;
+        if (typeof n === "number") {
+          return { value: { n: String(n) } };
+        }
+      }
+      return { issues: [{ message: "expected { n: number }" }] };
+    });
+
+    const inputAdapter = testAdapter(async () => ({ n: 1 }));
+    step.fromRemote("typed-remote", {
+      adapter: inputAdapter,
+      mapInput: () => ({}),
+      outputSchema: transformingSchema,
+    });
+
+    step.fromRemote.skippable("typed-skippable", {
+      adapter: inputAdapter,
+      mapInput: () => ({}),
+      outputSchema: transformingSchema,
+      skip: () => ({
+        reason: "skip",
+        value: { n: 0 },
+      }),
+    });
+
+    step.fromRemote("output-shaped-adapter", {
+      adapter: testAdapter(async () =>
+        // @ts-expect-error adapter results are validated as schema input, not output
+        ({ n: "1" })
+      ),
+      mapInput: () => ({}),
+      outputSchema: transformingSchema,
+    });
+
+    step.fromRemote.skippable("output-shaped-skip", {
+      adapter: inputAdapter,
+      mapInput: () => ({}),
+      outputSchema: transformingSchema,
+      skip: () => ({
+        reason: "skip",
+        value:
+          // @ts-expect-error skip values are validated as schema input, not output
+          { n: "0" },
+      }),
+    });
+  });
 });
