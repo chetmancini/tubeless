@@ -348,6 +348,45 @@ interface FromPipelineConstructor<
   skippable: SkippableFromPipelineConstructor<TOptions, TInputOptions>;
 }
 
+interface SkippableFromPipelineConstructor<
+  TOptions extends object,
+  TInputOptions extends object = TOptions,
+> {
+  <
+    TId extends string,
+    TChildPipeline extends Pipeline<object, unknown>,
+    const TDeps extends readonly AnyStep<TOptions>[] = [],
+    const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
+  >(
+    id: TId,
+    definition: ChildPipelineStepDefinitionBase<TOptions, TDeps, TOptionalDeps, TChildPipeline> & {
+      skip:
+        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, PipelineResultOf<TChildPipeline>>
+        | undefined;
+      mapResult?: undefined;
+    }
+  ): Step<TId, PipelineResultOf<TChildPipeline> | undefined, TOptions, TInputOptions>;
+
+  <
+    TId extends string,
+    TChildPipeline extends Pipeline<object, unknown>,
+    TOut,
+    const TDeps extends readonly AnyStep<TOptions>[] = [],
+    const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
+  >(
+    id: TId,
+    definition: ChildPipelineStepDefinitionBase<TOptions, TDeps, TOptionalDeps, TChildPipeline> & {
+      skip: StepSkipPredicate<TOptions, TDeps, TOptionalDeps, NoInfer<TOut>> | undefined;
+      mapResult(
+        value: PipelineResultOf<TChildPipeline>,
+        result: PipelineRun<PipelineResultOf<TChildPipeline>>,
+        context: PipelineStepContext<TOptions>
+      ): TOut;
+    }
+  ): Step<TId, TOut | undefined, TOptions, TInputOptions>;
+}
+
+
 type RemoteStepDefinitionBase<
   TParentOptions extends object,
   TDeps extends readonly AnyStep<TParentOptions>[],
