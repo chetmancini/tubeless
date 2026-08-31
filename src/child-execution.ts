@@ -5,6 +5,7 @@ import {
   type MappedChildProgressSnapshot,
   type ToMappedChildStepProgressOptions,
 } from "./mapped-child-progress.js";
+import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { duplicateValues, EXECUTE_COMPILED_RUN } from "./pipeline-plan.js";
 import { hasVisibleStepProgress } from "./progress.js";
 import type {
@@ -45,6 +46,13 @@ type ExecutableChild = ChildPipeline & {
   [EXECUTE_COMPILED_RUN]?: CompiledChildExecute;
 };
 
+function compiledChildExecute(pipeline: ChildPipeline): CompiledChildExecute | undefined {
+  // SAFETY: `definePipeline` stamps `EXECUTE_COMPILED_RUN` as an optional
+  // internal binding. Public `Pipeline` wrappers, mocks, spread clones, and
+  // cross-version instances omit it and must keep using `run()`.
+  return (pipeline as ExecutableChild)[EXECUTE_COMPILED_RUN];
+}
+
 function executeCompiledChild(
   pipeline: ChildPipeline,
   plan: PipelinePlan,
@@ -52,12 +60,46 @@ function executeCompiledChild(
   controls: PipelineRunControls,
   context: PipelineContext
 ): Promise<PipelineRun<unknown>> {
-  // SAFETY: `definePipeline` stamps `EXECUTE_COMPILED_RUN` as an optional
-  // internal binding. Public `Pipeline` wrappers, mocks, spread clones, and
-  // cross-version instances omit it and must keep using `run()`.
-  const execute = (pipeline as ExecutableChild)[EXECUTE_COMPILED_RUN];
+  const execute = compiledChildExecute(pipeline);
   if (execute === undefined) {
     return pipeline.run(domainOptions, controls, context);
+  }
+  return execute(plan, domainOptions, controls, context);
+}
+
+function failedPublicChildPlanRun(
+  pipeline: ChildPipeline,
+  plan: PipelinePlan,
+  controls: PipelineRunControls,
+  context: PipelineContext
+): PipelineRun<unknown> {
+  const startedAtMs = context.now?.() ?? Date.now();
+  const result: PipelineRun<unknown> = {
+    pipelineId: pipeline.id,
+    dryRun: controls.dryRun === true,
+    errors: [...plan.errors],
+    finalized: false,
+    finishedAtMs: context.now?.() ?? startedAtMs,
+    runId: context.runId ?? createRunId(pipeline.id),
+    startedAtMs,
+    status: "failed",
+    steps: [],
+    version: RUN_MODEL_VERSION,
+  };
+  if (context.parentRunId) result.parentRunId = context.parentRunId;
+  return result;
+}
+
+async function rejectedChildPlanResult(
+  pipeline: ChildPipeline,
+  plan: PipelinePlan,
+  domainOptions: PipelineRunOptions,
+  controls: PipelineRunControls,
+  context: PipelineContext
+): Promise<PipelineRun<unknown>> {
+  const execute = compiledChildExecute(pipeline);
+  if (execute === undefined) {
+    return failedPublicChildPlanRun(pipeline, plan, controls, context);
   }
   return execute(plan, domainOptions, controls, context);
 }
@@ -225,7 +267,7 @@ async function runChildPipeline(
 
   if (!plan.ok) {
     const firstError = plan.errors[0];
-    const result = await executeCompiledChild(
+    const result = await rejectedChildPlanResult(
       pipeline,
       plan,
       domainOptions,
@@ -257,47 +299,5 @@ async function runChildPipeline(
 
 export function createSingleChildRunner<TParentOptions extends object>(
   config: SingleChildExecutionConfig<TParentOptions>,
-  dependencies: ChildExecutionDependencies<TParentOptions>
-): (inputs: ChildInputs, context: PipelineStepContext<TParentOptions>) => Promise<unknown> {
-  return async (inputs, context) => {
-    const { controls, domainOptions } = childRunBags(
-      config.mapOptions(inputs, context),
-      context.dryRun
-    );
-    const baseChildContext: PipelineContext = {
-      cwd: context.cwd,
-      log: context.log,
-      now: context.now,
-      parentRunId: context.runId,
-      signal: context.signal,
-      sleep: context.sleep,
-      tracing: childTracingOptions(context),
-    };
-    // Plan once for progress totals and execution. Invalid plans fail before child.run.
-    const childPlan = config.pipeline.plan(controls);
-    const selectedStepCount = childPlan.ok
-      ? childPlan.steps.filter((step) => step.selected).length
-      : 0;
-    const terminalSteps = new Set<string>();
-    const report = (step: PipelinePlanStep, message: string, terminal = false): void => {
-      if (terminal) terminalSteps.add(step.id);
-      context.reportProgress({
-        completed: terminalSteps.size,
-        total: Math.max(1, selectedStepCount),
-        message: `${config.pipeline.id}/${step.name ?? step.id}: ${message}`,
-      });
-    };
-    const childHooks: PipelineHooks = {
-      onStepStart: ({ step }) => report(step, "started"),
-      onStepProgress: ({ progress, step }) => {
-        if (!hasVisibleStepProgress(progress)) return;
-        report(step, progress.message ?? `${progress.completed} completed`);
-      },
-      onStepComplete: ({ step }) => report(step, "complete", true),
-      onStepSkip: ({ reason, step }) => report(step, `skipped: ${reason}`, reason !== "filtered"),
-      onStepCancel: ({ error, step }) => report(step, `cancelled: ${error.message}`, true),
-      onStepFail: ({ error, step }) => report(step, `failed: ${error.message}`, true),
-    };
-    const childResult = await runChildPipeline(
 
-[Showing lines 1-300 of 310. Use :301 to continue]
+[Showing lines 1-300 of 344. Use :301 to continue]

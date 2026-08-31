@@ -1207,6 +1207,35 @@ describe("child-pipeline composition", () => {
       expect(runSpy).toHaveBeenCalledOnce();
     });
 
+    it("does not invoke public run when a child plan is already invalid", async () => {
+      const childStep = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({
+        id: "invalid-spread-child",
+        steps: [work],
+        finalize: () => true,
+      });
+      const publicChild = { ...child };
+      const runSpy = vi.spyOn(publicChild, "run");
+      const parentStep = createSteps();
+      const stage = parentStep.fromPipeline("stage", {
+        pipeline: publicChild,
+        mapOptions: () => ({ stepIds: ["missing" as never] }),
+      });
+      const parent = definePipeline({
+        id: "invalid-spread-parent",
+        steps: [stage],
+        finalize: () => true,
+      });
+
+      const result = await parent.run({});
+
+      expect(result.status).not.toBe("completed");
+      expect(runSpy).not.toHaveBeenCalled();
+      expect(result.errors[0]?.message).toContain("could not start");
+      expect(result.errors[0]?.message).toContain("unknown step ids: missing");
+    });
+
     it("applies a child pipeline's declared target closure through mapOptions", async () => {
       const ran: string[] = [];
       const childStep = createSteps();

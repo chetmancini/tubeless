@@ -851,6 +851,43 @@ export interface CompiledPipeline<
   readonly targetIds: readonly string[];
 }
 
+function remapFrozenDependencies<TOptions extends object>(
+  dependencies: readonly AnyStep<TOptions>[] | undefined,
+  sealedByOriginal: Map<AnyStep<TOptions>, AnyStep<TOptions>>
+): readonly AnyStep<TOptions>[] | undefined {
+  if (dependencies === undefined) return undefined;
+  return Object.freeze(
+    dependencies.map((dependency) => sealedByOriginal.get(dependency) ?? dependency)
+  );
+}
+
+function snapshotCompiledSteps<TOptions extends object>(
+  steps: readonly AnyStep<TOptions>[]
+): Map<AnyStep<TOptions>, AnyStep<TOptions>> {
+  const sealedByOriginal = new Map<AnyStep<TOptions>, AnyStep<TOptions>>();
+  for (const step of steps) {
+    // SAFETY: each placeholder receives the original step's descriptors below
+    // before compilePipeline returns, so the object matches AnyStep<TOptions>.
+    sealedByOriginal.set(step, {} as AnyStep<TOptions>);
+  }
+  for (const step of steps) {
+    const sealed = sealedByOriginal.get(step)!;
+    const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(step);
+    for (const field of ["dependsOn", "optionalDependsOn", "skipAfterFailureOf"] as const) {
+      if (!Object.hasOwn(descriptors, field)) continue;
+      descriptors[field] = {
+        configurable: true,
+        enumerable: true,
+        value: remapFrozenDependencies(step[field], sealedByOriginal),
+        writable: true,
+      };
+    }
+    Object.defineProperties(sealed, descriptors);
+    Object.freeze(sealed);
+  }
+  return sealedByOriginal;
+}
+
 export function compilePipeline<
   TSteps extends readonly AnyStep[],
   TResult,
@@ -867,6 +904,9 @@ export function compilePipeline<
   // SAFETY: `steps` is `TSteps extends readonly AnyStep[]`; the cast restores
   // the `TOptions` generic that the tuple erased, without changing the values.
   const orderedSteps = topologicalSort(definition.steps as readonly AnyStep<TOptions>[])!;
+  const sealedByOriginal = snapshotCompiledSteps(orderedSteps);
+  const sealedStep = (step: AnyStep<TOptions>): AnyStep<TOptions> =>
+    sealedByOriginal.get(step) ?? step;
   // SAFETY: `requireOutputs` stamps the required step ids onto the finalizer
   // function under `REQUIRED_FINALIZER_OUTPUTS`; the intersection only widens
   // the function type to expose that optional property.
@@ -878,13 +918,13 @@ export function compilePipeline<
   // SAFETY: targets are a subset of `TSteps[number]`, each an `AnyStep<TOptions>`.
   const declaredTargets = (definition.targets ?? []) as readonly AnyStep<TOptions>[];
   return Object.freeze({
-    declaredTargets: Object.freeze([...declaredTargets]),
+    declaredTargets: Object.freeze(declaredTargets.map(sealedStep)),
     finalize: definition.finalize,
     id: definition.id,
     optionsSchema: definition.steps[0]?.[STEP_OPTIONS_SCHEMA],
-    orderedSteps: Object.freeze([...orderedSteps]),
+    orderedSteps: Object.freeze(orderedSteps.map(sealedStep)),
     requiredFinalizerSteps: requiredFinalizerSteps
-      ? Object.freeze([...requiredFinalizerSteps])
+      ? Object.freeze(requiredFinalizerSteps.map(sealedStep))
       : undefined,
     resultSchema: definition.resultSchema,
     stepIds: Object.freeze(definition.steps.map((step) => step.id)),

@@ -2152,6 +2152,32 @@ describe("definePipeline", () => {
     expect(result.value).toBe("ok");
   });
 
+  it("plans from snapshotted dependency arrays after define", async () => {
+    const step = createSteps();
+    const build = step("build", { run: () => "built" });
+    const extra = step("extra", { run: () => "extra" });
+    const dependsOn = [build];
+    const write = step("write", {
+      dependsOn,
+      run: ({ build }) => `${build}+write`,
+    });
+    const pipeline = definePipeline({
+      id: "sealed-deps",
+      steps: [build, write],
+      finalize: (outputs) => outputs.write,
+    });
+    dependsOn.push(extra);
+
+    const plan = pipeline.plan();
+    expect(plan.ok).toBe(true);
+    expect(plan.steps.find((planned) => planned.id === "write")?.dependencies).toEqual(["build"]);
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("built+write");
+    expect(result.steps.map((report) => report.id)).toEqual(["build", "write"]);
+  });
+
   it("policy-skips a step with a yellow skip report and unlocks dependents", async () => {
     interface Options {
       enableWrite: boolean;
