@@ -112,6 +112,23 @@ adapter. The adapter maps:
 values are `"lambda"`, `"temporal"`, `"http"`, or `"test"`. The kernel does not
 validate the string.
 
+#### Inverse dry-run contract (required)
+
+Omitting `dryRun` on `fromRemote` means the adapter is contacted during a
+pipeline dry run. That makes this adapter-side rule the only safety line:
+
+- When `context.dryRun === true`, `invoke` must not produce side effects.
+- The remote worker must treat the same flag the same way.
+- The kernel does not inject `dryRun` into the payload and does not inspect
+  the engine. Authors prove the flag crossed the boundary by putting
+  `dryRun: ctx.dryRun` (or the engine's equivalent) in `mapInput`.
+- There is no way to call `invoke` while lying about dry-run.
+  `context.dryRun` is the pipeline's actual flag.
+
+This is the same rule as a local step that omits `dryRun`: the handler owns
+not writing when `context.dryRun` is true. An adapter that ignores the flag
+is incorrect, not a kernel gap.
+
 ### Factory
 
 `createSteps().fromRemote(...)` sits on `StepFactory` next to `fromPipeline`.
@@ -160,8 +177,9 @@ const charge = step.fromRemote("charge", {
 ```
 
 `enrich` contacts Lambda during a dry run so the remote path can be rehearsed.
-`charge` stays local because charging is the side effect, not because Temporal
-is remote.
+The payload carries `dryRun: true`; the adapter and the function must not
+mutate. `charge` stays local because charging is the side effect, not because
+Temporal is remote.
 
 ### Built step
 
@@ -174,7 +192,7 @@ The factory attaches a private `STEP_REMOTE` symbol, parallel to
 
 A step cannot be both nested and remote.
 
-## Dry-run contract
+## Dry-run policy
 
 Dry-run is a side-effect gate. It is not "run locally" vs "run remotely".
 
@@ -186,22 +204,11 @@ Dry-run is a side-effect gate. It is not "run locally" vs "run remotely".
 
 `skipsInDryRun` already implements this: only `step.dryRun === "skip"` is a
 structural skip. The factory does **not** stamp `"skip"`. Stamping it would
-prevent rehearsing a remote path.
+prevent rehearsing a remote path that is itself side-effect free.
 
-### Inverse contract (required)
-
-A remote adapter that receives `context.dryRun === true` must not produce side
-effects. The kernel does not inject `dryRun` into the payload and does not
-inspect the engine. Authors prove the flag crossed the boundary by putting
-`dryRun: ctx.dryRun` (or the engine's equivalent) in `mapInput`.
-
-This is the same rule as a local step that omits `dryRun`: the handler owns
-not writing when `context.dryRun` is true. The recipe and agent guide must
-state this in the inverse: if the remote is contacted during a dry run, the
-adapter and the remote worker must treat that as a rehearsal.
-
-There is no way to call `invoke` while lying about dry-run. `context.dryRun`
-is the pipeline's actual flag.
+The adapter-side half of this table is the inverse contract in the protocol
+section. If the remote is contacted during a dry run, the adapter and the
+remote worker must treat that as a rehearsal.
 
 ## Plan, inspect, and studio
 
@@ -234,7 +241,8 @@ Suggested human text:
 | `"run"` | absent | today's ordinary `run` |
 
 JSON and `PipelinePlan` stay machine-simple: `dryRun` plus optional `remote`.
-Do not add a `"rehearse"` plan value.
+Do not add a `"rehearse"` plan value. Do not add an authoring `dryRun: "run"`
+token; the plan field `"run"` is the existing derived enum for omitted policy.
 
 Mermaid stays the parent-step graph. It does not gain remote node types.
 Authors who want an engine hint on the diagram put it in `description` and
@@ -271,24 +279,37 @@ No AWS or Temporal dependency.
 - Type tests: `outputSchema` required; `skip` only on `fromRemote.skippable`;
   `dryRun: "run"` is a type error.
 
-- Application and example modules may export a pipeline factory that accepts
-  adapters so tests can pass a fake. Do not add injected runner overrides.
+Application and example modules may export a pipeline factory that accepts
+adapters so tests can pass a fake. Do not add injected runner overrides.
 
-## Learning surface
+## Public surface and learning surface (this slice)
 
-| Document | Change |
+`fromRemote` and `RemoteStepAdapter` are public API. Regenerating the checked
+inventory and updating the learning surface are part of this slice, not
+follow-ups.
+
+| Artifact | Required change |
 | --- | --- |
+| `src/pipeline.ts` | Export `RemoteStepAdapter` with the other public types. `StepFactory` already re-exports from `pipeline-steps.ts`. |
+| `bun run api:generate` | Rebuild `docs/api-reference.md` and `docs/api-report.json` after the export lands. `make check` runs `api:check`. |
+| `docs/recipes.md` | New rows: mixed local + remote steps; host embedding that passes `runId`. |
+| `docs/agent-guide.md` | Primitive: `fromRemote` for a unit of work that lives on another engine; inverse dry-run contract; host-embed when the graph must outlive the process. Plan metadata: parent plans expose `remote` with `engine` and optional `target`. |
+| `examples/catalog/` | Catalog-shaped pipeline + `definePipelineCommand` that uses `fromRemote` with a fake adapter, kebab-case IDs, and a studio registration in `tubeless.studio.ts`. Agents copy layout from this catalog. |
 | `docs/comparison.md` | Two-compositions table. Host embedding is the durable-graph path. `fromRemote` is mixed placement. |
 | `docs/concepts.md` | Short remote-step section after child pipelines. Dry-run remains a side-effect gate. |
 | `docs/remote-step-composition.md` | Living contract, same role as `child-pipeline-composition.md`. |
-| `docs/agent-guide.md` | `fromRemote` primitive. Inverse dry-run contract: an adapter that sees `context.dryRun === true` must not produce side effects; put the flag in the payload. Host-embed when the graph must outlive the process. |
-| `docs/recipes.md` | New recipe: mixed local + remote steps with a fake adapter. Host-embedding snippet that passes `runId`. |
-| `examples/remote-steps.ts` | Compiled example: local parse, remote enrich (omit dry-run, payload carries `dryRun`), remote charge (`dryRun: "skip"`). |
+| `docs/README.md` | Link the composition doc from Deeper reference. |
+| `docs/llms.txt` | Advanced link plus executable example path. |
+| `examples/remote-steps.ts` | Compiled recipe: local parse, remote enrich (omit dry-run, payload carries `dryRun`), remote charge (`dryRun: "skip"`). |
+| `src/public-api.example.test.ts` | One `fromRemote` smoke through the package entry. |
 | `skills/tubeless/SKILL.md` | No second copy of the rules; it already defers to the agent guide. |
 
-The recipe states the inverse contract explicitly. A rehearsal that contacts
-an engine is only correct when the remote worker is side-effect free under
-that flag.
+The recipe and agent guide state the inverse contract explicitly. A rehearsal
+that contacts an engine is only correct when the remote worker is side-effect
+free under that flag.
+
+A new agent-evaluation case is not required for this slice. Existing gated
+cases stay as they are.
 
 ## Implementation sketch
 
@@ -305,12 +326,17 @@ Kernel (no new npm dependencies, no new public entrypoint):
 
 Tests and examples:
 
-- `src/pipeline.test.ts` or a focused `src/remote-step.test.ts`
-- `src/public-api.example.test.ts` — one `fromRemote` smoke through the package entry
-- `examples/remote-steps.ts` plus a focused example test if the repo pattern needs it
+- `src/remote-step.test.ts` (or a focused section in `src/pipeline.test.ts`)
+- `src/public-api.example.test.ts`
+- `examples/remote-steps.ts` plus a focused example test if the repo pattern
+  needs it
+- `examples/catalog/pipelines/enrich.ts`, `examples/catalog/scripts/enrich.ts`,
+  and a `tubeless.studio.ts` registration
 
 `executePlannedRun` should not grow an engine branch. If a change there is
 needed, it is a bug in the factory design.
+
+After the public types export, run `bun run api:generate` in the same change.
 
 ## Out of scope later work
 
