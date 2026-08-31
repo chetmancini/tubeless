@@ -21,6 +21,7 @@ function run(command: string, args: string[], cwd: string, env: NodeJS.ProcessEn
     cwd,
     encoding: "utf8",
     env: { ...process.env, ...env },
+    timeout: 10_000,
   });
 }
 
@@ -87,7 +88,7 @@ function release(cwd: string, env: NodeJS.ProcessEnv = {}) {
   });
 }
 
-describe("cut-release version bump", () => {
+describe("cut-release version bump", { timeout: 15_000 }, () => {
   it("bumps package.json, commits, and tags without pushing when PUSH=0", () => {
     const dir = setupRepo();
     const before = git(dir, ["rev-parse", "HEAD"]);

@@ -3,11 +3,13 @@ import { PipelineChildError } from "./child-execution";
 import { createPipelineReporter, type ReporterOutput } from "./interactive-reporter";
 import {
   createSteps,
+  defaultPipelineContext,
   definePipeline,
   PipelineExecutionError,
   type PipelineExecutionContext,
   type Step,
 } from "./pipeline";
+import type { PipelineTraceEvent } from "./tracing";
 
 function captureOutput(): ReporterOutput & { chunks: string[] } {
   const chunks: string[] = [];
@@ -304,6 +306,36 @@ describe("child-pipeline composition", () => {
       expect((planFailure as PipelineExecutionError).result.errors[0]).toMatchObject({
         code: "TUBELESS_PLANNING_STEP_UNKNOWN",
       });
+    });
+
+    it("plans each mapped child once per item", async () => {
+      const childStep = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({
+        id: "mapped-once-child",
+        steps: [work],
+        finalize: () => true,
+      });
+      const planSpy = vi.spyOn(child, "plan");
+      const runSpy = vi.spyOn(child, "run");
+      const parentStep = createSteps();
+      const children = parentStep.forEachPipeline("children", {
+        pipeline: child,
+        items: () => [{ id: "a" }, { id: "b" }],
+        key: (item) => item.id,
+        mapOptions: () => ({}),
+      });
+      const parent = definePipeline({
+        id: "mapped-once-parent",
+        steps: [children],
+        finalize: () => true,
+      });
+
+      const result = await parent.run({});
+
+      expect(result.status).toBe("completed");
+      expect(planSpy).toHaveBeenCalledTimes(2);
+      expect(runSpy).not.toHaveBeenCalled();
     });
 
     it("does not count filtered child steps toward fan-out progress", async () => {
@@ -1117,6 +1149,166 @@ describe("child-pipeline composition", () => {
       expect(runSpy).not.toHaveBeenCalled();
       expect(result.errors[0]?.message).toContain("Child pipeline planned-child could not start");
       expect(result.errors[0]?.message).toContain("unknown step ids: missing");
+    });
+
+    it("plans a nested child once before execution", async () => {
+      const childStep = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({
+        id: "once-child",
+        steps: [work],
+        finalize: () => true,
+      });
+      const planSpy = vi.spyOn(child, "plan");
+      const runSpy = vi.spyOn(child, "run");
+      const parentStep = createSteps();
+      const stage = parentStep.fromPipeline("stage", {
+        pipeline: child,
+        mapOptions: () => ({}),
+      });
+      const parent = definePipeline({
+        id: "once-parent",
+        steps: [stage],
+        finalize: () => true,
+      });
+
+      const result = await parent.run({});
+
+      expect(result.status).toBe("completed");
+      expect(result.value).toBe(true);
+      expect(planSpy).toHaveBeenCalledOnce();
+      expect(runSpy).not.toHaveBeenCalled();
+    });
+
+    it("runs a public Pipeline child that lacks the compiled execute binding", async () => {
+      const childStep = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({
+        id: "spread-child",
+        steps: [work],
+        finalize: () => "child-ok" as const,
+      });
+      const publicChild = { ...child };
+      const runSpy = vi.spyOn(publicChild, "run");
+      const parentStep = createSteps();
+      const stage = parentStep.fromPipeline("stage", {
+        pipeline: publicChild,
+        mapOptions: () => ({}),
+      });
+      const parent = definePipeline({
+        id: "spread-parent",
+        steps: [stage],
+        finalize: (outputs) => outputs.stage,
+      });
+
+      const result = await parent.run({});
+
+      expect(result.errors.map((error) => error.message)).toEqual([]);
+      expect(result.status).toBe("completed");
+      expect(result.value).toBe("child-ok");
+      expect(runSpy).toHaveBeenCalledOnce();
+    });
+
+    it("uses public run on an Object.create wrapper that overrides run", async () => {
+      const childStep = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({
+        id: "proto-child",
+        steps: [work],
+        finalize: () => "child-ok" as const,
+      });
+      const runSpy = vi.fn(child.run.bind(child));
+      const decorated = Object.create(child, {
+        run: { configurable: true, enumerable: true, value: runSpy, writable: true },
+      }) as typeof child;
+      const parentStep = createSteps();
+      const stage = parentStep.fromPipeline("stage", {
+        pipeline: decorated,
+        mapOptions: () => ({}),
+      });
+      const parent = definePipeline({
+        id: "proto-parent",
+        steps: [stage],
+        finalize: (outputs) => outputs.stage,
+      });
+
+      const result = await parent.run({});
+
+      expect(result.errors.map((error) => error.message)).toEqual([]);
+      expect(result.status).toBe("completed");
+      expect(result.value).toBe("child-ok");
+      expect(runSpy).toHaveBeenCalledOnce();
+    });
+
+    it("does not invoke public run when a child plan is already invalid", async () => {
+      const childStep = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({
+        id: "invalid-spread-child",
+        steps: [work],
+        finalize: () => true,
+      });
+      const publicChild = { ...child };
+      const runSpy = vi.spyOn(publicChild, "run");
+      const parentStep = createSteps();
+      const stage = parentStep.fromPipeline("stage", {
+        pipeline: publicChild,
+        mapOptions: () => ({ stepIds: ["missing" as never] }),
+      });
+      const parent = definePipeline({
+        id: "invalid-spread-parent",
+        steps: [stage],
+        finalize: () => true,
+      });
+
+      const result = await parent.run({});
+
+      expect(result.status).not.toBe("completed");
+      expect(runSpy).not.toHaveBeenCalled();
+      expect(result.errors[0]?.message).toContain("could not start");
+      expect(result.errors[0]?.message).toContain("unknown step ids: missing");
+    });
+
+    it("emits child lifecycle traces when a public child plan is already invalid", async () => {
+      const childStep = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({
+        id: "invalid-trace-child",
+        steps: [work],
+        finalize: () => true,
+      });
+      const publicChild = { ...child };
+      const runSpy = vi.spyOn(publicChild, "run");
+      const parentStep = createSteps();
+      const stage = parentStep.fromPipeline("stage", {
+        pipeline: publicChild,
+        mapOptions: () => ({ stepIds: ["missing" as never] }),
+      });
+      const parent = definePipeline({
+        id: "invalid-trace-parent",
+        steps: [stage],
+        finalize: () => true,
+      });
+      const events: PipelineTraceEvent[] = [];
+      const result = await parent.run({}, undefined, {
+        ...defaultPipelineContext(),
+        runId: "parent-run",
+        tracing: { exporter: { export: (event) => events.push(event) } },
+      });
+
+      expect(result.status).not.toBe("completed");
+      expect(runSpy).not.toHaveBeenCalled();
+      expect(
+        events.find(
+          (event) => event.name === "pipeline.started" && event.pipelineId === "invalid-trace-child"
+        )
+      ).toMatchObject({ parentRunId: "parent-run", attributes: { plan_ok: false } });
+      expect(
+        events.find(
+          (event) =>
+            event.name === "pipeline.completed" && event.pipelineId === "invalid-trace-child"
+        )
+      ).toMatchObject({ parentRunId: "parent-run" });
     });
 
     it("applies a child pipeline's declared target closure through mapOptions", async () => {

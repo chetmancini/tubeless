@@ -1,4 +1,5 @@
 import { throwIfAborted } from "./abort.js";
+import { emitRejectedPlanLifecycle } from "./lifecycle.js";
 import { runConcurrent } from "./batch.js";
 import {
   toMappedChildStepProgress,
@@ -6,17 +7,19 @@ import {
   type ToMappedChildStepProgressOptions,
 } from "./mapped-child-progress.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
+import { duplicateValues, EXECUTE_COMPILED_RUN, isCompiledPipeline } from "./pipeline-plan.js";
 import { hasVisibleStepProgress } from "./progress.js";
 import type {
   Pipeline,
   PipelineContext,
-  PipelineError,
   PipelineExecutionContext,
   PipelineHooks,
+  PipelinePlan,
   PipelinePlanStep,
   PipelineRun,
   PipelineRunControls,
   PipelineRunOptions,
+  PipelineRuntime,
   PipelineStepContext,
 } from "./pipeline-types.js";
 import type { PipelineTracingOptions } from "./tracing.js";
@@ -33,6 +36,94 @@ export class PipelineChildError extends Error {
 }
 
 type ChildPipeline = Pipeline<object, unknown, string, string>;
+
+type CompiledChildExecute = (
+  plan: PipelinePlan,
+  options: PipelineRunOptions,
+  controls: PipelineRunControls,
+  context?: Partial<PipelineContext>
+) => Promise<PipelineRun<unknown>>;
+
+type ExecutableChild = ChildPipeline & {
+  [EXECUTE_COMPILED_RUN]?: CompiledChildExecute;
+};
+
+function compiledChildExecute(pipeline: ChildPipeline): CompiledChildExecute | undefined {
+  if (!isCompiledPipeline(pipeline)) return undefined;
+  // SAFETY: branded pipelines are the `definePipeline` object, which always
+  // stamps `EXECUTE_COMPILED_RUN`. Wrappers that inherit the symbol are rejected
+  // by the identity check above.
+  return (pipeline as ExecutableChild)[EXECUTE_COMPILED_RUN];
+}
+
+function executeCompiledChild(
+  pipeline: ChildPipeline,
+  plan: PipelinePlan,
+  domainOptions: PipelineRunOptions,
+  controls: PipelineRunControls,
+  context: PipelineContext
+): Promise<PipelineRun<unknown>> {
+  const execute = compiledChildExecute(pipeline);
+  if (execute === undefined) {
+    return pipeline.run(domainOptions, controls, context);
+  }
+  return execute(plan, domainOptions, controls, context);
+}
+
+function publicChildRuntime(context: PipelineContext): PipelineRuntime {
+  const runtime: PipelineRuntime = {
+    cwd: context.cwd,
+    log: context.log,
+    now: context.now ?? Date.now,
+    sleep: context.sleep ?? (async () => undefined),
+  };
+  if (context.hooks) runtime.hooks = context.hooks;
+  if (context.parentRunId) runtime.parentRunId = context.parentRunId;
+  if (context.runId) runtime.runId = context.runId;
+  if (context.signal) runtime.signal = context.signal;
+  if (context.tracing) runtime.tracing = context.tracing;
+  return runtime;
+}
+
+async function failedPublicChildPlanRun(
+  pipeline: ChildPipeline,
+  plan: PipelinePlan,
+  controls: PipelineRunControls,
+  context: PipelineContext
+): Promise<PipelineRun<unknown>> {
+  const runtime = publicChildRuntime(context);
+  const startedAtMs = runtime.now();
+  const result: PipelineRun<unknown> = {
+    pipelineId: pipeline.id,
+    dryRun: controls.dryRun === true,
+    errors: [...plan.errors],
+    finalized: false,
+    finishedAtMs: runtime.now(),
+    runId: context.runId ?? createRunId(pipeline.id),
+    startedAtMs,
+    status: "failed",
+    steps: [],
+    version: RUN_MODEL_VERSION,
+  };
+  if (context.parentRunId) result.parentRunId = context.parentRunId;
+  await emitRejectedPlanLifecycle(pipeline.id, pipeline.targetIds, plan, runtime, result);
+  return result;
+}
+
+async function rejectedChildPlanResult(
+  pipeline: ChildPipeline,
+  plan: PipelinePlan,
+  domainOptions: PipelineRunOptions,
+  controls: PipelineRunControls,
+  context: PipelineContext
+): Promise<PipelineRun<unknown>> {
+  const execute = compiledChildExecute(pipeline);
+  if (execute === undefined) {
+    return failedPublicChildPlanRun(pipeline, plan, controls, context);
+  }
+  return execute(plan, domainOptions, controls, context);
+}
+
 type ChildInputs = Record<string, unknown>;
 
 interface ChildExecutionDependencies<TParentOptions extends object> {
@@ -84,16 +175,6 @@ function childTracingOptions(
   itemKey = context.trace?.itemKey
 ): PipelineTracingOptions | undefined {
   return context.tracing ? { ...context.tracing, itemKey } : undefined;
-}
-
-function duplicateValues(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const duplicates = new Set<string>();
-  for (const value of values) {
-    if (seen.has(value)) duplicates.add(value);
-    seen.add(value);
-  }
-  return [...duplicates];
 }
 
 const CHILD_RUN_CONTROL_KEYS = ["continueOnError", "dryRun", "stepIds", "targets"] as const;
@@ -180,30 +261,6 @@ function isConcurrencyFunction<TOptions extends object>(
   return typeof concurrency === "function";
 }
 
-function failedPlanRun(
-  pipeline: ChildPipeline,
-  controls: PipelineRunControls,
-  context: PipelineContext,
-  errors: readonly PipelineError[]
-): PipelineRun<unknown> {
-  const now = context.now ?? Date.now;
-  const startedAtMs = now();
-  const result: PipelineRun<unknown> = {
-    pipelineId: pipeline.id,
-    dryRun: controls.dryRun === true,
-    errors: [...errors],
-    finalized: false,
-    finishedAtMs: now(),
-    runId: context.runId ?? createRunId(pipeline.id),
-    startedAtMs,
-    status: "failed",
-    steps: [],
-    version: RUN_MODEL_VERSION,
-  };
-  if (context.parentRunId) result.parentRunId = context.parentRunId;
-  return result;
-}
-
 function firstChildFailure(result: PipelineRun<unknown>) {
   const firstFailedStep = result.steps.find(
     ({ status }) => status === "failed" || status === "cancelled"
@@ -223,19 +280,25 @@ async function runChildPipeline(
   context: PipelineContext,
   hooks: PipelineHooks,
   dependencies: ChildExecutionDependencies<object>,
-  messagePrefix = ""
+  messagePrefix = "",
+  plan: PipelinePlan
 ): Promise<PipelineRun<unknown>> {
-  const plan = pipeline.plan(controls);
   if (!plan.ok) {
     const firstError = plan.errors[0];
-    const result = failedPlanRun(pipeline, controls, context, plan.errors);
+    const result = await rejectedChildPlanResult(pipeline, plan, domainOptions, controls, {
+      ...context,
+      hooks,
+    });
     throw dependencies.createExecutionError(
       result,
       `${messagePrefix}could not start: ${firstError?.message ?? "invalid plan"}`
     );
   }
 
-  const result = await pipeline.run(domainOptions, controls, { ...context, hooks });
+  const result = await executeCompiledChild(pipeline, plan, domainOptions, controls, {
+    ...context,
+    hooks,
+  });
   if (result.status !== "completed") {
     const { failureLocation, message } = firstChildFailure(result);
     throw dependencies.createExecutionError(
@@ -264,7 +327,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
       sleep: context.sleep,
       tracing: childTracingOptions(context),
     };
-    // Preview plan only for progress totals; invalid plans throw from runChildPipeline.
+    // Plan once for progress totals and execution. Invalid plans fail before child.run.
     const childPlan = config.pipeline.plan(controls);
     const selectedStepCount = childPlan.ok
       ? childPlan.steps.filter((step) => step.selected).length
@@ -296,7 +359,8 @@ export function createSingleChildRunner<TParentOptions extends object>(
       baseChildContext,
       childHooks,
       dependencies,
-      `Child pipeline ${config.pipeline.id} `
+      `Child pipeline ${config.pipeline.id} `,
+      childPlan
     );
 
     return config.mapResult
@@ -385,7 +449,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
             config.mapOptions(item, itemIndex, inputs, context),
             context.dryRun
           );
-          // Preview plan for live fan-out progress; invalid plans throw from runChildPipeline.
+          // Plan once per mapped-options bag for progress and execution.
           const childPlan = config.pipeline.plan(controls);
           if (childPlan.ok) {
             const plannedSteps = childPlan.steps.filter((step) => step.selected).length;
@@ -434,7 +498,9 @@ export function createMappedChildRunner<TParentOptions extends object>(
               tracing: childTracingOptions(context, key),
             },
             childHooks,
-            dependencies
+            dependencies,
+            "",
+            childPlan
           );
 
           const seen = childTerminalSteps.get(key) ?? new Set<string>();

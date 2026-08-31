@@ -2130,6 +2130,190 @@ describe("definePipeline", () => {
     ).toThrow("dependency cycle");
   });
 
+  it("plans from the compiled graph after define, ignoring later definition mutations", async () => {
+    const step = createSteps();
+    const build = step("build", { run: () => "built" });
+    const definition = {
+      id: "sealed",
+      steps: [build],
+      finalize: () => "ok" as const,
+    };
+    const pipeline = definePipeline(definition);
+    (definition as { steps: AnyStep[] }).steps = [build, build];
+
+    const plan = pipeline.plan();
+    expect(plan.ok).toBe(true);
+    expect(plan.errors).toEqual([]);
+    expect(plan.steps.map((planned) => planned.id)).toEqual(["build"]);
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.steps.map((report) => report.id)).toEqual(["build"]);
+    expect(result.value).toBe("ok");
+  });
+
+  it("plans from snapshotted dependency arrays after define", async () => {
+    const step = createSteps();
+    const build = step("build", { run: () => "built" });
+    const extra = step("extra", { run: () => "extra" });
+    const dependsOn = [build];
+    const write = step("write", {
+      dependsOn,
+      run: ({ build }) => `${build}+write`,
+    });
+    const pipeline = definePipeline({
+      id: "sealed-deps",
+      steps: [build, write],
+      finalize: (outputs) => outputs.write,
+    });
+    dependsOn.push(extra);
+
+    const plan = pipeline.plan();
+    expect(plan.ok).toBe(true);
+    expect(plan.steps.find((planned) => planned.id === "write")?.dependencies).toEqual(["build"]);
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("built+write");
+    expect(result.steps.map((report) => report.id)).toEqual(["build", "write"]);
+  });
+
+  it("defines a pipeline from frozen steps with dependencies", async () => {
+    const step = createSteps();
+    const build = step("build", { run: () => "built" });
+    const write = step("write", {
+      dependsOn: [build],
+      run: ({ build }) => `${build}+write`,
+    });
+    Object.freeze(write);
+    const pipeline = definePipeline({
+      id: "frozen-step",
+      steps: [build, write],
+      finalize: (outputs) => outputs.write,
+    });
+
+    const plan = pipeline.plan();
+    expect(plan.ok).toBe(true);
+    expect(plan.steps.find((planned) => planned.id === "write")?.dependencies).toEqual(["build"]);
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("built+write");
+  });
+
+  it("plans from snapshotted absent dependency fields after define", async () => {
+    const step = createSteps();
+    const later = step("later", { run: () => "later" });
+    const earlier = step("earlier", { run: () => "earlier" });
+    const pipeline = definePipeline({
+      id: "absent-deps",
+      steps: [later, earlier],
+      finalize: (outputs) => `${outputs.later}+${outputs.earlier}`,
+    });
+    Object.assign(later, { dependsOn: [earlier] });
+
+    const plan = pipeline.plan();
+    expect(plan.ok).toBe(true);
+    expect(plan.steps.find((planned) => planned.id === "later")?.dependencies).toEqual([]);
+    expect(plan.steps.find((planned) => planned.id === "later")?.skipReason).toBeUndefined();
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("later+earlier");
+    expect(result.steps.map((report) => report.id)).toEqual(["later", "earlier"]);
+  });
+
+  it("runs class steps whose contract members live on the prototype", async () => {
+    const deps: AnyStep[] = [];
+    class PrototypeStep implements AnyStep {
+      constructor(readonly id: string) {}
+
+      get dependsOn() {
+        return deps;
+      }
+
+      skip() {
+        return false;
+      }
+
+      run() {
+        return "from-class";
+      }
+    }
+
+    const work = new PrototypeStep("work");
+    const pipeline = definePipeline({
+      id: "class-step",
+      steps: [work],
+      finalize: (outputs) => outputs.work,
+    });
+    deps.push(work);
+
+    const plan = pipeline.plan();
+    expect(plan.ok).toBe(true);
+    expect(plan.steps.find((planned) => planned.id === "work")?.dependencies).toEqual([]);
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("from-class");
+  });
+
+  it("runs class steps whose accessors use private fields", async () => {
+    class PrivateStep implements AnyStep {
+      #id: string;
+      #label: string;
+      constructor(id: string, label: string) {
+        this.#id = id;
+        this.#label = label;
+      }
+
+      get id() {
+        return this.#id;
+      }
+
+      get name() {
+        return this.#label;
+      }
+
+      run() {
+        return this.#label;
+      }
+    }
+
+    const work = new PrivateStep("work", "from-private");
+    const pipeline = definePipeline({
+      id: "private-step",
+      steps: [work],
+      finalize: (outputs) => outputs.work,
+    });
+
+    const plan = pipeline.plan();
+    expect(plan.ok).toBe(true);
+    expect(plan.steps.find((planned) => planned.id === "work")?.name).toBe("from-private");
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("from-private");
+  });
+
+  it("invokes a method-style finalizer with the original definition as this", async () => {
+    const step = createSteps();
+    const work = step("work", { run: () => "ok" });
+    const definition = {
+      id: "finalize-this",
+      marker: "from-definition",
+      steps: [work] as const,
+      finalize() {
+        return this.marker;
+      },
+    };
+    const pipeline = definePipeline(definition);
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("from-definition");
+  });
+
   it("policy-skips a step with a yellow skip report and unlocks dependents", async () => {
     interface Options {
       enableWrite: boolean;

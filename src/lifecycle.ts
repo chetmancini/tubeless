@@ -7,8 +7,8 @@ import type {
   PipelineRuntime,
   PipelineStepStatus,
 } from "./pipeline-types.js";
-import type { PipelineTraceEmitter } from "./tracing-internal.js";
-import type { PipelineTraceAttributes } from "./tracing.js";
+import { createPipelineTraceEmitter, type PipelineTraceEmitter } from "./tracing-internal.js";
+import type { PipelineTraceAttributes, PipelineTraceContext } from "./tracing.js";
 
 /** Internal canonical lifecycle stream. Hooks and tracing are projections of it. */
 export interface PipelineLifecycleObserver {
@@ -116,4 +116,25 @@ export function createPipelineLifecycleObserver(
     },
     flush: () => trace?.flush() ?? Promise.resolve(),
   };
+}
+
+/** Same start/complete projection executePlannedRun uses for an invalid plan. */
+export async function emitRejectedPlanLifecycle(
+  pipelineId: string,
+  targetIds: readonly string[],
+  plan: PipelinePlan,
+  runtime: PipelineRuntime,
+  result: PipelineRun<unknown>
+): Promise<void> {
+  const identity: PipelineTraceContext = { runId: result.runId };
+  if (result.parentRunId) identity.parentRunId = result.parentRunId;
+  if (runtime.tracing?.itemKey) identity.itemKey = runtime.tracing.itemKey;
+  const lifecycle = createPipelineLifecycleObserver(
+    pipelineId,
+    runtime,
+    createPipelineTraceEmitter(pipelineId, runtime.tracing, runtime.log, identity, runtime.now)
+  );
+  lifecycle.pipelineStart(plan, targetIds);
+  lifecycle.pipelineComplete(result);
+  await lifecycle.flush();
 }
