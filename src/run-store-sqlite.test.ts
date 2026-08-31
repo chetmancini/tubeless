@@ -14,6 +14,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite.js";
 
@@ -498,5 +499,38 @@ describe("SQLite pipeline run store", () => {
     await expect(openSqlitePipelineRunStore(filename, { initialize: false })).rejects.toThrow(
       "is not a pipeline run store"
     );
+  });
+
+  it("refuses listEvents when a writer starts after the immutable open", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+
+    const reader = await openSqlitePipelineRunStore(filename, {
+      initialize: false,
+      readOnly: true,
+    });
+    expect(await reader.listEvents()).toEqual([expect.objectContaining({ runId: "run-1" })]);
+    const writer = await openSqlitePipelineRunStore(filename, { initialize: false });
+    try {
+      await writer.export(startedEvent("run-2", 20));
+      await expect(reader.listEvents()).rejects.toThrow(/write-ahead|journal|sidecar/i);
+    } finally {
+      await writer.close();
+      await reader.close();
+    }
+  });
+
+  it("does not create a missing file when Node opens an existing-only URI", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const missing = path.join(directory, "missing.sqlite");
+    expect(() => new DatabaseSync(`${pathToFileURL(missing).href}?mode=rw`)).toThrow(
+      /unable to open/i
+    );
+    await expect(stat(missing)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

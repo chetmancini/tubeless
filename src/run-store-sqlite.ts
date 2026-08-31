@@ -142,11 +142,9 @@ async function openDatabase(
     if (bunSqlite) {
       return openReadableDatabase(Database, filename, { create: false, readwrite: true });
     }
-    try {
-      return openReadableDatabase(Database, filename, { create: false });
-    } catch {
-      return openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=rw`);
-    }
+    // Node's DatabaseSync ignores `{ create: false }` and creates an empty
+    // file. `mode=rw` fails closed when the path is missing.
+    return openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=rw`);
   }
   return new Database(filename);
 }
@@ -276,9 +274,10 @@ export interface OpenSqlitePipelineRunStoreOptions {
    * Open the file without creating it or writing WAL/sidecars.
    * A leftover empty `-wal` is ignored and the main file is opened
    * immutable. A non-empty `-wal` or `-journal`, a multiply linked
-   * database file, or a WAL that appears during the open is refused
-   * so pending events are not dropped. `history` uses this so a
-   * supplied finished artifact can be inspected without rewriting `-shm`.
+   * database file, or a WAL that appears during the open or a later
+   * `listEvents` is refused so pending events are not dropped.
+   * `history` uses this so a supplied finished artifact can be inspected
+   * without rewriting `-shm`.
    */
   readonly readOnly?: boolean;
 }
@@ -367,6 +366,9 @@ export async function openSqlitePipelineRunStore(
     },
     async listEvents(query: PipelineRunEventQuery = {}) {
       if (closed) throw new Error("Cannot query a closed pipeline run store.");
+      if (readOnly && resolvedFilename !== ":memory:") {
+        await sqliteAssertImmutableInspect(resolvedFilename);
+      }
       const predicates: string[] = [];
       const params: unknown[] = [];
       if (query.afterId !== undefined) {
@@ -390,6 +392,9 @@ export async function openSqlitePipelineRunStore(
         database,
         `SELECT * FROM pipeline_run_events ${where} ORDER BY id ASC LIMIT ?`
       ).all(...params) as StoredEventRow[];
+      if (readOnly && resolvedFilename !== ":memory:") {
+        await sqliteAssertImmutableInspect(resolvedFilename);
+      }
       return rows.map(mapRow);
     },
     clearHistory() {
