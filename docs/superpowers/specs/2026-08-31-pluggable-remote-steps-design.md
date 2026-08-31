@@ -44,13 +44,13 @@ dry-run / skip / target model.
 
 ## Two compositions
 
-| Need | Composition | Who drives the DAG | Who survives process death |
-| --- | --- | --- | --- |
-| The graph must outlive the process, sleep for days, or wait on humans | Host embedding: a Temporal workflow, Lambda handler, or queue worker calls `pipeline.runOrThrow(...)` and passes `runId` / `parentRunId` | The engine | The engine |
-| Some steps run elsewhere; the rest stay local | `fromRemote`: one opaque parent step per remote unit of work | The tubeless process | Only the remote job, not the parent `PipelineRun` |
+| Need                                                                  | Composition                                                                                                                              | Who drives the DAG   | Who survives process death                        |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------- |
+| The graph must outlive the process, sleep for days, or wait on humans | Host embedding: a Temporal workflow, Lambda handler, or queue worker calls `pipeline.runOrThrow(...)` and passes `runId` / `parentRunId` | The engine           | The engine                                        |
+| Some steps run elsewhere; the rest stay local                         | `fromRemote`: one opaque parent step per remote unit of work                                                                             | The tubeless process | Only the remote job, not the parent `PipelineRun` |
 
-These are complementary. Embedding makes the *graph* durable. `fromRemote`
-makes *a step* remote. Do not treat a remote invoker inside today's loop as
+These are complementary. Embedding makes the _graph_ durable. `fromRemote`
+makes _a step_ remote. Do not treat a remote invoker inside today's loop as
 crash-resume.
 
 `docs/comparison.md` already says a queue worker or durable step can call
@@ -90,10 +90,7 @@ interface RemoteStepAdapter<TOptions extends object, TPayload, TResult> {
   readonly engine: string;
   /** Function name, workflow type, URL, queue. Presentation only. */
   readonly target?: string;
-  invoke(
-    payload: TPayload,
-    context: PipelineStepContext<TOptions>
-  ): Promise<TResult>;
+  invoke(payload: TPayload, context: PipelineStepContext<TOptions>): Promise<TResult>;
 }
 ```
 
@@ -233,11 +230,11 @@ A step cannot be both nested and remote.
 
 Dry-run is a side-effect gate. It is not "run locally" vs "run remotely".
 
-| Author writes | Meaning | Pipeline dry run |
-| --- | --- | --- |
-| omit | Work is safe, or the engine honors dry-run | Call `invoke`; `context.dryRun === true` |
-| `dryRun: "skip"` | This work is the side effect | Do not call `invoke` |
-| `dryRun: (inputs, ctx) => …` | A local preview is enough | Call the handler only |
+| Author writes                | Meaning                                    | Pipeline dry run                         |
+| ---------------------------- | ------------------------------------------ | ---------------------------------------- |
+| omit                         | Work is safe, or the engine honors dry-run | Call `invoke`; `context.dryRun === true` |
+| `dryRun: "skip"`             | This work is the side effect               | Do not call `invoke`                     |
+| `dryRun: (inputs, ctx) => …` | A local preview is enough                  | Call the handler only                    |
 
 `skipsInDryRun` already implements this: only `step.dryRun === "skip"` is a
 structural skip. The factory does **not** stamp `"skip"`. Stamping it would
@@ -270,12 +267,12 @@ dry run contacts the engine when all of these are true:
 
 Suggested human text:
 
-| Step `dryRun` | `remote` | Dry-run plan text |
-| --- | --- | --- |
-| `"run"` | present | `run -> remote lambda (enrich-v2); dry-run contacts engine` |
-| `"skip"` | present | `skip: dry-run -> remote temporal (chargeOrder)` |
-| `"custom"` | present | `run -> remote temporal (chargeOrder)` plus the usual custom policy |
-| `"run"` | absent | today's ordinary `run` |
+| Step `dryRun` | `remote` | Dry-run plan text                                                   |
+| ------------- | -------- | ------------------------------------------------------------------- |
+| `"run"`       | present  | `run -> remote lambda (enrich-v2); dry-run contacts engine`         |
+| `"skip"`      | present  | `skip: dry-run -> remote temporal (chargeOrder)`                    |
+| `"custom"`    | present  | `run -> remote temporal (chargeOrder)` plus the usual custom policy |
+| `"run"`       | absent   | today's ordinary `run`                                              |
 
 JSON and `PipelinePlan` stay machine-simple: `dryRun` plus optional `remote`.
 Do not add a `"rehearse"` plan value. Do not add an authoring `dryRun: "run"`
@@ -292,12 +289,12 @@ graph.
 
 ## Failure, cancel, and skip
 
-| Event | Existing classification |
-| --- | --- |
-| Adapter throw | `TUBELESS_STEP_FAILED`, `kind: "step"` |
-| Abort via `context.signal` | `TUBELESS_RUN_CANCELLED`, `kind: "cancellation"` |
-| `outputSchema` rejection | `TUBELESS_STEP_OUTPUT_VALIDATION_FAILED`, `kind: "validation"` |
-| Policy skip | `reason: "policy"`, same as `fromPipeline.skippable` |
+| Event                      | Existing classification                                        |
+| -------------------------- | -------------------------------------------------------------- |
+| Adapter throw              | `TUBELESS_STEP_FAILED`, `kind: "step"`                         |
+| Abort via `context.signal` | `TUBELESS_RUN_CANCELLED`, `kind: "cancellation"`               |
+| `outputSchema` rejection   | `TUBELESS_STEP_OUTPUT_VALIDATION_FAILED`, `kind: "validation"` |
+| Policy skip                | `reason: "policy"`, same as `fromPipeline.skippable`           |
 
 No `TUBELESS_REMOTE_*` codes. No engine job IDs on `PipelineStepReport`. The
 adapter may log or put a job id in progress `details`. A remote object thrown
@@ -331,21 +328,21 @@ adapters so tests can pass a fake. Do not add injected runner overrides.
 inventory and updating the learning surface are part of this slice, not
 follow-ups.
 
-| Artifact | Required change |
-| --- | --- |
-| `src/pipeline.ts` | Export `RemoteStepAdapter` with the other public types. `StepFactory` already re-exports from `pipeline-steps.ts`. |
-| `bun run api:generate` | Rebuild `docs/api-reference.md` and `docs/api-report.json` after the export lands. `make check` runs `api:check`. |
-| `docs/recipes.md` | New rows: mixed local + remote steps; host embedding that passes `runId`. |
-| `docs/agent-guide.md` | Primitive: `fromRemote` for a unit of work that lives on another engine; inverse dry-run contract; host-embed when the graph must outlive the process. Plan metadata: parent plans expose `remote` with `engine` and optional `target`. Adapters may forward remote lines through `context.log` and must rethrow remote failures as `Error` with `cause` / `code`. |
-| `examples/catalog/` | Catalog-shaped pipeline + `definePipelineCommand` that uses `fromRemote` with a fake adapter, kebab-case IDs, and a studio registration in `tubeless.studio.ts`. Agents copy layout from this catalog. |
-| `docs/comparison.md` | Two-compositions table. Host embedding is the durable-graph path. `fromRemote` is mixed placement. |
-| `docs/concepts.md` | Short remote-step section after child pipelines. Dry-run remains a side-effect gate. |
-| `docs/remote-step-composition.md` | Living contract, same role as `child-pipeline-composition.md`. |
-| `docs/README.md` | Link the composition doc from Deeper reference. |
-| `docs/llms.txt` | Advanced link plus executable example path. |
-| `examples/remote-steps.ts` | Compiled recipe: local parse, remote enrich (omit dry-run, payload carries `dryRun`), remote charge (`dryRun: "skip"`). |
-| `src/public-api.example.test.ts` | One `fromRemote` smoke through the package entry. |
-| `skills/tubeless/SKILL.md` | No second copy of the rules; it already defers to the agent guide. |
+| Artifact                          | Required change                                                                                                                                                                                                                                                                                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/pipeline.ts`                 | Export `RemoteStepAdapter` with the other public types. `StepFactory` already re-exports from `pipeline-steps.ts`.                                                                                                                                                                                                                                                 |
+| `bun run api:generate`            | Rebuild `docs/api-reference.md` and `docs/api-report.json` after the export lands. `make check` runs `api:check`.                                                                                                                                                                                                                                                  |
+| `docs/recipes.md`                 | New rows: mixed local + remote steps; host embedding that passes `runId`.                                                                                                                                                                                                                                                                                          |
+| `docs/agent-guide.md`             | Primitive: `fromRemote` for a unit of work that lives on another engine; inverse dry-run contract; host-embed when the graph must outlive the process. Plan metadata: parent plans expose `remote` with `engine` and optional `target`. Adapters may forward remote lines through `context.log` and must rethrow remote failures as `Error` with `cause` / `code`. |
+| `examples/catalog/`               | Catalog-shaped pipeline + `definePipelineCommand` that uses `fromRemote` with a fake adapter, kebab-case IDs, and a studio registration in `tubeless.studio.ts`. Agents copy layout from this catalog.                                                                                                                                                             |
+| `docs/comparison.md`              | Two-compositions table. Host embedding is the durable-graph path. `fromRemote` is mixed placement.                                                                                                                                                                                                                                                                 |
+| `docs/concepts.md`                | Short remote-step section after child pipelines. Dry-run remains a side-effect gate.                                                                                                                                                                                                                                                                               |
+| `docs/remote-step-composition.md` | Living contract, same role as `child-pipeline-composition.md`.                                                                                                                                                                                                                                                                                                     |
+| `docs/README.md`                  | Link the composition doc from Deeper reference.                                                                                                                                                                                                                                                                                                                    |
+| `docs/llms.txt`                   | Advanced link plus executable example path.                                                                                                                                                                                                                                                                                                                        |
+| `examples/remote-steps.ts`        | Compiled recipe: local parse, remote enrich (omit dry-run, payload carries `dryRun`), remote charge (`dryRun: "skip"`).                                                                                                                                                                                                                                            |
+| `src/public-api.example.test.ts`  | One `fromRemote` smoke through the package entry.                                                                                                                                                                                                                                                                                                                  |
+| `skills/tubeless/SKILL.md`        | No second copy of the rules; it already defers to the agent guide.                                                                                                                                                                                                                                                                                                 |
 
 The recipe and agent guide state the inverse contract explicitly. A rehearsal
 that contacts an engine is only correct when the remote worker is side-effect

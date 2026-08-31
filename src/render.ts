@@ -1,4 +1,9 @@
-import type { PipelineError, PipelinePlan, PipelinePlanStep, PipelineStepSelectionReason } from "./pipeline.js";
+import type {
+  PipelineError,
+  PipelinePlan,
+  PipelinePlanStep,
+  PipelineStepSelectionReason,
+} from "./pipeline.js";
 import { formatPipelineError } from "./pipeline-diagnostics.js";
 
 export interface PipelineHumanRenderOptions {

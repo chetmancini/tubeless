@@ -122,10 +122,7 @@ export interface RemoteStepAdapter<TOptions extends object, TPayload, TResult> {
   readonly engine: string;
   /** Function name, workflow type, URL, queue. Presentation only. */
   readonly target?: string;
-  invoke(
-    payload: TPayload,
-    context: PipelineStepContext<TOptions>
-  ): Promise<TResult>;
+  invoke(payload: TPayload, context: PipelineStepContext<TOptions>): Promise<TResult>;
 }
 
 export type PipelineErrorPhase = "definition" | "execution" | "finalization" | "planning";

@@ -92,7 +92,11 @@ describe("pipeline rendering", () => {
     };
     const step = createSteps();
     const enrich = step.fromRemote("enrich", {
-      adapter: { engine: "lambda", target: "enrich-v2", invoke: async () => ({ ok: true as const }) },
+      adapter: {
+        engine: "lambda",
+        target: "enrich-v2",
+        invoke: async () => ({ ok: true as const }),
+      },
       mapInput: () => ({}),
       outputSchema: schema,
     });
