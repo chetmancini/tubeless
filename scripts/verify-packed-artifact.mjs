@@ -298,6 +298,9 @@ try {
   if (existsSync(join(installedPackage, "docs", "agent-evaluations.md"))) {
     throw new Error("Packed tubeless artifact must not include docs/agent-evaluations.md");
   }
+  if (existsSync(join(installedPackage, "docs", "superpowers"))) {
+    throw new Error("Packed tubeless artifact must not include docs/superpowers");
+  }
   assertPackedDocumentationLinks(installedPackage);
 
   const smokeProgram = Object.keys(packageJson.exports)

@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Vitest (`expectTypeOf` + `@ts-expect-error`), existing Standard Schema helper, no new npm dependencies, no Temporal/AWS SDKs.
 
-**Spec:** [docs/superpowers/specs/2026-08-31-pluggable-remote-steps-design.md](../specs/2026-08-31-pluggable-remote-steps-design.md)
+**Spec:** [.context/superpowers/specs/2026-08-31-pluggable-remote-steps-design.md](../specs/2026-08-31-pluggable-remote-steps-design.md)
 
 ## Global Constraints
 
@@ -1042,7 +1042,7 @@ Use `step.fromRemote` when one parent step's work lives on another engine.
 The parent plan stays local and opaque; `remote.engine` and optional
 `remote.target` are presentation only. Dry-run remains a side-effect gate:
 omitting `dryRun` still calls the adapter. See
-[remote-step composition](../../remote-step-composition.md).
+[remote-step composition](../../../docs/remote-step-composition.md).
 ```
 
 `docs/README.md` Deeper reference table — add a row for `docs/remote-step-composition.md` next to child-pipeline composition (L26).
