@@ -603,7 +603,9 @@ parentPort.on("message", (msg) => {
       rendered = readFileSync(path, "utf8");
       expect(rendered).toContain("step done");
       expect(rendered).toContain("final status");
-      expect(rendered.lastIndexOf("final status")).toBeGreaterThan(rendered.lastIndexOf("step done"));
+      expect(rendered.lastIndexOf("final status")).toBeGreaterThan(
+        rendered.lastIndexOf("step done")
+      );
     } finally {
       closeSync(fd);
       unlinkSync(path);

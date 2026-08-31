@@ -341,13 +341,10 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     if (code !== 0) failToInline();
   });
   worker.unref();
-  worker.on("message", (msg: { type?: string; frameLineCount?: number }) => {
+  worker.on("message", (msg: { type?: string }) => {
     if (msg?.type !== "ready") return;
     workerLive = true;
     pendingLogs.length = 0;
-    if (typeof msg.frameLineCount === "number" && msg.frameLineCount >= 0) {
-      Atomics.store(handshake, 1, msg.frameLineCount);
-    }
   });
 
   return {
