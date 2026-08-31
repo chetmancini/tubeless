@@ -125,20 +125,39 @@ function splitChildRunOptions(options: PipelineRunOptions): ChildRunBags {
   if (!hasControls) {
     return { controls, domainOptions: options };
   }
-  const descriptors = Object.fromEntries(
-    Reflect.ownKeys(options)
-      .filter((property) => !isChildRunControlKey(property))
-      .map((property) => {
-        const descriptor = Reflect.getOwnPropertyDescriptor(options, property)!;
-        return [property, { ...descriptor, configurable: true }];
-      })
-  );
-  return {
-    controls,
-    // SAFETY: `Object.create` keeps the original prototype and own descriptors
-    // minus control keys, so the result remains a domain options object.
-    domainOptions: Object.create(Object.getPrototypeOf(options), descriptors) as PipelineRunOptions,
-  };
+  return { controls, domainOptions: createChildDomainOptionsView(options) };
+}
+
+function createChildDomainOptionsView(options: PipelineRunOptions): PipelineRunOptions {
+  // SAFETY: the view forwards to `options` with that object as the receiver, so
+  // accessors and methods keep their original `this` after control keys are hidden.
+  return new Proxy(options, {
+    get(target, property) {
+      if (isChildRunControlKey(property)) return undefined;
+      const value = readChildOptionProperty(target, property);
+      return value instanceof Function ? value.bind(target) : value;
+    },
+    has(target, property) {
+      return !isChildRunControlKey(property) && Reflect.has(target, property);
+    },
+    ownKeys(target) {
+      return Reflect.ownKeys(target).filter((property) => !isChildRunControlKey(property));
+    },
+    getOwnPropertyDescriptor(target, property) {
+      if (isChildRunControlKey(property)) return undefined;
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+    set(target, property, value) {
+      if (isChildRunControlKey(property)) return true;
+      return Reflect.set(target, property, value, target);
+    },
+  });
+}
+
+function readChildOptionProperty(options: PipelineRunOptions, property: PropertyKey): unknown {
+  // SAFETY: child mapOptions is an untyped bag; this index reads the requested
+  // key on that original object so accessors keep it as `this`.
+  return options[property as keyof PipelineRunOptions];
 }
 
 function childRunBags(options: PipelineRunOptions, dryRun: boolean): ChildRunBags {

@@ -908,6 +908,47 @@ describe("child-pipeline composition", () => {
       expect(observedDryRuns).toEqual([true]);
     });
 
+    it("reads child mapOptions accessors through the original receiver", async () => {
+      class MixedChildOptions {
+        readonly #label = "secret";
+        continueOnError = true;
+
+        get label(): string {
+          return this.#label;
+        }
+
+        read(): string {
+          return this.#label;
+        }
+      }
+
+      const childStep = createSteps<{ label: string } & { read(): string }>();
+      const inspect = childStep("inspect", {
+        run: (_inputs, context) => {
+          expect(context.options).toBeInstanceOf(MixedChildOptions);
+          expect("continueOnError" in context.options).toBe(false);
+          return `${context.options.label}:${context.options.read()}`;
+        },
+      });
+      const child = definePipeline({
+        id: "accessor-child",
+        steps: [inspect],
+        finalize: (outputs) => outputs.inspect,
+      });
+      const parentStep = createSteps();
+      const stage = parentStep.fromPipeline("accessor-stage", {
+        pipeline: child,
+        mapOptions: () => new MixedChildOptions(),
+      });
+      const parent = definePipeline({
+        id: "accessor-parent",
+        steps: [stage],
+        finalize: (outputs) => outputs["accessor-stage"],
+      });
+
+      await expect(parent.runOrThrow({})).resolves.toBe("secret:secret");
+    });
+
     it("fails one opaque step with child-identifying details and skips parent finalization", async () => {
       const childStep = createSteps();
       const explode = childStep("explode", {

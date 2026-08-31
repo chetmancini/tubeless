@@ -113,6 +113,15 @@ type CheckedStepTuple<TSteps extends readonly AnyStep[]> =
           readonly __duplicateStepIds: DuplicateStepIds<TSteps>;
         };
 
+function snapshotRunControls<TStepId extends string, TTargetId extends string>(
+  controls: PipelineRunControls<TStepId, TTargetId>
+): PipelineRunControls<TStepId, TTargetId> {
+  const snapshot: PipelineRunControls<TStepId, TTargetId> = { ...controls };
+  if (controls.stepIds !== undefined) snapshot.stepIds = [...controls.stepIds];
+  if (controls.targets !== undefined) snapshot.targets = [...controls.targets];
+  return snapshot;
+}
+
 export function definePipeline<
   const TSteps extends readonly AnyStep[],
   TResult = unknown,
@@ -164,12 +173,13 @@ export function definePipeline<
     controls: PipelineRunControls<TStepId, TTargetId> = {},
     context: Partial<PipelineContext> = defaultPipelineContext()
   ): Promise<PipelineRun<TPipelineResult>> {
+    const runControls = snapshotRunControls(controls);
     return executePlannedRun({
-      controls,
+      controls: runControls,
       definition,
       domainOptions: options,
       optionsSchema,
-      plan: plan(controls),
+      plan: plan(runControls),
       runtime: resolvePipelineRuntime(context),
       targetIds,
     });

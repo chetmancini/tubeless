@@ -303,6 +303,33 @@ describe("definePipeline", () => {
     await expect(pipeline.runOrThrow({}, { dryRun: true })).resolves.toBe(7);
   });
 
+  it("does not observe continueOnError mutations after run starts", async () => {
+    const controls = { continueOnError: true };
+    const step = createSteps();
+    const fail = step("fail", {
+      run: async () => {
+        controls.continueOnError = false;
+        throw new Error("boom");
+      },
+    });
+    const later = step("later", { run: () => "ok" });
+    const pipeline = definePipeline({
+      id: "snapshot-controls",
+      steps: [fail, later],
+      finalize: (outputs) => outputs.later,
+    });
+
+    const result = await pipeline.run({}, controls);
+
+    expect(result.status).not.toBe("completed");
+    expect(result.finalized).toBe(true);
+    expect(result.value).toBe("ok");
+    expect(result.steps.map(({ id, status }) => [id, status])).toEqual([
+      ["fail", "failed"],
+      ["later", "completed"],
+    ]);
+  });
+
   it("reports option validation issues before any step starts", async () => {
     const input = { source: "bad" };
     const validate = vi.fn((value: unknown) => {
