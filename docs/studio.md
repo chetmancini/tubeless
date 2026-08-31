@@ -47,6 +47,9 @@ rejected when any command is registered. A non-loopback `--host` without
 commands is allowed and stays read-only: the store is visible to anyone who
 can reach the port, and clear-history is not wired. That bind is a risk you
 enable; see [SECURITY.md](https://github.com/chetmancini/tubeless/blob/main/SECURITY.md).
+When `--host` is `0.0.0.0` or `::`, a matching `Host` cannot be the bind
+address, so the studio also accepts `localhost` or a literal IP on the same
+port. DNS names are still refused.
 
 ## Checked-in catalog
 
@@ -84,11 +87,12 @@ per-item `details` rows under the parent bar. Truncated lists keep the original
 `detail_count` and nested `step_count` so history can say how many rows were
 omitted.
 
-Browser plan, launch, cancel, and clear-history requests send
+Every studio request, including reads, requires a `Host` header that matches
+the bound authority (or, on a wildcard bind, `localhost` or a literal IP on
+the same port). Browser plan, launch, cancel, and clear-history also send
 `x-tubeless-studio-plan`, `x-tubeless-studio-launch`,
-`x-tubeless-studio-cancel`, and `x-tubeless-studio-clear-history`. Those
-requests also require a `Host` header that matches the bound authority, and
-plan/launch require `application/json`. A successful launch response (HTTP 202)
+`x-tubeless-studio-cancel`, and `x-tubeless-studio-clear-history`. Plan and
+launch require `application/json`. A successful launch response (HTTP 202)
 means the run id is already queryable from the store. Cancel aborts one live
 studio launch without stopping the server; it is not crash-resume. The Cancel
 run control appears only for top-level launches this studio process still owns.

@@ -764,4 +764,45 @@ describe("local pipeline run studio", () => {
     expect(forgedHost.status).toBe(403);
     expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
   });
+
+  it("rejects a literal-IP Host that does not match a specific bind", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const port = new URL(server.url).port;
+    const forgedHost = await requestWithHost(`${server.url}/api/snapshot`, {
+      host: `192.0.2.10:${port}`,
+      method: "GET",
+    });
+    expect(forgedHost.status).toBe(403);
+    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+  });
+
+  it("accepts localhost and literal-IP Hosts on a wildcard bind", async () => {
+    const server = await startPipelineRunStudio({
+      host: "0.0.0.0",
+      port: 0,
+      store: memoryStore(events),
+    });
+    servers.push(server);
+
+    const port = new URL(server.url).port;
+    const snapshotUrl = `http://127.0.0.1:${port}/api/snapshot`;
+    for (const host of [
+      `127.0.0.1:${port}`,
+      `192.0.2.10:${port}`,
+      `localhost:${port}`,
+      `[::1]:${port}`,
+    ]) {
+      const response = await requestWithHost(snapshotUrl, { host, method: "GET" });
+      expect({ host, status: response.status }).toEqual({ host, status: 200 });
+    }
+
+    const forgedHost = await requestWithHost(snapshotUrl, {
+      host: `evil.example:${port}`,
+      method: "GET",
+    });
+    expect(forgedHost.status).toBe(403);
+    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+  });
 });

@@ -173,9 +173,11 @@ The studio is a local process, not an authenticated network service.
   non-loopback host plus an injected launcher or history capability. That
   combination is out of scope, same as a non-loopback CLI bind the user
   enables.
-- Plan, launch, cancel, and clear-history require a `Host` matching the bound
-  authority, a custom `x-tubeless-studio-*` header, and `application/json`
-  for plan and launch. Those are same-origin guards, not authentication.
+- Every studio route requires a `Host` matching the bound authority (or,
+  on a wildcard bind, localhost or a literal IP on the same port). Plan,
+  launch, cancel, and clear-history also require a custom
+  `x-tubeless-studio-*` header, and `application/json` for plan and launch.
+  Those are same-origin guards, not authentication.
 
 Documented in `SECURITY.md` and `docs/studio.md`. Covered by
 `src/run-store-ui.test.ts` and `src/workbench.test.ts`.

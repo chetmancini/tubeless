@@ -1,5 +1,11 @@
 import { createServer, type Server } from "node:http";
-import { formatHttpUrlHost, normalizeHttpAuthority } from "./run-store-ui-http.js";
+import {
+  formatHttpUrlHost,
+  isLiteralOrLocalhostHttpHost,
+  isUnspecifiedHttpHost,
+  normalizeHttpAuthority,
+  parseHttpAuthority,
+} from "./run-store-ui-http.js";
 import { projectPipelineRun, type PipelineRunEventStore } from "./run-store.js";
 import { PIPELINE_RUN_STUDIO_HTML } from "./run-store-ui-page.js";
 import {
@@ -119,8 +125,21 @@ export async function startPipelineRunStudio(
   }
   const eventState = new PipelineRunStudioEventState(options.store);
   let expectedAuthority: string | undefined;
-  const isTrustedAuthority = (request: import("node:http").IncomingMessage): boolean =>
-    normalizeHttpAuthority(request.headers.host) === expectedAuthority;
+  const wildcardBind = isUnspecifiedHttpHost(host);
+  const isTrustedAuthority = (request: import("node:http").IncomingMessage): boolean => {
+    const requestAuthority = normalizeHttpAuthority(request.headers.host);
+    if (!requestAuthority || !expectedAuthority) return false;
+    if (requestAuthority === expectedAuthority) return true;
+    if (!wildcardBind) return false;
+    const requestParts = parseHttpAuthority(requestAuthority);
+    const expectedParts = parseHttpAuthority(expectedAuthority);
+    return (
+      requestParts !== undefined &&
+      expectedParts !== undefined &&
+      requestParts.port === expectedParts.port &&
+      isLiteralOrLocalhostHttpHost(requestParts.hostname)
+    );
+  };
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://studio.local");

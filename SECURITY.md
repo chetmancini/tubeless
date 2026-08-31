@@ -40,10 +40,12 @@ non-loopback host plus an injected launcher or history capability. That
 combination is out of scope.
 
 Every studio route, including reads, requires a `Host` header that matches
-the bound authority. Browser plan, launch, cancel, and clear-history also
-require a custom `x-tubeless-studio-*` header, and `application/json` for
-plan and launch. Those checks stop ordinary cross-site form posts and
-DNS-rebinding reads. They are not authentication. Do not expose studio to
-a network you do not trust.
+the bound authority. A wildcard bind (`0.0.0.0` or `::`) cannot appear in a
+client `Host`, so those listeners also accept `localhost` or a literal IP on
+the same port. DNS names are still refused. Browser plan, launch, cancel, and
+clear-history also require a custom `x-tubeless-studio-*` header, and
+`application/json` for plan and launch. Those checks stop ordinary cross-site
+form posts and DNS-rebinding reads. They are not authentication. Do not expose
+studio to a network you do not trust.
 
 See [the studio docs](./docs/studio.md).
