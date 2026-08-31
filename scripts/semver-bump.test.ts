@@ -55,8 +55,8 @@ describe("semver-bump --next", () => {
   it("prints --sh assignments for the computed version", () => {
     const result = run(["--from", "0.1.0", "--next", "patch", "--sh"]);
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain('to="0.1.1"');
-    expect(result.stdout).toContain('kind="patch"');
+    expect(result.stdout).toContain("to='0.1.1'");
+    expect(result.stdout).toContain("kind='patch'");
   });
 
   it("rejects an unknown bump kind", () => {
@@ -68,5 +68,59 @@ describe("semver-bump --next", () => {
   it("rejects --next together with --to", () => {
     const result = run(["--from", "0.1.0", "--next", "patch", "--to", "0.1.1"]);
     expect(result.status).not.toBe(0);
+  });
+});
+
+describe("semver-bump --sh", () => {
+  function evalSummary(output: string) {
+    return spawnSync("sh", ["-c", `eval "$(cat)"; printf %s "$summary"`], {
+      encoding: "utf8",
+      input: output,
+    });
+  }
+
+  it("evals patch, minor, and major assignments to the expected kind and summary", () => {
+    for (const [to, kind, summary] of [
+      ["1.0.1", "patch", "patch (1.0.0 → 1.0.1)"],
+      ["1.1.0", "minor", "minor (1.0.0 → 1.1.0)"],
+      ["2.0.0", "major", "major (1.0.0 → 2.0.0)"],
+    ] as const) {
+      const result = run(["--from", "v1.0.0", "--to", to, "--sh"]);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain(`kind='${kind}'`);
+      const evaled = evalSummary(result.stdout);
+      expect(evaled.status, evaled.stderr).toBe(0);
+      expect(evaled.stdout).toBe(summary);
+    }
+  });
+
+  it("round-trips a hostile non-semver --from through sh eval without expansion", () => {
+    const tick = "`";
+    const hostile = [
+      "vnot-semver",
+      "$HOME",
+      `${tick}printf x${tick}`,
+      ["$(", "echo", "y", ")"].join(""),
+      "it's",
+      '"quoted"',
+      ";tail",
+    ].join(" ");
+    const result = run(["--from", hostile, "--to", "1.0.1", "--sh"]);
+    expect(result.status, result.stderr).toBe(0);
+    const evaled = evalSummary(result.stdout);
+    expect(evaled.status, evaled.stderr).toBe(0);
+    expect(evaled.stdout).toBe(`invalid previous tag ${hostile}`);
+  });
+
+  it("leaves JSON output unchanged when --sh is absent", () => {
+    const result = run(["--from", "v1.0.0", "--to", "1.0.1"]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      kind: "patch",
+      title: "patch",
+      summary: "patch (1.0.0 → 1.0.1)",
+      from: "1.0.0",
+      to: "1.0.1",
+    });
   });
 });
