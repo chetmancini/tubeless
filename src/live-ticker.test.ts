@@ -104,7 +104,13 @@ describe("live ticker worker", () => {
       let rendered = "";
       while (Date.now() < paintedDeadline) {
         rendered = readFileSync(path, "utf8");
-        if (rendered.includes("load") && /[-\\|\/] /.test(rendered)) break;
+        if (
+          rendered.includes("load") &&
+          /[-\\|\/] /.test(rendered) &&
+          rendered.includes("\u001B[0;1;36m")
+        ) {
+          break;
+        }
       }
 
       ticker.writeLog("logged from parent\n");
