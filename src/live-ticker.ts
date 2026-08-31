@@ -1,5 +1,5 @@
 import { writeSync } from "node:fs";
-import { MessageChannel, Worker } from "node:worker_threads";
+import { Worker } from "node:worker_threads";
 import { formatDurationMs } from "./reporter.js";
 
 export const SPINNER_TOKEN = "\u0001";
@@ -269,8 +269,8 @@ function resolveLiveTickerWorkerUrl(): URL {
   return resolveCompiledWorkerUrl("live-ticker-worker.js");
 }
 
-function resolveLiveTickerExitWaiterUrl(): URL {
-  return resolveCompiledWorkerUrl("live-ticker-exit-waiter.js");
+function resolveLiveTickerSupervisorUrl(): URL {
+  return resolveCompiledWorkerUrl("live-ticker-supervisor.js");
 }
 
 function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[] {
@@ -291,18 +291,23 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   // [0] stop handshake, [1] painted rows, [2] accepted logs
   const handshakeBuffer = new SharedArrayBuffer(12);
   const handshake = new Int32Array(handshakeBuffer);
-  const lifetime = new MessageChannel();
-  const worker = new Worker(options.workerUrl ?? resolveLiveTickerWorkerUrl(), {
+  // [0] terminate request, [1] ticker isolate exited
+  const controlBuffer = new SharedArrayBuffer(8);
+  const control = new Int32Array(controlBuffer);
+  const worker = new Worker(resolveLiveTickerSupervisorUrl(), {
     execArgv: fileWorkerExecArgv(),
-    transferList: [lifetime.port2],
     workerData: {
-      color: options.color === true,
-      columns: resolveColumns(options),
-      fd: options.fd,
-      handshakeBuffer,
-      lifetimePort: lifetime.port2,
-      refreshIntervalMs: options.refreshIntervalMs,
-      unicode: options.unicode,
+      controlBuffer,
+      execArgv: fileWorkerExecArgv(),
+      tickerData: {
+        color: options.color === true,
+        columns: resolveColumns(options),
+        fd: options.fd,
+        handshakeBuffer,
+        refreshIntervalMs: options.refreshIntervalMs,
+        unicode: options.unicode,
+      },
+      tickerUrl: (options.workerUrl ?? resolveLiveTickerWorkerUrl()).href,
     },
   });
   let disposed = false;
@@ -326,22 +331,28 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     worker.postMessage(message);
   };
 
+  const requestTerminate = (): void => {
+    Atomics.store(control, 0, 1);
+    Atomics.notify(control, 0);
+  };
+
   const stopWorker = (): void => {
-    const exitGate = new Int32Array(new SharedArrayBuffer(4));
-    try {
-      const waiter = new Worker(resolveLiveTickerExitWaiterUrl(), {
-        execArgv: fileWorkerExecArgv(),
-        transferList: [lifetime.port1],
-        workerData: {
-          gateBuffer: exitGate.buffer,
-          port: lifetime.port1,
-        },
-      });
-      waiter.unref();
+    requestTerminate();
+    // Handshake already accepted: the isolate painted its own final frame.
+    // Do not park the parent for isolate exit.
+    if (Atomics.load(handshake, 0) === 1) {
       void worker.terminate();
-      Atomics.wait(exitGate, 0, 0, 1_000);
-      void waiter.terminate();
-    } catch {
+      return;
+    }
+    try {
+      Atomics.wait(control, 1, 0, 1_000);
+      // Exit is delivered during teardown, a few milliseconds before the
+      // isolate can no longer write. Park past the 80ms ownership window
+      // only after the thread has reported exit.
+      if (Atomics.load(control, 1) === 1) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 160);
+      }
+    } finally {
       void worker.terminate();
     }
   };
@@ -381,8 +392,16 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     if (code !== 0) failToInline();
   });
   worker.unref();
-  worker.on("message", (msg: { type?: string; kind?: string }) => {
-    if (msg?.type === "ack" && msg.kind === "log") dropAcknowledgedLogs();
+  worker.on("message", (msg: { code?: number; event?: string; kind?: string; type?: string }) => {
+    if (msg.type === "supervisor" && msg.event === "error") {
+      failToInline();
+      return;
+    }
+    if (msg.type === "supervisor" && msg.event === "exit") {
+      if (msg.code !== 0) failToInline();
+      return;
+    }
+    if (msg.type === "ack" && msg.kind === "log") dropAcknowledgedLogs();
   });
 
   return {
@@ -442,6 +461,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
       } catch {
         // Stream may already be closed; cursor restore is best-effort.
       }
+      requestTerminate();
       void worker.terminate();
     },
   };

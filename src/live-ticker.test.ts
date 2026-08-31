@@ -84,11 +84,14 @@ describe("paintLiveLines", () => {
 describe("live ticker worker", () => {
   it("loads a compiled worker file instead of eval source", () => {
     const compiled = fileURLToPath(new URL("../dist/live-ticker-worker.js", import.meta.url));
+    const supervisor = fileURLToPath(new URL("../dist/live-ticker-supervisor.js", import.meta.url));
     const source = readFileSync(new URL("./live-ticker.ts", import.meta.url), "utf8");
 
     expect(existsSync(compiled)).toBe(true);
+    expect(existsSync(supervisor)).toBe(true);
     expect(source).not.toContain("WORKER_SOURCE");
     expect(source).not.toContain("eval: true");
+    expect(source).not.toContain("ISOLATE_DRAIN_MS");
   });
 
   it("paints, logs, and stops through the compiled worker", () => {
@@ -130,7 +133,7 @@ describe("live ticker worker", () => {
 
       const disposeStarted = Date.now();
       ticker.dispose();
-      expect(Date.now() - disposeStarted).toBeLessThan(200);
+      expect(Date.now() - disposeStarted).toBeLessThan(120);
       rendered = readFileSync(path, "utf8");
       const plain = rendered.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
 
