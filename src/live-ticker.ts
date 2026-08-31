@@ -170,7 +170,7 @@ function resolveColumns(options: LiveTickerOptions): number | undefined {
   return options.getColumns?.() ?? options.columns;
 }
 
-function currentSpinner(unicode: boolean, refreshIntervalMs: number): string {
+export function currentSpinner(unicode: boolean, refreshIntervalMs: number): string {
   const frames = unicode ? SPINNERS.unicode : SPINNERS.ascii;
   return frames[Math.floor(Date.now() / refreshIntervalMs) % frames.length] ?? frames[0]!;
 }
@@ -256,195 +256,17 @@ function createInlineTicker(options: LiveTickerOptions): LiveTicker {
   };
 }
 
-// CJS eval worker: paints independently of the pipeline thread.
-const WORKER_SOURCE = `
-const { parentPort, workerData } = require("node:worker_threads");
-const { writeSync } = require("node:fs");
-const ANSI = {
-  clearDown: "\\u001B[J",
-  hideCursor: "\\u001B[?25l",
-  reset: "\\u001B[0m",
-  showCursor: "\\u001B[?25h",
-};
-const ANSI_STYLE = /\\u001B\\[[0-9;]*m/g;
-const ANSI_STYLE_PREFIX = /^\\u001B\\[[0-9;]*m/;
-const COMBINING_MARK = /\\p{Mark}/u;
-const EMOJI = /\\p{Extended_Pictographic}/u;
-const SHIMMER_BRIGHT = "\\u001B[0;1;36m";
-const SHIMMER_DIM = "\\u001B[0;2;36m";
-const frames = workerData.unicode
-  ? ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-  : ["-", "\\\\", "|", "/"];
-const handshake = new Int32Array(workerData.handshakeBuffer);
-let columns = workerData.columns;
-function characterWidth(character) {
-  if (COMBINING_MARK.test(character) || character === "\\u200D") return 0;
-  if (EMOJI.test(character)) return 2;
-  const codePoint = character.codePointAt(0) ?? 0;
-  return codePoint >= 0x1100 &&
-    (codePoint <= 0x115f ||
-      codePoint === 0x2329 ||
-      codePoint === 0x232a ||
-      (codePoint >= 0x2e80 && codePoint <= 0xa4cf) ||
-      (codePoint >= 0xac00 && codePoint <= 0xd7a3) ||
-      (codePoint >= 0xf900 && codePoint <= 0xfaff) ||
-      (codePoint >= 0xfe10 && codePoint <= 0xfe6f) ||
-      (codePoint >= 0xff00 && codePoint <= 0xff60) ||
-      (codePoint >= 0xffe0 && codePoint <= 0xffe6) ||
-      (codePoint >= 0x20000 && codePoint <= 0x3fffd))
-    ? 2
-    : 1;
-}
-function visibleWidth(value) {
-  return [...value].reduce((width, character) => width + characterWidth(character), 0);
-}
-function fitLine(value, nextColumns) {
-  if (!nextColumns || nextColumns <= 1) return value;
-  const maxWidth = nextColumns - 1;
-  const plain = value.replace(ANSI_STYLE, "");
-  if (visibleWidth(plain) <= maxWidth) return value;
-  const targetWidth = Math.max(0, maxWidth - 1);
-  let width = 0;
-  let truncated = "";
-  let index = 0;
-  let hasStyle = false;
-  while (index < value.length) {
-    const style = value.slice(index).match(ANSI_STYLE_PREFIX)?.[0];
-    if (style) {
-      truncated += style;
-      index += style.length;
-      hasStyle = true;
-      continue;
-    }
-    const character = String.fromCodePoint(value.codePointAt(index) ?? 0);
-    const nextWidth = width + characterWidth(character);
-    if (nextWidth > targetWidth) break;
-    truncated += character;
-    width = nextWidth;
-    index += character.length;
+function resolveLiveTickerWorkerUrl(): URL {
+  if (import.meta.url.endsWith(".ts")) {
+    return new URL("../dist/live-ticker-worker.js", import.meta.url);
   }
-  return truncated + (hasStyle ? ANSI.reset : "") + "…";
+  return new URL("./live-ticker-worker.js", import.meta.url);
 }
-function formatDurationMs(durationMs) {
-  const ms = Math.max(0, Math.round(durationMs));
-  if (ms < 1000) return ms + "ms";
-  if (ms < 60000) {
-    const seconds = ms / 1000;
-    return Number.isInteger(seconds) ? seconds + "s" : seconds.toFixed(1) + "s";
-  }
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.round((ms % 60000) / 1000);
-  return seconds === 0 ? minutes + "m" : minutes + "m" + seconds + "s";
-}
-function paintShimmerText(text, nowMs) {
-  const characters = [...text];
-  if (characters.length === 0) return text;
-  const widths = characters.map(characterWidth);
-  const totalWidth = visibleWidth(text);
-  const period = Math.max(1, totalWidth + 3);
-  const head = Math.floor(nowMs / 80) % period;
-  const bandStart = head - 2;
-  let column = 0;
-  let output = ANSI.reset;
-  let last;
-  for (let index = 0; index < characters.length; index++) {
-    const width = widths[index];
-    const inBand =
-      width === 0 ? last === "bright" : column <= head && column + width - 1 >= bandStart;
-    const style = inBand ? "bright" : "dim";
-    if (style !== last) {
-      output += style === "bright" ? SHIMMER_BRIGHT : SHIMMER_DIM;
-      last = style;
-    }
-    output += characters[index];
-    column += width;
-  }
-  return output + ANSI.reset;
-}
-function paint(lines, spinner, nowMs) {
-  return lines.map((line) =>
-    fitLine(
-      line
-        .replaceAll("\\u0001", spinner)
-        .replace(/\\u0002(\\d+)\\u0003/g, (_, start) =>
-          formatDurationMs(Math.max(0, nowMs - Number(start)))
-        )
-        .replace(/\\u0004(.*?)\\u0005/g, (_, text) =>
-          workerData.color ? paintShimmerText(text, nowMs) : text
-        ),
-      columns
-    )
-  );
-}
-let lines = [];
-let frameLineCount = 0;
-let cursorHidden = false;
-function write(chunk) {
-  writeSync(workerData.fd, chunk);
-}
-function hideCursor() {
-  if (cursorHidden) return;
-  write(ANSI.hideCursor);
-  cursorHidden = true;
-}
-function showCursor() {
-  if (!cursorHidden) return;
-  write(ANSI.showCursor);
-  cursorHidden = false;
-}
-function clearFrame() {
-  if (frameLineCount === 0) return;
-  write("\\u001B[" + frameLineCount + "F" + ANSI.clearDown);
-  frameLineCount = 0;
-}
-function currentSpinner() {
-  return frames[Math.floor(Date.now() / workerData.refreshIntervalMs) % frames.length];
-}
-function redraw() {
-  hideCursor();
-  clearFrame();
-  if (lines.length === 0) return;
-  const painted = paint(lines, currentSpinner(), Date.now());
-  write(painted.join("\\n") + "\\n");
-  frameLineCount = painted.length;
-}
-function done() {
-  Atomics.store(handshake, 0, 1);
-  Atomics.notify(handshake, 0);
-}
-const timer = setInterval(() => {
-  if (!lines.some((line) => line.includes("\\u0001") || line.includes("\\u0004"))) return;
-  redraw();
-}, workerData.refreshIntervalMs);
-parentPort.on("message", (msg) => {
-  if (msg.columns !== undefined) columns = msg.columns;
-  if (msg.type === "lines") {
-    lines = msg.lines;
-    redraw();
-    return;
-  }
-  if (msg.type === "log") {
-    clearFrame();
-    write(msg.text);
-    frameLineCount = 0;
-    return;
-  }
-  if (msg.type === "stop") {
-    clearInterval(timer);
-    if (msg.lines) lines = msg.lines;
-    redraw();
-    showCursor();
-    done();
-    parentPort.close();
-  }
-});
-`;
 
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
   const handshakeBuffer = new SharedArrayBuffer(4);
   const handshake = new Int32Array(handshakeBuffer);
-  const worker = new Worker(WORKER_SOURCE, {
-    eval: true,
+  const worker = new Worker(resolveLiveTickerWorkerUrl(), {
     workerData: {
       color: options.color === true,
       columns: resolveColumns(options),

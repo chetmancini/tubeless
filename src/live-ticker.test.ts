@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { elapsedToken, paintLiveLines, shimmerToken, SPINNER_TOKEN } from "./live-ticker";
 
@@ -59,5 +61,16 @@ describe("paintLiveLines", () => {
     expect(painted?.endsWith("\u001B[0m…")).toBe(true);
     expect(painted).not.toContain("\u0004");
     expect(stripAnsi(painted ?? "").endsWith("…")).toBe(true);
+  });
+});
+
+describe("live ticker worker", () => {
+  it("loads a compiled worker file instead of eval source", () => {
+    const compiled = fileURLToPath(new URL("../dist/live-ticker-worker.js", import.meta.url));
+    const source = readFileSync(new URL("./live-ticker.ts", import.meta.url), "utf8");
+
+    expect(existsSync(compiled)).toBe(true);
+    expect(source).not.toContain("WORKER_SOURCE");
+    expect(source).not.toContain("eval: true");
   });
 });
