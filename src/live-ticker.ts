@@ -176,11 +176,11 @@ export function currentSpinner(unicode: boolean, refreshIntervalMs: number): str
   return frames[Math.floor(Date.now() / refreshIntervalMs) % frames.length] ?? frames[0]!;
 }
 
-function createInlineTicker(options: LiveTickerOptions): LiveTicker {
+function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 0): LiveTicker {
   const state: TickerState = {
-    cursorHidden: false,
+    cursorHidden: adoptedFrameLineCount > 0,
     disposed: false,
-    frameLineCount: 0,
+    frameLineCount: adoptedFrameLineCount,
     lines: [],
   };
 
@@ -304,7 +304,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
 
   const failToInline = (): void => {
     if (disposed || inlineFallback) return;
-    inlineFallback = createInlineTicker(options);
+    inlineFallback = createInlineTicker(options, lines.length);
     inlineFallback.setLines([...lines]);
   };
   worker.on("error", failToInline);

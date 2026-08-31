@@ -286,4 +286,61 @@ const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
       unlinkSync(path);
     }
   });
+
+  it("clears a painted worker frame before falling back inline", async () => {
+    const path = join(tmpdir(), `tubeless-ticker-stale-${process.pid}-${Date.now()}.log`);
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-stale-worker-${process.pid}-${Date.now()}.mjs`
+    );
+    writeFileSync(
+      workerPath,
+      `
+import { writeSync } from "node:fs";
+import { parentPort, workerData } from "node:worker_threads";
+
+parentPort.on("message", (msg) => {
+  if (msg.type !== "lines") return;
+  writeSync(workerData.fd, "\\u001B[?25lworker-stale-1\\nworker-stale-2\\n");
+  throw new Error("mid-run crash");
+});
+`
+    );
+    const fd = openSync(path, "w");
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          writeSync(fd, chunk);
+        },
+      });
+      ticker.setLines([`${SPINNER_TOKEN} load`, `${SPINNER_TOKEN} more`]);
+
+      const paintedDeadline = Date.now() + 2_000;
+      let rendered = "";
+      while (Date.now() < paintedDeadline) {
+        rendered = readFileSync(path, "utf8");
+        if (rendered.includes("worker-stale-2") && rendered.includes("\u001B[2F\u001B[J")) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      ticker.dispose();
+      expect(rendered).toContain("worker-stale-1");
+      expect(rendered).toMatch(/worker-stale-2\n\u001B\[2F\u001B\[J/);
+      const afterClear = rendered.slice(rendered.indexOf("\u001B[2F\u001B[J"));
+      const plain = afterClear.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
+      expect(plain).toMatch(/[-\\|\/] load/);
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
+    }
+  });
 });
