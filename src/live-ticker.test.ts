@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, unlinkSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -199,5 +207,83 @@ const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
     expect(child.stderr).not.toContain("ERR_INPUT_TYPE_NOT_ALLOWED");
     const plain = child.stdout.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
     expect(plain).toMatch(/[-\\|/] load/);
+  });
+
+  it("falls back to the inline ticker when the worker fails to boot", async () => {
+    const path = join(tmpdir(), `tubeless-ticker-boot-fail-${process.pid}-${Date.now()}.log`);
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-boot-fail-worker-${process.pid}-${Date.now()}.js`
+    );
+    writeFileSync(workerPath, 'throw new Error("boot failure");\n');
+    const fd = openSync(path, "w");
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          writeSync(fd, chunk);
+        },
+      });
+      ticker.setLines([`${SPINNER_TOKEN} ${shimmerToken("load")}`]);
+
+      const paintedDeadline = Date.now() + 2_000;
+      let rendered = "";
+      while (Date.now() < paintedDeadline) {
+        rendered = readFileSync(path, "utf8");
+        if (rendered.includes("load") && /[-\\|\/] /.test(rendered)) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      ticker.dispose();
+      const plain = rendered.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
+      expect(plain).toMatch(/[-\\|\/] load/);
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
+    }
+  });
+
+  it("does not fall back to the inline ticker after a healthy dispose", () => {
+    const path = join(tmpdir(), `tubeless-ticker-dispose-${process.pid}-${Date.now()}.log`);
+    const fd = openSync(path, "w");
+    const inlineWrites: string[] = [];
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        write: (chunk) => {
+          inlineWrites.push(chunk);
+        },
+      });
+      ticker.setLines([`${SPINNER_TOKEN} load`]);
+
+      const paintedDeadline = Date.now() + 1_000;
+      let rendered = "";
+      while (Date.now() < paintedDeadline) {
+        rendered = readFileSync(path, "utf8");
+        if (rendered.includes("load")) break;
+      }
+      expect(rendered).toContain("load");
+
+      ticker.dispose();
+      ticker.writeLog("post-dispose\n");
+      rendered = readFileSync(path, "utf8");
+      expect(rendered).toContain("post-dispose");
+      expect(inlineWrites).toEqual([]);
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+    }
   });
 });

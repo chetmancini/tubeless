@@ -152,6 +152,7 @@ export interface LiveTickerOptions {
   unicode: boolean;
   color?: boolean;
   write(chunk: string): void;
+  workerUrl?: URL;
 }
 
 type TickerWorkerMessage =
@@ -232,6 +233,7 @@ function createInlineTicker(options: LiveTickerOptions): LiveTicker {
     }
     redraw();
   }, options.refreshIntervalMs);
+  timer.unref();
 
   return {
     setLines(lines) {
@@ -280,7 +282,7 @@ function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
   const handshakeBuffer = new SharedArrayBuffer(4);
   const handshake = new Int32Array(handshakeBuffer);
-  const worker = new Worker(resolveLiveTickerWorkerUrl(), {
+  const worker = new Worker(options.workerUrl ?? resolveLiveTickerWorkerUrl(), {
     execArgv: fileWorkerExecArgv(),
     workerData: {
       color: options.color === true,
@@ -292,19 +294,39 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     },
   });
   let disposed = false;
+  let inlineFallback: LiveTicker | undefined;
   let lines: readonly string[] = [];
 
   const send = (message: TickerWorkerMessage): void => {
-    if (disposed) return;
+    if (disposed || inlineFallback) return;
     worker.postMessage(message);
   };
+
+  const failToInline = (): void => {
+    if (disposed || inlineFallback) return;
+    inlineFallback = createInlineTicker(options);
+    inlineFallback.setLines([...lines]);
+  };
+  worker.on("error", failToInline);
+  worker.on("exit", (code) => {
+    if (code !== 0) failToInline();
+  });
+  worker.unref();
 
   return {
     setLines(nextLines) {
       lines = nextLines;
+      if (inlineFallback) {
+        inlineFallback.setLines(nextLines);
+        return;
+      }
       send({ columns: resolveColumns(options), lines: [...nextLines], type: "lines" });
     },
     writeLog(text) {
+      if (inlineFallback) {
+        inlineFallback.writeLog(text);
+        return;
+      }
       if (disposed) {
         writeSync(options.fd, text);
         return;
@@ -314,6 +336,13 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     dispose() {
       if (disposed) return;
       disposed = true;
+      worker.removeAllListeners("error");
+      worker.removeAllListeners("exit");
+      if (inlineFallback) {
+        inlineFallback.dispose();
+        void worker.terminate();
+        return;
+      }
       Atomics.store(handshake, 0, 0);
       worker.postMessage({
         columns: resolveColumns(options),
