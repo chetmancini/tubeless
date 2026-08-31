@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { GITHUB_BLOB, absUrl } from "../lib/paths";
+import { GITHUB_BLOB, absUrl, githubRaw } from "../lib/paths";
 
 export const GET: APIRoute = () => {
   const body = `# tubeless
@@ -24,7 +24,7 @@ Agent instructions:
 - This map: ${absUrl("llms.txt")}
 - Agent entrypoints: ${absUrl("agents")}
 - Canonical guide: ${absUrl("docs/agent-guide")}
-- Raw guide: ${GITHUB_BLOB}/docs/agent-guide.md
+- Raw guide: ${githubRaw("docs/agent-guide.md")}
 - Skill: ${GITHUB_BLOB}/skills/tubeless/SKILL.md
 - Project catalog: ${GITHUB_BLOB}/examples/catalog/tubeless.studio.ts
 - Maintain stable step IDs.

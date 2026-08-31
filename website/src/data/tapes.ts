@@ -58,7 +58,7 @@ export const graphTape: Tape = {
 export const runTape: Tape = {
   id: "run",
   title: "run",
-  command: "bunx tubeless run ./examples/cli-job.ts -- --source rows.txt --limit 2",
+  command: "bunx tubeless run ./examples/cli-job.ts -- --source examples/rows.txt --limit 2",
   lines: [
     { text: "Pipeline import: starting (2 steps, dryRun=false)", kind: "dim" },
     { text: "  -> load-rows - Read raw input records from the caller.", kind: "run" },
