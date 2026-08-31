@@ -1,0 +1,22 @@
+---
+import Wordmark from "./Wordmark.astro";
+import { GITHUB_REPO, href } from "../lib/paths";
+
+const here = Astro.url.pathname.replace(/\/+$/, "") || "/";
+
+function current(path: string): boolean {
+  const target = href(path).replace(/\/+$/, "") || "/";
+  if (path === "") return here === href().replace(/\/+$/, "") || here.endsWith("/tubeless");
+  return here === target || here.startsWith(`${target}/`);
+}
+---
+
+<header class="wrap masthead">
+  <Wordmark />
+  <nav class="nav" aria-label="Primary">
+    <a href={href("start")} aria-current={current("start") ? "page" : undefined}>Start</a>
+    <a href={href("docs")} aria-current={current("docs") ? "page" : undefined}>Docs</a>
+    <a class="gold" href={href("agents")} aria-current={current("agents") ? "page" : undefined}>Agents</a>
+    <a href={GITHUB_REPO} rel="noreferrer">GitHub</a>
+  </nav>
+</header>

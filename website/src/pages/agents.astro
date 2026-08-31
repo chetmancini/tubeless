@@ -1,0 +1,113 @@
+---
+import Base from "../layouts/Base.astro";
+import { githubBlob, githubRaw, href } from "../lib/paths";
+---
+
+<Base
+  title="Agents"
+  description="Machine-readable entrypoints for coding agents working with tubeless."
+>
+  <main class="wrap">
+    <header class="page-lead">
+      <p class="kicker">For agents</p>
+      <h1 class="page-title">Entrypoints</h1>
+      <p>
+        Start with the map, then the guide, then the smallest recipe. Copy file
+        layout and stable IDs from the catalog. This site is the human docs. The
+        package ships <code>docs/</code> and <code>examples/</code> in the tarball.
+      </p>
+    </header>
+
+    <section class="section">
+      <div class="facts">
+        <article>
+          <h3>1 · Map</h3>
+          <p>GET <a href={href("llms.txt")}>{href("llms.txt")}</a>.</p>
+        </article>
+        <article>
+          <h3>2 · Rules</h3>
+          <p>Read the <a href={href("docs/agent-guide")}>agent guide</a> before generating pipeline code.</p>
+        </article>
+        <article>
+          <h3>3 · Example</h3>
+          <p>Open the smallest row in <a href={href("docs/recipes")}>recipes</a>.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="kicker">Stable URLs</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Resource</th>
+              <th>URL</th>
+              <th>Use</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>LLM index</td>
+              <td><a href={href("llms.txt")}>{href("llms.txt")}</a></td>
+              <td>Compact documentation map</td>
+            </tr>
+            <tr>
+              <td>Agent guide</td>
+              <td><a href={href("docs/agent-guide")}>{href("docs/agent-guide")}</a></td>
+              <td>Primitive, runtime, and safety rules</td>
+            </tr>
+            <tr>
+              <td>Recipes</td>
+              <td><a href={href("docs/recipes")}>{href("docs/recipes")}</a></td>
+              <td>Intent → compiled example</td>
+            </tr>
+            <tr>
+              <td>API report</td>
+              <td><a href={href("api-report.json")}>{href("api-report.json")}</a></td>
+              <td>Public surface for automated review</td>
+            </tr>
+            <tr>
+              <td>Skill</td>
+              <td><a href={githubBlob("skills/tubeless/SKILL.md")}>skills/tubeless/SKILL.md</a></td>
+              <td>Authoring workflow for this repo</td>
+            </tr>
+            <tr>
+              <td>Catalog</td>
+              <td><a href={githubBlob("examples/catalog/tubeless.studio.ts")}>examples/catalog/tubeless.studio.ts</a></td>
+              <td>File layout, export names, IDs</td>
+            </tr>
+            <tr>
+              <td>Evaluations</td>
+              <td><a href={href("docs/agent-evaluations")}>{href("docs/agent-evaluations")}</a></td>
+              <td>Forward-testing cases</td>
+            </tr>
+            <tr>
+              <td>Raw markdown</td>
+              <td><a href={githubRaw("docs/agent-guide.md")}>raw agent-guide.md</a></td>
+              <td>When HTML is the wrong shape</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="kicker">Invariants</p>
+      <div class="facts">
+        <article>
+          <h3>IDs</h3>
+          <p>Keep step IDs stable. <code>name</code> is presentation only.</p>
+        </article>
+        <article>
+          <h3>Dry-run</h3>
+          <p>Side effects use <code>dryRun: "skip"</code> or a side-effect-free handler.</p>
+        </article>
+        <article>
+          <h3>Errors</h3>
+          <p>Branch on <code>PipelineError.code</code>, <code>phase</code>, and <code>kind</code>. Don't match error message text.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+</Base>

@@ -1,0 +1,24 @@
+---
+import Doc from "../../layouts/Doc.astro";
+import { DOC_SLUGS, listDocs, loadDoc } from "../../lib/docs";
+
+export function getStaticPaths() {
+  return listDocs()
+    .filter((doc) => DOC_SLUGS.has(doc.slug))
+    .map((doc) => ({
+      params: { slug: doc.slug },
+      props: { slug: doc.slug },
+    }));
+}
+
+const slug = Astro.params.slug;
+if (!slug || Array.isArray(slug) || !DOC_SLUGS.has(slug)) {
+  throw new Error(`Unknown doc slug: ${String(slug)}`);
+}
+
+const doc = loadDoc(slug);
+---
+
+<Doc title={doc.title} description={doc.description} slug={doc.slug} headings={doc.headings}>
+  <Fragment set:html={doc.html} />
+</Doc>

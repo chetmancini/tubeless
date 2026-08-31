@@ -4,6 +4,7 @@
 
 | Document                                                  | Use it for                                            |
 | --------------------------------------------------------- | ----------------------------------------------------- |
+| [Website](https://chetmancini.github.io/tubeless/)        | Human docs site and agent entrypoints                 |
 | [Package README](../README.md)                            | What it is, a first example, and a pattern table      |
 | [Getting started](./getting-started.md)                   | Building, running, and testing a first pipeline       |
 | [Recipe index](./recipes.md)                              | Choosing an executable example by intent              |

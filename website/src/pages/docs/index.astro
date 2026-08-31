@@ -1,0 +1,62 @@
+---
+import Doc from "../../layouts/Doc.astro";
+import { DOC_NAV } from "../../lib/docs";
+import { href } from "../../lib/paths";
+
+const human = DOC_NAV.filter((item) =>
+  ["getting-started", "recipes", "concepts", "cli", "studio", "comparison"].includes(item.slug)
+);
+const deep = DOC_NAV.filter((item) =>
+  ["child-pipeline-composition", "api-reference"].includes(item.slug)
+);
+const agents = DOC_NAV.filter((item) =>
+  ["agent-guide", "agent-evaluations"].includes(item.slug)
+);
+---
+
+<Doc title="Docs" description="Human documentation for tubeless, with agent entrypoints beside it.">
+  <p class="kicker">Documentation</p>
+  <h1>Docs</h1>
+  <p>
+    Getting started, recipes, CLI, studio, comparison, and the agent guide.
+    These pages render <code>docs/*.md</code> from the package.
+  </p>
+
+  <h2>Start here</h2>
+  <div class="agent-grid">
+    {human.map((item) => (
+      <a href={href(`docs/${item.slug}`)}>
+        <h3>{item.label}</h3>
+        <p>{item.slug.replaceAll("-", " ")}</p>
+      </a>
+    ))}
+  </div>
+
+  <h2>Agents</h2>
+  <div class="agent-grid">
+    <a href={href("agents")}>
+      <h3>Entrypoints</h3>
+      <p>llms.txt, skill, catalog, API report.</p>
+    </a>
+    {agents.map((item) => (
+      <a href={href(`docs/${item.slug}`)}>
+        <h3>{item.label}</h3>
+        <p>{item.slug.replaceAll("-", " ")}</p>
+      </a>
+    ))}
+  </div>
+
+  <h2>Reference</h2>
+  <div class="agent-grid">
+    {deep.map((item) => (
+      <a href={href(`docs/${item.slug}`)}>
+        <h3>{item.label}</h3>
+        <p>{item.slug.replaceAll("-", " ")}</p>
+      </a>
+    ))}
+    <a href={href("api-report.json")}>
+      <h3>api-report.json</h3>
+      <p>Machine-readable public surface.</p>
+    </a>
+  </div>
+</Doc>
