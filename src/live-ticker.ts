@@ -263,10 +263,25 @@ function resolveLiveTickerWorkerUrl(): URL {
   return new URL("./live-ticker-worker.js", import.meta.url);
 }
 
+function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[] {
+  const next: string[] = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--input-type") {
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith("--input-type=")) continue;
+    next.push(arg);
+  }
+  return next;
+}
+
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
   const handshakeBuffer = new SharedArrayBuffer(4);
   const handshake = new Int32Array(handshakeBuffer);
   const worker = new Worker(resolveLiveTickerWorkerUrl(), {
+    execArgv: fileWorkerExecArgv(),
     workerData: {
       color: options.color === true,
       columns: resolveColumns(options),

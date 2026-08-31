@@ -1,7 +1,8 @@
+import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   createLiveTicker,
@@ -131,5 +132,66 @@ describe("live ticker worker", () => {
       closeSync(fd);
       unlinkSync(path);
     }
+  });
+
+  it("starts the file worker when the parent inherited --input-type", () => {
+    const path = join(tmpdir(), `tubeless-input-type-${process.pid}-${Date.now()}.log`);
+    const tickerUrl = pathToFileURL(
+      fileURLToPath(new URL("../dist/live-ticker.js", import.meta.url))
+    ).href;
+    const child = spawnSync("node", ["--input-type=commonjs"], {
+      encoding: "utf8",
+      env: { ...process.env, NODE_OPTIONS: "" },
+      input: `
+process.on("uncaughtException", (err) => {
+  console.error(err);
+  process.exit(1);
+});
+const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
+(async () => {
+  const { createLiveTicker, SPINNER_TOKEN, shimmerToken } = await import(${JSON.stringify(tickerUrl)});
+  const fd = openSync(${JSON.stringify(path)}, "w");
+  const inlineWrites = [];
+  try {
+    const ticker = createLiveTicker({
+      color: true,
+      columns: 80,
+      fd,
+      refreshIntervalMs: 20,
+      unicode: false,
+      write: (chunk) => inlineWrites.push(chunk),
+    });
+    ticker.setLines([\`\${SPINNER_TOKEN} \${shimmerToken("load")}\`]);
+    const deadline = Date.now() + 1000;
+    let rendered = "";
+    while (Date.now() < deadline) {
+      rendered = readFileSync(${JSON.stringify(path)}, "utf8");
+      if (rendered.includes("load")) break;
+    }
+    ticker.dispose();
+    rendered = readFileSync(${JSON.stringify(path)}, "utf8");
+    if (inlineWrites.length !== 0) {
+      throw new Error("fell back to the inline ticker");
+    }
+    if (!rendered.includes("load")) {
+      throw new Error("worker did not paint");
+    }
+    process.stdout.write(rendered);
+  } finally {
+    closeSync(fd);
+    unlinkSync(${JSON.stringify(path)});
+  }
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
+`,
+      timeout: 5_000,
+    });
+
+    expect(child.status, child.stderr).toBe(0);
+    expect(child.stderr).not.toContain("ERR_INPUT_TYPE_NOT_ALLOWED");
+    const plain = child.stdout.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
+    expect(plain).toMatch(/[-\\|\/] load/);
   });
 });
