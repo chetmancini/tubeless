@@ -38,7 +38,9 @@ inventory.
 4. Use a child pipeline when the child has value independently; use a normal
    helper function when it does not.
 5. Use `forEachPipeline` when every item needs child-pipeline lifecycle and
-   reporting. Use `runConcurrent` for lightweight worker functions.
+   reporting. Use `runConcurrent` for lightweight worker functions that should
+   throw on the first failure. Use `runConcurrentSettled` when the caller needs
+   completed results plus that failure without throwing.
 
 Use fromRemote when a unit of work lives on another engine but the parent
 DAG still runs in this process. Omit dryRun only when the adapter and the

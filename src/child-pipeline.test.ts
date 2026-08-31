@@ -330,6 +330,8 @@ describe("child-pipeline composition", () => {
         kind: "cancellation",
         stepId: "children",
       });
+      expect(result.errors[0]?.message).toMatch(/failed for 2 item\(s\)/);
+      expect(result.errors[0]?.message).not.toContain("<aborted>");
     });
 
     it("reports a mapped child failure without abort as failed", async () => {
@@ -432,6 +434,8 @@ describe("child-pipeline composition", () => {
       expect((mappedFailure as PipelineChildError).cancelled).toBe(false);
       expect((mappedFailure as Error).cause).toBeInstanceOf(Error);
       expect(((mappedFailure as Error).cause as Error).message).toMatch(/shard exploded/);
+      expect((mappedFailure as Error).message).toMatch(/failed for 2 item\(s\)/);
+      expect((mappedFailure as Error).message).not.toContain("<aborted>");
       expect((mappedFailure as Error).message).toContain("broken:");
       expect((mappedFailure as Error).message).toContain("shard exploded");
     });
