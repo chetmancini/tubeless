@@ -125,13 +125,18 @@ async function openDatabase(
   const create = options.create !== false;
   const readOnly = options.readOnly === true;
   if (readOnly) {
-    const pending = await sqlitePendingTransactionalSidecar(filename);
-    if (pending !== undefined) {
-      throw new Error(
-        `${filename} has a write-ahead log or rollback journal that a read-only open cannot apply without writing a sidecar.`
-      );
+    await sqliteAssertImmutableInspect(filename);
+    const database = openReadableDatabase(
+      Database,
+      `${pathToFileURL(filename).href}?mode=ro&immutable=1`
+    );
+    try {
+      await sqliteAssertImmutableInspect(filename);
+      return database;
+    } catch (error) {
+      database.close();
+      throw error;
     }
-    return openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=ro&immutable=1`);
   }
   if (!create) {
     if (bunSqlite) {
@@ -169,13 +174,39 @@ async function sqliteSidecarExists(filename: string): Promise<boolean> {
 }
 
 async function sqliteSidecarTargets(filename: string): Promise<readonly string[]> {
-  const targets = new Set<string>([filename]);
+  const targets: string[] = [];
   try {
-    targets.add(await realpath(filename));
+    targets.push(await realpath(filename));
   } catch {
     // Missing or unresolvable; still check the given name.
   }
-  return [...targets];
+  if (targets.includes(filename) === false) targets.push(filename);
+  return targets;
+}
+
+async function sqliteDatabaseHasMultipleLinks(filename: string): Promise<boolean> {
+  for (const target of await sqliteSidecarTargets(filename)) {
+    try {
+      if ((await stat(target)).nlink > 1) return true;
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function sqliteAssertImmutableInspect(filename: string): Promise<void> {
+  const pending = await sqlitePendingTransactionalSidecar(filename);
+  if (pending !== undefined) {
+    throw new Error(
+      `${filename} has a write-ahead log or rollback journal that a read-only open cannot apply without writing a sidecar.`
+    );
+  }
+  if (await sqliteDatabaseHasMultipleLinks(filename)) {
+    throw new Error(
+      `${filename} has multiple hard links; a read-only open cannot locate a writer's write-ahead log beside another name.`
+    );
+  }
 }
 
 async function sqlitePendingTransactionalSidecar(filename: string): Promise<string | undefined> {
@@ -244,9 +275,10 @@ export interface OpenSqlitePipelineRunStoreOptions {
   /**
    * Open the file without creating it or writing WAL/sidecars.
    * A leftover empty `-wal` is ignored and the main file is opened
-   * immutable. A non-empty `-wal` or `-journal` is refused so pending
-   * events are not dropped. `history` uses this so a supplied artifact
-   * can be inspected without rewriting `-shm`.
+   * immutable. A non-empty `-wal` or `-journal`, a multiply linked
+   * database file, or a WAL that appears during the open is refused
+   * so pending events are not dropped. `history` uses this so a
+   * supplied finished artifact can be inspected without rewriting `-shm`.
    */
   readonly readOnly?: boolean;
 }

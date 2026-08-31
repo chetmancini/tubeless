@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import {
   chmod,
+  link,
   lstat,
   mkdir,
   mkdtemp,
@@ -317,6 +318,64 @@ describe("SQLite pipeline run store", () => {
     } else {
       expect(await readFile(`${filename}-shm`)).toEqual(shmBefore);
     }
+  });
+
+  it("refuses a read-only open when a stale alias WAL sits beside a newer target WAL", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const alias = path.join(directory, "alias", "store.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+    await mkdir(path.dirname(alias));
+    await symlink(filename, alias);
+    await writeFile(`${alias}-wal`, "");
+    await writeFile(`${filename}-wal`, "not a checkpointed wal");
+    await expect(
+      openSqlitePipelineRunStore(alias, { initialize: false, readOnly: true })
+    ).rejects.toThrow(/write-ahead|journal|sidecar/i);
+  });
+
+  it("refuses a read-only open of a hard-linked store while a writer holds a WAL", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const alias = path.join(directory, "alias", "store.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+    await mkdir(path.dirname(alias));
+    await link(filename, alias);
+    expect((await stat(filename)).nlink).toBe(2);
+    const writer = await openSqlitePipelineRunStore(filename, { initialize: false });
+    await writer.export(startedEvent("run-2", 20));
+    try {
+      await expect(
+        openSqlitePipelineRunStore(alias, { initialize: false, readOnly: true })
+      ).rejects.toThrow(/hard link|write-ahead|journal|sidecar/i);
+    } finally {
+      await writer.close();
+    }
+  });
+
+  it("refuses a read-only open when the store file has multiple hard links", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const alias = path.join(directory, "alias", "store.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+    await mkdir(path.dirname(alias));
+    await link(filename, alias);
+    expect((await stat(filename)).nlink).toBe(2);
+    await expect(
+      openSqlitePipelineRunStore(alias, { initialize: false, readOnly: true })
+    ).rejects.toThrow(/hard link/i);
+    await expect(
+      openSqlitePipelineRunStore(filename, { initialize: false, readOnly: true })
+    ).rejects.toThrow(/hard link/i);
   });
 
   it("refuses a read-only open when a WAL sidecar beside the realpath has pending bytes", async () => {
