@@ -288,8 +288,8 @@ function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[
 }
 
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
-  // [0] stop handshake, [1] painted rows, [2] accepted logs
-  const handshakeBuffer = new SharedArrayBuffer(12);
+  // [0] stop handshake, [1] painted rows, [2] accepted logs, [3] liveness beat
+  const handshakeBuffer = new SharedArrayBuffer(16);
   const handshake = new Int32Array(handshakeBuffer);
   // [0] terminate request, [1] ticker isolate exited
   const controlBuffer = new SharedArrayBuffer(8);
@@ -336,22 +336,36 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     Atomics.notify(control, 0);
   };
 
+  const waitForQuietBeat = (): void => {
+    const deadline = Date.now() + 1_000;
+    let lastBeat = Atomics.load(handshake, 3);
+    // A worker that never published a beat is already quiet.
+    let lastChange = lastBeat === 0 ? 0 : Date.now();
+    const park = new Int32Array(new SharedArrayBuffer(4));
+    while (Date.now() < deadline) {
+      const beat = Atomics.load(handshake, 3);
+      if (beat !== lastBeat) {
+        lastBeat = beat;
+        lastChange = Date.now();
+      }
+      const quiet = Date.now() - lastChange;
+      if (quiet >= 80) return;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return;
+      Atomics.wait(park, 0, 0, Math.min(80 - quiet, remaining));
+    }
+  };
+
   const stopWorker = (): void => {
     requestTerminate();
     // Handshake already accepted: the isolate painted its own final frame.
-    // Do not park the parent for isolate exit.
+    // Do not park the parent for a quiet beat.
     if (Atomics.load(handshake, 0) === 1) {
       void worker.terminate();
       return;
     }
     try {
-      Atomics.wait(control, 1, 0, 1_000);
-      // Exit is delivered during teardown, a few milliseconds before the
-      // isolate can no longer write. Park past the 80ms ownership window
-      // only after the thread has reported exit.
-      if (Atomics.load(control, 1) === 1) {
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 160);
-      }
+      waitForQuietBeat();
     } finally {
       void worker.terminate();
     }

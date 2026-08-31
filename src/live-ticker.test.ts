@@ -814,9 +814,12 @@ import { writeFileSync, writeSync } from "node:fs";
 import { parentPort, workerData } from "node:worker_threads";
 
 const beat = ${JSON.stringify(beatPath)};
-setInterval(() => {
+const handshake = new Int32Array(workerData.handshakeBuffer);
+const pulse = () => {
   writeFileSync(beat, String(Date.now()));
-}, 10);
+  Atomics.add(handshake, 3, 1);
+};
+setInterval(pulse, 10);
 
 parentPort.on("message", (msg) => {
   if (msg.type === "lines") {
@@ -827,7 +830,7 @@ parentPort.on("message", (msg) => {
   if (msg.type !== "stop") return;
   const start = Date.now();
   while (Date.now() - start < 800) {
-    writeFileSync(beat, String(Date.now()));
+    pulse();
   }
   writeSync(workerData.fd, "late-worker-output\\n");
   Atomics.store(new Int32Array(workerData.handshakeBuffer), 0, 1);
