@@ -111,6 +111,7 @@ port.on("message", (msg: TickerWorkerMessage) => {
     frameLineCount = 0;
     publishFrame();
     announceReady();
+    port.postMessage({ type: "ack", kind: "log" });
     return;
   }
   if (msg.columns !== undefined) columns = msg.columns;

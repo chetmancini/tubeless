@@ -298,13 +298,20 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   let inlineFallback: LiveTicker | undefined;
   let lines: readonly string[] = [];
   const pendingLogs: string[] = [];
-  let workerLive = false;
 
   const paintedFrameLineCount = (): number => Atomics.load(handshake, 1);
 
   const send = (message: TickerWorkerMessage): void => {
     if (disposed || inlineFallback) return;
     worker.postMessage(message);
+  };
+
+  const stopWorker = (): void => {
+    void worker.terminate();
+    const deadline = Date.now() + 1_000;
+    while (worker.threadId !== -1 && Date.now() < deadline) {
+      // terminate() stops the isolate; threadId becomes -1 without the event loop.
+    }
   };
 
   const replayThrough = (ticker: LiveTicker): void => {
@@ -341,10 +348,8 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     if (code !== 0) failToInline();
   });
   worker.unref();
-  worker.on("message", (msg: { type?: string }) => {
-    if (msg?.type !== "ready") return;
-    workerLive = true;
-    pendingLogs.length = 0;
+  worker.on("message", (msg: { type?: string; kind?: string }) => {
+    if (msg?.type === "ack" && msg.kind === "log") pendingLogs.shift();
   });
 
   return {
@@ -365,7 +370,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
         writeSync(options.fd, text);
         return;
       }
-      if (!workerLive) pendingLogs.push(text);
+      pendingLogs.push(text);
       send({ text, type: "log" });
     },
     dispose() {
@@ -384,12 +389,19 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
           type: "stop",
         });
       } catch {
+        stopWorker();
         paintFinalFrame();
-        void worker.terminate();
         return;
       }
       if (Atomics.wait(handshake, 0, 0, 500) === "timed-out") {
+        stopWorker();
         paintFinalFrame();
+        try {
+          writeSync(options.fd, ANSI.showCursor);
+        } catch {
+          // Stream may already be closed; cursor restore is best-effort.
+        }
+        return;
       }
       try {
         writeSync(options.fd, ANSI.showCursor);

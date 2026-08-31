@@ -470,6 +470,7 @@ parentPort.on("message", (msg) => {
   if (msg.type !== "log") return;
   writeSync(workerData.fd, msg.text);
   logs += 1;
+  parentPort.postMessage({ type: "ack", kind: "log" });
   if (logs >= 2) throw new Error("mid-run crash");
 });
 `
@@ -658,6 +659,151 @@ parentPort.on("message", (msg) => {
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
+    }
+  });
+
+  it("replays a log posted after ready when the worker crashes before writing it", async () => {
+    const path = join(tmpdir(), `tubeless-ticker-log-ack-${process.pid}-${Date.now()}.log`);
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-log-ack-worker-${process.pid}-${Date.now()}.mjs`
+    );
+    writeFileSync(
+      workerPath,
+      `
+import { writeSync } from "node:fs";
+import { parentPort, workerData } from "node:worker_threads";
+
+parentPort.on("message", (msg) => {
+  if (msg.type === "lines") {
+    writeSync(workerData.fd, "worker-ready\\n");
+    parentPort.postMessage({ type: "ready" });
+    return;
+  }
+  if (msg.type === "log") throw new Error("log crash");
+});
+`
+    );
+    const fd = openSync(path, "w");
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          writeSync(fd, chunk);
+        },
+      });
+      ticker.setLines(["load"]);
+
+      const liveDeadline = Date.now() + 2_000;
+      while (Date.now() < liveDeadline) {
+        if (readFileSync(path, "utf8").includes("worker-ready")) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      ticker.writeLog("lost-log\n");
+      const fallbackDeadline = Date.now() + 2_000;
+      let rendered = "";
+      while (Date.now() < fallbackDeadline) {
+        rendered = readFileSync(path, "utf8");
+        if (rendered.includes("lost-log")) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      ticker.dispose();
+      rendered = readFileSync(path, "utf8");
+      expect(rendered).toContain("lost-log");
+      expect(rendered.match(/lost-log/g)).toHaveLength(1);
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
+    }
+  });
+
+  it("does not interleave delayed worker output after a timed-out dispose", async () => {
+    const path = join(tmpdir(), `tubeless-ticker-stop-timeout-${process.pid}-${Date.now()}.log`);
+    const beatPath = join(
+      tmpdir(),
+      `tubeless-ticker-stop-timeout-beat-${process.pid}-${Date.now()}.txt`
+    );
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-stop-timeout-worker-${process.pid}-${Date.now()}.mjs`
+    );
+    writeFileSync(
+      workerPath,
+      `
+import { writeFileSync, writeSync } from "node:fs";
+import { parentPort, workerData } from "node:worker_threads";
+
+const beat = ${JSON.stringify(beatPath)};
+setInterval(() => {
+  writeFileSync(beat, String(Date.now()));
+}, 10);
+
+parentPort.on("message", (msg) => {
+  if (msg.type === "lines") {
+    writeSync(workerData.fd, "worker-ready\\n");
+    parentPort.postMessage({ type: "ready" });
+    return;
+  }
+  if (msg.type !== "stop") return;
+  const start = Date.now();
+  while (Date.now() - start < 800) {
+    writeFileSync(beat, String(Date.now()));
+  }
+  writeSync(workerData.fd, "late-worker-output\\n");
+  Atomics.store(new Int32Array(workerData.handshakeBuffer), 0, 1);
+  Atomics.notify(new Int32Array(workerData.handshakeBuffer), 0);
+});
+`
+    );
+    writeFileSync(beatPath, "0");
+    const fd = openSync(path, "w");
+    let workerAliveAtFinalPaint = false;
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          writeSync(fd, chunk);
+          if (!chunk.includes("final-status")) return;
+          try {
+            workerAliveAtFinalPaint = Date.now() - Number(readFileSync(beatPath, "utf8")) < 80;
+          } catch {
+            workerAliveAtFinalPaint = false;
+          }
+        },
+      });
+      ticker.setLines(["final-status"]);
+
+      const liveDeadline = Date.now() + 2_000;
+      while (Date.now() < liveDeadline) {
+        if (readFileSync(path, "utf8").includes("worker-ready")) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      ticker.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const rendered = readFileSync(path, "utf8");
+      expect(rendered).toContain("final-status");
+      expect(rendered).not.toContain("late-worker-output");
+      expect(workerAliveAtFinalPaint).toBe(false);
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
+      unlinkSync(beatPath);
     }
   });
 });
