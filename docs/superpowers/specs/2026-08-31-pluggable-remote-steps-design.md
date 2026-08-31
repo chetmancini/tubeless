@@ -103,10 +103,12 @@ adapter. The adapter maps:
 
 - `context.signal` to cancel
 - `context.reportProgress` to heartbeats or status polls
+- `context.log` to remote output when the engine can stream or poll it
 - `${context.runId}:<step-id>` to a job id when the engine needs one. The
   step id comes from the `fromRemote("enrich", …)` call site, usually via
   `mapInput`. `PipelineStepContext` does not grow a `stepId` field.
 - `context.dryRun` to the engine's side-effect gate
+- remote failures to a thrown `Error` so the kernel can wrap them
 
 `engine` is required so plan, inspect, and studio can label the step. Typical
 values are `"lambda"`, `"temporal"`, `"http"`, or `"test"`. The kernel does not
@@ -128,6 +130,41 @@ pipeline dry run. That makes this adapter-side rule the only safety line:
 This is the same rule as a local step that omits `dryRun`: the handler owns
 not writing when `context.dryRun` is true. An adapter that ignores the flag
 is incorrect, not a kernel gap.
+
+#### Local visibility (logs optional, exceptions required)
+
+Remote work stays one opaque parent step. Local studio, hooks, and the TTY
+already observe that step. Adapters optionally forward telemetry into those
+seams; the kernel does not grow a second protocol, a `streamLogs` flag on
+`fromRemote`, or a CloudWatch / Temporal tail.
+
+**Logs are optional.** If the engine can stream or poll output while
+`invoke` is in flight, the adapter calls `context.log.log` / `warn` /
+`error` as lines arrive. Those already go to the injected logger. With
+tracing or `--store` they become correlated `pipeline.log` events that
+studio pages under the parent step. If the engine has no stream, skip it.
+`invoke` stays request/response: the adapter may poll inside the wait, but
+it does not change the factory contract.
+
+**Exceptions are required.** Do not swallow a remote failure. Rethrow an
+`Error`. Wrap the remote object as `cause`. Copy a machine `code` onto the
+thrown error when the engine has one. Existing `toPipelineError` wrapping
+then produces `TUBELESS_STEP_FAILED` with `message`, `stack`, bounded
+`cause`, and `sourceCode`. Cancellation still goes through
+`context.signal` and becomes `TUBELESS_RUN_CANCELLED`. No
+`TUBELESS_REMOTE_*` codes.
+
+**Progress is the latest heartbeat; logs are the append-only narrative.**
+Use `context.reportProgress` for status and a job-id detail row. Use
+`context.log` for lines. Both can run together. Do not flatten remote log
+lines into child steps.
+
+Adapters must not dump unbounded remote files. Trace strings and progress
+details already have bounds (`TRACE_STRING_LIMIT`, `TRACE_LIST_LIMIT`);
+forwarded lines go through the same logger and inherit those limits.
+
+A dry-run rehearsal may stream logs. The inverse contract still holds:
+`invoke` must not produce side effects when `context.dryRun === true`.
 
 ### Factory
 
@@ -263,7 +300,9 @@ graph.
 | Policy skip | `reason: "policy"`, same as `fromPipeline.skippable` |
 
 No `TUBELESS_REMOTE_*` codes. No engine job IDs on `PipelineStepReport`. The
-adapter may log or put a job id in progress `details`.
+adapter may log or put a job id in progress `details`. A remote object thrown
+as `cause` with a `code` field becomes the ordinary bounded `cause` /
+`sourceCode` snapshot; the kernel does not special-case remote errors.
 
 ## Testing
 
@@ -275,6 +314,10 @@ No AWS or Temporal dependency.
 - Assert a preview handler never calls `invoke`.
 - Assert plan metadata `{ engine, target }`.
 - Assert adapter throws become ordinary step failures.
+- Assert a thrown `Error` with `cause` and `code` keeps the bounded cause
+  chain and `sourceCode` on `TUBELESS_STEP_FAILED`.
+- Assert `context.log` calls made from `invoke` reach the injected logger
+  and, with tracing, a `pipeline.log` event on the parent step.
 - Assert abort during `invoke` is cancellation.
 - Type tests: `outputSchema` required; `skip` only on `fromRemote.skippable`;
   `dryRun: "run"` is a type error.
@@ -293,7 +336,7 @@ follow-ups.
 | `src/pipeline.ts` | Export `RemoteStepAdapter` with the other public types. `StepFactory` already re-exports from `pipeline-steps.ts`. |
 | `bun run api:generate` | Rebuild `docs/api-reference.md` and `docs/api-report.json` after the export lands. `make check` runs `api:check`. |
 | `docs/recipes.md` | New rows: mixed local + remote steps; host embedding that passes `runId`. |
-| `docs/agent-guide.md` | Primitive: `fromRemote` for a unit of work that lives on another engine; inverse dry-run contract; host-embed when the graph must outlive the process. Plan metadata: parent plans expose `remote` with `engine` and optional `target`. |
+| `docs/agent-guide.md` | Primitive: `fromRemote` for a unit of work that lives on another engine; inverse dry-run contract; host-embed when the graph must outlive the process. Plan metadata: parent plans expose `remote` with `engine` and optional `target`. Adapters may forward remote lines through `context.log` and must rethrow remote failures as `Error` with `cause` / `code`. |
 | `examples/catalog/` | Catalog-shaped pipeline + `definePipelineCommand` that uses `fromRemote` with a fake adapter, kebab-case IDs, and a studio registration in `tubeless.studio.ts`. Agents copy layout from this catalog. |
 | `docs/comparison.md` | Two-compositions table. Host embedding is the durable-graph path. `fromRemote` is mixed placement. |
 | `docs/concepts.md` | Short remote-step section after child pipelines. Dry-run remains a side-effect gate. |
