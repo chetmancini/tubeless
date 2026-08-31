@@ -38,6 +38,17 @@ help:
 	@echo "  make pack          Inspect and verify the publishable artifact"
 	@echo "  make release-notes Print generated notes, labeled patch/minor/major"
 	@echo "  make release       Bump patch, check, commit, tag, and push (BUMP=/VERSION=)"
+	@echo
+	@echo "Fast loops"
+	@echo "  make build         Compile the library"
+	@echo "  make lint          Lint sources"
+	@echo "  make format-check  Check formatting without writing"
+	@echo "  make typecheck     Type-check library, examples, and tests"
+	@echo "  make test          Build once, run the vitest suite"
+	@echo "  make docs-check    Validate the learning-surface docs"
+	@echo "  make api-check     Verify generated public API docs"
+	@echo "  make eval-verify   Verify the agent evaluation runner"
+	@echo "  make pack-verify   Smoke-test the publishable artifact"
 
 require-file:
 	@if [ -z "$(FILE)" ]; then \
