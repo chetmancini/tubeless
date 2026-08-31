@@ -106,7 +106,7 @@ describe("createPipelineTestRuntime", () => {
   it("plans through the typed helper without executing or recording statuses", () => {
     const test = createPipelineTestRuntime();
 
-    const plan = test.plan(makePipeline(), { count: 1, targets: ["work"] });
+    const plan = test.plan(makePipeline(), { targets: ["work"] });
 
     expect(plan.ok).toBe(true);
     expect(plan.steps[0]).toMatchObject({ id: "work", selected: true });

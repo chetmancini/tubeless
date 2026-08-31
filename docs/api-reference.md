@@ -20,7 +20,7 @@ Package: `tubeless`
 | `tubeless/run-store/sqlite` | `./dist/run-store-sqlite.d.ts` | `e6ddfe8f5043656242ebd824ead3c0883ce25d4e57520fba9dcf93ce01a1572d` |                3 |
 | `tubeless/workbench/studio` | `./dist/workbench-studio.d.ts` | `2afced697589a4d76527107c9517921512c46ad62c074743264cb415a773539c` |                6 |
 | `tubeless/run-store/ui`     | `./dist/run-store-ui.d.ts`     | `d207e9aba052d83ad2f4268b91644d932b7835e6c1a3eecb89df622a61db2041` |                9 |
-| `tubeless/testing`          | `./dist/testing.d.ts`          | `a6e8a051df80bc56942c195d8fe62e4bb1e9436164c618abe703ffd51c9f1c34` |                7 |
+| `tubeless/testing`          | `./dist/testing.d.ts`          | `32f6c102669da0cbd28db73b6ac66c8768a6876685bfa347c31d40df86fa9593` |                7 |
 | `tubeless/tracing`          | `./dist/tracing.d.ts`          | `aaa44ca17255d9da1ae3a2e29c0e62e4fc279de16b3526831023289d6d3c1b12` |                8 |
 | `tubeless/tracing/json`     | `./dist/tracing-json.d.ts`     | `dcd58eb97dc8e08e2a5097a4f5435bf1d87901fb8c2b0bc387fcbce6d4caddc0` |                2 |
 | `tubeless/tracing/otel`     | `./dist/tracing-otel.d.ts`     | `307853d3987eeb64a0ccdfb945933a0c1f016fe4f13b6ad8f3fe1e4045746814` |                4 |

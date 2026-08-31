@@ -37,18 +37,15 @@ function makeReporterPipeline(options: { fail?: boolean; skipWrite?: boolean } =
 describe("createRunReporter", () => {
   it("logs a successful pipeline timeline without serializing its value", async () => {
     const { logger, messages } = capturingLogger();
-    const result = await makeReporterPipeline().run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: createRunReporter({
-          color: "never",
-          log: logger,
-          symbols: "ascii",
-        }),
+    const result = await makeReporterPipeline().run({}, undefined, {
+      cwd: "/tmp",
+      hooks: createRunReporter({
+        color: "never",
         log: logger,
-      }
-    );
+        symbols: "ascii",
+      }),
+      log: logger,
+    });
 
     expect(result.status).toBe("completed");
     expect(messages.log).toEqual(
@@ -70,6 +67,7 @@ describe("createRunReporter", () => {
   it("logs dry-run skips with their reason", async () => {
     const { logger, messages } = capturingLogger();
     await makeReporterPipeline({ skipWrite: true }).run(
+      {},
       { dryRun: true },
       {
         cwd: "/tmp",
@@ -83,14 +81,11 @@ describe("createRunReporter", () => {
 
   it("logs failed steps and the failed summary at error level", async () => {
     const { logger, messages } = capturingLogger();
-    await makeReporterPipeline({ fail: true }).run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: createRunReporter({ color: "never", log: logger, symbols: "ascii" }),
-        log: logger,
-      }
-    );
+    await makeReporterPipeline({ fail: true }).run({}, undefined, {
+      cwd: "/tmp",
+      hooks: createRunReporter({ color: "never", log: logger, symbols: "ascii" }),
+      log: logger,
+    });
 
     expect(messages.error).toContain("  fail Build Artifact: artifact is empty");
     expect(messages.error).toContainEqual(
@@ -105,15 +100,12 @@ describe("createRunReporter", () => {
     controller.abort("stop");
     const { logger, messages } = capturingLogger();
 
-    await makeReporterPipeline().run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: createRunReporter({ color: "never", log: logger, symbols: "ascii" }),
-        log: logger,
-        signal: controller.signal,
-      }
-    );
+    await makeReporterPipeline().run({}, undefined, {
+      cwd: "/tmp",
+      hooks: createRunReporter({ color: "never", log: logger, symbols: "ascii" }),
+      log: logger,
+      signal: controller.signal,
+    });
 
     expect(messages.warn).toContain("  - Build Artifact: cancelled: Pipeline run aborted: stop");
     expect(messages.error).not.toContainEqual(expect.stringContaining("Build Artifact"));
@@ -121,14 +113,11 @@ describe("createRunReporter", () => {
 
   it("uses Unicode or emoji symbols when configured", async () => {
     const unicode = capturingLogger();
-    await makeReporterPipeline().run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: createRunReporter({ color: "never", log: unicode.logger, symbols: "unicode" }),
-        log: unicode.logger,
-      }
-    );
+    await makeReporterPipeline().run({}, undefined, {
+      cwd: "/tmp",
+      hooks: createRunReporter({ color: "never", log: unicode.logger, symbols: "unicode" }),
+      log: unicode.logger,
+    });
     expect(unicode.messages.log).toEqual(
       expect.arrayContaining([
         "  → Build Artifact - Build the artifact",
@@ -137,14 +126,11 @@ describe("createRunReporter", () => {
     );
 
     const emoji = capturingLogger();
-    await makeReporterPipeline().run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: createRunReporter({ color: "never", log: emoji.logger, symbols: "emoji" }),
-        log: emoji.logger,
-      }
-    );
+    await makeReporterPipeline().run({}, undefined, {
+      cwd: "/tmp",
+      hooks: createRunReporter({ color: "never", log: emoji.logger, symbols: "emoji" }),
+      log: emoji.logger,
+    });
     expect(emoji.messages.log).toEqual(
       expect.arrayContaining([expect.stringMatching(/^  ✅ Build Artifact \(\d+ms\)$/)])
     );
@@ -152,30 +138,24 @@ describe("createRunReporter", () => {
 
   it("adds ANSI styling only when color is enabled", async () => {
     const colored = capturingLogger();
-    await makeReporterPipeline().run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: createRunReporter({ color: "always", log: colored.logger, symbols: "unicode" }),
-        log: colored.logger,
-      }
-    );
+    await makeReporterPipeline().run({}, undefined, {
+      cwd: "/tmp",
+      hooks: createRunReporter({ color: "always", log: colored.logger, symbols: "unicode" }),
+      log: colored.logger,
+    });
     expect(colored.messages.log.some((message) => message.includes("\u001B["))).toBe(true);
 
     const plain = capturingLogger();
-    await makeReporterPipeline().run(
-      {},
-      {
-        cwd: "/tmp",
-        hooks: createRunReporter({
-          color: "auto",
-          log: plain.logger,
-          symbols: "auto",
-          terminal: { color: false, isTTY: false, unicode: false },
-        }),
+    await makeReporterPipeline().run({}, undefined, {
+      cwd: "/tmp",
+      hooks: createRunReporter({
+        color: "auto",
         log: plain.logger,
-      }
-    );
+        symbols: "auto",
+        terminal: { color: false, isTTY: false, unicode: false },
+      }),
+      log: plain.logger,
+    });
     expect(plain.messages.log.every((message) => !message.includes("\u001B["))).toBe(true);
     expect(plain.messages.log).toContain("  -> Build Artifact - Build the artifact");
   });

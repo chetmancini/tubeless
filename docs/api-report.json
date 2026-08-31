@@ -267,7 +267,7 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "a6e8a051df80bc56942c195d8fe62e4bb1e9436164c618abe703ffd51c9f1c34",
+      "sha256": "32f6c102669da0cbd28db73b6ac66c8768a6876685bfa347c31d40df86fa9593",
       "specifier": "tubeless/testing"
     },
     {

@@ -18,8 +18,8 @@ or shared helpers in this repository.
 
 - Use `createSteps<TDomainOptions>()` once per pipeline and `definePipeline` once
   after declaring its steps. Domain option types contain domain input only;
-  callers pass built-in controls alongside domain fields to `run(options)`, while
-  `plan(controls)` accepts controls alone.
+  callers pass those options and optional built-in controls to
+  `run(options, controls?)`, while `plan(controls)` accepts controls alone.
 - Treat a `PipelineDefinitionError` during module loading as an authoring bug;
   static graph mistakes are rejected when `definePipeline` is called.
 - Use `dependsOn` when the output is required, `optionalDependsOn` when absence

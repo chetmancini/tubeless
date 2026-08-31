@@ -48,13 +48,12 @@ export interface PipelineRunControls<
   targets?: readonly TTargetId[];
 }
 
-/** Domain input plus the built-in controls for one pipeline invocation. */
+/** Domain input plus built-in controls. Child `mapOptions` still returns this mix. */
 export type PipelineRunOptions<
   TOptions extends object = object,
   TStepId extends string = string,
   TTargetId extends string = string,
 > = TOptions & PipelineRunControls<TStepId, TTargetId>;
-
 export interface PipelineRuntime extends PipelineContext {
   now: () => number;
   sleep: (durationMs: number, signal?: AbortSignal) => Promise<void>;
@@ -452,11 +451,13 @@ export interface Pipeline<
   readonly targetIds: readonly TTargetId[];
   plan(controls?: PipelineRunControls<TStepId, TTargetId>): PipelinePlan;
   run(
-    options: PipelineRunOptions<TOptions, TStepId, TTargetId>,
+    options: TOptions,
+    controls?: PipelineRunControls<TStepId, TTargetId>,
     context?: Partial<PipelineContext>
   ): Promise<PipelineRun<TResult>>;
   runOrThrow(
-    options: PipelineRunOptions<TOptions, TStepId, TTargetId>,
+    options: TOptions,
+    controls?: PipelineRunControls<TStepId, TTargetId>,
     context?: Partial<PipelineContext>
   ): Promise<TResult>;
   /** Generate a static Mermaid flowchart without running or planning the pipeline. */

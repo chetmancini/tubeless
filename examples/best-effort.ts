@@ -29,10 +29,14 @@ export const BestEffortAuditPipeline = definePipeline({
 });
 
 export async function runBestEffortExample() {
-  const result = await BestEffortAuditPipeline.run({
-    failLinks: true,
-    continueOnError: true,
-  });
+  const result = await BestEffortAuditPipeline.run(
+    {
+      failLinks: true,
+    },
+    {
+      continueOnError: true,
+    }
+  );
 
   return {
     errors: result.errors,

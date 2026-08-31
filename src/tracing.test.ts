@@ -52,20 +52,17 @@ describe("pipeline tracing", () => {
     const flush = vi.fn();
     let timestamp = 100;
 
-    const result = await pipeline.run(
-      {},
-      {
-        ...defaultPipelineContext(),
-        log: createLogger(),
-        now: () => timestamp++,
-        parentRunId: "parent-1",
-        runId: "run-1",
-        tracing: {
-          exporter: { export: (event) => events.push(event), flush },
-          itemKey: "chapter-3",
-        },
-      }
-    );
+    const result = await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log: createLogger(),
+      now: () => timestamp++,
+      parentRunId: "parent-1",
+      runId: "run-1",
+      tracing: {
+        exporter: { export: (event) => events.push(event), flush },
+        itemKey: "chapter-3",
+      },
+    });
 
     expect(result.status).not.toBe("completed");
     expect(result.runId).toBe("run-1");
@@ -156,20 +153,17 @@ describe("pipeline tracing", () => {
     });
     const log = createLogger();
 
-    const result = await pipeline.run(
-      {},
-      {
-        ...defaultPipelineContext(),
-        log,
-        runId: "isolated",
-        tracing: {
-          exporter: {
-            export: () => Promise.reject(new Error("collector unavailable")),
-            flush: () => Promise.reject(new Error("flush unavailable")),
-          },
+    const result = await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log,
+      runId: "isolated",
+      tracing: {
+        exporter: {
+          export: () => Promise.reject(new Error("collector unavailable")),
+          flush: () => Promise.reject(new Error("flush unavailable")),
         },
-      }
-    );
+      },
+    });
 
     expect(result.status).toBe("completed");
     expect(log.warnings).toContain("Pipeline trace exporter failed: collector unavailable");
@@ -196,16 +190,13 @@ describe("pipeline tracing", () => {
     const events: PipelineTraceEvent[] = [];
 
     await expect(
-      parent.run(
-        {},
-        {
-          ...defaultPipelineContext(),
-          runId: "parent-run",
-          tracing: {
-            exporter: { export: (event) => events.push(event) },
-          },
-        }
-      )
+      parent.run({}, undefined, {
+        ...defaultPipelineContext(),
+        runId: "parent-run",
+        tracing: {
+          exporter: { export: (event) => events.push(event) },
+        },
+      })
     ).resolves.toMatchObject({ status: "completed" });
 
     expect(
@@ -249,16 +240,13 @@ describe("pipeline tracing", () => {
     });
     const events: PipelineTraceEvent[] = [];
 
-    await pipeline.run(
-      {},
-      {
-        ...defaultPipelineContext(),
-        runId: "remote-run",
-        tracing: {
-          exporter: { export: (event) => events.push(event) },
-        },
-      }
-    );
+    await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      runId: "remote-run",
+      tracing: {
+        exporter: { export: (event) => events.push(event) },
+      },
+    });
 
     expect(events.filter((event) => event.name === "pipeline.started")).toHaveLength(1);
     expect(
@@ -300,16 +288,13 @@ describe("pipeline tracing", () => {
     const events: PipelineTraceEvent[] = [];
 
     await expect(
-      parent.run(
-        { values: ["first", "second"] },
-        {
-          ...defaultPipelineContext(),
-          runId: "mapped-parent-run",
-          tracing: {
-            exporter: { export: (event) => events.push(event) },
-          },
-        }
-      )
+      parent.run({ values: ["first", "second"] }, undefined, {
+        ...defaultPipelineContext(),
+        runId: "mapped-parent-run",
+        tracing: {
+          exporter: { export: (event) => events.push(event) },
+        },
+      })
     ).resolves.toMatchObject({ status: "completed" });
 
     const childStarts = events.filter(
@@ -344,14 +329,11 @@ describe("pipeline tracing", () => {
     });
     const events: PipelineTraceEvent[] = [];
 
-    await pipeline.run(
-      {},
-      {
-        ...defaultPipelineContext(),
-        log: createLogger(),
-        tracing: { exporter: { export: (event) => events.push(event) } },
-      }
-    );
+    await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log: createLogger(),
+      tracing: { exporter: { export: (event) => events.push(event) } },
+    });
 
     const progress = events.find(
       (event) => event.name === "step.running" && event.attributes.completed === 1
@@ -381,14 +363,11 @@ describe("pipeline tracing", () => {
     });
     const events: PipelineTraceEvent[] = [];
 
-    await pipeline.run(
-      {},
-      {
-        ...defaultPipelineContext(),
-        log: createLogger(),
-        tracing: { exporter: { export: (event) => events.push(event) } },
-      }
-    );
+    await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log: createLogger(),
+      tracing: { exporter: { export: (event) => events.push(event) } },
+    });
 
     expect(
       events.find((event) => event.name === "step.running" && event.attributes.completed === 1)

@@ -504,8 +504,9 @@ export interface StepFactory<
 }
 
 /**
- * Returns a step factory scoped to one pipeline's domain options. Built-in run
- * controls are accepted alongside those options when the pipeline is invoked.
+ * Returns a step factory scoped to one pipeline's domain options. Pass built-in
+ * run controls as the second argument to `run` / `runOrThrow`. Child
+ * `mapOptions` may still return domain options plus those controls.
  */
 export function createSteps<TOptions extends object = {}>(): StepFactory<TOptions>;
 export function createSteps<const TSchema extends StandardSchemaV1<object, object>>(

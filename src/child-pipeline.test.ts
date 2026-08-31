@@ -80,16 +80,13 @@ describe("child-pipeline composition", () => {
       });
       const progress: Array<{ completed: number; message?: string; total?: number }> = [];
 
-      const result = await parent.run(
-        { concurrency: 2 },
-        {
-          cwd: "/repo",
-          hooks: {
-            onStepProgress: ({ progress: nextProgress }) => progress.push(nextProgress),
-          },
-          log: console,
-        }
-      );
+      const result = await parent.run({ concurrency: 2 }, undefined, {
+        cwd: "/repo",
+        hooks: {
+          onStepProgress: ({ progress: nextProgress }) => progress.push(nextProgress),
+        },
+        log: console,
+      });
 
       expect(result.status).toBe("completed");
       expect(result.value).toEqual([
@@ -349,26 +346,23 @@ describe("child-pipeline composition", () => {
 
       const progress: Array<{ completed: number; total?: number; message?: string }> = [];
       let sawFullBeforeProcess = false;
-      const result = await parent.run(
-        {},
-        {
-          cwd: "/tmp",
-          hooks: {
-            onStepProgress: ({ progress: next, step }) => {
-              if (step.id !== "children") return;
-              progress.push({
-                completed: next.completed,
-                total: next.total,
-                message: next.message,
-              });
-              if (!processStarted && next.total === 1 && next.completed >= 1) {
-                sawFullBeforeProcess = true;
-              }
-            },
+      const result = await parent.run({}, undefined, {
+        cwd: "/tmp",
+        hooks: {
+          onStepProgress: ({ progress: next, step }) => {
+            if (step.id !== "children") return;
+            progress.push({
+              completed: next.completed,
+              total: next.total,
+              message: next.message,
+            });
+            if (!processStarted && next.total === 1 && next.completed >= 1) {
+              sawFullBeforeProcess = true;
+            }
           },
-          log: console,
-        }
-      );
+        },
+        log: console,
+      });
 
       expect(result.status).toBe("completed");
       expect(processStarted).toBe(true);
@@ -414,20 +408,17 @@ describe("child-pipeline composition", () => {
       });
       const progress: Array<{ completed: number; total?: number }> = [];
 
-      const result = await parent.run(
-        {},
-        {
-          cwd: "/tmp",
-          hooks: {
-            onStepProgress: ({ progress: next, step }) => {
-              if (step.id === "children") {
-                progress.push({ completed: next.completed, total: next.total });
-              }
-            },
+      const result = await parent.run({}, undefined, {
+        cwd: "/tmp",
+        hooks: {
+          onStepProgress: ({ progress: next, step }) => {
+            if (step.id === "children") {
+              progress.push({ completed: next.completed, total: next.total });
+            }
           },
-          log: console,
-        }
-      );
+        },
+        log: console,
+      });
 
       expect(result.status).toBe("completed");
       expect(progress.at(-1)).toEqual({ completed: 3, total: 3 });
@@ -469,28 +460,25 @@ describe("child-pipeline composition", () => {
       });
       let visibleFanoutPublishes = 0;
       let zeroProgressLabels = 0;
-      const result = await parent.run(
-        {},
-        {
-          cwd: "/tmp",
-          hooks: {
-            onStepProgress: ({ progress, step }) => {
-              if (step.id !== "children") return;
-              // Empty snapshots have no total/message; ignore those.
-              if (!progress.message && progress.total === undefined) return;
-              visibleFanoutPublishes += 1;
-              const labels = [
-                progress.message ?? "",
-                ...(progress.details ?? []).map((detail) => detail.label ?? ""),
-              ];
-              if (labels.some((label) => /work:0\b/.test(label) || label.endsWith(":0"))) {
-                zeroProgressLabels += 1;
-              }
-            },
+      const result = await parent.run({}, undefined, {
+        cwd: "/tmp",
+        hooks: {
+          onStepProgress: ({ progress, step }) => {
+            if (step.id !== "children") return;
+            // Empty snapshots have no total/message; ignore those.
+            if (!progress.message && progress.total === undefined) return;
+            visibleFanoutPublishes += 1;
+            const labels = [
+              progress.message ?? "",
+              ...(progress.details ?? []).map((detail) => detail.label ?? ""),
+            ];
+            if (labels.some((label) => /work:0\b/.test(label) || label.endsWith(":0"))) {
+              zeroProgressLabels += 1;
+            }
           },
-          log: console,
-        }
-      );
+        },
+        log: console,
+      });
 
       expect(result.status).toBe("completed");
       // Real child progress + lifecycle updates only — not empty-progress spam.
@@ -702,23 +690,20 @@ describe("child-pipeline composition", () => {
       });
       const lifecycle: string[] = [];
       const progress: Array<{ completed: number; message?: string; total?: number }> = [];
-      const result = await parent.run(
-        { source: "rows.json" },
-        {
-          cwd: "/repo",
-          hooks: {
-            onFinalizeStart: ({ pipelineId }) => lifecycle.push(`finalize:${pipelineId}`),
-            onPipelineComplete: ({ pipelineId }) => lifecycle.push(`complete:${pipelineId}`),
-            onPipelineStart: ({ pipelineId }) => lifecycle.push(`start:${pipelineId}`),
-            onStepProgress: ({ progress: nextProgress }) => progress.push(nextProgress),
-            onStepStart: ({ step }) => lifecycle.push(`step:${step.id}`),
-          },
-          log,
-          now,
-          signal: controller.signal,
-          sleep,
-        }
-      );
+      const result = await parent.run({ source: "rows.json" }, undefined, {
+        cwd: "/repo",
+        hooks: {
+          onFinalizeStart: ({ pipelineId }) => lifecycle.push(`finalize:${pipelineId}`),
+          onPipelineComplete: ({ pipelineId }) => lifecycle.push(`complete:${pipelineId}`),
+          onPipelineStart: ({ pipelineId }) => lifecycle.push(`start:${pipelineId}`),
+          onStepProgress: ({ progress: nextProgress }) => progress.push(nextProgress),
+          onStepStart: ({ step }) => lifecycle.push(`step:${step.id}`),
+        },
+        log,
+        now,
+        signal: controller.signal,
+        sleep,
+      });
 
       expect(parent.plan().steps.map(({ id }) => id)).toEqual([
         "prepare",
@@ -791,19 +776,16 @@ describe("child-pipeline composition", () => {
         finalize: (outputs) => outputs.stage,
       });
       const bridged: string[] = [];
-      const result = await parent.run(
-        {},
-        {
-          cwd: "/tmp",
-          hooks: {
-            onStepProgress: ({ progress, step }) => {
-              if (step.id !== "stage" || !progress.message) return;
-              bridged.push(progress.message);
-            },
+      const result = await parent.run({}, undefined, {
+        cwd: "/tmp",
+        hooks: {
+          onStepProgress: ({ progress, step }) => {
+            if (step.id !== "stage" || !progress.message) return;
+            bridged.push(progress.message);
           },
-          log: console,
-        }
-      );
+        },
+        log: console,
+      });
 
       expect(result.status).toBe("completed");
       expect(bridged.filter((message) => message.includes("batch"))).toHaveLength(1);
@@ -850,7 +832,7 @@ describe("child-pipeline composition", () => {
         finalize: (outputs) => outputs.after,
       });
 
-      const result = await parent.run({}, { cwd: "/tmp", log: console });
+      const result = await parent.run({}, undefined, { cwd: "/tmp", log: console });
 
       expect(mapResultCalls).toBe(0);
       expect(result.status).toBe("completed");
@@ -918,7 +900,7 @@ describe("child-pipeline composition", () => {
         finalize: (outputs) => outputs["dry-stage"],
       });
 
-      const result = await parent.run({ dryRun: true });
+      const result = await parent.run({}, { dryRun: true });
 
       expect(result.status).toBe("completed");
       expect(result.value).toBe("dry-result");
@@ -1131,26 +1113,23 @@ describe("child-pipeline composition", () => {
       let renderedAfterChild = "";
       let renderedAfterParent = "";
 
-      await parent.run(
-        {},
-        {
-          cwd: "/tmp",
-          hooks: [
-            reporter.hooks,
-            {
-              onPipelineComplete: () => {
-                renderedAfterParent = output.chunks.join("");
-              },
-              onStepComplete: ({ step }) => {
-                if (step.id === "child-stage") {
-                  renderedAfterChild = output.chunks.join("");
-                }
-              },
+      await parent.run({}, undefined, {
+        cwd: "/tmp",
+        hooks: [
+          reporter.hooks,
+          {
+            onPipelineComplete: () => {
+              renderedAfterParent = output.chunks.join("");
             },
-          ],
-          log: reporter.log,
-        }
-      );
+            onStepComplete: ({ step }) => {
+              if (step.id === "child-stage") {
+                renderedAfterChild = output.chunks.join("");
+              }
+            },
+          },
+        ],
+        log: reporter.log,
+      });
 
       expect(renderedAfterChild).not.toContain("\u001B[?25h");
       expect(renderedAfterChild).not.toContain("Pipeline reporter-child: done");
@@ -1180,7 +1159,11 @@ describe("child-pipeline composition", () => {
         finalize: () => true,
       });
 
-      const result = await parent.run({}, { cwd: "/tmp", log: console, signal: controller.signal });
+      const result = await parent.run({}, undefined, {
+        cwd: "/tmp",
+        log: console,
+        signal: controller.signal,
+      });
 
       expect(result.status).not.toBe("completed");
       expect(result.errors[0]).toMatchObject({
@@ -1223,10 +1206,12 @@ describe("child-pipeline composition", () => {
       });
       const parent = definePipeline({ id: "abort-parent", steps: [stage], finalize: () => true });
 
-      const resultPromise = parent.run(
-        {},
-        { cwd: "/tmp", log: console, signal: controller.signal, sleep }
-      );
+      const resultPromise = parent.run({}, undefined, {
+        cwd: "/tmp",
+        log: console,
+        signal: controller.signal,
+        sleep,
+      });
       await started;
       controller.abort(new Error("sleep interrupted"));
       const result = await resultPromise;

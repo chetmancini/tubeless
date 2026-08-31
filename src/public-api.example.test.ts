@@ -255,18 +255,15 @@ describe("public API example", () => {
     });
     expect(reporter.mode).toBe("plain");
 
-    const result = await ImportPipeline.run(
-      { lines: ["one"] },
-      {
-        cwd: "/tmp",
-        hooks: createRunReporter({
-          color: "never",
-          log: logger,
-          symbols: "ascii",
-        }),
+    const result = await ImportPipeline.run({ lines: ["one"] }, undefined, {
+      cwd: "/tmp",
+      hooks: createRunReporter({
+        color: "never",
         log: logger,
-      }
-    );
+        symbols: "ascii",
+      }),
+      log: logger,
+    });
 
     expect(result.status).toBe("completed");
     const publicRun: PipelineRun<{ count: number; rows: string[] }> = result;

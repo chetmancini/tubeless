@@ -10,11 +10,13 @@ describe("resumable enrichment example", () => {
     const checkpointPath = path.join(directory, "checkpoint.json");
 
     try {
-      const result = await EnrichmentPipeline.run({
-        checkpointPath,
-        dryRun: true,
-        items: ["alpha", "beta"],
-      });
+      const result = await EnrichmentPipeline.run(
+        {
+          checkpointPath,
+          items: ["alpha", "beta"],
+        },
+        { dryRun: true }
+      );
 
       expect(result.status).toBe("completed");
       expect(result.steps).toEqual(

@@ -33,8 +33,9 @@ Supported operating systems are Linux and macOS. Windows is untested.
 
 ## 1. Define domain options
 
-Describe only domain input. Built-in controls are added automatically to the
-typed run object, while `plan(controls)` accepts controls alone.
+Describe only domain input. Built-in controls are a separate argument to
+`run(options, controls?)` and `runOrThrow(options, controls?)`. `plan(controls)`
+accepts controls alone.
 
 ```ts
 interface ImportOptions {
@@ -114,7 +115,7 @@ text is useful. The same source is available from `tubeless graph`; see
 
 ```ts
 const value = await ImportPipeline.runOrThrow({ lines });
-const report = await ImportPipeline.run({ lines, continueOnError: true });
+const report = await ImportPipeline.run({ lines }, { continueOnError: true });
 const plan = ImportPipeline.plan({ dryRun: true });
 const normalizePlan = ImportPipeline.plan({ targets: ["normalize"] });
 ```

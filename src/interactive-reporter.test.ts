@@ -85,10 +85,11 @@ describe("createPipelineReporter", () => {
       terminal: { color: false, isTTY: true, unicode: true },
     });
 
-    const result = await progressivePipeline().run(
-      {},
-      { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log }
-    );
+    const result = await progressivePipeline().run({}, undefined, {
+      cwd: "/tmp",
+      hooks: reporter.hooks,
+      log: reporter.log,
+    });
     reporter.dispose();
 
     const rendered = output.chunks.join("");
@@ -121,7 +122,11 @@ describe("createPipelineReporter", () => {
       terminal: { color: false, isTTY: true, unicode: true },
     });
 
-    await detailedPipeline().run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    await detailedPipeline().run({}, undefined, {
+      cwd: "/tmp",
+      hooks: reporter.hooks,
+      log: reporter.log,
+    });
     reporter.dispose();
 
     const rendered = output.chunks.join("");
@@ -144,7 +149,11 @@ describe("createPipelineReporter", () => {
       terminal: { isTTY: false },
     });
 
-    await progressivePipeline().run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    await progressivePipeline().run({}, undefined, {
+      cwd: "/tmp",
+      hooks: reporter.hooks,
+      log: reporter.log,
+    });
 
     expect(reporter.mode).toBe("plain");
     expect(output.chunks).toEqual([]);
@@ -169,7 +178,11 @@ describe("createPipelineReporter", () => {
       terminal: { color: false, isTTY: true, unicode: false },
     });
 
-    await progressivePipeline().run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    await progressivePipeline().run({}, undefined, {
+      cwd: "/tmp",
+      hooks: reporter.hooks,
+      log: reporter.log,
+    });
 
     const rendered = output.chunks.join("");
     const frameLines = output.chunks
@@ -192,7 +205,11 @@ describe("createPipelineReporter", () => {
       terminal: { color: true, isTTY: true, unicode: true },
     });
 
-    await progressivePipeline().run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    await progressivePipeline().run({}, undefined, {
+      cwd: "/tmp",
+      hooks: reporter.hooks,
+      log: reporter.log,
+    });
 
     expect(output.chunks.join("")).toContain("\u001B[32mPipeline interactive-te\u001B[0m…");
   });
@@ -215,7 +232,7 @@ describe("createPipelineReporter", () => {
     });
     const pipeline = definePipeline({ id: "failure", steps: [fail], finalize: () => undefined });
 
-    await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
 
     const rendered = output.chunks.join("");
     expect(rendered).toContain("fail fail: first line second line");
@@ -243,7 +260,7 @@ describe("createPipelineReporter", () => {
       finalize: () => undefined,
     });
 
-    await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
 
     const rendered = output.chunks.join("");
     expect(rendered).toContain("Normalize Data");
@@ -272,7 +289,7 @@ describe("createPipelineReporter", () => {
     });
     const pipeline = definePipeline({ id: "unsafe", steps: [fail], finalize: () => undefined });
 
-    await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
 
     const rendered = output.chunks.join("");
     expect(rendered).toContain("record next");
@@ -300,7 +317,7 @@ describe("createPipelineReporter", () => {
     });
     const pipeline = definePipeline({ id: "logging", steps: [log], finalize: () => undefined });
 
-    await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
 
     const rendered = output.chunks.join("");
     expect(rendered).toContain("entry red\n");
@@ -343,7 +360,7 @@ describe("createPipelineReporter", () => {
       finalize: (outputs) => outputs.slow,
     });
 
-    await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
     reporter.dispose();
 
     const liveFrames = output.chunks
@@ -400,7 +417,7 @@ describe("createPipelineReporter", () => {
         finalize: (outputs) => outputs.busy,
       });
 
-      await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+      await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
       reporter.dispose();
 
       const rendered = readFileSync(path, "utf8");
@@ -456,7 +473,7 @@ describe("createPipelineReporter", () => {
         finalize: (outputs) => outputs.busy,
       });
 
-      await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+      await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
       reporter.dispose();
 
       const rendered = readFileSync(path, "utf8");
@@ -504,7 +521,7 @@ describe("createPipelineReporter", () => {
       },
     });
 
-    await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
     reporter.dispose();
 
     const rendered = output.chunks.join("");
@@ -556,7 +573,7 @@ describe("createPipelineReporter", () => {
       },
     });
 
-    await pipeline.run({}, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+    await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
     reporter.dispose();
 
     const frames = output.chunks.filter((chunk) => chunk.endsWith("\n"));

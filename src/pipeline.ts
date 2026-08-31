@@ -3,7 +3,6 @@ import {
   executePlannedRun,
   PipelineExecutionError,
   resolvePipelineRuntime,
-  splitPipelineRunOptions,
 } from "./pipeline-execute.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import {
@@ -161,14 +160,14 @@ export function definePipeline<
   }
 
   async function run(
-    options: PipelineRunOptions<TInputOptions, TStepId, TTargetId>,
+    options: TInputOptions,
+    controls: PipelineRunControls<TStepId, TTargetId> = {},
     context: Partial<PipelineContext> = defaultPipelineContext()
   ): Promise<PipelineRun<TPipelineResult>> {
-    const { controls, domainOptions } = splitPipelineRunOptions(options);
     return executePlannedRun({
       controls,
       definition,
-      domainOptions,
+      domainOptions: options,
       optionsSchema,
       plan: plan(controls),
       runtime: resolvePipelineRuntime(context),
@@ -177,10 +176,11 @@ export function definePipeline<
   }
 
   async function runOrThrow(
-    options: PipelineRunOptions<TInputOptions, TStepId, TTargetId>,
+    options: TInputOptions,
+    controls: PipelineRunControls<TStepId, TTargetId> = {},
     context: Partial<PipelineContext> = defaultPipelineContext()
   ): Promise<TPipelineResult> {
-    const result = await run(options, context);
+    const result = await run(options, controls, context);
     if (result.status !== "completed") {
       throw new PipelineExecutionError(result);
     }

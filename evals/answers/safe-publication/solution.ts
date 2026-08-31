@@ -59,5 +59,5 @@ export const PublishPipeline = definePipeline({
 });
 
 export function runBestEffortPublish(source: string) {
-  return PublishPipeline.run({ continueOnError: true, source });
+  return PublishPipeline.run({ source }, { continueOnError: true });
 }

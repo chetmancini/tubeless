@@ -79,10 +79,14 @@ describe("peloton example", () => {
     });
     expect(cached.weather).toBe("wet");
 
-    const dry = await PelotonPipeline.run({
-      ...fixture,
-      dryRun: true,
-    });
+    const dry = await PelotonPipeline.run(
+      {
+        ...fixture,
+      },
+      {
+        dryRun: true,
+      }
+    );
     expect(dry.status).toBe("completed");
     expect(dry.value).toEqual({
       auditCars: 2,
@@ -94,11 +98,15 @@ describe("peloton example", () => {
     });
     expect(skippedIds(dry)).toEqual(expect.arrayContaining(["publish-start-list"]));
 
-    const bestEffort = await PelotonPipeline.run({
-      ...fixture,
-      continueOnError: true,
-      failAudit: true,
-    });
+    const bestEffort = await PelotonPipeline.run(
+      {
+        ...fixture,
+        failAudit: true,
+      },
+      {
+        continueOnError: true,
+      }
+    );
     expect(bestEffort.status).toBe("failed");
     expect(bestEffort.value).toEqual({
       auditCars: undefined,
