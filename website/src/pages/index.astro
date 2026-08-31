@@ -1,0 +1,160 @@
+---
+import Base from "../layouts/Base.astro";
+import LiveTerminal from "../components/LiveTerminal.astro";
+import MermaidGraph from "../components/MermaidGraph.astro";
+import Terminal from "../components/Terminal.astro";
+import { planTape } from "../data/tapes";
+import { href } from "../lib/paths";
+---
+
+<Base
+  title="Tubeless"
+  description="Define and run typed data pipelines and multi-step workflow graphs."
+>
+  <main>
+    <section class="wrap hero">
+      <div>
+        <p class="kicker">In-process typed DAGs</p>
+        <h1>Tubeless</h1>
+        <p class="lede">
+          Define and run typed data pipelines and multi-step workflow graphs.
+        </p>
+        <div class="install"><span class="prompt">$</span> npm install tubeless</div>
+        <div class="actions">
+          <a class="btn" href={href("start")}>Start a pipeline</a>
+          <a class="btn ghost" href={href("agents")}>Agents</a>
+        </div>
+      </div>
+      <Terminal tape={planTape} />
+    </section>
+
+    <section class="wrap section">
+      <div class="section-head">
+        <div>
+          <p class="kicker">Library</p>
+          <h2>What it is</h2>
+        </div>
+        <p>
+          Import <code>createSteps</code> and <code>definePipeline</code>. Invalid graphs fail at definition.
+          <code>plan()</code> previews selection. <code>run</code> / <code>runOrThrow</code> execute. The CLI is a Bun
+          workbench around the same exports.
+        </p>
+      </div>
+      <div class="facts">
+        <article>
+          <h3>Library</h3>
+          <p>ESM-only, dependency-free compiled JavaScript. Node.js 22+ on Linux and macOS.</p>
+        </article>
+        <article>
+          <h3>CLI</h3>
+          <p><code>inspect</code>, <code>plan</code>, <code>graph</code>, <code>run</code>, and <code>ui</code>. Bun 1.3.14+. <code>npx tubeless</code> relaunches through Bun.</p>
+        </article>
+        <article>
+          <h3>Lightweight</h3>
+          <p>Zero infra. Import it and call <code>run</code> anywhere Node 22 already is.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="wrap section">
+      <div class="feature">
+        <div class="feature-copy">
+          <p class="kicker">01</p>
+          <h2>Define</h2>
+          <p>
+            The graph is typed. A step is both the work and the token later
+            steps depend on, so a missing edge, a cycle, or a duplicate ID fails
+            at definition. The same IDs drive plans, reports, hooks, and CLI
+            selection.
+          </p>
+        </div>
+        <figure class="shot">
+          <figcaption class="tty-bar">
+            <span class="tty-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>import.ts</span>
+          </figcaption>
+          <pre><code>{`import { createSteps, definePipeline, requireOutputs } from "tubeless";
+
+interface ImportOptions {
+  lines: readonly string[];
+}
+
+const step = createSteps<ImportOptions>();
+
+const load = step("load", {
+  run: (_inputs, context) => context.options.lines,
+});
+
+const normalize = step("normalize", {
+  dependsOn: [load],
+  run: ({ load: rows }) =>
+    rows.map((row) => row.trim().toLowerCase()).filter(Boolean),
+});
+
+export const ImportPipeline = definePipeline({
+  id: "import",
+  steps: [load, normalize],
+  targets: [normalize],
+  finalize: requireOutputs([normalize], ({ normalize }) => normalize),
+});`}</code></pre>
+        </figure>
+      </div>
+    </section>
+
+    <section class="wrap section">
+      <div class="feature">
+        <div class="feature-copy">
+          <p class="kicker">02</p>
+          <h2>Plan</h2>
+          <p>
+            The same definition prints as Mermaid. Required edges are solid.
+            Optional inputs and failure gates are dotted. <code>plan()</code>
+            names which nodes a target will visit, before anything writes.
+          </p>
+        </div>
+        <MermaidGraph />
+      </div>
+    </section>
+
+    <section class="wrap section">
+      <div class="feature">
+        <div class="feature-copy">
+          <p class="kicker">03</p>
+          <h2>Run</h2>
+          <p>
+            The same export plans, dry-runs, and executes. Preview a target
+            before anything writes. Persist the run if you want history. The TTY
+            reports the selected graph, not a spinner.
+          </p>
+        </div>
+        <LiveTerminal />
+      </div>
+    </section>
+
+    <section class="wrap section">
+      <div class="feature">
+        <div class="feature-copy">
+          <p class="kicker">04</p>
+          <h2>Control</h2>
+          <p>
+            The studio reads the local run store. After the process exits you
+            still have completed runs, step timelines, and nested children on
+            disk next to the repo.
+          </p>
+        </div>
+        <figure class="shot">
+          <figcaption class="tty-bar">
+            <span class="tty-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>tubeless ui</span>
+          </figcaption>
+          <img
+            src={href("studio.png")}
+            width="1440"
+            height="813"
+            alt="Local studio listing completed import and publish runs, with the import step timeline and a nested normalize run selected."
+          />
+        </figure>
+      </div>
+    </section>
+  </main>
+</Base>

@@ -1,0 +1,95 @@
+---
+/**
+ * Rendered `tubeless graph` for examples/publish-with-gates.ts --direction LR.
+ * Source is the workbench Mermaid; the drawing is themed to the site.
+ */
+export const publishGraphSource = `flowchart LR
+  step0["build-artifact"]
+  step1["validate-artifact"]
+  step2["publish-artifact"]
+
+  step0 --> step1
+  step0 --> step2
+  step1 -. optional input + failure gate .-> step2
+`;
+---
+
+<figure
+  class="shot graph-shot"
+  aria-label="Mermaid flowchart from tubeless graph: build-artifact leads to validate-artifact and publish-artifact; validate-artifact is a dotted optional input and failure gate into publish-artifact."
+>
+  <figcaption class="tty-bar">
+    <span class="tty-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span>tubeless graph</span>
+  </figcaption>
+  <div class="graph-canvas">
+    <p class="graph-lang">flowchart LR</p>
+    <svg viewBox="0 0 720 268" role="presentation">
+      <defs>
+        <marker
+          id="graph-arrow"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="8"
+          markerHeight="8"
+          orient="auto"
+        >
+          <path d="M 0 1.2 L 10 5 L 0 8.8 z" fill="#121212"></path>
+        </marker>
+        <marker
+          id="graph-arrow-gold"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="8"
+          markerHeight="8"
+          orient="auto"
+        >
+          <path d="M 0 1.2 L 10 5 L 0 8.8 z" fill="#c4a046"></path>
+        </marker>
+      </defs>
+
+      <path
+        class="graph-solid"
+        d="M 236 134 C 310 134, 360 70, 452 70"
+        marker-end="url(#graph-arrow)"
+      ></path>
+      <path
+        class="graph-solid"
+        d="M 236 134 C 310 134, 360 198, 452 198"
+        marker-end="url(#graph-arrow)"
+      ></path>
+      <path
+        class="graph-gate"
+        d="M 568 100 V 168"
+        marker-end="url(#graph-arrow-gold)"
+      ></path>
+      <text class="graph-edge-label" x="580" y="128">
+        <tspan x="580" dy="0">optional input</tspan>
+        <tspan x="580" dy="13">+ failure gate</tspan>
+      </text>
+
+      <g class="graph-node">
+        <rect x="20" y="110" width="216" height="48"></rect>
+        <rect class="graph-node-mark" x="20" y="110" width="5" height="48"></rect>
+        <text x="40" y="134">build-artifact</text>
+      </g>
+      <g class="graph-node">
+        <rect x="460" y="46" width="236" height="48"></rect>
+        <rect class="graph-node-mark" x="460" y="46" width="5" height="48"></rect>
+        <text x="480" y="70">validate-artifact</text>
+      </g>
+      <g class="graph-node">
+        <rect x="460" y="174" width="236" height="48"></rect>
+        <rect class="graph-node-mark" x="460" y="174" width="5" height="48"></rect>
+        <text x="480" y="198">publish-artifact</text>
+      </g>
+    </svg>
+    <p class="graph-key">
+      <span><i class="solid"></i> required</span>
+      <span><i class="gate"></i> optional input + failure gate</span>
+    </p>
+    <pre class="graph-source">{publishGraphSource}</pre>
+  </div>
+</figure>

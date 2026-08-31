@@ -1,0 +1,15 @@
+{
+  "name": "tubeless-website",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "devDependencies": {
+    "astro": "5.16.6",
+    "marked": "17.0.1"
+  }
+}

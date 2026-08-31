@@ -10,4 +10,6 @@
   `bun run api:generate` after intentional public declaration changes.
 - Update the recipe index, project catalog, and agent guidance when behavior or
   recommended usage changes.
+- The public website lives in `website/` and is not part of the npm package.
+  Rebuild it when human-facing docs or recommended usage change.
 - Run `make check` from this package directory before handoff.

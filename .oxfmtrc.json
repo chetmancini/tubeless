@@ -5,5 +5,5 @@
   "trailingComma": "es5",
   "printWidth": 100,
   "sortPackageJson": false,
-  "ignorePatterns": ["dist", "node_modules", "bun.lock", "tools/oxlint/anti-slop"]
+  "ignorePatterns": ["dist", "node_modules", "bun.lock", "tools/oxlint/anti-slop", "website"]
 }

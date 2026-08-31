@@ -2,7 +2,7 @@
 
 .PHONY: help verify inspect plan graph run ui require-file install build lint format \
 	format-check typecheck test docs-check api-check api-generate eval-verify pack \
-	pack-verify tubeless check release release-notes
+	pack-verify tubeless check release release-notes website website-build
 
 export_arg = $(if $(strip $(EXPORT)),--export "$(EXPORT)",)
 store_arg = $(if $(strip $(STORE)),--store "$(STORE)",)
@@ -31,6 +31,8 @@ help:
 	@echo "Developing tubeless"
 	@echo "  make install       Install exact dependencies from bun.lock"
 	@echo "  make check         Run the complete package quality gate"
+	@echo "  make website       Run the public docs site locally"
+	@echo "  make website-build Build the public docs site"
 	@echo "  make format        Format package sources and documentation"
 	@echo "  make api-generate  Regenerate checked public API documentation"
 	@echo "  make pack          Inspect and verify the publishable artifact"
@@ -108,6 +110,12 @@ pack-verify:
 # Raw workbench escape hatch; prefer the named pipeline targets above.
 tubeless:
 	bun run tubeless -- $(tubeless_command) $(if $(filter ui,$(tubeless_command)),$(ui_command_arg) $(export_arg) $(store_arg) $(port_arg),) $(ARGS) $(if $(filter ui,$(tubeless_command)),$(studio_arg),)
+
+website:
+	cd website && bun run dev
+
+website-build:
+	cd website && bun run build
 
 check:
 	bun run check

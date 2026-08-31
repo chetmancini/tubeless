@@ -1,0 +1,44 @@
+---
+import Base from "./Base.astro";
+import { DOC_NAV } from "../lib/docs";
+import { href } from "../lib/paths";
+
+type Heading = { id: string; text: string; level: number };
+
+type Props = {
+  title: string;
+  description: string;
+  slug?: string;
+  headings?: Heading[];
+};
+
+const { title, description, slug, headings = [] } = Astro.props;
+---
+
+<Base title={title} description={description}>
+  <div class="wrap doc-shell">
+    <nav class="doc-nav" aria-label="Documentation">
+      <p>Docs</p>
+      <a href={href("docs")} aria-current={slug ? undefined : "page"}>Index</a>
+      {DOC_NAV.map((item) => (
+        <a href={href(`docs/${item.slug}`)} aria-current={item.slug === slug ? "page" : undefined}>
+          {item.label}
+        </a>
+      ))}
+      <p>Agents</p>
+      <a href={href("agents")}>Entrypoints</a>
+      <a href={href("llms.txt")}>llms.txt</a>
+    </nav>
+    <article class="doc-body">
+      {headings.length > 0 && (
+        <nav class="toc" aria-label="On this page">
+          <p>On this page</p>
+          {headings.map((heading) => (
+            <a class={heading.level === 3 ? "h3" : undefined} href={`#${heading.id}`}>{heading.text}</a>
+          ))}
+        </nav>
+      )}
+      <slot />
+    </article>
+  </div>
+</Base>

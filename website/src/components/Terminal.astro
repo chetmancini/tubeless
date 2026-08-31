@@ -1,0 +1,23 @@
+---
+import type { Tape } from "../data/tapes";
+
+type Props = {
+  tape: Tape;
+  replay?: boolean;
+};
+
+const { tape, replay = true } = Astro.props;
+---
+
+<figure class="tty" data-replay={replay ? "" : undefined} aria-label={`Terminal: ${tape.command}`}>
+  <figcaption class="tty-bar">
+    <span class="tty-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span>{tape.title}</span>
+  </figcaption>
+  <pre>
+    <span class="typed" style="--delay: 0.15s"><span class="prompt">$</span> <span class="cmd">{tape.command}</span></span>
+    {tape.lines.map((line, index) => (
+      <span class:list={["line", line.kind ?? "out"]} style={`--delay: ${(index + 2) * 0.22}s`}>{line.text}</span>
+    ))}
+  </pre>
+</figure>

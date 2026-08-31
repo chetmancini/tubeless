@@ -1,0 +1,116 @@
+---
+import Base from "../layouts/Base.astro";
+import Terminal from "../components/Terminal.astro";
+import { graphTape, runTape } from "../data/tapes";
+import { href } from "../lib/paths";
+---
+
+<Base title="Start" description="Install tubeless, define a first pipeline, and choose how to run it.">
+  <main class="wrap">
+    <header class="page-lead">
+      <p class="kicker">Getting started</p>
+      <h1 class="page-title">First pipeline.</h1>
+      <p>
+        Library imports need Node.js 22+. The CLI needs Bun 1.3.14+. Linux and macOS
+        are supported. Windows is untested.
+      </p>
+    </header>
+
+    <section class="section">
+      <div class="split">
+        <div>
+          <h3>Install the library</h3>
+          <div class="install"><span class="prompt">$</span> npm install tubeless</div>
+          <p class="lede">Also <code>pnpm add</code>, <code>yarn add</code>, or <code>bun add</code>. ESM-only. Dependency-free at runtime.</p>
+        </div>
+        <div>
+          <h3>Use the CLI</h3>
+          <div class="install"><span class="prompt">$</span> bunx tubeless --help</div>
+          <p class="lede"><code>npx tubeless</code> works if Bun is installed; otherwise it prints install instructions.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="kicker">Author</p>
+      <h2>Define domain options, then steps.</h2>
+      <p class="lede">
+        One <code>createSteps</code> factory per pipeline. The step object is the typed dependency token.
+        IDs stay stable because plans, reports, hooks, and CLI selection use them.
+      </p>
+      <pre><code>{`import { createSteps, definePipeline, requireOutputs } from "tubeless";
+
+interface ImportOptions {
+  lines: readonly string[];
+}
+
+const step = createSteps<ImportOptions>();
+
+const load = step("load", {
+  run: (_inputs, context) => context.options.lines,
+});
+
+const normalize = step("normalize", {
+  dependsOn: [load],
+  run: ({ load: rows }) =>
+    rows.map((row) => row.trim().toLowerCase()).filter(Boolean),
+});
+
+export const ImportPipeline = definePipeline({
+  id: "import",
+  steps: [load, normalize],
+  targets: [normalize],
+  finalize: requireOutputs([normalize], ({ normalize }) => normalize),
+});`}</code></pre>
+    </section>
+
+    <section class="section">
+      <div class="feature">
+        <div class="feature-copy">
+          <h3>See the static graph</h3>
+          <p>
+            <code>toMermaid()</code> prints the static graph. Required edges are solid. Optional
+            inputs and failure gates are dotted. Same source from <code>tubeless graph</code>.
+          </p>
+        </div>
+        <Terminal tape={graphTape} />
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="feature">
+        <div class="feature-copy">
+          <h3>Pick an execution method</h3>
+          <p>
+            <code>runOrThrow</code> when failure should throw. <code>run</code> for the structured report.
+            <code>plan</code> when nothing may execute. Scripts should use <code>definePipelineCommand</code>
+            so <code>--target</code>, <code>--step</code>, and dry-run stay generated.
+          </p>
+        </div>
+        <Terminal tape={runTape} />
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="kicker">Next</p>
+      <div class="agent-grid">
+        <a href={href("docs/getting-started")}>
+          <h3>Full getting started</h3>
+          <p>Testing runtime, targets, and finalize rules.</p>
+        </a>
+        <a href={href("docs/recipes")}>
+          <h3>Recipe index</h3>
+          <p>Smallest compiled example for the job.</p>
+        </a>
+        <a href={href("docs/cli")}>
+          <h3>CLI</h3>
+          <p>inspect, plan, graph, run, exit codes.</p>
+        </a>
+        <a href={href("docs/studio")}>
+          <h3>Studio</h3>
+          <p>Optional SQLite history and <code>tubeless ui</code>.</p>
+        </a>
+      </div>
+    </section>
+  </main>
+</Base>

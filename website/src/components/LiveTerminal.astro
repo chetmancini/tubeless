@@ -1,0 +1,20 @@
+---
+import { liveSteps } from "../data/tapes";
+---
+
+<figure class="tty" data-replay aria-label="Live TTY reporter for the live-tui example">
+  <figcaption class="tty-bar">
+    <span class="tty-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span>live-tui</span>
+  </figcaption>
+  <div class="live">
+    <div class="typed" style="--delay: 0.1s"><span class="prompt">$</span> <span class="cmd">bunx tubeless run ./live-tui.ts</span></div>
+    {liveSteps.map((step) => (
+      <div class="live-row">
+        <b>{step.name}</b>
+        <span class="bar" aria-hidden="true"><i></i></span>
+        <span class="state">{step.detail}</span>
+      </div>
+    ))}
+  </div>
+</figure>
