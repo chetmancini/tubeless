@@ -1,5 +1,5 @@
 import { writeSync } from "node:fs";
-import { Worker } from "node:worker_threads";
+import { MessageChannel, Worker } from "node:worker_threads";
 import { formatDurationMs } from "./reporter.js";
 
 export const SPINNER_TOKEN = "\u0001";
@@ -258,11 +258,19 @@ function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 
   };
 }
 
-function resolveLiveTickerWorkerUrl(): URL {
+function resolveCompiledWorkerUrl(filename: string): URL {
   if (import.meta.url.endsWith(".ts")) {
-    return new URL("../dist/live-ticker-worker.js", import.meta.url);
+    return new URL(`../dist/${filename}`, import.meta.url);
   }
-  return new URL("./live-ticker-worker.js", import.meta.url);
+  return new URL(`./${filename}`, import.meta.url);
+}
+
+function resolveLiveTickerWorkerUrl(): URL {
+  return resolveCompiledWorkerUrl("live-ticker-worker.js");
+}
+
+function resolveLiveTickerExitWaiterUrl(): URL {
+  return resolveCompiledWorkerUrl("live-ticker-exit-waiter.js");
 }
 
 function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[] {
@@ -283,13 +291,16 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   // [0] stop handshake, [1] painted rows, [2] accepted logs
   const handshakeBuffer = new SharedArrayBuffer(12);
   const handshake = new Int32Array(handshakeBuffer);
+  const lifetime = new MessageChannel();
   const worker = new Worker(options.workerUrl ?? resolveLiveTickerWorkerUrl(), {
     execArgv: fileWorkerExecArgv(),
+    transferList: [lifetime.port2],
     workerData: {
       color: options.color === true,
       columns: resolveColumns(options),
       fd: options.fd,
       handshakeBuffer,
+      lifetimePort: lifetime.port2,
       refreshIntervalMs: options.refreshIntervalMs,
       unicode: options.unicode,
     },
@@ -316,10 +327,22 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   };
 
   const stopWorker = (): void => {
-    void worker.terminate();
-    const deadline = Date.now() + 1_000;
-    while (worker.threadId !== -1 && Date.now() < deadline) {
-      // terminate() stops the isolate; threadId becomes -1 without the event loop.
+    const exitGate = new Int32Array(new SharedArrayBuffer(4));
+    try {
+      const waiter = new Worker(resolveLiveTickerExitWaiterUrl(), {
+        execArgv: fileWorkerExecArgv(),
+        transferList: [lifetime.port1],
+        workerData: {
+          gateBuffer: exitGate.buffer,
+          port: lifetime.port1,
+        },
+      });
+      waiter.unref();
+      void worker.terminate();
+      Atomics.wait(exitGate, 0, 0, 1_000);
+      void waiter.terminate();
+    } catch {
+      void worker.terminate();
     }
   };
 
