@@ -21,6 +21,29 @@ function captureOutput(): ReporterOutput & { chunks: string[] } {
     write: (chunk) => chunks.push(chunk),
   };
 }
+function defer(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
+function rejectWhenAborted(signal: AbortSignal | undefined): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    const fail = (): void => {
+      const error = new Error("aborted");
+      error.name = "AbortError";
+      reject(error);
+    };
+    if (signal === undefined) return;
+    if (signal.aborted) {
+      fail();
+      return;
+    }
+    signal.addEventListener("abort", fail, { once: true });
+  });
+}
 
 describe("child-pipeline composition", () => {
   describe("mapped child adapter", () => {
@@ -260,6 +283,161 @@ describe("child-pipeline composition", () => {
         stepId: "children",
       });
       expect(result.steps).toMatchObject([{ id: "children", status: "cancelled" }]);
+    });
+
+    it("reports abort-only mapped children as cancelled", async () => {
+      const controller = new AbortController();
+      const firstStarted = defer();
+      const secondStarted = defer();
+      const childStep = createSteps<{ itemId: string }>();
+      const process = childStep("process", {
+        run: async (_inputs, context) => {
+          if (context.options.itemId === "first") firstStarted.resolve();
+          else secondStarted.resolve();
+          await rejectWhenAborted(context.signal);
+        },
+      });
+      const child = definePipeline({
+        id: "abort-only-child",
+        steps: [process],
+        finalize: () => true,
+      });
+      const parentStep = createSteps();
+      const children = parentStep.forEachPipeline("children", {
+        pipeline: child,
+        items: () => [{ id: "first" }, { id: "second" }],
+        key: (item) => item.id,
+        concurrency: 2,
+        mapOptions: (item) => ({ itemId: item.id }),
+      });
+      const parent = definePipeline({
+        id: "abort-only-parent",
+        steps: [children],
+        finalize: () => true,
+      });
+
+      const run = parent.run({}, undefined, {
+        cwd: "/tmp",
+        log: console,
+        signal: controller.signal,
+      });
+      await Promise.all([firstStarted.promise, secondStarted.promise]);
+      controller.abort("operator interrupt");
+      const result = await run;
+
+      expect(result.status).toBe("cancelled");
+      expect(result.errors[0]).toMatchObject({
+        kind: "cancellation",
+        stepId: "children",
+      });
+      expect(result.errors[0]?.message).toMatch(/failed for 2 item\(s\)/);
+      expect(result.errors[0]?.message).not.toContain("<aborted>");
+    });
+
+    it("reports a mapped child failure without abort as failed", async () => {
+      const childStep = createSteps();
+      const process = childStep("process", {
+        run: () => {
+          throw new Error("shard exploded");
+        },
+      });
+      const child = definePipeline({
+        id: "failure-only-child",
+        steps: [process],
+        finalize: () => true,
+      });
+      const parentStep = createSteps();
+      const children = parentStep.forEachPipeline("children", {
+        pipeline: child,
+        items: () => [{ id: "broken" }],
+        key: (item) => item.id,
+        mapOptions: () => ({}),
+      });
+      const parent = definePipeline({
+        id: "failure-only-parent",
+        steps: [children],
+        finalize: () => true,
+      });
+
+      let thrown: unknown;
+      try {
+        await parent.runOrThrow({});
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(PipelineExecutionError);
+      expect((thrown as PipelineExecutionError).result.status).toBe("failed");
+      const mappedFailure = (thrown as PipelineExecutionError).cause;
+      expect(mappedFailure).toBeInstanceOf(PipelineChildError);
+      expect((mappedFailure as PipelineChildError).cancelled).toBe(false);
+      expect((mappedFailure as Error).message).toContain("broken:");
+      expect((mappedFailure as Error).message).toContain("shard exploded");
+    });
+
+    it("reports mixed mapped failure plus parent abort as failed", async () => {
+      const controller = new AbortController();
+      const failStarted = defer();
+      const hangStarted = defer();
+      const childStep = createSteps<{ outcome: "fail" | "hang" }>();
+      const process = childStep("process", {
+        run: async (_inputs, context) => {
+          if (context.options.outcome === "fail") {
+            failStarted.resolve();
+            throw new Error("shard exploded");
+          }
+          hangStarted.resolve();
+          await rejectWhenAborted(context.signal);
+        },
+      });
+      const child = definePipeline({
+        id: "mixed-abort-child",
+        steps: [process],
+        finalize: () => true,
+      });
+      const parentStep = createSteps();
+      const children = parentStep.forEachPipeline("children", {
+        pipeline: child,
+        items: () => [
+          { id: "broken", outcome: "fail" as const },
+          { id: "hanging", outcome: "hang" as const },
+        ],
+        key: (item) => item.id,
+        concurrency: 2,
+        mapOptions: (item) => ({ outcome: item.outcome }),
+      });
+      const parent = definePipeline({
+        id: "mixed-abort-parent",
+        steps: [children],
+        finalize: () => true,
+      });
+
+      const run = parent.runOrThrow({}, undefined, {
+        cwd: "/tmp",
+        log: console,
+        signal: controller.signal,
+      });
+      await Promise.all([failStarted.promise, hangStarted.promise]);
+      controller.abort("operator interrupt");
+
+      let thrown: unknown;
+      try {
+        await run;
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(PipelineExecutionError);
+      expect((thrown as PipelineExecutionError).result.status).toBe("failed");
+      const mappedFailure = (thrown as PipelineExecutionError).cause;
+      expect(mappedFailure).toBeInstanceOf(PipelineChildError);
+      expect((mappedFailure as PipelineChildError).cancelled).toBe(false);
+      expect((mappedFailure as Error).cause).toBeInstanceOf(Error);
+      expect(((mappedFailure as Error).cause as Error).message).toMatch(/shard exploded/);
+      expect((mappedFailure as Error).message).toMatch(/failed for 2 item\(s\)/);
+      expect((mappedFailure as Error).message).not.toContain("<aborted>");
+      expect((mappedFailure as Error).message).toContain("broken:");
+      expect((mappedFailure as Error).message).toContain("shard exploded");
     });
 
     it("rejects an invalid mapped child plan with structured plan errors before child execution", async () => {

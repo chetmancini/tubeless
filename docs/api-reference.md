@@ -9,7 +9,7 @@ Package: `tubeless`
 | Entrypoint                  | Declaration                    | Surface hash                                                       | Exported symbols |
 | --------------------------- | ------------------------------ | ------------------------------------------------------------------ | ---------------: |
 | `tubeless`                  | `./dist/pipeline.d.ts`         | `0513b49cf2832ecebe2ab48adc05541d83adbdcf88eae8ef3a71dc2500cb0512` |               72 |
-| `tubeless/batch`            | `./dist/batch.d.ts`            | `449dcacdeb67e2171c51fb1cb92a553c4aa05402fe6f3055d5c8222808b728cc` |                5 |
+| `tubeless/batch`            | `./dist/batch.d.ts`            | `b8920da4ca2af85a4eb7e5d7d6bbcbf057b0bc290f4ebf990327abc8824a7f12` |                7 |
 | `tubeless/cli`              | `./dist/cli.d.ts`              | `ed784468ac18d5aa57e5120dc84bf4fd5fc26f5b1794bd18df363a7fe6ddecbf` |               35 |
 | `tubeless/node`             | `./dist/node.d.ts`             | `c466b60e1133c30a4d397ac48f473d6fffcf6b4f13258b200b0088132a86b4ff` |                8 |
 | `tubeless/rate-limit`       | `./dist/rate-limit.d.ts`       | `c48e035d303232b27f11159859807a9a7e963b1099f1c7f1df77b9b2465bf571` |                1 |
@@ -105,10 +105,12 @@ Package: `tubeless`
 ### `tubeless/batch`
 
 - `chunk`
+- `ConcurrentSettleResult`
 - `ConcurrentWorker`
 - `runBatched`
 - `runConcurrent`
 - `RunConcurrentOptions`
+- `runConcurrentSettled`
 
 ### `tubeless/cli`
 

@@ -27,6 +27,14 @@ function resolveConcurrency(concurrency: number | undefined): number {
   return Math.max(1, concurrency ?? 1);
 }
 
+export interface ConcurrentSettleResult<R> {
+  /** Sparse: holes are items never started or failed. */
+  readonly results: ReadonlyArray<R | undefined>;
+  readonly completedIndexes: ReadonlySet<number>;
+  /** First worker rejection or the abort error; undefined when all completed. */
+  readonly failure: unknown;
+}
+
 /**
  * Run individual items with bounded, lazy scheduling and input-order results.
  *
@@ -42,18 +50,46 @@ export async function runConcurrent<T, R>(
   return runConcurrentWithLabel(items, options, worker, "Concurrent run");
 }
 
+/**
+ * Like `runConcurrent`, but returns completed results and the first failure
+ * instead of throwing. Callers that need partials should use this API.
+ */
+export async function runConcurrentSettled<T, R>(
+  items: readonly T[],
+  options: RunConcurrentOptions,
+  worker: ConcurrentWorker<T, R>
+): Promise<ConcurrentSettleResult<R>> {
+  return runConcurrentSettledWithLabel(items, options, worker, "Concurrent run");
+}
+
 async function runConcurrentWithLabel<T, R>(
   items: readonly T[],
   options: RunConcurrentOptions,
   worker: ConcurrentWorker<T, R>,
   label: string
 ): Promise<R[]> {
+  const settled = await runConcurrentSettledWithLabel(items, options, worker, label);
+  if (settled.failure !== undefined || settled.completedIndexes.size !== items.length) {
+    throw settled.failure;
+  }
+  // SAFETY: every index is in completedIndexes, so each slot was assigned by a
+  // successful worker and is `R` rather than the sparse `R | undefined`.
+  return settled.results as R[];
+}
+
+async function runConcurrentSettledWithLabel<T, R>(
+  items: readonly T[],
+  options: RunConcurrentOptions,
+  worker: ConcurrentWorker<T, R>,
+  label: string
+): Promise<ConcurrentSettleResult<R>> {
   const concurrency = resolveConcurrency(options.concurrency);
   if (items.length === 0) {
-    return [];
+    return { completedIndexes: new Set(), failure: undefined, results: [] };
   }
 
-  const results = new Array<R>(items.length);
+  const results = new Array<R | undefined>(items.length);
+  const completedIndexes = new Set<number>();
   let failed = false;
   let failure: unknown;
   let nextIndex = 0;
@@ -75,6 +111,7 @@ async function runConcurrentWithLabel<T, R>(
 
       try {
         results[index] = await worker(items[index]!, index, options.signal);
+        completedIndexes.add(index);
       } catch (error) {
         if (!failed) {
           failed = true;
@@ -86,10 +123,7 @@ async function runConcurrentWithLabel<T, R>(
   }
 
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => runNext()));
-  if (failed) {
-    throw failure;
-  }
-  return results;
+  return { completedIndexes, failure, results };
 }
 
 export async function runBatched<T, R>(

@@ -83,12 +83,14 @@
       "declaration": "./dist/batch.d.ts",
       "exports": [
         "chunk",
+        "ConcurrentSettleResult",
         "ConcurrentWorker",
         "runBatched",
         "runConcurrent",
-        "RunConcurrentOptions"
+        "RunConcurrentOptions",
+        "runConcurrentSettled"
       ],
-      "sha256": "449dcacdeb67e2171c51fb1cb92a553c4aa05402fe6f3055d5c8222808b728cc",
+      "sha256": "b8920da4ca2af85a4eb7e5d7d6bbcbf057b0bc290f4ebf990327abc8824a7f12",
       "specifier": "tubeless/batch"
     },
     {

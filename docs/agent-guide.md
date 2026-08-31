@@ -48,7 +48,8 @@ or shared helpers in this repository.
   forward remote lines through `context.log` and must rethrow remote
   failures as `Error` with `cause` / `code`.
 - Use `runConcurrent` for bounded lightweight functions that do not need child
-  lifecycle events.
+  lifecycle events. Use `runConcurrentSettled` when the caller needs completed
+  results and the first failure instead of a throw.
 - Use `definePipelineCommand` for scripts centered on a pipeline. Do not parse
   `process.argv` manually or redeclare built-in dry-run, `--step`, or `--target`
   flags. `mapOptions`, validation, and hooks receive `stepIds` and `targets`,

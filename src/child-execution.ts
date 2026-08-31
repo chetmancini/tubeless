@@ -1,6 +1,6 @@
 import { throwIfAborted } from "./abort.js";
 import { emitRejectedPlanLifecycle } from "./lifecycle.js";
-import { runConcurrent } from "./batch.js";
+import { runConcurrentSettled } from "./batch.js";
 import {
   toMappedChildStepProgress,
   type MappedChildProgressSnapshot,
@@ -436,7 +436,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
     }
     publishProgress();
 
-    const outcomes = await runConcurrent(
+    const settled = await runConcurrentSettled(
       items,
       { concurrency, signal: context.signal },
       async (item, itemIndex): Promise<Outcome> => {
@@ -530,21 +530,32 @@ export function createMappedChildRunner<TParentOptions extends object>(
       }
     );
 
+    const outcomes = settled.results.filter((outcome): outcome is Outcome => outcome !== undefined);
+    const schedulerFailure =
+      settled.failure === undefined
+        ? undefined
+        : settled.failure instanceof Error
+          ? settled.failure
+          : new Error(String(settled.failure));
+
     const failures = outcomes.filter(
       (outcome): outcome is Extract<Outcome, { ok: false }> => !outcome.ok
     );
-    if (failures.length > 0) {
+    if (failures.length > 0 || schedulerFailure !== undefined) {
       const details = failures.map(({ error, key }) => `${key}: ${error.message}`).join("; ");
-      const cancelled = failures.every(({ error }) => dependencies.isCancellation(error, context));
-      const primaryFailure = cancelled
-        ? failures[0]
-        : (failures.find(({ error }) => !dependencies.isCancellation(error, context)) ??
-          failures[0]);
-      throw new PipelineChildError(
-        `Mapped child pipeline ${config.pipeline.id} failed for ${failures.length} item(s): ${details}`,
-        cancelled,
-        primaryFailure?.error
-      );
+      const cancelled =
+        failures.every(({ error }) => dependencies.isCancellation(error, context)) &&
+        (schedulerFailure === undefined || dependencies.isCancellation(schedulerFailure, context));
+      const primaryError = cancelled
+        ? (failures[0]?.error ?? schedulerFailure)
+        : (failures.find(({ error }) => !dependencies.isCancellation(error, context))?.error ??
+          failures[0]?.error ??
+          schedulerFailure);
+      const message =
+        failures.length > 0
+          ? `Mapped child pipeline ${config.pipeline.id} failed for ${failures.length} item(s): ${details}`
+          : `Mapped child pipeline ${config.pipeline.id} failed: ${primaryError?.message ?? "aborted"}`;
+      throw new PipelineChildError(message, cancelled, primaryError);
     }
     // SAFETY: when failures.length === 0 every outcome was produced by the
     // success branch (return { key, ok: true, value }), so each outcome is

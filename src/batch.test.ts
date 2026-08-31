@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { chunk, runBatched, runConcurrent } from "./batch.js";
+import { chunk, runBatched, runConcurrent, runConcurrentSettled } from "./batch.js";
 
 describe("chunk", () => {
   it("splits an array into fixed-size groups", () => {
@@ -195,5 +195,65 @@ describe("runConcurrent", () => {
       })
     ).rejects.toThrow("Concurrent run aborted: stop");
     expect(seen).toEqual([0]);
+  });
+
+  it("still throws the first worker failure after the settled core is used", async () => {
+    const firstFailure = new Error("first failure");
+    await expect(
+      runConcurrent([0], {}, async () => {
+        throw firstFailure;
+      })
+    ).rejects.toBe(firstFailure);
+  });
+});
+
+describe("runConcurrentSettled", () => {
+  it("returns completed results plus the abort failure when aborted mid-run", async () => {
+    const controller = new AbortController();
+    const seen: number[] = [];
+
+    const settled = await runConcurrentSettled(
+      [0, 1, 2],
+      { concurrency: 1, signal: controller.signal },
+      async (item) => {
+        seen.push(item);
+        controller.abort("stop");
+        return `done-${item}`;
+      }
+    );
+
+    expect(seen).toEqual([0]);
+    expect(settled.results[0]).toBe("done-0");
+    expect(settled.results[1]).toBeUndefined();
+    expect(settled.results[2]).toBeUndefined();
+    expect([...settled.completedIndexes]).toEqual([0]);
+    expect(settled.failure).toEqual(
+      expect.objectContaining({ message: "Concurrent run aborted: stop" })
+    );
+  });
+
+  it("returns dense results and no failure when every worker completes", async () => {
+    const settled = await runConcurrentSettled(
+      [3, 1, 2],
+      { concurrency: 2 },
+      async (item) => item * 2
+    );
+
+    expect(settled.failure).toBeUndefined();
+    expect(settled.results).toEqual([6, 2, 4]);
+    expect([...settled.completedIndexes].sort((left, right) => left - right)).toEqual([0, 1, 2]);
+  });
+
+  it("records a worker rejection without keeping that item as completed", async () => {
+    const failure = new Error("worker failed");
+    const settled = await runConcurrentSettled([0, 1], { concurrency: 1 }, async (item) => {
+      if (item === 0) throw failure;
+      return item;
+    });
+
+    expect(settled.failure).toBe(failure);
+    expect(settled.results[0]).toBeUndefined();
+    expect(settled.completedIndexes.has(0)).toBe(false);
+    expect(settled.completedIndexes.has(1)).toBe(false);
   });
 });
