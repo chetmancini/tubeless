@@ -252,6 +252,7 @@ function createInteractiveReporter<TResult>(
   let progressDirty = false;
   let disposed = false;
   let ticker: LiveTicker | undefined;
+  let trailingFlush: ReturnType<typeof setTimeout> | undefined;
   let exitListener: (() => void) | undefined;
 
   const frameLines = (): string[] => {
@@ -317,6 +318,10 @@ function createInteractiveReporter<TResult>(
   };
 
   const flushProgress = (): void => {
+    if (trailingFlush !== undefined) {
+      clearTimeout(trailingFlush);
+      trailingFlush = undefined;
+    }
     if (!progressDirty) return;
     progressDirty = false;
     lastProgressRedrawAt = Date.now();
@@ -326,6 +331,10 @@ function createInteractiveReporter<TResult>(
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
+    if (trailingFlush !== undefined) {
+      clearTimeout(trailingFlush);
+      trailingFlush = undefined;
+    }
     ticker?.dispose();
     ticker = undefined;
     if (exitListener) process.off("exit", exitListener);
@@ -393,6 +402,14 @@ function createInteractiveReporter<TResult>(
           redraw();
         } else {
           progressDirty = true;
+          trailingFlush ??= setTimeout(
+            () => {
+              trailingFlush = undefined;
+              if (!disposed) flushProgress();
+            },
+            Math.max(0, refreshIntervalMs - (now - lastProgressRedrawAt))
+          );
+          trailingFlush.unref?.();
         }
         return;
       }
