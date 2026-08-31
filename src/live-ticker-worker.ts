@@ -42,10 +42,15 @@ let frameLineCount = 0;
 let cursorHidden = false;
 let announcedReady = false;
 
+function publishFrame(): void {
+  Atomics.store(handshake, 1, frameLineCount);
+}
+
 function announceReady(): void {
+  publishFrame();
   if (announcedReady || port === null) return;
   announcedReady = true;
-  port.postMessage({ type: "ready" });
+  port.postMessage({ type: "ready", frameLineCount });
 }
 
 function write(chunk: string): void {
@@ -73,16 +78,18 @@ function clearFrame(): void {
 function redraw(): void {
   hideCursor();
   clearFrame();
-  if (lines.length === 0) return;
-  const painted = paintLiveLines(
-    lines,
-    currentSpinner(data.unicode, data.refreshIntervalMs),
-    Date.now(),
-    columns,
-    data.color
-  );
-  write(`${painted.join("\n")}\n`);
-  frameLineCount = painted.length;
+  if (lines.length !== 0) {
+    const painted = paintLiveLines(
+      lines,
+      currentSpinner(data.unicode, data.refreshIntervalMs),
+      Date.now(),
+      columns,
+      data.color
+    );
+    write(`${painted.join("\n")}\n`);
+    frameLineCount = painted.length;
+  }
+  publishFrame();
 }
 
 function done(): void {
@@ -102,6 +109,7 @@ port.on("message", (msg: TickerWorkerMessage) => {
     clearFrame();
     write(msg.text);
     frameLineCount = 0;
+    publishFrame();
     announceReady();
     return;
   }

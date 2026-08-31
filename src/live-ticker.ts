@@ -280,7 +280,7 @@ function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[
 }
 
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
-  const handshakeBuffer = new SharedArrayBuffer(4);
+  const handshakeBuffer = new SharedArrayBuffer(8);
   const handshake = new Int32Array(handshakeBuffer);
   const worker = new Worker(options.workerUrl ?? resolveLiveTickerWorkerUrl(), {
     execArgv: fileWorkerExecArgv(),
@@ -294,34 +294,60 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     },
   });
   let disposed = false;
+  let finalFramePainted = false;
   let inlineFallback: LiveTicker | undefined;
   let lines: readonly string[] = [];
   const pendingLogs: string[] = [];
   let workerLive = false;
+
+  const paintedFrameLineCount = (): number => Atomics.load(handshake, 1);
 
   const send = (message: TickerWorkerMessage): void => {
     if (disposed || inlineFallback) return;
     worker.postMessage(message);
   };
 
-  const failToInline = (): void => {
-    if (disposed || inlineFallback) return;
-    inlineFallback = createInlineTicker(options, lines.length);
-    inlineFallback.setLines([...lines]);
+  const replayThrough = (ticker: LiveTicker): void => {
     for (const text of pendingLogs) {
-      inlineFallback.writeLog(text);
+      ticker.writeLog(text);
     }
     pendingLogs.length = 0;
+    ticker.setLines([...lines]);
+  };
+
+  const paintFinalFrame = (): void => {
+    if (finalFramePainted) return;
+    finalFramePainted = true;
+    try {
+      const ticker = createInlineTicker(options, paintedFrameLineCount());
+      replayThrough(ticker);
+      ticker.dispose();
+    } catch {
+      // Stream may already be closed after dispose.
+    }
+  };
+
+  const failToInline = (): void => {
+    if (inlineFallback || finalFramePainted) return;
+    if (disposed) {
+      if (Atomics.load(handshake, 0) !== 1) paintFinalFrame();
+      return;
+    }
+    inlineFallback = createInlineTicker(options, paintedFrameLineCount());
+    replayThrough(inlineFallback);
   };
   worker.on("error", failToInline);
   worker.on("exit", (code) => {
     if (code !== 0) failToInline();
   });
   worker.unref();
-  worker.on("message", (msg: { type?: string }) => {
+  worker.on("message", (msg: { type?: string; frameLineCount?: number }) => {
     if (msg?.type !== "ready") return;
     workerLive = true;
     pendingLogs.length = 0;
+    if (typeof msg.frameLineCount === "number" && msg.frameLineCount >= 0) {
+      Atomics.store(handshake, 1, msg.frameLineCount);
+    }
   });
 
   return {
@@ -354,12 +380,20 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
         return;
       }
       Atomics.store(handshake, 0, 0);
-      worker.postMessage({
-        columns: resolveColumns(options),
-        lines: [...lines],
-        type: "stop",
-      });
-      Atomics.wait(handshake, 0, 0, 500);
+      try {
+        worker.postMessage({
+          columns: resolveColumns(options),
+          lines: [...lines],
+          type: "stop",
+        });
+      } catch {
+        paintFinalFrame();
+        void worker.terminate();
+        return;
+      }
+      if (Atomics.wait(handshake, 0, 0, 500) === "timed-out") {
+        paintFinalFrame();
+      }
       try {
         writeSync(options.fd, ANSI.showCursor);
       } catch {

@@ -302,6 +302,8 @@ import { parentPort, workerData } from "node:worker_threads";
 parentPort.on("message", (msg) => {
   if (msg.type !== "lines") return;
   writeSync(workerData.fd, "\\u001B[?25lworker-stale-1\\nworker-stale-2\\n");
+  Atomics.store(new Int32Array(workerData.handshakeBuffer), 1, 2);
+  parentPort.postMessage({ type: "ready", frameLineCount: 2 });
   throw new Error("mid-run crash");
 });
 `
@@ -514,6 +516,142 @@ parentPort.on("message", (msg) => {
       ticker.dispose();
       rendered = readFileSync(path, "utf8");
       expect(rendered.match(/session-log/g)).toHaveLength(1);
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
+    }
+  });
+
+  it("does not cursor-up when the worker never painted", async () => {
+    const path = join(tmpdir(), `tubeless-ticker-no-paint-${process.pid}-${Date.now()}.log`);
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-no-paint-worker-${process.pid}-${Date.now()}.js`
+    );
+    writeFileSync(workerPath, 'throw new Error("boot failure");\n');
+    const fd = openSync(path, "w");
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          writeSync(fd, chunk);
+        },
+      });
+      ticker.setLines([`${SPINNER_TOKEN} load`, `${SPINNER_TOKEN} more`]);
+
+      const paintedDeadline = Date.now() + 2_000;
+      let rendered = "";
+      while (Date.now() < paintedDeadline) {
+        rendered = readFileSync(path, "utf8");
+        if (rendered.includes("load") && /[-\\|\/] /.test(rendered)) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      ticker.dispose();
+      expect(rendered).not.toMatch(/\u001B\[\d+F/);
+      const plain = rendered.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
+      expect(plain).toMatch(/[-\\|\/] load/);
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
+    }
+  });
+
+  it("restores the latest frame after replaying boot-failure logs", async () => {
+    const path = join(tmpdir(), `tubeless-ticker-log-order-${process.pid}-${Date.now()}.log`);
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-log-order-worker-${process.pid}-${Date.now()}.js`
+    );
+    writeFileSync(workerPath, 'throw new Error("boot failure");\n');
+    const fd = openSync(path, "w");
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          writeSync(fd, chunk);
+        },
+      });
+      ticker.writeLog("step done\n");
+      ticker.setLines(["final status"]);
+
+      const paintedDeadline = Date.now() + 2_000;
+      let rendered = "";
+      while (Date.now() < paintedDeadline) {
+        rendered = readFileSync(path, "utf8");
+        if (rendered.includes("step done") && rendered.includes("final status")) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      ticker.dispose();
+      rendered = readFileSync(path, "utf8");
+      expect(rendered).toContain("step done");
+      expect(rendered).toContain("final status");
+      expect(rendered.lastIndexOf("final status")).toBeGreaterThan(rendered.lastIndexOf("step done"));
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
+    }
+  });
+
+  it("paints the final frame when dispose races a crashed worker", async () => {
+    const path = join(tmpdir(), `tubeless-ticker-dispose-final-${process.pid}-${Date.now()}.log`);
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-dispose-final-worker-${process.pid}-${Date.now()}.mjs`
+    );
+    writeFileSync(
+      workerPath,
+      `
+import { writeSync } from "node:fs";
+import { parentPort, workerData } from "node:worker_threads";
+
+parentPort.on("message", (msg) => {
+  if (msg.type !== "lines") return;
+  writeSync(workerData.fd, "\\u001B[?25lworker-stale-1\\nworker-stale-2\\n");
+  Atomics.store(new Int32Array(workerData.handshakeBuffer), 1, 2);
+  parentPort.postMessage({ type: "ready", frameLineCount: 2 });
+  throw new Error("mid-run crash");
+});
+`
+    );
+    const fd = openSync(path, "w");
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          writeSync(fd, chunk);
+        },
+      });
+      ticker.setLines(["dispose-final-1", "dispose-final-2"]);
+      ticker.dispose();
+      const rendered = readFileSync(path, "utf8");
+      expect(rendered).toContain("worker-stale-1");
+      expect(rendered).toContain("dispose-final-1");
+      expect(rendered).toContain("dispose-final-2");
+      expect(rendered).toMatch(/worker-stale-2\n\u001B\[2F\u001B\[J/);
     } finally {
       closeSync(fd);
       unlinkSync(path);
