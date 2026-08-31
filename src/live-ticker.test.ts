@@ -1,5 +1,16 @@
+import { spawnSync } from "node:child_process";
+import { closeSync, existsSync, openSync, readFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { elapsedToken, paintLiveLines, shimmerToken, SPINNER_TOKEN } from "./live-ticker";
+import {
+  createLiveTicker,
+  elapsedToken,
+  paintLiveLines,
+  shimmerToken,
+  SPINNER_TOKEN,
+} from "./live-ticker";
 
 const RESET = "\u001B[0m";
 const SHIMMER_BRIGHT = "\u001B[0;1;36m";
@@ -59,5 +70,134 @@ describe("paintLiveLines", () => {
     expect(painted?.endsWith("\u001B[0m…")).toBe(true);
     expect(painted).not.toContain("\u0004");
     expect(stripAnsi(painted ?? "").endsWith("…")).toBe(true);
+  });
+});
+
+describe("live ticker worker", () => {
+  it("loads a compiled worker file instead of eval source", () => {
+    const compiled = fileURLToPath(new URL("../dist/live-ticker-worker.js", import.meta.url));
+    const source = readFileSync(new URL("./live-ticker.ts", import.meta.url), "utf8");
+
+    expect(existsSync(compiled)).toBe(true);
+    expect(source).not.toContain("WORKER_SOURCE");
+    expect(source).not.toContain("eval: true");
+  });
+
+  it("paints, logs, and stops through the compiled worker", () => {
+    const path = join(tmpdir(), `tubeless-ticker-${process.pid}-${Date.now()}.log`);
+    const fd = openSync(path, "w");
+    const inlineWrites: string[] = [];
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        write: (chunk) => {
+          inlineWrites.push(chunk);
+        },
+      });
+      ticker.setLines([`${SPINNER_TOKEN} ${shimmerToken("load")}`]);
+
+      const paintedDeadline = Date.now() + 1_000;
+      let rendered = "";
+      while (Date.now() < paintedDeadline) {
+        rendered = readFileSync(path, "utf8");
+        if (
+          rendered.includes("load") &&
+          /[-\\|\/] /.test(rendered) &&
+          rendered.includes("\u001B[0;1;36m")
+        ) {
+          break;
+        }
+      }
+
+      ticker.writeLog("logged from parent\n");
+      const loggedDeadline = Date.now() + 500;
+      while (Date.now() < loggedDeadline) {
+        rendered = readFileSync(path, "utf8");
+        if (rendered.includes("logged from parent")) break;
+      }
+
+      const disposeStarted = Date.now();
+      ticker.dispose();
+      expect(Date.now() - disposeStarted).toBeLessThan(200);
+      rendered = readFileSync(path, "utf8");
+      const plain = rendered.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
+
+      expect(inlineWrites).toEqual([]);
+      expect(rendered).toContain("\u001B[?25l");
+      expect(rendered).toContain("\u001B[?25h");
+      expect(plain).toMatch(/[-\\|\/] load/);
+      expect(rendered).toContain("\u001B[0;1;36m");
+      expect(rendered).toContain("logged from parent");
+      expect(rendered).not.toContain("\u0004");
+      expect(rendered).not.toContain("\u0005");
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+    }
+  });
+
+  it("starts the file worker when the parent inherited --input-type", () => {
+    const path = join(tmpdir(), `tubeless-input-type-${process.pid}-${Date.now()}.log`);
+    const tickerUrl = pathToFileURL(
+      fileURLToPath(new URL("../dist/live-ticker.js", import.meta.url))
+    ).href;
+    const child = spawnSync("node", ["--input-type=commonjs"], {
+      encoding: "utf8",
+      env: { ...process.env, NODE_OPTIONS: "" },
+      input: `
+process.on("uncaughtException", (err) => {
+  console.error(err);
+  process.exit(1);
+});
+const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
+(async () => {
+  const { createLiveTicker, SPINNER_TOKEN, shimmerToken } = await import(${JSON.stringify(tickerUrl)});
+  const fd = openSync(${JSON.stringify(path)}, "w");
+  const inlineWrites = [];
+  try {
+    const ticker = createLiveTicker({
+      color: true,
+      columns: 80,
+      fd,
+      refreshIntervalMs: 20,
+      unicode: false,
+      write: (chunk) => inlineWrites.push(chunk),
+    });
+    ticker.setLines([\`\${SPINNER_TOKEN} \${shimmerToken("load")}\`]);
+    const deadline = Date.now() + 1000;
+    let rendered = "";
+    while (Date.now() < deadline) {
+      rendered = readFileSync(${JSON.stringify(path)}, "utf8");
+      if (rendered.includes("load")) break;
+    }
+    ticker.dispose();
+    rendered = readFileSync(${JSON.stringify(path)}, "utf8");
+    if (inlineWrites.length !== 0) {
+      throw new Error("fell back to the inline ticker");
+    }
+    if (!rendered.includes("load")) {
+      throw new Error("worker did not paint");
+    }
+    process.stdout.write(rendered);
+  } finally {
+    closeSync(fd);
+    unlinkSync(${JSON.stringify(path)});
+  }
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
+`,
+      timeout: 5_000,
+    });
+
+    expect(child.status, child.stderr).toBe(0);
+    expect(child.stderr).not.toContain("ERR_INPUT_TYPE_NOT_ALLOWED");
+    const plain = child.stdout.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
+    expect(plain).toMatch(/[-\\|\/] load/);
   });
 });
