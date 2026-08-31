@@ -378,6 +378,29 @@ describe("pipeline run store projections", () => {
     });
   });
 
+  it("keeps the later-started definition when an earlier run is inserted with higher ids", () => {
+    const snapshot = projectPipelineRunStore([
+      event(1, "pipeline.started", {
+        attributes: { target_ids: "[]" },
+        runId: "later-short",
+        timestampMs: 200,
+      }),
+      event(2, "step.planned", { runId: "later-short", stepId: "new-step", timestampMs: 201 }),
+      event(3, "pipeline.started", {
+        attributes: { target_ids: '["old-target"]' },
+        runId: "earlier-long",
+        timestampMs: 100,
+      }),
+      event(4, "step.planned", { runId: "earlier-long", stepId: "old-step", timestampMs: 250 }),
+    ]);
+
+    expect(snapshot.definitions[0]).toMatchObject({
+      runCount: 2,
+      steps: [{ id: "new-step" }],
+      targetIds: [],
+    });
+  });
+
   it("retains the last planned definition when a newer run fails before planning", () => {
     const snapshot = projectPipelineRunStore(failedBeforePlanningFixture);
 

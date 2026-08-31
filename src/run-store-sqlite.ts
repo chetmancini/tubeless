@@ -318,7 +318,11 @@ export interface OpenSqlitePipelineRunStoreOptions {
 
 /**
  * Open the optional local SQLite trace store used by `tubeless run --store`,
- * `tubeless history`, and `tubeless ui`. The main executor never imports this module.
+ * `tubeless history`, and `tubeless ui`. The main executor never imports this
+ * module. `export()` buffers up to 64 events and commits them in one
+ * transaction, plus on `flush()`, same-instance `listEvents`/`clearHistory`,
+ * and `close()`. Other connections cannot see the unflushed tail; a crash can
+ * lose it. Finished `tubeless run --store` invocations flush at completion.
  */
 export async function openSqlitePipelineRunStore(
   filename: string,
