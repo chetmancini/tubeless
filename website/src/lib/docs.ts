@@ -50,15 +50,15 @@ function rewriteDocLinks(markdown: string): string {
     if (path === "./api-report.json" || path === "api-report.json") {
       return `](${href("api-report.json")}${suffix})`;
     }
+    if (path.startsWith("../")) {
+      return `](${GITHUB_BLOB}/${path.slice(3)}${suffix})`;
+    }
     if (path.endsWith(".md")) {
       const slug = path.replace(/^\.\//, "").replace(/\.md$/, "");
-      if (slug === "README" || path.endsWith("../README.md")) {
+      if (slug === "README") {
         return `](${GITHUB_BLOB}/README.md${suffix})`;
       }
       return `](${href(`docs/${slug}`)}${suffix})`;
-    }
-    if (path.startsWith("../")) {
-      return `](${GITHUB_BLOB}/${path.slice(3)}${suffix})`;
     }
     return full;
   });
