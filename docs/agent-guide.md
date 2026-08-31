@@ -153,8 +153,13 @@ or shared helpers in this repository.
   default. Use `definePipelineStudio` for a checked-in command catalog, and
   register only explicit `definePipelineCommand` modules; never make execution
   require the studio server or infer executable modules from observed history.
-  Cancel a live top-level launch from the running detail pane; that abort is
-  process-local, leaves sibling launches running, and is not crash-resume.
+  Every studio request, including reads, must send a `Host` that matches the
+  bound authority, or, on a wildcard bind, `localhost` or a literal IP on the
+  same port. Browser plan, launch, cancel, and clear-history also send
+  `x-tubeless-studio-*` headers; those are same-origin guards, not
+  authentication. Cancel a live top-level launch from the running detail pane;
+  that abort is process-local, leaves sibling launches running, and is not
+  crash-resume.
 
 ## Failure and safety rules
 
