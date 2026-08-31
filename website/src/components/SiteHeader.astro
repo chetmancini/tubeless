@@ -1,5 +1,6 @@
 ---
 import Wordmark from "./Wordmark.astro";
+import { PACKAGE } from "../lib/package";
 import { GITHUB_REPO, href } from "../lib/paths";
 
 const here = Astro.url.pathname.replace(/\/+$/, "") || "/";
@@ -12,7 +13,10 @@ function current(path: string): boolean {
 ---
 
 <header class="wrap masthead">
-  <Wordmark />
+  <div class="brand">
+    <Wordmark />
+    <span class="pkg-ver">v{PACKAGE.version}</span>
+  </div>
   <nav class="nav" aria-label="Primary">
     <a href={href("start")} aria-current={current("start") ? "page" : undefined}>Start</a>
     <a href={href("docs")} aria-current={current("docs") ? "page" : undefined}>Docs</a>

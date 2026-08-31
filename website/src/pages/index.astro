@@ -4,7 +4,8 @@ import LiveTerminal from "../components/LiveTerminal.astro";
 import MermaidGraph from "../components/MermaidGraph.astro";
 import Terminal from "../components/Terminal.astro";
 import { planTape } from "../data/tapes";
-import { href } from "../lib/paths";
+import { PACKAGE } from "../lib/package";
+import { githubBlob, href } from "../lib/paths";
 ---
 
 <Base
@@ -16,10 +17,40 @@ import { href } from "../lib/paths";
       <div>
         <p class="kicker">In-process typed DAGs</p>
         <h1>Tubeless</h1>
+        <dl class="pkg" aria-label="Package">
+          <div>
+            <dt>Version</dt>
+            <dd>
+              {PACKAGE.npm ? (
+                <a href={PACKAGE.npm} rel="noreferrer">{PACKAGE.version}</a>
+              ) : (
+                PACKAGE.version
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>License</dt>
+            <dd>
+              <a href={githubBlob("LICENSE")} rel="noreferrer">{PACKAGE.license}</a>
+            </dd>
+          </div>
+          <div>
+            <dt>Module</dt>
+            <dd>{PACKAGE.module}</dd>
+          </div>
+          <div>
+            <dt>Node</dt>
+            <dd>{PACKAGE.node}</dd>
+          </div>
+          <div>
+            <dt>Deps</dt>
+            <dd>{PACKAGE.runtimeDeps}</dd>
+          </div>
+        </dl>
         <p class="lede">
           Define and run typed data pipelines and multi-step workflow graphs.
         </p>
-        <div class="install"><span class="prompt">$</span> npm install tubeless</div>
+        <div class="install"><span class="prompt">$</span> npm install {PACKAGE.name}</div>
         <div class="actions">
           <a class="btn" href={href("start")}>Start a pipeline</a>
           <a class="btn ghost" href={href("agents")}>Agents</a>
