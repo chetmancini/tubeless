@@ -14,6 +14,8 @@ inventory.
 | Deliberately omit unnecessary work            | [`conditional-step.ts`](../examples/conditional-step.ts)                 | `step.skippable`, valued skip, skip-aware output typing                               |
 | Preserve independent work after failure       | [`best-effort.ts`](../examples/best-effort.ts)                           | `continueOnError`, structured `run` result                                            |
 | Compose one reusable workflow                 | [`child-pipeline.ts`](../examples/child-pipeline.ts)                     | `fromPipeline`, `mapOptions`, `mapResult`                                             |
+| Mixed local and remote steps                  | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `fromRemote`, `RemoteStepAdapter`, inverse dry-run                                    |
+| Host a pipeline in a durable engine           | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `runOrThrow`, pass `runId` / `parentRunId`                                            |
 | Fan out over runtime items                    | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline`, stable keys, concurrency, progress                                 |
 | Show determinate progress                     | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `reportProgress`, mapped-child progress                                               |
 | Watch the live TTY reporter                   | [`live-tui.ts`](../examples/live-tui.ts)                                 | named steps, nested `details`; persist with `--store`                                 |
@@ -37,6 +39,12 @@ inventory.
    helper function when it does not.
 5. Use `forEachPipeline` when every item needs child-pipeline lifecycle and
    reporting. Use `runConcurrent` for lightweight worker functions.
+
+Use fromRemote when a unit of work lives on another engine but the parent
+DAG still runs in this process. Omit dryRun only when the adapter and the
+remote worker are side-effect free under context.dryRun. Embed the whole
+pipeline in Temporal/Lambda/a worker when the graph must outlive the process.
+
 6. Use `definePipelineCommand` for pipeline scripts; use `defineCommand` only
    when the script is not centered on a pipeline. Preview selection with
    `command.plan()` or `tubeless plan`; do not simulate planning with `--plan`.

@@ -278,10 +278,12 @@ function parseRemote(
     const parsed: unknown = JSON.parse(value);
     if (parsed === null || Array.isArray(parsed) || !(parsed instanceof Object)) return undefined;
     if (!("engine" in parsed)) return undefined;
+    // SAFETY: JSON.parse returned a plain object and we confirmed an engine key exists.
     const engine = parsed.engine as PipelineTraceAttributeValue | undefined;
     if (!isStringValue(engine) || engine.length === 0) return undefined;
     const remote: StoredRemote = { engine: engine.slice(0, 4_096) };
     if ("target" in parsed) {
+      // SAFETY: target is optional metadata on the same parsed remote object.
       const target = parsed.target as PipelineTraceAttributeValue | undefined;
       if (isStringValue(target) && target.length > 0) remote.target = target.slice(0, 4_096);
     }

@@ -1005,8 +1005,8 @@ Create `docs/remote-step-composition.md` in the same role as `docs/child-pipelin
 
 `docs/recipes.md` — add two rows to the intent table after the child-pipeline row (L16):
 
-| Mixed local and remote steps | [`remote-steps.ts`](../examples/remote-steps.ts) | `fromRemote`, `RemoteStepAdapter`, inverse dry-run |
-| Host a pipeline in a durable engine | [`remote-steps.ts`](../examples/remote-steps.ts) | `runOrThrow`, pass `runId` / `parentRunId` |
+| Mixed local and remote steps | [`remote-steps.ts`](../../../examples/remote-steps.ts) | `fromRemote`, `RemoteStepAdapter`, inverse dry-run |
+| Host a pipeline in a durable engine | [`remote-steps.ts`](../../../examples/remote-steps.ts) | `runOrThrow`, pass `runId` / `parentRunId` |
 
 Add a selection rule after rule 5 (forEachPipeline, L38-39):
 
@@ -1042,7 +1042,7 @@ Use `step.fromRemote` when one parent step's work lives on another engine.
 The parent plan stays local and opaque; `remote.engine` and optional
 `remote.target` are presentation only. Dry-run remains a side-effect gate:
 omitting `dryRun` still calls the adapter. See
-[remote-step composition](./remote-step-composition.md).
+[remote-step composition](../../remote-step-composition.md).
 ```
 
 `docs/README.md` Deeper reference table — add a row for `docs/remote-step-composition.md` next to child-pipeline composition (L26).

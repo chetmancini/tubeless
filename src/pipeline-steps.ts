@@ -386,7 +386,6 @@ interface SkippableFromPipelineConstructor<
   ): Step<TId, TOut | undefined, TOptions, TInputOptions>;
 }
 
-
 type RemoteStepDefinitionBase<
   TParentOptions extends object,
   TDeps extends readonly AnyStep<TParentOptions>[],
@@ -408,10 +407,7 @@ type RemoteStepDefinitionBase<
   dryRun?: StepDryRunPolicy<TParentOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>>;
 };
 
-interface FromRemoteConstructor<
-  TOptions extends object,
-  TInputOptions extends object = TOptions,
-> {
+interface FromRemoteConstructor<TOptions extends object, TInputOptions extends object = TOptions> {
   <
     TId extends string,
     TSchema extends StandardSchemaV1,
@@ -595,7 +591,6 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
     return buildStep(id, definition);
   }) as StepFactory<TOptions, TInputOptions>["fromPipeline"];
 
-
   // SAFETY: the closure's parameter and return shapes match the
   // `fromRemote` constructor signature it is assigned to.
   const fromRemote = ((
@@ -639,6 +634,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
       const skip = config.skip;
       return buildStep(id, {
         ...definition,
+        // SAFETY: skippable fromRemote configs share the same dependency input map as the non-skippable overload.
         skip: (inputs, context) => skip(inputs as never, context),
       });
     }

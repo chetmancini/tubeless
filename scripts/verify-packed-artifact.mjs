@@ -176,6 +176,9 @@ const runners = {
   "child-pipeline.ts": async (mod) => {
     defined(await mod.runChildPipelineExample(), "child-pipeline.ts");
   },
+  "remote-steps.ts": async (mod) => {
+    defined(await mod.runRemoteStepsExample(), "remote-steps.ts");
+  },
   "fan-out-progress.ts": async (mod) => {
     defined(
       await mod.FanOutPipeline.runOrThrow({
@@ -269,6 +272,7 @@ try {
     "docs/api-reference.md",
     "docs/api-report.json",
     "docs/child-pipeline-composition.md",
+    "docs/remote-step-composition.md",
     "docs/cli.md",
     "docs/concepts.md",
     "docs/getting-started.md",
@@ -278,7 +282,9 @@ try {
     "examples/typed-import.ts",
     "examples/catalog/tubeless.studio.ts",
     "examples/catalog/pipelines/import.ts",
+    "examples/catalog/pipelines/enrich.ts",
     "examples/catalog/scripts/import.ts",
+    "examples/catalog/scripts/enrich.ts",
   ]) {
     if (!existsSync(join(installedPackage, relativePath))) {
       throw new Error(`Packed tubeless artifact is missing ${relativePath}`);

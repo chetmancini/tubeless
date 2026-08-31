@@ -38,6 +38,15 @@ or shared helpers in this repository.
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
   Parent plans keep these steps opaque but expose `nestedPipeline` with the child
   pipeline id, declared step ids, and single/fan-out mode for presentation.
+- Use `fromRemote` for a unit of work that lives on another engine. Required
+  fields are `adapter`, `mapInput`, and `outputSchema`. Omitting `dryRun`
+  contacts the engine during a pipeline dry run; the adapter and remote
+  worker must honor `context.dryRun` and authors prove the flag crossed the
+  boundary in `mapInput`. Host-embed with `pipeline.runOrThrow` and pass
+  `runId` / `parentRunId` when the graph must outlive the process. Parent
+  plans expose `remote` with `engine` and optional `target`. Adapters may
+  forward remote lines through `context.log` and must rethrow remote
+  failures as `Error` with `cause` / `code`.
 - Use `runConcurrent` for bounded lightweight functions that do not need child
   lifecycle events.
 - Use `definePipelineCommand` for scripts centered on a pipeline. Do not parse

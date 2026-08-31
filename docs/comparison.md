@@ -46,6 +46,11 @@ Those last four can still _call_ a tubeless pipeline. A queue worker or a
 durable step can run `pipeline.runOrThrow(...)` when the hard part inside the
 job is a gated, typed graph.
 
+| Need                                                                  | Composition                                                                                                                              | Who drives the DAG   | Who survives process death                        |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------- |
+| The graph must outlive the process, sleep for days, or wait on humans | Host embedding: a Temporal workflow, Lambda handler, or queue worker calls `pipeline.runOrThrow(...)` and passes `runId` / `parentRunId` | The engine           | The engine                                        |
+| Some steps run elsewhere; the rest stay local                         | `fromRemote`: one opaque parent step per remote unit of work                                                                             | The tubeless process | Only the remote job, not the parent `PipelineRun` |
+
 ## When tubeless is the wrong default
 
 - The pipeline must outlive the process. Use a durable engine as the

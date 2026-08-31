@@ -94,10 +94,13 @@ function serializeNestedPipeline(nested: PipelinePlanStep["nestedPipeline"]): st
 
 function serializeRemote(remote: PipelinePlanStep["remote"]): string | undefined {
   if (!remote) return undefined;
-  return JSON.stringify({
-    engine: boundTraceString(remote.engine),
-    ...(remote.target ? { target: boundTraceString(remote.target) } : {}),
-  });
+  if (remote.target) {
+    return JSON.stringify({
+      engine: boundTraceString(remote.engine),
+      target: boundTraceString(remote.target),
+    });
+  }
+  return JSON.stringify({ engine: boundTraceString(remote.engine) });
 }
 
 function toTraceError(error: PipelineError | undefined): PipelineTraceError | undefined {
