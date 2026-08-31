@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { chunk, runBatched, runConcurrent } from "./batch";
+import { chunk, runBatched, runConcurrent } from "./batch.js";
 
 describe("chunk", () => {
   it("splits an array into fixed-size groups", () => {

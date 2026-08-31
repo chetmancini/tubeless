@@ -114,7 +114,7 @@ const remoteAdapter: RemoteStepAdapter<ImportOptions, { lines: readonly string[]
   {
     engine: "test",
     target: "enrich-v2",
-    invoke: async (payload) => ({ ok: payload.lines.length >= 0 }),
+    invoke: async () => ({ ok: true as const }),
   };
 const remoteEnrich = remoteStep.fromRemote("remote-enrich", {
   adapter: remoteAdapter,

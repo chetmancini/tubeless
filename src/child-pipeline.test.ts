@@ -1,15 +1,16 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { PipelineChildError } from "./child-execution";
-import { createPipelineReporter, type ReporterOutput } from "./interactive-reporter";
+import { PipelineChildError } from "./child-execution.js";
+import { createPipelineReporter, type ReporterOutput } from "./interactive-reporter.js";
 import {
   createSteps,
   defaultPipelineContext,
   definePipeline,
   PipelineExecutionError,
   type PipelineExecutionContext,
+  type PipelineStepProgress,
   type Step,
-} from "./pipeline";
-import type { PipelineTraceEvent } from "./tracing";
+} from "./pipeline.js";
+import type { PipelineTraceEvent } from "./tracing.js";
 
 function captureOutput(): ReporterOutput & { chunks: string[] } {
   const chunks: string[] = [];
@@ -80,7 +81,7 @@ describe("child-pipeline composition", () => {
         pipelineId: "worker",
         stepIds: ["process"],
       });
-      const progress: Array<{ completed: number; message?: string; total?: number }> = [];
+      const progress: PipelineStepProgress[] = [];
 
       const result = await parent.run({ concurrency: 2 }, undefined, {
         cwd: "/repo",
@@ -368,7 +369,7 @@ describe("child-pipeline composition", () => {
         items: () => [{ id: "only" }],
         key: (item) => item.id,
         // Select only process so setup is filtered out at the child plan.
-        mapOptions: (item) => ({ itemId: item.id, stepIds: ["process"] }),
+        mapOptions: (item) => ({ itemId: item.id, stepIds: ["process"] as const }),
       });
       const parent = definePipeline({
         id: "filtered-parent",
@@ -376,7 +377,7 @@ describe("child-pipeline composition", () => {
         finalize: (outputs) => outputs.children,
       });
 
-      const progress: Array<{ completed: number; total?: number; message?: string }> = [];
+      const progress: PipelineStepProgress[] = [];
       let sawFullBeforeProcess = false;
       const result = await parent.run({}, undefined, {
         cwd: "/tmp",
@@ -721,7 +722,7 @@ describe("child-pipeline composition", () => {
         },
       });
       const lifecycle: string[] = [];
-      const progress: Array<{ completed: number; message?: string; total?: number }> = [];
+      const progress: PipelineStepProgress[] = [];
       const result = await parent.run({ source: "rows.json" }, undefined, {
         cwd: "/repo",
         hooks: {
@@ -1293,7 +1294,7 @@ describe("child-pipeline composition", () => {
       const result = await parent.run({}, undefined, {
         ...defaultPipelineContext(),
         runId: "parent-run",
-        tracing: { exporter: { export: (event) => events.push(event) } },
+        tracing: { exporter: { export: (event) => void events.push(event) } },
       });
 
       expect(result.status).not.toBe("completed");
@@ -1328,7 +1329,7 @@ describe("child-pipeline composition", () => {
       const parentStep = createSteps();
       const stage = parentStep.fromPipeline("targeted-stage", {
         pipeline: child,
-        mapOptions: () => ({ targets: ["publish"] }),
+        mapOptions: () => ({ targets: ["publish"] as const }),
       });
       const parent = definePipeline({
         id: "targeted-parent",

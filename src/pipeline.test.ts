@@ -7,9 +7,10 @@ import {
   PipelineExecutionError,
   requireOutputs,
   type AnyStep,
+  type PipelineExecutionContext,
   type StandardSchemaV1,
   type Step,
-} from "./pipeline";
+} from "./pipeline.js";
 
 interface TestOptions {
   failFinalize?: boolean;
@@ -102,22 +103,22 @@ describe("definePipeline", () => {
 
   it("exports one completed token for run, step, and progress-detail statuses", () => {
     expectTypeOf<
-      import("./pipeline").PipelineStepCompleteReport["status"]
+      import("./pipeline.js").PipelineStepCompleteReport["status"]
     >().toEqualTypeOf<"completed">();
-    expectTypeOf<import("./pipeline").PipelineRunStatus>().toEqualTypeOf<
+    expectTypeOf<import("./pipeline.js").PipelineRunStatus>().toEqualTypeOf<
       "cancelled" | "completed" | "failed"
     >();
-    expectTypeOf<import("./pipeline").PipelineStepReportStatus>().toEqualTypeOf<
+    expectTypeOf<import("./pipeline.js").PipelineStepReportStatus>().toEqualTypeOf<
       "cancelled" | "completed" | "failed" | "skipped"
     >();
-    expectTypeOf<import("./pipeline").PipelineStepLifecycleStatus>().toEqualTypeOf<
-      import("./pipeline").PipelineStepStatus["status"]
+    expectTypeOf<import("./pipeline.js").PipelineStepLifecycleStatus>().toEqualTypeOf<
+      import("./pipeline.js").PipelineStepStatus["status"]
     >();
-    expectTypeOf<import("./pipeline").PipelineStepProgressDetailStatus>().toEqualTypeOf<
+    expectTypeOf<import("./pipeline.js").PipelineStepProgressDetailStatus>().toEqualTypeOf<
       "completed" | "failed" | "pending" | "running" | "skipped"
     >();
-    expectTypeOf<import("./pipeline").MappedChildProgressDetail>().toEqualTypeOf<
-      import("./pipeline").PipelineStepProgressDetail
+    expectTypeOf<import("./pipeline.js").MappedChildProgressDetail>().toEqualTypeOf<
+      import("./pipeline.js").PipelineStepProgressDetail
     >();
   });
 
@@ -247,7 +248,9 @@ describe("definePipeline", () => {
 
   it("applies controls independently when an options schema returns its input", async () => {
     const optionsSchema = standardSchema<{ label: string }, { label: string }>((value) => ({
-      value,
+      // SAFETY: identity schema; validate receives unknown and this test only
+      // needs the value echoed as the declared options object.
+      value: value as { label: string },
     }));
     const step = createSteps(optionsSchema);
     const fail = step("fail", {
@@ -283,7 +286,8 @@ describe("definePipeline", () => {
         return this.#value;
       }
     }
-    const frozen = Object.freeze(new FrozenOptions());
+    const frozen = new FrozenOptions();
+    Object.freeze(frozen);
     const optionsSchema = standardSchema<object, FrozenOptions>(() => ({ value: frozen }));
     const step = createSteps(optionsSchema);
     const read = step("read", {
@@ -555,7 +559,7 @@ describe("definePipeline", () => {
   });
 
   it("fails before execution when requested step ids are unknown", async () => {
-    const result = await makePipeline("test").run({}, { stepIds: ["missing"] });
+    const result = await makePipeline("test").run({}, { stepIds: ["missing" as never] });
     expect(result.status).not.toBe("completed");
     expect(result.steps).toEqual([]);
     expect(result.errors[0]?.message).toContain("requested unknown step ids: missing");
@@ -754,7 +758,7 @@ describe("definePipeline", () => {
     expect(pipeline.plan({ targets: ["build", "build"] }).errors[0]?.message).toContain(
       "duplicate targets: build"
     );
-    expect(pipeline.plan({ targets: ["missing"] }).errors[0]?.message).toContain(
+    expect(pipeline.plan({ targets: ["missing" as never] }).errors[0]?.message).toContain(
       "unknown targets: missing"
     );
     expect(pipeline.plan({ stepIds: ["build"], targets: ["write"] }).errors[0]?.message).toContain(
@@ -814,6 +818,7 @@ describe("definePipeline", () => {
       definePipeline({
         id: "invalid-target-declarations",
         steps: [included],
+        // @ts-expect-error Duplicate and foreign targets are rejected at definition time.
         targets: [included, included, foreign],
         finalize: () => undefined,
       })
@@ -859,6 +864,7 @@ describe("definePipeline", () => {
       definePipeline({
         id: "foreign-finalizer-output",
         steps: [included],
+        // @ts-expect-error Required finalizer steps must be in the pipeline.
         finalize: requireOutputs([foreign], ({ foreign }) => foreign),
       })
     ).toThrow("requires finalizer output from step(s) not included in its steps list: foreign");
@@ -1550,10 +1556,14 @@ describe("definePipeline", () => {
         stepId: "failing",
       },
     ]);
-    expect(result.steps[0]?.error).toMatchObject({
-      code: "TUBELESS_STEP_FAILED",
-      sourceCode: "REQUEST_REJECTED",
-    });
+    const failed = result.steps[0];
+    expect(failed?.status).toBe("failed");
+    if (failed?.status === "failed") {
+      expect(failed.error).toMatchObject({
+        code: "TUBELESS_STEP_FAILED",
+        sourceCode: "REQUEST_REJECTED",
+      });
+    }
     expect(result.steps[0]).toMatchObject({ status: "failed", error: result.errors[0] });
   });
 
@@ -2166,7 +2176,9 @@ describe("definePipeline", () => {
       steps: [build, write],
       finalize: (outputs) => outputs.write,
     });
-    dependsOn.push(extra);
+    // SAFETY: mutate the authoring array after define to prove the compiled
+    // graph snapshotted original membership; extra is a different step id.
+    (dependsOn as AnyStep[]).push(extra);
 
     const plan = pipeline.plan();
     expect(plan.ok).toBe(true);
@@ -2232,7 +2244,7 @@ describe("definePipeline", () => {
         return deps;
       }
 
-      skip() {
+      skip(_inputs: Record<string, unknown>, _context: PipelineExecutionContext<object>): false {
         return false;
       }
 
@@ -2495,7 +2507,7 @@ describe("definePipeline", () => {
     const step = createSteps();
     let ran = false;
     const gate = step.skippable("gate", {
-      skip: async (_inputs, context) => {
+      skip: async (_inputs, context): Promise<false> => {
         await context.sleep(100, context.signal);
         return false;
       },
@@ -2643,13 +2655,13 @@ describe("definePipeline", () => {
     const step = createSteps();
 
     const plain = step("plain", { run: () => "ok" as const });
-    expectTypeOf(plain).toEqualTypeOf<Step<"plain", "ok", object>>();
+    expectTypeOf(plain).toEqualTypeOf<Step<"plain", "ok", {}>>();
 
     const withSkip = step.skippable("with-skip", {
       skip: () => "disabled",
       run: () => "ok" as const,
     });
-    expectTypeOf(withSkip).toEqualTypeOf<Step<"with-skip", "ok" | undefined, object>>();
+    expectTypeOf(withSkip).toEqualTypeOf<Step<"with-skip", "ok" | undefined, {}>>();
 
     const dependent = step("dependent", {
       dependsOn: [withSkip],
@@ -2658,7 +2670,7 @@ describe("definePipeline", () => {
         return inputs["with-skip"] ?? "fallback";
       },
     });
-    expectTypeOf(dependent).toEqualTypeOf<Step<"dependent", "ok" | "fallback", object>>();
+    expectTypeOf(dependent).toEqualTypeOf<Step<"dependent", "ok" | "fallback", {}>>();
 
     // Config-gated: `skip: predicate | undefined` stays explicit and widens.
     const enableSkip = false as boolean;
@@ -2666,14 +2678,14 @@ describe("definePipeline", () => {
       skip: enableSkip ? () => "disabled" : undefined,
       run: () => "ok" as const,
     });
-    expectTypeOf(gated).toEqualTypeOf<Step<"gated-skip", "ok" | undefined, object>>();
+    expectTypeOf(gated).toEqualTypeOf<Step<"gated-skip", "ok" | undefined, {}>>();
 
     const explicitUndefined = step.skippable("explicit-undefined-skip", {
       skip: undefined,
       run: () => "ok" as const,
     });
     expectTypeOf(explicitUndefined).toEqualTypeOf<
-      Step<"explicit-undefined-skip", "ok" | undefined, object>
+      Step<"explicit-undefined-skip", "ok" | undefined, {}>
     >();
 
     step("skip-requires-skippable", {

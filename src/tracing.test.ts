@@ -59,7 +59,7 @@ describe("pipeline tracing", () => {
       parentRunId: "parent-1",
       runId: "run-1",
       tracing: {
-        exporter: { export: (event) => events.push(event), flush },
+        exporter: { export: (event) => void events.push(event), flush },
         itemKey: "chapter-3",
       },
     });
@@ -194,7 +194,7 @@ describe("pipeline tracing", () => {
         ...defaultPipelineContext(),
         runId: "parent-run",
         tracing: {
-          exporter: { export: (event) => events.push(event) },
+          exporter: { export: (event) => void events.push(event) },
         },
       })
     ).resolves.toMatchObject({ status: "completed" });
@@ -244,7 +244,7 @@ describe("pipeline tracing", () => {
       ...defaultPipelineContext(),
       runId: "remote-run",
       tracing: {
-        exporter: { export: (event) => events.push(event) },
+        exporter: { export: (event) => void events.push(event) },
       },
     });
 
@@ -292,7 +292,7 @@ describe("pipeline tracing", () => {
         ...defaultPipelineContext(),
         runId: "mapped-parent-run",
         tracing: {
-          exporter: { export: (event) => events.push(event) },
+          exporter: { export: (event) => void events.push(event) },
         },
       })
     ).resolves.toMatchObject({ status: "completed" });
@@ -332,7 +332,7 @@ describe("pipeline tracing", () => {
     await pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
       log: createLogger(),
-      tracing: { exporter: { export: (event) => events.push(event) } },
+      tracing: { exporter: { export: (event) => void events.push(event) } },
     });
 
     const progress = events.find(
@@ -366,7 +366,7 @@ describe("pipeline tracing", () => {
     await pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
       log: createLogger(),
-      tracing: { exporter: { export: (event) => events.push(event) } },
+      tracing: { exporter: { export: (event) => void events.push(event) } },
     });
 
     expect(

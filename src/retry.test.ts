@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { withRetry } from "./retry";
+import { withRetry } from "./retry.js";
 
 describe("withRetry", () => {
   it("returns the result on first success without waiting", async () => {

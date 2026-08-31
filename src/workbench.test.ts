@@ -18,22 +18,22 @@ import { pathToFileURL } from "node:url";
 
 const execFileAsync = promisify(execFile);
 import { describe, expect, it, vi } from "vitest";
-import { defineCommand, definePipelineCommand } from "./cli";
-import { markPipelineCommand } from "./pipeline-command-marker";
+import { defineCommand, definePipelineCommand } from "./cli.js";
+import { markPipelineCommand } from "./pipeline-command-marker.js";
 import {
   selectPipelineCommandExport,
   selectPipelineExport,
   selectUniqueExport,
-} from "./pipeline-module";
-import { createSteps, definePipeline } from "./pipeline";
-import { projectPipelineRun } from "./run-store";
-import { openSqlitePipelineRunStore } from "./run-store-sqlite";
+} from "./pipeline-module.js";
+import { createSteps, definePipeline } from "./pipeline.js";
+import { projectPipelineRun } from "./run-store.js";
+import { openSqlitePipelineRunStore } from "./run-store-sqlite.js";
 import {
   DUPLICATE_SIGNAL_WINDOW_MS,
   onFirstProcessSignal,
   writeCliChunk,
-} from "./workbench-shared";
-import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli, type WorkbenchCliIo } from "./workbench";
+} from "./workbench-shared.js";
+import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli, type WorkbenchCliIo } from "./workbench.js";
 
 async function directoryIgnoresCase(dir: string): Promise<boolean> {
   const probe = path.join(dir, ".tubeless-case-test-a");
@@ -67,8 +67,16 @@ function captureIo(cwd: string): WorkbenchCliIo & { errors: string[]; output: st
     cwd,
     errors,
     output,
-    stderr: { write: (chunk) => errors.push(chunk) },
-    stdout: { write: (chunk) => output.push(chunk) },
+    stderr: {
+      write: (chunk) => {
+        errors.push(chunk);
+      },
+    },
+    stdout: {
+      write: (chunk) => {
+        output.push(chunk);
+      },
+    },
   };
 }
 

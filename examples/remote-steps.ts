@@ -103,13 +103,3 @@ export const RemoteStepsPipeline = definePipeline({
 export async function runRemoteStepsExample() {
   return RemoteStepsPipeline.runOrThrow({ lines: [" Alpha ", "", "Beta"] });
 }
-
-if (false) {
-  step.fromRemote("invalid-dry-run-run", {
-    adapter: enrichAdapter,
-    mapInput: () => ({ dryRun: false, rows: [], runId: "x" }),
-    outputSchema: enrichSchema,
-    // @ts-expect-error Authors do not write dryRun: "run".
-    dryRun: "run",
-  });
-}

@@ -409,10 +409,12 @@ describe("SQLite pipeline run store", () => {
     expect(() => {
       void store.export({
         ...startedEvent("run-1", 10),
-        attributes: cycle,
+        // SAFETY: circular object is the runtime fixture; attributes are
+        // otherwise JSON-safe PipelineTraceAttributeValue records.
+        attributes: cycle as import("./tracing.js").PipelineTraceAttributes,
       });
     }).toThrow(/circular/i);
-    expect(() => store.flush()).toThrow(/circular/i);
+    expect(() => store.flush!()).toThrow(/circular/i);
     expect(() => store.close()).toThrow(/circular/i);
   });
 

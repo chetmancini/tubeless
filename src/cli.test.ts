@@ -2,16 +2,16 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { openCheckpoint, type CheckpointStore } from "./checkpoint";
+import { openCheckpoint, type CheckpointStore } from "./checkpoint.js";
 import {
   CliHelpRequested,
   CliValidationError,
   defineCommand,
   definePipelineCommand,
   type CliContext,
-} from "./cli";
-import { createSteps, definePipeline } from "./pipeline";
-import { renderPipelinePlan } from "./render";
+} from "./cli.js";
+import { createSteps, definePipeline } from "./pipeline.js";
+import { renderPipelinePlan } from "./render.js";
 
 function testLog(): CliContext["log"] & { lines: { level: string; message: string }[] } {
   const lines: { level: string; message: string }[] = [];

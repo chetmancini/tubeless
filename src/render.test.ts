@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createSteps, definePipeline, type PipelineError } from "./pipeline";
-import { renderPipelineError, renderPipelinePlan } from "./render";
+import { createSteps, definePipeline, type PipelineError } from "./pipeline.js";
+import { renderPipelineError, renderPipelinePlan } from "./render.js";
 
 function makeTargetPlan() {
   const step = createSteps();

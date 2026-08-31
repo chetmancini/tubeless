@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createSteps, definePipeline, type PipelineLogger } from "./pipeline";
-import { createRunReporter } from "./reporter";
+import { createSteps, definePipeline, type PipelineLogger } from "./pipeline.js";
+import { createRunReporter } from "./reporter.js";
 
 function capturingLogger() {
   const messages = { error: [] as string[], log: [] as string[], warn: [] as string[] };

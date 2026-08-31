@@ -6,7 +6,7 @@ import {
   type RemoteStepAdapter,
   type StandardSchemaV1,
   type Step,
-} from "./pipeline";
+} from "./pipeline.js";
 import type { PipelineTraceEvent } from "./tracing.js";
 
 function standardSchema<TInput, TOutput>(
@@ -28,10 +28,12 @@ const resultSchema = standardSchema<{ ok: true }, { ok: true }>((value) => {
   return { issues: [{ message: "expected { ok: true }" }] };
 });
 
+type DefaultOptions = {};
+
 function testAdapter<TPayload, TResult>(
-  invoke: RemoteStepAdapter<object, TPayload, TResult>["invoke"],
+  invoke: RemoteStepAdapter<DefaultOptions, TPayload, TResult>["invoke"],
   target = "enrich-v2"
-): RemoteStepAdapter<object, TPayload, TResult> {
+): RemoteStepAdapter<DefaultOptions, TPayload, TResult> {
   return { engine: "test", target, invoke };
 }
 
@@ -39,7 +41,7 @@ describe("fromRemote", () => {
   it("copies adapter engine and target onto the parent plan without flattening", () => {
     const step = createSteps();
     const enrich = step.fromRemote("enrich", {
-      adapter: testAdapter(async () => ({ ok: true })),
+      adapter: testAdapter(async () => ({ ok: true as const })),
       mapInput: () => ({ rows: [] }),
       outputSchema: resultSchema,
     });
@@ -201,7 +203,7 @@ describe("fromRemote", () => {
       ...defaultPipelineContext(),
       log,
       tracing: {
-        exporter: { export: (event) => events.push(event), flush: async () => undefined },
+        exporter: { export: (event) => void events.push(event), flush: async () => undefined },
       },
     });
 
@@ -215,7 +217,7 @@ describe("fromRemote", () => {
     const controller = new AbortController();
     const step = createSteps();
     const enrich = step.fromRemote("enrich", {
-      adapter: testAdapter(
+      adapter: testAdapter<Record<string, never>, { ok: true }>(
         (_payload, context) =>
           new Promise((_resolve, reject) => {
             const fail = () => {
@@ -223,8 +225,8 @@ describe("fromRemote", () => {
               error.name = "AbortError";
               reject(error);
             };
-            if (context.signal.aborted) fail();
-            else context.signal.addEventListener("abort", fail, { once: true });
+            if (context.signal?.aborted) fail();
+            else context.signal?.addEventListener("abort", fail, { once: true });
           })
       ),
       mapInput: () => ({}),
@@ -259,7 +261,7 @@ describe("fromRemote", () => {
       outputSchema: schema,
     });
     expectTypeOf(remote).toEqualTypeOf<
-      Step<"enrich", { n: number }, object, object, { n: number }>
+      Step<"enrich", { n: number }, DefaultOptions, DefaultOptions, { n: number }>
     >();
 
     const skippable = step.fromRemote.skippable("maybe-enrich", {
@@ -269,7 +271,7 @@ describe("fromRemote", () => {
       skip: () => "disabled",
     });
     expectTypeOf(skippable).toEqualTypeOf<
-      Step<"maybe-enrich", { n: number } | undefined, object, object, { n: number }>
+      Step<"maybe-enrich", { n: number } | undefined, DefaultOptions, DefaultOptions, { n: number }>
     >();
 
     const dependent = step("after", {
@@ -279,12 +281,12 @@ describe("fromRemote", () => {
         return inputs["maybe-enrich"]?.n ?? 0;
       },
     });
-    expectTypeOf(dependent).toEqualTypeOf<Step<"after", number, object>>();
+    expectTypeOf(dependent).toEqualTypeOf<Step<"after", number, DefaultOptions>>();
 
+    // @ts-expect-error outputSchema is required
     step.fromRemote("missing-schema", {
       adapter,
       mapInput: () => ({ n: 1 }),
-      // @ts-expect-error outputSchema is required
     });
 
     step.fromRemote("skip-requires-skippable", {
@@ -334,10 +336,8 @@ describe("fromRemote", () => {
     });
 
     step.fromRemote("output-shaped-adapter", {
-      adapter: testAdapter(async () =>
-        // @ts-expect-error adapter results are validated as schema input, not output
-        ({ n: "1" })
-      ),
+      // @ts-expect-error adapter results are validated as schema input, not output
+      adapter: testAdapter(async () => ({ n: "1" })),
       mapInput: () => ({}),
       outputSchema: transformingSchema,
     });
@@ -346,11 +346,10 @@ describe("fromRemote", () => {
       adapter: inputAdapter,
       mapInput: () => ({}),
       outputSchema: transformingSchema,
+      // @ts-expect-error skip values are validated as schema input, not output
       skip: () => ({
         reason: "skip",
-        value:
-          // @ts-expect-error skip values are validated as schema input, not output
-          { n: "0" },
+        value: { n: "0" },
       }),
     });
   });

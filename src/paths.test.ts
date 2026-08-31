@@ -1,6 +1,6 @@
 import * as path from "path";
 import { describe, expect, it } from "vitest";
-import { definePaths } from "./paths";
+import { definePaths } from "./paths.js";
 
 describe("definePaths", () => {
   it("joins each relative path against the given cwd", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { abortableSleep, createAbortError, isAbortError, throwIfAborted } from "./abort";
+import { abortableSleep, createAbortError, isAbortError, throwIfAborted } from "./abort.js";
 
 describe("createAbortError", () => {
   it("builds a message with just the label when reason is undefined", () => {
