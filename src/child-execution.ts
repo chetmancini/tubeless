@@ -129,27 +129,33 @@ function splitChildRunOptions(options: PipelineRunOptions): ChildRunBags {
 }
 
 function createChildDomainOptionsView(options: PipelineRunOptions): PipelineRunOptions {
-  // SAFETY: the view forwards to `options` with that object as the receiver, so
-  // accessors and methods keep their original `this` after control keys are hidden.
-  return new Proxy(options, {
-    get(target, property) {
+  // SAFETY: proxy an empty facade so hiding non-configurable control keys on a
+  // frozen mapOptions bag does not violate proxy invariants. Reads still use
+  // `options` as the receiver so accessors and methods keep their original `this`.
+  return new Proxy({} as PipelineRunOptions, {
+    get(_target, property) {
       if (isChildRunControlKey(property)) return undefined;
-      const value = readChildOptionProperty(target, property);
-      return value instanceof Function ? value.bind(target) : value;
+      const value = readChildOptionProperty(options, property);
+      return value instanceof Function ? value.bind(options) : value;
     },
-    has(target, property) {
-      return !isChildRunControlKey(property) && Reflect.has(target, property);
+    has(_target, property) {
+      return !isChildRunControlKey(property) && property in options;
     },
-    ownKeys(target) {
-      return Reflect.ownKeys(target).filter((property) => !isChildRunControlKey(property));
+    ownKeys() {
+      return Reflect.ownKeys(options).filter((property) => !isChildRunControlKey(property));
     },
-    getOwnPropertyDescriptor(target, property) {
+    getOwnPropertyDescriptor(_target, property) {
       if (isChildRunControlKey(property)) return undefined;
-      return Reflect.getOwnPropertyDescriptor(target, property);
+      const descriptor = Reflect.getOwnPropertyDescriptor(options, property);
+      if (descriptor === undefined) return undefined;
+      return { ...descriptor, configurable: true };
     },
-    set(target, property, value) {
+    getPrototypeOf() {
+      return Object.getPrototypeOf(options);
+    },
+    set(_target, property, value) {
       if (isChildRunControlKey(property)) return true;
-      return Reflect.set(target, property, value, target);
+      return Reflect.set(options, property, value, options);
     },
   });
 }

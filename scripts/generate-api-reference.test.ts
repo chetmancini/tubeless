@@ -25,4 +25,27 @@ describe("hashDeclarationSurface", () => {
     );
     expect(hashDeclarationSurface(join(root, "entry.d.ts"), root)).not.toBe(before);
   });
+
+  it("changes when a declaration is reached only through import()", () => {
+    const root = mkdtempSync(join(tmpdir(), "tubeless-api-import-type-"));
+    writeFileSync(
+      join(root, "entry.d.ts"),
+      `export type Pipeline = import("./types.js").Pipeline;\n`
+    );
+    writeFileSync(
+      join(root, "types.d.ts"),
+      "export interface Pipeline { run(options: object): void }\n"
+    );
+    writeFileSync(join(root, "unrelated.d.ts"), "export type Unused = { n: number };\n");
+    const before = hashDeclarationSurface(join(root, "entry.d.ts"), root);
+
+    writeFileSync(join(root, "unrelated.d.ts"), "export type Unused = { n: string };\n");
+    expect(hashDeclarationSurface(join(root, "entry.d.ts"), root)).toBe(before);
+
+    writeFileSync(
+      join(root, "types.d.ts"),
+      "export interface Pipeline { run(options: object, controls?: object): void }\n"
+    );
+    expect(hashDeclarationSurface(join(root, "entry.d.ts"), root)).not.toBe(before);
+  });
 });

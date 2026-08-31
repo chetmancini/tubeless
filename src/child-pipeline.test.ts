@@ -949,6 +949,35 @@ describe("child-pipeline composition", () => {
       await expect(parent.runOrThrow({})).resolves.toBe("secret:secret");
     });
 
+    it("hides control keys on a frozen mixed mapOptions bag", async () => {
+      const mixed = Object.freeze({ continueOnError: true, label: "frozen" });
+      const childStep = createSteps<{ label: string }>();
+      const inspect = childStep("inspect", {
+        run: (_inputs, context) => {
+          expect("continueOnError" in context.options).toBe(false);
+          expect(Object.keys(context.options)).toEqual(["label"]);
+          return context.options.label;
+        },
+      });
+      const child = definePipeline({
+        id: "frozen-child",
+        steps: [inspect],
+        finalize: (outputs) => outputs.inspect,
+      });
+      const parentStep = createSteps();
+      const stage = parentStep.fromPipeline("frozen-stage", {
+        pipeline: child,
+        mapOptions: () => mixed,
+      });
+      const parent = definePipeline({
+        id: "frozen-parent",
+        steps: [stage],
+        finalize: (outputs) => outputs["frozen-stage"],
+      });
+
+      await expect(parent.runOrThrow({})).resolves.toBe("frozen");
+    });
+
     it("fails one opaque step with child-identifying details and skips parent finalization", async () => {
       const childStep = createSteps();
       const explode = childStep("explode", {

@@ -63,7 +63,7 @@ export function collectDeclarationSources(entryPath) {
     if (sources.has(path)) continue;
     const source = readFileSync(path, "utf8");
     sources.set(path, source);
-    for (const match of source.matchAll(/(?:from\s+|import\s*)["']([^"']+)["']/g)) {
+    for (const match of source.matchAll(/(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/g)) {
       const next = resolveImportedDeclaration(path, match[1]);
       if (next) pending.push(next);
     }

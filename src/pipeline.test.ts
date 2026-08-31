@@ -330,6 +330,25 @@ describe("definePipeline", () => {
     ]);
   });
 
+  it("reads dryRun from prototype getters on the controls object", async () => {
+    class DryRunControls {
+      get dryRun(): boolean {
+        return true;
+      }
+    }
+    const sideEffect = vi.fn();
+    const step = createSteps();
+    const write = step("write", { dryRun: "skip", run: sideEffect });
+    const pipeline = definePipeline({
+      id: "class-dry-run-controls",
+      steps: [write],
+      finalize: () => "ok",
+    });
+
+    await expect(pipeline.runOrThrow({}, new DryRunControls())).resolves.toBe("ok");
+    expect(sideEffect).not.toHaveBeenCalled();
+  });
+
   it("reports option validation issues before any step starts", async () => {
     const input = { source: "bad" };
     const validate = vi.fn((value: unknown) => {
