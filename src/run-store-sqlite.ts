@@ -1,4 +1,5 @@
-import { lstat, mkdir, realpath, stat } from "node:fs/promises";
+import { copyFile, lstat, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { PipelineTraceEvent } from "./tracing.js";
@@ -125,11 +126,6 @@ async function openDatabase(
   const create = options.create !== false;
   const readOnly = options.readOnly === true;
   if (readOnly) {
-    if (await sqliteWalMissingSharedMemory(filename)) {
-      throw new Error(
-        `${filename} has a write-ahead log without a shared-memory file; a read-only open would create a sidecar.`
-      );
-    }
     if (bunSqlite) return openReadableDatabase(Database, filename, { readonly: true });
     try {
       return openReadableDatabase(Database, filename, { readOnly: true });
@@ -173,31 +169,18 @@ async function sqliteSidecarExists(filename: string): Promise<boolean> {
   }
 }
 
-async function sqliteWalMissingSharedMemory(filename: string): Promise<boolean> {
+async function sqliteSidecarTargets(filename: string): Promise<readonly string[]> {
   const targets = new Set<string>([filename]);
   try {
     targets.add(await realpath(filename));
   } catch {
     // Missing or unresolvable; still check the given name.
   }
-  for (const target of targets) {
-    const hasWal = await sqliteSidecarExists(`${target}-wal`);
-    const hasShm = await sqliteSidecarExists(`${target}-shm`);
-    if (hasWal && hasShm === false) {
-      return true;
-    }
-  }
-  return false;
+  return [...targets];
 }
 
 async function sqliteTransactionalSidecarExists(filename: string): Promise<boolean> {
-  const targets = new Set<string>([filename]);
-  try {
-    targets.add(await realpath(filename));
-  } catch {
-    // Missing or unresolvable; still check the given name.
-  }
-  for (const target of targets) {
+  for (const target of await sqliteSidecarTargets(filename)) {
     if (
       (await sqliteSidecarExists(`${target}-wal`)) ||
       (await sqliteSidecarExists(`${target}-journal`))
@@ -206,6 +189,40 @@ async function sqliteTransactionalSidecarExists(filename: string): Promise<boole
     }
   }
   return false;
+}
+
+const SQLITE_SIDECAR_SUFFIXES = ["-journal", "-shm", "-wal"] as const;
+
+async function isolateReadOnlySqliteSnapshot(filename: string): Promise<{
+  cleanup(): Promise<void>;
+  filename: string;
+}> {
+  const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-ro-"));
+  const snapshot = path.join(directory, path.basename(filename));
+  const cleanup = async () => {
+    await rm(directory, { recursive: true, force: true });
+  };
+  try {
+    await copyFile(filename, snapshot);
+    for (const suffix of SQLITE_SIDECAR_SUFFIXES) {
+      for (const target of await sqliteSidecarTargets(filename)) {
+        const sidecar = `${target}${suffix}`;
+        if ((await sqliteSidecarExists(sidecar)) === false) continue;
+        try {
+          await copyFile(sidecar, `${snapshot}${suffix}`);
+        } catch {
+          throw new Error(
+            `${filename} has a ${suffix.slice(1)} sidecar that cannot be copied for a read-only open.`
+          );
+        }
+        break;
+      }
+    }
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
+  return { cleanup, filename: snapshot };
 }
 
 function openReadableDatabase(
@@ -258,7 +275,9 @@ export interface OpenSqlitePipelineRunStoreOptions {
   readonly initialize?: boolean;
   /**
    * Open the file without creating it or writing WAL/sidecars.
-   * `history` uses this so a read-only artifact or mount can still be inspected.
+   * File stores are copied to a temporary snapshot first so a WAL-backed
+   * original, including its `-shm`, is not mutated. `history` uses this so a
+   * supplied artifact or mount can still be inspected.
    */
   readonly readOnly?: boolean;
 }
@@ -284,8 +303,16 @@ export async function openSqlitePipelineRunStore(
       throw new Error(`${resolvedFilename} is not a pipeline run store.`);
     }
   }
-  const database = await openDatabase(resolvedFilename, { create: initialize, readOnly });
+  let snapshotCleanup: (() => Promise<void>) | undefined;
+  let database: SqliteDatabase | undefined;
   try {
+    let openFilename = resolvedFilename;
+    if (readOnly && resolvedFilename !== ":memory:") {
+      const snapshot = await isolateReadOnlySqliteSnapshot(resolvedFilename);
+      openFilename = snapshot.filename;
+      snapshotCleanup = snapshot.cleanup;
+    }
+    database = await openDatabase(openFilename, { create: initialize, readOnly });
     // SAFETY: `PRAGMA user_version` always returns a single row with a
     // `user_version` column, so the first result row matches this shape.
     const versionRow = statement(database, "PRAGMA user_version").all()[0] as
@@ -305,8 +332,12 @@ export async function openSqlitePipelineRunStore(
       database.exec(`PRAGMA user_version = ${RUN_EVENT_STORE_VERSION}`);
     }
   } catch (error) {
-    database.close();
+    database?.close();
+    if (snapshotCleanup) await snapshotCleanup();
     throw error;
+  }
+  if (database === undefined) {
+    throw new Error(`Failed to open pipeline run store ${resolvedFilename}.`);
   }
   const insert = statement(
     database,
@@ -391,10 +422,14 @@ export async function openSqlitePipelineRunStore(
       }
       database.exec("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");
     },
-    close() {
+    async close() {
       if (closed) return;
       closed = true;
-      database.close();
+      try {
+        database.close();
+      } finally {
+        if (snapshotCleanup) await snapshotCleanup();
+      }
       if (exportError) throw exportError;
     },
   };

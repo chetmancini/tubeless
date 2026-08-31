@@ -4,6 +4,7 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  readFile,
   rm,
   stat,
   symlink,
@@ -249,10 +250,12 @@ describe("SQLite pipeline run store", () => {
     await store.export(startedEvent("run-1", 10));
     await store.close();
     await unlink(`${filename}-shm`).catch(() => {});
-    await writeFile(`${filename}-wal`, "not a checkpointed wal");
-    await expect(
-      openSqlitePipelineRunStore(filename, { initialize: false, readOnly: true })
-    ).rejects.toThrow(/shared-memory|sidecar/i);
+    const reopened = await openSqlitePipelineRunStore(filename, {
+      initialize: false,
+      readOnly: true,
+    });
+    expect(await reopened.listEvents()).toHaveLength(1);
+    await reopened.close();
     await expect(stat(`${filename}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -267,66 +270,90 @@ describe("SQLite pipeline run store", () => {
     await mkdir(path.dirname(alias));
     await symlink(filename, alias);
     await unlink(`${filename}-shm`).catch(() => {});
-    await writeFile(`${filename}-wal`, "not a checkpointed wal");
-    await expect(
-      openSqlitePipelineRunStore(alias, { initialize: false, readOnly: true })
-    ).rejects.toThrow(/shared-memory|sidecar/i);
+    const reopened = await openSqlitePipelineRunStore(alias, {
+      initialize: false,
+      readOnly: true,
+    });
+    expect(await reopened.listEvents()).toHaveLength(1);
+    await reopened.close();
     await expect(stat(`${filename}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(stat(`${alias}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it.skipIf("Bun" in globalThis)(
-    "does not hide WAL events behind an immutable read-only fallback",
-    async () => {
-      const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
-      directories.push(directory);
-      const filename = path.join(directory, "runs.sqlite");
-      const store = await openSqlitePipelineRunStore(filename);
-      await store.export(startedEvent("run-1", 10));
-      await store.close();
-      await writeFile(`${filename}-wal`, "not a checkpointed wal");
-      await chmod(filename, 0o444);
-      await chmod(`${filename}-wal`, 0o444);
-      await chmod(directory, 0o555);
-      try {
-        await expect(
-          openSqlitePipelineRunStore(filename, { initialize: false, readOnly: true })
-        ).rejects.toThrow();
-      } finally {
-        await chmod(directory, 0o755);
-        await chmod(filename, 0o644);
-        await chmod(`${filename}-wal`, 0o644);
-      }
-    }
-  );
+  it("does not mutate an existing shared-memory sidecar during a read-only open", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+    const marker = Buffer.alloc(32_768, 0x5a);
+    await writeFile(`${filename}-shm`, marker);
+    const reopened = await openSqlitePipelineRunStore(filename, {
+      initialize: false,
+      readOnly: true,
+    });
+    expect(await reopened.listEvents()).toHaveLength(1);
+    await reopened.close();
+    expect(await readFile(`${filename}-shm`)).toEqual(marker);
+  });
 
-  it.skipIf("Bun" in globalThis)(
-    "does not hide WAL events behind an immutable fallback when opened through a symlink",
-    async () => {
-      const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
-      directories.push(directory);
-      const filename = path.join(directory, "runs.sqlite");
-      const alias = path.join(directory, "alias", "store.sqlite");
-      const store = await openSqlitePipelineRunStore(filename);
-      await store.export(startedEvent("run-1", 10));
-      await store.close();
-      await mkdir(path.dirname(alias));
-      await symlink(filename, alias);
-      await writeFile(`${filename}-wal`, "not a checkpointed wal");
-      await chmod(filename, 0o444);
-      await chmod(`${filename}-wal`, 0o444);
-      await chmod(directory, 0o555);
-      try {
-        await expect(
-          openSqlitePipelineRunStore(alias, { initialize: false, readOnly: true })
-        ).rejects.toThrow();
-      } finally {
-        await chmod(directory, 0o755);
-        await chmod(filename, 0o644);
-        await chmod(`${filename}-wal`, 0o644);
-      }
+  it("inspects a WAL snapshot on a read-only volume without using the immutable fallback", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+    await writeFile(`${filename}-wal`, "not a checkpointed wal");
+    const walBefore = await readFile(`${filename}-wal`);
+    await chmod(filename, 0o444);
+    await chmod(`${filename}-wal`, 0o444);
+    await chmod(directory, 0o555);
+    try {
+      const reopened = await openSqlitePipelineRunStore(filename, {
+        initialize: false,
+        readOnly: true,
+      });
+      expect(await reopened.listEvents()).toHaveLength(1);
+      await reopened.close();
+    } finally {
+      await chmod(directory, 0o755);
+      await chmod(filename, 0o644);
+      await chmod(`${filename}-wal`, 0o644);
     }
-  );
+    expect(await readFile(`${filename}-wal`)).toEqual(walBefore);
+  });
+
+  it("inspects a WAL snapshot through a symlink on a read-only volume", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const alias = path.join(directory, "alias", "store.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+    await mkdir(path.dirname(alias));
+    await symlink(filename, alias);
+    await writeFile(`${filename}-wal`, "not a checkpointed wal");
+    const walBefore = await readFile(`${filename}-wal`);
+    await chmod(filename, 0o444);
+    await chmod(`${filename}-wal`, 0o444);
+    await chmod(directory, 0o555);
+    try {
+      const reopened = await openSqlitePipelineRunStore(alias, {
+        initialize: false,
+        readOnly: true,
+      });
+      expect(await reopened.listEvents()).toHaveLength(1);
+      await reopened.close();
+    } finally {
+      await chmod(directory, 0o755);
+      await chmod(filename, 0o644);
+      await chmod(`${filename}-wal`, 0o644);
+    }
+    expect(await readFile(`${filename}-wal`)).toEqual(walBefore);
+  });
 
   it("surfaces the first append failure from flush and close", async () => {
     const store = await openTempStore();
@@ -339,7 +366,7 @@ describe("SQLite pipeline run store", () => {
       });
     }).toThrow(/circular/i);
     expect(() => store.flush()).toThrow(/circular/i);
-    expect(() => store.close()).toThrow(/circular/i);
+    await expect(store.close()).rejects.toThrow(/circular/i);
   });
 
   it("does not treat a dangling WAL sidecar symlink as absent", async () => {
@@ -388,30 +415,29 @@ describe("SQLite pipeline run store", () => {
     }
   );
 
-  it.skipIf("Bun" in globalThis)(
-    "does not hide rollback-journal events behind an immutable read-only fallback",
-    async () => {
-      const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
-      directories.push(directory);
-      const filename = path.join(directory, "runs.sqlite");
-      const store = await openSqlitePipelineRunStore(filename);
-      await store.export(startedEvent("run-1", 10));
-      await store.close();
-      await writeFile(`${filename}-journal`, "not a recovered journal");
-      await chmod(filename, 0o444);
-      await chmod(`${filename}-journal`, 0o444);
-      await chmod(directory, 0o555);
-      try {
-        await expect(
-          openSqlitePipelineRunStore(filename, { initialize: false, readOnly: true })
-        ).rejects.toThrow();
-      } finally {
-        await chmod(directory, 0o755);
-        await chmod(filename, 0o644);
-        await chmod(`${filename}-journal`, 0o644);
-      }
+  it("inspects a rollback-journal snapshot on a read-only volume without mutating it", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+    await writeFile(`${filename}-journal`, "not a recovered journal");
+    const journalBefore = await readFile(`${filename}-journal`);
+    await chmod(filename, 0o444);
+    await chmod(`${filename}-journal`, 0o444);
+    await chmod(directory, 0o555);
+    try {
+      await expect(
+        openSqlitePipelineRunStore(filename, { initialize: false, readOnly: true })
+      ).rejects.toThrow();
+    } finally {
+      await chmod(directory, 0o755);
+      await chmod(filename, 0o644);
+      await chmod(`${filename}-journal`, 0o644);
     }
-  );
+    expect(await readFile(`${filename}-journal`)).toEqual(journalBefore);
+  });
 
   it("rejects a missing path when initialize is false without creating it", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));

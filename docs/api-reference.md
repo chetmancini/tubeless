@@ -17,7 +17,7 @@ Package: `tubeless`
 | `tubeless/reporter`         | `./dist/reporter-entry.d.ts`   | `c2cf9ffaa7f5f80d1cb936b373782baeb2a33b1f2847fd7dbe3b36d7cc6dc199` |               13 |
 | `tubeless/retry`            | `./dist/retry.d.ts`            | `8b93425242c618f533498fa9d1670d321e69c4bab7bfaa000ab2464c1b755f4a` |                4 |
 | `tubeless/run-store`        | `./dist/run-store.d.ts`        | `be37dc529dc7cfd1f09c196eacb4664194a82bff62846bae94d318ab528d8d8a` |               16 |
-| `tubeless/run-store/sqlite` | `./dist/run-store-sqlite.d.ts` | `93df75c457f02823aa10fac37f487f062be9b77214ff3a8b40968a98d8803948` |                3 |
+| `tubeless/run-store/sqlite` | `./dist/run-store-sqlite.d.ts` | `b40e8466e36c52cee00a3a2deca0401677412330c01045d1f9b1ac8e4d095a2f` |                3 |
 | `tubeless/workbench/studio` | `./dist/workbench-studio.d.ts` | `2afced697589a4d76527107c9517921512c46ad62c074743264cb415a773539c` |                6 |
 | `tubeless/run-store/ui`     | `./dist/run-store-ui.d.ts`     | `d207e9aba052d83ad2f4268b91644d932b7835e6c1a3eecb89df622a61db2041` |                9 |
 | `tubeless/testing`          | `./dist/testing.d.ts`          | `a6e8a051df80bc56942c195d8fe62e4bb1e9436164c618abe703ffd51c9f1c34` |                7 |

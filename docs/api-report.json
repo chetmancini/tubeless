@@ -222,7 +222,7 @@
         "OpenSqlitePipelineRunStoreOptions",
         "SqlitePipelineRunStore"
       ],
-      "sha256": "93df75c457f02823aa10fac37f487f062be9b77214ff3a8b40968a98d8803948",
+      "sha256": "b40e8466e36c52cee00a3a2deca0401677412330c01045d1f9b1ac8e4d095a2f",
       "specifier": "tubeless/run-store/sqlite"
     },
     {
