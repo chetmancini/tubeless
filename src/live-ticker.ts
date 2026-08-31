@@ -1,5 +1,5 @@
 import { writeSync } from "node:fs";
-import { Worker } from "node:worker_threads";
+import { MessageChannel, Worker } from "node:worker_threads";
 import { formatDurationMs } from "./reporter.js";
 
 export const SPINNER_TOKEN = "\u0001";
@@ -152,6 +152,7 @@ export interface LiveTickerOptions {
   unicode: boolean;
   color?: boolean;
   write(chunk: string): void;
+  workerUrl?: URL;
 }
 
 type TickerWorkerMessage =
@@ -175,11 +176,11 @@ export function currentSpinner(unicode: boolean, refreshIntervalMs: number): str
   return frames[Math.floor(Date.now() / refreshIntervalMs) % frames.length] ?? frames[0]!;
 }
 
-function createInlineTicker(options: LiveTickerOptions): LiveTicker {
+function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 0): LiveTicker {
   const state: TickerState = {
-    cursorHidden: false,
+    cursorHidden: adoptedFrameLineCount > 0,
     disposed: false,
-    frameLineCount: 0,
+    frameLineCount: adoptedFrameLineCount,
     lines: [],
   };
 
@@ -232,6 +233,7 @@ function createInlineTicker(options: LiveTickerOptions): LiveTicker {
     }
     redraw();
   }, options.refreshIntervalMs);
+  timer.unref();
 
   return {
     setLines(lines) {
@@ -256,11 +258,19 @@ function createInlineTicker(options: LiveTickerOptions): LiveTicker {
   };
 }
 
-function resolveLiveTickerWorkerUrl(): URL {
+function resolveCompiledWorkerUrl(filename: string): URL {
   if (import.meta.url.endsWith(".ts")) {
-    return new URL("../dist/live-ticker-worker.js", import.meta.url);
+    return new URL(`../dist/${filename}`, import.meta.url);
   }
-  return new URL("./live-ticker-worker.js", import.meta.url);
+  return new URL(`./${filename}`, import.meta.url);
+}
+
+function resolveLiveTickerWorkerUrl(): URL {
+  return resolveCompiledWorkerUrl("live-ticker-worker.js");
+}
+
+function resolveLiveTickerExitWaiterUrl(): URL {
+  return resolveCompiledWorkerUrl("live-ticker-exit-waiter.js");
 }
 
 function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[] {
@@ -278,49 +288,155 @@ function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[
 }
 
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
-  const handshakeBuffer = new SharedArrayBuffer(4);
+  // [0] stop handshake, [1] painted rows, [2] accepted logs
+  const handshakeBuffer = new SharedArrayBuffer(12);
   const handshake = new Int32Array(handshakeBuffer);
-  const worker = new Worker(resolveLiveTickerWorkerUrl(), {
+  const lifetime = new MessageChannel();
+  const worker = new Worker(options.workerUrl ?? resolveLiveTickerWorkerUrl(), {
     execArgv: fileWorkerExecArgv(),
+    transferList: [lifetime.port2],
     workerData: {
       color: options.color === true,
       columns: resolveColumns(options),
       fd: options.fd,
       handshakeBuffer,
+      lifetimePort: lifetime.port2,
       refreshIntervalMs: options.refreshIntervalMs,
       unicode: options.unicode,
     },
   });
   let disposed = false;
+  let finalFramePainted = false;
+  let inlineFallback: LiveTicker | undefined;
   let lines: readonly string[] = [];
+  const pendingLogs: string[] = [];
+  let ackedLogs = 0;
+
+  const paintedFrameLineCount = (): number => Atomics.load(handshake, 1);
+
+  const dropAcknowledgedLogs = (): void => {
+    const accepted = Atomics.load(handshake, 2);
+    if (accepted <= ackedLogs) return;
+    pendingLogs.splice(0, accepted - ackedLogs);
+    ackedLogs = accepted;
+  };
 
   const send = (message: TickerWorkerMessage): void => {
-    if (disposed) return;
+    if (disposed || inlineFallback) return;
     worker.postMessage(message);
   };
+
+  const stopWorker = (): void => {
+    const exitGate = new Int32Array(new SharedArrayBuffer(4));
+    try {
+      const waiter = new Worker(resolveLiveTickerExitWaiterUrl(), {
+        execArgv: fileWorkerExecArgv(),
+        transferList: [lifetime.port1],
+        workerData: {
+          gateBuffer: exitGate.buffer,
+          port: lifetime.port1,
+        },
+      });
+      waiter.unref();
+      void worker.terminate();
+      Atomics.wait(exitGate, 0, 0, 1_000);
+      void waiter.terminate();
+    } catch {
+      void worker.terminate();
+    }
+  };
+
+  const replayThrough = (ticker: LiveTicker): void => {
+    dropAcknowledgedLogs();
+    for (const text of pendingLogs) {
+      ticker.writeLog(text);
+    }
+    pendingLogs.length = 0;
+    ticker.setLines([...lines]);
+  };
+
+  const paintFinalFrame = (): void => {
+    if (finalFramePainted) return;
+    finalFramePainted = true;
+    try {
+      const ticker = createInlineTicker(options, paintedFrameLineCount());
+      replayThrough(ticker);
+      ticker.dispose();
+    } catch {
+      // Stream may already be closed after dispose.
+    }
+  };
+
+  const failToInline = (): void => {
+    if (inlineFallback || finalFramePainted) return;
+    if (disposed) {
+      if (Atomics.load(handshake, 0) !== 1) paintFinalFrame();
+      return;
+    }
+    inlineFallback = createInlineTicker(options, paintedFrameLineCount());
+    replayThrough(inlineFallback);
+  };
+  worker.on("error", failToInline);
+  worker.on("exit", (code) => {
+    if (code !== 0) failToInline();
+  });
+  worker.unref();
+  worker.on("message", (msg: { type?: string; kind?: string }) => {
+    if (msg?.type === "ack" && msg.kind === "log") dropAcknowledgedLogs();
+  });
 
   return {
     setLines(nextLines) {
       lines = nextLines;
+      if (inlineFallback) {
+        inlineFallback.setLines(nextLines);
+        return;
+      }
       send({ columns: resolveColumns(options), lines: [...nextLines], type: "lines" });
     },
     writeLog(text) {
+      if (inlineFallback) {
+        inlineFallback.writeLog(text);
+        return;
+      }
       if (disposed) {
         writeSync(options.fd, text);
         return;
       }
+      dropAcknowledgedLogs();
+      pendingLogs.push(text);
       send({ text, type: "log" });
     },
     dispose() {
       if (disposed) return;
       disposed = true;
+      if (inlineFallback) {
+        inlineFallback.dispose();
+        void worker.terminate();
+        return;
+      }
       Atomics.store(handshake, 0, 0);
-      worker.postMessage({
-        columns: resolveColumns(options),
-        lines: [...lines],
-        type: "stop",
-      });
-      Atomics.wait(handshake, 0, 0, 500);
+      try {
+        worker.postMessage({
+          columns: resolveColumns(options),
+          lines: [...lines],
+          type: "stop",
+        });
+      } catch {
+        stopWorker();
+        paintFinalFrame();
+        return;
+      }
+      if (Atomics.wait(handshake, 0, 0, 500) === "timed-out") {
+        stopWorker();
+        paintFinalFrame();
+        try {
+          writeSync(options.fd, ANSI.showCursor);
+        } catch {
+          // Stream may already be closed; cursor restore is best-effort.
+        }
+        return;
+      }
       try {
         writeSync(options.fd, ANSI.showCursor);
       } catch {
