@@ -6,7 +6,7 @@ import {
 } from "./child-execution.js";
 import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.js";
 import { isPipelineCancellation, PipelineExecutionError } from "./pipeline-execute.js";
-import { STEP_NESTED_PIPELINE, STEP_OPTIONS_SCHEMA } from "./pipeline-plan.js";
+import { STEP_NESTED_PIPELINE, STEP_OPTIONS_SCHEMA, STEP_REMOTE } from "./pipeline-plan.js";
 import type {
   InferSchemaInput,
   InferSchemaOutput,
@@ -16,6 +16,7 @@ import type {
   PipelineRun,
   PipelineRunOptions,
   PipelineStepContext,
+  RemoteStepAdapter,
   StandardSchemaV1,
   StepSkipDecision,
 } from "./pipeline-types.js";
@@ -39,6 +40,7 @@ type AnyStepDryRunHandler<TOptions extends object> = {
 
 export interface AnyStep<TOptions extends object = object> {
   readonly [STEP_NESTED_PIPELINE]?: NonNullable<PipelinePlanStep["nestedPipeline"]>;
+  readonly [STEP_REMOTE]?: NonNullable<PipelinePlanStep["remote"]>;
   readonly [STEP_OPTIONS_SCHEMA]?: StandardSchemaV1;
   readonly id: string;
   readonly dependsOn?: readonly AnyStep<TOptions>[];
@@ -346,42 +348,71 @@ interface FromPipelineConstructor<
   skippable: SkippableFromPipelineConstructor<TOptions, TInputOptions>;
 }
 
-interface SkippableFromPipelineConstructor<
+type RemoteStepDefinitionBase<
+  TParentOptions extends object,
+  TDeps extends readonly AnyStep<TParentOptions>[],
+  TOptionalDeps extends readonly AnyStep<TParentOptions>[],
+  TPayload,
+  TSchema extends StandardSchemaV1,
+> = {
+  adapter: RemoteStepAdapter<TParentOptions, TPayload, InferSchemaOutput<TSchema>>;
+  mapInput(
+    inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
+    context: PipelineStepContext<TParentOptions>
+  ): TPayload;
+  outputSchema: TSchema;
+  dependsOn?: TDeps;
+  optionalDependsOn?: TOptionalDeps;
+  skipAfterFailureOf?: readonly AnyStep<TParentOptions>[];
+  name?: string;
+  description?: string;
+  dryRun?: StepDryRunPolicy<TParentOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>>;
+};
+
+interface FromRemoteConstructor<
   TOptions extends object,
   TInputOptions extends object = TOptions,
 > {
   <
     TId extends string,
-    TChildPipeline extends Pipeline<object, unknown>,
+    TSchema extends StandardSchemaV1,
+    TPayload,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
   >(
     id: TId,
-    definition: ChildPipelineStepDefinitionBase<TOptions, TDeps, TOptionalDeps, TChildPipeline> & {
-      skip:
-        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, PipelineResultOf<TChildPipeline>>
-        | undefined;
-      mapResult?: undefined;
+    definition: RemoteStepDefinitionBase<TOptions, TDeps, TOptionalDeps, TPayload, TSchema> & {
+      skip?: never;
     }
-  ): Step<TId, PipelineResultOf<TChildPipeline> | undefined, TOptions, TInputOptions>;
+  ): Step<TId, InferSchemaOutput<TSchema>, TOptions, TInputOptions, InferSchemaInput<TSchema>>;
 
+  skippable: SkippableFromRemoteConstructor<TOptions, TInputOptions>;
+}
+
+interface SkippableFromRemoteConstructor<
+  TOptions extends object,
+  TInputOptions extends object = TOptions,
+> {
   <
     TId extends string,
-    TChildPipeline extends Pipeline<object, unknown>,
-    TOut,
+    TSchema extends StandardSchemaV1,
+    TPayload,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
   >(
     id: TId,
-    definition: ChildPipelineStepDefinitionBase<TOptions, TDeps, TOptionalDeps, TChildPipeline> & {
-      skip: StepSkipPredicate<TOptions, TDeps, TOptionalDeps, NoInfer<TOut>> | undefined;
-      mapResult(
-        value: PipelineResultOf<TChildPipeline>,
-        result: PipelineRun<PipelineResultOf<TChildPipeline>>,
-        context: PipelineStepContext<TOptions>
-      ): TOut;
+    definition: RemoteStepDefinitionBase<TOptions, TDeps, TOptionalDeps, TPayload, TSchema> & {
+      skip:
+        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, InferSchemaOutput<TSchema>>
+        | undefined;
     }
-  ): Step<TId, TOut | undefined, TOptions, TInputOptions>;
+  ): Step<
+    TId,
+    InferSchemaOutput<TSchema> | undefined,
+    TOptions,
+    TInputOptions,
+    InferSchemaInput<TSchema>
+  >;
 }
 
 export interface StepFactory<
@@ -389,6 +420,7 @@ export interface StepFactory<
   TInputOptions extends object = TOptions,
 > extends StepConstructor<TOptions, TInputOptions> {
   fromPipeline: FromPipelineConstructor<TOptions, TInputOptions>;
+  fromRemote: FromRemoteConstructor<TOptions, TInputOptions>;
 
   forEachPipeline<
     TId extends string,
@@ -524,6 +556,56 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
     return buildStep(id, definition);
   }) as StepFactory<TOptions, TInputOptions>["fromPipeline"];
 
+
+  // SAFETY: the closure's parameter and return shapes match the
+  // `fromRemote` constructor signature it is assigned to.
+  const fromRemote = ((
+    id: string,
+    config: {
+      adapter: RemoteStepAdapter<object, unknown, unknown>;
+      mapInput: (
+        inputs: Record<string, unknown>,
+        context: PipelineStepContext<TOptions>
+      ) => unknown;
+      outputSchema: StandardSchemaV1;
+      dependsOn?: readonly AnyStep<TOptions>[];
+      optionalDependsOn?: readonly AnyStep<TOptions>[];
+      skipAfterFailureOf?: readonly AnyStep<TOptions>[];
+      name?: string;
+      description?: string;
+      dryRun?: "skip" | AnyStepDryRunHandler<TOptions>;
+      skip?: StepSkipPredicate<
+        TOptions,
+        readonly AnyStep<TOptions>[],
+        readonly AnyStep<TOptions>[],
+        unknown
+      >;
+    }
+  ) => {
+    const remote: NonNullable<PipelinePlanStep["remote"]> = { engine: config.adapter.engine };
+    if (config.adapter.target !== undefined) remote.target = config.adapter.target;
+    const definition = {
+      [STEP_REMOTE]: remote,
+      dependsOn: config.dependsOn,
+      optionalDependsOn: config.optionalDependsOn,
+      skipAfterFailureOf: config.skipAfterFailureOf,
+      name: config.name,
+      description: config.description,
+      dryRun: config.dryRun,
+      outputSchema: config.outputSchema,
+      run: (inputs: Record<string, unknown>, context: PipelineStepContext<TOptions>) =>
+        config.adapter.invoke(config.mapInput(inputs, context), context),
+    };
+    if ("skip" in config && config.skip !== undefined) {
+      const skip = config.skip;
+      return buildStep(id, {
+        ...definition,
+        skip: (inputs, context) => skip(inputs as never, context),
+      });
+    }
+    return buildStep(id, definition);
+  }) as StepFactory<TOptions, TInputOptions>["fromRemote"];
+
   // SAFETY: the closure's parameter and return shapes match the
   // `forEachPipeline` constructor signature it is assigned to.
   const forEachPipeline = ((
@@ -571,6 +653,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
   const factory = Object.assign(buildStep, {
     skippable: buildStep,
     fromPipeline,
+    fromRemote,
     forEachPipeline,
   }) as StepFactory<TOptions, TInputOptions>;
   // SAFETY: `fromPipeline` is the same callable as `factory.fromPipeline`; it
@@ -579,6 +662,12 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
     TOptions,
     TInputOptions
   >["fromPipeline"]["skippable"];
+  // SAFETY: `fromRemote` is the same callable as `factory.fromRemote`; it
+  // carries the skippable variant, so the assignment is sound.
+  factory.fromRemote.skippable = fromRemote as StepFactory<
+    TOptions,
+    TInputOptions
+  >["fromRemote"]["skippable"];
 
   return factory;
 }

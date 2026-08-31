@@ -22,6 +22,7 @@ export const PIPELINE_FINALIZE_STEP_ID = "__finalize__";
 
 export const STEP_OPTIONS_SCHEMA: unique symbol = Symbol("tubeless.stepOptionsSchema");
 export const STEP_NESTED_PIPELINE: unique symbol = Symbol("tubeless.stepNestedPipeline");
+export const STEP_REMOTE: unique symbol = Symbol("tubeless.stepRemote");
 export const REQUIRED_FINALIZER_OUTPUTS: unique symbol = Symbol(
   "tubeless.requiredFinalizerOutputs"
 );
@@ -309,6 +310,9 @@ export function stepToPlanStep<TOptions extends object>(
       ...step[STEP_NESTED_PIPELINE],
       stepIds: [...step[STEP_NESTED_PIPELINE].stepIds],
     };
+  }
+  if (step[STEP_REMOTE]) {
+    planStep.remote = { ...step[STEP_REMOTE] };
   }
   return planStep;
 }
