@@ -1,4 +1,4 @@
-import { mkdir, realpath, stat } from "node:fs/promises";
+import { lstat, mkdir, realpath, stat } from "node:fs/promises";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { PipelineTraceEvent } from "./tracing.js";
@@ -151,12 +151,25 @@ async function openDatabase(
   return new Database(filename);
 }
 
+function isMissingDirectoryEntry(error: NodeJS.ErrnoException): boolean {
+  return error.code === "ENOENT";
+}
+
 async function sqliteSidecarExists(filename: string): Promise<boolean> {
   try {
     await stat(filename);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    // SAFETY: Node fs rejects with ErrnoException. Only ENOENT is a missing
+    // directory entry; EACCES/EPERM and other inspect failures stay present.
+    if (isMissingDirectoryEntry(error as NodeJS.ErrnoException) === false) return true;
+  }
+  try {
+    await lstat(filename);
+    return true;
+  } catch (error) {
+    // SAFETY: Same Node fs ErrnoException contract as the stat() branch.
+    return isMissingDirectoryEntry(error as NodeJS.ErrnoException) === false;
   }
 }
 

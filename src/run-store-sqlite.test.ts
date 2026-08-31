@@ -1,5 +1,15 @@
 import { DatabaseSync } from "node:sqlite";
-import { chmod, mkdir, mkdtemp, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -331,6 +341,52 @@ describe("SQLite pipeline run store", () => {
     expect(() => store.flush()).toThrow(/circular/i);
     expect(() => store.close()).toThrow(/circular/i);
   });
+
+  it("does not treat a dangling WAL sidecar symlink as absent", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    await store.export(startedEvent("run-1", 10));
+    await store.close();
+    await unlink(`${filename}-wal`).catch(() => {});
+    await unlink(`${filename}-shm`).catch(() => {});
+    const missingWal = path.join(directory, "missing-wal");
+    await symlink(missingWal, `${filename}-wal`);
+    expect((await lstat(`${filename}-wal`)).isSymbolicLink()).toBe(true);
+    await expect(stat(`${filename}-wal`)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      openSqlitePipelineRunStore(filename, { initialize: false, readOnly: true })
+    ).rejects.toThrow(/shared-memory|sidecar|write-ahead/i);
+    await expect(stat(`${filename}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it.skipIf("Bun" in globalThis)(
+    "does not hide events behind an immutable fallback when a WAL sidecar is a dangling symlink",
+    async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+      directories.push(directory);
+      const filename = path.join(directory, "runs.sqlite");
+      const store = await openSqlitePipelineRunStore(filename);
+      await store.export(startedEvent("run-1", 10));
+      await store.close();
+      await unlink(`${filename}-wal`).catch(() => {});
+      const missingWal = path.join(directory, "missing-wal");
+      await symlink(missingWal, `${filename}-wal`);
+      expect((await lstat(`${filename}-wal`)).isSymbolicLink()).toBe(true);
+      await expect(stat(`${filename}-wal`)).rejects.toMatchObject({ code: "ENOENT" });
+      await chmod(filename, 0o444);
+      await chmod(directory, 0o555);
+      try {
+        await expect(
+          openSqlitePipelineRunStore(filename, { initialize: false, readOnly: true })
+        ).rejects.toThrow();
+      } finally {
+        await chmod(directory, 0o755);
+        await chmod(filename, 0o644);
+      }
+    }
+  );
 
   it.skipIf("Bun" in globalThis)(
     "does not hide rollback-journal events behind an immutable read-only fallback",
