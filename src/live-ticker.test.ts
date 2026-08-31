@@ -445,4 +445,79 @@ try {
       unlinkSync(workerPath);
     }
   });
+
+  it("does not replay logs already accepted by a live worker", async () => {
+    const path = join(tmpdir(), `tubeless-ticker-log-dup-${process.pid}-${Date.now()}.log`);
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-log-dup-worker-${process.pid}-${Date.now()}.mjs`
+    );
+    writeFileSync(
+      workerPath,
+      `
+import { writeSync } from "node:fs";
+import { parentPort, workerData } from "node:worker_threads";
+
+let logs = 0;
+parentPort.on("message", (msg) => {
+  if (msg.type === "lines") {
+    writeSync(workerData.fd, "worker-live\\n");
+    parentPort.postMessage({ type: "ready" });
+    return;
+  }
+  if (msg.type !== "log") return;
+  writeSync(workerData.fd, msg.text);
+  logs += 1;
+  if (logs >= 2) throw new Error("mid-run crash");
+});
+`
+    );
+    const fd = openSync(path, "w");
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          writeSync(fd, chunk);
+        },
+      });
+      ticker.setLines([`${SPINNER_TOKEN} load`]);
+
+      const liveDeadline = Date.now() + 2_000;
+      while (Date.now() < liveDeadline) {
+        if (readFileSync(path, "utf8").includes("worker-live")) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      ticker.writeLog("session-log\n");
+      const loggedDeadline = Date.now() + 2_000;
+      while (Date.now() < loggedDeadline) {
+        if (readFileSync(path, "utf8").includes("session-log")) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      ticker.writeLog("crash-log\n");
+      const fallbackDeadline = Date.now() + 2_000;
+      let rendered = "";
+      while (Date.now() < fallbackDeadline) {
+        rendered = readFileSync(path, "utf8");
+        const plain = rendered.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
+        if (rendered.includes("crash-log") && /[-\\|\/] load/.test(plain)) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      ticker.dispose();
+      rendered = readFileSync(path, "utf8");
+      expect(rendered.match(/session-log/g)).toHaveLength(1);
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
+    }
+  });
 });

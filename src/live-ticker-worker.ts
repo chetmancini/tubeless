@@ -40,6 +40,13 @@ let columns = data.columns;
 let lines: string[] = [];
 let frameLineCount = 0;
 let cursorHidden = false;
+let announcedReady = false;
+
+function announceReady(): void {
+  if (announcedReady || port === null) return;
+  announcedReady = true;
+  port.postMessage({ type: "ready" });
+}
 
 function write(chunk: string): void {
   writeSync(data.fd, chunk);
@@ -95,12 +102,14 @@ port.on("message", (msg: TickerWorkerMessage) => {
     clearFrame();
     write(msg.text);
     frameLineCount = 0;
+    announceReady();
     return;
   }
   if (msg.columns !== undefined) columns = msg.columns;
   if (msg.type === "lines") {
     lines = msg.lines;
     redraw();
+    announceReady();
     return;
   }
   if (msg.type === "stop") {

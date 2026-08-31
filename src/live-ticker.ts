@@ -297,6 +297,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   let inlineFallback: LiveTicker | undefined;
   let lines: readonly string[] = [];
   const pendingLogs: string[] = [];
+  let workerLive = false;
 
   const send = (message: TickerWorkerMessage): void => {
     if (disposed || inlineFallback) return;
@@ -317,6 +318,11 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     if (code !== 0) failToInline();
   });
   worker.unref();
+  worker.on("message", (msg: { type?: string }) => {
+    if (msg?.type !== "ready") return;
+    workerLive = true;
+    pendingLogs.length = 0;
+  });
 
   return {
     setLines(nextLines) {
@@ -336,7 +342,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
         writeSync(options.fd, text);
         return;
       }
-      pendingLogs.push(text);
+      if (!workerLive) pendingLogs.push(text);
       send({ text, type: "log" });
     },
     dispose() {
