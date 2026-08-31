@@ -217,8 +217,12 @@
     },
     {
       "declaration": "./dist/run-store-sqlite.d.ts",
-      "exports": ["openSqlitePipelineRunStore", "SqlitePipelineRunStore"],
-      "sha256": "13a9d5b25010b79c1771f81eb681d990e14288a3cefa2520dde21eb9535328ff",
+      "exports": [
+        "openSqlitePipelineRunStore",
+        "OpenSqlitePipelineRunStoreOptions",
+        "SqlitePipelineRunStore"
+      ],
+      "sha256": "e6ddfe8f5043656242ebd824ead3c0883ce25d4e57520fba9dcf93ce01a1572d",
       "specifier": "tubeless/run-store/sqlite"
     },
     {

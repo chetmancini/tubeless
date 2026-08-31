@@ -29,11 +29,94 @@ export const TUBELESS_WORKBENCH_EXIT_CODE = {
  */
 export const DUPLICATE_SIGNAL_WINDOW_MS = 300;
 
+/** Default local SQLite path shared by `tubeless run --store`, `history`, and `ui`. */
+export const DEFAULT_PIPELINE_RUN_STORE = ".tubeless/runs.sqlite";
+
 export interface WorkbenchCliIo {
   cwd: string;
   signal?: AbortSignal;
-  stderr: { write(chunk: string): void };
-  stdout: { write(chunk: string): void };
+  stderr: { write(chunk: string): boolean | void };
+  stdout: { write(chunk: string): boolean | void };
+}
+
+function abortReason(signal?: AbortSignal): Error {
+  return signal?.reason instanceof Error ? signal.reason : new Error("Aborted");
+}
+
+/** Write a chunk and wait until it is flushed or the destination fails. */
+export async function writeCliChunk(
+  output: { write(chunk: string): boolean | void },
+  chunk: string,
+  signal?: AbortSignal
+): Promise<void> {
+  interface CallbackWriter {
+    destroyed?: boolean;
+    errored?: Error | null;
+    off?(event: string, listener: (...args: never[]) => void): unknown;
+    once?(event: string, listener: (...args: never[]) => void): unknown;
+    write(chunk: string, callback?: (error?: Error | null) => void): boolean | void;
+  }
+  // SAFETY: destroyed/errored/once/off and write(chunk, cb) are Node writable
+  // stream signals. Test IO objects omit those fields and skip the flush wait.
+  const stream = output as CallbackWriter;
+  if (signal?.aborted) throw abortReason(signal);
+  if (stream.destroyed) {
+    throw stream.errored instanceof Error
+      ? stream.errored
+      : new Error("Cannot write to a closed stream.");
+  }
+  if (typeof stream.once !== "function" || typeof stream.off !== "function") {
+    output.write(chunk);
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const succeed = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const onAbort = () => {
+      fail(abortReason(signal));
+    };
+    const onError = (error: Error) => {
+      fail(error);
+    };
+    const onClose = () => {
+      fail(
+        stream.errored instanceof Error
+          ? stream.errored
+          : new Error("Cannot write to a closed stream.")
+      );
+    };
+    const cleanup = () => {
+      stream.off!("error", onError);
+      stream.off!("close", onClose);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    stream.once!("error", onError);
+    stream.once!("close", onClose);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    if (stream.destroyed) {
+      onClose();
+      return;
+    }
+    stream.write(chunk, (error) => {
+      if (error) fail(error);
+      else succeed();
+    });
+  });
 }
 
 export function writeUsageError(io: WorkbenchCliIo, message: string, usage: string): number {

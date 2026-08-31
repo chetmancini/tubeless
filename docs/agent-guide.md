@@ -60,7 +60,10 @@ or shared helpers in this repository.
   `--export`.
 - Use `tubeless run <command-file> -- <command-args>` only for modules exporting a
   `definePipelineCommand`. Keep application flags after `--`; the command must
-  continue to own domain validation and option mapping.
+  continue to own domain validation and option mapping. Pass `--trace <path>` for
+  NDJSON traces (`-` writes NDJSON to stdout and moves command output to stderr)
+  and `--store` for SQLite; they compose. Use `tubeless history` to list or show
+  recorded runs.
 
 ## Runtime rules
 
@@ -118,8 +121,11 @@ or shared helpers in this repository.
 - Preserve the dependency-free runtime. Keep application telemetry SDKs at the
   exporter boundary.
 - Keep durable local observation opt-in. Use the append-only adapter from
-  `tubeless/run-store/sqlite` or `tubeless run --store`; do not make pipeline
-  definitions depend on storage or the studio. Recorded history keeps the last
+  `tubeless/run-store/sqlite` or `tubeless run --store`; inspect recorded runs
+  with `tubeless history`. `tubeless history` inspects a finished artifact and
+  refuses a store with a live writer or multiple hard links. Do not make
+  pipeline definitions depend on storage or the studio. Recorded history keeps
+  the last
   `reportProgress` `details` plus `detail_count`, and opaque child steps keep
   `nested_pipeline` with the original `step_count`. Studio renders those
   snapshots; it does not flatten child DAGs into the parent step.
@@ -158,7 +164,7 @@ or shared helpers in this repository.
 ## Required references
 
 - Read [core concepts](./concepts.md) for skip, failure, or selection changes.
-- Read [the CLI](./cli.md) for inspect, plan, graph, run, and exit codes.
+- Read [the CLI](./cli.md) for inspect, plan, graph, run, history, and exit codes.
 - Read [the studio](./studio.md) before changing `tubeless ui` or
   `definePipelineStudio`.
 - Read [child composition](./child-pipeline-composition.md) before changing child
