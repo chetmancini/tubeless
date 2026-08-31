@@ -669,6 +669,50 @@ describe("createPipelineReporter", () => {
     reporter.dispose();
   });
 
+  it("flushes a late-window coalesced update at the cadence deadline", async () => {
+    vi.useFakeTimers();
+    const refreshIntervalMs = 80;
+    const output = captureOutput();
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      mode: "interactive",
+      output,
+      progressBarWidth: 10,
+      refreshIntervalMs,
+      symbols: "unicode",
+      terminal: { color: false, isTTY: true, unicode: true },
+    });
+    const plan = progressivePipeline().plan();
+    const load = plan.steps.find((step) => step.id === "load");
+    expect(load).toBeDefined();
+    if (!load) return;
+
+    reporter.hooks.onPipelineStart?.(plan);
+    reporter.hooks.onStepStatus?.({
+      attemptId: "attempt-1",
+      pipelineId: plan.pipelineId,
+      progress: { completed: 4, total: 10, message: "records" },
+      status: "running",
+      step: load,
+    });
+    expect(output.chunks.join("")).toContain("4/10 records");
+
+    await vi.advanceTimersByTimeAsync(refreshIntervalMs - 1);
+    reporter.hooks.onStepStatus?.({
+      attemptId: "attempt-1",
+      pipelineId: plan.pipelineId,
+      progress: { completed: 8, total: 10, message: "records" },
+      status: "running",
+      step: load,
+    });
+    expect(output.chunks.join("")).not.toContain("8/10 records");
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(output.chunks.join("")).toContain("8/10 records");
+    reporter.dispose();
+  });
+
   it("cancels the trailing flush when a status event already painted", async () => {
     vi.useFakeTimers();
     const refreshIntervalMs = 80;

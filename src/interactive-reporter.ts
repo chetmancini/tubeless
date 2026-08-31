@@ -402,10 +402,13 @@ function createInteractiveReporter<TResult>(
           redraw();
         } else {
           progressDirty = true;
-          trailingFlush ??= setTimeout(() => {
-            trailingFlush = undefined;
-            if (!disposed) flushProgress();
-          }, refreshIntervalMs);
+          trailingFlush ??= setTimeout(
+            () => {
+              trailingFlush = undefined;
+              if (!disposed) flushProgress();
+            },
+            Math.max(0, refreshIntervalMs - (now - lastProgressRedrawAt))
+          );
           trailingFlush.unref?.();
         }
         return;
