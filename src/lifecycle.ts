@@ -1,7 +1,6 @@
 import type {
   PipelineError,
   PipelineHooks,
-  PipelineLogger,
   PipelinePlan,
   PipelineRun,
   PipelineRuntime,

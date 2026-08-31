@@ -199,7 +199,14 @@ function isHookConfigFunction<TResult, TSchema extends CliParamsSchema>(
 function defaultPipelineCommandOptions<TSchema extends CliParamsSchema>(
   values: PipelineCliValues<TSchema>
 ): DefaultPipelineCommandOptions<TSchema> {
-  const { continueOnError, dryRun, resume, stepIds, targets, ...domainValues } = values;
+  const {
+    continueOnError: _continueOnError,
+    dryRun: _dryRun,
+    resume: _resume,
+    stepIds: _stepIds,
+    targets: _targets,
+    ...domainValues
+  } = values;
   return domainValues;
 }
 

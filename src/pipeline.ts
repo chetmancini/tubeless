@@ -26,7 +26,6 @@ import type {
   PipelinePlan,
   PipelineRun,
   PipelineRunControls,
-  PipelineRunOptions,
   StandardSchemaV1,
 } from "./pipeline-types.js";
 

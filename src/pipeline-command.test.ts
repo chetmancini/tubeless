@@ -375,7 +375,7 @@ describe("definePipelineCommand", () => {
       await started;
       const registration = onceSpy.mock.calls.find(([event]) => event === "SIGINT");
       expect(registration).toBeDefined();
-      (registration?.[1] as () => void)();
+      (registration![1] as () => void)();
       await runPromise;
     } finally {
       const observedExitCode = process.exitCode;
@@ -421,7 +421,7 @@ describe("definePipelineCommand", () => {
       await started;
       const registration = onceSpy.mock.calls.find(([event]) => event === "SIGINT");
       expect(registration).toBeDefined();
-      (registration?.[1] as () => void)();
+      (registration![1] as () => void)();
       await runPromise;
       expect(process.exitCode).toBe(130);
     } finally {

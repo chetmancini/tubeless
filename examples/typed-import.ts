@@ -44,6 +44,7 @@ export function planNormalizeTarget(lines: readonly string[]) {
   return ImportPipeline.plan({ targets: ["normalize-rows"] });
 }
 
+// oxlint-disable-next-line no-constant-condition -- typecheck-only compile probe
 if (false) {
   // @ts-expect-error Pipeline step IDs stay literal, so typos fail typecheck.
   ImportPipeline.plan({ stepIds: ["normalise-rows"] });

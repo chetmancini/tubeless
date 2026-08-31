@@ -42,6 +42,7 @@ export async function runChildPipelineExample() {
   });
 }
 
+// oxlint-disable-next-line no-constant-condition -- typecheck-only compile probe
 if (false) {
   importStep.fromPipeline("invalid-child-selection", {
     pipeline: NormalizePipeline,

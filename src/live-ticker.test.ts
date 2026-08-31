@@ -106,7 +106,7 @@ describe("live ticker worker", () => {
         rendered = readFileSync(path, "utf8");
         if (
           rendered.includes("load") &&
-          /[-\\|\/] /.test(rendered) &&
+          /[-\\|/] /.test(rendered) &&
           rendered.includes("\u001B[0;1;36m")
         ) {
           break;
@@ -129,7 +129,7 @@ describe("live ticker worker", () => {
       expect(inlineWrites).toEqual([]);
       expect(rendered).toContain("\u001B[?25l");
       expect(rendered).toContain("\u001B[?25h");
-      expect(plain).toMatch(/[-\\|\/] load/);
+      expect(plain).toMatch(/[-\\|/] load/);
       expect(rendered).toContain("\u001B[0;1;36m");
       expect(rendered).toContain("logged from parent");
       expect(rendered).not.toContain("\u0004");
@@ -198,6 +198,6 @@ const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
     expect(child.status, child.stderr).toBe(0);
     expect(child.stderr).not.toContain("ERR_INPUT_TYPE_NOT_ALLOWED");
     const plain = child.stdout.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
-    expect(plain).toMatch(/[-\\|\/] load/);
+    expect(plain).toMatch(/[-\\|/] load/);
   });
 });
