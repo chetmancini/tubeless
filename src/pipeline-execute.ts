@@ -810,8 +810,10 @@ export async function executePlannedRun<
       };
       let output: unknown;
       try {
-        const runStep = dryRun && typeof step.dryRun === "function" ? step.dryRun : step.run;
-        output = await runStep(inputs, stepContext);
+        output =
+          dryRun && typeof step.dryRun === "function"
+            ? await step.dryRun(inputs, stepContext)
+            : await step.run(inputs, stepContext);
       } finally {
         acceptsProgress = false;
       }

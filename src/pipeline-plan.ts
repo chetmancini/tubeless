@@ -851,90 +851,23 @@ export interface CompiledPipeline<
   readonly targetIds: readonly string[];
 }
 
-function remapFrozenDependencies<TOptions extends object>(
-  dependencies: readonly AnyStep<TOptions>[] | undefined,
-  sealedByOriginal: Map<AnyStep<TOptions>, AnyStep<TOptions>>
-): readonly AnyStep<TOptions>[] | undefined {
-  if (dependencies === undefined) return undefined;
-  return Object.freeze(
-    dependencies.map((dependency) => sealedByOriginal.get(dependency) ?? dependency)
-  );
-}
-
-const COMPILED_STEP_VALUE_FIELDS = [
-  "id",
-  "name",
-  "description",
-  "dryRun",
-  "outputSchema",
-  "skip",
-  "run",
-] as const;
-
 const COMPILED_STEP_GRAPH_FIELDS = [
   "dependsOn",
   "optionalDependsOn",
   "skipAfterFailureOf",
 ] as const;
 
-const COMPILED_STEP_SYMBOLS = [STEP_NESTED_PIPELINE, STEP_REMOTE, STEP_OPTIONS_SCHEMA] as const;
-
-function bindToOriginal<T>(original: object, value: T): T {
-  if (typeof value !== "function") return value;
-  // SAFETY: contract methods and dry-run handlers must keep the author's
-  // `this`, including class instances whose implementation uses `#private`.
-  return value.bind(original) as T;
-}
-
-function snapshotContractValue(
-  step: object,
-  field: PropertyKey,
-  enumerable: boolean
-): PropertyDescriptor | undefined {
-  if (!(field in step)) return undefined;
-  return {
-    configurable: true,
-    enumerable,
-    // SAFETY: `field` is an AnyStep contract key; the indexed read is the
-    // public value (or getter result) from the original instance.
-    value: bindToOriginal(step, (step as Record<PropertyKey, unknown>)[field]),
-    writable: true,
-  };
-}
-
-function snapshotCompiledSteps<TOptions extends object>(
-  steps: readonly AnyStep<TOptions>[]
-): Map<AnyStep<TOptions>, AnyStep<TOptions>> {
-  const sealedByOriginal = new Map<AnyStep<TOptions>, AnyStep<TOptions>>();
-  for (const step of steps) {
-    // SAFETY: each placeholder receives materialized contract fields below
-    // before compilePipeline returns, so the object matches AnyStep<TOptions>.
-    sealedByOriginal.set(step, {} as AnyStep<TOptions>);
+function snapshotStepGraphMetadata<TOptions extends object>(step: AnyStep<TOptions>): void {
+  for (const field of COMPILED_STEP_GRAPH_FIELDS) {
+    if (!(field in step)) continue;
+    const dependencies = step[field];
+    Object.defineProperty(step, field, {
+      configurable: true,
+      enumerable: true,
+      value: dependencies === undefined ? undefined : Object.freeze([...dependencies]),
+      writable: false,
+    });
   }
-  for (const step of steps) {
-    const sealed = sealedByOriginal.get(step)!;
-    const descriptors: PropertyDescriptorMap = {};
-    for (const field of COMPILED_STEP_VALUE_FIELDS) {
-      const descriptor = snapshotContractValue(step, field, true);
-      if (descriptor) descriptors[field] = descriptor;
-    }
-    for (const symbol of COMPILED_STEP_SYMBOLS) {
-      const descriptor = snapshotContractValue(step, symbol, false);
-      if (descriptor) descriptors[symbol] = descriptor;
-    }
-    for (const field of COMPILED_STEP_GRAPH_FIELDS) {
-      if (!(field in step)) continue;
-      descriptors[field] = {
-        configurable: true,
-        enumerable: true,
-        value: remapFrozenDependencies(step[field], sealedByOriginal),
-        writable: true,
-      };
-    }
-    Object.defineProperties(sealed, descriptors);
-    Object.freeze(sealed);
-  }
-  return sealedByOriginal;
 }
 
 export function compilePipeline<
@@ -953,9 +886,10 @@ export function compilePipeline<
   // SAFETY: `steps` is `TSteps extends readonly AnyStep[]`; the cast restores
   // the `TOptions` generic that the tuple erased, without changing the values.
   const orderedSteps = topologicalSort(definition.steps as readonly AnyStep<TOptions>[])!;
-  const sealedByOriginal = snapshotCompiledSteps(orderedSteps);
-  const sealedStep = (step: AnyStep<TOptions>): AnyStep<TOptions> =>
-    sealedByOriginal.get(step) ?? step;
+  // Keep the author's step objects so class `#private` accessors and prototype
+  // `run`/`skip` keep working. Graph arrays are snapshotted onto those objects
+  // as frozen own properties; other contract fields do not need to be own.
+  for (const step of orderedSteps) snapshotStepGraphMetadata(step);
   // SAFETY: `requireOutputs` stamps the required step ids onto the finalizer
   // function under `REQUIRED_FINALIZER_OUTPUTS`; the intersection only widens
   // the function type to expose that optional property.
@@ -967,13 +901,13 @@ export function compilePipeline<
   // SAFETY: targets are a subset of `TSteps[number]`, each an `AnyStep<TOptions>`.
   const declaredTargets = (definition.targets ?? []) as readonly AnyStep<TOptions>[];
   return Object.freeze({
-    declaredTargets: Object.freeze(declaredTargets.map(sealedStep)),
+    declaredTargets: Object.freeze([...declaredTargets]),
     finalize: definition.finalize,
     id: definition.id,
     optionsSchema: definition.steps[0]?.[STEP_OPTIONS_SCHEMA],
-    orderedSteps: Object.freeze(orderedSteps.map(sealedStep)),
+    orderedSteps: Object.freeze([...orderedSteps]),
     requiredFinalizerSteps: requiredFinalizerSteps
-      ? Object.freeze(requiredFinalizerSteps.map(sealedStep))
+      ? Object.freeze([...requiredFinalizerSteps])
       : undefined,
     resultSchema: definition.resultSchema,
     stepIds: Object.freeze(definition.steps.map((step) => step.id)),
