@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import type { PipelineRunEventStore, StoredPipelineEvent } from "./run-store.js";
-import { PIPELINE_RUN_STUDIO_SCRIPT } from "./run-store-ui-page.js";
+import { PIPELINE_RUN_STUDIO_SCRIPT, PIPELINE_RUN_STUDIO_STYLE } from "./run-store-ui-page.js";
 import { startPipelineRunStudio, type PipelineRunStudioServer } from "./run-store-ui.js";
 
 async function requestWithHost(
@@ -254,6 +254,8 @@ describe("local pipeline run studio", () => {
     const html = await fetch(server.url).then((response) => response.text());
     const script = /<script>([\s\S]*)<\/script>/.exec(html)?.[1] ?? "";
     const style = /<style>([\s\S]*)<\/style>/.exec(html)?.[1] ?? "";
+    expect(script).toBe(PIPELINE_RUN_STUDIO_SCRIPT);
+    expect(style).toBe(PIPELINE_RUN_STUDIO_STYLE);
     expect(script).not.toMatch(/\bstyle="/);
     expect(script).not.toMatch(/\.style\./);
     expect(style).toContain(".pulse.lost");
@@ -262,7 +264,45 @@ describe("local pipeline run studio", () => {
     expect(style).toContain(".progress > i.w0");
     expect(style).toContain(".progress > i.w100");
     expect(script).toContain("class=\"w' + Math.round(progressWidth) + '\"");
-    expect(script).toContain("classList.toggle('lost'");
+    expect(script).toContain("classList.toggle('lost', !connected)");
+  });
+
+  it("clears the pulse lost class after a disconnect then reconnect", () => {
+    const tokens = new Set<string>();
+    const label = { textContent: "" };
+    const pulse = {
+      classList: {
+        toggle(name: string, force?: boolean) {
+          if (force === undefined) {
+            if (tokens.has(name)) tokens.delete(name);
+            else tokens.add(name);
+          } else if (force) {
+            tokens.add(name);
+          } else {
+            tokens.delete(name);
+          }
+          return tokens.has(name);
+        },
+      },
+    };
+    const query = (selector: string) => (selector === ".pulse" ? pulse : label);
+    const source = /function setConnected\(connected\) \{[\s\S]*?\n    \}/.exec(
+      PIPELINE_RUN_STUDIO_SCRIPT
+    )?.[0];
+    expect(source).toBeTruthy();
+    const loaded = new Function("$", `${source}; return setConnected;`)(query);
+    if (typeof loaded !== "function") {
+      throw new Error("setConnected helper was not extracted from the studio script");
+    }
+    const setConnected = (connected: boolean) => {
+      loaded(connected);
+    };
+    setConnected(false);
+    expect(tokens.has("lost")).toBe(true);
+    expect(label.textContent).toBe("Connection lost");
+    setConnected(true);
+    expect(tokens.has("lost")).toBe(false);
+    expect(label.textContent).toBe("Connected · local");
   });
 
   it("escapes step status labels and guards isoTime in the served script", async () => {

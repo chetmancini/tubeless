@@ -269,6 +269,10 @@ export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
 export const PIPELINE_RUN_STUDIO_SCRIPT = String.raw`
     const state = { snapshot: null, detail: null, detailFingerprint: null, commands: [], view: "runs", selectedRunId: null, query: "", loading: false, launching: false, planning: false, clearing: false, cancelling: false, canCancel: false, canClearHistory: false, planVersion: 0 };
     const $ = (selector) => document.querySelector(selector);
+    function setConnected(connected) {
+      $('#connectionLabel').textContent = connected ? 'Connected · local' : 'Connection lost';
+      $('.pulse').classList.toggle('lost', !connected);
+    }
     const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"})[char]);
     const statusMark = (value) => value === 'completed' ? '✓' : value === 'skipped' ? '×' : value === 'cancelled' ? '■' : value === 'failed' ? '!' : value === 'planned' ? '…' : '';
     const status = (value) => '<span class="status ' + esc(value) + '"><i class="status-mark" aria-hidden="true">' + statusMark(value) + '</i>' + esc(value) + '</span>';
@@ -624,12 +628,10 @@ export const PIPELINE_RUN_STUDIO_SCRIPT = String.raw`
         state.snapshot = await response.json();
         render();
         await loadSelectedRunDetail();
-        $('#connectionLabel').textContent = 'Connected · local';
-        $('.pulse').classList.toggle('lost', false);
+        setConnected(true);
         render();
       } catch (error) {
-        $('#connectionLabel').textContent = 'Connection lost';
-        $('.pulse').classList.toggle('lost', true);
+        setConnected(false);
       } finally {
         state.loading = false;
         $('#refresh').classList.remove('spinning');
