@@ -24,7 +24,7 @@ import {
 } from "./cli-types.js";
 import { isCliValidationError, isPipelineExecutionError, toExitCode } from "./workbench-shared.js";
 
-export function resolveContext(overrides?: Partial<CliContext>): CliContext {
+function resolveContext(overrides?: Partial<CliContext>): CliContext {
   return {
     cwd: overrides?.cwd ?? process.cwd(),
     env: overrides?.env ?? process.env,
@@ -48,7 +48,7 @@ const SIGINT_EXIT_CODE = 130;
  * `parse()` mutate process-global signal handlers. Embedded callers can pass
  * their own signal through the context instead.
  */
-export function manageMainSignal(context: CliContext): ManagedMainSignal {
+function manageMainSignal(context: CliContext): ManagedMainSignal {
   if (context.signal) {
     return { context, wasInterrupted: () => false, cleanup: () => {} };
   }
@@ -77,7 +77,7 @@ export function manageMainSignal(context: CliContext): ManagedMainSignal {
  * matter what `run` does with `context.checkpoint` (`record`/`flush`/`clear`, directly or
  * via `withCheckpointedBatch`).
  */
-export function inMemoryCheckpointView(seed: ReadonlyMap<string, unknown>): CheckpointStore {
+function inMemoryCheckpointView(seed: ReadonlyMap<string, unknown>): CheckpointStore {
   const entries = new Map(seed);
   return {
     has: (key) => entries.has(key),

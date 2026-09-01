@@ -57,7 +57,7 @@ function parseRunArgs(argv: readonly string[]) {
   };
 }
 
-export async function executePipelineCommand(
+async function executePipelineCommand(
   command: WorkbenchPipelineCommand,
   args: readonly string[],
   io: WorkbenchCliIo,

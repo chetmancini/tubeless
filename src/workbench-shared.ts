@@ -124,7 +124,7 @@ export function writeUsageError(io: WorkbenchCliIo, message: string, usage: stri
   return TUBELESS_WORKBENCH_EXIT_CODE.usage;
 }
 
-export function isDefinitionError(error: unknown): boolean {
+function isDefinitionError(error: unknown): boolean {
   return (
     error instanceof PipelineDefinitionError ||
     (error instanceof Error && error.name === "PipelineDefinitionError")
@@ -135,7 +135,7 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function errorName(error: unknown): string | undefined {
+function errorName(error: unknown): string | undefined {
   return typeof error === "object" && error !== null && "name" in error
     ? String(error.name)
     : undefined;
@@ -236,7 +236,7 @@ export async function loadPlanSource(
   }));
 }
 
-export function writeCommandLine(
+function writeCommandLine(
   output: WorkbenchCliIo["stdout"] | WorkbenchCliIo["stderr"],
   message: string,
   ...optionalParams: string[]

@@ -178,7 +178,7 @@ export function selectPipelineCommandExport(
  * Select a plan source. A marked command wins when the module also exports a
  * pipeline. Named exports still have to be a pipeline or a marked command.
  */
-export function selectPlanSourceExport(
+function selectPlanSourceExport(
   moduleExports: Record<string, unknown>,
   exportName?: string
 ): WorkbenchPlanSource {
@@ -227,14 +227,6 @@ export async function importModuleNamespace(filePath: string): Promise<Record<st
   // Record<string, unknown> documents the import result's shape; selectors
   // validate each export at runtime before use.
   return (await import(pathToFileURL(filePath).href)) as Record<string, unknown>;
-}
-
-/** Load and select a pipeline from an absolute module path. */
-export async function loadPipelineModule(
-  filePath: string,
-  exportName?: string
-): Promise<WorkbenchPipeline> {
-  return selectPipelineExport(await importModuleNamespace(filePath), exportName);
 }
 
 /** Load a command and its export name for a stable external registration identity. */
