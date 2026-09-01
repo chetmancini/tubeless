@@ -227,29 +227,37 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
 
 function composeTraceExporters(exporters: readonly PipelineTraceExporter[]): PipelineTraceExporter {
   if (exporters.length === 1) return exporters[0]!;
+  const failed = new WeakSet<PipelineTraceExporter>();
+  let lastError: unknown;
+  const invokeHealthy = async (
+    invoke: (exporter: PipelineTraceExporter) => void | Promise<void>
+  ): Promise<void> => {
+    let succeeded = 0;
+    let roundError: unknown;
+    for (const exporter of exporters) {
+      if (failed.has(exporter)) continue;
+      try {
+        await invoke(exporter);
+        succeeded += 1;
+      } catch (error) {
+        failed.add(exporter);
+        lastError = error;
+        roundError ??= error;
+      }
+    }
+    if (succeeded === 0) {
+      const error = roundError ?? lastError;
+      if (error !== undefined) throw error;
+    }
+  };
   return {
-    async export(event) {
-      await invokeEveryExporter(exporters, (exporter) => exporter.export(event));
+    export(event) {
+      return invokeHealthy((exporter) => exporter.export(event));
     },
-    async flush() {
-      await invokeEveryExporter(exporters, (exporter) => exporter.flush?.());
+    flush() {
+      return invokeHealthy((exporter) => exporter.flush?.());
     },
   };
-}
-
-async function invokeEveryExporter(
-  exporters: readonly PipelineTraceExporter[],
-  invoke: (exporter: PipelineTraceExporter) => void | Promise<void>
-): Promise<void> {
-  let firstError: unknown;
-  for (const exporter of exporters) {
-    try {
-      await invoke(exporter);
-    } catch (error) {
-      firstError ??= error;
-    }
-  }
-  if (firstError !== undefined) throw firstError;
 }
 
 async function createRunTraceWriter(

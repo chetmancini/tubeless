@@ -94,7 +94,9 @@ or shared helpers in this repository.
   output. Its versioned `PipelineRun` exposes `runId`, terminal status and
   timestamps, errors, and timestamped step reports with correlated attempt IDs;
   structural skips have no attempt ID or start timestamp. Use hooks or tracing
-  for streaming logs and progress. Use `plan` when nothing may run.
+  for streaming logs and progress. Exporter failures warn once per emitter and
+  do not fail the run; pass `onExporterError` to observe the first drop. Use
+  `plan` when nothing may run.
 - Declare supported downstream goals with `targets: [step]` on
   `definePipeline`, then select their literal IDs through run controls. Required
   inputs and failure gates are selected recursively. Use `stepIds` only when

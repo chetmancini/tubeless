@@ -27,6 +27,11 @@ export const TracingExamplePipeline = definePipeline({
 export async function runTracingExample(rows: readonly string[]): Promise<readonly string[]> {
   return TracingExamplePipeline.runOrThrow({ rows }, undefined, {
     ...defaultPipelineContext(),
-    tracing: { exporter: createJsonTraceExporter({ log: console }) },
+    tracing: {
+      exporter: createJsonTraceExporter({ log: console }),
+      onExporterError: (error) => {
+        console.warn("trace export failed", error instanceof Error ? error.message : error);
+      },
+    },
   });
 }

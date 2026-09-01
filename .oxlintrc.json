@@ -104,6 +104,7 @@
         "src/lifecycle.ts",
         "src/retry.ts",
         "src/testing.ts",
+        "src/tracing.ts",
         "src/workbench-studio.ts"
       ],
       "rules": {

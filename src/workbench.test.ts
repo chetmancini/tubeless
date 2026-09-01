@@ -813,6 +813,43 @@ describe("tubeless workbench", () => {
     expect(traced.map(({ name }) => name)).toContain("pipeline.completed");
   });
 
+  it("keeps SQLite history when a composed --trace destination fails", async () => {
+    const { directory } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const databasePath = path.join(directory, "history", "runs.sqlite");
+    let writes = 0;
+    const writeStdout = io.stdout.write;
+    io.stdout.write = (chunk) => {
+      writes += 1;
+      if (writes > 1) throw new Error("broken pipe");
+      writeStdout(chunk);
+    };
+
+    const exitCode = await runWorkbenchCli(
+      [
+        "run",
+        "--store",
+        databasePath,
+        "--trace",
+        "-",
+        "pipeline.mjs",
+        "--",
+        "--message",
+        "hello",
+        "--target",
+        "work",
+      ],
+      io
+    );
+
+    const store = await openSqlitePipelineRunStore(databasePath);
+    const stored = await store.listEvents();
+    await store.close();
+    expect(stored.map(({ name }) => name)).toContain("pipeline.completed");
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.execution);
+    expect(io.errors.join("")).toMatch(/broken pipe|Error/i);
+  });
+
   it("rejects the same path for --store and --trace", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     const io = captureIo(directory);
