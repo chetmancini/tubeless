@@ -50,14 +50,23 @@ function lockPathFor(filePath: string): string {
   return `${filePath}.lock`;
 }
 
-function readLockHolder(lockPath: string): number | undefined {
+function readLockContents(lockPath: string): string | undefined {
   try {
-    const firstLine = fs.readFileSync(lockPath, "utf8").split("\n", 1)[0];
-    const pid = Number(firstLine);
-    return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+    return fs.readFileSync(lockPath, "utf8");
   } catch {
     return undefined;
   }
+}
+
+function holderPidFromContents(contents: string): number | undefined {
+  const firstLine = contents.split("\n", 1)[0];
+  const pid = Number(firstLine);
+  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+}
+
+function readLockHolder(lockPath: string): number | undefined {
+  const contents = readLockContents(lockPath);
+  return contents === undefined ? undefined : holderPidFromContents(contents);
 }
 
 function isProcessAlive(pid: number): boolean {
@@ -98,8 +107,11 @@ function throwLocked(filePath: string, lockPath: string, fallbackPid?: number): 
 
 /**
  * The lock protects the checkpoint path, not the file: a lock without a checkpoint
- * file still excludes other openers. Live holders are never reclaimed. Unparseable
- * lock contents and dead pids are stale and may be replaced once.
+ * file still excludes other openers. Live holders are never reclaimed. An empty
+ * lock is treated as in-progress create (openSync wx before writeSync), not stale.
+ * Unparseable nonempty contents and dead pids are stale and may be replaced once,
+ * but only while the file still matches the stale snapshot — otherwise a racing
+ * reclaim would unlink the winner's live lock.
  */
 function acquireCheckpointLock(filePath: string): string {
   const lockPath = lockPathFor(filePath);
@@ -113,9 +125,32 @@ function acquireCheckpointLock(filePath: string): string {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
   }
 
-  const holderPid = readLockHolder(lockPath);
+  const snapshot = readLockContents(lockPath);
+  if (snapshot === undefined) {
+    try {
+      createExclusiveLock(lockPath);
+      return lockPath;
+    } catch (error) {
+      // SAFETY: vanished lock may already have been replaced by another opener.
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      throwLocked(filePath, lockPath);
+    }
+  }
+  if (snapshot.length === 0) {
+    throwLocked(filePath, lockPath);
+  }
+  const holderPid = holderPidFromContents(snapshot);
   if (holderPid !== undefined && isProcessAlive(holderPid)) {
     throw new CheckpointLockedError(filePath, holderPid);
+  }
+
+  const current = readLockContents(lockPath);
+  if (current !== snapshot) {
+    const currentPid = current === undefined ? undefined : holderPidFromContents(current);
+    if (currentPid !== undefined && isProcessAlive(currentPid)) {
+      throw new CheckpointLockedError(filePath, currentPid);
+    }
+    throwLocked(filePath, lockPath, currentPid ?? holderPid);
   }
 
   try {
@@ -178,7 +213,13 @@ export function openCheckpoint<TMeta = unknown>(
     });
   const lockPath = acquireCheckpointLock(filePath);
   let closed = false;
-  const entries = loadEntries<TMeta>(filePath, onCorruptFile);
+  let entries: Map<string, TMeta | undefined>;
+  try {
+    entries = loadEntries<TMeta>(filePath, onCorruptFile);
+  } catch (error) {
+    releaseCheckpointLock(lockPath);
+    throw error;
+  }
 
   const close = (): void => {
     if (closed) return;

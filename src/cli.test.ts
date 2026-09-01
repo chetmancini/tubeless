@@ -1135,6 +1135,29 @@ describe("defineCommand: checkpoint", () => {
     expect(received).toBe(stub);
     expect(fs.existsSync(checkpointPath)).toBe(false);
     expect(stub.clear).toHaveBeenCalledTimes(1);
+    expect(stub.close).not.toHaveBeenCalled();
+  });
+
+  it("does not close a caller-provided path-backed store", async () => {
+    const holder = openCheckpoint(checkpointPath);
+    holder.record("a");
+    holder.flush();
+    const command = defineCommand({
+      checkpoint: { path: checkpointPath, clearOnSuccess: false },
+      params: {},
+      run: (_v, context) => {
+        context.checkpoint?.record("b");
+        context.checkpoint?.flush();
+      },
+    });
+    try {
+      await command.run(["--resume"], { checkpoint: holder });
+      expect(fs.existsSync(`${checkpointPath}.lock`)).toBe(true);
+      expect(() => openCheckpoint(checkpointPath)).toThrow(CheckpointLockedError);
+      expect(holder.has("b")).toBe(true);
+    } finally {
+      holder.close();
+    }
   });
 
   function fakeStore(seed: Iterable<[string, unknown]> = []): CheckpointStore {

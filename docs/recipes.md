@@ -20,7 +20,7 @@ inventory.
 | Show determinate progress                     | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `reportProgress`, mapped-child progress                                   |
 | Watch the live TTY reporter                   | [`live-tui.ts`](../examples/live-tui.ts)                                 | named steps, nested `details`; persist with `--store`                     |
 | Retry and rate-limit remote calls             | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `withRetry`, `RateLimiter`, injected sleep and signal                     |
-| Resume durable long-running work              | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `dryRun`, `openCheckpoint`, `withCheckpointedBatch`                       |
+| Resume durable long-running work              | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `dryRun`, `openCheckpoint`, `close`, `withCheckpointedBatch`              |
 | Expose and run a typed command-line program   | [`cli-job.ts`](../examples/cli-job.ts)                                   | `definePipelineCommand`, conditional `mapOptions`, `tubeless run`         |
 | Render plans and diagnostics                  | [`rendering.ts`](../examples/rendering.ts)                               | `renderPipelinePlan`, `renderPipelineError`                               |
 | Handle cancellation and deterministic testing | [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts) | `createPipelineTestRuntime`, captured status/progress                     |

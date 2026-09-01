@@ -41,6 +41,11 @@ interface ManagedMainSignal {
   cleanup(): void;
 }
 
+interface AttachedCheckpoint {
+  context: CliContext;
+  openedStore: CheckpointStore | undefined;
+}
+
 const SIGINT_EXIT_CODE = 130;
 
 /**
@@ -205,11 +210,14 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
    * override (e.g. a stub in tests) instead of opening the real file. Otherwise opens (or
    * clears, if not resuming) the checkpoint before `run` is called — never on the `--help`/
    * error paths, since those return before this is reached.
+   *
+   * `openedStore` is set only when this command created the path-backed store; callers that
+   * passed `context.checkpoint` keep ownership and must close it themselves.
    */
-  function attachCheckpoint(context: CliContext, values: CliParams<TSchema>): CliContext {
+  function attachCheckpoint(context: CliContext, values: CliParams<TSchema>): AttachedCheckpoint {
     const checkpointConfig = config.checkpoint;
     if (!checkpointConfig) {
-      return context;
+      return { context, openedStore: undefined };
     }
     const resolvedPath = path.isAbsolute(checkpointConfig.path)
       ? checkpointConfig.path
@@ -224,6 +232,10 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     const closeIfOpenedHere = (): void => {
       if (openedHere) store.close();
     };
+    const attached = (next: CliContext): AttachedCheckpoint => ({
+      context: next,
+      openedStore: openedHere ? store : undefined,
+    });
 
     if (values.resume) {
       if (hadExisting) {
@@ -244,17 +256,23 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       if (values.dryRun) {
         const snapshot = new Map(store.entries());
         closeIfOpenedHere();
-        return { ...context, checkpoint: inMemoryCheckpointView(snapshot) };
+        return {
+          context: { ...context, checkpoint: inMemoryCheckpointView(snapshot) },
+          openedStore: undefined,
+        };
       }
-      return { ...context, checkpoint: store };
+      return attached({ ...context, checkpoint: store });
     }
 
     if (!hadExisting) {
       if (values.dryRun) {
         closeIfOpenedHere();
-        return { ...context, checkpoint: inMemoryCheckpointView(new Map()) };
+        return {
+          context: { ...context, checkpoint: inMemoryCheckpointView(new Map()) },
+          openedStore: undefined,
+        };
       }
-      return { ...context, checkpoint: store };
+      return attached({ ...context, checkpoint: store });
     }
 
     if (values.dryRun) {
@@ -263,12 +281,15 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       // "done" set, not the stale entries a --resume invocation would use.
       context.log.log("Dry run: leaving existing checkpoint untouched (would start fresh).");
       closeIfOpenedHere();
-      return { ...context, checkpoint: inMemoryCheckpointView(new Map()) };
+      return {
+        context: { ...context, checkpoint: inMemoryCheckpointView(new Map()) },
+        openedStore: undefined,
+      };
     }
 
     store.clear();
     context.log.log("Starting fresh — cleared existing checkpoint.");
-    return { ...context, checkpoint: store };
+    return attached({ ...context, checkpoint: store });
   }
 
   /** No-op unless `config.checkpoint` is set, a store is attached, and the run wasn't a dry run. */
@@ -285,13 +306,13 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
 
   async function executeValues(values: CliParams<TSchema>, context: CliContext): Promise<TResult> {
     const preparedContext = prepareContext?.(values, context) ?? context;
-    const runContext = attachCheckpoint(preparedContext, values);
+    const attached = attachCheckpoint(preparedContext, values);
     try {
-      const value = await config.run(values, runContext);
-      finalizeCheckpoint(runContext, values);
+      const value = await config.run(values, attached.context);
+      finalizeCheckpoint(attached.context, values);
       return value;
     } finally {
-      runContext.checkpoint?.close();
+      attached.openedStore?.close();
     }
   }
 
@@ -352,14 +373,15 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       return;
     }
     const managedSignal = manageMainSignal(context);
-    let runContext: CliContext | undefined;
+    let openedStore: CheckpointStore | undefined;
     try {
       const preparedContext =
         prepareContext?.(result.values, managedSignal.context) ?? managedSignal.context;
-      runContext = attachCheckpoint(preparedContext, result.values);
-      await config.run(result.values, runContext);
+      const attached = attachCheckpoint(preparedContext, result.values);
+      openedStore = attached.openedStore;
+      await config.run(result.values, attached.context);
       if (!managedSignal.wasInterrupted()) {
-        finalizeCheckpoint(runContext, result.values);
+        finalizeCheckpoint(attached.context, result.values);
       }
     } catch (error) {
       context.log.error(
@@ -375,7 +397,7 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
           ? toExitCode(error)
           : 1;
     } finally {
-      runContext?.checkpoint?.close();
+      openedStore?.close();
       if (managedSignal.wasInterrupted()) {
         process.exitCode = SIGINT_EXIT_CODE;
       }

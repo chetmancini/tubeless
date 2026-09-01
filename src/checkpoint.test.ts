@@ -181,6 +181,28 @@ describe("openCheckpoint", () => {
     checkpoint.close();
   });
 
+  it("does not reclaim an empty lock that may still be mid-create", () => {
+    const lockPath = `${filePath}.lock`;
+    fs.writeFileSync(lockPath, "");
+    expect(() => openCheckpoint(filePath)).toThrow(CheckpointLockedError);
+    expect(fs.readFileSync(lockPath, "utf8")).toBe("");
+  });
+
+  it("releases the lock if onCorruptFile throws during open", () => {
+    fs.writeFileSync(filePath, "{not json");
+    expect(() =>
+      openCheckpoint(filePath, {
+        onCorruptFile: () => {
+          throw new Error("reject corrupt checkpoint");
+        },
+      })
+    ).toThrow("reject corrupt checkpoint");
+    expect(fs.existsSync(`${filePath}.lock`)).toBe(false);
+    const checkpoint = openCheckpoint(filePath);
+    expect(checkpoint.entries().size).toBe(0);
+    checkpoint.close();
+  });
+
   it("close() releases the lock without deleting checkpoint entries", () => {
     const checkpoint = openCheckpoint(filePath);
     checkpoint.record("a", { attempt: 1 });
