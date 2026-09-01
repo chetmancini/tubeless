@@ -252,9 +252,7 @@ describe("local pipeline run studio", () => {
     servers.push(server);
 
     const html = await fetch(server.url).then((response) => response.text());
-    expect(html).toContain(
-      `role="img" aria-label="' + esc(label) + '" title="' + esc(label) + '"`
-    );
+    expect(html).toContain(`role="img" aria-label="' + esc(label) + '" title="' + esc(label) + '"`);
     expect(html).toContain("if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return ''");
   });
 
