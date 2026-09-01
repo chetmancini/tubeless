@@ -1138,6 +1138,23 @@ describe("defineCommand: checkpoint", () => {
     expect(stub.close).not.toHaveBeenCalled();
   });
 
+  it("releases a managed store if attachCheckpoint logging throws", async () => {
+    seedCheckpoint();
+    const log = testLog();
+    log.log = () => {
+      throw new Error("log exploded");
+    };
+    const command = defineCommand({
+      checkpoint: { path: checkpointPath },
+      params: {},
+      run: () => undefined,
+    });
+    await expect(command.run([], { log })).rejects.toThrow("log exploded");
+    expect(fs.existsSync(`${checkpointPath}.lock`)).toBe(false);
+    const store = openCheckpoint(checkpointPath);
+    store.close();
+  });
+
   it("does not close a caller-provided path-backed store", async () => {
     const holder = openCheckpoint(checkpointPath);
     holder.record("a");

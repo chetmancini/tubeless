@@ -228,6 +228,21 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     // the "where does the store come from" step is skipped.
     const openedHere = context.checkpoint === undefined;
     const store = context.checkpoint ?? openCheckpoint(resolvedPath);
+    try {
+      return finishAttachedCheckpoint(context, values, store, openedHere, resolvedPath);
+    } catch (error) {
+      if (openedHere) store.close();
+      throw error;
+    }
+  }
+
+  function finishAttachedCheckpoint(
+    context: CliContext,
+    values: CliParams<TSchema>,
+    store: CheckpointStore,
+    openedHere: boolean,
+    resolvedPath: string
+  ): AttachedCheckpoint {
     const hadExisting = store.entries().size > 0;
     const closeIfOpenedHere = (): void => {
       if (openedHere) store.close();

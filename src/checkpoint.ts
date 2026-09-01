@@ -16,6 +16,7 @@ export interface CheckpointStore<TMeta = unknown> {
   /**
    * Release the exclusive lock without deleting checkpoint entries. Idempotent.
    * After close, another `openCheckpoint` on the same path may succeed.
+   * `has`/`entries` remain readable; `record`, `flush`, and `clear` throw.
    */
   close(): void;
 }
@@ -85,8 +86,19 @@ function createExclusiveLock(lockPath: string): void {
   const fd = fs.openSync(lockPath, "wx");
   try {
     fs.writeSync(fd, `${process.pid}\n${Date.now()}\n`);
-  } finally {
     fs.closeSync(fd);
+  } catch (error) {
+    try {
+      fs.closeSync(fd);
+    } catch {
+      // Descriptor may already be closed; still remove the incomplete lock.
+    }
+    try {
+      fs.rmSync(lockPath, { force: true });
+    } catch {
+      // Best-effort: a leftover file would look like an in-progress or live lock.
+    }
+    throw error;
   }
   heldLockPaths.add(lockPath);
   ensureExitHook();
@@ -226,14 +238,19 @@ export function openCheckpoint<TMeta = unknown>(
     closed = true;
     releaseCheckpointLock(lockPath);
   };
+  const assertWritable = (): void => {
+    if (closed) throw new Error(`Checkpoint ${filePath} is closed`);
+  };
 
   return {
     has: (key) => entries.has(key),
     record: (key, meta) => {
+      assertWritable();
       entries.set(key, meta);
     },
     entries: () => entries,
     flush: () => {
+      assertWritable();
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
       // Records made without a `meta` argument store `undefined`, which JSON.stringify
       // silently drops from object properties — without the replacer below, every
@@ -265,6 +282,7 @@ export function openCheckpoint<TMeta = unknown>(
       }
     },
     clear: () => {
+      assertWritable();
       entries.clear();
       fs.rmSync(filePath, { force: true });
     },

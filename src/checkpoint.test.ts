@@ -188,6 +188,20 @@ describe("openCheckpoint", () => {
     expect(fs.readFileSync(lockPath, "utf8")).toBe("");
   });
 
+  it("removes the lock file if writing the lock fails after exclusive create", () => {
+    vi.mocked(fs.writeSync).mockImplementation(() => {
+      throw new Error("disk full");
+    });
+    try {
+      expect(() => openCheckpoint(filePath)).toThrow("disk full");
+      expect(fs.existsSync(`${filePath}.lock`)).toBe(false);
+    } finally {
+      vi.mocked(fs.writeSync).mockRestore();
+    }
+    const checkpoint = openCheckpoint(filePath);
+    checkpoint.close();
+  });
+
   it("releases the lock if onCorruptFile throws during open", () => {
     fs.writeFileSync(filePath, "{not json");
     expect(() =>
@@ -216,6 +230,19 @@ describe("openCheckpoint", () => {
     const reopened = openCheckpoint(filePath);
     expect(reopened.has("a")).toBe(true);
     reopened.close();
+  });
+
+  it("rejects record, flush, and clear after close, but still allows has and entries", () => {
+    const checkpoint = openCheckpoint(filePath);
+    checkpoint.record("a");
+    checkpoint.flush();
+    checkpoint.close();
+
+    expect(checkpoint.has("a")).toBe(true);
+    expect(checkpoint.entries().size).toBe(1);
+    expect(() => checkpoint.record("b")).toThrow(/closed/);
+    expect(() => checkpoint.flush()).toThrow(/closed/);
+    expect(() => checkpoint.clear()).toThrow(/closed/);
   });
 
   it("close() is idempotent", () => {
