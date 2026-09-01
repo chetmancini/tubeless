@@ -29,7 +29,10 @@ function startWorker(): {
   path: string;
   worker: Worker;
 } {
-  const path = join(tmpdir(), `tubeless-ticker-worker-${process.pid}-${Date.now()}-${Math.random()}.log`);
+  const path = join(
+    tmpdir(),
+    `tubeless-ticker-worker-${process.pid}-${Date.now()}-${Math.random()}.log`
+  );
   const fd = openSync(path, "w");
   const handshakeBuffer = new SharedArrayBuffer(16);
   const handshake = new Int32Array(handshakeBuffer);
@@ -47,7 +50,10 @@ function startWorker(): {
   return { fd, handshake, path, worker };
 }
 
-async function waitForFile(path: string, predicate: (rendered: string) => boolean): Promise<string> {
+async function waitForFile(
+  path: string,
+  predicate: (rendered: string) => boolean
+): Promise<string> {
   let rendered = "";
   await vi.waitFor(
     () => {

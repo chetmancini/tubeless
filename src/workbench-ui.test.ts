@@ -136,7 +136,10 @@ describe("runUi", () => {
 
     const exportWithStudio = captureIo(directory);
     expect(
-      await runUi(["--export", "FixtureCommand", "--command", "pipeline.mjs", "studio.mjs"], exportWithStudio)
+      await runUi(
+        ["--export", "FixtureCommand", "--command", "pipeline.mjs", "studio.mjs"],
+        exportWithStudio
+      )
     ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
     expect(exportWithStudio.errors.join("")).toContain(
       "Error: --export requires exactly one registered --command."
@@ -149,15 +152,15 @@ describe("runUi", () => {
     expect(twoStudios.errors.join("")).toContain("Error: Pass at most one studio config file.");
 
     const duplicate = captureIo(directory);
-    expect(
-      await runUi(["--command", "pipeline.mjs", "--command", "pipeline.mjs"], duplicate)
-    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(await runUi(["--command", "pipeline.mjs", "--command", "pipeline.mjs"], duplicate)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.usage
+    );
     expect(duplicate.errors.join("")).toContain("is duplicated.");
 
     const nonLoopback = captureIo(directory);
-    expect(
-      await runUi(["--host", "0.0.0.0", "--command", "pipeline.mjs"], nonLoopback)
-    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(await runUi(["--host", "0.0.0.0", "--command", "pipeline.mjs"], nonLoopback)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.usage
+    );
     expect(nonLoopback.errors.join("")).toContain(
       "Error: Browser-triggered execution requires a loopback --host."
     );
