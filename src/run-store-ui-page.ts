@@ -269,9 +269,18 @@ export const PIPELINE_RUN_STUDIO_SCRIPT = String.raw`
     const statusMark = (value) => value === 'completed' ? '✓' : value === 'skipped' ? '×' : value === 'cancelled' ? '■' : value === 'failed' ? '!' : value === 'planned' ? '…' : '';
     const status = (value) => '<span class="status ' + esc(value) + '"><i class="status-mark" aria-hidden="true">' + statusMark(value) + '</i>' + esc(value) + '</span>';
     const duration = (ms) => ms == null ? "—" : ms < 1000 ? Math.max(0, Math.round(ms)) + " ms" : ms < 60000 ? (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + " s" : Math.floor(ms / 60000) + "m " + Math.round((ms % 60000) / 1000) + "s";
-    const clock = (ms) => new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(ms);
-    const dateTime = (ms) => new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(ms);
-    const isoTime = (ms) => new Date(ms).toISOString();
+    const clock = (ms) => {
+      if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return '';
+      return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(ms);
+    };
+    const dateTime = (ms) => {
+      if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return '';
+      return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(ms);
+    };
+    const isoTime = (ms) => {
+      if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return '';
+      return new Date(ms).toISOString();
+    };
     const relative = (ms) => { const delta = Math.max(0, Date.now() - ms); if (delta < 60000) return Math.floor(delta / 1000) + "s ago"; if (delta < 3600000) return Math.floor(delta / 60000) + "m ago"; if (delta < 86400000) return Math.floor(delta / 3600000) + "h ago"; return Math.floor(delta / 86400000) + "d ago"; };
     const shortId = (id) => id.length > 24 ? id.slice(0, 12) + "…" + id.slice(-7) : id;
     function selectedCommand() { return state.commands.find((command) => command.id === $('#launchCommand').value); }
@@ -489,7 +498,7 @@ export const PIPELINE_RUN_STUDIO_SCRIPT = String.raw`
     function stepStatusIcon(value) {
       const label = value.charAt(0).toUpperCase() + value.slice(1);
       const icon = value === 'completed' ? '<svg viewBox="0 0 12 12"><path d="m2 6 2.4 2.4L10 3"/></svg>' : value === 'running' ? '<i></i>' : value === 'skipped' ? '<svg viewBox="0 0 12 12"><path d="m3 3 6 6M9 3 3 9"/></svg>' : value === 'cancelled' ? '<svg viewBox="0 0 12 12"><rect x="3" y="3" width="6" height="6" rx="1" fill="currentColor" stroke="none"/></svg>' : value === 'failed' ? '!' : '…';
-      return '<span class="step-status-icon ' + esc(value) + '" role="img" aria-label="' + label + '" title="' + label + '">' + icon + '</span>';
+      return '<span class="step-status-icon ' + esc(value) + '" role="img" aria-label="' + esc(label) + '" title="' + esc(label) + '">' + icon + '</span>';
     }
     function stepSummary(run) {
       const labels = { running: 'running', failed: 'failed', cancelled: 'cancelled', skipped: 'skipped', completed: 'completed', planned: 'planned' };

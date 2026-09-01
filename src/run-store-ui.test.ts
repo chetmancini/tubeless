@@ -247,6 +247,17 @@ describe("local pipeline run studio", () => {
     expect(csp).not.toContain("unsafe-inline");
   });
 
+  it("escapes step status labels and guards isoTime in the served script", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const html = await fetch(server.url).then((response) => response.text());
+    expect(html).toContain(
+      `role="img" aria-label="' + esc(label) + '" title="' + esc(label) + '"`
+    );
+    expect(html).toContain("if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return ''");
+  });
+
   it("exposes only injected commands and delegates bounded structured launch values", async () => {
     const launches: { commandId: string; values: Record<string, unknown> }[] = [];
     const plans: { commandId: string; dryRun?: boolean; targets?: readonly string[] }[] = [];
