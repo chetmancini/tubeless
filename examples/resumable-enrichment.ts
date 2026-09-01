@@ -21,7 +21,11 @@ const loadPendingItems = step("load-pending-items", {
   description: "Skip work that was already checkpointed by a previous run.",
   run: (_inputs, context) => {
     const checkpoint = openCheckpoint(resolve(context.cwd, context.options.checkpointPath));
-    return context.options.items.filter((item) => !checkpoint.has(item));
+    try {
+      return context.options.items.filter((item) => !checkpoint.has(item));
+    } finally {
+      checkpoint.close();
+    }
   },
 });
 
@@ -33,36 +37,44 @@ const enrichItems = step("enrich-items", {
     const checkpoint = openCheckpoint(resolve(context.cwd, context.options.checkpointPath));
     const limiter = new RateLimiter(100);
 
-    return runBatched(items, { size: 5, concurrency: 2, signal: context.signal }, async (batch) => {
-      const enriched = await Promise.all(
-        batch.map((id) =>
-          withRetry(
-            async (): Promise<EnrichedItem> => {
-              await limiter.wait(context.signal);
-              return { id, summary: `summary for ${id}` };
-            },
-            {
-              baseDelayMs: 250,
-              maxAttempts: 3,
-              signal: context.signal,
-              sleep: context.sleep,
-            }
-          )
-        )
-      );
+    try {
+      return await runBatched(
+        items,
+        { size: 5, concurrency: 2, signal: context.signal },
+        async (batch) => {
+          const enriched = await Promise.all(
+            batch.map((id) =>
+              withRetry(
+                async (): Promise<EnrichedItem> => {
+                  await limiter.wait(context.signal);
+                  return { id, summary: `summary for ${id}` };
+                },
+                {
+                  baseDelayMs: 250,
+                  maxAttempts: 3,
+                  signal: context.signal,
+                  sleep: context.sleep,
+                }
+              )
+            )
+          );
 
-      await withCheckpointedBatch(
-        checkpoint,
-        batch,
-        (id) => id,
-        async () => {
-          // Persist `enriched` here before recording the checkpoint.
-          void enriched;
+          await withCheckpointedBatch(
+            checkpoint,
+            batch,
+            (id) => id,
+            async () => {
+              // Persist `enriched` here before recording the checkpoint.
+              void enriched;
+            }
+          );
+
+          return enriched;
         }
       );
-
-      return enriched;
-    });
+    } finally {
+      checkpoint.close();
+    }
   },
 });
 

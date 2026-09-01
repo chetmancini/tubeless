@@ -13,6 +13,126 @@ export interface CheckpointStore<TMeta = unknown> {
    * enrichment) where auto-clearing would cause reprocessing and duplicate output.
    */
   clear(): void;
+  /**
+   * Release the exclusive lock without deleting checkpoint entries. Idempotent.
+   * After close, another `openCheckpoint` on the same path may succeed.
+   */
+  close(): void;
+}
+
+export class CheckpointLockedError extends Error {
+  readonly code = "TUBELESS_CHECKPOINT_LOCKED";
+
+  constructor(filePath: string, holderPid: number) {
+    super(`Checkpoint ${filePath} is locked by process ${holderPid}`);
+    this.name = "CheckpointLockedError";
+  }
+}
+
+const heldLockPaths = new Set<string>();
+let exitHookRegistered = false;
+
+function ensureExitHook(): void {
+  if (exitHookRegistered) return;
+  exitHookRegistered = true;
+  process.on("exit", () => {
+    for (const lockPath of heldLockPaths) {
+      try {
+        fs.rmSync(lockPath, { force: true });
+      } catch {
+        // Best-effort: a crashed process leaves a stale lock the next open reclaims.
+      }
+    }
+  });
+}
+
+function lockPathFor(filePath: string): string {
+  return `${filePath}.lock`;
+}
+
+function readLockHolder(lockPath: string): number | undefined {
+  try {
+    const firstLine = fs.readFileSync(lockPath, "utf8").split("\n", 1)[0];
+    const pid = Number(firstLine);
+    return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // SAFETY: process.kill throws Node system errors. EPERM means the pid
+    // exists but we cannot signal it — treat as live so a long-running holder
+    // is never reclaimed. ESRCH (and anything else) is dead.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+function createExclusiveLock(lockPath: string): void {
+  const fd = fs.openSync(lockPath, "wx");
+  try {
+    fs.writeSync(fd, `${process.pid}\n${Date.now()}\n`);
+  } finally {
+    fs.closeSync(fd);
+  }
+  heldLockPaths.add(lockPath);
+  ensureExitHook();
+}
+
+function releaseCheckpointLock(lockPath: string): void {
+  heldLockPaths.delete(lockPath);
+  try {
+    fs.rmSync(lockPath, { force: true });
+  } catch {
+    // Already gone.
+  }
+}
+
+function throwLocked(filePath: string, lockPath: string, fallbackPid?: number): never {
+  throw new CheckpointLockedError(filePath, readLockHolder(lockPath) ?? fallbackPid ?? 0);
+}
+
+/**
+ * The lock protects the checkpoint path, not the file: a lock without a checkpoint
+ * file still excludes other openers. Live holders are never reclaimed. Unparseable
+ * lock contents and dead pids are stale and may be replaced once.
+ */
+function acquireCheckpointLock(filePath: string): string {
+  const lockPath = lockPathFor(filePath);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  try {
+    createExclusiveLock(lockPath);
+    return lockPath;
+  } catch (error) {
+    // SAFETY: fs.openSync("wx") throws Node system errors; EEXIST means another
+    // holder already created the lock file.
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+
+  const holderPid = readLockHolder(lockPath);
+  if (holderPid !== undefined && isProcessAlive(holderPid)) {
+    throw new CheckpointLockedError(filePath, holderPid);
+  }
+
+  try {
+    fs.rmSync(lockPath, { force: true });
+  } catch {
+    // Retry acquisition once either way.
+  }
+
+  try {
+    createExclusiveLock(lockPath);
+    return lockPath;
+  } catch (error) {
+    // SAFETY: the retry also uses openSync("wx"); EEXIST means another process
+    // won the race after we removed a stale lock.
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    throwLocked(filePath, lockPath, holderPid);
+  }
 }
 
 function loadEntries<TMeta>(
@@ -56,7 +176,15 @@ export function openCheckpoint<TMeta = unknown>(
         `Checkpoint file ${filePath} is corrupt; starting fresh (all previously checkpointed items will be reprocessed): ${cause instanceof Error ? cause.message : String(cause)}`
       );
     });
+  const lockPath = acquireCheckpointLock(filePath);
+  let closed = false;
   const entries = loadEntries<TMeta>(filePath, onCorruptFile);
+
+  const close = (): void => {
+    if (closed) return;
+    closed = true;
+    releaseCheckpointLock(lockPath);
+  };
 
   return {
     has: (key) => entries.has(key),
@@ -99,6 +227,7 @@ export function openCheckpoint<TMeta = unknown>(
       entries.clear();
       fs.rmSync(filePath, { force: true });
     },
+    close,
   };
 }
 

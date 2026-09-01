@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { openCheckpoint, type CheckpointStore } from "./checkpoint.js";
+import { CheckpointLockedError, openCheckpoint, type CheckpointStore } from "./checkpoint.js";
 import {
   CliHelpRequested,
   CliValidationError,
@@ -865,6 +865,13 @@ describe("defineCommand: checkpoint", () => {
     const store = openCheckpoint(checkpointPath);
     store.record("a");
     store.flush();
+    store.close();
+  }
+
+  function inspectCheckpoint(): CheckpointStore {
+    const store = openCheckpoint(checkpointPath);
+    store.close();
+    return store;
   }
 
   it("starts fresh by default, clearing a pre-existing checkpoint before run is called", async () => {
@@ -1005,7 +1012,7 @@ describe("defineCommand: checkpoint", () => {
       run: () => undefined,
     });
     await command.run(["--resume", "--dry-run"]);
-    expect(openCheckpoint(checkpointPath).has("a")).toBe(true);
+    expect(inspectCheckpoint().has("a")).toBe(true);
   });
 
   it("does not destructively clear a pre-existing checkpoint on a fresh (non-resume) dry run", async () => {
@@ -1016,7 +1023,7 @@ describe("defineCommand: checkpoint", () => {
       run: () => undefined,
     });
     await command.run(["--dry-run"]);
-    expect(openCheckpoint(checkpointPath).has("a")).toBe(true);
+    expect(inspectCheckpoint().has("a")).toBe(true);
   });
 
   it("previews an empty checkpoint on a fresh (non-resume) dry run, even though the file survives on disk", async () => {
@@ -1036,7 +1043,7 @@ describe("defineCommand: checkpoint", () => {
     expect(seenEntriesSize).toBe(0);
     // The on-disk file is untouched by the dry run (verified by the test above); this test
     // only asserts what `run` observes through `context.checkpoint`.
-    expect(openCheckpoint(checkpointPath).has("a")).toBe(true);
+    expect(inspectCheckpoint().has("a")).toBe(true);
   });
 
   it("never writes to disk when run records and flushes during a fresh dry run with no existing checkpoint", async () => {
@@ -1066,7 +1073,7 @@ describe("defineCommand: checkpoint", () => {
     });
     await command.run(["--resume", "--dry-run"]);
     expect(seenHasB).toBe(true);
-    expect(openCheckpoint(checkpointPath).has("b")).toBe(false);
+    expect(inspectCheckpoint().has("b")).toBe(false);
   });
 
   it("never writes to disk when run records and flushes during a fresh dry run with an existing checkpoint", async () => {
@@ -1080,7 +1087,7 @@ describe("defineCommand: checkpoint", () => {
       },
     });
     await command.run(["--dry-run"]);
-    const onDisk = openCheckpoint(checkpointPath);
+    const onDisk = inspectCheckpoint();
     expect(onDisk.has("a")).toBe(true);
     expect(onDisk.has("b")).toBe(false);
   });
@@ -1104,7 +1111,7 @@ describe("defineCommand: checkpoint", () => {
       run: () => undefined,
     });
     await command.run(["--resume"]);
-    expect(openCheckpoint(checkpointPath).has("a")).toBe(true);
+    expect(inspectCheckpoint().has("a")).toBe(true);
   });
 
   it("respects a caller-provided context.checkpoint override instead of opening the real file", async () => {
@@ -1114,6 +1121,7 @@ describe("defineCommand: checkpoint", () => {
       entries: vi.fn(() => new Map()),
       flush: vi.fn(),
       clear: vi.fn(),
+      close: vi.fn(),
     };
     let received: CheckpointStore | undefined;
     const command = defineCommand({
@@ -1137,6 +1145,7 @@ describe("defineCommand: checkpoint", () => {
       entries: () => entries,
       flush: vi.fn(),
       clear: vi.fn(() => entries.clear()),
+      close: vi.fn(),
     };
   }
 
@@ -1188,7 +1197,7 @@ describe("defineCommand: checkpoint", () => {
     await expect(command.run(["--help"])).rejects.toBeInstanceOf(CliHelpRequested);
     await expect(command.run(["--limit", "abc"])).rejects.toBeInstanceOf(CliValidationError);
     expect(run).not.toHaveBeenCalled();
-    expect(openCheckpoint(checkpointPath).has("a")).toBe(true);
+    expect(inspectCheckpoint().has("a")).toBe(true);
   });
 
   it("main(): a thrown error from run leaves the checkpoint untouched", async () => {
@@ -1203,7 +1212,7 @@ describe("defineCommand: checkpoint", () => {
     });
     await command.main(["--resume"], { log });
     expect(process.exitCode).toBe(1);
-    expect(openCheckpoint(checkpointPath).has("a")).toBe(true);
+    expect(inspectCheckpoint().has("a")).toBe(true);
     process.exitCode = undefined;
   });
 
@@ -1238,12 +1247,61 @@ describe("defineCommand: checkpoint", () => {
       await runPromise;
 
       expect(process.exitCode).toBe(130);
-      expect(openCheckpoint(checkpointPath).has("a")).toBe(true);
-      expect(openCheckpoint(checkpointPath).has("b")).toBe(true);
+      const onDisk = inspectCheckpoint();
+      expect(onDisk.has("a")).toBe(true);
+      expect(onDisk.has("b")).toBe(true);
     } finally {
       process.exitCode = previousExitCode;
       onceSpy.mockRestore();
     }
+  });
+
+  it("fails fast when another live holder already locked the checkpoint path", async () => {
+    const holder = openCheckpoint(checkpointPath);
+    const command = defineCommand({
+      checkpoint: { path: checkpointPath },
+      params: {},
+      run: () => undefined,
+    });
+    try {
+      await expect(command.run([])).rejects.toBeInstanceOf(CheckpointLockedError);
+    } finally {
+      holder.close();
+    }
+  });
+
+  it("main(): reports a locked checkpoint as a one-line error", async () => {
+    const holder = openCheckpoint(checkpointPath);
+    const log = testLog();
+    const command = defineCommand({
+      checkpoint: { path: checkpointPath },
+      params: {},
+      run: () => undefined,
+    });
+    const previousExitCode = process.exitCode;
+    try {
+      await command.main([], { log });
+      expect(process.exitCode).toBe(1);
+      const errors = log.lines.filter((line) => line.level === "error");
+      expect(errors).toHaveLength(1);
+      expect(errors[0]?.message).toContain(checkpointPath);
+      expect(errors[0]?.message).not.toMatch(/\n\s+at /);
+    } finally {
+      process.exitCode = previousExitCode;
+      holder.close();
+    }
+  });
+
+  it("releases the lock after a successful run so a later run can open the same path", async () => {
+    seedCheckpoint();
+    const command = defineCommand({
+      checkpoint: { path: checkpointPath, clearOnSuccess: false },
+      params: {},
+      run: () => undefined,
+    });
+    await command.run(["--resume"]);
+    await command.run(["--resume"]);
+    expect(inspectCheckpoint().has("a")).toBe(true);
   });
 
   it("lists --resume in help for every command, checkpoint or not", () => {

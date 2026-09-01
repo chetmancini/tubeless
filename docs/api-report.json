@@ -138,6 +138,7 @@
     {
       "declaration": "./dist/node.d.ts",
       "exports": [
+        "CheckpointLockedError",
         "CheckpointStore",
         "definePaths",
         "openCheckpoint",
@@ -147,7 +148,7 @@
         "withCheckpointedBatch",
         "writeJson"
       ],
-      "sha256": "c466b60e1133c30a4d397ac48f473d6fffcf6b4f13258b200b0088132a86b4ff",
+      "sha256": "d3b4ecedc74e02063cfda4eddb869e6ae4b75264dd54b3f89f17e6a6ad3e3ebd",
       "specifier": "tubeless/node"
     },
     {

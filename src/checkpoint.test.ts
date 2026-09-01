@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { openCheckpoint, withCheckpointedBatch } from "./checkpoint.js";
+import { CheckpointLockedError, openCheckpoint, withCheckpointedBatch } from "./checkpoint.js";
 
 // ESM `fs` exports are non-configurable, so `vi.spyOn(fs, ...)` throws.
 // `{ spy: true }` wraps the same module `checkpoint.ts` imports.
@@ -38,10 +38,12 @@ describe("openCheckpoint", () => {
     const checkpoint = openCheckpoint<{ attempt: number }>(filePath);
     checkpoint.record("a", { attempt: 1 });
     checkpoint.flush();
+    checkpoint.close();
 
     const reopened = openCheckpoint<{ attempt: number }>(filePath);
     expect(reopened.has("a")).toBe(true);
     expect(reopened.entries().get("a")).toEqual({ attempt: 1 });
+    reopened.close();
   });
 
   it("persists a key recorded without metadata across a reload", () => {
@@ -51,10 +53,12 @@ describe("openCheckpoint", () => {
     const checkpoint = openCheckpoint(filePath);
     checkpoint.record("a");
     checkpoint.flush();
+    checkpoint.close();
 
     const reopened = openCheckpoint(filePath);
     expect(reopened.has("a")).toBe(true);
     expect(reopened.entries().size).toBe(1);
+    reopened.close();
   });
 
   it("deletes the checkpoint file on clear", () => {
@@ -66,6 +70,7 @@ describe("openCheckpoint", () => {
     checkpoint.clear();
     expect(fs.existsSync(filePath)).toBe(false);
     expect(checkpoint.has("a")).toBe(false);
+    checkpoint.close();
   });
 
   it("tolerates a corrupt checkpoint file by starting fresh", () => {
@@ -103,7 +108,9 @@ describe("openCheckpoint", () => {
     // leftover temp file from the atomic-rename strategy survives the flush.
     const onDisk = JSON.parse(fs.readFileSync(filePath, "utf8"));
     expect(onDisk).toEqual({ a: { attempt: 1 } });
-    expect(fs.readdirSync(dir)).toEqual([path.basename(filePath)]);
+    expect(fs.readdirSync(dir).filter((name) => name.includes(".tmp-"))).toEqual([]);
+    expect(fs.existsSync(`${filePath}.lock`)).toBe(true);
+    checkpoint.close();
   });
 
   it("failed rename leaves no temp file and preserves the previous complete checkpoint", () => {
@@ -142,6 +149,81 @@ describe("openCheckpoint", () => {
     } finally {
       vi.mocked(fs.writeFileSync).mockRestore();
     }
+  });
+
+  it("rejects a second live open of the same path with TUBELESS_CHECKPOINT_LOCKED", () => {
+    const holder = openCheckpoint(filePath);
+    try {
+      expect(() => openCheckpoint(filePath)).toThrow(
+        expect.objectContaining({
+          code: "TUBELESS_CHECKPOINT_LOCKED",
+          name: "CheckpointLockedError",
+          message: expect.stringContaining(filePath),
+        })
+      );
+    } finally {
+      holder.close();
+    }
+  });
+
+  it("reclaims a stale lock whose pid is dead", () => {
+    fs.writeFileSync(`${filePath}.lock`, "999999999\n0\n");
+    const checkpoint = openCheckpoint(filePath);
+    expect(checkpoint.entries().size).toBe(0);
+    expect(fs.readFileSync(`${filePath}.lock`, "utf8")).toMatch(new RegExp(`^${process.pid}\\n`));
+    checkpoint.close();
+  });
+
+  it("reclaims an unparseable lock file", () => {
+    fs.writeFileSync(`${filePath}.lock`, "not-a-pid\n");
+    const checkpoint = openCheckpoint(filePath);
+    expect(checkpoint.entries().size).toBe(0);
+    checkpoint.close();
+  });
+
+  it("close() releases the lock without deleting checkpoint entries", () => {
+    const checkpoint = openCheckpoint(filePath);
+    checkpoint.record("a", { attempt: 1 });
+    checkpoint.flush();
+    expect(fs.existsSync(`${filePath}.lock`)).toBe(true);
+
+    checkpoint.close();
+    expect(fs.existsSync(`${filePath}.lock`)).toBe(false);
+    expect(fs.existsSync(filePath)).toBe(true);
+
+    const reopened = openCheckpoint(filePath);
+    expect(reopened.has("a")).toBe(true);
+    reopened.close();
+  });
+
+  it("close() is idempotent", () => {
+    const checkpoint = openCheckpoint(filePath);
+    checkpoint.close();
+    expect(() => checkpoint.close()).not.toThrow();
+    const reopened = openCheckpoint(filePath);
+    reopened.close();
+  });
+
+  it("clear() wipes the file but keeps the lock so a second open still fails", () => {
+    const checkpoint = openCheckpoint(filePath);
+    checkpoint.record("a");
+    checkpoint.flush();
+    checkpoint.clear();
+    expect(fs.existsSync(filePath)).toBe(false);
+    expect(fs.existsSync(`${filePath}.lock`)).toBe(true);
+    expect(() => openCheckpoint(filePath)).toThrow(CheckpointLockedError);
+    checkpoint.close();
+    const reopened = openCheckpoint(filePath);
+    expect(reopened.entries().size).toBe(0);
+    reopened.close();
+  });
+
+  it("locks the path even when the checkpoint file does not exist", () => {
+    const holder = openCheckpoint(filePath);
+    expect(fs.existsSync(filePath)).toBe(false);
+    expect(fs.existsSync(`${filePath}.lock`)).toBe(true);
+    expect(() => openCheckpoint(filePath)).toThrow(CheckpointLockedError);
+    holder.close();
   });
 });
 

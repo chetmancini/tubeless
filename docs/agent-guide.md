@@ -87,7 +87,11 @@ or shared helpers in this repository.
 - Call `context.reportProgress` for long loops and `context.reportAttempt` for
   retries that operators should see.
 - Resolve relative files from `context.cwd`; prefer helpers from
-  `tubeless/node`.
+  `tubeless/node`. `openCheckpoint` is single-writer per path: a concurrent open
+  fails with `TUBELESS_CHECKPOINT_LOCKED`. Call `close()` to release the lock
+  without deleting entries; `clear()` wipes the file but keeps the lock while
+  the store is still in use. Stale locks from dead pids self-heal on the next
+  open.
 - Use `runOrThrow` when every step must succeed and the caller expects a value.
   It always throws for an unsuccessful run, including `continueOnError` runs.
   Use `run` when the caller must inspect failures, skips, timings, or best-effort

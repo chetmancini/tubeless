@@ -11,7 +11,7 @@ Package: `tubeless`
 | `tubeless`                  | `./dist/pipeline.d.ts`         | `14dd22ddac836c7552234fe235337a7faa32c27ac99ea37cbc8854ed4af6a388` |               72 |
 | `tubeless/batch`            | `./dist/batch.d.ts`            | `b8920da4ca2af85a4eb7e5d7d6bbcbf057b0bc290f4ebf990327abc8824a7f12` |                7 |
 | `tubeless/cli`              | `./dist/cli.d.ts`              | `ffd51471f8041d13799e761c46f89c46efb75076764fe50690a173bece01a82f` |               35 |
-| `tubeless/node`             | `./dist/node.d.ts`             | `c466b60e1133c30a4d397ac48f473d6fffcf6b4f13258b200b0088132a86b4ff` |                8 |
+| `tubeless/node`             | `./dist/node.d.ts`             | `d3b4ecedc74e02063cfda4eddb869e6ae4b75264dd54b3f89f17e6a6ad3e3ebd` |                9 |
 | `tubeless/rate-limit`       | `./dist/rate-limit.d.ts`       | `c48e035d303232b27f11159859807a9a7e963b1099f1c7f1df77b9b2465bf571` |                1 |
 | `tubeless/render`           | `./dist/render.d.ts`           | `bffcd2bf1f06dc636a19e2a4af9752a8ebc7f9aed5daaa03e9efb1307039fafd` |                6 |
 | `tubeless/reporter`         | `./dist/reporter-entry.d.ts`   | `e23c8dc06b1cba5cf1cf195426bae4bd386b66ec0951d267e2dd00eff675f8a0` |               13 |
@@ -152,6 +152,7 @@ Package: `tubeless`
 
 ### `tubeless/node`
 
+- `CheckpointLockedError`
 - `CheckpointStore`
 - `definePaths`
 - `openCheckpoint`

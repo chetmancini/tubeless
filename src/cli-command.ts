@@ -1,5 +1,5 @@
 import * as path from "path";
-import { openCheckpoint, type CheckpointStore } from "./checkpoint.js";
+import { CheckpointLockedError, openCheckpoint, type CheckpointStore } from "./checkpoint.js";
 import {
   assertNoDuplicateFlags,
   assertValidEnvironmentFallbacks,
@@ -89,6 +89,7 @@ function inMemoryCheckpointView(seed: ReadonlyMap<string, unknown>): CheckpointS
     clear: () => {
       entries.clear();
     },
+    close: () => {},
   };
 }
 
@@ -217,8 +218,12 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     // underlying store instead of opening the real file, but every rule below — fresh
     // clearing, dry-run wrapping, resume detection/logging — still applies to it; only
     // the "where does the store come from" step is skipped.
+    const openedHere = context.checkpoint === undefined;
     const store = context.checkpoint ?? openCheckpoint(resolvedPath);
     const hadExisting = store.entries().size > 0;
+    const closeIfOpenedHere = (): void => {
+      if (openedHere) store.close();
+    };
 
     if (values.resume) {
       if (hadExisting) {
@@ -236,17 +241,20 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       }
       // A dry run must never write to the checkpoint file, even while resuming — an
       // in-memory view seeded with the real entries previews it accurately without risk.
-      return {
-        ...context,
-        checkpoint: values.dryRun ? inMemoryCheckpointView(store.entries()) : store,
-      };
+      if (values.dryRun) {
+        const snapshot = new Map(store.entries());
+        closeIfOpenedHere();
+        return { ...context, checkpoint: inMemoryCheckpointView(snapshot) };
+      }
+      return { ...context, checkpoint: store };
     }
 
     if (!hadExisting) {
-      return {
-        ...context,
-        checkpoint: values.dryRun ? inMemoryCheckpointView(store.entries()) : store,
-      };
+      if (values.dryRun) {
+        closeIfOpenedHere();
+        return { ...context, checkpoint: inMemoryCheckpointView(new Map()) };
+      }
+      return { ...context, checkpoint: store };
     }
 
     if (values.dryRun) {
@@ -254,6 +262,7 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       // but the preview should still reflect what a real fresh run would see: an empty
       // "done" set, not the stale entries a --resume invocation would use.
       context.log.log("Dry run: leaving existing checkpoint untouched (would start fresh).");
+      closeIfOpenedHere();
       return { ...context, checkpoint: inMemoryCheckpointView(new Map()) };
     }
 
@@ -277,9 +286,13 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
   async function executeValues(values: CliParams<TSchema>, context: CliContext): Promise<TResult> {
     const preparedContext = prepareContext?.(values, context) ?? context;
     const runContext = attachCheckpoint(preparedContext, values);
-    const value = await config.run(values, runContext);
-    finalizeCheckpoint(runContext, values);
-    return value;
+    try {
+      const value = await config.run(values, runContext);
+      finalizeCheckpoint(runContext, values);
+      return value;
+    } finally {
+      runContext.checkpoint?.close();
+    }
   }
 
   function parseValues(
@@ -339,22 +352,30 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       return;
     }
     const managedSignal = manageMainSignal(context);
+    let runContext: CliContext | undefined;
     try {
       const preparedContext =
         prepareContext?.(result.values, managedSignal.context) ?? managedSignal.context;
-      const runContext = attachCheckpoint(preparedContext, result.values);
+      runContext = attachCheckpoint(preparedContext, result.values);
       await config.run(result.values, runContext);
       if (!managedSignal.wasInterrupted()) {
         finalizeCheckpoint(runContext, result.values);
       }
     } catch (error) {
-      context.log.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
+      context.log.error(
+        error instanceof CheckpointLockedError
+          ? error.message
+          : error instanceof Error
+            ? (error.stack ?? error.message)
+            : String(error)
+      );
       process.exitCode = managedSignal.wasInterrupted()
         ? SIGINT_EXIT_CODE
         : mainExits || isCliValidationError(error) || isPipelineExecutionError(error)
           ? toExitCode(error)
           : 1;
     } finally {
+      runContext?.checkpoint?.close();
       if (managedSignal.wasInterrupted()) {
         process.exitCode = SIGINT_EXIT_CODE;
       }

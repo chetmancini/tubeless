@@ -28,7 +28,11 @@ reusable typed data graph.
 
 File checkpoints (`openCheckpoint` in `tubeless/node`) record an "already
 done" set for batch API work. They do not replay a crashed process the way a
-durable workflow engine does.
+durable workflow engine does. One writer may hold a checkpoint path at a time:
+a second `openCheckpoint` on the same path fails fast with
+`TUBELESS_CHECKPOINT_LOCKED`. Call `close()` to release the lock without
+deleting entries so a later step or run can reopen the path. Stale locks from
+dead pids are reclaimed automatically.
 
 ## Different job
 

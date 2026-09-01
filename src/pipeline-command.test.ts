@@ -765,6 +765,7 @@ describe("definePipelineCommand", () => {
       const checkpoint = openCheckpoint(checkpointPath);
       checkpoint.record("existing");
       checkpoint.flush();
+      checkpoint.close();
 
       const command = definePipelineCommand(makeMiniPipeline(), {
         checkpoint: { path: checkpointPath },
@@ -776,7 +777,9 @@ describe("definePipelineCommand", () => {
       const plan = command.plan();
 
       expect(plan.ok).toBe(true);
-      expect(openCheckpoint(checkpointPath).has("existing")).toBe(true);
+      const onDisk = openCheckpoint(checkpointPath);
+      expect(onDisk.has("existing")).toBe(true);
+      onDisk.close();
       expect(validationCalls).toBe(0);
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
