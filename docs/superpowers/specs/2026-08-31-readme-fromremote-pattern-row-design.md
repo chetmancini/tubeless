@@ -22,11 +22,14 @@ pipeline inside another" (child pipeline) and before "Run one child pipeline
 for many items" (fan-out). That matches recipe-index order.
 
 ```
-| Run a step on another engine | [Remote steps](./examples/remote-steps.ts) |
+| Run a step on another engine | [Remote steps](../../../examples/remote-steps.ts) |
 ```
 
-The table row is one line. README is 115 lines today; after the insert it is
-116. The learning-surface cap in
+In `README.md` itself the href stays package-root relative:
+`./examples/remote-steps.ts`. The path above is only so this spec’s Markdown
+link resolves from `docs/superpowers/specs/`.
+
+The table row is one line. README is 115 lines today; after the insert it is 116. The learning-surface cap in
 [`scripts/validate-learning-surface.mjs`](../../../scripts/validate-learning-surface.mjs)
 stays at 120. Do not trim another row. Do not raise the cap.
 
