@@ -11,13 +11,14 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createLiveTicker,
   elapsedToken,
   paintLiveLines,
   shimmerToken,
   SPINNER_TOKEN,
+  type LiveTicker,
 } from "./live-ticker.js";
 
 const RESET = "\u001B[0m";
@@ -26,6 +27,22 @@ const SHIMMER_DIM = "\u001B[0;2;36m";
 
 function stripAnsi(value: string): string {
   return value.replace(/\u001B\[[0-9;]*m/g, "");
+}
+
+async function waitForFileContent(
+  path: string,
+  predicate: (rendered: string) => boolean,
+  timeout = 2_000
+): Promise<string> {
+  let rendered = "";
+  await vi.waitFor(
+    () => {
+      rendered = readFileSync(path, "utf8");
+      expect(predicate(rendered)).toBe(true);
+    },
+    { interval: 25, timeout }
+  );
+  return rendered;
 }
 
 describe("paintLiveLines", () => {
@@ -101,12 +118,13 @@ describe("live ticker worker", () => {
     expect(source).toContain("terminated");
   });
 
-  it("paints, logs, and stops through the compiled worker", () => {
+  it("paints, logs, and stops through the compiled worker", async () => {
     const path = join(tmpdir(), `tubeless-ticker-${process.pid}-${Date.now()}.log`);
     const fd = openSync(path, "w");
     const inlineWrites: string[] = [];
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -118,25 +136,14 @@ describe("live ticker worker", () => {
       });
       ticker.setLines([`${SPINNER_TOKEN} ${shimmerToken("load")}`]);
 
-      const paintedDeadline = Date.now() + 1_000;
-      let rendered = "";
-      while (Date.now() < paintedDeadline) {
-        rendered = readFileSync(path, "utf8");
-        if (
-          rendered.includes("load") &&
-          /[-\\|/] /.test(rendered) &&
-          rendered.includes("\u001B[0;1;36m")
-        ) {
-          break;
-        }
-      }
+      let rendered = await waitForFileContent(
+        path,
+        (next) => next.includes("load") && /[-\\|/] /.test(next) && next.includes("\u001B[0;1;36m"),
+        1_000
+      );
 
       ticker.writeLog("logged from parent\n");
-      const loggedDeadline = Date.now() + 500;
-      while (Date.now() < loggedDeadline) {
-        rendered = readFileSync(path, "utf8");
-        if (rendered.includes("logged from parent")) break;
-      }
+      rendered = await waitForFileContent(path, (next) => next.includes("logged from parent"), 500);
 
       const disposeStarted = Date.now();
       ticker.dispose();
@@ -153,6 +160,7 @@ describe("live ticker worker", () => {
       expect(rendered).not.toContain("\u0004");
       expect(rendered).not.toContain("\u0005");
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
     }
@@ -186,11 +194,13 @@ const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
       write: (chunk) => inlineWrites.push(chunk),
     });
     ticker.setLines([\`\${SPINNER_TOKEN} \${shimmerToken("load")}\`]);
+    // If CI flakes with "worker did not paint", raise this 1s deadline. Do not change the yield.
     const deadline = Date.now() + 1000;
     let rendered = "";
-    while (Date.now() < deadline) {
+    for (;;) {
       rendered = readFileSync(${JSON.stringify(path)}, "utf8");
-      if (rendered.includes("load")) break;
+      if (rendered.includes("load") || Date.now() >= deadline) break;
+      await new Promise((resolve) => setImmediate(resolve));
     }
     ticker.dispose();
     rendered = readFileSync(${JSON.stringify(path)}, "utf8");
@@ -227,8 +237,9 @@ const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
     );
     writeFileSync(workerPath, 'throw new Error("boot failure");\n');
     const fd = openSync(path, "w");
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -241,32 +252,29 @@ const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
       });
       ticker.setLines([`${SPINNER_TOKEN} ${shimmerToken("load")}`]);
 
-      const paintedDeadline = Date.now() + 2_000;
-      let rendered = "";
-      while (Date.now() < paintedDeadline) {
-        rendered = readFileSync(path, "utf8");
-        if (rendered.includes("load") && /[-\\|\/] /.test(rendered)) {
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      const rendered = await waitForFileContent(
+        path,
+        (next) => next.includes("load") && /[-\\|/] /.test(next)
+      );
 
       ticker.dispose();
       const plain = rendered.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
-      expect(plain).toMatch(/[-\\|\/] load/);
+      expect(plain).toMatch(/[-\\|/] load/);
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
     }
   });
 
-  it("does not fall back to the inline ticker after a healthy dispose", () => {
+  it("does not fall back to the inline ticker after a healthy dispose", async () => {
     const path = join(tmpdir(), `tubeless-ticker-dispose-${process.pid}-${Date.now()}.log`);
     const fd = openSync(path, "w");
     const inlineWrites: string[] = [];
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -278,12 +286,7 @@ const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
       });
       ticker.setLines([`${SPINNER_TOKEN} load`]);
 
-      const paintedDeadline = Date.now() + 1_000;
-      let rendered = "";
-      while (Date.now() < paintedDeadline) {
-        rendered = readFileSync(path, "utf8");
-        if (rendered.includes("load")) break;
-      }
+      let rendered = await waitForFileContent(path, (next) => next.includes("load"), 1_000);
       expect(rendered).toContain("load");
 
       ticker.dispose();
@@ -292,6 +295,7 @@ const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
       expect(rendered).toContain("post-dispose");
       expect(inlineWrites).toEqual([]);
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
     }
@@ -325,8 +329,9 @@ parentPort.on("message", (msg) => {
     );
     const fd = openSync(path, "w");
     const inlineWrites: string[] = [];
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -340,11 +345,7 @@ parentPort.on("message", (msg) => {
       });
       ticker.setLines(["inline-fallback-frame"]);
 
-      const liveDeadline = Date.now() + 2_000;
-      while (Date.now() < liveDeadline) {
-        if (readFileSync(path, "utf8").includes("worker-ready")) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      await waitForFileContent(path, (next) => next.includes("worker-ready"));
       expect(readFileSync(path, "utf8"), readFileSync(workerPath, "utf8")).toContain(
         "worker-ready"
       );
@@ -356,6 +357,7 @@ parentPort.on("message", (msg) => {
       expect(inlineWrites).toEqual([]);
       expect(rendered).not.toContain("inline-fallback-frame");
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
@@ -384,8 +386,9 @@ parentPort.on("message", (msg) => {
 `
     );
     const fd = openSync(path, "w");
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -398,23 +401,19 @@ parentPort.on("message", (msg) => {
       });
       ticker.setLines([`${SPINNER_TOKEN} load`, `${SPINNER_TOKEN} more`]);
 
-      const paintedDeadline = Date.now() + 2_000;
-      let rendered = "";
-      while (Date.now() < paintedDeadline) {
-        rendered = readFileSync(path, "utf8");
-        if (rendered.includes("worker-stale-2") && rendered.includes("\u001B[2F\u001B[J")) {
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      let rendered = await waitForFileContent(
+        path,
+        (next) => next.includes("worker-stale-2") && next.includes("\u001B[2F\u001B[J")
+      );
 
       ticker.dispose();
       expect(rendered).toContain("worker-stale-1");
       expect(rendered).toMatch(/worker-stale-2\n\u001B\[2F\u001B\[J/);
       const afterClear = rendered.slice(rendered.indexOf("\u001B[2F\u001B[J"));
       const plain = afterClear.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
-      expect(plain).toMatch(/[-\\|\/] load/);
+      expect(plain).toMatch(/[-\\|/] load/);
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
@@ -489,8 +488,9 @@ try {
     );
     writeFileSync(workerPath, 'throw new Error("boot failure");\n');
     const fd = openSync(path, "w");
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -504,19 +504,12 @@ try {
       ticker.setLines([`${SPINNER_TOKEN} load`]);
       ticker.writeLog("pre-fallback log\n");
 
-      const paintedDeadline = Date.now() + 2_000;
-      let rendered = "";
-      while (Date.now() < paintedDeadline) {
-        rendered = readFileSync(path, "utf8");
-        if (rendered.includes("pre-fallback log")) {
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      let rendered = await waitForFileContent(path, (next) => next.includes("pre-fallback log"));
 
       ticker.dispose();
       expect(rendered).toContain("pre-fallback log");
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
@@ -552,8 +545,9 @@ parentPort.on("message", (msg) => {
 `
     );
     const fd = openSync(path, "w");
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -566,34 +560,25 @@ parentPort.on("message", (msg) => {
       });
       ticker.setLines([`${SPINNER_TOKEN} load`]);
 
-      const liveDeadline = Date.now() + 2_000;
-      while (Date.now() < liveDeadline) {
-        if (readFileSync(path, "utf8").includes("worker-live")) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      await waitForFileContent(path, (next) => next.includes("worker-live"));
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       ticker.writeLog("session-log\n");
-      const loggedDeadline = Date.now() + 2_000;
-      while (Date.now() < loggedDeadline) {
-        if (readFileSync(path, "utf8").includes("session-log")) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      await waitForFileContent(path, (next) => next.includes("session-log"));
 
       ticker.writeLog("crash-log\n");
-      const fallbackDeadline = Date.now() + 2_000;
-      let rendered = "";
-      while (Date.now() < fallbackDeadline) {
-        rendered = readFileSync(path, "utf8");
-        const plain = rendered.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
-        if (rendered.includes("crash-log") && /[-\\|\/] load/.test(plain)) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      let rendered = await waitForFileContent(
+        path,
+        (next) =>
+          next.includes("crash-log") &&
+          /[-\\|/] load/.test(next.replace(/\u001B\[[0-9;]*[A-Za-z]/g, ""))
+      );
 
       ticker.dispose();
       rendered = readFileSync(path, "utf8");
       expect(rendered.match(/session-log/g)).toHaveLength(1);
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
@@ -608,8 +593,9 @@ parentPort.on("message", (msg) => {
     );
     writeFileSync(workerPath, 'throw new Error("boot failure");\n');
     const fd = openSync(path, "w");
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -622,21 +608,22 @@ parentPort.on("message", (msg) => {
       });
       ticker.setLines([`${SPINNER_TOKEN} load`, `${SPINNER_TOKEN} more`]);
 
-      const paintedDeadline = Date.now() + 2_000;
-      let rendered = "";
-      while (Date.now() < paintedDeadline) {
-        rendered = readFileSync(path, "utf8");
-        if (rendered.includes("load") && /[-\\|\/] /.test(rendered)) {
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      const rendered = await waitForFileContent(
+        path,
+        (next) => next.includes("load") && /[-\\|/] /.test(next)
+      );
 
       ticker.dispose();
-      expect(rendered).not.toMatch(/\u001B\[\d+F/);
-      const plain = rendered.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
-      expect(plain).toMatch(/[-\\|\/] load/);
+      // Worker never painted, so the first fallback frame must not cursor-up.
+      // Later inline refreshes may; ignore those.
+      const loadAt = rendered.indexOf("load");
+      expect(loadAt).toBeGreaterThan(-1);
+      expect(rendered.slice(0, loadAt)).not.toMatch(/\u001B\[\d+F/);
+      const firstFrame = rendered.slice(0, loadAt + "load".length);
+      const plain = firstFrame.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
+      expect(plain).toMatch(/[-\\|/] load/);
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
@@ -651,8 +638,9 @@ parentPort.on("message", (msg) => {
     );
     writeFileSync(workerPath, 'throw new Error("boot failure");\n');
     const fd = openSync(path, "w");
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -666,15 +654,10 @@ parentPort.on("message", (msg) => {
       ticker.writeLog("step done\n");
       ticker.setLines(["final status"]);
 
-      const paintedDeadline = Date.now() + 2_000;
-      let rendered = "";
-      while (Date.now() < paintedDeadline) {
-        rendered = readFileSync(path, "utf8");
-        if (rendered.includes("step done") && rendered.includes("final status")) {
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      let rendered = await waitForFileContent(
+        path,
+        (next) => next.includes("step done") && next.includes("final status")
+      );
 
       ticker.dispose();
       rendered = readFileSync(path, "utf8");
@@ -684,6 +667,7 @@ parentPort.on("message", (msg) => {
         rendered.lastIndexOf("step done")
       );
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
@@ -761,8 +745,9 @@ parentPort.on("message", (msg) => {
 `
     );
     const fd = openSync(path, "w");
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -775,27 +760,18 @@ parentPort.on("message", (msg) => {
       });
       ticker.setLines(["load"]);
 
-      const liveDeadline = Date.now() + 2_000;
-      while (Date.now() < liveDeadline) {
-        if (readFileSync(path, "utf8").includes("worker-ready")) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      await waitForFileContent(path, (next) => next.includes("worker-ready"));
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       ticker.writeLog("lost-log\n");
-      const fallbackDeadline = Date.now() + 2_000;
-      let rendered = "";
-      while (Date.now() < fallbackDeadline) {
-        rendered = readFileSync(path, "utf8");
-        if (rendered.includes("lost-log")) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      let rendered = await waitForFileContent(path, (next) => next.includes("lost-log"));
 
       ticker.dispose();
       rendered = readFileSync(path, "utf8");
       expect(rendered).toContain("lost-log");
       expect(rendered.match(/lost-log/g)).toHaveLength(1);
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
@@ -828,8 +804,9 @@ parentPort.on("message", (msg) => {
 `
     );
     const fd = openSync(path, "w");
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -842,27 +819,21 @@ parentPort.on("message", (msg) => {
       });
       ticker.setLines(["load"]);
 
-      const liveDeadline = Date.now() + 2_000;
-      while (Date.now() < liveDeadline) {
-        if (readFileSync(path, "utf8").includes("worker-ready")) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      await waitForFileContent(path, (next) => next.includes("worker-ready"));
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       ticker.writeLog("accepted-log\n");
-      const fallbackDeadline = Date.now() + 2_000;
-      let rendered = "";
-      while (Date.now() < fallbackDeadline) {
-        rendered = readFileSync(path, "utf8");
-        if ((rendered.match(/accepted-log/g) ?? []).length >= 1) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      let rendered = await waitForFileContent(
+        path,
+        (next) => (next.match(/accepted-log/g) ?? []).length >= 1
+      );
 
       ticker.dispose();
       rendered = readFileSync(path, "utf8");
       expect(rendered).toContain("accepted-log");
       expect(rendered.match(/accepted-log/g)).toHaveLength(1);
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
@@ -913,8 +884,9 @@ parentPort.on("message", (msg) => {
     writeFileSync(beatPath, "0");
     const fd = openSync(path, "w");
     let workerAliveAtFinalPaint = false;
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -933,11 +905,7 @@ parentPort.on("message", (msg) => {
       });
       ticker.setLines(["final-status"]);
 
-      const liveDeadline = Date.now() + 2_000;
-      while (Date.now() < liveDeadline) {
-        if (readFileSync(path, "utf8").includes("worker-ready")) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      await waitForFileContent(path, (next) => next.includes("worker-ready"));
 
       ticker.dispose();
       await new Promise((resolve) => setTimeout(resolve, 400));
@@ -946,6 +914,7 @@ parentPort.on("message", (msg) => {
       expect(rendered).not.toContain("late-worker-output");
       expect(workerAliveAtFinalPaint).toBe(false);
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
@@ -999,8 +968,9 @@ parentPort.on("message", (msg) => {
     writeFileSync(beatPath, "0");
     const fd = openSync(path, "w");
     let workerAliveAtFinalPaint = false;
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -1019,11 +989,7 @@ parentPort.on("message", (msg) => {
       });
       ticker.setLines(["final-status"]);
 
-      const liveDeadline = Date.now() + 2_000;
-      while (Date.now() < liveDeadline) {
-        if (readFileSync(path, "utf8").includes("worker-ready")) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      await waitForFileContent(path, (next) => next.includes("worker-ready"));
 
       ticker.dispose();
       await new Promise((resolve) => setTimeout(resolve, 400));
@@ -1032,6 +998,7 @@ parentPort.on("message", (msg) => {
       expect(rendered).not.toContain("late-worker-output");
       expect(workerAliveAtFinalPaint).toBe(false);
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
@@ -1060,8 +1027,9 @@ parentPort.on("message", (msg) => {
 `
     );
     const fd = openSync(path, "w");
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -1074,11 +1042,7 @@ parentPort.on("message", (msg) => {
       });
       ticker.setLines(["final-status"]);
 
-      const liveDeadline = Date.now() + 2_000;
-      while (Date.now() < liveDeadline) {
-        if (readFileSync(path, "utf8").includes("worker-ready")) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      await waitForFileContent(path, (next) => next.includes("worker-ready"));
 
       const started = Date.now();
       ticker.dispose();
@@ -1086,6 +1050,7 @@ parentPort.on("message", (msg) => {
       expect(elapsed).toBeLessThan(1_200);
       expect(readFileSync(path, "utf8")).toContain("final-status");
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
@@ -1103,8 +1068,9 @@ parentPort.on("message", (msg) => {
     writeFileSync(supervisorPath, 'throw new Error("supervisor boot failure");\n');
     const fd = openSync(path, "w");
     const inlineWrites: string[] = [];
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -1122,17 +1088,16 @@ parentPort.on("message", (msg) => {
         // Supervisor may already be gone; fallback still paints on error/exit.
       }
 
-      const paintedDeadline = Date.now() + 2_000;
-      while (Date.now() < paintedDeadline) {
-        if (inlineWrites.some((chunk) => chunk.includes("load"))) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      await vi.waitFor(() => {
+        expect(inlineWrites.some((chunk) => chunk.includes("load"))).toBe(true);
+      });
       expect(inlineWrites.join("")).toContain("load");
 
       const started = Date.now();
       ticker.dispose();
       expect(Date.now() - started).toBeLessThan(400);
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(supervisorPath);
@@ -1203,8 +1168,9 @@ setTimeout(() => {
     );
     writeFileSync(beatPath, "0");
     const fd = openSync(path, "w");
+    let ticker: LiveTicker | undefined;
     try {
-      const ticker = createLiveTicker({
+      ticker = createLiveTicker({
         color: true,
         columns: 80,
         fd,
@@ -1218,11 +1184,7 @@ setTimeout(() => {
       });
       ticker.setLines(["load"]);
 
-      const liveDeadline = Date.now() + 2_000;
-      while (Date.now() < liveDeadline) {
-        if (readFileSync(path, "utf8").includes("worker-ready")) break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      await waitForFileContent(path, (next) => next.includes("worker-ready"));
       expect(readFileSync(path, "utf8")).toContain("worker-ready");
       await new Promise((resolve) => setTimeout(resolve, 80));
 
@@ -1232,6 +1194,7 @@ setTimeout(() => {
       expect(elapsed).toBeGreaterThanOrEqual(150);
       expect(elapsed).toBeLessThan(1_400);
     } finally {
+      ticker?.dispose();
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(beatPath);

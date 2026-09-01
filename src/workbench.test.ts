@@ -1592,16 +1592,22 @@ describe("tubeless workbench", () => {
     const commandId = commands.commands[0]?.id;
     expect(commandId).toBeDefined();
 
+    let resolved = false;
     const launchPromise = fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
       body: JSON.stringify({ values: { message: "x" } }),
       headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
       method: "POST",
+    }).then((response) => {
+      resolved = true;
+      return response;
     });
-    const pending = await Promise.race([
-      launchPromise.then(() => "resolved" as const),
-      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 80)),
-    ]);
-    expect(pending).toBe("pending");
+    await vi.waitFor(async () => {
+      const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
+        liveRunIds: string[];
+      };
+      expect(snapshot.liveRunIds.length).toBeGreaterThan(0);
+    });
+    expect(resolved).toBe(false);
     await writeFile(gateFile, "go");
     const launched = await launchPromise;
     expect(launched.status).toBe(202);
@@ -1702,16 +1708,22 @@ describe("tubeless workbench", () => {
     const commandId = commands.commands[0]?.id;
     expect(commandId).toBeDefined();
 
+    let resolved = false;
     const launchPromise = fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
       body: JSON.stringify({ values: { message: "x" } }),
       headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
       method: "POST",
+    }).then((response) => {
+      resolved = true;
+      return response;
     });
-    const pending = await Promise.race([
-      launchPromise.then(() => "resolved" as const),
-      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 80)),
-    ]);
-    expect(pending).toBe("pending");
+    await vi.waitFor(async () => {
+      const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
+        liveRunIds: string[];
+      };
+      expect(snapshot.liveRunIds.length).toBeGreaterThan(0);
+    });
+    expect(resolved).toBe(false);
     controller.abort();
     const failed = await launchPromise;
     expect(failed.status).toBe(400);
