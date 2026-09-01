@@ -176,54 +176,61 @@ describe("runUi", () => {
       io
     );
 
-    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
-    const url = studioUrl(io.output.join(""));
-    const payload = (await fetch(`${url}/api/commands`).then((response) => response.json())) as {
-      commands: {
-        canPlan: boolean;
-        id: string;
-        name: string;
-        parameters: { flag: string; type: string }[];
-      }[];
-    };
-
-    expect(payload).toEqual({
-      commands: [
-        expect.objectContaining({
-          canPlan: true,
-          id: `${filePath}#FixtureCommand`,
-          name: "Studio fixture",
-        }),
-      ],
-    });
-    expect(payload.commands[0]?.parameters).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ flag: "message", type: "string" }),
-        expect.objectContaining({ flag: "target", type: "string" }),
-      ])
-    );
-
-    const commandId = payload.commands[0]?.id;
-    expect(commandId).toBeDefined();
-    const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
-      body: JSON.stringify({ values: { message: "from-studio" } }),
-      headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
-      method: "POST",
-    });
-    expect(launched.status).toBe(202);
-    const launch = (await launched.json()) as { runId: string };
-    await vi.waitFor(async () => {
-      const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
-        liveRunIds: string[];
-        runs: { runId: string; status: string }[];
-      };
-      expect(snapshot.runs).toContainEqual(
-        expect.objectContaining({ runId: launch.runId, status: "completed" })
+    try {
+      await vi.waitFor(() =>
+        expect(io.output.join("")).toContain("Tubeless local studio: http://")
       );
-      expect(snapshot.liveRunIds).toEqual([]);
-    });
+      const url = studioUrl(io.output.join(""));
+      const payload = (await fetch(`${url}/api/commands`).then((response) => response.json())) as {
+        commands: {
+          canPlan: boolean;
+          id: string;
+          name: string;
+          parameters: { flag: string; type: string }[];
+        }[];
+      };
 
-    controller.abort();
+      expect(payload).toEqual({
+        commands: [
+          expect.objectContaining({
+            canPlan: true,
+            id: `${filePath}#FixtureCommand`,
+            name: "Studio fixture",
+          }),
+        ],
+      });
+      expect(payload.commands[0]?.parameters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ flag: "message", type: "string" }),
+          expect.objectContaining({ flag: "target", type: "string" }),
+        ])
+      );
+
+      const commandId = payload.commands[0]?.id;
+      expect(commandId).toBeDefined();
+      const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+        body: JSON.stringify({ values: { message: "from-studio" } }),
+        headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
+        method: "POST",
+      });
+      expect(launched.status).toBe(202);
+      const launch = (await launched.json()) as { runId: string };
+      await vi.waitFor(async () => {
+        const snapshot = (await fetch(`${url}/api/snapshot`).then((response) =>
+          response.json()
+        )) as {
+          liveRunIds: string[];
+          runs: { runId: string; status: string }[];
+        };
+        expect(snapshot.runs).toContainEqual(
+          expect.objectContaining({ runId: launch.runId, status: "completed" })
+        );
+        expect(snapshot.liveRunIds).toEqual([]);
+      });
+    } finally {
+      controller.abort();
+      await pending.catch(() => undefined);
+    }
     await expect(pending).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
   });
 });
