@@ -697,6 +697,9 @@ describe("child-pipeline composition", () => {
       await vi.waitFor(() => {
         expect(visibleFanoutPublishes).toBeGreaterThan(0);
       });
+      // Hold mapped children across the old 250ms observation window so a late
+      // empty-progress tick would still be recorded before we release the gate.
+      await new Promise((resolve) => setTimeout(resolve, 250));
       expect(zeroProgressLabels).toBe(0);
       releaseWork();
       const result = await runPromise;
@@ -1014,6 +1017,9 @@ describe("child-pipeline composition", () => {
       await vi.waitFor(() => {
         expect(bridged.filter((message) => message.includes("batch"))).toHaveLength(1);
       });
+      // Hold the child pending across the old 250ms observation window so a late
+      // empty snapshot would still be recorded before we release the gate.
+      await new Promise((resolve) => setTimeout(resolve, 250));
       expect(bridged.some((message) => message.includes("0 completed"))).toBe(false);
       releaseWork();
       const result = await runPromise;
