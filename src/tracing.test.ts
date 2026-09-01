@@ -166,8 +166,120 @@ describe("pipeline tracing", () => {
     });
 
     expect(result.status).toBe("completed");
-    expect(log.warnings).toContain("Pipeline trace exporter failed: collector unavailable");
+    expect(log.warnings).toContain(
+      "Pipeline trace exporter failed; further trace events for this run will be dropped: collector unavailable"
+    );
+    expect(log.warnings.filter((warning) => warning.includes("flush unavailable"))).toHaveLength(0);
+  });
+
+  it("calls onExporterError once when export rejects for every event", async () => {
+    const step = createSteps();
+    const first = step("first", { run: () => "a" });
+    const second = step("second", { dependsOn: [first], run: () => "b" });
+    const third = step("third", { dependsOn: [second], run: () => "c" });
+    const pipeline = definePipeline({
+      id: "trace-export-once",
+      steps: [first, second, third],
+      finalize: () => "ok",
+    });
+    const log = createLogger();
+    const exportError = new Error("collector unavailable");
+    const onExporterError = vi.fn();
+
+    const result = await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log,
+      runId: "export-once",
+      tracing: {
+        exporter: { export: () => Promise.reject(exportError) },
+        onExporterError,
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(onExporterError).toHaveBeenCalledTimes(1);
+    expect(onExporterError).toHaveBeenCalledWith(exportError);
+    expect(
+      log.warnings.filter((warning) => warning.startsWith("Pipeline trace exporter failed"))
+    ).toHaveLength(1);
+  });
+
+  it("does not call onExporterError when the exporter succeeds", async () => {
+    const step = createSteps();
+    const pipeline = definePipeline({
+      id: "trace-export-ok",
+      steps: [step("work", { run: () => "ok" })],
+      finalize: () => "ok",
+    });
+    const onExporterError = vi.fn();
+
+    const result = await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log: createLogger(),
+      runId: "export-ok",
+      tracing: {
+        exporter: { export: () => undefined },
+        onExporterError,
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(onExporterError).not.toHaveBeenCalled();
+  });
+
+  it("calls onExporterError once when flush rejects after successful export", async () => {
+    const step = createSteps();
+    const pipeline = definePipeline({
+      id: "trace-flush-once",
+      steps: [step("work", { run: () => "ok" })],
+      finalize: () => "ok",
+    });
+    const log = createLogger();
+    const flushError = new Error("flush unavailable");
+    const onExporterError = vi.fn();
+
+    const result = await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log,
+      runId: "flush-once",
+      tracing: {
+        exporter: {
+          export: () => undefined,
+          flush: () => Promise.reject(flushError),
+        },
+        onExporterError,
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(onExporterError).toHaveBeenCalledTimes(1);
+    expect(onExporterError).toHaveBeenCalledWith(flushError);
     expect(log.warnings).toContain("Pipeline trace exporter flush failed: flush unavailable");
+  });
+
+  it("completes the run when onExporterError throws", async () => {
+    const step = createSteps();
+    const pipeline = definePipeline({
+      id: "trace-callback-throw",
+      steps: [step("work", { run: () => "ok" })],
+      finalize: () => "ok",
+    });
+    const log = createLogger();
+
+    const result = await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log,
+      runId: "callback-throw",
+      tracing: {
+        exporter: { export: () => Promise.reject(new Error("collector unavailable")) },
+        onExporterError: () => {
+          throw new Error("callback exploded");
+        },
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(log.warnings).toContain("Pipeline trace onExporterError failed: callback exploded");
   });
 
   it("links child runs to the parent trace identity", async () => {

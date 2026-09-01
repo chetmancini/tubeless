@@ -67,4 +67,9 @@ export interface PipelineTraceExporter {
 export interface PipelineTracingOptions {
   exporter: PipelineTraceExporter;
   itemKey?: string;
+  /**
+   * Called once, on the first exporter failure of the run. The run itself is
+   * not failed; after this fires, subsequent trace events are dropped.
+   */
+  readonly onExporterError?: (error: unknown) => void;
 }

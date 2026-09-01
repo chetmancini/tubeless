@@ -151,6 +151,21 @@ export function createPipelineTraceEmitter(
 
   const context: PipelineTraceContext = identity;
   let queue = Promise.resolve();
+  let sawExporterError = false;
+
+  const formatExporterError = (error: unknown): string =>
+    error instanceof Error ? error.message : String(error);
+
+  const captureExporterError = (error: unknown, message: string): void => {
+    if (sawExporterError) return;
+    sawExporterError = true;
+    log.warn(message);
+    try {
+      options.onExporterError?.(error);
+    } catch (callbackError) {
+      log.warn(`Pipeline trace onExporterError failed: ${formatExporterError(callbackError)}`);
+    }
+  };
 
   const emit = (
     name: PipelineTraceEventName,
@@ -170,8 +185,9 @@ export function createPipelineTraceEmitter(
     queue = queue
       .then(() => options.exporter.export(event))
       .catch((error) => {
-        log.warn(
-          `Pipeline trace exporter failed: ${error instanceof Error ? error.message : String(error)}`
+        captureExporterError(
+          error,
+          `Pipeline trace exporter failed; further trace events for this run will be dropped: ${formatExporterError(error)}`
         );
       });
   };
@@ -313,8 +329,9 @@ export function createPipelineTraceEmitter(
       try {
         await options.exporter.flush?.();
       } catch (error) {
-        log.warn(
-          `Pipeline trace exporter flush failed: ${error instanceof Error ? error.message : String(error)}`
+        captureExporterError(
+          error,
+          `Pipeline trace exporter flush failed: ${formatExporterError(error)}`
         );
       }
     },
