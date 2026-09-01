@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import type { PipelineRunEventStore, StoredPipelineEvent } from "./run-store.js";
+import { PIPELINE_RUN_STUDIO_SCRIPT } from "./run-store-ui-page.js";
 import { startPipelineRunStudio, type PipelineRunStudioServer } from "./run-store-ui.js";
 
 async function requestWithHost(
@@ -223,6 +225,26 @@ describe("local pipeline run studio", () => {
       method: "POST",
     });
     expect(cancel.status).toBe(405);
+  });
+
+  it("pins the studio page CSP hashes to the exact inline script and style", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const page = await fetch(server.url);
+    const csp = page.headers.get("content-security-policy") ?? "";
+    const html = await page.text();
+    const script = /<script>([\s\S]*)<\/script>/.exec(html)?.[1];
+    const style = /<style>([\s\S]*)<\/style>/.exec(html)?.[1];
+    expect(script).toBeTruthy();
+    expect(style).toBeTruthy();
+    const scriptHash = `'sha256-${createHash("sha256").update(script!).digest("base64")}'`;
+    const styleHash = `'sha256-${createHash("sha256").update(style!).digest("base64")}'`;
+    expect(html).toContain(`<script>${PIPELINE_RUN_STUDIO_SCRIPT}</script>`);
+    expect(csp).toBe(
+      `default-src 'none'; style-src ${styleHash}; script-src ${scriptHash}; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
+    );
+    expect(csp).not.toContain("unsafe-inline");
   });
 
   it("exposes only injected commands and delegates bounded structured launch values", async () => {

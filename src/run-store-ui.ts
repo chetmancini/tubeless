@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import {
   formatHttpUrlHost,
@@ -7,7 +8,11 @@ import {
   parseHttpAuthority,
 } from "./run-store-ui-http.js";
 import { projectPipelineRun, type PipelineRunEventStore } from "./run-store.js";
-import { PIPELINE_RUN_STUDIO_HTML } from "./run-store-ui-page.js";
+import {
+  PIPELINE_RUN_STUDIO_HTML,
+  PIPELINE_RUN_STUDIO_SCRIPT,
+  PIPELINE_RUN_STUDIO_STYLE,
+} from "./run-store-ui-page.js";
 import {
   isPipelineRunStudioParameter,
   parseStudioLaunchRequest,
@@ -28,6 +33,10 @@ export type {
   PipelineRunStudioLaunchRequest,
 } from "./run-store-ui-protocol.js";
 export type { PipelineRunStudioHistoryMaintenance } from "./run-store-ui-state.js";
+
+const studioStyleCspHash = `'sha256-${createHash("sha256").update(PIPELINE_RUN_STUDIO_STYLE).digest("base64")}'`;
+const studioScriptCspHash = `'sha256-${createHash("sha256").update(PIPELINE_RUN_STUDIO_SCRIPT).digest("base64")}'`;
+const studioPageCsp = `default-src 'none'; style-src ${studioStyleCspHash}; script-src ${studioScriptCspHash}; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 
 export interface PipelineRunStudioOptions {
   /** Bind address. Defaults to loopback only. */
@@ -150,8 +159,7 @@ export async function startPipelineRunStudio(
       if (request.method === "GET" && url.pathname === "/") {
         response.writeHead(200, {
           "cache-control": "no-store",
-          "content-security-policy":
-            "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'self'",
+          "content-security-policy": studioPageCsp,
           "content-type": "text/html; charset=utf-8",
           "x-content-type-options": "nosniff",
         });
