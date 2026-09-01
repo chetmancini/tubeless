@@ -160,13 +160,13 @@ export function createPipelineTraceEmitter(
     log.warn(`Pipeline trace onExporterError failed: ${formatExporterError(callbackError)}`);
   };
 
-  const captureExporterError = (error: unknown, message: string): void | Promise<void> => {
+  const captureExporterError = (error: unknown, message: string): void => {
     if (sawExporterError) return;
     sawExporterError = true;
     log.warn(message);
     if (!options.onExporterError) return;
     try {
-      return Promise.resolve(options.onExporterError(error)).catch(warnCallbackError);
+      void Promise.resolve(options.onExporterError(error)).catch(warnCallbackError);
     } catch (callbackError) {
       warnCallbackError(callbackError);
     }
@@ -337,7 +337,7 @@ export function createPipelineTraceEmitter(
       try {
         await options.exporter.flush?.();
       } catch (error) {
-        await captureExporterError(
+        captureExporterError(
           error,
           `Pipeline trace exporter flush failed: ${formatExporterError(error)}`
         );

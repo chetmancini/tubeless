@@ -334,6 +334,40 @@ describe("pipeline tracing", () => {
     expect(log.warnings).toContain("Pipeline trace onExporterError failed: callback exploded");
   });
 
+  it("does not wait for a slow onExporterError before completing the run", async () => {
+    const step = createSteps();
+    const pipeline = definePipeline({
+      id: "trace-callback-slow",
+      steps: [step("work", { run: () => "ok" })],
+      finalize: () => "ok",
+    });
+    let release!: () => void;
+    const hung = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const runPromise = pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log: createLogger(),
+      runId: "callback-slow",
+      tracing: {
+        exporter: { export: () => Promise.reject(new Error("collector unavailable")) },
+        onExporterError: () => hung,
+      },
+    });
+    const timeout = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("run waited on onExporterError")), 100);
+    });
+
+    try {
+      const result = await Promise.race([runPromise, timeout]);
+      expect(result.status).toBe("completed");
+    } finally {
+      release();
+      await runPromise;
+    }
+  });
+
   it("links child runs to the parent trace identity", async () => {
     const childStep = createSteps();
     const child = definePipeline({
