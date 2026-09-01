@@ -1168,11 +1168,13 @@ const ticker = new Worker(new URL(workerData.tickerUrl), {
 });
 ticker.on("message", (msg) => {
   parentPort.postMessage(msg);
+  // Exit after the isolate acks lines. A timer from the parent's
+  // first "lines" post can kill a nested worker before it boots.
+  if (msg.type === "ready") process.exit(1);
 });
 ticker.unref();
 parentPort.on("message", (msg) => {
   ticker.postMessage(msg);
-  if (msg.type === "lines") setTimeout(() => process.exit(1), 30);
 });
 `
     );
@@ -1189,11 +1191,14 @@ const pulse = () => {
 };
 pulse();
 setInterval(pulse, 10);
-parentPort.on("message", (msg) => {
-  if (msg.type !== "lines") return;
-  writeSync(workerData.fd, "worker-ready\\n");
-  parentPort.postMessage({ type: "ready" });
-});
+// Nested isolate boot can lag the parent's first "lines" post.
+setTimeout(() => {
+  parentPort.on("message", (msg) => {
+    if (msg.type !== "lines") return;
+    writeSync(workerData.fd, "worker-ready\\n");
+    parentPort.postMessage({ type: "ready" });
+  });
+}, 80);
 `
     );
     writeFileSync(beatPath, "0");
