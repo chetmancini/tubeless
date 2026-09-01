@@ -80,6 +80,7 @@ command export; application flags go after `--`. `history` lists recorded
 | Skip work intentionally at runtime           | [Conditional step](./examples/conditional-step.ts)                        |
 | Continue independent work after a failure    | [Best-effort execution](./examples/best-effort.ts)                        |
 | Reuse a pipeline inside another              | [Child pipeline](./examples/child-pipeline.ts)                            |
+| Run a step on another engine                 | [Remote steps](./examples/remote-steps.ts)                                |
 | Run one child pipeline for many items        | [Fan-out and progress](./examples/fan-out-progress.ts)                    |
 | Resume long API work safely                  | [Retry, rate limit, and checkpoint](./examples/resumable-enrichment.ts)   |
 | Watch the live TTY reporter                  | [Live TUI](./examples/live-tui.ts)                                        |
