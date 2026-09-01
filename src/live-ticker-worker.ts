@@ -97,7 +97,13 @@ function done(): void {
   Atomics.notify(handshake, 0);
 }
 
+const beat = (): void => {
+  Atomics.add(handshake, 3, 1);
+};
+
+beat();
 const timer = setInterval(() => {
+  beat();
   if (!lines.some((line) => line.includes(SPINNER_TOKEN) || line.includes(SHIMMER_TOKEN_START))) {
     return;
   }

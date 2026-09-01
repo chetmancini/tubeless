@@ -84,11 +84,21 @@ describe("paintLiveLines", () => {
 describe("live ticker worker", () => {
   it("loads a compiled worker file instead of eval source", () => {
     const compiled = fileURLToPath(new URL("../dist/live-ticker-worker.js", import.meta.url));
+    const supervisor = fileURLToPath(new URL("../dist/live-ticker-supervisor.js", import.meta.url));
     const source = readFileSync(new URL("./live-ticker.ts", import.meta.url), "utf8");
 
+    const supervisorSource = readFileSync(
+      new URL("./live-ticker-supervisor.ts", import.meta.url),
+      "utf8"
+    );
     expect(existsSync(compiled)).toBe(true);
+    expect(existsSync(supervisor)).toBe(true);
     expect(source).not.toContain("WORKER_SOURCE");
     expect(source).not.toContain("eval: true");
+    expect(source).not.toContain("ISOLATE_DRAIN_MS");
+    expect(supervisorSource).not.toContain("setInterval");
+    expect(supervisorSource).toContain("terminated");
+    expect(source).toContain("terminated");
   });
 
   it("paints, logs, and stops through the compiled worker", () => {
@@ -130,7 +140,7 @@ describe("live ticker worker", () => {
 
       const disposeStarted = Date.now();
       ticker.dispose();
-      expect(Date.now() - disposeStarted).toBeLessThan(200);
+      expect(Date.now() - disposeStarted).toBeLessThan(120);
       rendered = readFileSync(path, "utf8");
       const plain = rendered.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
 
@@ -284,6 +294,71 @@ const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
     } finally {
       closeSync(fd);
       unlinkSync(path);
+    }
+  });
+
+  it("does not paint inline fallback when a requested terminate exits non-zero", async () => {
+    const path = join(tmpdir(), `tubeless-ticker-term-exit-${process.pid}-${Date.now()}.log`);
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-term-exit-worker-${process.pid}-${Date.now()}.mjs`
+    );
+    writeFileSync(
+      workerPath,
+      `
+import { writeSync } from "node:fs";
+import { parentPort, workerData } from "node:worker_threads";
+
+parentPort.on("message", (msg) => {
+  if (msg.type === "lines") {
+    writeSync(workerData.fd, "worker-ready\\n");
+    parentPort.postMessage({ type: "ready" });
+    return;
+  }
+  if (msg.type !== "stop") return;
+  writeSync(workerData.fd, "worker-owned-final\\n");
+  Atomics.store(new Int32Array(workerData.handshakeBuffer), 0, 1);
+  Atomics.notify(new Int32Array(workerData.handshakeBuffer), 0);
+  throw new Error("non-zero exit after stop handshake");
+});
+`
+    );
+    const fd = openSync(path, "w");
+    const inlineWrites: string[] = [];
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          inlineWrites.push(chunk);
+          writeSync(fd, chunk);
+        },
+      });
+      ticker.setLines(["inline-fallback-frame"]);
+
+      const liveDeadline = Date.now() + 2_000;
+      while (Date.now() < liveDeadline) {
+        if (readFileSync(path, "utf8").includes("worker-ready")) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(readFileSync(path, "utf8"), readFileSync(workerPath, "utf8")).toContain(
+        "worker-ready"
+      );
+
+      ticker.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const rendered = readFileSync(path, "utf8");
+      expect(rendered).toContain("worker-owned-final");
+      expect(inlineWrites).toEqual([]);
+      expect(rendered).not.toContain("inline-fallback-frame");
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
     }
   });
 
@@ -796,6 +871,10 @@ parentPort.on("message", (msg) => {
 
   it("does not interleave delayed worker output after a timed-out dispose", async () => {
     const path = join(tmpdir(), `tubeless-ticker-stop-timeout-${process.pid}-${Date.now()}.log`);
+    const beatPath = join(
+      tmpdir(),
+      `tubeless-ticker-stop-timeout-beat-${process.pid}-${Date.now()}.txt`
+    );
     const workerPath = join(
       tmpdir(),
       `tubeless-ticker-stop-timeout-worker-${process.pid}-${Date.now()}.mjs`
@@ -803,8 +882,16 @@ parentPort.on("message", (msg) => {
     writeFileSync(
       workerPath,
       `
-import { writeSync } from "node:fs";
+import { writeFileSync, writeSync } from "node:fs";
 import { parentPort, workerData } from "node:worker_threads";
+
+const beat = ${JSON.stringify(beatPath)};
+const handshake = new Int32Array(workerData.handshakeBuffer);
+const pulse = () => {
+  writeFileSync(beat, String(Date.now()));
+  Atomics.add(handshake, 3, 1);
+};
+setInterval(pulse, 10);
 
 parentPort.on("message", (msg) => {
   if (msg.type === "lines") {
@@ -814,14 +901,18 @@ parentPort.on("message", (msg) => {
   }
   if (msg.type !== "stop") return;
   const start = Date.now();
-  while (Date.now() - start < 800) {}
+  while (Date.now() - start < 800) {
+    pulse();
+  }
   writeSync(workerData.fd, "late-worker-output\\n");
   Atomics.store(new Int32Array(workerData.handshakeBuffer), 0, 1);
   Atomics.notify(new Int32Array(workerData.handshakeBuffer), 0);
 });
 `
     );
+    writeFileSync(beatPath, "0");
     const fd = openSync(path, "w");
+    let workerAliveAtFinalPaint = false;
     try {
       const ticker = createLiveTicker({
         color: true,
@@ -832,6 +923,12 @@ parentPort.on("message", (msg) => {
         workerUrl: pathToFileURL(workerPath),
         write: (chunk) => {
           writeSync(fd, chunk);
+          if (!chunk.includes("final-status")) return;
+          try {
+            workerAliveAtFinalPaint = Date.now() - Number(readFileSync(beatPath, "utf8")) < 80;
+          } catch {
+            workerAliveAtFinalPaint = false;
+          }
         },
       });
       ticker.setLines(["final-status"]);
@@ -847,10 +944,12 @@ parentPort.on("message", (msg) => {
       const rendered = readFileSync(path, "utf8");
       expect(rendered).toContain("final-status");
       expect(rendered).not.toContain("late-worker-output");
+      expect(workerAliveAtFinalPaint).toBe(false);
     } finally {
       closeSync(fd);
       unlinkSync(path);
       unlinkSync(workerPath);
+      unlinkSync(beatPath);
     }
   });
 

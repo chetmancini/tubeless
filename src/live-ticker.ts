@@ -1,5 +1,5 @@
 import { writeSync } from "node:fs";
-import { MessageChannel, Worker } from "node:worker_threads";
+import { Worker } from "node:worker_threads";
 import { formatDurationMs } from "./reporter.js";
 
 export const SPINNER_TOKEN = "\u0001";
@@ -269,8 +269,8 @@ function resolveLiveTickerWorkerUrl(): URL {
   return resolveCompiledWorkerUrl("live-ticker-worker.js");
 }
 
-function resolveLiveTickerExitWaiterUrl(): URL {
-  return resolveCompiledWorkerUrl("live-ticker-exit-waiter.js");
+function resolveLiveTickerSupervisorUrl(): URL {
+  return resolveCompiledWorkerUrl("live-ticker-supervisor.js");
 }
 
 function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[] {
@@ -288,21 +288,26 @@ function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[
 }
 
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
-  // [0] stop handshake, [1] painted rows, [2] accepted logs
-  const handshakeBuffer = new SharedArrayBuffer(12);
+  // [0] stop handshake, [1] painted rows, [2] accepted logs, [3] liveness beat
+  const handshakeBuffer = new SharedArrayBuffer(16);
   const handshake = new Int32Array(handshakeBuffer);
-  const lifetime = new MessageChannel();
-  const worker = new Worker(options.workerUrl ?? resolveLiveTickerWorkerUrl(), {
+  // [0] terminate request, [1] ticker isolate exited
+  const controlBuffer = new SharedArrayBuffer(8);
+  const control = new Int32Array(controlBuffer);
+  const worker = new Worker(resolveLiveTickerSupervisorUrl(), {
     execArgv: fileWorkerExecArgv(),
-    transferList: [lifetime.port2],
     workerData: {
-      color: options.color === true,
-      columns: resolveColumns(options),
-      fd: options.fd,
-      handshakeBuffer,
-      lifetimePort: lifetime.port2,
-      refreshIntervalMs: options.refreshIntervalMs,
-      unicode: options.unicode,
+      controlBuffer,
+      execArgv: fileWorkerExecArgv(),
+      tickerData: {
+        color: options.color === true,
+        columns: resolveColumns(options),
+        fd: options.fd,
+        handshakeBuffer,
+        refreshIntervalMs: options.refreshIntervalMs,
+        unicode: options.unicode,
+      },
+      tickerUrl: (options.workerUrl ?? resolveLiveTickerWorkerUrl()).href,
     },
   });
   let disposed = false;
@@ -326,22 +331,47 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     worker.postMessage(message);
   };
 
-  const stopWorker = (): void => {
-    const exitGate = new Int32Array(new SharedArrayBuffer(4));
+  const requestTerminate = (): void => {
+    Atomics.store(control, 0, 1);
+    Atomics.notify(control, 0);
     try {
-      const waiter = new Worker(resolveLiveTickerExitWaiterUrl(), {
-        execArgv: fileWorkerExecArgv(),
-        transferList: [lifetime.port1],
-        workerData: {
-          gateBuffer: exitGate.buffer,
-          port: lifetime.port1,
-        },
-      });
-      waiter.unref();
-      void worker.terminate();
-      Atomics.wait(exitGate, 0, 0, 1_000);
-      void waiter.terminate();
+      worker.postMessage({ type: "terminate" });
     } catch {
+      void worker.terminate();
+    }
+  };
+
+  const waitForQuietBeat = (): void => {
+    const deadline = Date.now() + 1_000;
+    let lastBeat = Atomics.load(handshake, 3);
+    // A worker that never published a beat is already quiet.
+    let lastChange = lastBeat === 0 ? 0 : Date.now();
+    const park = new Int32Array(new SharedArrayBuffer(4));
+    while (Date.now() < deadline) {
+      const beat = Atomics.load(handshake, 3);
+      if (beat !== lastBeat) {
+        lastBeat = beat;
+        lastChange = Date.now();
+      }
+      const quiet = Date.now() - lastChange;
+      if (quiet >= 80) return;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return;
+      Atomics.wait(park, 0, 0, Math.min(80 - quiet, remaining));
+    }
+  };
+
+  const stopWorker = (): void => {
+    requestTerminate();
+    // Handshake already accepted: the isolate painted its own final frame.
+    // Do not park the parent for a quiet beat.
+    if (Atomics.load(handshake, 0) === 1) {
+      void worker.terminate();
+      return;
+    }
+    try {
+      waitForQuietBeat();
+    } finally {
       void worker.terminate();
     }
   };
@@ -376,14 +406,37 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     inlineFallback = createInlineTicker(options, paintedFrameLineCount());
     replayThrough(inlineFallback);
   };
-  worker.on("error", failToInline);
+  const requestedTerminate = (): boolean => Atomics.load(control, 0) === 1;
+
+  worker.on("error", () => {
+    if (!requestedTerminate()) failToInline();
+  });
   worker.on("exit", (code) => {
-    if (code !== 0) failToInline();
+    if (code !== 0 && !requestedTerminate()) failToInline();
   });
   worker.unref();
-  worker.on("message", (msg: { type?: string; kind?: string }) => {
-    if (msg?.type === "ack" && msg.kind === "log") dropAcknowledgedLogs();
-  });
+  worker.on(
+    "message",
+    (msg: {
+      code?: number;
+      event?: string;
+      kind?: string;
+      terminated?: boolean;
+      type?: string;
+    }) => {
+      if (msg.type === "supervisor" && msg.event === "error") {
+        if (msg.terminated !== true && !requestedTerminate()) failToInline();
+        return;
+      }
+      if (msg.type === "supervisor" && msg.event === "exit") {
+        if (msg.code !== 0 && msg.terminated !== true && !requestedTerminate()) {
+          failToInline();
+        }
+        return;
+      }
+      if (msg.type === "ack" && msg.kind === "log") dropAcknowledgedLogs();
+    }
+  );
 
   return {
     setLines(nextLines) {
@@ -429,7 +482,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
       }
       if (Atomics.wait(handshake, 0, 0, 500) === "timed-out") {
         stopWorker();
-        paintFinalFrame();
+        if (Atomics.load(handshake, 0) !== 1) paintFinalFrame();
         try {
           writeSync(options.fd, ANSI.showCursor);
         } catch {
@@ -442,6 +495,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
       } catch {
         // Stream may already be closed; cursor restore is best-effort.
       }
+      requestTerminate();
       void worker.terminate();
     },
   };
