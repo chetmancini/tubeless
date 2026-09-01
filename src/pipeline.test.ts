@@ -7,6 +7,7 @@ import {
   PipelineExecutionError,
   requireOutputs,
   type AnyStep,
+  type PipelineError,
   type PipelineExecutionContext,
   type StandardSchemaV1,
   type Step,
@@ -51,6 +52,16 @@ function standardSchema<TInput, TOutput>(
   vendor = "test"
 ): StandardSchemaV1<TInput, TOutput> {
   return { "~standard": { validate, vendor, version: 1 } };
+}
+
+function thrownDefinitionErrors(define: () => unknown): readonly PipelineError[] {
+  try {
+    define();
+  } catch (error) {
+    expect(error).toBeInstanceOf(PipelineDefinitionError);
+    return (error as PipelineDefinitionError).errors;
+  }
+  throw new Error("expected PipelineDefinitionError");
 }
 
 describe("definePipeline", () => {
@@ -442,13 +453,19 @@ describe("definePipeline", () => {
     const first = createSteps(schemaA)("first", { run: () => 1 });
     const second = createSteps(schemaB)("second", { run: () => 2 });
 
-    expect(() =>
-      definePipeline({
-        id: "mixed-options-schemas",
-        steps: [first, second],
-        finalize: () => undefined,
-      })
-    ).toThrow("mixes steps from different options-schema scopes");
+    expect(
+      thrownDefinitionErrors(() =>
+        definePipeline({
+          id: "mixed-options-schemas",
+          steps: [first, second],
+          finalize: () => undefined,
+        })
+      )[0]
+    ).toMatchObject({
+      code: "TUBELESS_DEFINITION_OPTIONS_SCHEMA_CONFLICT",
+      kind: "definition",
+      phase: "definition",
+    });
   });
 
   it("generates a Mermaid flowchart without running the pipeline", () => {
@@ -535,9 +552,16 @@ describe("definePipeline", () => {
     const step = createSteps();
     const invalid = step("normalize-data", { name: "  ", run: () => undefined });
 
-    expect(() =>
-      definePipeline({ id: "named", steps: [invalid], finalize: () => undefined })
-    ).toThrow("step normalize-data has a blank display name");
+    expect(
+      thrownDefinitionErrors(() =>
+        definePipeline({ id: "named", steps: [invalid], finalize: () => undefined })
+      )[0]
+    ).toMatchObject({
+      code: "TUBELESS_DEFINITION_STEP_NAME_BLANK",
+      kind: "definition",
+      phase: "definition",
+      stepId: "normalize-data",
+    });
   });
 
   it("exposes immutable step ids in definition order", () => {
@@ -562,7 +586,11 @@ describe("definePipeline", () => {
     const result = await makePipeline("test").run({}, { stepIds: ["missing" as never] });
     expect(result.status).not.toBe("completed");
     expect(result.steps).toEqual([]);
-    expect(result.errors[0]?.message).toContain("requested unknown step ids: missing");
+    expect(result.errors[0]).toMatchObject({
+      code: "TUBELESS_PLANNING_STEP_UNKNOWN",
+      kind: "selection",
+      phase: "planning",
+    });
   });
 
   it("rejects an empty stepIds array during planning and execution", async () => {
@@ -574,14 +602,17 @@ describe("definePipeline", () => {
     expect(plan.errors[0]).toMatchObject({
       code: "TUBELESS_PLANNING_STEP_SELECTION_EMPTY",
       kind: "selection",
-      message: expect.stringContaining("empty stepIds"),
       phase: "planning",
     });
 
     const result = await pipeline.run({}, { stepIds: [] });
     expect(result.status).not.toBe("completed");
     expect(result.steps).toEqual([]);
-    expect(result.errors[0]?.message).toContain("empty stepIds");
+    expect(result.errors[0]).toMatchObject({
+      code: "TUBELESS_PLANNING_STEP_SELECTION_EMPTY",
+      kind: "selection",
+      phase: "planning",
+    });
   });
 
   it("runs every step when stepIds is omitted and preserves non-empty filtering", async () => {
@@ -754,16 +785,31 @@ describe("definePipeline", () => {
   it("rejects invalid target selections and combining targets with stepIds", () => {
     const pipeline = makePipeline("target-validation");
 
-    expect(pipeline.plan({ targets: [] }).errors[0]?.message).toContain("empty targets");
-    expect(pipeline.plan({ targets: ["build", "build"] }).errors[0]?.message).toContain(
-      "duplicate targets: build"
-    );
-    expect(pipeline.plan({ targets: ["missing" as never] }).errors[0]?.message).toContain(
-      "unknown targets: missing"
-    );
-    expect(pipeline.plan({ stepIds: ["build"], targets: ["write"] }).errors[0]?.message).toContain(
-      "cannot combine exact stepIds"
-    );
+    expect(pipeline.plan({ targets: [] }).errors[0]).toMatchObject({
+      code: "TUBELESS_PLANNING_TARGET_SELECTION_EMPTY",
+      kind: "selection",
+      phase: "planning",
+    });
+    expect(pipeline.plan({ targets: ["build", "build"] }).errors[0]).toMatchObject({
+      code: "TUBELESS_PLANNING_TARGET_SELECTION_DUPLICATE",
+      kind: "selection",
+      phase: "planning",
+    });
+    expect(pipeline.plan({ targets: ["missing" as never] }).errors[0]).toMatchObject({
+      code: "TUBELESS_PLANNING_TARGET_UNKNOWN",
+      kind: "selection",
+      phase: "planning",
+    });
+    expect(pipeline.plan({ stepIds: ["build", "build"] }).errors[0]).toMatchObject({
+      code: "TUBELESS_PLANNING_STEP_SELECTION_DUPLICATE",
+      kind: "selection",
+      phase: "planning",
+    });
+    expect(pipeline.plan({ stepIds: ["build"], targets: ["write"] }).errors[0]).toMatchObject({
+      code: "TUBELESS_PLANNING_SELECTION_CONFLICT",
+      kind: "selection",
+      phase: "planning",
+    });
   });
 
   it("exposes only declared targets and rejects internal steps as targets", () => {
@@ -786,9 +832,11 @@ describe("definePipeline", () => {
     expect(pipeline.plan({ targets: ["publish"] }).ok).toBe(true);
     // @ts-expect-error Internal steps are available through exact stepIds, not targets.
     pipeline.plan({ targets: ["load"] });
-    expect(pipeline.plan({ targets: ["load" as never] }).errors[0]?.message).toContain(
-      "requested undeclared targets: load"
-    );
+    expect(pipeline.plan({ targets: ["load" as never] }).errors[0]).toMatchObject({
+      code: "TUBELESS_PLANNING_TARGET_UNDECLARED",
+      kind: "selection",
+      phase: "planning",
+    });
   });
 
   it("rejects declared targets that cannot satisfy required finalizer outputs", () => {
@@ -799,14 +847,21 @@ describe("definePipeline", () => {
       run: ({ load }) => load.toUpperCase(),
     });
 
-    expect(() =>
-      definePipeline({
-        id: "invalid-target-result",
-        steps: [load, normalize],
-        targets: [load],
-        finalize: requireOutputs([normalize], ({ normalize }) => normalize),
-      })
-    ).toThrow("target load cannot satisfy required finalizer output(s): normalize");
+    expect(
+      thrownDefinitionErrors(() =>
+        definePipeline({
+          id: "invalid-target-result",
+          steps: [load, normalize],
+          targets: [load],
+          finalize: requireOutputs([normalize], ({ normalize }) => normalize),
+        })
+      )[0]
+    ).toMatchObject({
+      code: "TUBELESS_DEFINITION_TARGET_FINALIZER_MISMATCH",
+      kind: "definition",
+      phase: "definition",
+      stepId: "load",
+    });
   });
 
   it("rejects duplicate and foreign target declarations", () => {
@@ -814,16 +869,29 @@ describe("definePipeline", () => {
     const included = step("included", { run: () => true });
     const foreign = step("foreign", { run: () => true });
 
-    expect(() =>
-      definePipeline({
-        id: "invalid-target-declarations",
-        steps: [included],
-        // @ts-expect-error Duplicate and foreign targets are rejected at definition time.
-        targets: [included, included, foreign],
-        finalize: () => undefined,
-      })
-    ).toThrow(
-      /declares duplicate targets: included.*declares target step\(s\) not included.*foreign/
+    expect(
+      thrownDefinitionErrors(() =>
+        definePipeline({
+          id: "invalid-target-declarations",
+          steps: [included],
+          // @ts-expect-error Duplicate and foreign targets are rejected at definition time.
+          targets: [included, included, foreign],
+          finalize: () => undefined,
+        })
+      )
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "TUBELESS_DEFINITION_TARGETS_DUPLICATE",
+          kind: "definition",
+          phase: "definition",
+        }),
+        expect.objectContaining({
+          code: "TUBELESS_DEFINITION_TARGET_NOT_IN_STEPS",
+          kind: "definition",
+          phase: "definition",
+        }),
+      ])
     );
   });
 
@@ -860,14 +928,20 @@ describe("definePipeline", () => {
     const included = step("included", { run: () => true });
     const foreign = step("foreign", { run: () => true });
 
-    expect(() =>
-      definePipeline({
-        id: "foreign-finalizer-output",
-        steps: [included],
-        // @ts-expect-error Required finalizer steps must be in the pipeline.
-        finalize: requireOutputs([foreign], ({ foreign }) => foreign),
-      })
-    ).toThrow("requires finalizer output from step(s) not included in its steps list: foreign");
+    expect(
+      thrownDefinitionErrors(() =>
+        definePipeline({
+          id: "foreign-finalizer-output",
+          steps: [included],
+          // @ts-expect-error Required finalizer steps must be in the pipeline.
+          finalize: requireOutputs([foreign], ({ foreign }) => foreign),
+        })
+      )[0]
+    ).toMatchObject({
+      code: "TUBELESS_DEFINITION_FINALIZER_STEP_NOT_IN_STEPS",
+      kind: "definition",
+      phase: "definition",
+    });
   });
 
   it("rejects duplicate step ids when the pipeline is defined", () => {
@@ -891,10 +965,8 @@ describe("definePipeline", () => {
     expect((thrown as PipelineDefinitionError).errors[0]).toMatchObject({
       code: "TUBELESS_DEFINITION_STEP_IDS_DUPLICATE",
       kind: "definition",
-      message: expect.stringContaining("duplicate step ids: build"),
       phase: "definition",
     });
-    expect((thrown as PipelineDefinitionError).message).toContain("definition");
     expect((thrown as PipelineDefinitionError).message).toContain(
       "TUBELESS_DEFINITION_STEP_IDS_DUPLICATE"
     );
@@ -908,20 +980,66 @@ describe("definePipeline", () => {
       optionalDependsOn: [source],
       run: () => "unreachable",
     });
-    expect(() =>
-      definePipeline({
-        id: " ",
-        steps: [source, contradictory],
-        finalize: () => undefined,
-      })
-    ).toThrow(
-      /Pipeline id must not be blank.*repeats dependsOn: source.*both required and optional/
+    expect(
+      thrownDefinitionErrors(() =>
+        definePipeline({
+          id: " ",
+          steps: [source, contradictory],
+          finalize: () => undefined,
+        })
+      )
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "TUBELESS_DEFINITION_PIPELINE_ID_BLANK",
+          kind: "definition",
+          phase: "definition",
+        }),
+        expect.objectContaining({
+          code: "TUBELESS_DEFINITION_DEPENDENCY_DUPLICATE",
+          kind: "definition",
+          phase: "definition",
+          stepId: "contradictory",
+        }),
+        expect.objectContaining({
+          code: "TUBELESS_DEFINITION_DEPENDENCY_CONTRADICTORY",
+          kind: "definition",
+          phase: "definition",
+          stepId: "contradictory",
+        }),
+      ])
     );
 
     const reserved = step(PIPELINE_FINALIZE_STEP_ID, { run: () => undefined });
-    expect(() =>
-      definePipeline({ id: "reserved", steps: [reserved], finalize: () => undefined })
-    ).toThrow(`reserved step id ${PIPELINE_FINALIZE_STEP_ID}`);
+    expect(
+      thrownDefinitionErrors(() =>
+        definePipeline({ id: "reserved", steps: [reserved], finalize: () => undefined })
+      )[0]
+    ).toMatchObject({
+      code: "TUBELESS_DEFINITION_STEP_ID_RESERVED",
+      kind: "definition",
+      phase: "definition",
+      stepId: PIPELINE_FINALIZE_STEP_ID,
+    });
+  });
+
+  it("rejects a blank step id when the pipeline is defined", () => {
+    const blank: AnyStep<object> = { id: " ", run: () => true };
+
+    expect(
+      thrownDefinitionErrors(() =>
+        definePipeline({
+          id: "blank-step-id",
+          steps: [blank],
+          finalize: () => undefined,
+        })
+      )[0]
+    ).toMatchObject({
+      code: "TUBELESS_DEFINITION_STEP_ID_BLANK",
+      kind: "definition",
+      phase: "definition",
+      stepId: " ",
+    });
   });
 
   it("skips dependent steps after a failed dependency with continueOnError", async () => {
@@ -1807,6 +1925,40 @@ describe("definePipeline", () => {
     });
   });
 
+  it("cancels finalization when the runtime signal is aborted after steps complete", async () => {
+    const controller = new AbortController();
+    const step = createSteps();
+    const work = step("work", {
+      run: () => {
+        controller.abort("stop");
+        return true;
+      },
+    });
+    const pipeline = definePipeline({
+      id: "finalize-cancelled",
+      steps: [work],
+      finalize: () => "done",
+    });
+
+    const result = await pipeline.run({}, undefined, {
+      cwd: "/tmp",
+      log: console,
+      signal: controller.signal,
+    });
+
+    expect(result.status).toBe("cancelled");
+    expect(result.finalized).toBe(false);
+    expect(result.steps.map((report) => [report.id, report.status])).toEqual([
+      ["work", "completed"],
+    ]);
+    expect(result.errors[0]).toMatchObject({
+      code: "TUBELESS_FINALIZATION_CANCELLED",
+      kind: "cancellation",
+      phase: "finalization",
+      stepId: PIPELINE_FINALIZE_STEP_ID,
+    });
+  });
+
   it("emits lifecycle hooks in execution order", async () => {
     const events: string[] = [];
     const focusedEvents: string[] = [];
@@ -2107,13 +2259,19 @@ describe("definePipeline", () => {
       run: (inputs) => `${inputs.build}+written`,
     });
     // `build` is a real dependency but never listed in `steps` — a copy/paste bug.
-    expect(() =>
-      definePipeline({
-        id: "missing-from-list",
-        steps: [write],
-        finalize: (outputs) => outputs,
-      })
-    ).toThrow("not included in its steps list: write -> build");
+    expect(
+      thrownDefinitionErrors(() =>
+        definePipeline({
+          id: "missing-from-list",
+          steps: [write],
+          finalize: (outputs) => outputs,
+        })
+      )[0]
+    ).toMatchObject({
+      code: "TUBELESS_DEFINITION_DEPENDENCY_NOT_IN_STEPS",
+      kind: "definition",
+      phase: "definition",
+    });
   });
 
   it("rejects a dependency cycle when the pipeline is defined", () => {
@@ -2131,13 +2289,40 @@ describe("definePipeline", () => {
     };
     (a as { dependsOn?: readonly AnyStep[] }).dependsOn = [b];
 
-    expect(() =>
-      definePipeline({
-        id: "cyclic",
-        steps: [a, b],
-        finalize: (outputs) => outputs,
-      })
-    ).toThrow("dependency cycle");
+    expect(
+      thrownDefinitionErrors(() =>
+        definePipeline({
+          id: "cyclic",
+          steps: [a, b],
+          finalize: (outputs) => outputs,
+        })
+      )[0]
+    ).toMatchObject({
+      code: "TUBELESS_DEFINITION_DEPENDENCY_CYCLE",
+      kind: "definition",
+      phase: "definition",
+    });
+  });
+
+  it("rejects a self-referential dependency when the pipeline is defined", () => {
+    const step = createSteps();
+    const loop = step("loop", { run: () => "loop" });
+    (loop as { dependsOn?: readonly AnyStep[] }).dependsOn = [loop];
+
+    expect(
+      thrownDefinitionErrors(() =>
+        definePipeline({
+          id: "self-reference",
+          steps: [loop],
+          finalize: () => undefined,
+        })
+      )[0]
+    ).toMatchObject({
+      code: "TUBELESS_DEFINITION_DEPENDENCY_SELF_REFERENCE",
+      kind: "definition",
+      phase: "definition",
+      stepId: "loop",
+    });
   });
 
   it("plans from the compiled graph after define, ignoring later definition mutations", async () => {
