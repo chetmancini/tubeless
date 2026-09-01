@@ -370,19 +370,25 @@ describe("createPipelineReporter", () => {
       hooks: reporter.hooks,
       log: reporter.log,
     });
-    await vi.waitFor(() => {
-      const liveFrames = output.chunks
-        .filter((chunk) => chunk.includes(" slow"))
-        .map((chunk) => chunk.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "").trimEnd());
-      const runningFrames = liveFrames.filter((frame) => /[-\\|/] slow/.test(frame));
-      const uniqueRunning = new Set(runningFrames);
-      // Reporter timer (not kernel progress) must animate spinner/elapsed while live.
-      expect(runningFrames.length).toBeGreaterThanOrEqual(2);
-      expect(uniqueRunning.size).toBeGreaterThanOrEqual(2);
-    });
-    releaseWork();
-    await runPromise;
-    reporter.dispose();
+    try {
+      await vi.waitFor(() => {
+        const liveFrames = output.chunks
+          .filter((chunk) => chunk.includes(" slow"))
+          .map((chunk) => chunk.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "").trimEnd());
+        const runningFrames = liveFrames.filter((frame) => /[-\\|/] slow/.test(frame));
+        const uniqueRunning = new Set(runningFrames);
+        // Reporter timer (not kernel progress) must animate spinner/elapsed while live.
+        expect(runningFrames.length).toBeGreaterThanOrEqual(2);
+        expect(uniqueRunning.size).toBeGreaterThanOrEqual(2);
+      });
+    } finally {
+      releaseWork();
+      try {
+        await runPromise;
+      } finally {
+        reporter.dispose();
+      }
+    }
   });
 
   it("animates spinner while a step burns CPU without progress", async () => {
