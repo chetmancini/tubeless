@@ -1138,4 +1138,100 @@ parentPort.on("message", (msg) => {
       unlinkSync(supervisorPath);
     }
   });
+
+  it("still drains after a supervisor crash once the isolate has started", async () => {
+    // Supervisor error/exit after the isolate published a beat is not
+    // "never started". dispose must still wait out the ownership window.
+    const path = join(
+      tmpdir(),
+      `tubeless-ticker-supervisor-midflight-${process.pid}-${Date.now()}.log`
+    );
+    const beatPath = join(
+      tmpdir(),
+      `tubeless-ticker-supervisor-midflight-beat-${process.pid}-${Date.now()}.txt`
+    );
+    const supervisorPath = join(
+      tmpdir(),
+      `tubeless-ticker-supervisor-midflight-${process.pid}-${Date.now()}.mjs`
+    );
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-supervisor-midflight-worker-${process.pid}-${Date.now()}.mjs`
+    );
+    writeFileSync(
+      supervisorPath,
+      `
+import { parentPort, workerData, Worker } from "node:worker_threads";
+const ticker = new Worker(new URL(workerData.tickerUrl), {
+  execArgv: workerData.execArgv,
+  workerData: workerData.tickerData,
+});
+ticker.on("message", (msg) => {
+  parentPort.postMessage(msg);
+});
+ticker.unref();
+parentPort.on("message", (msg) => {
+  ticker.postMessage(msg);
+  if (msg.type === "lines") setTimeout(() => process.exit(1), 30);
+});
+`
+    );
+    writeFileSync(
+      workerPath,
+      `
+import { writeFileSync, writeSync } from "node:fs";
+import { parentPort, workerData } from "node:worker_threads";
+const beat = ${JSON.stringify(beatPath)};
+const handshake = new Int32Array(workerData.handshakeBuffer);
+const pulse = () => {
+  writeFileSync(beat, String(Date.now()));
+  Atomics.add(handshake, 3, 1);
+};
+pulse();
+setInterval(pulse, 10);
+parentPort.on("message", (msg) => {
+  if (msg.type !== "lines") return;
+  writeSync(workerData.fd, "worker-ready\\n");
+  parentPort.postMessage({ type: "ready" });
+});
+`
+    );
+    writeFileSync(beatPath, "0");
+    const fd = openSync(path, "w");
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        supervisorUrl: pathToFileURL(supervisorPath),
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          writeSync(fd, chunk);
+        },
+      });
+      ticker.setLines(["load"]);
+
+      const liveDeadline = Date.now() + 2_000;
+      while (Date.now() < liveDeadline) {
+        if (readFileSync(path, "utf8").includes("worker-ready")) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(readFileSync(path, "utf8")).toContain("worker-ready");
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
+      const started = Date.now();
+      ticker.dispose();
+      const elapsed = Date.now() - started;
+      expect(elapsed).toBeGreaterThanOrEqual(150);
+      expect(elapsed).toBeLessThan(1_400);
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(beatPath);
+      unlinkSync(supervisorPath);
+      unlinkSync(workerPath);
+    }
+  });
 });

@@ -348,7 +348,15 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   // Supervisor stores control[1] on the ticker isolate's exit event.
   // A stale refresh beat is not isolate death: refreshIntervalMs is
   // user-configurable, and stop handlers clear the timer before done().
+  const isolateNeverStarted = (): boolean =>
+    Atomics.load(control, 1) === 0 &&
+    Atomics.load(handshake, 1) === 0 &&
+    Atomics.load(handshake, 2) === 0 &&
+    Atomics.load(handshake, 3) === 0;
+
   const joinTickerIsolate = (ms: number): void => {
+    // Only the supervisor stores control[1]. Once it is gone the join
+    // cannot observe isolate exit, so skip rather than park for 1s.
     if (supervisorGone || Atomics.load(control, 1) === 1) return;
     Atomics.wait(control, 1, 0, ms);
   };
@@ -362,10 +370,14 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     requestTerminate();
     try {
       joinTickerIsolate(1_000);
-      // Exit can land in the same millisecond as the last beat. Wait out the
-      // 80ms ownership window before the parent takes the fd. A supervisor
-      // that never started cannot set control[1] or have written the fd.
-      if (!supervisorGone && Atomics.load(handshake, 0) !== 1) drainOwnershipWindow();
+      // Exit can land in the same millisecond as the last beat. Wait out
+      // the 80ms ownership window before the parent takes the fd.
+      // supervisorGone is not enough to skip: a mid-flight supervisor
+      // crash can leave the isolate still writing. Skip only when the
+      // isolate never published a frame, log, beat, or exit.
+      if (Atomics.load(handshake, 0) !== 1 && !isolateNeverStarted()) {
+        drainOwnershipWindow();
+      }
     } finally {
       void worker.terminate();
     }
