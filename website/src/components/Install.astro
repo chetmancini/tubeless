@@ -1,0 +1,15 @@
+---
+type Props = {
+  command: string;
+};
+
+const { command } = Astro.props;
+---
+
+<div class="install">
+  <span><span class="prompt">$</span> {command}</span>
+  <button type="button" class="copy-cmd" data-copy={command} aria-label={`Copy ${command}`}>
+    <span class="copy-idle">Copy</span>
+    <span class="copy-done">Copied</span>
+  </button>
+</div>

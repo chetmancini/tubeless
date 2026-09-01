@@ -27,7 +27,7 @@ const agents = DOC_NAV.filter((item) =>
     {human.map((item) => (
       <a href={href(`docs/${item.slug}`)}>
         <h3>{item.label}</h3>
-        <p>{item.slug.replaceAll("-", " ")}</p>
+        <p>{item.blurb}</p>
       </a>
     ))}
   </div>
@@ -36,12 +36,12 @@ const agents = DOC_NAV.filter((item) =>
   <div class="agent-grid">
     <a href={href("agents")}>
       <h3>Entrypoints</h3>
-      <p>llms.txt, skill, catalog, API report.</p>
+      <p>llms.txt, skill, catalog, and the API report.</p>
     </a>
     {agents.map((item) => (
       <a href={href(`docs/${item.slug}`)}>
         <h3>{item.label}</h3>
-        <p>{item.slug.replaceAll("-", " ")}</p>
+        <p>{item.blurb}</p>
       </a>
     ))}
   </div>
@@ -51,7 +51,7 @@ const agents = DOC_NAV.filter((item) =>
     {deep.map((item) => (
       <a href={href(`docs/${item.slug}`)}>
         <h3>{item.label}</h3>
-        <p>{item.slug.replaceAll("-", " ")}</p>
+        <p>{item.blurb}</p>
       </a>
     ))}
     <a href={href("api-report.json")}>

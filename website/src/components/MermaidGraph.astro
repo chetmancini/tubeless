@@ -1,4 +1,6 @@
 ---
+import TtyBar from "./TtyBar.astro";
+
 /**
  * Rendered `tubeless graph` for examples/publish-with-gates.ts --direction LR.
  * Source is the workbench Mermaid; the drawing is themed to the site.
@@ -18,10 +20,7 @@ export const publishGraphSource = `flowchart LR
   class="shot graph-shot"
   aria-label="Mermaid flowchart from tubeless graph: build-artifact leads to validate-artifact and publish-artifact; validate-artifact is a dotted optional input and failure gate into publish-artifact."
 >
-  <figcaption class="tty-bar">
-    <span class="tty-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-    <span>tubeless graph</span>
-  </figcaption>
+  <TtyBar title="tubeless graph" />
   <div class="graph-canvas">
     <p class="graph-lang">flowchart LR</p>
     <svg viewBox="0 0 720 268" role="presentation">

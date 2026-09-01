@@ -27,18 +27,41 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap"
       rel="stylesheet"
     />
     <meta property="og:title" content={pageTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
     <meta name="theme-color" content="#e6e4de" />
+    <meta name="color-scheme" content="light" />
   </head>
   <body>
-    <Rainbow />
-    <SiteHeader />
-    <slot />
+    <a class="skip" href="#content">Skip to content</a>
+    <div class="site-top">
+      <Rainbow />
+      <SiteHeader />
+    </div>
+    <div id="content">
+      <slot />
+    </div>
     <SiteFooter />
+    <script>
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const button = target.closest<HTMLButtonElement>("[data-copy]");
+        if (!button) return;
+        const text = button.dataset.copy;
+        if (!text) return;
+        void navigator.clipboard.writeText(text).then(() => {
+          button.dataset.copied = "";
+          window.setTimeout(() => {
+            delete button.dataset.copied;
+          }, 1600);
+        });
+      });
+    </script>
   </body>
 </html>

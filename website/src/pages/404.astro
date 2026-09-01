@@ -4,9 +4,14 @@ import { href } from "../lib/paths";
 ---
 
 <Base title="Not found" description="That page is not on the tubeless site.">
-  <main class="wrap page-lead">
+  <main class="wrap page-lead miss">
     <p class="kicker">404</p>
     <h1 class="page-title">Page not found</h1>
-    <p>That URL is not a page. Try <a href={href()}>home</a>, <a href={href("docs")}>docs</a>, or <a href={href("agents")}>agents</a>.</p>
+    <p>That URL is not a page.</p>
+    <div class="actions">
+      <a class="btn" href={href()}>Home</a>
+      <a class="btn ghost" href={href("docs")}>Docs</a>
+      <a class="btn ghost" href={href("agents")}>Agents</a>
+    </div>
   </main>
 </Base>

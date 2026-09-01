@@ -1,0 +1,14 @@
+---
+type Props = {
+  title: string;
+  host?: string;
+};
+
+const { title, host = "workbench" } = Astro.props;
+---
+
+<figcaption class="tty-bar">
+  <span class="valve-mark" aria-hidden="true"></span>
+  <span>{title}</span>
+  <span class="tty-host">{host}</span>
+</figcaption>

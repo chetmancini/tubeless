@@ -30,6 +30,7 @@ const { title, description, slug, headings = [] } = Astro.props;
       <a href={href("llms.txt")}>llms.txt</a>
     </nav>
     <article class="doc-body">
+      {slug && <h1>{title}</h1>}
       {headings.length > 0 && (
         <nav class="toc" aria-label="On this page">
           <p>On this page</p>

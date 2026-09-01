@@ -15,16 +15,16 @@ export type DocPage = {
 };
 
 export const DOC_NAV = [
-  { slug: "getting-started", label: "Getting started" },
-  { slug: "recipes", label: "Recipes" },
-  { slug: "concepts", label: "Concepts" },
-  { slug: "cli", label: "CLI" },
-  { slug: "studio", label: "Studio" },
-  { slug: "comparison", label: "Comparison" },
-  { slug: "child-pipeline-composition", label: "Child pipelines" },
-  { slug: "agent-guide", label: "Agent guide" },
-  { slug: "agent-evaluations", label: "Evaluations" },
-  { slug: "api-reference", label: "API inventory" },
+  { slug: "getting-started", label: "Getting started", blurb: "Install, first pipeline, and the testing runtime." },
+  { slug: "recipes", label: "Recipes", blurb: "Smallest compiled example for the job." },
+  { slug: "concepts", label: "Concepts", blurb: "Skip, failure, selection, and dry-run." },
+  { slug: "cli", label: "CLI", blurb: "inspect, plan, graph, run, and history." },
+  { slug: "studio", label: "Studio", blurb: "Local SQLite history and tubeless ui." },
+  { slug: "comparison", label: "Comparison", blurb: "What this is, and what it is not." },
+  { slug: "child-pipeline-composition", label: "Child pipelines", blurb: "Nested pipelines and fan-out." },
+  { slug: "agent-guide", label: "Agent guide", blurb: "Rules for generating pipeline code." },
+  { slug: "agent-evaluations", label: "Evaluations", blurb: "Forward-testing cases." },
+  { slug: "api-reference", label: "API inventory", blurb: "Generated public surface." },
 ] as const;
 
 export const DOC_SLUGS = new Set(DOC_NAV.map((item) => item.slug));
@@ -85,7 +85,8 @@ export function loadDoc(slug: string): DocPage {
       .find((line) => line.length > 0 && !line.startsWith("#") && !line.startsWith("|")) ?? title;
   const html = marked.parse(rewriteDocLinks(source), { async: false, gfm: true }) as string;
   const rendered = addHeadingIds(html);
-  return { slug, title, description, ...rendered };
+  const body = rendered.html.replace(/^\s*<h1\b[^>]*>[\s\S]*?<\/h1>/, "");
+  return { slug, title, description, html: body, headings: rendered.headings };
 }
 
 export function listDocs(): DocPage[] {

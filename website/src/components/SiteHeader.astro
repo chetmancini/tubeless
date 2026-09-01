@@ -20,7 +20,7 @@ function current(path: string): boolean {
   <nav class="nav" aria-label="Primary">
     <a href={href("start")} aria-current={current("start") ? "page" : undefined}>Start</a>
     <a href={href("docs")} aria-current={current("docs") ? "page" : undefined}>Docs</a>
-    <a class="gold" href={href("agents")} aria-current={current("agents") ? "page" : undefined}>Agents</a>
+    <a href={href("agents")} aria-current={current("agents") ? "page" : undefined}>Agents</a>
     <a href={GITHUB_REPO} rel="noreferrer">GitHub</a>
   </nav>
 </header>

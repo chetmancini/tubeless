@@ -1,5 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
+import Install from "../components/Install.astro";
 import Terminal from "../components/Terminal.astro";
 import { graphTape, runTape } from "../data/tapes";
 import { href } from "../lib/paths";
@@ -9,7 +10,7 @@ import { href } from "../lib/paths";
   <main class="wrap">
     <header class="page-lead">
       <p class="kicker">Getting started</p>
-      <h1 class="page-title">First pipeline.</h1>
+      <h1 class="page-title">First pipeline</h1>
       <p>
         Library imports need Node.js 22+. The CLI needs Bun 1.3.14+. Linux and macOS
         are supported. Windows is untested.
@@ -20,12 +21,12 @@ import { href } from "../lib/paths";
       <div class="split">
         <div>
           <h3>Install the library</h3>
-          <div class="install"><span class="prompt">$</span> npm install tubeless</div>
+          <Install command="npm install tubeless" />
           <p class="lede">Also <code>pnpm add</code>, <code>yarn add</code>, or <code>bun add</code>. ESM-only. Dependency-free at runtime.</p>
         </div>
         <div>
           <h3>Use the CLI</h3>
-          <div class="install"><span class="prompt">$</span> bunx tubeless --help</div>
+          <Install command="bunx tubeless --help" />
           <p class="lede"><code>npx tubeless</code> works if Bun is installed; otherwise it prints install instructions.</p>
         </div>
       </div>
@@ -78,7 +79,7 @@ export const ImportPipeline = definePipeline({
     </section>
 
     <section class="section">
-      <div class="feature">
+      <div class="feature reverse">
         <div class="feature-copy">
           <h3>Pick an execution method</h3>
           <p>
