@@ -953,6 +953,92 @@ parentPort.on("message", (msg) => {
     }
   });
 
+  it("does not treat a slow refresh beat as isolate death", async () => {
+    // Handshake beats every 200ms, then stop blocks for 800ms without pulsing.
+    // An 80ms quiet-beat join would paint mid-hang; isolate exit must win.
+
+    const path = join(tmpdir(), `tubeless-ticker-slow-beat-${process.pid}-${Date.now()}.log`);
+    const beatPath = join(
+      tmpdir(),
+      `tubeless-ticker-slow-beat-alive-${process.pid}-${Date.now()}.txt`
+    );
+    const workerPath = join(
+      tmpdir(),
+      `tubeless-ticker-slow-beat-worker-${process.pid}-${Date.now()}.mjs`
+    );
+    writeFileSync(
+      workerPath,
+      `
+import { writeFileSync, writeSync } from "node:fs";
+import { parentPort, workerData } from "node:worker_threads";
+
+const beat = ${JSON.stringify(beatPath)};
+const handshake = new Int32Array(workerData.handshakeBuffer);
+setInterval(() => {
+  Atomics.add(handshake, 3, 1);
+}, 200);
+setInterval(() => {
+  writeFileSync(beat, String(Date.now()));
+}, 10);
+
+parentPort.on("message", (msg) => {
+  if (msg.type === "lines") {
+    writeSync(workerData.fd, "worker-ready\\n");
+    parentPort.postMessage({ type: "ready" });
+    return;
+  }
+  if (msg.type !== "stop") return;
+  const start = Date.now();
+  while (Date.now() - start < 800) {
+    writeFileSync(beat, String(Date.now()));
+  }
+  writeSync(workerData.fd, "late-worker-output\\n");
+});
+`
+    );
+    writeFileSync(beatPath, "0");
+    const fd = openSync(path, "w");
+    let workerAliveAtFinalPaint = false;
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 200,
+        unicode: false,
+        workerUrl: pathToFileURL(workerPath),
+        write: (chunk) => {
+          writeSync(fd, chunk);
+          if (!chunk.includes("final-status")) return;
+          try {
+            workerAliveAtFinalPaint = Date.now() - Number(readFileSync(beatPath, "utf8")) < 80;
+          } catch {
+            workerAliveAtFinalPaint = false;
+          }
+        },
+      });
+      ticker.setLines(["final-status"]);
+
+      const liveDeadline = Date.now() + 2_000;
+      while (Date.now() < liveDeadline) {
+        if (readFileSync(path, "utf8").includes("worker-ready")) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      ticker.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const rendered = readFileSync(path, "utf8");
+      expect(rendered).toContain("final-status");
+      expect(rendered).not.toContain("late-worker-output");
+      expect(workerAliveAtFinalPaint).toBe(false);
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(workerPath);
+      unlinkSync(beatPath);
+    }
+  });
+
   it("does not spin a full second waiting for a promptly terminated worker", async () => {
     const path = join(tmpdir(), `tubeless-ticker-stop-wait-${process.pid}-${Date.now()}.log`);
     const workerPath = join(
