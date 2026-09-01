@@ -247,6 +247,24 @@ describe("local pipeline run studio", () => {
     expect(csp).not.toContain("unsafe-inline");
   });
 
+  it("keeps studio styles in the hashed stylesheet instead of inline declarations", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const html = await fetch(server.url).then((response) => response.text());
+    const script = /<script>([\s\S]*)<\/script>/.exec(html)?.[1] ?? "";
+    const style = /<style>([\s\S]*)<\/style>/.exec(html)?.[1] ?? "";
+    expect(script).not.toMatch(/\bstyle="/);
+    expect(script).not.toMatch(/\.style\./);
+    expect(style).toContain(".pulse.lost");
+    expect(style).toContain(".detail-heading-copy");
+    expect(style).toContain(".detail-heading-actions");
+    expect(style).toContain(".progress > i.w0");
+    expect(style).toContain(".progress > i.w100");
+    expect(script).toContain("class=\"w' + Math.round(progressWidth) + '\"");
+    expect(script).toContain("classList.toggle('lost'");
+  });
+
   it("escapes step status labels and guards isoTime in the served script", async () => {
     const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
     servers.push(server);
