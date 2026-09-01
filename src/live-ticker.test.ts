@@ -1203,6 +1203,7 @@ setTimeout(() => {
     );
     writeFileSync(beatPath, "0");
     const fd = openSync(path, "w");
+    const inlineWrites: string[] = [];
     try {
       const ticker = createLiveTicker({
         color: true,
@@ -1213,24 +1214,34 @@ setTimeout(() => {
         supervisorUrl: pathToFileURL(supervisorPath),
         workerUrl: pathToFileURL(workerPath),
         write: (chunk) => {
+          inlineWrites.push(chunk);
           writeSync(fd, chunk);
         },
       });
       ticker.setLines(["load"]);
 
+      // Worker exit sets supervisorGone, then failToInline paints. dispose()
+      // uses Atomics.wait, which blocks that exit handler, so wait for the
+      // fallback paint before disposing. An 80ms sleep is not enough on a
+      // loaded runner: stop times out (500ms), join parks 1s, then drain.
       const liveDeadline = Date.now() + 2_000;
       while (Date.now() < liveDeadline) {
-        if (readFileSync(path, "utf8").includes("worker-ready")) break;
+        if (
+          readFileSync(path, "utf8").includes("worker-ready") &&
+          inlineWrites.some((chunk) => chunk.includes("load"))
+        ) {
+          break;
+        }
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
       expect(readFileSync(path, "utf8")).toContain("worker-ready");
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      expect(inlineWrites.join("")).toContain("load");
 
       const started = Date.now();
       ticker.dispose();
       const elapsed = Date.now() - started;
       expect(elapsed).toBeGreaterThanOrEqual(150);
-      expect(elapsed).toBeLessThan(1_400);
+      expect(elapsed).toBeLessThan(500);
     } finally {
       closeSync(fd);
       unlinkSync(path);
