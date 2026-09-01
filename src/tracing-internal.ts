@@ -156,14 +156,19 @@ export function createPipelineTraceEmitter(
   const formatExporterError = (error: unknown): string =>
     error instanceof Error ? error.message : String(error);
 
-  const captureExporterError = (error: unknown, message: string): void => {
+  const warnCallbackError = (callbackError: unknown): void => {
+    log.warn(`Pipeline trace onExporterError failed: ${formatExporterError(callbackError)}`);
+  };
+
+  const captureExporterError = (error: unknown, message: string): void | Promise<void> => {
     if (sawExporterError) return;
     sawExporterError = true;
     log.warn(message);
+    if (!options.onExporterError) return;
     try {
-      options.onExporterError?.(error);
+      return Promise.resolve(options.onExporterError(error)).catch(warnCallbackError);
     } catch (callbackError) {
-      log.warn(`Pipeline trace onExporterError failed: ${formatExporterError(callbackError)}`);
+      warnCallbackError(callbackError);
     }
   };
 
@@ -183,13 +188,16 @@ export function createPipelineTraceEmitter(
       version: 1,
     };
     queue = queue
-      .then(() => options.exporter.export(event))
-      .catch((error) => {
+      .then(() => {
+        if (sawExporterError) return;
+        return options.exporter.export(event);
+      })
+      .catch((error) =>
         captureExporterError(
           error,
           `Pipeline trace exporter failed; further trace events for this run will be dropped: ${formatExporterError(error)}`
-        );
-      });
+        )
+      );
   };
 
   type EmitFields = Parameters<typeof emit>[1];
@@ -329,7 +337,7 @@ export function createPipelineTraceEmitter(
       try {
         await options.exporter.flush?.();
       } catch (error) {
-        captureExporterError(
+        await captureExporterError(
           error,
           `Pipeline trace exporter flush failed: ${formatExporterError(error)}`
         );

@@ -204,6 +204,35 @@ describe("pipeline tracing", () => {
     ).toHaveLength(1);
   });
 
+  it("does not call export after the first exporter failure", async () => {
+    const step = createSteps();
+    const first = step("first", { run: () => "a" });
+    const second = step("second", { dependsOn: [first], run: () => "b" });
+    const pipeline = definePipeline({
+      id: "trace-export-drop",
+      steps: [first, second],
+      finalize: () => "ok",
+    });
+    let exportCalls = 0;
+
+    const result = await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log: createLogger(),
+      runId: "export-drop",
+      tracing: {
+        exporter: {
+          export: () => {
+            exportCalls += 1;
+            return Promise.reject(new Error("collector unavailable"));
+          },
+        },
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(exportCalls).toBe(1);
+  });
+
   it("does not call onExporterError when the exporter succeeds", async () => {
     const step = createSteps();
     const pipeline = definePipeline({
@@ -275,6 +304,29 @@ describe("pipeline tracing", () => {
         onExporterError: () => {
           throw new Error("callback exploded");
         },
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(log.warnings).toContain("Pipeline trace onExporterError failed: callback exploded");
+  });
+
+  it("completes the run when onExporterError returns a rejected promise", async () => {
+    const step = createSteps();
+    const pipeline = definePipeline({
+      id: "trace-callback-reject",
+      steps: [step("work", { run: () => "ok" })],
+      finalize: () => "ok",
+    });
+    const log = createLogger();
+
+    const result = await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log,
+      runId: "callback-reject",
+      tracing: {
+        exporter: { export: () => Promise.reject(new Error("collector unavailable")) },
+        onExporterError: () => Promise.reject(new Error("callback exploded")),
       },
     });
 
