@@ -52,7 +52,7 @@ const ANSI = {
   yellow: "\u001B[33m",
 } as const;
 
-export function detectTerminalCapabilities(
+function detectTerminalCapabilities(
   overrides: Partial<ReporterTerminalCapabilities> = {}
 ): ReporterTerminalCapabilities {
   const isTTY = overrides.isTTY ?? process.stdout.isTTY === true;
