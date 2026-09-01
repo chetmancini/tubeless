@@ -2077,13 +2077,12 @@ describe("definePipeline", () => {
       },
       log: console,
     });
-    const observeUntil = Date.now() + 250;
     await vi.waitFor(() => {
       expect(started).toBe(true);
-      // Hold the pending step across the old 250ms observation window so a late
-      // empty-progress tick would still be recorded before we release the gate.
-      expect(Date.now()).toBeGreaterThanOrEqual(observeUntil);
     });
+    // Hold the pending step across the old 250ms observation window so a late
+    // empty-progress tick would still be recorded before we release the gate.
+    await new Promise((resolve) => setTimeout(resolve, 250));
     expect(progressEvents).toEqual([]);
     releaseWork();
     await runPromise;
