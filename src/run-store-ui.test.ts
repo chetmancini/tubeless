@@ -838,4 +838,43 @@ describe("local pipeline run studio", () => {
     expect(forgedHost.status).toBe(403);
     expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
   });
+
+  it("rejects a malformed run path segment with a generic 400", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const response = await fetch(`${server.url}/api/runs/%zz`);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Malformed path segment." });
+  });
+
+  it("hides unexpected store errors from the client and logs them", async () => {
+    const logged: unknown[][] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      logged.push(args);
+    };
+    const secret = "SQLITE_ERROR: /secret/abs/path/studio.sqlite";
+    try {
+      const server = await startPipelineRunStudio({
+        port: 0,
+        store: {
+          ...memoryStore([]),
+          async listEvents() {
+            throw new Error(secret);
+          },
+        },
+      });
+      servers.push(server);
+
+      const response = await fetch(`${server.url}/api/snapshot`);
+      const body = await response.json();
+      expect(response.status).toBe(500);
+      expect(body).toEqual({ error: "The studio hit an unexpected error." });
+      expect(JSON.stringify(body)).not.toContain(secret);
+      expect(logged.flat().join("\n")).toContain(secret);
+    } finally {
+      console.error = originalError;
+    }
+  });
 });
