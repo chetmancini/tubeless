@@ -1,11 +1,4 @@
-export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="light" />
-  <title>Tubeless — Local Studio</title>
-  <style>
+export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
     :root {
       --ink: #171816;
       --muted: #6f716c;
@@ -48,6 +41,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
     .rail-foot { margin-top: auto; padding: 12px 9px 3px; border-top: 1px solid #30332e; }
     .connection { display: flex; gap: 8px; align-items: center; color: #aeb3aa; font-size: 11px; }
     .pulse { width: 7px; height: 7px; border-radius: 50%; background: #63d297; box-shadow: 0 0 0 4px rgba(99,210,151,.1); }
+    .pulse.lost { background: #ff8c84; box-shadow: 0 0 0 4px rgba(255,140,132,.12); }
     .database { margin-top: 7px; overflow: hidden; text-overflow: ellipsis; color: #6f746c; font: 10px var(--mono); white-space: nowrap; }
     .workspace { width: 100%; max-width: 1760px; min-width: 0; margin: 0 auto; padding: 28px 32px 52px; }
     .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
@@ -112,6 +106,8 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
     .detail { min-height: 460px; }
     .detail-body { padding: 18px; }
     .detail-heading { align-items: flex-start; }
+    .detail-heading-copy { min-width: 0; }
+    .detail-heading-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
     .detail-heading h2 { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; font-size: 19px; letter-spacing: -.03em; white-space: nowrap; }
     .detail-heading .status { margin-top: 2px; }
     .detail-kicker { margin-bottom: 5px; color: var(--faint); font-size: 9px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
@@ -143,7 +139,8 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
     .execution-summary { padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); background: #fbfbf8; font: 9px var(--mono); }
     .execution-summary b { color: var(--faint); font: 700 8px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
     .progress { height: 3px; margin-top: 10px; overflow: hidden; border-radius: 2px; background: #e7e9e2; }
-    .progress > i { display: block; height: 100%; background: var(--blue); transition: width .3s ease; }
+    .progress > i { display: block; height: 100%; width: 0; background: var(--blue); transition: width .3s ease; }
+    .progress > i.w0{width:0%}.progress > i.w1{width:1%}.progress > i.w2{width:2%}.progress > i.w3{width:3%}.progress > i.w4{width:4%}.progress > i.w5{width:5%}.progress > i.w6{width:6%}.progress > i.w7{width:7%}.progress > i.w8{width:8%}.progress > i.w9{width:9%}.progress > i.w10{width:10%}.progress > i.w11{width:11%}.progress > i.w12{width:12%}.progress > i.w13{width:13%}.progress > i.w14{width:14%}.progress > i.w15{width:15%}.progress > i.w16{width:16%}.progress > i.w17{width:17%}.progress > i.w18{width:18%}.progress > i.w19{width:19%}.progress > i.w20{width:20%}.progress > i.w21{width:21%}.progress > i.w22{width:22%}.progress > i.w23{width:23%}.progress > i.w24{width:24%}.progress > i.w25{width:25%}.progress > i.w26{width:26%}.progress > i.w27{width:27%}.progress > i.w28{width:28%}.progress > i.w29{width:29%}.progress > i.w30{width:30%}.progress > i.w31{width:31%}.progress > i.w32{width:32%}.progress > i.w33{width:33%}.progress > i.w34{width:34%}.progress > i.w35{width:35%}.progress > i.w36{width:36%}.progress > i.w37{width:37%}.progress > i.w38{width:38%}.progress > i.w39{width:39%}.progress > i.w40{width:40%}.progress > i.w41{width:41%}.progress > i.w42{width:42%}.progress > i.w43{width:43%}.progress > i.w44{width:44%}.progress > i.w45{width:45%}.progress > i.w46{width:46%}.progress > i.w47{width:47%}.progress > i.w48{width:48%}.progress > i.w49{width:49%}.progress > i.w50{width:50%}.progress > i.w51{width:51%}.progress > i.w52{width:52%}.progress > i.w53{width:53%}.progress > i.w54{width:54%}.progress > i.w55{width:55%}.progress > i.w56{width:56%}.progress > i.w57{width:57%}.progress > i.w58{width:58%}.progress > i.w59{width:59%}.progress > i.w60{width:60%}.progress > i.w61{width:61%}.progress > i.w62{width:62%}.progress > i.w63{width:63%}.progress > i.w64{width:64%}.progress > i.w65{width:65%}.progress > i.w66{width:66%}.progress > i.w67{width:67%}.progress > i.w68{width:68%}.progress > i.w69{width:69%}.progress > i.w70{width:70%}.progress > i.w71{width:71%}.progress > i.w72{width:72%}.progress > i.w73{width:73%}.progress > i.w74{width:74%}.progress > i.w75{width:75%}.progress > i.w76{width:76%}.progress > i.w77{width:77%}.progress > i.w78{width:78%}.progress > i.w79{width:79%}.progress > i.w80{width:80%}.progress > i.w81{width:81%}.progress > i.w82{width:82%}.progress > i.w83{width:83%}.progress > i.w84{width:84%}.progress > i.w85{width:85%}.progress > i.w86{width:86%}.progress > i.w87{width:87%}.progress > i.w88{width:88%}.progress > i.w89{width:89%}.progress > i.w90{width:90%}.progress > i.w91{width:91%}.progress > i.w92{width:92%}.progress > i.w93{width:93%}.progress > i.w94{width:94%}.progress > i.w95{width:95%}.progress > i.w96{width:96%}.progress > i.w97{width:97%}.progress > i.w98{width:98%}.progress > i.w99{width:99%}.progress > i.w100{width:100%}
     .progress-copy { margin-top: 5px; color: var(--faint); font-size: 9px; }
     .step .plan-nested { margin-top: 8px; }
     .progress-details { margin-top: 8px; display: grid; gap: 3px; }
@@ -267,87 +264,31 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
     }
-  </style>
-</head>
-<body>
-  <div class="shell">
-    <aside class="rail">
-      <div class="brand">
-        <div class="mark" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 4.5h6a3 3 0 0 1 3 3v6" stroke="#f7f8f3" stroke-width="1.5"/><circle cx="3" cy="4.5" r="2" fill="#7396ff"/><circle cx="12" cy="13.5" r="2" fill="#63d297"/></svg>
-        </div>
-        <div class="brand-copy"><strong>Tubeless</strong><small>Local studio</small></div>
-      </div>
-      <div class="rail-label">Workspace</div>
-      <nav class="nav" aria-label="Studio sections">
-        <button class="hidden" data-view="pipelines" id="pipelineNav" title="Pipelines">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 5h7M4 10h12M9 15h7"/><circle cx="14.5" cy="5" r="1.5"/><circle cx="5.5" cy="15" r="1.5"/></svg>
-          <span>Pipelines</span><b class="nav-count" id="pipelineCount">0</b>
-        </button>
-        <button class="active" data-view="runs" title="Runs">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3v4l2.5 1.5M17 10a7 7 0 1 1-2.05-4.95"/><path d="M14.5 2.8v3.5H18"/></svg>
-          <span>Runs</span><b class="nav-count" id="runCount">0</b>
-        </button>
-      </nav>
-      <div class="rail-foot">
-        <div class="connection"><i class="pulse"></i><span id="connectionLabel">Connected · local</span></div>
-        <div class="database">append-only SQLite</div>
-      </div>
-    </aside>
-    <main class="workspace">
-      <header class="topbar">
-        <div><div class="eyebrow">Execution workspace</div><h1 id="pageTitle">Runs</h1><p class="lede" id="pageLede">Live work and durable history in one place.</p></div>
-        <div class="toolbar">
-          <input class="search" id="search" type="search" placeholder="Filter runs or IDs" aria-label="Filter" />
-          <button class="primary-button hidden" id="launchButton">Run pipeline</button>
-          <button class="danger-button hidden" id="clearHistoryButton" type="button" title="Clear history"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M3 4.5h10M6 2.5h4M5 4.5l.5 9h5l.5-9M7 7v4M9 7v4"/></svg><span>Clear history</span></button>
-          <button class="icon-button" id="refresh" title="Refresh now" aria-label="Refresh now"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16.5 7A7 7 0 1 0 17 11"/><path d="M16.5 3v4h-4"/></svg></button>
-        </div>
-      </header>
-      <section class="metrics" id="metrics"></section>
-      <section id="content"></section>
-    </main>
-  </div>
-  <div class="modal-backdrop hidden" id="launchModal" role="dialog" aria-modal="true" aria-labelledby="launchTitle">
-    <div class="modal">
-      <div class="modal-head">
-        <div><div class="detail-kicker">Configure pipeline</div><h2 id="launchTitle">Run a pipeline</h2><p id="launchDescription">Choose a declared pipeline and provide its inputs.</p></div>
-        <button class="close-button" id="closeLaunch" type="button" aria-label="Close">&times;</button>
-      </div>
-      <form class="launch-form" id="launchForm">
-        <div class="field"><label for="launchCommand">Pipeline command</label><select id="launchCommand"></select></div>
-        <div id="runPane"><div class="parameter-fields" id="parameterFields"></div></div>
-        <div class="plan-result hidden" id="planResult" aria-live="polite"></div>
-        <div class="launch-error hidden" id="launchError"></div>
-        <div class="modal-actions"><button class="secondary-button" id="cancelLaunch" type="button">Cancel</button><button class="secondary-button hidden" id="previewPlan" type="button">Preview plan</button><button class="primary-button" id="submitLaunch" type="submit">Run</button></div>
-      </form>
-    </div>
-  </div>
-  <div class="modal-backdrop hidden" id="clearHistoryModal" role="dialog" aria-modal="true" aria-labelledby="clearHistoryTitle">
-    <div class="modal confirm-modal">
-      <div class="modal-head">
-        <div><div class="detail-kicker">Local maintenance</div><h2 id="clearHistoryTitle">Clear run history?</h2><p>This permanently resets the local studio history.</p></div>
-        <button class="close-button" id="closeClearHistory" type="button" aria-label="Close">&times;</button>
-      </div>
-      <div class="confirm-body">
-        <p class="confirm-copy" id="clearHistoryCopy"></p>
-        <div class="confirm-warning">This cannot be undone. Pipeline definitions and execution remain unchanged; only recorded local events are removed.</div>
-        <div class="launch-error hidden" id="clearHistoryError"></div>
-        <div class="confirm-actions"><button class="secondary-button" id="cancelClearHistory" type="button">Cancel</button><button class="danger-button" id="confirmClearHistory" type="button">Clear history</button></div>
-      </div>
-    </div>
-  </div>
-  <div class="toast hidden" id="toast" role="status"></div>
-  <script>
+  `;
+
+export const PIPELINE_RUN_STUDIO_SCRIPT = String.raw`
     const state = { snapshot: null, detail: null, detailFingerprint: null, commands: [], view: "runs", selectedRunId: null, query: "", loading: false, launching: false, planning: false, clearing: false, cancelling: false, canCancel: false, canClearHistory: false, planVersion: 0 };
     const $ = (selector) => document.querySelector(selector);
+    function setConnected(connected) {
+      $('#connectionLabel').textContent = connected ? 'Connected · local' : 'Connection lost';
+      $('.pulse').classList.toggle('lost', !connected);
+    }
     const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"})[char]);
     const statusMark = (value) => value === 'completed' ? '✓' : value === 'skipped' ? '×' : value === 'cancelled' ? '■' : value === 'failed' ? '!' : value === 'planned' ? '…' : '';
     const status = (value) => '<span class="status ' + esc(value) + '"><i class="status-mark" aria-hidden="true">' + statusMark(value) + '</i>' + esc(value) + '</span>';
     const duration = (ms) => ms == null ? "—" : ms < 1000 ? Math.max(0, Math.round(ms)) + " ms" : ms < 60000 ? (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + " s" : Math.floor(ms / 60000) + "m " + Math.round((ms % 60000) / 1000) + "s";
-    const clock = (ms) => new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(ms);
-    const dateTime = (ms) => new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(ms);
-    const isoTime = (ms) => new Date(ms).toISOString();
+    const clock = (ms) => {
+      if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return '';
+      return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(ms);
+    };
+    const dateTime = (ms) => {
+      if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return '';
+      return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(ms);
+    };
+    const isoTime = (ms) => {
+      if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return '';
+      return new Date(ms).toISOString();
+    };
     const relative = (ms) => { const delta = Math.max(0, Date.now() - ms); if (delta < 60000) return Math.floor(delta / 1000) + "s ago"; if (delta < 3600000) return Math.floor(delta / 60000) + "m ago"; if (delta < 86400000) return Math.floor(delta / 3600000) + "h ago"; return Math.floor(delta / 86400000) + "d ago"; };
     const shortId = (id) => id.length > 24 ? id.slice(0, 12) + "…" + id.slice(-7) : id;
     function selectedCommand() { return state.commands.find((command) => command.id === $('#launchCommand').value); }
@@ -559,13 +500,13 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
       const detailCount = step.progress?.detailCount;
       const truncatedDetails = detailCount && step.progress.details && step.progress.details.length < detailCount ? '<div class="progress-detail-truncated">Showing ' + step.progress.details.length + ' of ' + detailCount + ' items</div>' : '';
       const detailRows = step.progress?.details?.length ? '<div class="progress-details">' + step.progress.details.map((detail) => '<div class="progress-detail ' + esc(detail.status || 'running') + '"><b>' + esc(detail.id) + '</b>' + (detail.label ? '<span>' + esc(detail.label) + '</span>' : '') + '</div>').join('') + truncatedDetails + '</div>' : '';
-      const progress = step.progress ? '<div class="progress"><i style="width:' + progressWidth + '%"></i></div><div class="progress-copy">' + esc(step.progress.message || (step.progress.completed + (progressTotal ? ' / ' + progressTotal : '') + ' complete')) + '</div>' + detailRows : '';
+      const progress = step.progress ? '<div class="progress"><i class="w' + Math.round(progressWidth) + '"></i></div><div class="progress-copy">' + esc(step.progress.message || (step.progress.completed + (progressTotal ? ' / ' + progressTotal : '') + ' complete')) + '</div>' + detailRows : '';
       return '<article class="step ' + esc(step.status) + '">' + stepStatusIcon(step.status) + '<div class="step-head"><strong>' + esc(step.name || step.id) + '</strong>' + (step.name ? '<code>' + esc(step.id) + '</code>' : '') + '<span class="step-duration">' + duration(step.durationMs) + '</span></div>' + (step.description ? '<div class="step-description">' + esc(step.description) + '</div>' : '') + nestedDetail + remoteDetail + (execution ? '<div class="execution">' + execution + '</div>' : '') + progress + '</article>';
     }
     function stepStatusIcon(value) {
       const label = value.charAt(0).toUpperCase() + value.slice(1);
       const icon = value === 'completed' ? '<svg viewBox="0 0 12 12"><path d="m2 6 2.4 2.4L10 3"/></svg>' : value === 'running' ? '<i></i>' : value === 'skipped' ? '<svg viewBox="0 0 12 12"><path d="m3 3 6 6M9 3 3 9"/></svg>' : value === 'cancelled' ? '<svg viewBox="0 0 12 12"><rect x="3" y="3" width="6" height="6" rx="1" fill="currentColor" stroke="none"/></svg>' : value === 'failed' ? '!' : '…';
-      return '<span class="step-status-icon ' + esc(value) + '" role="img" aria-label="' + label + '" title="' + label + '">' + icon + '</span>';
+      return '<span class="step-status-icon ' + esc(value) + '" role="img" aria-label="' + esc(label) + '" title="' + esc(label) + '">' + icon + '</span>';
     }
     function stepSummary(run) {
       const labels = { running: 'running', failed: 'failed', cancelled: 'cancelled', skipped: 'skipped', completed: 'completed', planned: 'planned' };
@@ -580,7 +521,7 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
       const nested = children.length ? '<div class="section-title"><span>Nested runs</span><span>' + children.length + ' direct · ' + descendantsOf(run.runId).length + ' total</span></div><div class="nested-runs">' + children.map((child) => '<button class="nested-run" type="button" data-detail-run-id="' + esc(child.runId) + '">' + status(child.status) + '<strong>' + esc(child.pipelineId) + '</strong><small>' + duration(child.durationMs) + ' · ' + child.steps.length + ' steps' + (descendantsOf(child.runId).length ? ' · ' + descendantsOf(child.runId).length + ' nested' : '') + '</small></button>').join('') + '</div>' : '';
       const error = run.error ? '<div class="section-title"><span>Error</span></div><div class="error-card"><div class="error-code">' + esc(run.error.code) + ' · ' + esc(run.error.phase) + '</div><div class="error-message">' + esc(run.error.message) + '</div></div>' : '';
       const logs = run.logs.length ? '<div class="section-title"><span>Logs</span><span>' + run.logs.length + '</span></div><div class="logs">' + run.logs.map((log) => '<div class="log-line"><time class="log-time">' + clock(log.timestampMs) + '</time><span class="log-level ' + esc(log.level) + '">' + esc(log.level) + '</span><span class="log-message">' + (log.stepId ? '<b>' + esc(log.stepId) + '</b> · ' : '') + esc(log.message) + '</span></div>').join('') + '</div>' : '';
-      return '<article class="sheet detail"><div class="detail-body">' + parentage + '<div class="detail-heading"><div style="min-width:0"><div class="detail-kicker">' + (run.parentRunId ? 'Nested run' : 'Top-level run') + ' · ' + relative(run.startedAtMs) + '</div><h2>' + esc(run.pipelineId) + '</h2><div class="run-id">' + esc(run.runId) + '</div></div><div style="margin-left:auto;display:flex;align-items:center;gap:8px">' + status(run.status) + (state.canCancel && run.status === 'running' && !run.parentRunId && Array.isArray(state.snapshot?.liveRunIds) && state.snapshot.liveRunIds.includes(run.runId) ? '<button class="danger-button" type="button" data-cancel-run-id="' + esc(run.runId) + '"' + (state.cancelling ? ' disabled' : '') + '>Cancel run</button>' : '') + '</div></div><div class="detail-meta"><div><label>Started</label><span title="' + esc(isoTime(run.startedAtMs)) + '">' + esc(dateTime(run.startedAtMs)) + '</span></div><div><label>Duration</label><span>' + duration(run.durationMs) + '</span></div><div><label>Steps</label><span>' + run.steps.length + '</span></div><div><label>Events</label><span>' + run.eventCount + '</span></div></div>' + nested + '<div class="section-title"><span>Step timeline</span><span>' + stepSummary(run) + '</span></div>' + (run.steps.length ? '<div class="step-list">' + run.steps.map(stepRow).join('') + '</div>' : empty('No planned steps', 'This run ended before a step plan was recorded.')) + error + logs + '</div></article>';
+      return '<article class="sheet detail"><div class="detail-body">' + parentage + '<div class="detail-heading"><div class="detail-heading-copy"><div class="detail-kicker">' + (run.parentRunId ? 'Nested run' : 'Top-level run') + ' · ' + relative(run.startedAtMs) + '</div><h2>' + esc(run.pipelineId) + '</h2><div class="run-id">' + esc(run.runId) + '</div></div><div class="detail-heading-actions">' + status(run.status) + (state.canCancel && run.status === 'running' && !run.parentRunId && Array.isArray(state.snapshot?.liveRunIds) && state.snapshot.liveRunIds.includes(run.runId) ? '<button class="danger-button" type="button" data-cancel-run-id="' + esc(run.runId) + '"' + (state.cancelling ? ' disabled' : '') + '>Cancel run</button>' : '') + '</div></div><div class="detail-meta"><div><label>Started</label><span title="' + esc(isoTime(run.startedAtMs)) + '">' + esc(dateTime(run.startedAtMs)) + '</span></div><div><label>Duration</label><span>' + duration(run.durationMs) + '</span></div><div><label>Steps</label><span>' + run.steps.length + '</span></div><div><label>Events</label><span>' + run.eventCount + '</span></div></div>' + nested + '<div class="section-title"><span>Step timeline</span><span>' + stepSummary(run) + '</span></div>' + (run.steps.length ? '<div class="step-list">' + run.steps.map(stepRow).join('') + '</div>' : empty('No planned steps', 'This run ended before a step plan was recorded.')) + error + logs + '</div></article>';
     }
     function runById(runId) { return state.snapshot?.runs.find((run) => run.runId === runId); }
     function childrenOf(runId) { return state.snapshot.runs.filter((run) => run.parentRunId === runId).sort((left, right) => right.startedAtMs - left.startedAtMs); }
@@ -687,12 +628,10 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
         state.snapshot = await response.json();
         render();
         await loadSelectedRunDetail();
-        $('#connectionLabel').textContent = 'Connected · local';
-        $('.pulse').style.background = '#63d297';
+        setConnected(true);
         render();
       } catch (error) {
-        $('#connectionLabel').textContent = 'Connection lost';
-        $('.pulse').style.background = '#ff8c84';
+        setConnected(false);
       } finally {
         state.loading = false;
         $('#refresh').classList.remove('spinning');
@@ -840,6 +779,91 @@ export const PIPELINE_RUN_STUDIO_HTML = String.raw`<!doctype html>
     loadCapabilities();
     refresh();
     setInterval(() => refresh(), 1200);
-  </script>
+  `;
+
+export const PIPELINE_RUN_STUDIO_HTML =
+  String.raw`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
+  <title>Tubeless — Local Studio</title>
+  <style>` +
+  PIPELINE_RUN_STUDIO_STYLE +
+  String.raw`</style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 4.5h6a3 3 0 0 1 3 3v6" stroke="#f7f8f3" stroke-width="1.5"/><circle cx="3" cy="4.5" r="2" fill="#7396ff"/><circle cx="12" cy="13.5" r="2" fill="#63d297"/></svg>
+        </div>
+        <div class="brand-copy"><strong>Tubeless</strong><small>Local studio</small></div>
+      </div>
+      <div class="rail-label">Workspace</div>
+      <nav class="nav" aria-label="Studio sections">
+        <button class="hidden" data-view="pipelines" id="pipelineNav" title="Pipelines">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 5h7M4 10h12M9 15h7"/><circle cx="14.5" cy="5" r="1.5"/><circle cx="5.5" cy="15" r="1.5"/></svg>
+          <span>Pipelines</span><b class="nav-count" id="pipelineCount">0</b>
+        </button>
+        <button class="active" data-view="runs" title="Runs">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3v4l2.5 1.5M17 10a7 7 0 1 1-2.05-4.95"/><path d="M14.5 2.8v3.5H18"/></svg>
+          <span>Runs</span><b class="nav-count" id="runCount">0</b>
+        </button>
+      </nav>
+      <div class="rail-foot">
+        <div class="connection"><i class="pulse"></i><span id="connectionLabel">Connected · local</span></div>
+        <div class="database">append-only SQLite</div>
+      </div>
+    </aside>
+    <main class="workspace">
+      <header class="topbar">
+        <div><div class="eyebrow">Execution workspace</div><h1 id="pageTitle">Runs</h1><p class="lede" id="pageLede">Live work and durable history in one place.</p></div>
+        <div class="toolbar">
+          <input class="search" id="search" type="search" placeholder="Filter runs or IDs" aria-label="Filter" />
+          <button class="primary-button hidden" id="launchButton">Run pipeline</button>
+          <button class="danger-button hidden" id="clearHistoryButton" type="button" title="Clear history"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M3 4.5h10M6 2.5h4M5 4.5l.5 9h5l.5-9M7 7v4M9 7v4"/></svg><span>Clear history</span></button>
+          <button class="icon-button" id="refresh" title="Refresh now" aria-label="Refresh now"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16.5 7A7 7 0 1 0 17 11"/><path d="M16.5 3v4h-4"/></svg></button>
+        </div>
+      </header>
+      <section class="metrics" id="metrics"></section>
+      <section id="content"></section>
+    </main>
+  </div>
+  <div class="modal-backdrop hidden" id="launchModal" role="dialog" aria-modal="true" aria-labelledby="launchTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div><div class="detail-kicker">Configure pipeline</div><h2 id="launchTitle">Run a pipeline</h2><p id="launchDescription">Choose a declared pipeline and provide its inputs.</p></div>
+        <button class="close-button" id="closeLaunch" type="button" aria-label="Close">&times;</button>
+      </div>
+      <form class="launch-form" id="launchForm">
+        <div class="field"><label for="launchCommand">Pipeline command</label><select id="launchCommand"></select></div>
+        <div id="runPane"><div class="parameter-fields" id="parameterFields"></div></div>
+        <div class="plan-result hidden" id="planResult" aria-live="polite"></div>
+        <div class="launch-error hidden" id="launchError"></div>
+        <div class="modal-actions"><button class="secondary-button" id="cancelLaunch" type="button">Cancel</button><button class="secondary-button hidden" id="previewPlan" type="button">Preview plan</button><button class="primary-button" id="submitLaunch" type="submit">Run</button></div>
+      </form>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="clearHistoryModal" role="dialog" aria-modal="true" aria-labelledby="clearHistoryTitle">
+    <div class="modal confirm-modal">
+      <div class="modal-head">
+        <div><div class="detail-kicker">Local maintenance</div><h2 id="clearHistoryTitle">Clear run history?</h2><p>This permanently resets the local studio history.</p></div>
+        <button class="close-button" id="closeClearHistory" type="button" aria-label="Close">&times;</button>
+      </div>
+      <div class="confirm-body">
+        <p class="confirm-copy" id="clearHistoryCopy"></p>
+        <div class="confirm-warning">This cannot be undone. Pipeline definitions and execution remain unchanged; only recorded local events are removed.</div>
+        <div class="launch-error hidden" id="clearHistoryError"></div>
+        <div class="confirm-actions"><button class="secondary-button" id="cancelClearHistory" type="button">Cancel</button><button class="danger-button" id="confirmClearHistory" type="button">Clear history</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="toast hidden" id="toast" role="status"></div>
+  <script>` +
+  PIPELINE_RUN_STUDIO_SCRIPT +
+  String.raw`</script>
 </body>
 </html>`;

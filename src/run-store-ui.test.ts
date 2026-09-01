@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import type { PipelineRunEventStore, StoredPipelineEvent } from "./run-store.js";
+import { PIPELINE_RUN_STUDIO_SCRIPT, PIPELINE_RUN_STUDIO_STYLE } from "./run-store-ui-page.js";
 import { startPipelineRunStudio, type PipelineRunStudioServer } from "./run-store-ui.js";
 
 async function requestWithHost(
@@ -223,6 +225,93 @@ describe("local pipeline run studio", () => {
       method: "POST",
     });
     expect(cancel.status).toBe(405);
+  });
+
+  it("pins the studio page CSP hashes to the exact inline script and style", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const page = await fetch(server.url);
+    const csp = page.headers.get("content-security-policy") ?? "";
+    const html = await page.text();
+    const script = /<script>([\s\S]*)<\/script>/.exec(html)?.[1];
+    const style = /<style>([\s\S]*)<\/style>/.exec(html)?.[1];
+    expect(script).toBeTruthy();
+    expect(style).toBeTruthy();
+    const scriptHash = `'sha256-${createHash("sha256").update(script!).digest("base64")}'`;
+    const styleHash = `'sha256-${createHash("sha256").update(style!).digest("base64")}'`;
+    expect(html).toContain(`<script>${PIPELINE_RUN_STUDIO_SCRIPT}</script>`);
+    expect(csp).toBe(
+      `default-src 'none'; style-src ${styleHash}; script-src ${scriptHash}; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
+    );
+    expect(csp).not.toContain("unsafe-inline");
+  });
+
+  it("keeps studio styles in the hashed stylesheet instead of inline declarations", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const html = await fetch(server.url).then((response) => response.text());
+    const script = /<script>([\s\S]*)<\/script>/.exec(html)?.[1] ?? "";
+    const style = /<style>([\s\S]*)<\/style>/.exec(html)?.[1] ?? "";
+    expect(script).toBe(PIPELINE_RUN_STUDIO_SCRIPT);
+    expect(style).toBe(PIPELINE_RUN_STUDIO_STYLE);
+    expect(script).not.toMatch(/\bstyle="/);
+    expect(script).not.toMatch(/\.style\./);
+    expect(style).toContain(".pulse.lost");
+    expect(style).toContain(".detail-heading-copy");
+    expect(style).toContain(".detail-heading-actions");
+    expect(style).toContain(".progress > i.w0");
+    expect(style).toContain(".progress > i.w100");
+    expect(script).toContain("class=\"w' + Math.round(progressWidth) + '\"");
+    expect(script).toContain("classList.toggle('lost', !connected)");
+  });
+
+  it("clears the pulse lost class after a disconnect then reconnect", () => {
+    const tokens = new Set<string>();
+    const label = { textContent: "" };
+    const pulse = {
+      classList: {
+        toggle(name: string, force?: boolean) {
+          if (force === undefined) {
+            if (tokens.has(name)) tokens.delete(name);
+            else tokens.add(name);
+          } else if (force) {
+            tokens.add(name);
+          } else {
+            tokens.delete(name);
+          }
+          return tokens.has(name);
+        },
+      },
+    };
+    const query = (selector: string) => (selector === ".pulse" ? pulse : label);
+    const source = /function setConnected\(connected\) \{[\s\S]*?\n    \}/.exec(
+      PIPELINE_RUN_STUDIO_SCRIPT
+    )?.[0];
+    expect(source).toBeTruthy();
+    const loaded = new Function("$", `${source}; return setConnected;`)(query);
+    if (typeof loaded !== "function") {
+      throw new Error("setConnected helper was not extracted from the studio script");
+    }
+    const setConnected = (connected: boolean) => {
+      loaded(connected);
+    };
+    setConnected(false);
+    expect(tokens.has("lost")).toBe(true);
+    expect(label.textContent).toBe("Connection lost");
+    setConnected(true);
+    expect(tokens.has("lost")).toBe(false);
+    expect(label.textContent).toBe("Connected · local");
+  });
+
+  it("escapes step status labels and guards isoTime in the served script", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const html = await fetch(server.url).then((response) => response.text());
+    expect(html).toContain(`role="img" aria-label="' + esc(label) + '" title="' + esc(label) + '"`);
+    expect(html).toContain("if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return ''");
   });
 
   it("exposes only injected commands and delegates bounded structured launch values", async () => {
@@ -804,5 +893,44 @@ describe("local pipeline run studio", () => {
     });
     expect(forgedHost.status).toBe(403);
     expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+  });
+
+  it("rejects a malformed run path segment with a generic 400", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const response = await fetch(`${server.url}/api/runs/%zz`);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Malformed path segment." });
+  });
+
+  it("hides unexpected store errors from the client and logs them", async () => {
+    const logged: unknown[][] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      logged.push(args);
+    };
+    const secret = "SQLITE_ERROR: /secret/abs/path/studio.sqlite";
+    try {
+      const server = await startPipelineRunStudio({
+        port: 0,
+        store: {
+          ...memoryStore([]),
+          async listEvents() {
+            throw new Error(secret);
+          },
+        },
+      });
+      servers.push(server);
+
+      const response = await fetch(`${server.url}/api/snapshot`);
+      const body = await response.json();
+      expect(response.status).toBe(500);
+      expect(body).toEqual({ error: "The studio hit an unexpected error." });
+      expect(JSON.stringify(body)).not.toContain(secret);
+      expect(logged.flat().join("\n")).toContain(secret);
+    } finally {
+      console.error = originalError;
+    }
   });
 });
