@@ -153,6 +153,7 @@ export interface LiveTickerOptions {
   color?: boolean;
   write(chunk: string): void;
   workerUrl?: URL;
+  supervisorUrl?: URL;
 }
 
 type TickerWorkerMessage =
@@ -294,7 +295,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   // [0] terminate request, [1] ticker isolate exited
   const controlBuffer = new SharedArrayBuffer(8);
   const control = new Int32Array(controlBuffer);
-  const worker = new Worker(resolveLiveTickerSupervisorUrl(), {
+  const worker = new Worker(options.supervisorUrl ?? resolveLiveTickerSupervisorUrl(), {
     execArgv: fileWorkerExecArgv(),
     workerData: {
       controlBuffer,
@@ -331,46 +332,52 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     worker.postMessage(message);
   };
 
+  let supervisorGone = false;
+
   const requestTerminate = (): void => {
     Atomics.store(control, 0, 1);
     Atomics.notify(control, 0);
     try {
       worker.postMessage({ type: "terminate" });
     } catch {
-      void worker.terminate();
+      // Supervisor is already gone; isolate exit is best-effort.
+      supervisorGone = true;
     }
   };
 
-  const waitForQuietBeat = (): void => {
-    const deadline = Date.now() + 1_000;
-    let lastBeat = Atomics.load(handshake, 3);
-    // A worker that never published a beat is already quiet.
-    let lastChange = lastBeat === 0 ? 0 : Date.now();
+  // Supervisor stores control[1] on the ticker isolate's exit event.
+  // A stale refresh beat is not isolate death: refreshIntervalMs is
+  // user-configurable, and stop handlers clear the timer before done().
+  const isolateNeverStarted = (): boolean =>
+    Atomics.load(control, 1) === 0 &&
+    Atomics.load(handshake, 1) === 0 &&
+    Atomics.load(handshake, 2) === 0 &&
+    Atomics.load(handshake, 3) === 0;
+
+  const joinTickerIsolate = (ms: number): void => {
+    // Only the supervisor stores control[1]. Once it is gone the join
+    // cannot observe isolate exit, so skip rather than park for 1s.
+    if (supervisorGone || Atomics.load(control, 1) === 1) return;
+    Atomics.wait(control, 1, 0, ms);
+  };
+
+  const drainOwnershipWindow = (): void => {
     const park = new Int32Array(new SharedArrayBuffer(4));
-    while (Date.now() < deadline) {
-      const beat = Atomics.load(handshake, 3);
-      if (beat !== lastBeat) {
-        lastBeat = beat;
-        lastChange = Date.now();
-      }
-      const quiet = Date.now() - lastChange;
-      if (quiet >= 80) return;
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) return;
-      Atomics.wait(park, 0, 0, Math.min(80 - quiet, remaining));
-    }
+    Atomics.wait(park, 0, 0, 160);
   };
 
   const stopWorker = (): void => {
     requestTerminate();
-    // Handshake already accepted: the isolate painted its own final frame.
-    // Do not park the parent for a quiet beat.
-    if (Atomics.load(handshake, 0) === 1) {
-      void worker.terminate();
-      return;
-    }
     try {
-      waitForQuietBeat();
+      joinTickerIsolate(1_000);
+      // Exit can land in the same millisecond as the last beat. Wait out
+      // the 80ms ownership window before the parent takes the fd.
+      // supervisorGone is not enough to skip: a mid-flight supervisor
+      // crash can leave the isolate still writing. Skip only when the
+      // isolate never published a frame, log, beat, or exit.
+      if (Atomics.load(handshake, 0) !== 1 && !isolateNeverStarted()) {
+        drainOwnershipWindow();
+      }
     } finally {
       void worker.terminate();
     }
@@ -409,9 +416,11 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   const requestedTerminate = (): boolean => Atomics.load(control, 0) === 1;
 
   worker.on("error", () => {
+    supervisorGone = true;
     if (!requestedTerminate()) failToInline();
   });
   worker.on("exit", (code) => {
+    supervisorGone = true;
     if (code !== 0 && !requestedTerminate()) failToInline();
   });
   worker.unref();
@@ -465,7 +474,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
       disposed = true;
       if (inlineFallback) {
         inlineFallback.dispose();
-        void worker.terminate();
+        stopWorker();
         return;
       }
       Atomics.store(handshake, 0, 0);
@@ -495,8 +504,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
       } catch {
         // Stream may already be closed; cursor restore is best-effort.
       }
-      requestTerminate();
-      void worker.terminate();
+      stopWorker();
     },
   };
 }
