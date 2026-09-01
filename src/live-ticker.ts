@@ -153,6 +153,7 @@ export interface LiveTickerOptions {
   color?: boolean;
   write(chunk: string): void;
   workerUrl?: URL;
+  supervisorUrl?: URL;
 }
 
 type TickerWorkerMessage =
@@ -294,7 +295,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   // [0] terminate request, [1] ticker isolate exited
   const controlBuffer = new SharedArrayBuffer(8);
   const control = new Int32Array(controlBuffer);
-  const worker = new Worker(resolveLiveTickerSupervisorUrl(), {
+  const worker = new Worker(options.supervisorUrl ?? resolveLiveTickerSupervisorUrl(), {
     execArgv: fileWorkerExecArgv(),
     workerData: {
       controlBuffer,
@@ -331,6 +332,8 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     worker.postMessage(message);
   };
 
+  let supervisorGone = false;
+
   const requestTerminate = (): void => {
     Atomics.store(control, 0, 1);
     Atomics.notify(control, 0);
@@ -338,6 +341,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
       worker.postMessage({ type: "terminate" });
     } catch {
       // Supervisor is already gone; isolate exit is best-effort.
+      supervisorGone = true;
     }
   };
 
@@ -345,7 +349,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   // A stale refresh beat is not isolate death: refreshIntervalMs is
   // user-configurable, and stop handlers clear the timer before done().
   const joinTickerIsolate = (ms: number): void => {
-    if (Atomics.load(control, 1) === 1) return;
+    if (supervisorGone || Atomics.load(control, 1) === 1) return;
     Atomics.wait(control, 1, 0, ms);
   };
 
@@ -359,8 +363,9 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     try {
       joinTickerIsolate(1_000);
       // Exit can land in the same millisecond as the last beat. Wait out the
-      // 80ms ownership window before the parent takes the fd.
-      if (Atomics.load(handshake, 0) !== 1) drainOwnershipWindow();
+      // 80ms ownership window before the parent takes the fd. A supervisor
+      // that never started cannot set control[1] or have written the fd.
+      if (!supervisorGone && Atomics.load(handshake, 0) !== 1) drainOwnershipWindow();
     } finally {
       void worker.terminate();
     }
@@ -399,9 +404,11 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   const requestedTerminate = (): boolean => Atomics.load(control, 0) === 1;
 
   worker.on("error", () => {
+    supervisorGone = true;
     if (!requestedTerminate()) failToInline();
   });
   worker.on("exit", (code) => {
+    supervisorGone = true;
     if (code !== 0 && !requestedTerminate()) failToInline();
   });
   worker.unref();

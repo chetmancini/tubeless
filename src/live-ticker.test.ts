@@ -1091,4 +1091,51 @@ parentPort.on("message", (msg) => {
       unlinkSync(workerPath);
     }
   });
+
+  it("does not spin when disposing a supervisor that never started", async () => {
+    // Supervisor boot failure never sets control[1]. dispose of the inline
+    // fallback must not park on the isolate join or ownership drain.
+    const path = join(tmpdir(), `tubeless-ticker-supervisor-boot-${process.pid}-${Date.now()}.log`);
+    const supervisorPath = join(
+      tmpdir(),
+      `tubeless-ticker-supervisor-boot-${process.pid}-${Date.now()}.js`
+    );
+    writeFileSync(supervisorPath, 'throw new Error("supervisor boot failure");\n');
+    const fd = openSync(path, "w");
+    const inlineWrites: string[] = [];
+    try {
+      const ticker = createLiveTicker({
+        color: true,
+        columns: 80,
+        fd,
+        refreshIntervalMs: 20,
+        unicode: false,
+        supervisorUrl: pathToFileURL(supervisorPath),
+        write: (chunk) => {
+          inlineWrites.push(chunk);
+          writeSync(fd, chunk);
+        },
+      });
+      try {
+        ticker.setLines([`${SPINNER_TOKEN} load`]);
+      } catch {
+        // Supervisor may already be gone; fallback still paints on error/exit.
+      }
+
+      const paintedDeadline = Date.now() + 2_000;
+      while (Date.now() < paintedDeadline) {
+        if (inlineWrites.some((chunk) => chunk.includes("load"))) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(inlineWrites.join("")).toContain("load");
+
+      const started = Date.now();
+      ticker.dispose();
+      expect(Date.now() - started).toBeLessThan(400);
+    } finally {
+      closeSync(fd);
+      unlinkSync(path);
+      unlinkSync(supervisorPath);
+    }
+  });
 });
