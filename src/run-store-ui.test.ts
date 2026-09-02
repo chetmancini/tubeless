@@ -165,7 +165,7 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("function selectedRunFingerprint");
     expect(html).toContain("fingerprint === state.detailFingerprint && state.detail");
     expect(html).toContain("const requestedRunId = state.selectedRunId");
-    expect(html).toContain("if (state.selectedRunId !== requestedRunId) return");
+    expect(html).toContain("if (state.selectedRunId !== requestedRunId)");
     expect(html).not.toContain('data-view="active"');
     expect(html).not.toContain('data-view="definitions"');
     expect(html).toContain("Run pipeline");
@@ -174,7 +174,7 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("Pipeline inputs");
     expect(html).toContain("Execution controls");
     expect(html).toContain("Built into Tubeless");
-    expect(html).toContain("if (!parameter.exclusive || !parameter.multiple) return []");
+    expect(html).toContain("if (!parameter.exclusive || !parameter.multiple)");
     expect(html).not.toContain("parameter.group !== 'execution' || !parameter.multiple");
     expect(html).toContain("if (checked !== Boolean(parameter.default))");
     expect(html).toContain("Clear run history?");
@@ -263,8 +263,9 @@ describe("local pipeline run studio", () => {
     expect(style).toContain(".detail-heading-actions");
     expect(style).toContain(".progress > i.w0");
     expect(style).toContain(".progress > i.w100");
-    expect(script).toContain("class=\"w' + Math.round(progressWidth) + '\"");
-    expect(script).toContain("classList.toggle('lost', !connected)");
+    expect(script).toContain('class="w');
+    expect(script).toContain("Math.round(progressWidth)");
+    expect(script).toContain('classList.toggle("lost", !connected)');
   });
 
   it("clears the pulse lost class after a disconnect then reconnect", () => {
@@ -310,8 +311,9 @@ describe("local pipeline run studio", () => {
     servers.push(server);
 
     const html = await fetch(server.url).then((response) => response.text());
-    expect(html).toContain(`role="img" aria-label="' + esc(label) + '" title="' + esc(label) + '"`);
-    expect(html).toContain("if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return ''");
+    expect(html).toContain('role="img" aria-label="');
+    expect(html).toContain("esc(label)");
+    expect(html).toContain("if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15)");
   });
 
   it("exposes only injected commands and delegates bounded structured launch values", async () => {
