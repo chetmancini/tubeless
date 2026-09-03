@@ -44,10 +44,12 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/generate-studio-client.mjs --dist",
     "api:check": "node scripts/generate-api-reference.mjs --check",
     "api:generate": "bun run build && node scripts/generate-api-reference.mjs",
-    "check": "bun run build && bun run lint:run && bun run format:check && bun run typecheck:run && bun run docs:check && bun run api:check && bun run test:run && bun run eval:verify && bun run pack:verify",
+    "studio:check": "node scripts/generate-studio-client.mjs --check",
+    "studio:generate": "tsc -p tsconfig.json && node scripts/generate-studio-client.mjs",
+    "check": "bun run build && bun run lint:run && bun run format:check && bun run typecheck:run && bun run docs:check && bun run api:check && bun run studio:check && bun run test:run && bun run eval:verify && bun run pack:verify",
     "docs:check": "node scripts/validate-learning-surface.mjs",
     "eval:agent": "node scripts/evaluate-agent-submission.mjs",
     "eval:verify": "node scripts/verify-agent-evaluation-runner.mjs",
