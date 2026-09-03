@@ -1,21 +1,24 @@
+import { duplicateValues } from "./collections.js";
 import { formatPipelineError } from "./pipeline-diagnostics.js";
+import { brandTubelessError } from "./tubeless-error.js";
 import type { AnyStep, Step, StepOutput } from "./pipeline-steps.js";
-import type {
-  InferSchemaInput,
-  PipelineError,
-  PipelineErrorCode,
-  PipelineErrorKind,
-  PipelineErrorPhase,
-  PipelineExecutionContext,
-  PipelineMermaidOptions,
-  PipelinePlan,
-  PipelinePlanStep,
-  PipelineRunControls,
-  PipelineStepReport,
-  PipelineStepSelectionReason,
-  PipelineStepSkipReason,
-  PipelineStepSkippedReport,
-  StandardSchemaV1,
+import {
+  PIPELINE_MERMAID_DIRECTIONS,
+  type InferSchemaInput,
+  type PipelineError,
+  type PipelineErrorCode,
+  type PipelineErrorKind,
+  type PipelineErrorPhase,
+  type PipelineExecutionContext,
+  type PipelineMermaidOptions,
+  type PipelinePlan,
+  type PipelinePlanStep,
+  type PipelineRunControls,
+  type PipelineStepReport,
+  type PipelineStepSelectionReason,
+  type PipelineStepSkipReason,
+  type PipelineStepSkippedReport,
+  type StandardSchemaV1,
 } from "./pipeline-types.js";
 
 export const PIPELINE_FINALIZE_STEP_ID = "__finalize__";
@@ -104,18 +107,6 @@ export type StepsInputOptions<TSteps extends readonly AnyStep[]> =
 export type StepIds<TSteps extends readonly AnyStep[]> = TSteps[number]["id"];
 
 export type TargetIds<TTargets extends readonly AnyStep[]> = TTargets[number]["id"];
-
-export function duplicateValues(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const duplicates = new Set<string>();
-  for (const value of values) {
-    if (seen.has(value)) {
-      duplicates.add(value);
-    }
-    seen.add(value);
-  }
-  return [...duplicates].sort((left, right) => left.localeCompare(right));
-}
 
 function pipelineDiagnostic(
   code: PipelineErrorCode,
@@ -297,7 +288,7 @@ export function renderPipelineMermaid<TOptions extends object>(
   stepGraph?: ReadonlyMap<AnyStep, CompiledStepGraph>
 ): string {
   const direction = options.direction ?? "TD";
-  if (!(["BT", "LR", "RL", "TB", "TD"] as const).includes(direction)) {
+  if (!PIPELINE_MERMAID_DIRECTIONS.includes(direction)) {
     throw new Error(`Invalid Mermaid flowchart direction: ${direction}`);
   }
   const nodeIdByStep = new Map(steps.map((step, index) => [step, `step${index}`]));
@@ -895,6 +886,7 @@ export class PipelineDefinitionError extends Error {
         : `Invalid pipeline ${pipelineId}`
     );
     this.name = "PipelineDefinitionError";
+    brandTubelessError(this, "pipeline-definition");
   }
 }
 

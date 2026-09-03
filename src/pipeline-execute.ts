@@ -1,5 +1,6 @@
 import { abortableSleep, isAbortError, throwIfAborted as throwIfSignalAborted } from "./abort.js";
 import { PipelineChildError } from "./child-execution.js";
+import { brandTubelessError } from "./tubeless-error.js";
 import { createPipelineLifecycleObserver } from "./lifecycle.js";
 import { formatPipelineError } from "./pipeline-diagnostics.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
@@ -88,6 +89,7 @@ export class PipelineExecutionError extends Error {
     const cause = firstOriginalPipelineError(result.errors);
     super(message, cause === undefined ? undefined : { cause });
     this.name = "PipelineExecutionError";
+    brandTubelessError(this, "pipeline-execution");
   }
 }
 

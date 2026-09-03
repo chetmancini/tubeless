@@ -1,5 +1,6 @@
 import type { CheckpointStore } from "./checkpoint.js";
 import type { PipelineContext, PipelineLogger } from "./pipeline.js";
+import { brandTubelessError } from "./tubeless-error.js";
 
 /**
  * Typed command-line entry points for scripts, mirroring how `definePipeline` turns a
@@ -182,6 +183,7 @@ export class CliValidationError extends Error {
   ) {
     super(`Invalid command-line arguments:\n${errors.map((error) => `  - ${error}`).join("\n")}`);
     this.name = "CliValidationError";
+    brandTubelessError(this, "cli-validation");
   }
 }
 
@@ -189,6 +191,7 @@ export class CliHelpRequested extends Error {
   constructor(readonly helpText: string) {
     super(helpText);
     this.name = "CliHelpRequested";
+    brandTubelessError(this, "cli-help");
   }
 }
 

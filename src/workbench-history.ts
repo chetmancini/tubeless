@@ -16,6 +16,7 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
+import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 const HISTORY_USAGE = `Usage: tubeless history [options] [run-id]
 
@@ -120,81 +121,101 @@ async function writeEvents(
 }
 
 export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
-  let parsed: ReturnType<typeof parseHistoryArgs>;
-  try {
-    parsed = parseHistoryArgs(argv);
-  } catch (error) {
-    return writeUsageError(io, errorMessage(error), HISTORY_USAGE);
-  }
+  return runWorkbenchSubcommand(
+    {
+      usage: HISTORY_USAGE,
+      parse: parseHistoryArgs,
+      helpRequested: (parsed) => parsed.values.help === true,
+      positionals: (parsed) => parsed.positionals,
+      async run(parsed, commandIo) {
+        if (parsed.values.json && parsed.values.events) {
+          return writeUsageError(commandIo, "Use --json or --events, not both.", HISTORY_USAGE);
+        }
+        if (parsed.positionals.length > 1) {
+          return writeUsageError(commandIo, "Pass at most one run id.", HISTORY_USAGE);
+        }
 
-  if (parsed.values.help) {
-    io.stdout.write(HISTORY_USAGE);
-    return TUBELESS_WORKBENCH_EXIT_CODE.success;
-  }
-  if (parsed.values.json && parsed.values.events) {
-    return writeUsageError(io, "Use --json or --events, not both.", HISTORY_USAGE);
-  }
-  if (parsed.positionals.length > 1) {
-    return writeUsageError(io, "Pass at most one run id.", HISTORY_USAGE);
-  }
+        const runId = parsed.positionals[0];
+        const filename = path.resolve(
+          commandIo.cwd,
+          parsed.values.store ?? DEFAULT_PIPELINE_RUN_STORE
+        );
+        try {
+          await stat(filename);
+        } catch {
+          commandIo.stderr.write(`Error: Run store not found at ${filename}\n`);
+          return TUBELESS_WORKBENCH_EXIT_CODE.load;
+        }
 
-  const runId = parsed.positionals[0];
-  const filename = path.resolve(io.cwd, parsed.values.store ?? DEFAULT_PIPELINE_RUN_STORE);
-  try {
-    await stat(filename);
-  } catch {
-    io.stderr.write(`Error: Run store not found at ${filename}\n`);
-    return TUBELESS_WORKBENCH_EXIT_CODE.load;
-  }
+        const { openSqlitePipelineRunStore } = await import("./run-store-sqlite.js");
+        let store: PipelineRunEventStore;
+        try {
+          store = await openSqlitePipelineRunStore(filename, {
+            initialize: false,
+            readOnly: true,
+          });
+        } catch (error) {
+          commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
+          return TUBELESS_WORKBENCH_EXIT_CODE.load;
+        }
+        const query: PipelineRunEventQuery = runId === undefined ? {} : { runId };
+        try {
+          if (parsed.values.events) {
+            const eventCount = await forEachEventPage(store, query, (page) =>
+              writeEvents(commandIo, page)
+            );
+            if (runId !== undefined && eventCount === 0) {
+              return writeUsageError(
+                commandIo,
+                `Unknown run ${JSON.stringify(runId)}.`,
+                HISTORY_USAGE
+              );
+            }
+            return TUBELESS_WORKBENCH_EXIT_CODE.success;
+          }
 
-  const { openSqlitePipelineRunStore } = await import("./run-store-sqlite.js");
-  let store: PipelineRunEventStore;
-  try {
-    store = await openSqlitePipelineRunStore(filename, { initialize: false, readOnly: true });
-  } catch (error) {
-    io.stderr.write(`Error: ${errorMessage(error)}\n`);
-    return TUBELESS_WORKBENCH_EXIT_CODE.load;
-  }
-  const query: PipelineRunEventQuery = runId === undefined ? {} : { runId };
-  try {
-    if (parsed.values.events) {
-      const eventCount = await forEachEventPage(store, query, (page) => writeEvents(io, page));
-      if (runId !== undefined && eventCount === 0) {
-        return writeUsageError(io, `Unknown run ${JSON.stringify(runId)}.`, HISTORY_USAGE);
-      }
-      return TUBELESS_WORKBENCH_EXIT_CODE.success;
-    }
+          const projector = createPipelineRunProjector({ retainLogs: runId !== undefined });
+          await forEachEventPage(store, query, (page) => projector.append(page));
+          const snapshot = projector.snapshot();
+          if (runId !== undefined) {
+            const run = snapshot.runs.find((candidate) => candidate.runId === runId);
+            if (!run) {
+              return writeUsageError(
+                commandIo,
+                `Unknown run ${JSON.stringify(runId)}.`,
+                HISTORY_USAGE
+              );
+            }
+            await writeCliChunk(
+              commandIo.stdout,
+              parsed.values.json ? `${JSON.stringify(run, null, 2)}\n` : formatRunDetail(run)
+            );
+            return TUBELESS_WORKBENCH_EXIT_CODE.success;
+          }
 
-    const projector = createPipelineRunProjector({ retainLogs: runId !== undefined });
-    await forEachEventPage(store, query, (page) => projector.append(page));
-    const snapshot = projector.snapshot();
-    if (runId !== undefined) {
-      const run = snapshot.runs.find((candidate) => candidate.runId === runId);
-      if (!run) {
-        return writeUsageError(io, `Unknown run ${JSON.stringify(runId)}.`, HISTORY_USAGE);
-      }
-      await writeCliChunk(
-        io.stdout,
-        parsed.values.json ? `${JSON.stringify(run, null, 2)}\n` : formatRunDetail(run)
-      );
-      return TUBELESS_WORKBENCH_EXIT_CODE.success;
-    }
-
-    if (parsed.values.json) {
-      await writeCliChunk(
-        io.stdout,
-        `${JSON.stringify({ runs: snapshot.runs.map(summarizeRun) }, null, 2)}\n`
-      );
-      return TUBELESS_WORKBENCH_EXIT_CODE.success;
-    }
-    if (snapshot.runs.length > 0) {
-      await writeCliChunk(io.stdout, `${snapshot.runs.map(formatRunListLine).join("\n")}\n`);
-    }
-    return TUBELESS_WORKBENCH_EXIT_CODE.success;
-  } catch (error) {
-    io.stderr.write(`Error: ${errorMessage(error)}\n`);
-    return TUBELESS_WORKBENCH_EXIT_CODE.load;
-  } finally {
-    await store.close();
-  }
+          if (parsed.values.json) {
+            await writeCliChunk(
+              commandIo.stdout,
+              `${JSON.stringify({ runs: snapshot.runs.map(summarizeRun) }, null, 2)}\n`
+            );
+            return TUBELESS_WORKBENCH_EXIT_CODE.success;
+          }
+          if (snapshot.runs.length > 0) {
+            await writeCliChunk(
+              commandIo.stdout,
+              `${snapshot.runs.map(formatRunListLine).join("\n")}\n`
+            );
+          }
+          return TUBELESS_WORKBENCH_EXIT_CODE.success;
+        } catch (error) {
+          commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
+          return TUBELESS_WORKBENCH_EXIT_CODE.load;
+        } finally {
+          await store.close();
+        }
+      },
+    },
+    argv,
+    io
+  );
 }

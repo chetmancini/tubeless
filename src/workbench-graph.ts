@@ -1,19 +1,17 @@
 import { parseArgs } from "node:util";
-import type { PipelineMermaidDirection } from "./pipeline.js";
+import { PIPELINE_MERMAID_DIRECTIONS, type PipelineMermaidDirection } from "./pipeline-types.js";
 import {
-  errorMessage,
   loadPlanSource,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-
-const MERMAID_DIRECTIONS = ["BT", "LR", "RL", "TB", "TD"] as const;
+import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 function isMermaidDirection(value: string): value is PipelineMermaidDirection {
-  // SAFETY: MERMAID_DIRECTIONS is a const tuple of exactly the PipelineMermaidDirection
-  // union members, so membership implies the value is a valid direction.
-  return (MERMAID_DIRECTIONS as readonly string[]).includes(value);
+  // SAFETY: PIPELINE_MERMAID_DIRECTIONS is a const tuple of exactly the
+  // PipelineMermaidDirection union members, so membership implies a valid direction.
+  return (PIPELINE_MERMAID_DIRECTIONS as readonly string[]).includes(value);
 }
 
 const GRAPH_USAGE = `Usage: tubeless graph [options] <pipeline-or-command-file>
@@ -44,37 +42,47 @@ function parseGraphArgs(argv: readonly string[]) {
 }
 
 export async function runGraph(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
-  let parsed: ReturnType<typeof parseGraphArgs>;
-  try {
-    parsed = parseGraphArgs(argv);
-  } catch (error) {
-    return writeUsageError(io, errorMessage(error), GRAPH_USAGE);
-  }
+  return runWorkbenchSubcommand(
+    {
+      usage: GRAPH_USAGE,
+      parse: parseGraphArgs,
+      helpRequested: (parsed) => parsed.values.help === true,
+      positionals: (parsed) => parsed.positionals,
+      positionalCountError: {
+        count: 1,
+        message: "Pass exactly one pipeline or command file.",
+      },
+      async run(parsed, commandIo) {
+        const direction = parsed.values.direction ?? "TD";
+        if (!isMermaidDirection(direction)) {
+          return writeUsageError(
+            commandIo,
+            `Invalid direction ${JSON.stringify(direction)}.`,
+            GRAPH_USAGE
+          );
+        }
 
-  if (parsed.values.help) {
-    io.stdout.write(GRAPH_USAGE);
-    return TUBELESS_WORKBENCH_EXIT_CODE.success;
-  }
-  if (parsed.positionals.length !== 1) {
-    return writeUsageError(io, "Pass exactly one pipeline or command file.", GRAPH_USAGE);
-  }
+        const loaded = await loadPlanSource(
+          parsed.positionals[0]!,
+          parsed.values.export,
+          commandIo
+        );
+        if ("exitCode" in loaded) return loaded.exitCode;
 
-  const direction = parsed.values.direction ?? "TD";
-  if (!isMermaidDirection(direction)) {
-    return writeUsageError(io, `Invalid direction ${JSON.stringify(direction)}.`, GRAPH_USAGE);
-  }
-
-  const loaded = await loadPlanSource(parsed.positionals[0]!, parsed.values.export, io);
-  if ("exitCode" in loaded) return loaded.exitCode;
-
-  const view = loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
-  const source = view.toMermaid({
-    direction,
-    includeDescriptions: parsed.values.descriptions,
-  });
-  const terminatedSource = `${source.replace(/\n+$/, "")}\n`;
-  io.stdout.write(
-    parsed.values.markdown ? `\`\`\`mermaid\n${terminatedSource}\`\`\`\n` : terminatedSource
+        const view =
+          loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
+        const source = view.toMermaid({
+          direction,
+          includeDescriptions: parsed.values.descriptions,
+        });
+        const terminatedSource = `${source.replace(/\n+$/, "")}\n`;
+        commandIo.stdout.write(
+          parsed.values.markdown ? `\`\`\`mermaid\n${terminatedSource}\`\`\`\n` : terminatedSource
+        );
+        return TUBELESS_WORKBENCH_EXIT_CODE.success;
+      },
+    },
+    argv,
+    io
   );
-  return TUBELESS_WORKBENCH_EXIT_CODE.success;
 }
