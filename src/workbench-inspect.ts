@@ -1,12 +1,11 @@
 import { parseArgs } from "node:util";
 import { renderPipelinePlan } from "./render.js";
 import {
-  errorMessage,
   loadPlanSource,
   TUBELESS_WORKBENCH_EXIT_CODE,
-  writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
+import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 const INSPECT_USAGE = `Usage: tubeless inspect [options] <pipeline-or-command-file>
 
@@ -36,50 +35,56 @@ function parseInspectArgs(argv: readonly string[]) {
 }
 
 export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
-  let parsed: ReturnType<typeof parseInspectArgs>;
-  try {
-    parsed = parseInspectArgs(argv);
-  } catch (error) {
-    return writeUsageError(io, errorMessage(error), INSPECT_USAGE);
-  }
+  return runWorkbenchSubcommand(
+    {
+      usage: INSPECT_USAGE,
+      parse: parseInspectArgs,
+      helpRequested: (parsed) => parsed.values.help === true,
+      positionals: (parsed) => parsed.positionals,
+      positionalCountError: {
+        count: 1,
+        message: "Pass exactly one pipeline or command file.",
+      },
+      async run(parsed, commandIo) {
+        const loaded = await loadPlanSource(
+          parsed.positionals[0]!,
+          parsed.values.export,
+          commandIo
+        );
+        if ("exitCode" in loaded) return loaded.exitCode;
 
-  if (parsed.values.help) {
-    io.stdout.write(INSPECT_USAGE);
-    return TUBELESS_WORKBENCH_EXIT_CODE.success;
-  }
-  if (parsed.positionals.length !== 1) {
-    return writeUsageError(io, "Pass exactly one pipeline or command file.", INSPECT_USAGE);
-  }
+        const view =
+          loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
+        const plan = view.plan();
+        if (parsed.values.json) {
+          commandIo.stdout.write(
+            `${JSON.stringify(
+              {
+                pipelineId: view.id,
+                targetIds: [...view.targetIds],
+                stepIds: [...view.stepIds],
+                plan,
+              },
+              null,
+              2
+            )}\n`
+          );
+          return TUBELESS_WORKBENCH_EXIT_CODE.success;
+        }
 
-  const loaded = await loadPlanSource(parsed.positionals[0]!, parsed.values.export, io);
-  if ("exitCode" in loaded) return loaded.exitCode;
-
-  const view = loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
-  const plan = view.plan();
-  if (parsed.values.json) {
-    io.stdout.write(
-      `${JSON.stringify(
-        {
-          pipelineId: view.id,
-          targetIds: [...view.targetIds],
-          stepIds: [...view.stepIds],
-          plan,
-        },
-        null,
-        2
-      )}\n`
-    );
-    return TUBELESS_WORKBENCH_EXIT_CODE.success;
-  }
-
-  io.stdout.write(
-    [
-      `Pipeline ${view.id}`,
-      `Targets: ${list(view.targetIds)}`,
-      `Exact steps: ${list(view.stepIds)}`,
-      renderPipelinePlan(plan, { explain: false }),
-      "",
-    ].join("\n")
+        commandIo.stdout.write(
+          [
+            `Pipeline ${view.id}`,
+            `Targets: ${list(view.targetIds)}`,
+            `Exact steps: ${list(view.stepIds)}`,
+            renderPipelinePlan(plan, { explain: false }),
+            "",
+          ].join("\n")
+        );
+        return TUBELESS_WORKBENCH_EXIT_CODE.success;
+      },
+    },
+    argv,
+    io
   );
-  return TUBELESS_WORKBENCH_EXIT_CODE.success;
 }

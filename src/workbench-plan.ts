@@ -2,12 +2,11 @@ import { parseArgs } from "node:util";
 import type { PipelineRunControls } from "./pipeline.js";
 import { renderPipelinePlan } from "./render.js";
 import {
-  errorMessage,
   loadPlanSource,
   TUBELESS_WORKBENCH_EXIT_CODE,
-  writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
+import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 const PLAN_USAGE = `Usage: tubeless plan [options] <pipeline-or-command-file>
 
@@ -41,34 +40,42 @@ function parsePlanArgs(argv: readonly string[]) {
 }
 
 export async function runPlan(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
-  let parsed: ReturnType<typeof parsePlanArgs>;
-  try {
-    parsed = parsePlanArgs(argv);
-  } catch (error) {
-    return writeUsageError(io, errorMessage(error), PLAN_USAGE);
-  }
+  return runWorkbenchSubcommand(
+    {
+      usage: PLAN_USAGE,
+      parse: parsePlanArgs,
+      helpRequested: (parsed) => parsed.values.help === true,
+      positionals: (parsed) => parsed.positionals,
+      positionalCountError: {
+        count: 1,
+        message: "Pass exactly one pipeline or command file.",
+      },
+      async run(parsed, commandIo) {
+        const loaded = await loadPlanSource(
+          parsed.positionals[0]!,
+          parsed.values.export,
+          commandIo
+        );
+        if ("exitCode" in loaded) return loaded.exitCode;
 
-  if (parsed.values.help) {
-    io.stdout.write(PLAN_USAGE);
-    return TUBELESS_WORKBENCH_EXIT_CODE.success;
-  }
-  if (parsed.positionals.length !== 1) {
-    return writeUsageError(io, "Pass exactly one pipeline or command file.", PLAN_USAGE);
-  }
-
-  const loaded = await loadPlanSource(parsed.positionals[0]!, parsed.values.export, io);
-  if ("exitCode" in loaded) return loaded.exitCode;
-
-  const controls: PipelineRunControls = {
-    dryRun: parsed.values["dry-run"] ?? false,
-  };
-  if (parsed.values.step !== undefined) controls.stepIds = parsed.values.step;
-  if (parsed.values.target !== undefined) controls.targets = parsed.values.target;
-  const view = loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
-  const plan = view.plan(controls);
-  const rendered = parsed.values.json
-    ? renderPipelinePlan(plan, { format: "json", pretty: true })
-    : renderPipelinePlan(plan, { explain: parsed.values.explain ?? false });
-  io.stdout.write(`${rendered}\n`);
-  return plan.ok ? TUBELESS_WORKBENCH_EXIT_CODE.success : TUBELESS_WORKBENCH_EXIT_CODE.planning;
+        const controls: PipelineRunControls = {
+          dryRun: parsed.values["dry-run"] ?? false,
+        };
+        if (parsed.values.step !== undefined) controls.stepIds = parsed.values.step;
+        if (parsed.values.target !== undefined) controls.targets = parsed.values.target;
+        const view =
+          loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
+        const plan = view.plan(controls);
+        const rendered = parsed.values.json
+          ? renderPipelinePlan(plan, { format: "json", pretty: true })
+          : renderPipelinePlan(plan, { explain: parsed.values.explain ?? false });
+        commandIo.stdout.write(`${rendered}\n`);
+        return plan.ok
+          ? TUBELESS_WORKBENCH_EXIT_CODE.success
+          : TUBELESS_WORKBENCH_EXIT_CODE.planning;
+      },
+    },
+    argv,
+    io
+  );
 }
