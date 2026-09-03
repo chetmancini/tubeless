@@ -174,6 +174,18 @@ describe("openCheckpoint", () => {
     checkpoint.close();
   });
 
+  it("reclaims a stale lock after removing a leftover reclaim gate whose pid is dead", () => {
+    const lockPath = `${filePath}.lock`;
+    fs.writeFileSync(lockPath, "999999999\n0\n");
+    const gate = `${lockPath}.reclaim`;
+    fs.mkdirSync(gate);
+    fs.writeFileSync(path.join(gate, "pid"), "999999999\n");
+    const checkpoint = openCheckpoint(filePath);
+    expect(fs.readFileSync(lockPath, "utf8")).toMatch(new RegExp(`^${process.pid}\\n`));
+    expect(fs.existsSync(gate)).toBe(false);
+    checkpoint.close();
+  });
+
   it("reclaims an unparseable lock file", () => {
     fs.writeFileSync(`${filePath}.lock`, "not-a-pid\n");
     const checkpoint = openCheckpoint(filePath);
@@ -186,6 +198,18 @@ describe("openCheckpoint", () => {
     fs.writeFileSync(lockPath, "");
     expect(() => openCheckpoint(filePath)).toThrow(CheckpointLockedError);
     expect(fs.readFileSync(lockPath, "utf8")).toBe("");
+  });
+
+  it("rejects a short write while creating the lock and removes the incomplete file", () => {
+    vi.mocked(fs.writeSync).mockImplementation(() => 0);
+    try {
+      expect(() => openCheckpoint(filePath)).toThrow(/no bytes/);
+      expect(fs.existsSync(`${filePath}.lock`)).toBe(false);
+    } finally {
+      vi.mocked(fs.writeSync).mockRestore();
+    }
+    const checkpoint = openCheckpoint(filePath);
+    checkpoint.close();
   });
 
   it("removes the lock file if writing the lock fails after exclusive create", () => {

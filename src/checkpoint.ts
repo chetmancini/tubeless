@@ -82,10 +82,22 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
+function writeAllSync(fd: number, payload: string): void {
+  const buffer = Buffer.from(payload);
+  let offset = 0;
+  while (offset < buffer.length) {
+    const written = fs.writeSync(fd, buffer, offset, buffer.length - offset);
+    if (written <= 0) {
+      throw new Error("Checkpoint lock write returned no bytes");
+    }
+    offset += written;
+  }
+}
+
 function createExclusiveLock(lockPath: string): void {
   const fd = fs.openSync(lockPath, "wx");
   try {
-    fs.writeSync(fd, `${process.pid}\n${Date.now()}\n`);
+    writeAllSync(fd, `${process.pid}\n${Date.now()}\n`);
     fs.closeSync(fd);
   } catch (error) {
     try {
@@ -120,63 +132,66 @@ function isAbsentPathError(error: NodeJS.ErrnoException): boolean {
   return error.code === "ENOENT";
 }
 
-function sameFileIdentity(left: fs.Stats, right: fs.Stats): boolean {
-  return left.dev === right.dev && left.ino === right.ino;
+function reclaimGatePath(lockPath: string): string {
+  return `${lockPath}.reclaim`;
+}
+
+function enterReclaimGate(lockPath: string): boolean {
+  const gate = reclaimGatePath(lockPath);
+  const holderFile = path.join(gate, "pid");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      fs.mkdirSync(gate);
+    } catch (error) {
+      // SAFETY: mkdir EEXIST means another reclaimer holds the gate, or a
+      // crashed process left it behind. Live holders keep the gate; dead ones
+      // are removed once, then we retry.
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if (attempt === 1) return false;
+      const holderPid = readLockHolder(holderFile);
+      if (holderPid !== undefined && isProcessAlive(holderPid)) return false;
+      try {
+        fs.rmSync(gate, { recursive: true, force: true });
+      } catch {
+        return false;
+      }
+      continue;
+    }
+    try {
+      fs.writeFileSync(holderFile, `${process.pid}\n`, { flag: "wx" });
+      return true;
+    } catch (error) {
+      try {
+        fs.rmSync(gate, { recursive: true, force: true });
+      } catch {
+        // Best-effort: an empty leftover gate is retried on the next open.
+      }
+      throw error;
+    }
+  }
+  return false;
+}
+
+function leaveReclaimGate(lockPath: string): void {
+  try {
+    fs.rmSync(reclaimGatePath(lockPath), { recursive: true, force: true });
+  } catch {
+    // Best-effort; a leftover gate is removed if its pid is dead.
+  }
 }
 
 /**
- * Claim the stale lock inode, not whichever file currently occupies the path.
- * Hard-link the observed generation, then unlink the lock path only if it still
- * names that same inode. If another process already created a live lock at the
- * path, the identities differ and we leave that live lock alone.
+ * Serialize stale-lock unlink: only one process may reclaim at a time, and it
+ * re-reads the lock after taking the gate so a live lock created meanwhile is
+ * not unlinked.
  */
 function claimStaleLock(lockPath: string, snapshot: string): boolean {
-  let observed: fs.Stats;
+  if (!enterReclaimGate(lockPath)) return false;
   try {
-    observed = fs.statSync(lockPath);
-  } catch (error) {
-    // SAFETY: stat of a missing lock is ENOENT; any other errno is a real failure.
-    if (isAbsentPathError(error as NodeJS.ErrnoException)) return false;
-    throw error;
-  }
-  if (readLockContents(lockPath) !== snapshot) return false;
-
-  const tombstone = `${lockPath}.reclaim-${process.pid}-${process.hrtime.bigint().toString()}`;
-  try {
-    fs.linkSync(lockPath, tombstone);
-  } catch (error) {
-    // SAFETY: link of a vanished lock is ENOENT — another opener already claimed it.
-    if (isAbsentPathError(error as NodeJS.ErrnoException)) return false;
-    throw error;
-  }
-
-  const releaseTombstone = (): void => {
-    try {
-      fs.rmSync(tombstone, { force: true });
-    } catch {
-      // Extra name only; the live lock path is not this file.
-    }
-  };
-
-  try {
-    let linked: fs.Stats;
-    try {
-      linked = fs.statSync(tombstone);
-    } catch {
-      return false;
-    }
-    if (!sameFileIdentity(linked, observed) || readLockContents(tombstone) !== snapshot) {
-      return false;
-    }
-    let named: fs.Stats;
-    try {
-      named = fs.statSync(lockPath);
-    } catch (error) {
-      // SAFETY: the path may have been claimed and removed between link and re-stat.
-      if (isAbsentPathError(error as NodeJS.ErrnoException)) return false;
-      throw error;
-    }
-    if (!sameFileIdentity(named, observed)) return false;
+    const current = readLockContents(lockPath);
+    if (current !== snapshot) return false;
+    const holderPid = holderPidFromContents(current);
+    if (holderPid !== undefined && isProcessAlive(holderPid)) return false;
     try {
       fs.unlinkSync(lockPath);
     } catch (error) {
@@ -186,7 +201,7 @@ function claimStaleLock(lockPath: string, snapshot: string): boolean {
     }
     return true;
   } finally {
-    releaseTombstone();
+    leaveReclaimGate(lockPath);
   }
 }
 
@@ -198,9 +213,9 @@ function throwLocked(filePath: string, lockPath: string, fallbackPid?: number): 
  * The lock protects the checkpoint path, not the file: a lock without a checkpoint
  * file still excludes other openers. Live holders are never reclaimed. An empty
  * lock is treated as in-progress create (openSync wx before writeSync), not stale.
- * Unparseable nonempty contents and dead pids are stale. Replacement hard-links
- * the observed inode, then unlinks the lock path only if it still names that
- * inode, so a live lock created at the same path is not claimed.
+ * Unparseable nonempty contents and dead pids are stale. Replacement takes an
+ * exclusive reclaim gate, re-reads the lock, then unlinks only that snapshot so
+ * a live lock created at the same path is not removed.
  */
 function acquireCheckpointLock(filePath: string): string {
   const lockPath = lockPathFor(filePath);
