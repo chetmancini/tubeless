@@ -122,6 +122,12 @@ function tubelessErrorKind(error: unknown): string | undefined {
   return typeof kind === "string" ? kind : undefined;
 }
 
+function errorName(error: unknown): string | undefined {
+  return typeof error === "object" && error !== null && "name" in error
+    ? String(error.name)
+    : undefined;
+}
+
 function isDefinitionError(error: unknown): boolean {
   // Dual library copies under dynamic import break instanceof; identify
   // errors by branded discriminant, then the historical name used by loaded modules.
@@ -136,10 +142,10 @@ export function errorMessage(error: unknown): string {
 }
 
 export function isCliHelpRequested(error: unknown): error is { helpText: string } {
-  // Dual library copies under dynamic import break instanceof; key on the
-  // branded discriminant plus the structural help payload.
+  // Dual library copies under dynamic import break instanceof. Key on the
+  // brand, then the pre-brand name-and-shape used by older loaded copies.
   return (
-    tubelessErrorKind(error) === "cli-help" &&
+    (tubelessErrorKind(error) === "cli-help" || errorName(error) === "CliHelpRequested") &&
     typeof error === "object" &&
     error !== null &&
     "helpText" in error &&
@@ -150,10 +156,10 @@ export function isCliHelpRequested(error: unknown): error is { helpText: string 
 export function isCliValidationError(
   error: unknown
 ): error is { errors: readonly string[]; helpText: string } {
-  // Dual library copies under dynamic import break instanceof; key on the
-  // branded discriminant plus the structural validation payload.
+  // Dual library copies under dynamic import break instanceof. Key on the
+  // brand, then the pre-brand name-and-shape used by older loaded copies.
   return (
-    tubelessErrorKind(error) === "cli-validation" &&
+    (tubelessErrorKind(error) === "cli-validation" || errorName(error) === "CliValidationError") &&
     typeof error === "object" &&
     error !== null &&
     "errors" in error &&
@@ -166,10 +172,11 @@ export function isCliValidationError(
 export function isPipelineExecutionError(
   error: unknown
 ): error is { result: { errors: PipelineError[] } } {
-  // Dual library copies under dynamic import break instanceof; key on the
-  // branded discriminant plus the structured run result.
+  // Dual library copies under dynamic import break instanceof. Key on the
+  // brand, then the pre-brand name-and-shape used by older loaded copies.
   return (
-    tubelessErrorKind(error) === "pipeline-execution" &&
+    (tubelessErrorKind(error) === "pipeline-execution" ||
+      errorName(error) === "PipelineExecutionError") &&
     typeof error === "object" &&
     error !== null &&
     "result" in error &&
