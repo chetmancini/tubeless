@@ -19,7 +19,7 @@ import {
   type PipelineRunControls,
 } from "./pipeline.js";
 import { createPipelineReporter, type PipelineReporterConfig } from "./reporter-entry.js";
-import { TUBELESS_WORKBENCH_EXIT_CODE } from "./workbench-shared.js";
+import { TUBELESS_WORKBENCH_EXIT_CODE } from "./cli-exit.js";
 
 export type PipelineCliBuiltins = {
   stepIds: CliStringParam & { multiple: true };

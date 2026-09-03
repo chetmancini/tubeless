@@ -1,25 +1,17 @@
 import { stat } from "node:fs/promises";
 import * as path from "node:path";
 import type { CliContext } from "./cli.js";
-import { PipelineDefinitionError, type PipelineContext, type PipelineError } from "./pipeline.js";
+import { TUBELESS_WORKBENCH_EXIT_CODE } from "./cli-exit.js";
+import { type PipelineContext, type PipelineError } from "./pipeline.js";
 import {
   loadPipelineCommandModule,
   loadPlanSourceModule,
   type WorkbenchPipelineCommand,
   type WorkbenchPlanSource,
 } from "./pipeline-module.js";
+import { TUBELESS_ERROR } from "./tubeless-error.js";
 
-/** Stable shell exit codes for the workbench command family. */
-export const TUBELESS_WORKBENCH_EXIT_CODE = {
-  success: 0,
-  usage: 1,
-  load: 2,
-  definition: 3,
-  validation: 4,
-  planning: 5,
-  execution: 6,
-  cancellation: 7,
-} as const;
+export { TUBELESS_WORKBENCH_EXIT_CODE };
 
 /**
  * How long after the first delivery of a terminal signal a repeat is
@@ -124,9 +116,17 @@ export function writeUsageError(io: WorkbenchCliIo, message: string, usage: stri
   return TUBELESS_WORKBENCH_EXIT_CODE.usage;
 }
 
+function tubelessErrorKind(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const kind = Object.getOwnPropertyDescriptor(error, TUBELESS_ERROR)?.value;
+  return typeof kind === "string" ? kind : undefined;
+}
+
 function isDefinitionError(error: unknown): boolean {
+  // Dual library copies under dynamic import break instanceof; identify
+  // errors by branded discriminant, then the historical name used by loaded modules.
   return (
-    error instanceof PipelineDefinitionError ||
+    tubelessErrorKind(error) === "pipeline-definition" ||
     (error instanceof Error && error.name === "PipelineDefinitionError")
   );
 }
@@ -135,15 +135,11 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function errorName(error: unknown): string | undefined {
-  return typeof error === "object" && error !== null && "name" in error
-    ? String(error.name)
-    : undefined;
-}
-
 export function isCliHelpRequested(error: unknown): error is { helpText: string } {
+  // Dual library copies under dynamic import break instanceof; key on the
+  // branded discriminant plus the structural help payload.
   return (
-    errorName(error) === "CliHelpRequested" &&
+    tubelessErrorKind(error) === "cli-help" &&
     typeof error === "object" &&
     error !== null &&
     "helpText" in error &&
@@ -154,8 +150,10 @@ export function isCliHelpRequested(error: unknown): error is { helpText: string 
 export function isCliValidationError(
   error: unknown
 ): error is { errors: readonly string[]; helpText: string } {
+  // Dual library copies under dynamic import break instanceof; key on the
+  // branded discriminant plus the structural validation payload.
   return (
-    errorName(error) === "CliValidationError" &&
+    tubelessErrorKind(error) === "cli-validation" &&
     typeof error === "object" &&
     error !== null &&
     "errors" in error &&
@@ -168,8 +166,10 @@ export function isCliValidationError(
 export function isPipelineExecutionError(
   error: unknown
 ): error is { result: { errors: PipelineError[] } } {
+  // Dual library copies under dynamic import break instanceof; key on the
+  // branded discriminant plus the structured run result.
   return (
-    errorName(error) === "PipelineExecutionError" &&
+    tubelessErrorKind(error) === "pipeline-execution" &&
     typeof error === "object" &&
     error !== null &&
     "result" in error &&

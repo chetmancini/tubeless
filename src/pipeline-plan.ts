@@ -1,5 +1,6 @@
 import { duplicateValues } from "./collections.js";
 import { formatPipelineError } from "./pipeline-diagnostics.js";
+import { brandTubelessError } from "./tubeless-error.js";
 import type { AnyStep, Step, StepOutput } from "./pipeline-steps.js";
 import {
   PIPELINE_MERMAID_DIRECTIONS,
@@ -287,7 +288,7 @@ export function renderPipelineMermaid<TOptions extends object>(
   stepGraph?: ReadonlyMap<AnyStep, CompiledStepGraph>
 ): string {
   const direction = options.direction ?? "TD";
-  if (!(PIPELINE_MERMAID_DIRECTIONS as readonly string[]).includes(direction)) {
+  if (!PIPELINE_MERMAID_DIRECTIONS.includes(direction)) {
     throw new Error(`Invalid Mermaid flowchart direction: ${direction}`);
   }
   const nodeIdByStep = new Map(steps.map((step, index) => [step, `step${index}`]));
@@ -885,6 +886,7 @@ export class PipelineDefinitionError extends Error {
         : `Invalid pipeline ${pipelineId}`
     );
     this.name = "PipelineDefinitionError";
+    brandTubelessError(this, "pipeline-definition");
   }
 }
 
