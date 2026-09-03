@@ -1,3 +1,4 @@
+import { duplicateValues } from "./collections.js";
 import { formatPipelineError } from "./pipeline-diagnostics.js";
 import type { AnyStep, Step, StepOutput } from "./pipeline-steps.js";
 import {
@@ -105,18 +106,6 @@ export type StepsInputOptions<TSteps extends readonly AnyStep[]> =
 export type StepIds<TSteps extends readonly AnyStep[]> = TSteps[number]["id"];
 
 export type TargetIds<TTargets extends readonly AnyStep[]> = TTargets[number]["id"];
-
-export function duplicateValues(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const duplicates = new Set<string>();
-  for (const value of values) {
-    if (seen.has(value)) {
-      duplicates.add(value);
-    }
-    seen.add(value);
-  }
-  return [...duplicates].sort((left, right) => left.localeCompare(right));
-}
 
 function pipelineDiagnostic(
   code: PipelineErrorCode,
