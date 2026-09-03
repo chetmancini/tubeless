@@ -31,12 +31,19 @@ function renderJson<T>(value: T, pretty = false): string {
   return JSON.stringify(value, null, pretty ? 2 : undefined);
 }
 
+/** True when the caller asked for machine-readable JSON output. */
+function isJsonRenderOptions(
+  options: PipelineRenderOptions | PipelinePlanRenderOptions
+): options is PipelineJsonRenderOptions {
+  return options.format === "json";
+}
+
 /** Render one structured diagnostic for a person or a machine consumer. */
 export function renderPipelineError(
   error: PipelineError,
   options: PipelineRenderOptions = {}
 ): string {
-  if (options.format === "json") return renderJson(error, options.pretty);
+  if (isJsonRenderOptions(options)) return renderJson(error, options.pretty);
   return formatPipelineError(error);
 }
 
@@ -70,13 +77,11 @@ function describeSelectionReason(reason: PipelineStepSelectionReason): string | 
   }
 }
 
-/** Render an execution plan without recomputing selection or dependency provenance. */
-export function renderPipelinePlan(
-  plan: PipelinePlan,
-  options: PipelinePlanRenderOptions = {}
-): string {
-  if (options.format === "json") return renderJson(plan, options.pretty);
+/** Human-readable plan options (the JSON member excluded). */
+type HumanPlanRenderOptions = Exclude<PipelinePlanRenderOptions, PipelineJsonRenderOptions>;
 
+/** Human-readable plan body; the JSON branch is handled by the caller. */
+function renderHumanPlan(plan: PipelinePlan, options: HumanPlanRenderOptions): string {
   const explain = options.explain !== false;
   const lines = [
     `Pipeline ${plan.pipelineId}: plan (ok=${plan.ok}, dryRun=${plan.dryRun}, steps=${plan.steps.length})`,
@@ -106,4 +111,13 @@ export function renderPipelinePlan(
     lines.push(`  ! ${renderPipelineError(error)}`);
   }
   return lines.join("\n");
+}
+
+/** Render an execution plan without recomputing selection or dependency provenance. */
+export function renderPipelinePlan(
+  plan: PipelinePlan,
+  options: PipelinePlanRenderOptions = {}
+): string {
+  if (isJsonRenderOptions(options)) return renderJson(plan, options.pretty);
+  return renderHumanPlan(plan, options);
 }
