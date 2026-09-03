@@ -64,6 +64,39 @@ function assertPackedLlmsLinks(docsDirectory) {
   }
 }
 
+function assertPackedSourceMaps(installedPackage) {
+  const distDirectory = join(installedPackage, "dist");
+  const entries = readdirSync(distDirectory);
+  const declarationMaps = entries.filter((name) => name.endsWith(".d.ts.map"));
+  if (declarationMaps.length > 0) {
+    throw new Error(
+      `Packed tubeless artifact must not include dangling declaration maps: ${declarationMaps.join(", ")}`
+    );
+  }
+  const javaScriptMaps = entries.filter((name) => name.endsWith(".js.map"));
+  if (javaScriptMaps.length === 0) {
+    throw new Error("Packed tubeless artifact is missing dist source maps");
+  }
+  for (const name of javaScriptMaps) {
+    const map = JSON.parse(readFileSync(join(distDirectory, name), "utf8"));
+    if (
+      !Array.isArray(map.sourcesContent) ||
+      map.sourcesContent.length !== map.sources?.length ||
+      map.sourcesContent.some((source) => typeof source !== "string" || source.length === 0)
+    ) {
+      throw new Error(`Packed tubeless artifact map dist/${name} is missing inline sourcesContent`);
+    }
+    const pairedJavaScript = name.slice(0, -".map".length);
+    const pairedPath = join(distDirectory, pairedJavaScript);
+    const pairedSource = existsSync(pairedPath) ? readFileSync(pairedPath, "utf8") : "";
+    if (!pairedSource.includes(`sourceMappingURL=${name}`)) {
+      throw new Error(
+        `Packed tubeless artifact map dist/${name} is not referenced by dist/${pairedJavaScript}`
+      );
+    }
+  }
+}
+
 function assertPackedDocumentationLinks(installedPackage) {
   const packedDocs = join(installedPackage, "docs");
   for (const name of readdirSync(packedDocs)) {
@@ -301,6 +334,7 @@ try {
   if (existsSync(join(installedPackage, "docs", "superpowers"))) {
     throw new Error("Packed tubeless artifact must not include docs/superpowers");
   }
+  assertPackedSourceMaps(installedPackage);
   assertPackedDocumentationLinks(installedPackage);
 
   const smokeProgram = Object.keys(packageJson.exports)
