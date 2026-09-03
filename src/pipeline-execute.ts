@@ -43,11 +43,13 @@ import type {
 } from "./pipeline-types.js";
 import { createPipelineTraceEmitter } from "./tracing-internal.js";
 
+function isCancellationOnly(errors: readonly PipelineError[]): boolean {
+  return errors.length > 0 && errors.every(({ kind }) => kind === "cancellation");
+}
+
 function terminalRunStatus(errors: readonly PipelineError[]): PipelineRunStatus {
   if (errors.length === 0) return "completed";
-  return errors.length > 0 && errors.every(({ kind }) => kind === "cancellation")
-    ? "cancelled"
-    : "failed";
+  return isCancellationOnly(errors) ? "cancelled" : "failed";
 }
 
 const PIPELINE_LOGGER_BASE = Symbol("pipelineLoggerBase");
@@ -65,10 +67,7 @@ const originalPipelineErrors = new WeakMap<PipelineError, unknown>();
 
 function defaultExecutionErrorMessage(result: PipelineRun<unknown>): string {
   const firstError = result.errors[0];
-  const disposition =
-    result.errors.length > 0 && result.errors.every(({ kind }) => kind === "cancellation")
-      ? "cancelled"
-      : "failed";
+  const disposition = isCancellationOnly(result.errors) ? "cancelled" : "failed";
   return firstError
     ? `Pipeline ${result.pipelineId} ${disposition}: ${formatPipelineError(firstError)}`
     : `Pipeline ${result.pipelineId} ${disposition}`;

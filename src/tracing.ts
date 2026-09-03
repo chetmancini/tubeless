@@ -1,4 +1,10 @@
-import type { PipelineValidationIssue } from "./pipeline.js";
+import type {
+  PipelineErrorCause,
+  PipelineErrorCode,
+  PipelineErrorKind,
+  PipelineErrorPhase,
+  PipelineValidationIssue,
+} from "./pipeline.js";
 
 /** Values that can be safely carried in a structured trace attribute. */
 export type PipelineTraceAttributeValue = boolean | number | string;
@@ -17,11 +23,11 @@ export interface PipelineTraceContext {
 
 /** Structured error attributes emitted without retaining the original error object. */
 export interface PipelineTraceError {
-  cause?: import("./pipeline.js").PipelineErrorCause;
-  code: import("./pipeline.js").PipelineErrorCode;
-  kind: import("./pipeline.js").PipelineErrorKind;
+  cause?: PipelineErrorCause;
+  code: PipelineErrorCode;
+  kind: PipelineErrorKind;
   message: string;
-  phase: import("./pipeline.js").PipelineErrorPhase;
+  phase: PipelineErrorPhase;
   issues?: readonly PipelineValidationIssue[];
   sourceCode?: string;
   stack?: string;
