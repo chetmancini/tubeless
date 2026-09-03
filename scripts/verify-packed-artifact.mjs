@@ -86,6 +86,14 @@ function assertPackedSourceMaps(installedPackage) {
     ) {
       throw new Error(`Packed tubeless artifact map dist/${name} is missing inline sourcesContent`);
     }
+    const pairedJavaScript = name.slice(0, -".map".length);
+    const pairedPath = join(distDirectory, pairedJavaScript);
+    const pairedSource = existsSync(pairedPath) ? readFileSync(pairedPath, "utf8") : "";
+    if (!pairedSource.includes(`sourceMappingURL=${name}`)) {
+      throw new Error(
+        `Packed tubeless artifact map dist/${name} is not referenced by dist/${pairedJavaScript}`
+      );
+    }
   }
 }
 

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +10,7 @@ const distOnly = process.argv.includes("--dist");
 const compiledClientPath = resolve(packageRoot, "dist/run-store-ui-client.js");
 const sourceModulePath = resolve(packageRoot, "src/run-store-ui-client-source.ts");
 const distSourcePath = resolve(packageRoot, "dist/run-store-ui-client-source.js");
+const distSourceMapPath = `${distSourcePath}.map`;
 const distDeclarationPath = resolve(packageRoot, "dist/run-store-ui-client-source.d.ts");
 
 function formatWithOxfmt(contents, filepath) {
@@ -95,6 +96,9 @@ if (isMain) {
     mkdirSync(dirname(distSourcePath), { recursive: true });
     writeFileSync(distSourcePath, javascript);
     writeFileSync(distDeclarationPath, declaration);
+    // The generated JavaScript replaces the tsc emit and carries no
+    // sourceMappingURL, so the tsc-emitted map would be orphaned and misaligned.
+    rmSync(distSourceMapPath, { force: true });
     process.stdout.write(`Generated ${relative(packageRoot, distSourcePath)}\n`);
   }
 }
