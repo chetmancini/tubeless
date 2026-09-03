@@ -388,6 +388,24 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       return;
     }
     const managedSignal = manageMainSignal(context);
+    const reportMainError = (error: unknown): void => {
+      context.log.error(
+        error instanceof CheckpointLockedError
+          ? error.message
+          : error instanceof Error
+            ? (error.stack ?? error.message)
+            : String(error)
+      );
+      if (managedSignal.wasInterrupted()) {
+        process.exitCode = SIGINT_EXIT_CODE;
+        return;
+      }
+      if (process.exitCode !== undefined && process.exitCode !== 0) return;
+      process.exitCode =
+        mainExits || isCliValidationError(error) || isPipelineExecutionError(error)
+          ? toExitCode(error)
+          : 1;
+    };
     let openedStore: CheckpointStore | undefined;
     try {
       const preparedContext =
@@ -399,24 +417,18 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
         finalizeCheckpoint(attached.context, result.values);
       }
     } catch (error) {
-      context.log.error(
-        error instanceof CheckpointLockedError
-          ? error.message
-          : error instanceof Error
-            ? (error.stack ?? error.message)
-            : String(error)
-      );
-      process.exitCode = managedSignal.wasInterrupted()
-        ? SIGINT_EXIT_CODE
-        : mainExits || isCliValidationError(error) || isPipelineExecutionError(error)
-          ? toExitCode(error)
-          : 1;
+      reportMainError(error);
     } finally {
-      openedStore?.close();
-      if (managedSignal.wasInterrupted()) {
-        process.exitCode = SIGINT_EXIT_CODE;
+      try {
+        openedStore?.close();
+      } catch (error) {
+        reportMainError(error);
+      } finally {
+        if (managedSignal.wasInterrupted()) {
+          process.exitCode = SIGINT_EXIT_CODE;
+        }
+        managedSignal.cleanup();
       }
-      managedSignal.cleanup();
     }
   }
 

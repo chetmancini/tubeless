@@ -1240,6 +1240,34 @@ describe("defineCommand: checkpoint", () => {
     expect(inspectCheckpoint().has("a")).toBe(true);
   });
 
+  it("main(): a failed checkpoint close still sets exitCode and removes the SIGINT listener", async () => {
+    seedCheckpoint();
+    const log = testLog();
+    const onceSpy = vi.spyOn(process, "once");
+    const removeSpy = vi.spyOn(process, "removeListener");
+    const previousExitCode = process.exitCode;
+    const command = defineCommand({
+      checkpoint: { path: checkpointPath, clearOnSuccess: false },
+      params: {},
+      run: () => {
+        fs.chmodSync(dir, 0o555);
+      },
+    });
+    try {
+      await command.main(["--resume"], { log });
+      expect(process.exitCode).toBe(1);
+      expect(log.lines.some((line) => line.level === "error")).toBe(true);
+      const registration = onceSpy.mock.calls.find(([event]) => event === "SIGINT");
+      expect(registration).toBeDefined();
+      expect(removeSpy).toHaveBeenCalledWith("SIGINT", registration![1]);
+    } finally {
+      fs.chmodSync(dir, 0o755);
+      process.exitCode = previousExitCode;
+      onceSpy.mockRestore();
+      removeSpy.mockRestore();
+    }
+  });
+
   it("main(): a thrown error from run leaves the checkpoint untouched", async () => {
     seedCheckpoint();
     const log = testLog();

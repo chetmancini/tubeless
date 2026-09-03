@@ -116,22 +116,78 @@ function releaseCheckpointLock(lockPath: string): void {
   heldLockPaths.delete(lockPath);
 }
 
-function claimStaleLock(lockPath: string): boolean {
-  const tombstone = `${lockPath}.reclaim-${process.pid}-${process.hrtime.bigint().toString()}`;
+function isAbsentPathError(error: NodeJS.ErrnoException): boolean {
+  return error.code === "ENOENT";
+}
+
+function sameFileIdentity(left: fs.Stats, right: fs.Stats): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+/**
+ * Claim the stale lock inode, not whichever file currently occupies the path.
+ * Hard-link the observed generation, then unlink the lock path only if it still
+ * names that same inode. If another process already created a live lock at the
+ * path, the identities differ and we leave that live lock alone.
+ */
+function claimStaleLock(lockPath: string, snapshot: string): boolean {
+  let observed: fs.Stats;
   try {
-    fs.renameSync(lockPath, tombstone);
+    observed = fs.statSync(lockPath);
   } catch (error) {
-    // SAFETY: rename of a missing path is ENOENT — another opener already
-    // moved this inode, so we must not create a second live lock.
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    // SAFETY: stat of a missing lock is ENOENT; any other errno is a real failure.
+    if (isAbsentPathError(error as NodeJS.ErrnoException)) return false;
     throw error;
   }
+  if (readLockContents(lockPath) !== snapshot) return false;
+
+  const tombstone = `${lockPath}.reclaim-${process.pid}-${process.hrtime.bigint().toString()}`;
   try {
-    fs.rmSync(tombstone, { force: true });
-  } catch {
-    // The lock path no longer names this inode; a leftover tombstone is not a lock.
+    fs.linkSync(lockPath, tombstone);
+  } catch (error) {
+    // SAFETY: link of a vanished lock is ENOENT — another opener already claimed it.
+    if (isAbsentPathError(error as NodeJS.ErrnoException)) return false;
+    throw error;
   }
-  return true;
+
+  const releaseTombstone = (): void => {
+    try {
+      fs.rmSync(tombstone, { force: true });
+    } catch {
+      // Extra name only; the live lock path is not this file.
+    }
+  };
+
+  try {
+    let linked: fs.Stats;
+    try {
+      linked = fs.statSync(tombstone);
+    } catch {
+      return false;
+    }
+    if (!sameFileIdentity(linked, observed) || readLockContents(tombstone) !== snapshot) {
+      return false;
+    }
+    let named: fs.Stats;
+    try {
+      named = fs.statSync(lockPath);
+    } catch (error) {
+      // SAFETY: the path may have been claimed and removed between link and re-stat.
+      if (isAbsentPathError(error as NodeJS.ErrnoException)) return false;
+      throw error;
+    }
+    if (!sameFileIdentity(named, observed)) return false;
+    try {
+      fs.unlinkSync(lockPath);
+    } catch (error) {
+      // SAFETY: unlink ENOENT means another opener already moved this generation.
+      if (isAbsentPathError(error as NodeJS.ErrnoException)) return false;
+      throw error;
+    }
+    return true;
+  } finally {
+    releaseTombstone();
+  }
 }
 
 function throwLocked(filePath: string, lockPath: string, fallbackPid?: number): never {
@@ -142,9 +198,9 @@ function throwLocked(filePath: string, lockPath: string, fallbackPid?: number): 
  * The lock protects the checkpoint path, not the file: a lock without a checkpoint
  * file still excludes other openers. Live holders are never reclaimed. An empty
  * lock is treated as in-progress create (openSync wx before writeSync), not stale.
- * Unparseable nonempty contents and dead pids are stale. Replacement claims the
- * current inode with an atomic rename before creating a new lock; a racing
- * reclaim that loses the rename does not unlink the winner.
+ * Unparseable nonempty contents and dead pids are stale. Replacement hard-links
+ * the observed inode, then unlinks the lock path only if it still names that
+ * inode, so a live lock created at the same path is not claimed.
  */
 function acquireCheckpointLock(filePath: string): string {
   const lockPath = lockPathFor(filePath);
@@ -186,7 +242,7 @@ function acquireCheckpointLock(filePath: string): string {
     throwLocked(filePath, lockPath, currentPid ?? holderPid);
   }
 
-  if (!claimStaleLock(lockPath)) {
+  if (!claimStaleLock(lockPath, snapshot)) {
     throwLocked(filePath, lockPath, holderPid);
   }
 
