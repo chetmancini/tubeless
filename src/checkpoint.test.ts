@@ -245,6 +245,27 @@ describe("openCheckpoint", () => {
     expect(() => checkpoint.clear()).toThrow(/closed/);
   });
 
+  it("keeps the lock if close cannot unlink the lock file", () => {
+    const checkpoint = openCheckpoint(filePath);
+    const lockPath = `${filePath}.lock`;
+    const actualRm = fs.rmSync;
+    vi.mocked(fs.rmSync).mockImplementation((target, options) => {
+      if (target === lockPath) {
+        throw Object.assign(new Error("operation not permitted"), { code: "EPERM" });
+      }
+      return actualRm(target, options);
+    });
+    try {
+      expect(() => checkpoint.close()).toThrow(/operation not permitted/);
+      expect(fs.existsSync(lockPath)).toBe(true);
+      expect(() => checkpoint.record("a")).not.toThrow();
+      expect(() => openCheckpoint(filePath)).toThrow(CheckpointLockedError);
+    } finally {
+      vi.mocked(fs.rmSync).mockRestore();
+    }
+    checkpoint.close();
+  });
+
   it("close() is idempotent", () => {
     const checkpoint = openCheckpoint(filePath);
     checkpoint.close();

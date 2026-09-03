@@ -105,12 +105,33 @@ function createExclusiveLock(lockPath: string): void {
 }
 
 function releaseCheckpointLock(lockPath: string): void {
-  heldLockPaths.delete(lockPath);
   try {
-    fs.rmSync(lockPath, { force: true });
-  } catch {
-    // Already gone.
+    fs.rmSync(lockPath);
+  } catch (error) {
+    // SAFETY: Node fs rejects with ErrnoException. Only ENOENT means the lock
+    // path is already gone; EACCES/EPERM and other failures keep ownership so
+    // close() can be retried and the exit hook can still see the path.
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
+  heldLockPaths.delete(lockPath);
+}
+
+function claimStaleLock(lockPath: string): boolean {
+  const tombstone = `${lockPath}.reclaim-${process.pid}-${process.hrtime.bigint().toString()}`;
+  try {
+    fs.renameSync(lockPath, tombstone);
+  } catch (error) {
+    // SAFETY: rename of a missing path is ENOENT — another opener already
+    // moved this inode, so we must not create a second live lock.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+  try {
+    fs.rmSync(tombstone, { force: true });
+  } catch {
+    // The lock path no longer names this inode; a leftover tombstone is not a lock.
+  }
+  return true;
 }
 
 function throwLocked(filePath: string, lockPath: string, fallbackPid?: number): never {
@@ -121,9 +142,9 @@ function throwLocked(filePath: string, lockPath: string, fallbackPid?: number): 
  * The lock protects the checkpoint path, not the file: a lock without a checkpoint
  * file still excludes other openers. Live holders are never reclaimed. An empty
  * lock is treated as in-progress create (openSync wx before writeSync), not stale.
- * Unparseable nonempty contents and dead pids are stale and may be replaced once,
- * but only while the file still matches the stale snapshot — otherwise a racing
- * reclaim would unlink the winner's live lock.
+ * Unparseable nonempty contents and dead pids are stale. Replacement claims the
+ * current inode with an atomic rename before creating a new lock; a racing
+ * reclaim that loses the rename does not unlink the winner.
  */
 function acquireCheckpointLock(filePath: string): string {
   const lockPath = lockPathFor(filePath);
@@ -165,10 +186,8 @@ function acquireCheckpointLock(filePath: string): string {
     throwLocked(filePath, lockPath, currentPid ?? holderPid);
   }
 
-  try {
-    fs.rmSync(lockPath, { force: true });
-  } catch {
-    // Retry acquisition once either way.
+  if (!claimStaleLock(lockPath)) {
+    throwLocked(filePath, lockPath, holderPid);
   }
 
   try {
@@ -176,7 +195,7 @@ function acquireCheckpointLock(filePath: string): string {
     return lockPath;
   } catch (error) {
     // SAFETY: the retry also uses openSync("wx"); EEXIST means another process
-    // won the race after we removed a stale lock.
+    // won the race after claiming the stale inode.
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     throwLocked(filePath, lockPath, holderPid);
   }
@@ -235,8 +254,8 @@ export function openCheckpoint<TMeta = unknown>(
 
   const close = (): void => {
     if (closed) return;
-    closed = true;
     releaseCheckpointLock(lockPath);
+    closed = true;
   };
   const assertWritable = (): void => {
     if (closed) throw new Error(`Checkpoint ${filePath} is closed`);
