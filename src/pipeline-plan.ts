@@ -1,21 +1,22 @@
 import { formatPipelineError } from "./pipeline-diagnostics.js";
 import type { AnyStep, Step, StepOutput } from "./pipeline-steps.js";
-import type {
-  InferSchemaInput,
-  PipelineError,
-  PipelineErrorCode,
-  PipelineErrorKind,
-  PipelineErrorPhase,
-  PipelineExecutionContext,
-  PipelineMermaidOptions,
-  PipelinePlan,
-  PipelinePlanStep,
-  PipelineRunControls,
-  PipelineStepReport,
-  PipelineStepSelectionReason,
-  PipelineStepSkipReason,
-  PipelineStepSkippedReport,
-  StandardSchemaV1,
+import {
+  PIPELINE_MERMAID_DIRECTIONS,
+  type InferSchemaInput,
+  type PipelineError,
+  type PipelineErrorCode,
+  type PipelineErrorKind,
+  type PipelineErrorPhase,
+  type PipelineExecutionContext,
+  type PipelineMermaidOptions,
+  type PipelinePlan,
+  type PipelinePlanStep,
+  type PipelineRunControls,
+  type PipelineStepReport,
+  type PipelineStepSelectionReason,
+  type PipelineStepSkipReason,
+  type PipelineStepSkippedReport,
+  type StandardSchemaV1,
 } from "./pipeline-types.js";
 
 export const PIPELINE_FINALIZE_STEP_ID = "__finalize__";
@@ -297,7 +298,7 @@ export function renderPipelineMermaid<TOptions extends object>(
   stepGraph?: ReadonlyMap<AnyStep, CompiledStepGraph>
 ): string {
   const direction = options.direction ?? "TD";
-  if (!(["BT", "LR", "RL", "TB", "TD"] as const).includes(direction)) {
+  if (!(PIPELINE_MERMAID_DIRECTIONS as readonly string[]).includes(direction)) {
     throw new Error(`Invalid Mermaid flowchart direction: ${direction}`);
   }
   const nodeIdByStep = new Map(steps.map((step, index) => [step, `step${index}`]));

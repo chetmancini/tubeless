@@ -428,8 +428,9 @@ export interface PipelinePlan {
   steps: PipelinePlanStep[];
 }
 
-/** Layout direction for generated Mermaid flowcharts. */
-export type PipelineMermaidDirection = "BT" | "LR" | "RL" | "TB" | "TD";
+/** Layout directions for generated Mermaid flowcharts. */
+export const PIPELINE_MERMAID_DIRECTIONS = ["BT", "LR", "RL", "TB", "TD"] as const;
+export type PipelineMermaidDirection = (typeof PIPELINE_MERMAID_DIRECTIONS)[number];
 
 export interface PipelineMermaidOptions {
   /** Mermaid flowchart direction. Defaults to top-down (`TD`). */

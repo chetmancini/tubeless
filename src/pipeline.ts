@@ -30,6 +30,7 @@ import type {
 } from "./pipeline-types.js";
 
 export { createRunId, PIPELINE_FINALIZE_STEP_ID, PipelineExecutionError, RUN_MODEL_VERSION };
+export { PIPELINE_MERMAID_DIRECTIONS } from "./pipeline-types.js";
 export { createSteps } from "./pipeline-steps.js";
 export { defaultPipelineContext };
 export { PipelineDefinitionError, requireOutputs };

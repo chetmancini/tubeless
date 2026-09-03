@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import type { PipelineMermaidDirection } from "./pipeline.js";
+import { PIPELINE_MERMAID_DIRECTIONS, type PipelineMermaidDirection } from "./pipeline-types.js";
 import {
   loadPlanSource,
   TUBELESS_WORKBENCH_EXIT_CODE,
@@ -8,12 +8,10 @@ import {
 } from "./workbench-shared.js";
 import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
-const MERMAID_DIRECTIONS = ["BT", "LR", "RL", "TB", "TD"] as const;
-
 function isMermaidDirection(value: string): value is PipelineMermaidDirection {
-  // SAFETY: MERMAID_DIRECTIONS is a const tuple of exactly the PipelineMermaidDirection
-  // union members, so membership implies the value is a valid direction.
-  return (MERMAID_DIRECTIONS as readonly string[]).includes(value);
+  // SAFETY: PIPELINE_MERMAID_DIRECTIONS is a const tuple of exactly the
+  // PipelineMermaidDirection union members, so membership implies a valid direction.
+  return (PIPELINE_MERMAID_DIRECTIONS as readonly string[]).includes(value);
 }
 
 const GRAPH_USAGE = `Usage: tubeless graph [options] <pipeline-or-command-file>
