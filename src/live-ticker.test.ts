@@ -1168,6 +1168,7 @@ setTimeout(() => {
     );
     writeFileSync(beatPath, "0");
     const fd = openSync(path, "w");
+    const inlineWrites: string[] = [];
     let ticker: LiveTicker | undefined;
     try {
       ticker = createLiveTicker({
@@ -1179,6 +1180,7 @@ setTimeout(() => {
         supervisorUrl: pathToFileURL(supervisorPath),
         workerUrl: pathToFileURL(workerPath),
         write: (chunk) => {
+          inlineWrites.push(chunk);
           writeSync(fd, chunk);
         },
       });
@@ -1186,7 +1188,17 @@ setTimeout(() => {
 
       await waitForFileContent(path, (next) => next.includes("worker-ready"));
       expect(readFileSync(path, "utf8")).toContain("worker-ready");
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      // Wait for the inline fallback paint: it proves the parent observed
+      // the supervisor exit, so dispose takes the fallback path
+      // (ownership-window drain) instead of racing Worker exit and parking
+      // on the stop handshake plus isolate join. A fixed 80ms sleep raced
+      // on Node 24 CI and parked dispose for ~1660ms.
+      await vi.waitFor(
+        () => {
+          expect(inlineWrites.some((chunk) => chunk.includes("load"))).toBe(true);
+        },
+        { interval: 25, timeout: 5_000 }
+      );
 
       const started = Date.now();
       ticker.dispose();
