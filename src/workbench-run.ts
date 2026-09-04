@@ -306,10 +306,23 @@ async function createRunTraceWriter(
   const destroyOnAbort = () => {
     if (!stream.destroyed) stream.destroy();
   };
+  // The signal is caller-owned and may outlive this writer (embedders reuse
+  // one signal across runs), so never leave a stale listener behind: detach
+  // before rebinding and on every terminal close path.
+  let boundSignal: AbortSignal | undefined;
+  const detachSignal = () => {
+    boundSignal?.removeEventListener("abort", destroyOnAbort);
+    boundSignal = undefined;
+  };
   const bindSignal = (next: AbortSignal) => {
+    detachSignal();
     writeSignal = next;
-    if (next.aborted) destroyOnAbort();
-    else next.addEventListener("abort", destroyOnAbort, { once: true });
+    if (next.aborted) {
+      destroyOnAbort();
+      return;
+    }
+    boundSignal = next;
+    next.addEventListener("abort", destroyOnAbort, { once: true });
   };
   await waitForWriteStreamOpen(stream, signal);
   if (writeSignal) bindSignal(writeSignal);
@@ -319,6 +332,7 @@ async function createRunTraceWriter(
       new Promise((resolve, reject) => {
         const retainedError =
           writeError ?? (stream.errored instanceof Error ? stream.errored : undefined);
+        detachSignal();
         if (retainedError) {
           reject(retainedError);
           return;
