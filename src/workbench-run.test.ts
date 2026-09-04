@@ -1,3 +1,4 @@
+import { getEventListeners } from "node:events";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
@@ -158,5 +159,24 @@ describe("runCommand", () => {
     const events = parseNdjson(text);
     expect(events.at(-1)?.name).toBe("pipeline.completed");
     expect(events.every((event) => typeof event.name === "string")).toBe(true);
+  });
+
+  it("leaves no abort listeners on a signal shared across runs", async () => {
+    const { directory } = await writeCommandFixture();
+    const controller = new AbortController();
+    for (let run = 0; run < 2; run += 1) {
+      const io = { ...captureIo(directory), signal: controller.signal };
+      const tracePath = path.join(directory, `run-${run}.ndjson`);
+
+      const exitCode = await runCommand(
+        ["--trace", tracePath, "pipeline.mjs", "--", "--message", "hello"],
+        io
+      );
+
+      expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+      expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+      const events = parseNdjson(await readFile(tracePath, "utf8"));
+      expect(events.at(-1)?.name).toBe("pipeline.completed");
+    }
   });
 });

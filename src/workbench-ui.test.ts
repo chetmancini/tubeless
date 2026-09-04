@@ -233,4 +233,98 @@ describe("runUi", () => {
     }
     await expect(pending).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
   });
+
+  it("logs a launch failure once and keeps serving when error reporting itself throws", async () => {
+    const directory = await tempDir();
+    const filePath = path.join(directory, "pipeline.mjs");
+    const cliModuleUrl = pathToFileURL(path.resolve("dist/cli.js")).href;
+    const pipelineModuleUrl = pathToFileURL(path.resolve("dist/pipeline.js")).href;
+    await writeFile(
+      filePath,
+      `
+      import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
+      import { createSteps, definePipeline, requireOutputs } from ${JSON.stringify(pipelineModuleUrl)};
+      const step = createSteps();
+      const work = step("work", {
+        run: () => {
+          throw new Error("intentional launch failure");
+        },
+      });
+      export const FixtureCommand = definePipelineCommand(
+        definePipeline({
+          id: "failing-fixture",
+          steps: [work],
+          targets: [work],
+          finalize: requireOutputs([work], ({ work }) => work),
+        }),
+        {
+          params: {
+            message: { type: "string", description: "Message to process." },
+          },
+          reporter: false,
+        }
+      );
+    `
+    );
+    await writeStudioConfig(directory);
+    const controller = new AbortController();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const io = {
+      ...captureIo(directory),
+      signal: controller.signal,
+      stderr: {
+        write: (_chunk: string): void => {
+          throw new Error("EPIPE: broken pipe");
+        },
+      },
+    };
+    const pending = runUi(
+      ["--store", path.join(directory, "runs.sqlite"), "--port", "0", "config/tubeless.studio.mjs"],
+      io
+    );
+
+    try {
+      await vi.waitFor(() =>
+        expect(io.output.join("")).toContain("Tubeless local studio: http://")
+      );
+      const url = studioUrl(io.output.join(""));
+      const commandId = await fetch(`${url}/api/commands`).then(async (response) => {
+        expect(response.status).toBe(200);
+        const payload = (await response.json()) as { commands: { id: string }[] };
+        return payload.commands[0]?.id;
+      });
+      expect(commandId).toBe(`${filePath}#FixtureCommand`);
+      const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+        body: JSON.stringify({ values: { message: "boom" } }),
+        headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
+        method: "POST",
+      });
+      // Either the acknowledgement wins the race (202, with the execution
+      // failure surfacing afterwards) or the execution rejection wins (500).
+      // Both paths must log the failure exactly once without crashing.
+      expect([202, 500]).toContain(launched.status);
+      await launched.json().catch(() => undefined);
+      await vi.waitFor(async () => {
+        const snapshot = (await fetch(`${url}/api/snapshot`).then((response) =>
+          response.json()
+        )) as { liveRunIds: string[] };
+        expect(snapshot.liveRunIds).toEqual([]);
+      });
+      expect(await fetch(`${url}/api/commands`).then((response) => response.status)).toBe(200);
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(String(consoleError.mock.calls[0]?.[0])).toContain("EPIPE");
+    } finally {
+      controller.abort();
+      await pending.catch(() => undefined);
+      consoleError.mockRestore();
+      process.off("unhandledRejection", onUnhandled);
+    }
+    await expect(pending).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(unhandled).toEqual([]);
+  });
 });

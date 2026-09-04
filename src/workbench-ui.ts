@@ -54,6 +54,10 @@ async function acknowledgeRecordedLaunch(
     exitCode = code;
     return code;
   });
+  // Mark the derived chain handled: an early return below can skip
+  // `Promise.race`, leaving a later execution rejection unobserved here.
+  // Racing `settled` still sees the rejection and propagates it as before.
+  void settled.catch(() => {});
   const stoppedOnce = stopping.then(() => {
     stopped = true;
   });
@@ -311,16 +315,40 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
                       pipelineContext
                     );
                     activeLaunches.add(execution);
-                    void execution.finally(() => {
+                    const cleanupLaunch = () => {
                       activeLaunches.delete(execution);
                       launchControllers.delete(runId);
+                    };
+                    // Settle the acknowledgement loop before observing a late
+                    // execution failure, so the studio request handler (which
+                    // logs a pre-acknowledgement failure) and this chain (which
+                    // logs a post-acknowledgement failure) never report twice.
+                    let launchAcknowledged = false;
+                    void execution.then(cleanupLaunch, (error) => {
+                      cleanupLaunch();
+                      if (!launchAcknowledged) return;
+                      // The launch response already went out, so the request
+                      // handler will never see this failure. Report it here;
+                      // stderr itself may be the broken piece (EPIPE), so fall
+                      // back to console rather than throwing again.
+                      try {
+                        registration.commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
+                      } catch {
+                        console.error(
+                          error instanceof Error ? (error.stack ?? error.message) : error
+                        );
+                      }
                     });
-                    return await acknowledgeRecordedLaunch(
-                      store!,
-                      runId,
-                      execution,
-                      studioStopping
-                    );
+                    try {
+                      return await acknowledgeRecordedLaunch(
+                        store!,
+                        runId,
+                        execution,
+                        studioStopping
+                      );
+                    } finally {
+                      launchAcknowledged = true;
+                    }
                   },
                   cancel(runId) {
                     const controller = launchControllers.get(runId);
