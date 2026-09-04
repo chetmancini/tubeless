@@ -54,6 +54,10 @@ async function acknowledgeRecordedLaunch(
     exitCode = code;
     return code;
   });
+  // Mark the derived chain handled: an early return below can skip
+  // `Promise.race`, leaving a later execution rejection unobserved here.
+  // Racing `settled` still sees the rejection and propagates it as before.
+  void settled.catch(() => {});
   const stoppedOnce = stopping.then(() => {
     stopped = true;
   });
