@@ -13,13 +13,7 @@ const choices: MultiSelectChoice[] = [
 
 describe("normalizeMultiSelectChoices", () => {
   it("accepts bare strings and object choices", () => {
-    expect(
-      normalizeMultiSelectChoices(
-        // SAFETY: the implementation accepts mixed string/object entries; the
-        // public type is a union of homogeneous arrays.
-        ["a", { value: "b", label: "Bee" }] as unknown as readonly string[]
-      )
-    ).toEqual([
+    expect(normalizeMultiSelectChoices(["a", { value: "b", label: "Bee" }])).toEqual([
       { value: "a", label: "a" },
       { value: "b", label: "Bee" },
     ]);

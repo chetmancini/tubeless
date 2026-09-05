@@ -22,7 +22,7 @@ export type MultiSelectResult<T extends string = string> =
 
 export interface PromptMultiSelectOptions<T extends string = string> {
   /** Items the user may pick. */
-  choices: readonly MultiSelectChoice<T>[] | readonly T[];
+  choices: readonly (MultiSelectChoice<T> | T)[];
   /**
    * When true, show an "all" row that returns `{ kind: "all" }`.
    * Domains decide what "all" expands to after the prompt returns.
@@ -72,7 +72,7 @@ function isStringChoice<T extends string>(choice: MultiSelectChoice<T> | T): cho
 
 /** Normalize string or `{ value, label }` choices into a stable list. */
 export function normalizeMultiSelectChoices<T extends string>(
-  choices: readonly MultiSelectChoice<T>[] | readonly T[]
+  choices: readonly (MultiSelectChoice<T> | T)[]
 ): MultiSelectChoice<T>[] {
   return choices.map((choice) =>
     isStringChoice(choice)
@@ -91,7 +91,7 @@ function displayLabel(choice: MultiSelectChoice<string>): string {
  */
 export function parseMultiSelectInput<T extends string>(
   input: string,
-  choices: readonly MultiSelectChoice<T>[] | readonly T[],
+  choices: readonly (MultiSelectChoice<T> | T)[],
   options: ParseMultiSelectInputOptions = {}
 ): MultiSelectResult<T> | null {
   const normalized = normalizeMultiSelectChoices(choices);
