@@ -16,7 +16,7 @@ inventory.
 | Compose one reusable workflow                 | [`child-pipeline.ts`](../examples/child-pipeline.ts)                     | `fromPipeline`, `mapOptions`, `mapResult`                                 |
 | Mixed local and remote steps                  | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `fromRemote`, `RemoteStepAdapter`, inverse dry-run                        |
 | Host a pipeline in a durable engine           | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `runOrThrow`, pass `runId` / `parentRunId`                                |
-| Fan out over runtime items                    | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline`, stable keys, concurrency, progress                     |
+| Fan out over runtime items                    | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline.skippable`, stable keys, concurrency, progress           |
 | Show determinate progress                     | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `reportProgress`, mapped-child progress                                   |
 | Watch the live TTY reporter                   | [`live-tui.ts`](../examples/live-tui.ts)                                 | named steps, nested `details`; persist with `--store`                     |
 | Retry and rate-limit remote calls             | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `withRetry`, `RateLimiter`, injected sleep and signal                     |
@@ -38,7 +38,9 @@ inventory.
 4. Use a child pipeline when the child has value independently; use a normal
    helper function when it does not.
 5. Use `forEachPipeline` when every item needs child-pipeline lifecycle and
-   reporting. Use `runConcurrent` for lightweight worker functions that should
+   reporting. Opt into `forEachPipeline.skippable` when policy may omit the
+   whole fan-out and a canonical skipped disposition matters. Use `runConcurrent`
+   for lightweight worker functions that should
    throw on the first failure. Use `runConcurrentSettled` when the caller needs
    completed results plus that failure without throwing.
 

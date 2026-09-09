@@ -420,7 +420,9 @@ Use `step.fromPipeline` for one child run and `step.forEachPipeline` when runtim
 items each need the same child. Children are opaque to the parent's plan and
 hooks; their activity is summarized as progress on the parent step. See
 [child-pipeline composition](./child-pipeline-composition.md) for propagation and
-selection boundaries.
+selection boundaries. When the whole mapped fan-out is optional, use
+`step.forEachPipeline.skippable`; only that opt-in constructor widens the mapped
+array output with `undefined`.
 
 ## Remote steps
 

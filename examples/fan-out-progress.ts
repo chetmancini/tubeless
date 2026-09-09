@@ -36,9 +36,11 @@ interface FanOutOptions {
 
 const fanOutStep = createSteps<FanOutOptions>();
 
-const processShards = fanOutStep.forEachPipeline("process-shards", {
+const processShards = fanOutStep.forEachPipeline.skippable("process-shards", {
   pipeline: ShardPipeline,
   description: "Process shards with bounded concurrency and stable identities",
+  skip: (_inputs, context) =>
+    context.options.shards.length === 0 ? { reason: "no shards selected", value: [] } : false,
   items: (_inputs, context) => context.options.shards,
   key: (shard) => shard.id,
   concurrency: (_inputs, context) => context.options.concurrency,
