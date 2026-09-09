@@ -12,17 +12,23 @@ const loadRows = step("load-rows", {
   run: (_inputs, context) => context.options.lines,
 });
 
-const normalizedImport = step.fromPipeline("normalized-import", {
+const normalizedImport = step.forEachPipeline.skippable("normalized-import", {
   dependsOn: [loadRows],
-  description: "Normalize rows through the independently useful child pipeline.",
+  description: "Normalize rows through mapped child pipelines when input is present.",
   pipeline: NormalizePipeline,
-  mapOptions: ({ "load-rows": rows }) => ({ rows }),
-  mapResult: (rows) => ({ count: rows.length, rows }),
+  skip: ({ "load-rows": rows }) =>
+    rows.length === 0 ? { reason: "no rows to normalize", value: [] } : false,
+  items: ({ "load-rows": rows }) => rows,
+  key: (_row, index) => String(index),
+  mapOptions: (row) => ({ rows: [row] }),
 });
 
 export const ImportPipeline = definePipeline({
   id: "import",
   steps: [loadRows, normalizedImport],
   targets: [normalizedImport],
-  finalize: requireOutputs([normalizedImport], (outputs) => outputs["normalized-import"]),
+  finalize: requireOutputs([normalizedImport], (outputs) => {
+    const rows = (outputs["normalized-import"] ?? []).flat();
+    return { count: rows.length, rows };
+  }),
 });

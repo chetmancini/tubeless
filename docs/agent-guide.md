@@ -36,6 +36,8 @@ or shared helpers in this repository.
   resulting `T | undefined` output type explicitly.
 - Use `fromPipeline` for one independently useful child workflow and
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
+  Use `forEachPipeline.skippable` only when the whole fan-out may be intentionally
+  omitted; handle its `readonly T[] | undefined` output explicitly.
   Parent plans keep these steps opaque but expose `nestedPipeline` with the child
   pipeline id, declared step ids, and single/fan-out mode for presentation.
 - Use `fromRemote` for a unit of work that lives on another engine. Required

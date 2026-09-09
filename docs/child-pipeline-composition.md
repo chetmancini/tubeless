@@ -41,8 +41,9 @@ The package needs a composition contract that preserves typing and runtime behav
 ## Supported: policy skip on opaque steps
 
 Policy skip (`step.skippable` / `StepSkipDecision`) is part of the shipped API and
-applies to ordinary steps and to `fromPipeline` adapters (the opaque parent
-step is a normal step under the hood):
+applies to ordinary steps, `fromPipeline` adapters, and mapped
+`forEachPipeline` adapters (the opaque parent step is a normal step under the
+hood):
 
 - Return a non-empty string or `{ reason, value? }` from `skip` to skip without
   calling `run` (or without running the child). Reporters show a yellow skip
@@ -50,16 +51,17 @@ step is a normal step under the hood):
 - Policy skips unlock required dependents. A bare string (or `{ reason }`
   without `value`) publishes `undefined` as the step output.
 - Any step that declares `skip` is typed so dependents see `TOut | undefined`
-  (including `PipelineResultOf<Child> | undefined` for `fromPipeline` without
-  `mapResult`). Prefer `{ reason, value }` on every skip path when dependents
-  need a real output. With `mapResult`, skip `value` is the parent-facing
-  mapped `TOut` — policy skip does not call `mapResult`.
+  (including `PipelineResultOf<Child> | undefined` for `fromPipeline` and
+  `readonly PipelineResultOf<Child>[] | undefined` for `forEachPipeline`, both
+  without `mapResult`). Prefer `{ reason, value }` on every skip path when
+  dependents need a real output. With `mapResult`, skip `value` is the
+  parent-facing mapped output — one `TOut` for `fromPipeline`, or the complete
+  `readonly TOut[]` for `forEachPipeline`. Policy skip does not call `mapResult`.
 
-A `fromPipeline.skippable` step can policy-skip optional work and publish a
-concrete disabled result via `{ reason, value }`.
-
-`forEachPipeline` does not accept `skip` today; gate mapped fan-out with an
-upstream step or filter `items` instead.
+Use `fromPipeline.skippable` or `forEachPipeline.skippable` to policy-skip
+optional child work and publish a concrete disabled result via
+`{ reason, value }`. The ordinary constructors reject `skip` and retain their
+non-optional output types.
 
 ## Non-goals
 
@@ -125,6 +127,26 @@ const processShards = step.forEachPipeline("process-shards", {
 });
 ```
 
+When the whole fan-out may be intentionally unnecessary, opt into the widened
+output explicitly:
+
+```ts
+const processShards = step.forEachPipeline.skippable("process-shards", {
+  pipeline: ShardPipeline,
+  dependsOn: [resolveShards],
+  skip: ({ "resolve-shards": shards }) =>
+    shards.length === 0 ? { reason: "no shards selected", value: [] } : false,
+  items: ({ "resolve-shards": shards }) => shards,
+  key: (shard) => shard.id,
+  mapOptions: (shard) => ({ shardPath: shard.path }),
+});
+```
+
+Only `.skippable` produces `readonly ChildResult[] | undefined` (or
+`readonly TOut[] | undefined` with `mapResult`). A valued skip supplies the
+complete parent-facing array and bypasses `items`, child execution, and
+`mapResult`.
+
 The parent sees one opaque `process-shards` step. Progress is domain-neutral by
 default: a one-line item/concurrency summary plus structured `details` rows for
 each in-flight child (`id` + `label`). Interactive reporters render those as
@@ -170,14 +192,16 @@ pipeline, step, and error, including when `continueOnError` produced a
 best-effort final value. Later cancellation interrupts in-flight child work.
 An invalid child plan fails before the child starts.
 
-`fromPipeline` identity (no `mapResult`) uses overloads so the parent-facing
-output stays the child result.
+`fromPipeline` and `forEachPipeline` identity forms (no `mapResult`) use
+overloads so the parent-facing outputs stay the child result and child-result
+array, respectively. Their ordinary constructors remain non-optional;
+`.skippable` alone adds `undefined`.
 
 ## Out of scope
 
-Policy skip plus `TOut | undefined` typing cover skip-without-run for opaque
-`fromPipeline` steps. Runner substitution and any richer skipped-output shape
-beyond policy skip are not supported.
+Policy skip plus explicit `undefined` typing cover skip-without-run for opaque
+single and mapped child steps. Runner substitution and any richer skipped-output
+shape beyond policy skip are not supported.
 
 Hierarchical or versioned external events, flattened or namespaced child
 selection, and parallel DAG scheduling remain out of scope. Mapped children

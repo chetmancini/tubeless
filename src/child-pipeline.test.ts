@@ -94,6 +94,63 @@ describe("child-pipeline composition", () => {
       expectTypeOf(children).toEqualTypeOf<
         Step<"children", readonly { workerId: string }[], ParentOptions>
       >();
+      parentStep.forEachPipeline("skip-requires-skippable", {
+        pipeline: child,
+        // @ts-expect-error Policy skip belongs on forEachPipeline.skippable.
+        skip: () => "fan-out not requested",
+        items: (): readonly { delayMs: number; id: string }[] => [],
+        key: (item) => item.id,
+        mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
+      });
+      const reusableSkippingFanOutDefinition = {
+        pipeline: child,
+        skip: () => "fan-out not requested",
+        items: (): readonly { delayMs: number; id: string }[] => [],
+        key: (item: { delayMs: number; id: string }) => item.id,
+        mapOptions: (item: { delayMs: number; id: string }) => ({
+          delayMs: item.delayMs,
+          itemId: item.id,
+        }),
+      };
+      parentStep.forEachPipeline(
+        "reusable-skip-requires-skippable",
+        // @ts-expect-error Reusable definitions cannot bypass forEachPipeline.skippable.
+        reusableSkippingFanOutDefinition
+      );
+      const skippableChildren = parentStep.forEachPipeline.skippable("skippable-children", {
+        pipeline: child,
+        dependsOn: [select],
+        skip: ({ select }) => (select.length === 0 ? { reason: "no children", value: [] } : false),
+        items: ({ select }) => select,
+        key: (item) => item.id,
+        mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
+      });
+      expectTypeOf(skippableChildren).toEqualTypeOf<
+        Step<"skippable-children", readonly { workerId: string }[] | undefined, ParentOptions>
+      >();
+      const skippableMappedChildren = parentStep.forEachPipeline.skippable(
+        "skippable-mapped-children",
+        {
+          pipeline: child,
+          skip: () => ({ reason: "fan-out disabled", value: [{ id: "disabled" }] }),
+          items: (): readonly { delayMs: number; id: string }[] => [],
+          key: (item) => item.id,
+          mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
+          mapResult: (value) => ({ id: value.workerId }),
+        }
+      );
+      expectTypeOf(skippableMappedChildren).toEqualTypeOf<
+        Step<"skippable-mapped-children", readonly { id: string }[] | undefined, ParentOptions>
+      >();
+      parentStep.forEachPipeline.skippable("invalid-mapped-skip-value", {
+        pipeline: child,
+        // @ts-expect-error skip value must be the complete mapped output array.
+        skip: () => ({ reason: "fan-out disabled", value: [{ workerId: "wrong" }] }),
+        items: (): readonly { delayMs: number; id: string }[] => [],
+        key: (item) => item.id,
+        mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
+        mapResult: (value) => ({ id: value.workerId }),
+      });
       const parent = definePipeline({
         id: "batch-parent",
         steps: [select, children],
@@ -140,6 +197,53 @@ describe("child-pipeline composition", () => {
       });
       expect(progress.at(-1)?.message).toMatch(/3\/3 shards/);
       expect(progress.at(-1)?.details ?? []).toEqual([]);
+    });
+
+    it("policy-skips mapped children with the parent-facing result array", async () => {
+      const runChild = vi.fn(() => "child-result");
+      const childStep = createSteps();
+      const process = childStep("process", { run: runChild });
+      const child = definePipeline({
+        id: "skipped-fan-out-child",
+        steps: [process],
+        finalize: (outputs) => ({ value: outputs.process ?? "missing" }),
+      });
+
+      const parentStep = createSteps();
+      const items = vi.fn(() => [{ id: "child" }]);
+      const mapResult = vi.fn((value: { value: string }) => ({ id: value.value }));
+      const children = parentStep.forEachPipeline.skippable("children", {
+        pipeline: child,
+        skip: () => ({
+          reason: "fan-out disabled",
+          value: [{ id: "disabled" }],
+        }),
+        items,
+        key: (item) => item.id,
+        mapOptions: () => ({}),
+        mapResult,
+      });
+      const after = parentStep("after", {
+        dependsOn: [children],
+        run: ({ children: values }) => values?.[0]?.id,
+      });
+      const parent = definePipeline({
+        id: "skipped-fan-out-parent",
+        steps: [children, after],
+        finalize: (outputs) => outputs.after,
+      });
+
+      const result = await parent.run({});
+
+      expect(result.status).toBe("completed");
+      expect(result.value).toBe("disabled");
+      expect(items).not.toHaveBeenCalled();
+      expect(runChild).not.toHaveBeenCalled();
+      expect(mapResult).not.toHaveBeenCalled();
+      expect(result.steps).toMatchObject([
+        { id: "children", status: "skipped", reason: "policy", message: "fan-out disabled" },
+        { id: "after", status: "completed" },
+      ]);
     });
 
     it("waits for running children and fails the parent when any selected child fails", async () => {
