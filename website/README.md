@@ -28,6 +28,7 @@ From the package root: `make website`.
 | Studio screenshot | `public/studio.png` (recapture from `tubeless ui`) |
 | Agent URL table | `src/pages/agents.astro`, `src/pages/llms.txt.ts` |
 | Visual system | `src/styles/global.css` |
+| Logo and social card | `../docs/assets/logo.svg` and `../docs/assets/social.svg`; rasterize social to `public/og.png` |
 
 Refresh captured CLI tapes by running the workbench against `examples/` and
 replacing the strings in `src/data/tapes.ts`.

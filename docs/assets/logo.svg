@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Tubeless">
+  <rect width="64" height="64" rx="14" fill="#e6e4de"/>
+  <g transform="translate(8 8) scale(1.7142857)">
+    <g stroke="#121212" stroke-width="1.15">
+      <path d="M16.2 10.19 19.2 4.99"/>
+      <path d="M18.4 14h6"/>
+      <path d="M16.2 17.81 19.2 23.01"/>
+      <path d="M11.8 17.81 8.8 23.01"/>
+      <path d="M9.6 14h-6"/>
+      <path d="M11.8 10.19 8.8 4.99"/>
+    </g>
+    <circle cx="14" cy="14" r="12.15" stroke="#121212" stroke-width="2.35"/>
+    <circle cx="14" cy="14" r="3.15" stroke="#121212" stroke-width="1.55"/>
+    <path d="M14 1.85v3.55" stroke="#c4a046" stroke-width="2.15"/>
+    <circle cx="14" cy="2.05" r="1.2" fill="#c4a046"/>
+  </g>
+</svg>

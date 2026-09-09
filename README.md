@@ -1,23 +1,31 @@
-# Tubeless
-
-<img width="2816" height="1536" alt="Gemini_Generated_Image_6qp28g6qp28g6qp2" src="https://github.com/user-attachments/assets/e41b0e6f-a94c-4684-805a-5ccd21d88f53" />
+<p align="center">
+  <a href="https://chetmancini.github.io/tubeless/">
+    <img src="docs/assets/logo.svg" width="72" height="72" alt="Tubeless">
+  </a>
+</p>
+<h1 align="center">Tubeless</h1>
+<p align="center">
+  Define a typed graph. Plan a target. Run it from Node.
+</p>
+<p align="center">
+  <a href="https://www.npmjs.com/package/tubeless"><img alt="npm" src="https://img.shields.io/npm/v/tubeless?style=flat-square&labelColor=121212&color=c4a046"></a>
+  <a href="https://github.com/chetmancini/tubeless/actions/workflows/check.yml"><img alt="check" src="https://img.shields.io/github/actions/workflow/status/chetmancini/tubeless/check.yml?style=flat-square&label=check&labelColor=121212&color=2f6f4a"></a>
+  <a href="./LICENSE"><img alt="MIT" src="https://img.shields.io/npm/l/tubeless?style=flat-square&labelColor=121212&color=c4c0b4"></a>
+</p>
 
 Typed, observable data pipelines you import from TypeScript or run from a Bun
 CLI. It is a library, not a hosted workflow engine or a Make/npm-scripts
-replacement.
-
-The first public version is `0.1.0`. The API is still being proven; expect
-change before 1.0.
+replacement. The public line is `0.1.x`; expect API change before 1.0.
 
 ```sh
 npm install tubeless
 ```
 
-Also: `pnpm add tubeless`, `yarn add tubeless`, `bun add tubeless`. Library
+Also `pnpm add tubeless`, `yarn add tubeless`, or `bun add tubeless`. Library
 imports are ESM-only on Node.js 22+. The `tubeless` CLI requires Bun 1.3.14+;
 `npx tubeless` works anywhere with Bun installed and otherwise prints Bun
-install instructions. Linux and macOS are supported; Windows is
-untested. See [install and runtime](./docs/getting-started.md#install).
+install instructions. Linux and macOS are supported; Windows is untested. See
+[install and runtime](./docs/getting-started.md#install).
 
 ## Quick start
 
@@ -93,17 +101,13 @@ command export; application flags go after `--`. `history` lists recorded
 
 The [recipe index](./docs/recipes.md) explains when to use each pattern.
 
-## Next
+## Docs
 
-- [Website](https://chetmancini.github.io/tubeless/)
-- [Getting started](./docs/getting-started.md)
-- [CLI](./docs/cli.md)
-- [Local studio](./docs/studio.md)
-- [Core concepts](./docs/concepts.md)
-- [Comparison](./docs/comparison.md)
-- [Documentation map](./docs/README.md)
-- [Generated API inventory](./docs/api-reference.md)
-- [Agent guide](./docs/agent-guide.md)
+[Website](https://chetmancini.github.io/tubeless/) ·
+[Getting started](./docs/getting-started.md) · [CLI](./docs/cli.md) ·
+[Studio](./docs/studio.md) · [Concepts](./docs/concepts.md) ·
+[Comparison](./docs/comparison.md) · [API](./docs/api-reference.md) ·
+[Agents](./docs/agent-guide.md)
 
 ## Contributing
 
@@ -113,4 +117,4 @@ through [SECURITY.md](./SECURITY.md).
 
 ## License
 
-MIT
+[MIT](./LICENSE)
