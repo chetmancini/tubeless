@@ -744,15 +744,16 @@ export async function executePlannedRun<
       continue;
     }
 
-    const inputs: Record<string, unknown> = {};
+    const inputEntries: Array<[string, unknown]> = [];
     for (const dep of graph.dependsOn) {
-      inputs[dep.id] = outputs.get(dep.id);
+      inputEntries.push([dep.id, outputs.get(dep.id)]);
     }
     for (const dep of graph.optionalDependsOn) {
       if (outputs.has(dep.id)) {
-        inputs[dep.id] = outputs.get(dep.id);
+        inputEntries.push([dep.id, outputs.get(dep.id)]);
       }
     }
+    const inputs = Object.fromEntries(inputEntries);
 
     if (typeof step.skip === "function") {
       let skipDecision: ReturnType<typeof normalizeStepSkipDecision>;
