@@ -15,6 +15,10 @@ export interface CheckpointStore<TMeta = unknown> {
   clear(): void;
 }
 
+function isCheckpointRecord<T>(value: T): value is T & object {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function loadEntries<TMeta>(
   filePath: string,
   onCorruptFile: (cause: unknown) => void
@@ -23,12 +27,22 @@ function loadEntries<TMeta>(
     return new Map();
   }
   try {
-    // SAFETY: the file is expected to hold a JSON object whose values are
-    // TMeta entries, as written by this store's flush(). Object.entries only
-    // yields string keys, so the `as Record<string, TMeta>` documents the
-    // caller-supplied TMeta contract; any mismatch is caught by the try/catch.
-    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) as Record<string, TMeta>;
-    return new Map(Object.entries(parsed));
+    // The file must be a JSON object keyed by item IDs, as written by flush().
+    // JSON.parse also accepts arrays and scalars; those are corrupt containers.
+    const parsed: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    if (!isCheckpointRecord(parsed)) {
+      const kind =
+        parsed === null
+          ? "null"
+          : Array.isArray(parsed)
+            ? "array"
+            : Object.prototype.toString.call(parsed).slice(8, -1).toLowerCase();
+      throw new Error(`Checkpoint file must be a JSON object keyed by item IDs, not ${kind}`);
+    }
+    // SAFETY: isCheckpointRecord only proves a non-null, non-array object. The
+    // `as Record<string, TMeta>` documents the caller-supplied TMeta contract
+    // only; generic metadata is not validated.
+    return new Map(Object.entries(parsed as Record<string, TMeta>));
   } catch (error) {
     onCorruptFile(error);
     return new Map();
