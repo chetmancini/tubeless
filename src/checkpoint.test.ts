@@ -94,6 +94,95 @@ describe("openCheckpoint", () => {
     warn.mockRestore();
   });
 
+  it.each([
+    ["array", "[1,2]"],
+    ["string", '"completed"'],
+    ["number", "1"],
+    ["boolean", "true"],
+    ["boolean", "false"],
+    ["null", "null"],
+  ] as const)(
+    "reports a top-level JSON %s as corrupt without rewriting the file",
+    (_kind, json) => {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(filePath, json);
+      const errors: unknown[] = [];
+      const checkpoint = openCheckpoint(filePath, { onCorruptFile: (error) => errors.push(error) });
+      expect(checkpoint.entries().size).toBe(0);
+      expect(errors).toHaveLength(1);
+      expect(String(errors[0])).toContain("JSON object");
+      expect(fs.readFileSync(filePath, "utf8")).toBe(json);
+    }
+  );
+
+  it.each([
+    {
+      label: "nested metadata",
+      json: '{"item":{"attempt":1,"extra":{"ok":true}}}',
+      expected: [["item", { attempt: 1, extra: { ok: true } }]],
+    },
+    {
+      label: "null metadata",
+      json: '{"item":null}',
+      expected: [["item", null]],
+    },
+    {
+      label: "empty object",
+      json: "{}",
+      expected: [],
+    },
+    {
+      label: "own __proto__ key",
+      json: '{"__proto__":{"own":true}}',
+      expected: [["__proto__", { own: true }]],
+    },
+  ])("loads a valid JSON object with $label without rewriting the file", ({ json, expected }) => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, json);
+    const errors: unknown[] = [];
+    const checkpoint = openCheckpoint(filePath, { onCorruptFile: (error) => errors.push(error) });
+    expect(errors).toEqual([]);
+    expect([...checkpoint.entries()]).toEqual(expected);
+    expect(fs.readFileSync(filePath, "utf8")).toBe(json);
+  });
+
+  it("warns on console by default when the checkpoint file has an invalid container shape", () => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, "[]");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const checkpoint = openCheckpoint(filePath);
+    expect(checkpoint.entries().size).toBe(0);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain(filePath);
+    expect(warn.mock.calls[0]?.[0]).toContain("JSON object");
+    expect(fs.readFileSync(filePath, "utf8")).toBe("[]");
+    warn.mockRestore();
+  });
+
+  it("does not warn when reloading a valid checkpoint object", () => {
+    const checkpoint = openCheckpoint<{ attempt: number }>(filePath);
+    checkpoint.record("a", { attempt: 1 });
+    checkpoint.flush();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const reopened = openCheckpoint<{ attempt: number }>(filePath);
+    expect(reopened.entries().get("a")).toEqual({ attempt: 1 });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("propagates onCorruptFile exceptions from an invalid container shape", () => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, "[]");
+    expect(() =>
+      openCheckpoint(filePath, {
+        onCorruptFile: () => {
+          throw new Error("observer failed");
+        },
+      })
+    ).toThrow("observer failed");
+    expect(fs.readFileSync(filePath, "utf8")).toBe("[]");
+  });
+
   it("never leaves a partial file behind: flush only ever produces a complete, parseable file", () => {
     const checkpoint = openCheckpoint(filePath);
     checkpoint.record("a", { attempt: 1 });
