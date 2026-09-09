@@ -552,6 +552,24 @@ export async function executePlannedRun<
     }
   };
 
+  const cancelBeforeStepStart = (stepId: string, stepIndex: number): boolean => {
+    try {
+      throwIfAborted(runtime);
+    } catch (error) {
+      const pipelineError = toPipelineError(error, {
+        code: "TUBELESS_RUN_CANCELLED",
+        kind: "cancellation",
+        phase: "execution",
+        stepId,
+      });
+      errors.push(pipelineError);
+      completed = false;
+      recordRemainingStates(stepIndex, undefined, pipelineError);
+      return true;
+    }
+    return false;
+  };
+
   const recordStepExecutionFailure = (
     error: unknown,
     plannedStep: PipelinePlanStep,
@@ -698,18 +716,7 @@ export async function executePlannedRun<
     const plannedStep =
       plannedSteps.get(stepId) ?? stepToPlanStep(step, true, undefined, undefined, graph);
 
-    try {
-      throwIfAborted(runtime);
-    } catch (error) {
-      const pipelineError = toPipelineError(error, {
-        code: "TUBELESS_RUN_CANCELLED",
-        kind: "cancellation",
-        phase: "execution",
-        stepId,
-      });
-      errors.push(pipelineError);
-      completed = false;
-      recordRemainingStates(stepIndex, undefined, pipelineError);
+    if (cancelBeforeStepStart(stepId, stepIndex)) {
       break;
     }
 
@@ -765,6 +772,9 @@ export async function executePlannedRun<
           break;
         }
         continue;
+      }
+      if (cancelBeforeStepStart(stepId, stepIndex)) {
+        break;
       }
       if (skipDecision) {
         if (

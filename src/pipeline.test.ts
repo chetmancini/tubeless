@@ -2776,6 +2776,119 @@ describe("definePipeline", () => {
     }
   });
 
+  it.each([
+    { name: "normal execution", skip: false, dryRun: false, continueOnError: false },
+    { name: "a policy skip", skip: true, dryRun: false, continueOnError: false },
+    { name: "dry-run execution", skip: false, dryRun: true, continueOnError: false },
+    { name: "continueOnError", skip: false, dryRun: false, continueOnError: true },
+    {
+      name: "a dry-run policy skip with continueOnError",
+      skip: true,
+      dryRun: true,
+      continueOnError: true,
+    },
+  ])(
+    "cancels before starting work when an async skip resolves after abort during $name",
+    async (mode) => {
+      for (const runOrThrow of [false, true]) {
+        let enterSkip!: () => void;
+        const skipEntered = new Promise<void>((resolve) => {
+          enterSkip = resolve;
+        });
+        let resolveSkip!: (decision: false | { reason: string; value: string }) => void;
+        const skipDecision = new Promise<false | { reason: string; value: string }>((resolve) => {
+          resolveSkip = resolve;
+        });
+        const runHandler = vi.fn(() => "ran");
+        const dryRunHandler = vi.fn(() => "preview");
+        const laterHandler = vi.fn(() => "later");
+        const filteredHandler = vi.fn(() => "filtered");
+        const finalize = vi.fn(() => "finalized");
+        const statuses: Array<[string, string]> = [];
+        const step = createSteps();
+        const gate = step.skippable("gate", {
+          skip: () => {
+            enterSkip();
+            return skipDecision;
+          },
+          dryRun: dryRunHandler,
+          run: runHandler,
+        });
+        const later = step("later", { run: laterHandler });
+        const filtered = step("filtered", { run: filteredHandler });
+        const pipeline = definePipeline({
+          id: "skip-resolves-after-abort",
+          steps: [gate, later, filtered],
+          finalize,
+        });
+        const controller = new AbortController();
+        const controls = {
+          continueOnError: mode.continueOnError,
+          dryRun: mode.dryRun,
+          stepIds: ["gate", "later"] as const,
+        };
+        const context = {
+          cwd: "/tmp",
+          hooks: {
+            onStepStatus: (event: { step: { id: string }; status: string }) => {
+              statuses.push([event.step.id, event.status]);
+            },
+          },
+          log: console,
+          signal: controller.signal,
+        };
+        const runPromise = runOrThrow
+          ? pipeline.runOrThrow({}, controls, context).then(
+              () => {
+                throw new Error("expected PipelineExecutionError");
+              },
+              (error: unknown) => {
+                expect(error).toBeInstanceOf(PipelineExecutionError);
+                return (error as PipelineExecutionError).result;
+              }
+            )
+          : pipeline.run({}, controls, context);
+        await skipEntered;
+        controller.abort("stop");
+        resolveSkip(mode.skip ? { reason: "already done", value: "cached" } : false);
+        const result = await runPromise;
+
+        expect(runHandler).not.toHaveBeenCalled();
+        expect(dryRunHandler).not.toHaveBeenCalled();
+        expect(laterHandler).not.toHaveBeenCalled();
+        expect(filteredHandler).not.toHaveBeenCalled();
+        expect(finalize).not.toHaveBeenCalled();
+        expect(result.status).toBe("cancelled");
+        expect(result.finalized).toBe(false);
+        expect(result.steps).toMatchObject([
+          {
+            id: "gate",
+            status: "cancelled",
+            error: { code: "TUBELESS_RUN_CANCELLED", phase: "execution", stepId: "gate" },
+          },
+          {
+            id: "later",
+            status: "cancelled",
+            error: { code: "TUBELESS_RUN_CANCELLED", phase: "execution", stepId: "later" },
+          },
+          { id: "filtered", status: "skipped", reason: "filtered" },
+        ]);
+        for (const report of result.steps) {
+          expect(report).not.toHaveProperty("attemptId");
+          expect(report).not.toHaveProperty("startedAtMs");
+        }
+        expect(statuses).toEqual([
+          ["gate", "planned"],
+          ["later", "planned"],
+          ["filtered", "planned"],
+          ["gate", "cancelled"],
+          ["later", "cancelled"],
+          ["filtered", "skipped"],
+        ]);
+      }
+    }
+  );
+
   it("continues independent later work when a skip predicate throws with continueOnError", async () => {
     const step = createSteps();
     let laterRan = false;
