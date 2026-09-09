@@ -64,6 +64,15 @@ function thrownDefinitionErrors(define: () => unknown): readonly PipelineError[]
   throw new Error("expected PipelineDefinitionError");
 }
 
+function inspectDependencyInputs(inputs: Record<string, unknown>, id: string) {
+  const { [id]: value } = inputs;
+  return {
+    hasOwn: Object.hasOwn(inputs, id),
+    proto: Object.getPrototypeOf(inputs),
+    value,
+  };
+}
+
 describe("definePipeline", () => {
   it("returns one versioned run with public identities and timestamps", async () => {
     const log = { error: vi.fn(), log: vi.fn(), warn: vi.fn() };
@@ -1128,6 +1137,147 @@ describe("definePipeline", () => {
       ["b", "completed"],
     ]);
     expect(result.value).toBe("fallback");
+  });
+
+  it.each([
+    { name: "primitive", value: 42 },
+    { name: "object", value: { marker: true } },
+    { name: "undefined", value: undefined },
+  ])("preserves required __proto__ $name output as an own data property", async ({ value }) => {
+    const step = createSteps();
+    const upstream = step("__proto__", { run: () => value });
+    const inspect = step("inspect", {
+      dependsOn: [upstream],
+      run: (inputs) => inspectDependencyInputs(inputs, "__proto__"),
+    });
+    const pipeline = definePipeline({
+      id: "required-proto",
+      steps: [upstream, inspect],
+      finalize: (outputs) => outputs.inspect,
+    });
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value?.hasOwn).toBe(true);
+    expect(result.value?.value).toBe(value);
+    expect(result.value?.proto).toBe(Object.prototype);
+  });
+
+  it.each(["source", "constructor", "toString"] as const)(
+    "preserves required %s dependency values as own data properties",
+    async (id) => {
+      const objectValue = { marker: id };
+      const step = createSteps();
+      const upstream = step(id, { run: () => objectValue });
+      const inspect = step("inspect", {
+        dependsOn: [upstream],
+        run: (inputs) => inspectDependencyInputs(inputs, id),
+      });
+      const pipeline = definePipeline({
+        id: `required-${id}`,
+        steps: [upstream, inspect],
+        finalize: (outputs) => outputs.inspect,
+      });
+
+      const result = await pipeline.run({});
+      expect(result.status).toBe("completed");
+      expect(result.value?.hasOwn).toBe(true);
+      expect(result.value?.value).toBe(objectValue);
+      expect(result.value?.proto).toBe(Object.prototype);
+    }
+  );
+
+  it("keeps present optional special-key values, including published undefined", async () => {
+    const step = createSteps();
+    const proto = step("__proto__", { run: () => undefined });
+    const ctor = step("constructor", { run: () => "ctor-value" });
+    const inspect = step("inspect", {
+      optionalDependsOn: [proto, ctor],
+      run: (inputs) => ({
+        proto: inspectDependencyInputs(inputs, "__proto__"),
+        ctor: inspectDependencyInputs(inputs, "constructor"),
+      }),
+    });
+    const pipeline = definePipeline({
+      id: "optional-present-special",
+      steps: [proto, ctor, inspect],
+      finalize: (outputs) => outputs.inspect,
+    });
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(result.value?.proto).toEqual({
+      hasOwn: true,
+      proto: Object.prototype,
+      value: undefined,
+    });
+    expect(result.value?.ctor).toEqual({
+      hasOwn: true,
+      proto: Object.prototype,
+      value: "ctor-value",
+    });
+  });
+
+  it("omits absent optional dependencies, including filtered special-key producers", async () => {
+    const step = createSteps();
+    const proto = step("__proto__", { run: () => 1 });
+    const ordinary = step("hint", { run: () => "hint" });
+    const inspect = step("inspect", {
+      optionalDependsOn: [proto, ordinary],
+      run: (inputs) => ({
+        proto: inspectDependencyInputs(inputs, "__proto__"),
+        hint: inspectDependencyInputs(inputs, "hint"),
+        keys: Object.keys(inputs),
+      }),
+    });
+    const pipeline = definePipeline({
+      id: "optional-absent-special",
+      steps: [proto, ordinary, inspect],
+      finalize: (outputs) => outputs.inspect,
+    });
+
+    const result = await pipeline.run({}, { stepIds: ["inspect"] });
+    expect(result.status).toBe("completed");
+    expect(result.steps.map((report) => [report.id, report.status])).toEqual([
+      ["__proto__", "skipped"],
+      ["hint", "skipped"],
+      ["inspect", "completed"],
+    ]);
+    expect(result.value?.proto.hasOwn).toBe(false);
+    expect(result.value?.hint.hasOwn).toBe(false);
+    expect(result.value?.keys).toEqual([]);
+    expect(result.value?.proto.proto).toBe(Object.prototype);
+  });
+
+  it("feeds skippable predicates the same own-property-safe inputs", async () => {
+    const objectValue = { marker: "skip-input" };
+    const step = createSteps();
+    const upstream = step("__proto__", { run: () => objectValue });
+    let skipSnapshot: ReturnType<typeof inspectDependencyInputs> | undefined;
+    const gated = step.skippable("gated", {
+      dependsOn: [upstream],
+      skip: (inputs) => {
+        skipSnapshot = inspectDependencyInputs(inputs, "__proto__");
+        return false;
+      },
+      run: (inputs) => inspectDependencyInputs(inputs, "__proto__"),
+    });
+    const pipeline = definePipeline({
+      id: "skippable-special-inputs",
+      steps: [upstream, gated],
+      finalize: (outputs) => outputs.gated,
+    });
+
+    const result = await pipeline.run({});
+    expect(result.status).toBe("completed");
+    expect(skipSnapshot).toEqual({
+      hasOwn: true,
+      proto: Object.prototype,
+      value: objectValue,
+    });
+    expect(result.value).toEqual(skipSnapshot);
+    expect(skipSnapshot?.value).toBe(objectValue);
+    expect(result.value?.value).toBe(objectValue);
   });
 
   it("skipAfterFailureOf skips a step when the referenced step failed, even without a data dependency", async () => {
