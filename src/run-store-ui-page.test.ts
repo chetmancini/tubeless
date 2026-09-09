@@ -13,6 +13,7 @@ describe("pipeline run studio page composition", () => {
     expect(PIPELINE_RUN_STUDIO_HTML.match(/<\/html>/g)).toEqual(["</html>"]);
     expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("initStudio");
     expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("initStudio();");
+    expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("function createStudioRunIndex");
     expect(PIPELINE_RUN_STUDIO_SCRIPT).not.toMatch(/^\s*export\b/m);
     expect(PIPELINE_RUN_STUDIO_SCRIPT).not.toMatch(/\bimport\s/);
     expect(PIPELINE_RUN_STUDIO_HTML).toContain(`<script>${PIPELINE_RUN_STUDIO_SCRIPT}</script>`);
