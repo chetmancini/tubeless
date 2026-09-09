@@ -47,6 +47,7 @@ Agent instructions:
 Advanced:
 
 - Child pipelines: ${absUrl("docs/child-pipeline-composition")}
+- Remote steps: ${absUrl("docs/remote-step-composition")}
 - Public exports: ${absUrl("docs/api-reference")}
 - Machine-readable surface: ${absUrl("api-report.json")}
 - Agent evaluation cases: ${absUrl("docs/agent-evaluations")}

@@ -6,11 +6,13 @@ on:
     paths:
       - "website/**"
       - "docs/**"
+      - "package.json"
       - ".github/workflows/pages.yml"
   pull_request:
     paths:
       - "website/**"
       - "docs/**"
+      - "package.json"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

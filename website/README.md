@@ -22,6 +22,8 @@ From the package root: `make website`.
 | Concepts, CLI, recipes, agent rules | `../docs/*.md` then rebuild |
 | Landing copy | `src/pages/index.astro` |
 | Package version and engines | `../package.json` via `src/lib/package.ts` |
+| Route catalog | `src/lib/docs.ts` (`DOC_NAV`; static paths and doc nav) |
+| Rendered-link check | `scripts/check-built-links.mjs` (runs after `astro build`) |
 | CLI tapes | `src/data/tapes.ts` (used on Start) |
 | Studio screenshot | `public/studio.png` (recapture from `tubeless ui`) |
 | Agent URL table | `src/pages/agents.astro`, `src/pages/llms.txt.ts` |

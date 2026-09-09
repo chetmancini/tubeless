@@ -22,6 +22,7 @@ export const DOC_NAV = [
   { slug: "studio", label: "Studio", blurb: "Local SQLite history and tubeless ui." },
   { slug: "comparison", label: "Comparison", blurb: "What this is, and what it is not." },
   { slug: "child-pipeline-composition", label: "Child pipelines", blurb: "Nested pipelines and fan-out." },
+  { slug: "remote-step-composition", label: "Remote steps", blurb: "Remote engines as parent steps." },
   { slug: "agent-guide", label: "Agent guide", blurb: "Rules for generating pipeline code." },
   { slug: "agent-evaluations", label: "Evaluations", blurb: "Forward-testing cases." },
   { slug: "api-reference", label: "API inventory", blurb: "Generated public surface." },
