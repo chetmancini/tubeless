@@ -1,7 +1,8 @@
 import { createSteps, defaultPipelineContext, definePipeline, requireOutputs } from "tubeless";
 import { createPipelineRunProjector, type StoredPipelineEvent } from "tubeless/run-store";
+import { openNdjsonPipelineRunStore } from "tubeless/run-store/ndjson";
 import { openSqlitePipelineRunStore } from "tubeless/run-store/sqlite";
-import { definePipelineStudio } from "tubeless/workbench/studio";
+import { definePipelineProject } from "tubeless/workbench/project";
 import {
   startPipelineRunStudio,
   type PipelineRunStudioLauncher,
@@ -25,8 +26,15 @@ export const LocallyObservedPipeline = definePipeline({
 });
 
 /** A checked-in catalog can register many command modules in one place. */
-export const LocalStudioConfig = definePipelineStudio({
-  commands: [{ file: "./cli-job.ts", export: "ImportCommand", name: "Import rows" }],
+export const LocalProjectManifest = definePipelineProject({
+  commands: [
+    {
+      id: "import-rows",
+      file: "./cli-job.ts",
+      export: "ImportCommand",
+      name: "Import rows",
+    },
+  ],
 });
 
 /**
@@ -38,6 +46,23 @@ export function snapshotFromPages(pages: readonly (readonly StoredPipelineEvent[
   const projector = createPipelineRunProjector();
   for (const page of pages) projector.append(page);
   return projector.snapshot();
+}
+
+/** Project a portable CI/support trace without creating or updating SQLite. */
+export async function snapshotPortableTrace(filename: string) {
+  const store = await openNdjsonPipelineRunStore(filename);
+  const projector = createPipelineRunProjector();
+  let afterId: number | undefined;
+  try {
+    for (;;) {
+      const page = await store.listEvents({ afterId, limit: 20_000 });
+      if (page.length === 0) return projector.snapshot();
+      projector.append(page);
+      afterId = page.at(-1)!.id;
+    }
+  } finally {
+    await store.close();
+  }
 }
 
 /** Recording is opt-in; ordinary calls to the pipeline remain storage-free. */

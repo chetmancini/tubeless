@@ -203,8 +203,10 @@ The terminal record deliberately does not copy log or progress streams. Use the
 injected logger and hooks for live observation, or tracing when durable event
 export is required. Errors and cancellation remain represented directly in the
 run and terminal step reports. A failing `tracing.exporter` does not fail the
-run: the executor warns once on the first export or flush error for that emitter
-and drops later events. Nested child runs each construct their own emitter, so
+run: the executor warns once on the first export or flush error for that emitter.
+A standalone failure drops later events. `composeTraceExporters` instead retires
+a failed destination after reporting the first partial drop and keeps sending to
+healthy destinations. Nested child runs each construct their own emitter, so
 `tracing.onExporterError` fires once per nested run rather than once for the
 whole parent tree. The run currently has `version: 2`, also exported
 as `RUN_MODEL_VERSION`; persist that field and branch on it before decoding a
@@ -230,9 +232,9 @@ execution:
 
 ```text
 pipeline definition → dependency-free executor → trace exporter
-                                               ↘ append-only SQLite
-                                                  ↘ local studio
-                                                     ↘ injected command launcher
+                                               ↘ append-only SQLite ↘ local studio
+                                               ↘ portable NDJSON   ↗
+                                                                    ↘ injected command launcher (SQLite only)
 ```
 
 `openSqlitePipelineRunStore()` implements `PipelineTraceExporter` and appends
@@ -251,6 +253,13 @@ interrupted process can still be cleared after confirmation. A directly embedded
 studio stays history-immutable unless its caller explicitly injects the same
 capability and may report its own known live writers through `isBusy()`.
 
+`openNdjsonPipelineRunStore()` gives a finished trace artifact the same
+read-only event-query boundary. It validates and bounds the artifact, assigns
+store-local ids in file order, closes the file, and never exposes an exporter or
+maintenance capability. History and Studio can therefore project CI or support
+traces directly without copying them into SQLite. Trace contents are not
+redacted and should be handled as sensitive operational data.
+
 Trace-enabled contexts route calls made through `context.log` into correlated
 `pipeline.log` events while still forwarding them to the injected logger.
 Definition metadata is attached to `step.planned` records, so the studio can
@@ -264,11 +273,13 @@ that fails validation before planning does not erase the last usable graph.
 
 The main `tubeless` entrypoint never imports SQLite or the UI. The optional
 `tubeless/run-store/sqlite` adapter selects the runtime-provided SQLite
-implementation, and `tubeless/run-store/ui` is a separate HTTP projection.
+implementation, `tubeless/run-store/ndjson` reads portable artifacts, and
+`tubeless/run-store/ui` is a separate HTTP projection.
 It is read-only unless the caller injects a `PipelineRunStudioLauncher`.
-Likewise, ordinary `tubeless run` remains unchanged; pass `--store` to record a run,
-`--trace` for NDJSON, `tubeless history` to inspect the store, and `tubeless ui`
-only when a browser view is useful.
+Likewise, ordinary `tubeless run` remains unchanged; pass `--store` to record a
+run, `--trace` for NDJSON, `tubeless history` to inspect SQLite, `tubeless
+history --trace` to inspect portable output, and `tubeless ui` only when a
+browser view is useful.
 
 Observed definitions are never treated as executable registrations: an event
 stream does not contain a trusted module path or a command's domain contract.
@@ -299,12 +310,14 @@ and does not need incremental refresh. History therefore continues past an
 adapter's per-query safety cap without reloading the entire database on every
 refresh.
 
-For a reusable catalog, `definePipelineStudio` declares versioned command-module
-references in one dependency-free manifest. Run `tubeless ui ./tubeless.studio.ts` to
-load it. Module paths and the optional execution `cwd` resolve from the manifest
-instead of the caller's shell directory; duplicate or malformed declarations
-fail before the server listens. Presentation-name overrides never change run or
-pipeline identity.
+For a reusable project interface, `definePipelineProject` declares stable
+command IDs and versioned module references in one dependency-free manifest.
+`tubeless list`, `inspect`, `plan`, `graph`, and `run` resolve those IDs without
+scanning for executable files. Module paths and the optional execution `cwd`
+resolve from the manifest instead of the caller's shell directory; duplicate or
+malformed declarations fail when it loads. Presentation-name overrides never
+change registered, run, or pipeline identity. Legacy `definePipelineStudio`
+catalogs remain accepted by `ui` with their historical UI-only identities.
 
 Cancellation is classified from an actual abort error or propagated child
 cancellation, not merely from the signal's current state. An unrelated failure
@@ -446,9 +459,10 @@ operational descriptions to node labels.
 Command-by-command usage lives in [the CLI](./cli.md). The optional local UI is
 documented in [the studio](./studio.md).
 
-`tubeless inspect`, `tubeless plan`, and `tubeless graph` load a pipeline or a
-marked `definePipelineCommand` without executing steps or requiring domain
-options, and prefer the command when both are exported. `tubeless run`
+`tubeless inspect`, `tubeless plan`, and `tubeless graph` load a registered
+project command, a pipeline, or a marked `definePipelineCommand` without
+executing steps or requiring domain options, and prefer the command when both
+are exported. `tubeless run`
 deliberately accepts only a command created by `definePipelineCommand`, because
 that export carries the application-owned parser, validation, option mapping,
 reporter, and result summary needed for safe execution. A raw pipeline is not

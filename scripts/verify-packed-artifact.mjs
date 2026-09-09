@@ -315,6 +315,7 @@ try {
     "docs/recipes.md",
     "docs/studio.md",
     "examples/typed-import.ts",
+    "examples/catalog/tubeless.project.ts",
     "examples/catalog/tubeless.studio.ts",
     "examples/catalog/pipelines/import.ts",
     "examples/catalog/pipelines/enrich.ts",
@@ -387,9 +388,37 @@ export const FixtureCommand = definePipelineCommand(FixturePipeline, {
 });
 `
   );
+  const projectFixture = join(consumerRoot, "tubeless.project.mjs");
+  writeFileSync(
+    projectFixture,
+    `import { definePipelineProject } from "tubeless/workbench/project";
+export default definePipelineProject({
+  commands: [{ id: "fixture-command", file: "./pipeline.mjs", export: "FixtureCommand" }],
+});
+`
+  );
   const tubelessBin = join(consumerRoot, "node_modules", ".bin", "tubeless");
   if (!existsSync(tubelessBin)) {
     throw new Error("Packed tubeless artifact is missing the tubeless executable");
+  }
+  const projectList = JSON.parse(
+    run(tubelessBin, ["list", "--project", projectFixture, "--json"], consumerRoot)
+  );
+  if (projectList.commands?.[0]?.id !== "fixture-command") {
+    throw new Error(`Packed tubeless list returned an invalid project inventory.`);
+  }
+  const projectInspection = JSON.parse(
+    run(
+      tubelessBin,
+      ["inspect", "--project", projectFixture, "--json", "fixture-command"],
+      consumerRoot
+    )
+  );
+  if (
+    projectInspection.commandId !== "fixture-command" ||
+    projectInspection.pipelineId !== "fixture"
+  ) {
+    throw new Error(`Packed tubeless inspect did not resolve the registered project identity.`);
   }
   const inspection = JSON.parse(
     run(tubelessBin, ["inspect", "--json", pipelineFixture], consumerRoot)
@@ -430,6 +459,15 @@ export const FixtureCommand = definePipelineCommand(FixturePipeline, {
   );
   if (!successfulRun.stdout.includes("completed:written:packed")) {
     throw new Error(`Packed tubeless run returned invalid output:\n${successfulRun.stdout}`);
+  }
+  const projectRun = runWithStatus(
+    tubelessBin,
+    ["run", "--project", projectFixture, "fixture-command", "--", "--message", "project"],
+    consumerRoot,
+    0
+  );
+  if (!projectRun.stdout.includes("completed:written:project")) {
+    throw new Error(`Packed tubeless run did not execute the registered project identity.`);
   }
   const validationRun = runWithStatus(tubelessBin, ["run", pipelineFixture], consumerRoot, 4);
   if (!validationRun.stderr.includes("Missing required option --message")) {

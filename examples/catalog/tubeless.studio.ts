@@ -4,10 +4,12 @@ import { definePipelineStudio } from "tubeless/workbench/studio";
 // labels from these commands. Use --store when launching so that structure
 // survives after the live TTY closes. Writers buffer up to 64 events; flush or
 // close before another connection can see the tail.
+// A finished --trace artifact opens separately with `tubeless ui --trace`;
+// that portable view is read-only and cannot use this launch catalog.
 // Command argv flags stay --step/--target; mapOptions and hooks receive stepIds
 // and targets.
 
-/** Checked-in catalog. Studio can cancel one live launch from the running detail pane without stopping the server. */
+/** Legacy UI-only catalog. New projects should use tubeless.project.ts. */
 export default definePipelineStudio({
   cwd: ".",
   commands: [

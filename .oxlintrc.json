@@ -80,6 +80,7 @@
         "src/cli-command.ts",
         "src/pipeline-command-marker.ts",
         "src/run-store-ui-protocol.ts",
+        "src/run-store-ndjson.ts",
         "src/tracing-internal.ts",
         "src/workbench-shared.ts",
         "src/workbench-ui.ts"
@@ -105,6 +106,7 @@
         "src/retry.ts",
         "src/testing.ts",
         "src/tracing.ts",
+        "src/workbench-project.ts",
         "src/workbench-studio.ts"
       ],
       "rules": {

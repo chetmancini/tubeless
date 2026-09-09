@@ -1,6 +1,7 @@
 import { runGraph } from "./workbench-graph.js";
 import { runHistory } from "./workbench-history.js";
 import { runInspect } from "./workbench-inspect.js";
+import { runList } from "./workbench-list.js";
 import { runPlan } from "./workbench-plan.js";
 import { runCommand } from "./workbench-run.js";
 import {
@@ -12,11 +13,12 @@ import { runUi } from "./workbench-ui.js";
 
 export { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "./workbench-shared.js";
 
-const WORKBENCH_USAGE = `Usage: tubeless <command> [options] <pipeline-or-command-file>
+const WORKBENCH_USAGE = `Usage: tubeless <command> [options] <registered-id|pipeline-or-command-file>
 
 Inspect, plan, visualize, or safely run exported tubeless workflows.
 
 Commands:
+  tubeless list      List commands explicitly registered in the project manifest
   tubeless inspect   Show pipeline identity and the default structural plan
   tubeless plan      Preview step selection without executing the pipeline
   tubeless graph     Generate Mermaid flowchart source
@@ -40,6 +42,7 @@ export async function runWorkbenchCli(
   if (command === undefined) {
     return writeUsageError(io, "Pass a command.", WORKBENCH_USAGE);
   }
+  if (command === "list") return runList(commandArgs, io);
   if (command === "inspect") return runInspect(commandArgs, io);
   if (command === "plan") return runPlan(commandArgs, io);
   if (command === "graph") return runGraph(commandArgs, io);

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -176,6 +176,47 @@ describe("runHistory", () => {
     expect(rendered).toContain("  [warn] source slowed");
     expect(rendered).toContain("Error:");
     expect(rendered).toContain("  TUBELESS_STEP_FAILED  source unavailable");
+  });
+
+  it("projects a finished NDJSON trace without importing it", async () => {
+    const directory = await tempDir();
+    const tracePath = path.join(directory, "run.ndjson");
+    const portableEvents = failedRunEvents.map((next) =>
+      next.name === "pipeline.log"
+        ? { ...next, attributes: { ...next.attributes, message: "source\u001b[31m slowed" } }
+        : next
+    );
+    await writeFile(
+      tracePath,
+      `${portableEvents.map((next) => JSON.stringify(next)).join("\n")}\n`
+    );
+    const io = captureIo(directory);
+
+    const exitCode = await runHistory(["--trace", tracePath, "run-failed"], io);
+
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(io.errors).toEqual([]);
+    expect(io.output.join("")).toContain("Run run-failed");
+    expect(io.output.join("")).toContain("source unavailable");
+    expect(io.output.join("")).not.toContain("\u001b");
+  });
+
+  it("rejects conflicting artifact sources and malformed traces", async () => {
+    const directory = await tempDir();
+    const tracePath = path.join(directory, "run.ndjson");
+    await writeFile(tracePath, '{"secret":"not-an-event"}\n');
+    const conflictIo = captureIo(directory);
+    const malformedIo = captureIo(directory);
+
+    expect(await runHistory(["--store", "runs.sqlite", "--trace", tracePath], conflictIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.usage
+    );
+    expect(conflictIo.errors.join("")).toContain("Use --store or --trace, not both.");
+    expect(await runHistory(["--trace", tracePath], malformedIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(malformedIo.errors.join("")).toContain("line 1 is invalid");
+    expect(malformedIo.errors.join("")).not.toContain("not-an-event");
   });
 
   it("emits parseable JSON without ANSI", async () => {

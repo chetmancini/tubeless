@@ -26,11 +26,12 @@ Agent instructions:
 - Canonical guide: ${absUrl("docs/agent-guide")}
 - Raw guide: ${githubRaw("docs/agent-guide.md")}
 - Skill: ${GITHUB_BLOB}/skills/tubeless/SKILL.md
-- Project catalog: ${GITHUB_BLOB}/examples/catalog/tubeless.studio.ts
+- Project manifest: ${GITHUB_BLOB}/examples/catalog/tubeless.project.ts
 - Maintain stable step IDs.
 - Use optional step names only as display overrides; dependencies and selection use IDs.
 - Use pipeline.toMermaid() to generate static graph documentation.
-- Use tubeless inspect with a pipeline or marked command module for a read-only inventory of identity plus the default plan. Prefer the marked command when both are exported.
+- Use tubeless list to enumerate only explicitly registered commands from the project manifest. Use stable registered IDs with inspect, plan, graph, and run; no command modules are discovered from the filesystem or history.
+- Use tubeless inspect with a registered ID, pipeline, or marked command module for a read-only inventory of identity plus the default plan. Prefer the marked command when both are exported.
 - Use tubeless plan with a pipeline or marked command module to preview target, exact-step, and dry-run selection without executing or supplying domain options. Prefer the marked command when both are exported. Use command.plan() or tubeless plan; do not simulate planning with --plan.
 - Use tubeless graph with a pipeline or marked command module to print Mermaid without a wrapper script. Prefer the marked command when both are exported.
 - Use tubeless run only with a definePipelineCommand module; put the command's validated application arguments after --.
@@ -54,7 +55,7 @@ Advanced:
 
 Executable examples:
 
-- ${GITHUB_BLOB}/examples/catalog/tubeless.studio.ts
+- ${GITHUB_BLOB}/examples/catalog/tubeless.project.ts
 - ${GITHUB_BLOB}/examples/typed-import.ts
 - ${GITHUB_BLOB}/examples/validated-boundaries.ts
 - ${GITHUB_BLOB}/examples/publish-with-gates.ts

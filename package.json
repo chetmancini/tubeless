@@ -125,10 +125,20 @@
       "import": "./dist/run-store-sqlite.js",
       "default": "./dist/run-store-sqlite.js"
     },
+    "./run-store/ndjson": {
+      "types": "./dist/run-store-ndjson.d.ts",
+      "import": "./dist/run-store-ndjson.js",
+      "default": "./dist/run-store-ndjson.js"
+    },
     "./workbench/studio": {
       "types": "./dist/workbench-studio.d.ts",
       "import": "./dist/workbench-studio.js",
       "default": "./dist/workbench-studio.js"
+    },
+    "./workbench/project": {
+      "types": "./dist/workbench-project.d.ts",
+      "import": "./dist/workbench-project.js",
+      "default": "./dist/workbench-project.js"
     },
     "./run-store/ui": {
       "types": "./dist/run-store-ui.d.ts",

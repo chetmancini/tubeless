@@ -7,7 +7,11 @@ import {
   normalizeHttpAuthority,
   parseHttpAuthority,
 } from "./run-store-ui-http.js";
-import { projectPipelineRun, type PipelineRunEventStore } from "./run-store.js";
+import {
+  projectPipelineRun,
+  type PipelineRunEventReader,
+  type PipelineRunEventStore,
+} from "./run-store.js";
 import {
   PIPELINE_RUN_STUDIO_HTML,
   PIPELINE_RUN_STUDIO_SCRIPT,
@@ -47,7 +51,7 @@ export interface PipelineRunStudioOptions {
   launcher?: PipelineRunStudioLauncher;
   /** HTTP port. Pass `0` to select an available port. Defaults to `4317`. */
   port?: number;
-  store: PipelineRunEventStore;
+  store: PipelineRunEventReader | PipelineRunEventStore;
 }
 
 export interface PipelineRunStudioServer {

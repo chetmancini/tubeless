@@ -38,7 +38,11 @@ function requiredText(value: unknown, label: string): asserts value is string {
   }
 }
 
-/** Declare a versioned, dependency-free manifest of commands available to `tubeless ui`. */
+/**
+ * Declare a legacy UI-only manifest of commands available to `tubeless ui`.
+ * @deprecated Use definePipelineProject from `tubeless/workbench/project` for stable
+ * registered identities across every workbench command.
+ */
 export function definePipelineStudio(config: PipelineStudioConfigInput): PipelineStudioConfig {
   if (!Array.isArray(config.commands) || config.commands.length === 0) {
     throw new Error("Pipeline studio config must declare at least one command.");

@@ -7,8 +7,10 @@ import {
   type WorkbenchPipelineCommand,
 } from "./pipeline-module.js";
 import { createRunId } from "./pipeline.js";
+import type { SqlitePipelineRunStore } from "./run-store-sqlite.js";
 import type { PipelineStudioConfig } from "./workbench-studio.js";
-import type { PipelineRunEventStore } from "./run-store.js";
+import { isPipelineProjectManifest, type PipelineProjectManifest } from "./workbench-project.js";
+import type { PipelineRunEventReader } from "./run-store.js";
 import type {
   PipelineRunStudioCommand,
   PipelineRunStudioLaunchResult,
@@ -29,13 +31,15 @@ import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 const UI_USAGE = `Usage: tubeless ui [options] [studio-file]
 
-Serve the local pipeline studio from an append-only SQLite run store. Register
-definePipelineCommand modules directly or through one studio config file.
+Serve the local pipeline studio from an append-only SQLite run store or a
+finished NDJSON trace. Register definePipelineCommand modules directly or through
+a project or studio manifest, and only with a writable SQLite store.
 
 Options:
       --command <path> Register a launchable pipeline command (repeatable)
   -e, --export <name>  Select the export when registering exactly one command
       --store <path>    SQLite database (default: .tubeless/runs.sqlite)
+      --trace <path>    Read a finished NDJSON trace artifact (history-only)
       --host <value>    Bind address (default: 127.0.0.1)
       --port <number>   HTTP port (default: 4317)
   -h, --help            Show this help
@@ -43,7 +47,7 @@ Options:
 
 /** Resolve a studio launch only after the run store has the run, or after a silent exit. */
 async function acknowledgeRecordedLaunch(
-  store: PipelineRunEventStore,
+  store: PipelineRunEventReader,
   runId: string,
   execution: Promise<number>,
   stopping: Promise<void>
@@ -92,6 +96,7 @@ function parseUiArgs(argv: readonly string[]) {
       host: { type: "string" },
       port: { type: "string" },
       store: { type: "string" },
+      trace: { type: "string" },
     },
     strict: true,
   });
@@ -102,14 +107,15 @@ interface StudioCommandSpec {
   cwd: string;
   exportName?: string;
   filePath: string;
+  id?: string;
   name?: string;
 }
 
-async function loadPipelineStudioConfig(
+async function loadPipelineUiManifest(
   fileArgument: string,
   io: WorkbenchCliIo
 ): Promise<
-  | { config: PipelineStudioConfig; filePath: string }
+  | { config: PipelineProjectManifest | PipelineStudioConfig; filePath: string }
   | { exitCode: typeof TUBELESS_WORKBENCH_EXIT_CODE.load }
 > {
   const filePath = path.resolve(io.cwd, fileArgument);
@@ -124,8 +130,9 @@ async function loadPipelineStudioConfig(
       config: selectUniqueExport(
         moduleExports,
         undefined,
-        isPipelineStudioConfig,
-        "studio config",
+        (value): value is PipelineProjectManifest | PipelineStudioConfig =>
+          isPipelineProjectManifest(value) || isPipelineStudioConfig(value),
+        "project or studio manifest",
         { hintExport: false }
       ),
       filePath,
@@ -149,6 +156,16 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
         }
         const directCommandFiles = parsed.values.command ?? [];
         const studioFile = parsed.positionals[0];
+        if (parsed.values.store && parsed.values.trace) {
+          return writeUsageError(io, "Use --store or --trace, not both.", UI_USAGE);
+        }
+        if (parsed.values.trace && (directCommandFiles.length > 0 || studioFile)) {
+          return writeUsageError(
+            io,
+            "An NDJSON trace is read-only and cannot register launchable commands.",
+            UI_USAGE
+          );
+        }
         if (parsed.values.export && (directCommandFiles.length !== 1 || studioFile)) {
           return writeUsageError(
             io,
@@ -172,7 +189,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           return spec;
         });
         if (studioFile) {
-          const loadedConfig = await loadPipelineStudioConfig(studioFile, io);
+          const loadedConfig = await loadPipelineUiManifest(studioFile, io);
           if ("exitCode" in loadedConfig) return loadedConfig.exitCode;
           const configDirectory = path.dirname(loadedConfig.filePath);
           const configCwd = path.resolve(configDirectory, loadedConfig.config.cwd ?? ".");
@@ -184,6 +201,9 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
               };
               if (command.export !== undefined) {
                 spec.exportName = command.export;
+              }
+              if ("id" in command) {
+                spec.id = command.id;
               }
               if (command.name !== undefined) {
                 spec.name = command.name;
@@ -235,7 +255,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           const commandName = spec.name ?? loaded.command.descriptor.name;
           const descriptor: PipelineRunStudioCommand = {
             canPlan: true,
-            id: `${spec.filePath}#${loaded.exportName}`,
+            id: spec.id ?? `${spec.filePath}#${loaded.exportName}`,
             name: commandName,
             parameters: loaded.command.descriptor.parameters,
           };
@@ -249,19 +269,40 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
             runIdPrefix: loaded.command.descriptor.name,
           });
         }
+        const registrationIds = new Set<string>();
+        for (const registration of registrations) {
+          if (registrationIds.has(registration.descriptor.id)) {
+            return writeUsageError(
+              io,
+              `Studio command id ${JSON.stringify(registration.descriptor.id)} is duplicated.`,
+              UI_USAGE
+            );
+          }
+          registrationIds.add(registration.descriptor.id);
+        }
 
-        const filename = path.resolve(io.cwd, parsed.values.store ?? DEFAULT_PIPELINE_RUN_STORE);
-        let store:
-          | Awaited<ReturnType<typeof import("./run-store-sqlite.js").openSqlitePipelineRunStore>>
-          | undefined;
+        const filename = path.resolve(
+          io.cwd,
+          parsed.values.trace ?? parsed.values.store ?? DEFAULT_PIPELINE_RUN_STORE
+        );
+        let store: PipelineRunEventReader | undefined;
+        let writableStore: SqlitePipelineRunStore | undefined;
         let server:
           | Awaited<ReturnType<typeof import("./run-store-ui.js").startPipelineRunStudio>>
           | undefined;
         let disposeProcessSignals: (() => void) | undefined;
+        let storeOpened = false;
         try {
-          const { openSqlitePipelineRunStore } = await import("./run-store-sqlite.js");
           const { startPipelineRunStudio } = await import("./run-store-ui.js");
-          store = await openSqlitePipelineRunStore(filename);
+          if (parsed.values.trace) {
+            const { openNdjsonPipelineRunStore } = await import("./run-store-ndjson.js");
+            store = await openNdjsonPipelineRunStore(filename);
+          } else {
+            const { openSqlitePipelineRunStore } = await import("./run-store-sqlite.js");
+            writableStore = await openSqlitePipelineRunStore(filename);
+            store = writableStore;
+          }
+          storeOpened = true;
           const commandById = new Map(
             registrations.map((registration) => [registration.descriptor.id, registration] as const)
           );
@@ -282,7 +323,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
                     if (!registration)
                       return { accepted: false, errors: ["Pipeline command not found."] };
                     const runId = createRunId(registration.runIdPrefix);
-                    const pipelineContext = { runId, tracing: { exporter: store! } };
+                    const pipelineContext = { runId, tracing: { exporter: writableStore! } };
                     const runController = new AbortController();
                     const signal = AbortSignal.any([
                       studioStopController.signal,
@@ -366,15 +407,15 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
             port,
             store,
           };
-          if (isLoopbackHost) {
+          if (isLoopbackHost && writableStore) {
             studioOptions.history = {
-              clear: () => store!.clearHistory(),
+              clear: () => writableStore!.clearHistory(),
               isBusy: () => activeLaunches.size > 0,
             };
           }
           server = await startPipelineRunStudio(studioOptions);
           io.stdout.write(`Tubeless local studio: ${server.url}\n`);
-          io.stdout.write(`Run store: ${filename}\n`);
+          io.stdout.write(`${parsed.values.trace ? "Trace artifact" : "Run store"}: ${filename}\n`);
           if (registrations.length > 0) {
             io.stdout.write(
               `Launchable commands: ${registrations.map(({ descriptor }) => descriptor.name).join(", ")}\n`
@@ -403,7 +444,9 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           return TUBELESS_WORKBENCH_EXIT_CODE.success;
         } catch (error) {
           io.stderr.write(`Error: ${errorMessage(error)}\n`);
-          return TUBELESS_WORKBENCH_EXIT_CODE.execution;
+          return parsed.values.trace && !storeOpened
+            ? TUBELESS_WORKBENCH_EXIT_CODE.load
+            : TUBELESS_WORKBENCH_EXIT_CODE.execution;
         } finally {
           markStudioStopping();
           studioStopController.abort(

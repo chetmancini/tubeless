@@ -19,14 +19,33 @@ prints install instructions instead of failing with
 
 ## Commands
 
-| Command            | Accepts                          | Does                                                                          |
-| ------------------ | -------------------------------- | ----------------------------------------------------------------------------- |
-| `tubeless inspect` | A pipeline or command export     | Prints identity (`id`, targets, exact steps) plus the default structural plan |
-| `tubeless plan`    | A pipeline or command export     | Previews selection without executing or requiring domain options              |
-| `tubeless graph`   | A pipeline or command export     | Writes Mermaid flowchart source                                               |
-| `tubeless run`     | A `definePipelineCommand` export | Executes the command's own validated CLI contract                             |
-| `tubeless history` | An optional run id               | Lists or shows recorded runs from the local SQLite store                      |
-| `tubeless ui`      | An optional studio catalog       | Serves the local run studio; see [studio](./studio.md)                        |
+| Command            | Accepts                             | Does                                                                          |
+| ------------------ | ----------------------------------- | ----------------------------------------------------------------------------- |
+| `tubeless list`    | A project manifest                  | Lists explicitly registered command IDs without loading their modules         |
+| `tubeless inspect` | A pipeline or command export        | Prints identity (`id`, targets, exact steps) plus the default structural plan |
+| `tubeless plan`    | A pipeline or command export        | Previews selection without executing or requiring domain options              |
+| `tubeless graph`   | A pipeline or command export        | Writes Mermaid flowchart source                                               |
+| `tubeless run`     | A `definePipelineCommand` export    | Executes the command's own validated CLI contract                             |
+| `tubeless history` | An optional run id                  | Lists or shows recorded runs from SQLite or a finished NDJSON trace           |
+| `tubeless ui`      | An optional project/Studio manifest | Serves the local run studio; see [studio](./studio.md)                        |
+
+Use a checked-in `tubeless.project.ts` to address commands by stable project ID:
+
+```sh
+bunx tubeless list
+bunx tubeless inspect import-rows
+bunx tubeless plan import-rows --target normalized-import --explain
+bunx tubeless graph import-rows --markdown
+bunx tubeless run import-rows -- --source ../rows.txt --target normalized-import
+```
+
+The default manifest is only checked in the current directory; Tubeless never
+walks parent directories. Pass `--project <path>` to every command when the
+manifest has another name or location. With no `--project`, an existing file
+argument wins over manifest identity, then a bare name may resolve from the
+default manifest. Paths containing `/`, starting with `.`, or having an
+extension always remain file arguments. `--export` applies only to file mode;
+manifest registrations own export selection.
 
 The workbench discovers a single matching export automatically. Pass
 `--export Name` when the file exports more than one. `inspect`, `plan`, and
@@ -53,6 +72,18 @@ For command help:
 tubeless run ./scripts/import.ts -- --help
 ```
 
+## List
+
+```
+tubeless list [options]
+```
+
+- `-p, --project <path>` selects the manifest (default `./tubeless.project.ts`)
+- `--json` emits its version, resolved manifest path, `cwd`, and registrations
+
+`list` evaluates the explicit manifest but does not load any registered command
+module. It never scans the filesystem or run history for executables.
+
 ## Inspect
 
 ```
@@ -60,6 +91,7 @@ tubeless inspect [options] <pipeline-or-command-file>
 ```
 
 - `-e, --export <name>` selects a pipeline or command export
+- `-p, --project <path>` resolves the positional as a registered command ID
 - `--json` emits identity and the default plan as JSON
 
 ## Plan
@@ -69,6 +101,7 @@ tubeless plan [options] <pipeline-or-command-file>
 ```
 
 - `-e, --export <name>` selects a pipeline or command export
+- `-p, --project <path>` resolves the positional as a registered command ID
 - `-t, --target <id>` selects a declared target and its prerequisites (repeatable)
 - `-s, --step <id>` selects exact internal steps (repeatable)
 - `--dry-run` shows each step's dry-run disposition
@@ -85,6 +118,7 @@ tubeless graph [options] <pipeline-or-command-file>
 ```
 
 - `-e, --export <name>` selects a pipeline or command export
+- `-p, --project <path>` resolves the positional as a registered command ID
 - `-d, --direction <value>` is `BT`, `LR`, `RL`, `TB`, or `TD` (default `TD`)
 - `--descriptions` includes step descriptions in node labels
 - `--markdown` wraps the result in a fenced Mermaid block
@@ -99,6 +133,7 @@ tubeless run [options] <command-file> [-- <command-args...>]
 ```
 
 - `-e, --export <name>` selects a command export
+- `-p, --project <path>` resolves the positional as a registered command ID
 - `--store <path>` appends run events to a local SQLite database
 - `--trace <path>` writes NDJSON traces to a file, or `-` for stdout
 
@@ -106,6 +141,8 @@ tubeless run [options] <command-file> [-- <command-args...>]
 is set. When `--trace -` is set, the TTY reporter and command result go to
 stderr so stdout stays valid NDJSON. The binary does not attach OpenTelemetry;
 keep that SDK at the application exporter boundary.
+Programmatic callers can use `composeTraceExporters` from `tubeless/tracing` to
+fan one event stream out to multiple destinations with the same failure isolation.
 
 `run` accepts only a `definePipelineCommand` export. That export owns parsing,
 validation, option mapping, reporting, and the result summary. Omit `mapOptions`
@@ -123,22 +160,31 @@ tubeless history [options] [run-id]
 ```
 
 - `--store <path>` selects the SQLite database (default `.tubeless/runs.sqlite`)
+- `--trace <path>` selects a finished NDJSON trace artifact
 - `--json` emits the projected run list, or one projected run when `run-id` is set
 - `--events` emits raw store events as NDJSON (run-scoped when `run-id` is set)
 
-`--json` and `--events` cannot be combined. The default print is the projection:
+`--store` and `--trace` cannot be combined. `--json` and `--events` cannot be
+combined. The default print is the projection:
 a run list, or one run's steps, logs, and error. A missing store exits `2`. A
 store that cannot be opened read-only — a pending `-wal` or `-journal`,
 multiple hard links, or a file that is not a versioned run store — also exits
 `2` with an `Error:` line. An unknown run id exits `1`. An unflushed `export()`
 does not create that sidecar; `tubeless run --store` flushes at completion so a
 finished run is durable. A hard crash before then can lose up to 63 tail events.
+NDJSON is opened read-only, validated before projection, and assigned zero-based
+event ids in file order. By default, artifacts over 64 MiB, individual event
+lines over 1 MiB, and traces over 100,000 events are refused. Diagnostics name
+the line and invalid field without echoing its contents. Trace artifacts may
+contain sensitive logs, errors, and attributes; inspect only files you trust and
+avoid exposing Studio beyond the intended host.
 
 ```sh
 bunx tubeless run --store .tubeless/runs.sqlite --trace run.ndjson ./scripts/import.ts -- --source rows.txt
 bunx tubeless history
 bunx tubeless history --json <run-id>
 bunx tubeless history --events <run-id>
+bunx tubeless history --trace run.ndjson
 ```
 
 ## Exit codes
