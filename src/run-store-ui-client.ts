@@ -40,15 +40,203 @@ interface StudioState {
   planning: boolean;
   planVersion: number;
   query: string;
+  runIndex: StudioRunIndex;
   selectedRunId: string | null;
   snapshot: StudioSnapshot | null;
   view: string;
+}
+
+const EMPTY_STUDIO_RUNS: readonly StoredPipelineRun[] = [];
+
+export interface StudioRunIndex {
+  readonly roots: readonly StoredPipelineRun[];
+  ancestorsOf(runId: string | null | undefined): StoredPipelineRun[];
+  childrenOf(runId: string): readonly StoredPipelineRun[];
+  descendantCount(runId: string): number;
+  descendantsOf(runId: string): StoredPipelineRun[];
+  matchingRootIds(query: string): ReadonlySet<string>;
+  rootRunId(runId: string | null | undefined): string | null | undefined;
+  runById(runId: string | null | undefined): StoredPipelineRun | undefined;
+  subtreeIsRunning(runId: string): boolean;
+}
+
+/** Derived run hierarchy for one studio snapshot. Rebuild when the snapshot is replaced. */
+export function createStudioRunIndex(runs: readonly StoredPipelineRun[]): StudioRunIndex {
+  const runsById = new Map<string, StoredPipelineRun>();
+  const childrenByParentId = new Map<string, StoredPipelineRun[]>();
+  const parentIdByRunId = new Map<string, string | undefined>();
+  for (const run of runs) {
+    if (!runsById.has(run.runId)) runsById.set(run.runId, run);
+    const parentRunId = run.parentRunId;
+    if (!parentIdByRunId.has(run.runId)) parentIdByRunId.set(run.runId, parentRunId);
+    if (!parentRunId) continue;
+    const siblings = childrenByParentId.get(parentRunId);
+    if (siblings) siblings.push(run);
+    else childrenByParentId.set(parentRunId, [run]);
+  }
+  for (const siblings of childrenByParentId.values()) {
+    siblings.sort((left, right) => right.startedAtMs - left.startedAtMs);
+  }
+
+  const roots: StoredPipelineRun[] = [];
+  const rootIds = new Set<string>();
+  for (const run of runs) {
+    const parentRunId = parentIdByRunId.get(run.runId);
+    if (parentRunId && runsById.has(parentRunId)) continue;
+    roots.push(run);
+    rootIds.add(run.runId);
+  }
+
+  const rootIdByRunId = new Map<string, string | undefined>();
+  for (const run of runs) {
+    if (rootIdByRunId.has(run.runId)) continue;
+    const path: string[] = [];
+    const onPath = new Set<string>();
+    let currentId: string | undefined = run.runId;
+    let resolved: string | undefined;
+    while (currentId) {
+      if (rootIdByRunId.has(currentId)) {
+        resolved = rootIdByRunId.get(currentId);
+        break;
+      }
+      if (rootIds.has(currentId)) {
+        resolved = currentId;
+        break;
+      }
+      if (onPath.has(currentId)) {
+        resolved = undefined;
+        break;
+      }
+      onPath.add(currentId);
+      path.push(currentId);
+      const parentRunId = parentIdByRunId.get(currentId);
+      if (!parentRunId || !runsById.has(parentRunId)) {
+        resolved = currentId;
+        break;
+      }
+      currentId = parentRunId;
+    }
+    if (resolved !== undefined) rootIdByRunId.set(resolved, resolved);
+    for (const id of path) rootIdByRunId.set(id, resolved);
+  }
+
+  const descendantCountById = new Map<string, number>();
+  const subtreeRunningById = new Map<string, boolean>();
+  for (const run of runs) {
+    if (descendantCountById.has(run.runId)) continue;
+    const stack: { exiting: boolean; id: string }[] = [{ exiting: false, id: run.runId }];
+    const visiting = new Set<string>();
+    while (stack.length > 0) {
+      const frame = stack.pop();
+      if (!frame) break;
+      if (frame.exiting) {
+        visiting.delete(frame.id);
+        let count = 0;
+        let running = runsById.get(frame.id)?.status === "running";
+        for (const child of childrenByParentId.get(frame.id) ?? EMPTY_STUDIO_RUNS) {
+          const childCount = descendantCountById.get(child.runId);
+          if (childCount === undefined) continue;
+          count += 1 + childCount;
+          running = running || subtreeRunningById.get(child.runId) === true;
+        }
+        descendantCountById.set(frame.id, count);
+        subtreeRunningById.set(frame.id, running);
+        continue;
+      }
+      if (descendantCountById.has(frame.id) || visiting.has(frame.id)) continue;
+      visiting.add(frame.id);
+      stack.push({ exiting: true, id: frame.id });
+      for (const child of childrenByParentId.get(frame.id) ?? EMPTY_STUDIO_RUNS) {
+        if (!descendantCountById.has(child.runId) && !visiting.has(child.runId)) {
+          stack.push({ exiting: false, id: child.runId });
+        }
+      }
+    }
+  }
+
+  function runById(runId: string | null | undefined) {
+    return runId == null ? undefined : runsById.get(runId);
+  }
+  function childrenOf(runId: string): readonly StoredPipelineRun[] {
+    return childrenByParentId.get(runId) ?? EMPTY_STUDIO_RUNS;
+  }
+  function ancestorsOf(runId: string | null | undefined) {
+    const ancestors: StoredPipelineRun[] = [];
+    const seen = new Set<string>();
+    let current = runById(runId);
+    while (current) {
+      const parentRunId = parentIdByRunId.get(current.runId);
+      if (!parentRunId || seen.has(parentRunId)) break;
+      seen.add(parentRunId);
+      const parent = runsById.get(parentRunId);
+      if (!parent) break;
+      ancestors.unshift(parent);
+      current = parent;
+    }
+    return ancestors;
+  }
+  function descendantsOf(runId: string): StoredPipelineRun[] {
+    const result: StoredPipelineRun[] = [];
+    const seen = new Set<string>([runId]);
+    const stack = childrenOf(runId).slice().reverse();
+    while (stack.length > 0) {
+      const child = stack.pop();
+      if (!child || seen.has(child.runId)) continue;
+      seen.add(child.runId);
+      result.push(child);
+      const nested = childrenByParentId.get(child.runId);
+      if (!nested) continue;
+      for (let index = nested.length - 1; index >= 0; index -= 1) {
+        const next = nested[index];
+        if (next) stack.push(next);
+      }
+    }
+    return result;
+  }
+  function matchingRootIds(query: string): ReadonlySet<string> {
+    const needle = query.toLowerCase();
+    const matched = new Set<string>();
+    if (!needle) {
+      for (const root of roots) matched.add(root.runId);
+      return matched;
+    }
+    for (const run of runs) {
+      if (
+        !run.pipelineId.toLowerCase().includes(needle) &&
+        !run.runId.toLowerCase().includes(needle)
+      ) {
+        continue;
+      }
+      const rootId = rootIdByRunId.get(run.runId);
+      if (rootId) matched.add(rootId);
+    }
+    return matched;
+  }
+
+  return {
+    roots,
+    ancestorsOf,
+    childrenOf,
+    descendantCount(runId: string) {
+      return descendantCountById.get(runId) ?? 0;
+    },
+    descendantsOf,
+    matchingRootIds,
+    rootRunId(runId: string | null | undefined) {
+      return runId == null ? runId : (rootIdByRunId.get(runId) ?? runId);
+    },
+    runById,
+    subtreeIsRunning(runId: string) {
+      return subtreeRunningById.get(runId) === true;
+    },
+  };
 }
 
 /** Browser client for the local studio page. Compiled JS is inlined into the served HTML. */
 export function initStudio(): void {
   const state: StudioState = {
     snapshot: null,
+    runIndex: createStudioRunIndex([]),
     detail: null,
     detailFingerprint: null,
     commands: [],
@@ -554,7 +742,7 @@ export function initStudio(): void {
   }
   function runRow(run: StoredPipelineRun) {
     const activeStep = run.steps.find((step) => step.status === "running");
-    const nestedCount = descendantsOf(run.runId).length;
+    const nestedCount = state.runIndex.descendantCount(run.runId);
     const activity =
       run.status === "running"
         ? '<div class="run-activity"><strong>' +
@@ -779,7 +967,7 @@ export function initStudio(): void {
       ? '<div class="section-title"><span>Nested runs</span><span>' +
         children.length +
         " direct · " +
-        descendantsOf(run.runId).length +
+        state.runIndex.descendantCount(run.runId) +
         ' total</span></div><div class="nested-runs">' +
         children
           .map(
@@ -795,8 +983,8 @@ export function initStudio(): void {
               " · " +
               child.steps.length +
               " steps" +
-              (descendantsOf(child.runId).length
-                ? " · " + descendantsOf(child.runId).length + " nested"
+              (state.runIndex.descendantCount(child.runId)
+                ? " · " + state.runIndex.descendantCount(child.runId) + " nested"
                 : "") +
               "</small></button>"
           )
@@ -880,63 +1068,34 @@ export function initStudio(): void {
       "</div></article>"
     );
   }
-  function runById(runId: string | null | undefined) {
-    return state.snapshot?.runs.find((run) => run.runId === runId);
-  }
-  function childrenOf(runId: string): StoredPipelineRun[] {
-    return (state.snapshot?.runs ?? [])
-      .filter((run) => run.parentRunId === runId)
-      .sort((left, right) => right.startedAtMs - left.startedAtMs);
-  }
-  function descendantsOf(runId: string, seen: Set<string> = new Set()): StoredPipelineRun[] {
-    if (seen.has(runId)) return [];
-    seen.add(runId);
-    return childrenOf(runId)
-      .filter((child) => !seen.has(child.runId))
-      .flatMap((child) => [child, ...descendantsOf(child.runId, seen)]);
+  function childrenOf(runId: string) {
+    return state.runIndex.childrenOf(runId);
   }
   function ancestorsOf(runId: string | null | undefined) {
-    const ancestors: StoredPipelineRun[] = [];
-    const seen = new Set<string>();
-    let current = runById(runId);
-    while (current?.parentRunId && !seen.has(current.parentRunId)) {
-      seen.add(current.parentRunId);
-      const parent = runById(current.parentRunId);
-      if (!parent) break;
-      ancestors.unshift(parent);
-      current = parent;
-    }
-    return ancestors;
+    return state.runIndex.ancestorsOf(runId);
   }
   function rootRunId(runId: string | null | undefined) {
-    return ancestorsOf(runId).at(0)?.runId || runId;
+    return state.runIndex.rootRunId(runId);
   }
   function renderRuns() {
-    const query = state.query.toLowerCase();
-    const roots = (state.snapshot?.runs ?? [])
-      .filter((run) => !run.parentRunId || !runById(run.parentRunId))
-      .filter(
-        (run) =>
-          !query ||
-          [run, ...descendantsOf(run.runId)].some(
-            (candidate) =>
-              candidate.pipelineId.toLowerCase().includes(query) ||
-              candidate.runId.toLowerCase().includes(query)
-          )
-      )
+    const matchedRoots = state.query ? state.runIndex.matchingRootIds(state.query) : null;
+    const roots = state.runIndex.roots
+      .filter((run) => !matchedRoots || matchedRoots.has(run.runId))
       .sort(
         (left, right) =>
-          Number([right, ...descendantsOf(right.runId)].some((run) => run.status === "running")) -
-            Number([left, ...descendantsOf(left.runId)].some((run) => run.status === "running")) ||
+          Number(state.runIndex.subtreeIsRunning(right.runId)) -
+            Number(state.runIndex.subtreeIsRunning(left.runId)) ||
           right.startedAtMs - left.startedAtMs
       );
     if (!state.selectedRunId || !roots.some((run) => run.runId === rootRunId(state.selectedRunId)))
       state.selectedRunId = roots[0]?.runId ?? null;
     const selected = state.detail?.run?.runId === state.selectedRunId ? state.detail.run : null;
-    const activeRuns = roots.filter((root) =>
-      [root, ...descendantsOf(root.runId)].some((run) => run.status === "running")
-    );
-    const historicalRuns = roots.filter((root) => !activeRuns.includes(root));
+    const activeRuns: StoredPipelineRun[] = [];
+    const historicalRuns: StoredPipelineRun[] = [];
+    for (const root of roots) {
+      if (state.runIndex.subtreeIsRunning(root.runId)) activeRuns.push(root);
+      else historicalRuns.push(root);
+    }
     const activeList = activeRuns.length
       ? '<div class="run-group">Running now · ' +
         activeRuns.length +
@@ -1018,8 +1177,7 @@ export function initStudio(): void {
     else renderRuns();
   }
   function selectedRunFingerprint() {
-    const run =
-      state.snapshot && state.snapshot.runs.find((item) => item.runId === state.selectedRunId);
+    const run = state.runIndex.runById(state.selectedRunId);
     return run ? [run.runId, run.eventCount, run.status].join(":") : null;
   }
   async function loadSelectedRunDetail() {
@@ -1065,7 +1223,10 @@ export function initStudio(): void {
     try {
       const response = await fetch("/api/snapshot", { cache: "no-store" });
       if (!response.ok) throw new Error("Snapshot request failed");
-      state.snapshot = await response.json();
+      // SAFETY: The snapshot endpoint returns a studio snapshot with a runs array.
+      const snapshot = (await response.json()) as StudioSnapshot;
+      state.snapshot = snapshot;
+      state.runIndex = createStudioRunIndex(snapshot.runs);
       render();
       await loadSelectedRunDetail();
       setConnected(true);

@@ -26,6 +26,22 @@ function formatWithOxfmt(contents, filepath) {
   return result.stdout;
 }
 
+const ALLOWED_CLIENT_EXPORTS = new Set(["createStudioRunIndex", "initStudio"]);
+
+function exportedNamesFromLine(line) {
+  const fn = /^export function ([A-Za-z_$][\w$]*)\b/.exec(line);
+  if (fn) return [fn[1]];
+  const named = /^export \{([^}]+)\};?\s*$/.exec(line);
+  if (!named) return null;
+  const names = [];
+  for (const part of named[1].split(",")) {
+    const name = part.trim();
+    if (!name || !/^[A-Za-z_$][\w$]*$/.test(name)) return null;
+    names.push(name);
+  }
+  return names;
+}
+
 /** Strip module syntax from tsc output so the client can run as an inline script. */
 export function compiledClientSource(js) {
   const withoutMaps = js.replace(/^\uFEFF?\/\/# sourceMappingURL=.*\r?\n?/gm, "");
@@ -33,14 +49,23 @@ export function compiledClientSource(js) {
     throw new Error("Compiled studio client still contains import; cannot inline.");
   }
   const exportLines = [...withoutMaps.matchAll(/^export .*$/gm)].map((match) => match[0]);
+  const exported = [];
+  for (const line of exportLines) {
+    const names = exportedNamesFromLine(line);
+    if (!names || names.length === 0) {
+      throw new Error("Compiled studio client still contains export; cannot inline.");
+    }
+    exported.push(...names);
+  }
+  const unique = new Set(exported);
   if (
-    exportLines.length !== 1 ||
-    (exportLines[0] !== "export { initStudio };" &&
-      !/^export function initStudio\b/.test(exportLines[0] ?? ""))
+    exported.filter((name) => name === "initStudio").length !== 1 ||
+    unique.size !== exported.length ||
+    [...unique].some((name) => !ALLOWED_CLIENT_EXPORTS.has(name))
   ) {
     throw new Error("Compiled studio client still contains export; cannot inline.");
   }
-  const stripped = withoutMaps.replace(/^export /gm, "");
+  const stripped = withoutMaps.replace(/^export \{[^}]+\};?\s*\n?/gm, "").replace(/^export /gm, "");
   let source = stripped.replace(/\s+$/u, "");
   if (!/\ninitStudio\(\);\s*$/.test(source)) source += "\ninitStudio();";
   return `${source}\n`;
