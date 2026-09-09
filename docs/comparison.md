@@ -18,7 +18,7 @@ and preview you get without writing it yourself.
 | Declared targets and partial rerun      | Yes                        | If you write it | No      | No                    |
 | Child pipelines and fan-out             | Yes                        | If you write it | No      | Nested tasks          |
 | Inspect / plan / graph / run CLI        | Yes (Bun)                  | No              | No      | TTY task renderer     |
-| Local run history                       | Optional SQLite            | No              | No      | No                    |
+| Local run history                       | Optional SQLite or NDJSON  | No              | No      | No                    |
 | Crash-resume the graph                  | No (file checkpoints only) | If you write it | No      | No                    |
 
 Roll your own `await` / `Promise.all` is enough for two or three linear steps

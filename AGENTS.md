@@ -8,7 +8,7 @@
 - Keep executable examples on public package imports; they compile in CI.
 - Do not edit `docs/api-reference.md` or `docs/api-report.json` manually. Run
   `bun run api:generate` after intentional public declaration changes.
-- Update the recipe index, project catalog, and agent guidance when behavior or
+- Update the recipe index, project manifest, and agent guidance when behavior or
   recommended usage changes.
 - The public website lives in `website/` and is not part of the npm package.
   Rebuild it when human-facing docs or recommended usage change.

@@ -1,24 +1,35 @@
 import { parseArgs } from "node:util";
+import type { PipelinePlan } from "./pipeline.js";
 import { renderPipelinePlan } from "./render.js";
+import { loadPlanSourceTarget } from "./workbench-project-loader.js";
 import {
-  loadPlanSource,
   TUBELESS_WORKBENCH_EXIT_CODE,
+  writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
 import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 const INSPECT_USAGE = `Usage: tubeless inspect [options] <pipeline-or-command-file>
 
-Show pipeline identity plus the default structural plan.
+Show a registered id or exported pipeline's identity plus the default structural plan.
 
 Options:
   -e, --export <name>   Select a pipeline or command export when the file has more than one
+  -p, --project <path>  Resolve a registered id from this project manifest
       --json            Emit identity and the default plan as JSON
   -h, --help            Show this help
 `;
 
 function list(values: readonly string[]): string {
   return values.length > 0 ? values.join(", ") : "none";
+}
+
+interface WorkbenchInspection {
+  commandId?: string;
+  pipelineId: string;
+  plan: PipelinePlan;
+  stepIds: string[];
+  targetIds: string[];
 }
 
 function parseInspectArgs(argv: readonly string[]) {
@@ -29,6 +40,7 @@ function parseInspectArgs(argv: readonly string[]) {
       export: { type: "string", short: "e" },
       help: { type: "boolean", short: "h" },
       json: { type: "boolean" },
+      project: { type: "string", short: "p" },
     },
     strict: true,
   });
@@ -46,9 +58,17 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
         message: "Pass exactly one pipeline or command file.",
       },
       async run(parsed, commandIo) {
-        const loaded = await loadPlanSource(
+        if (parsed.values.export !== undefined && parsed.values.project !== undefined) {
+          return writeUsageError(
+            commandIo,
+            "--export cannot be combined with --project; the manifest owns export selection.",
+            INSPECT_USAGE
+          );
+        }
+        const loaded = await loadPlanSourceTarget(
           parsed.positionals[0]!,
           parsed.values.export,
+          parsed.values.project,
           commandIo
         );
         if ("exitCode" in loaded) return loaded.exitCode;
@@ -57,23 +77,20 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
           loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
         const plan = view.plan();
         if (parsed.values.json) {
-          commandIo.stdout.write(
-            `${JSON.stringify(
-              {
-                pipelineId: view.id,
-                targetIds: [...view.targetIds],
-                stepIds: [...view.stepIds],
-                plan,
-              },
-              null,
-              2
-            )}\n`
-          );
+          const inspection: WorkbenchInspection = {
+            pipelineId: view.id,
+            targetIds: [...view.targetIds],
+            stepIds: [...view.stepIds],
+            plan,
+          };
+          if (loaded.registration) inspection.commandId = loaded.registration.id;
+          commandIo.stdout.write(`${JSON.stringify(inspection, null, 2)}\n`);
           return TUBELESS_WORKBENCH_EXIT_CODE.success;
         }
 
         commandIo.stdout.write(
           [
+            ...(loaded.registration ? [`Command ${loaded.registration.id}`] : []),
             `Pipeline ${view.id}`,
             `Targets: ${list(view.targetIds)}`,
             `Exact steps: ${list(view.stepIds)}`,

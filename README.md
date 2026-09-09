@@ -66,16 +66,16 @@ graph.
 ## Inspect, plan, or run
 
 ```sh
-bunx tubeless inspect ./pipelines/my-pipeline.ts
-bunx tubeless plan ./pipelines/my-pipeline.ts --target publish --explain
-bunx tubeless graph ./pipelines/my-pipeline.ts --markdown
-bunx tubeless run ./pipelines/my-command.ts -- --source input.json --target publish
+bunx tubeless list # reads ./tubeless.project.ts
+bunx tubeless inspect import-rows
+bunx tubeless run import-rows -- --source input.json
 ```
 
-The CLI loads TypeScript modules with Bun. `inspect`, `plan`, and `graph`
-accept a pipeline or a `definePipelineCommand` export. `run` executes only a
-command export; application flags go after `--`. `history` lists recorded
-`--store` runs without opening the studio. See
+The project manifest explicitly registers stable command IDs, module paths, and
+execution cwd without scanning the filesystem. The CLI loads TypeScript modules
+with Bun; existing file-oriented commands remain available. Application flags
+go after `--`. `history` lists recorded
+`--store` runs or reads a finished `--trace` artifact without opening the studio. See
 [the CLI](./docs/cli.md) and [the local studio](./docs/studio.md).
 
 ## Choose the right pattern

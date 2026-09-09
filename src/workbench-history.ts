@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import {
   createPipelineRunProjector,
   type PipelineRunEventQuery,
-  type PipelineRunEventStore,
+  type PipelineRunEventReader,
   type StoredPipelineEvent,
   type StoredPipelineRun,
 } from "./run-store.js";
@@ -20,10 +20,11 @@ import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 const HISTORY_USAGE = `Usage: tubeless history [options] [run-id]
 
-Show recorded pipeline runs from the local SQLite store.
+Show recorded pipeline runs from SQLite or an NDJSON trace.
 
 Options:
       --store <path>    SQLite database (default: .tubeless/runs.sqlite)
+      --trace <path>    Read a finished NDJSON trace artifact
       --json            Emit the projected run list or run as JSON
       --events          Emit raw store events as NDJSON
   -h, --help            Show this help
@@ -40,13 +41,14 @@ function parseHistoryArgs(argv: readonly string[]) {
       help: { type: "boolean", short: "h" },
       json: { type: "boolean" },
       store: { type: "string" },
+      trace: { type: "string" },
     },
     strict: true,
   });
 }
 
 async function forEachEventPage(
-  store: PipelineRunEventStore,
+  store: PipelineRunEventReader,
   query: PipelineRunEventQuery,
   onPage: (page: readonly StoredPipelineEvent[]) => void | Promise<void>
 ): Promise<number> {
@@ -71,6 +73,10 @@ interface HistoryRunSummary {
   status: StoredPipelineRun["status"];
 }
 
+function terminalSafeText(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, " ");
+}
+
 function summarizeRun(run: StoredPipelineRun): HistoryRunSummary {
   const summary: HistoryRunSummary = {
     pipelineId: run.pipelineId,
@@ -85,13 +91,13 @@ function summarizeRun(run: StoredPipelineRun): HistoryRunSummary {
 function formatRunListLine(run: StoredPipelineRun): string {
   const started = new Date(run.startedAtMs).toISOString();
   const duration = run.durationMs === undefined ? "" : `  ${run.durationMs}ms`;
-  return `${run.runId}  ${run.pipelineId}  ${run.status}  started ${started}${duration}`;
+  return `${terminalSafeText(run.runId)}  ${terminalSafeText(run.pipelineId)}  ${run.status}  started ${started}${duration}`;
 }
 
 function formatRunDetail(run: StoredPipelineRun): string {
   const lines = [
-    `Run ${run.runId}`,
-    `Pipeline ${run.pipelineId}`,
+    `Run ${terminalSafeText(run.runId)}`,
+    `Pipeline ${terminalSafeText(run.pipelineId)}`,
     `Status ${run.status}`,
     `Started ${new Date(run.startedAtMs).toISOString()}`,
   ];
@@ -99,14 +105,14 @@ function formatRunDetail(run: StoredPipelineRun): string {
   lines.push("", "Steps:");
   for (const step of run.steps) {
     const duration = step.durationMs === undefined ? "" : `  ${step.durationMs}ms`;
-    lines.push(`  ${step.id}  ${step.status}${duration}`);
+    lines.push(`  ${terminalSafeText(step.id)}  ${step.status}${duration}`);
   }
   lines.push("", "Logs:");
   for (const log of run.logs) {
-    lines.push(`  [${log.level}] ${log.message}`);
+    lines.push(`  [${log.level}] ${terminalSafeText(log.message)}`);
   }
   if (run.error) {
-    lines.push("", "Error:", `  ${run.error.code}  ${run.error.message}`);
+    lines.push("", "Error:", `  ${run.error.code}  ${terminalSafeText(run.error.message)}`);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -131,6 +137,9 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
         if (parsed.values.json && parsed.values.events) {
           return writeUsageError(commandIo, "Use --json or --events, not both.", HISTORY_USAGE);
         }
+        if (parsed.values.store && parsed.values.trace) {
+          return writeUsageError(commandIo, "Use --store or --trace, not both.", HISTORY_USAGE);
+        }
         if (parsed.positionals.length > 1) {
           return writeUsageError(commandIo, "Pass at most one run id.", HISTORY_USAGE);
         }
@@ -138,22 +147,29 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
         const runId = parsed.positionals[0];
         const filename = path.resolve(
           commandIo.cwd,
-          parsed.values.store ?? DEFAULT_PIPELINE_RUN_STORE
+          parsed.values.trace ?? parsed.values.store ?? DEFAULT_PIPELINE_RUN_STORE
         );
         try {
           await stat(filename);
         } catch {
-          commandIo.stderr.write(`Error: Run store not found at ${filename}\n`);
+          commandIo.stderr.write(
+            `Error: ${parsed.values.trace ? "Trace artifact" : "Run store"} not found at ${filename}\n`
+          );
           return TUBELESS_WORKBENCH_EXIT_CODE.load;
         }
 
-        const { openSqlitePipelineRunStore } = await import("./run-store-sqlite.js");
-        let store: PipelineRunEventStore;
+        let store: PipelineRunEventReader;
         try {
-          store = await openSqlitePipelineRunStore(filename, {
-            initialize: false,
-            readOnly: true,
-          });
+          if (parsed.values.trace) {
+            const { openNdjsonPipelineRunStore } = await import("./run-store-ndjson.js");
+            store = await openNdjsonPipelineRunStore(filename);
+          } else {
+            const { openSqlitePipelineRunStore } = await import("./run-store-sqlite.js");
+            store = await openSqlitePipelineRunStore(filename, {
+              initialize: false,
+              readOnly: true,
+            });
+          }
         } catch (error) {
           commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
           return TUBELESS_WORKBENCH_EXIT_CODE.load;

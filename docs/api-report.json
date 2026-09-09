@@ -77,7 +77,7 @@
         "toMappedChildStepProgress",
         "ToMappedChildStepProgressOptions"
       ],
-      "sha256": "66b0efe2de8b8e6c690103168476ece579dfd28161c2cbeaa4c2ce1f67c26c71",
+      "sha256": "b7d8e154dcc971ed83297c2c55ac7fbe101f3bc4b3c98bff0834397c0e69a535",
       "specifier": "tubeless"
     },
     {
@@ -133,7 +133,7 @@
         "PromptMultiSelectOptions",
         "TUBELESS_WORKBENCH_EXIT_CODE"
       ],
-      "sha256": "712f31f9ca366b232ffbaf04b6704d170b3dfa4a0e2f5ae6abbbf920c7dfcbe8",
+      "sha256": "bbf83003d65ca161724b4e319b0d383e823e7f377713aa156d2c67a7c8356b4e",
       "specifier": "tubeless/cli"
     },
     {
@@ -167,7 +167,7 @@
         "renderPipelineError",
         "renderPipelinePlan"
       ],
-      "sha256": "c753998ec61846459e963b7011d3f43bd2bf2f130b4aab33ec56eca94f5e8854",
+      "sha256": "a280084c23b45907e1aaf6389609d5b770cd2a7a0787fdbaf26e0bc42099a5a4",
       "specifier": "tubeless/render"
     },
     {
@@ -187,7 +187,7 @@
         "RunReporterConfig",
         "RunReporterOptions"
       ],
-      "sha256": "df28e5f7215bb6fb23874c89b4492c54757615445406d568f53c36fa148153ea",
+      "sha256": "a88dc6f5174328b91975209fbe6b55b621222268e3535691528a055495cff37c",
       "specifier": "tubeless/reporter"
     },
     {
@@ -201,6 +201,7 @@
       "exports": [
         "createPipelineRunProjector",
         "PipelineRunEventQuery",
+        "PipelineRunEventReader",
         "PipelineRunEventStore",
         "PipelineRunProjector",
         "PipelineRunStoreSnapshot",
@@ -217,7 +218,7 @@
         "StoredPipelineStep",
         "StoredRemote"
       ],
-      "sha256": "2d3bbeaa85fd1d18c2556023ba7dea05e6bfcb8feb92d692e27d79e7dc843558",
+      "sha256": "695364cdd0c537b9b5ed7b5633be89424d0a51b451c4137953a51d9049153c00",
       "specifier": "tubeless/run-store"
     },
     {
@@ -227,8 +228,18 @@
         "OpenSqlitePipelineRunStoreOptions",
         "SqlitePipelineRunStore"
       ],
-      "sha256": "7ec3284782c326c73f0c09ffaeada79a63947ceeb404596facd15304a263ea62",
+      "sha256": "f8311e5c3695c7bf051391b17ce8e8e39dc6a11cb1834ea7345a72a0bb77610f",
       "specifier": "tubeless/run-store/sqlite"
+    },
+    {
+      "declaration": "./dist/run-store-ndjson.d.ts",
+      "exports": [
+        "NdjsonPipelineRunStore",
+        "openNdjsonPipelineRunStore",
+        "OpenNdjsonPipelineRunStoreOptions"
+      ],
+      "sha256": "55403d98773eca759f8c4f2b0f4e95dd86187efe3f005c2ca5aeecc1e76e6e85",
+      "specifier": "tubeless/run-store/ndjson"
     },
     {
       "declaration": "./dist/workbench-studio.d.ts",
@@ -240,8 +251,21 @@
         "PipelineStudioConfig",
         "PipelineStudioConfigInput"
       ],
-      "sha256": "788cf3d69799227df3deba5af2df33aad6832cfea9bbee7d78ef04e19a8d33e6",
+      "sha256": "4a7281c6cb6ac61bc980f5255edfe2955067122798094c3503cc31c0e2b7a3ca",
       "specifier": "tubeless/workbench/studio"
+    },
+    {
+      "declaration": "./dist/workbench-project.d.ts",
+      "exports": [
+        "definePipelineProject",
+        "isPipelineProjectManifest",
+        "PIPELINE_PROJECT_MANIFEST_VERSION",
+        "PipelineProjectCommandModule",
+        "PipelineProjectManifest",
+        "PipelineProjectManifestInput"
+      ],
+      "sha256": "f1ae252104509114296130608a3855d14b366c7148089d65e02a5a181f46d714",
+      "specifier": "tubeless/workbench/project"
     },
     {
       "declaration": "./dist/run-store-ui.d.ts",
@@ -256,7 +280,7 @@
         "PipelineRunStudioServer",
         "startPipelineRunStudio"
       ],
-      "sha256": "fd00451c89652552a11ace32fdabaf255b98e2e42ea09d0e6c79c4b96a841644",
+      "sha256": "d2391bf9db44183cd1c021d554538f2df3583ff398911353084f4089be38e729",
       "specifier": "tubeless/run-store/ui"
     },
     {
@@ -270,12 +294,13 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "0b67c424870ed075f8d24368b92f8562ebcef2a6952ac7a6758703e7574daef8",
+      "sha256": "bc373957d3e2139f3559293c43d10c81d2d6a894a7db819451c7bb9ea1367477",
       "specifier": "tubeless/testing"
     },
     {
       "declaration": "./dist/tracing.d.ts",
       "exports": [
+        "composeTraceExporters",
         "PipelineTraceAttributes",
         "PipelineTraceAttributeValue",
         "PipelineTraceContext",
@@ -285,13 +310,13 @@
         "PipelineTraceExporter",
         "PipelineTracingOptions"
       ],
-      "sha256": "66b0efe2de8b8e6c690103168476ece579dfd28161c2cbeaa4c2ce1f67c26c71",
+      "sha256": "b7d8e154dcc971ed83297c2c55ac7fbe101f3bc4b3c98bff0834397c0e69a535",
       "specifier": "tubeless/tracing"
     },
     {
       "declaration": "./dist/tracing-json.d.ts",
       "exports": ["createJsonTraceExporter", "JsonTraceExporterOptions"],
-      "sha256": "5e30e789914f8ac6c2cf32458e966a47a61dfba61ee0971cbe1a01369203be48",
+      "sha256": "9a5ffef1297a04f2564b3d226b0e83e1f753039d91da9df3c6239c33ba78aed5",
       "specifier": "tubeless/tracing/json"
     },
     {
@@ -302,7 +327,7 @@
         "OpenTelemetryLikeTracer",
         "OpenTelemetryTraceExporterOptions"
       ],
-      "sha256": "05340ec88223bd67455368826d30b5497be2c1de4d6d205563556d64c31ebd3e",
+      "sha256": "680024a30fc5c9079f7edb12f33efeed45c4bd89be9b6280a42a229d5d713175",
       "specifier": "tubeless/tracing/otel"
     }
   ],

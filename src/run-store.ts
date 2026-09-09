@@ -29,15 +29,18 @@ export interface PipelineRunEventQuery {
   limit?: number;
 }
 
+/** Read-only event source consumed by run history and the local studio. */
+export interface PipelineRunEventReader {
+  close(): void | Promise<void>;
+  listEvents(query?: PipelineRunEventQuery): Promise<readonly StoredPipelineEvent[]>;
+}
+
 /**
  * Append-only persistence boundary used by the local studio.
  * SQLite `export()` may return before the row is durable; call `flush()` or
  * `close()` before another connection can observe the tail.
  */
-export interface PipelineRunEventStore extends PipelineTraceExporter {
-  close(): void | Promise<void>;
-  listEvents(query?: PipelineRunEventQuery): Promise<readonly StoredPipelineEvent[]>;
-}
+export interface PipelineRunEventStore extends PipelineRunEventReader, PipelineTraceExporter {}
 
 export type StoredPipelineRunStatus = PipelineRunStatus | "running";
 

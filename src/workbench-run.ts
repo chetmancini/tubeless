@@ -7,14 +7,14 @@ import type { PipelineContext } from "./pipeline.js";
 import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import { renderPipelineError } from "./render.js";
 import type { PipelineRunEventStore } from "./run-store.js";
-import type { PipelineTraceExporter } from "./tracing.js";
+import { composeTraceExporters, type PipelineTraceExporter } from "./tracing.js";
+import { loadPipelineCommandTarget } from "./workbench-project-loader.js";
 import {
   commandContext,
   errorMessage,
   isCliHelpRequested,
   isCliValidationError,
   isPipelineExecutionError,
-  loadPipelineCommand,
   manageWorkbenchSignal,
   TUBELESS_WORKBENCH_EXIT_CODE,
   toExitCode,
@@ -25,10 +25,11 @@ import {
 
 const RUN_USAGE = `Usage: tubeless run [options] <command-file> [-- <command-args...>]
 
-Execute an exported definePipelineCommand using its own validated CLI contract.
+Execute a registered id or exported definePipelineCommand using its validated CLI contract.
 
 Options:
   -e, --export <name>   Select a command export when the file has more than one
+  -p, --project <path>  Resolve a registered id from this project manifest
       --store <path>    Append run events to a local SQLite database
       --trace <path>    Write NDJSON traces to a file, or - for stdout
                         (command output then goes to stderr)
@@ -49,6 +50,7 @@ function parseRunArgs(argv: readonly string[]) {
       options: {
         export: { type: "string", short: "e" },
         help: { type: "boolean", short: "h" },
+        project: { type: "string", short: "p" },
         store: { type: "string" },
         trace: { type: "string" },
       },
@@ -146,9 +148,18 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
     return writeUsageError(io, "Pass exactly one pipeline command file.", RUN_USAGE);
   }
 
-  const loaded = await loadPipelineCommand(
+  if (parsed.parsed.values.export !== undefined && parsed.parsed.values.project !== undefined) {
+    return writeUsageError(
+      io,
+      "--export cannot be combined with --project; the manifest owns export selection.",
+      RUN_USAGE
+    );
+  }
+
+  const loaded = await loadPipelineCommandTarget(
     parsed.parsed.positionals[0]!,
     parsed.parsed.values.export,
+    parsed.parsed.values.project,
     io
   );
   if ("exitCode" in loaded) return loaded.exitCode;
@@ -192,7 +203,10 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
       exporters.length > 0
         ? { tracing: { exporter: composeTraceExporters(exporters) } }
         : undefined;
-    const commandIo = parsed.parsed.values.trace === "-" ? { ...io, stdout: io.stderr } : io;
+    const commandIo =
+      parsed.parsed.values.trace === "-"
+        ? { ...loaded.commandIo, stdout: loaded.commandIo.stderr }
+        : loaded.commandIo;
     exitCode = await executePipelineCommand(
       loaded.command,
       parsed.commandArgs,
@@ -223,41 +237,6 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
     managedSignal?.cleanup();
   }
   return exitCode;
-}
-
-function composeTraceExporters(exporters: readonly PipelineTraceExporter[]): PipelineTraceExporter {
-  if (exporters.length === 1) return exporters[0]!;
-  const failed = new WeakSet<PipelineTraceExporter>();
-  let lastError: unknown;
-  const invokeHealthy = async (
-    invoke: (exporter: PipelineTraceExporter) => void | Promise<void>
-  ): Promise<void> => {
-    let succeeded = 0;
-    let roundError: unknown;
-    for (const exporter of exporters) {
-      if (failed.has(exporter)) continue;
-      try {
-        await invoke(exporter);
-        succeeded += 1;
-      } catch (error) {
-        failed.add(exporter);
-        lastError = error;
-        roundError ??= error;
-      }
-    }
-    if (succeeded === 0) {
-      const error = roundError ?? lastError;
-      if (error !== undefined) throw error;
-    }
-  };
-  return {
-    export(event) {
-      return invokeHealthy((exporter) => exporter.export(event));
-    },
-    flush() {
-      return invokeHealthy((exporter) => exporter.flush?.());
-    },
-  };
 }
 
 async function createRunTraceWriter(

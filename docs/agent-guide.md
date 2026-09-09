@@ -7,7 +7,7 @@ or shared helpers in this repository.
 
 1. Read the [recipe index](./recipes.md) and open the smallest matching example.
 2. Copy file layout and stable IDs from the
-   [project catalog](../examples/catalog/tubeless.studio.ts).
+   [project manifest](../examples/catalog/tubeless.project.ts).
 3. Declare stable IDs and operational descriptions. Add `name` only when printed
    output needs a friendlier display name.
 4. Model data dependencies before failure policy or CLI concerns.
@@ -64,18 +64,21 @@ or shared helpers in this repository.
   simulate planning with `--plan`.
 - Use `pipeline.toMermaid()` or `command.toMermaid()` when documentation needs
   the static graph; do not duplicate dependency edges by hand.
-- Use `tubeless inspect <pipeline-or-command-file>` for a module inventory,
+- Use `tubeless list` for the explicit project command inventory. Use
+  `tubeless inspect <registered-id>` for a registered module inventory,
   `tubeless plan` to preview selection without domain options or execution, and
   `tubeless graph` when generating documentation. `inspect`, `plan`, and `graph`
   accept a pipeline or a marked command and prefer the command when both are
   exported. Let the workbench discover the sole matching export or pass
   `--export`.
-- Use `tubeless run <command-file> -- <command-args>` only for modules exporting a
+- Use `tubeless run <registered-id> -- <command-args>` for project commands, or
+  the existing file form only for modules exporting a
   `definePipelineCommand`. Keep application flags after `--`; the command must
   continue to own domain validation and option mapping. Pass `--trace <path>` for
   NDJSON traces (`-` writes NDJSON to stdout and moves command output to stderr)
   and `--store` for SQLite; they compose. Use `tubeless history` to list or show
-  recorded runs.
+  recorded runs from SQLite, or pass `--trace` to inspect a finished NDJSON
+  artifact without importing it.
 
 ## Runtime rules
 
@@ -133,10 +136,16 @@ or shared helpers in this repository.
   specific step outputs. Use a plain finalizer only when partial output is a
   valid domain result.
 - Preserve the dependency-free runtime. Keep application telemetry SDKs at the
-  exporter boundary.
+  exporter boundary. Use `composeTraceExporters` from `tubeless/tracing` when
+  one run must fan out to multiple destinations; a failed destination is retired
+  while healthy exporters keep receiving events.
 - Keep durable local observation opt-in. Use the append-only adapter from
   `tubeless/run-store/sqlite` or `tubeless run --store`; inspect recorded runs
-  with `tubeless history`. `tubeless history` inspects a finished artifact and
+  with `tubeless history`. Use the strictly read-only adapter from
+  `tubeless/run-store/ndjson`, `tubeless history --trace`, or the `--trace`
+  option to `tubeless ui` for a finished portable trace. Treat trace files as sensitive: logs,
+  errors, and attributes are displayed as recorded, and malformed or oversized
+  artifacts are rejected. `tubeless history` inspects a finished artifact and
   refuses a store with a live writer or multiple hard links. SQLite `export()`
   may return before the row is on disk. Other connections cannot see that tail
   until a batch of 64, `flush()`, same-instance `listEvents`/`clearHistory`, or
@@ -160,9 +169,10 @@ or shared helpers in this repository.
   when joining an external execution tree. Do not derive correlation from step
   IDs or timestamps.
 - Treat `tubeless ui` as a local projection with no execution capability by
-  default. Use `definePipelineStudio` for a checked-in command catalog, and
-  register only explicit `definePipelineCommand` modules; never make execution
-  require the studio server or infer executable modules from observed history.
+  default. Use `definePipelineProject` for a checked-in command catalog with
+  stable registered IDs, and register only explicit `definePipelineCommand`
+  modules; never make execution require the studio server or infer executable
+  modules from observed history.
   Every studio request, including reads, must send a `Host` that matches the
   bound authority, or, on a wildcard bind, `localhost` or a literal IP on the
   same port. Browser plan, launch, cancel, and clear-history also send
@@ -188,15 +198,15 @@ or shared helpers in this repository.
 ## Required references
 
 - Read [core concepts](./concepts.md) for skip, failure, or selection changes.
-- Read [the CLI](./cli.md) for inspect, plan, graph, run, history, and exit codes.
-- Read [the studio](./studio.md) before changing `tubeless ui` or
-  `definePipelineStudio`.
+- Read [the CLI](./cli.md) for list, inspect, plan, graph, run, history, and exit codes.
+- Read [the studio](./studio.md) before changing `tubeless ui`,
+  `definePipelineProject`, or `definePipelineStudio` compatibility.
 - Read [child composition](./child-pipeline-composition.md) before changing child
   propagation, progress, or parent/child selection.
 - Read the relevant executable example linked from the
   [recipe index](./recipes.md) before writing new usage.
 - Copy consumer layout, export names, and IDs from the
-  [project catalog](../examples/catalog/tubeless.studio.ts).
+  [project manifest](../examples/catalog/tubeless.project.ts).
 - Use the [generated API inventory](./api-reference.md) only to verify exports;
   it is not implementation guidance.
 

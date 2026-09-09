@@ -1,7 +1,7 @@
 import { parseArgs } from "node:util";
 import { PIPELINE_MERMAID_DIRECTIONS, type PipelineMermaidDirection } from "./pipeline-types.js";
+import { loadPlanSourceTarget } from "./workbench-project-loader.js";
 import {
-  loadPlanSource,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
   type WorkbenchCliIo,
@@ -16,10 +16,11 @@ function isMermaidDirection(value: string): value is PipelineMermaidDirection {
 
 const GRAPH_USAGE = `Usage: tubeless graph [options] <pipeline-or-command-file>
 
-Generate Mermaid flowchart source from an exported tubeless pipeline or command.
+Generate Mermaid flowchart source from a registered or exported pipeline or command.
 
 Options:
   -e, --export <name>       Select a pipeline or command export when the file has more than one
+  -p, --project <path>      Resolve a registered id from this project manifest
   -d, --direction <value>   Flowchart direction: BT, LR, RL, TB, or TD (default: TD)
       --descriptions        Include step descriptions in node labels
       --markdown            Wrap the result in a fenced Mermaid Markdown block
@@ -36,6 +37,7 @@ function parseGraphArgs(argv: readonly string[]) {
       export: { type: "string", short: "e" },
       help: { type: "boolean", short: "h" },
       markdown: { type: "boolean" },
+      project: { type: "string", short: "p" },
     },
     strict: true,
   });
@@ -62,9 +64,18 @@ export async function runGraph(argv: readonly string[], io: WorkbenchCliIo): Pro
           );
         }
 
-        const loaded = await loadPlanSource(
+        if (parsed.values.export !== undefined && parsed.values.project !== undefined) {
+          return writeUsageError(
+            commandIo,
+            "--export cannot be combined with --project; the manifest owns export selection.",
+            GRAPH_USAGE
+          );
+        }
+
+        const loaded = await loadPlanSourceTarget(
           parsed.positionals[0]!,
           parsed.values.export,
+          parsed.values.project,
           commandIo
         );
         if ("exitCode" in loaded) return loaded.exitCode;

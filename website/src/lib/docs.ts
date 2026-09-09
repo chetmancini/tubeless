@@ -19,7 +19,7 @@ export const DOC_NAV = [
   { slug: "recipes", label: "Recipes", blurb: "Smallest compiled example for the job." },
   { slug: "concepts", label: "Concepts", blurb: "Skip, failure, selection, and dry-run." },
   { slug: "cli", label: "CLI", blurb: "inspect, plan, graph, run, and history." },
-  { slug: "studio", label: "Studio", blurb: "Local SQLite history and tubeless ui." },
+  { slug: "studio", label: "Studio", blurb: "Local SQLite or NDJSON history and tubeless ui." },
   { slug: "comparison", label: "Comparison", blurb: "What this is, and what it is not." },
   { slug: "child-pipeline-composition", label: "Child pipelines", blurb: "Nested pipelines and fan-out." },
   { slug: "remote-step-composition", label: "Remote steps", blurb: "Remote engines as parent steps." },

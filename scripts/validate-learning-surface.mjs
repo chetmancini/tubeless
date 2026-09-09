@@ -125,12 +125,12 @@ assert(
   "Agent guide must not send authors to a production pipeline outside this package"
 );
 assert(
-  agentGuide.includes("examples/catalog"),
-  "Agent guide must point authors at the project catalog"
+  agentGuide.includes("examples/catalog/tubeless.project.ts"),
+  "Agent guide must point authors at the project manifest"
 );
 assert(
-  recipes.includes("examples/catalog"),
-  "Recipe index must point authors at the project catalog"
+  recipes.includes("examples/catalog/tubeless.project.ts"),
+  "Recipe index must point authors at the project manifest"
 );
 const concepts = readFileSync(join(packageRoot, "docs", "concepts.md"), "utf8");
 const cliGuide = readFileSync(join(packageRoot, "docs", "cli.md"), "utf8");
@@ -159,12 +159,15 @@ assert(
   "CLI recipe must distinguish --step/--target flags from stepIds/targets values"
 );
 const catalog = readFileSync(
-  join(packageRoot, "examples", "catalog", "tubeless.studio.ts"),
+  join(packageRoot, "examples", "catalog", "tubeless.project.ts"),
   "utf8"
 );
 assert(
-  catalog.includes("--step/--target") && catalog.includes("stepIds") && catalog.includes("targets"),
-  "Project catalog must distinguish --step/--target flags from stepIds/targets values"
+  catalog.includes("--step/--target") &&
+    catalog.includes("stepIds") &&
+    catalog.includes("targets") &&
+    catalog.includes('id: "import-rows"'),
+  "Project manifest must declare stable IDs and distinguish --step/--target flags from stepIds/targets values"
 );
 for (const script of [
   "scripts/evaluate-agent-submission.mjs",
@@ -185,6 +188,7 @@ const requiredDocuments = [
   "docs/studio.md",
   "evals/agent-cases.json",
   "skills/tubeless/SKILL.md",
+  "examples/catalog/tubeless.project.ts",
   "examples/catalog/tubeless.studio.ts",
   "examples/catalog/pipelines/import.ts",
   "examples/catalog/pipelines/normalize.ts",

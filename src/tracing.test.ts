@@ -5,7 +5,7 @@ import {
   definePipeline,
   type PipelineLogger,
 } from "./pipeline.js";
-import type { PipelineTraceEvent } from "./tracing.js";
+import { composeTraceExporters, type PipelineTraceEvent } from "./tracing.js";
 
 function createLogger(): PipelineLogger & { warnings: string[] } {
   const warnings: string[] = [];
@@ -18,6 +18,51 @@ function createLogger(): PipelineLogger & { warnings: string[] } {
 }
 
 describe("pipeline tracing", () => {
+  it("composes exporters while retiring failed destinations", async () => {
+    const event = {
+      attributes: {},
+      name: "pipeline.started",
+      pipelineId: "composed",
+      runId: "run-1",
+      timestampMs: 1,
+      version: 1,
+    } satisfies PipelineTraceEvent;
+    const first = { export: vi.fn(), flush: vi.fn() };
+    const failed = {
+      export: vi.fn().mockRejectedValue(new Error("destination failed")),
+      flush: vi.fn(),
+    };
+    const composite = composeTraceExporters([first, failed]);
+
+    await composite.export(event);
+    await composite.export(event);
+    await composite.flush?.();
+
+    expect(first.export).toHaveBeenCalledTimes(2);
+    expect(first.flush).toHaveBeenCalledOnce();
+    expect(failed.export).toHaveBeenCalledOnce();
+    expect(failed.flush).not.toHaveBeenCalled();
+  });
+
+  it("reports failure when every composed exporter is retired", async () => {
+    const failure = new Error("destination failed");
+    const composite = composeTraceExporters([
+      { export: vi.fn().mockRejectedValue(failure) },
+      { export: vi.fn().mockRejectedValue(new Error("also failed")) },
+    ]);
+    const event = {
+      attributes: {},
+      name: "pipeline.started",
+      pipelineId: "composed",
+      runId: "run-1",
+      timestampMs: 1,
+      version: 1,
+    } satisfies PipelineTraceEvent;
+
+    await expect(composite.export(event)).rejects.toBe(failure);
+    await expect(composite.export(event)).rejects.toBeInstanceOf(Error);
+  });
+
   it("exports ordered lifecycle events with correlation, attempt, duration, and error data", async () => {
     const step = createSteps();
     const succeed = step("succeed", {

@@ -160,4 +160,5 @@ Continue with the [recipe index](./recipes.md), or read
 
 For untrusted boundary values, use the Standard Schema support in
 [`validated-boundaries.ts`](../examples/validated-boundaries.ts). Persist and
-inspect local runs with [the studio](./studio.md).
+inspect local runs with [the studio](./studio.md), or open a finished portable
+trace with `tubeless history --trace run.ndjson`.

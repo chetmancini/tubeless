@@ -166,6 +166,75 @@ describe("runUi", () => {
     );
   });
 
+  it("rejects launch registrations for a read-only NDJSON trace", async () => {
+    const directory = await tempDir();
+    const io = captureIo(directory);
+
+    expect(await runUi(["--trace", "run.ndjson", "--command", "pipeline.mjs"], io)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.usage
+    );
+    expect(io.errors.join("")).toContain(
+      "An NDJSON trace is read-only and cannot register launchable commands."
+    );
+
+    const malformedPath = path.join(directory, "malformed.ndjson");
+    await writeFile(malformedPath, '{"token":"do-not-echo"}\n');
+    const malformedIo = captureIo(directory);
+    expect(await runUi(["--trace", malformedPath], malformedIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(malformedIo.errors.join("")).toContain("line 1 is invalid");
+    expect(malformedIo.errors.join("")).not.toContain("do-not-echo");
+  });
+
+  it("serves an NDJSON trace with history-only capabilities", async () => {
+    const directory = await tempDir();
+    const tracePath = path.join(directory, "run.ndjson");
+    const events = [
+      {
+        attributes: { dry_run: false },
+        name: "pipeline.started",
+        pipelineId: "portable",
+        runId: "portable-run",
+        timestampMs: 1_700_000_000_000,
+        version: 1,
+      },
+      {
+        attributes: { status: "completed" },
+        durationMs: 5,
+        name: "pipeline.completed",
+        pipelineId: "portable",
+        runId: "portable-run",
+        timestampMs: 1_700_000_000_005,
+        version: 1,
+      },
+    ];
+    await writeFile(tracePath, `${events.map((event) => JSON.stringify(event)).join("\n")}\n`);
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), signal: controller.signal };
+    const pending = runUi(["--trace", tracePath, "--port", "0"], io);
+
+    try {
+      await vi.waitFor(() =>
+        expect(io.output.join("")).toContain("Tubeless local studio: http://")
+      );
+      expect(io.output.join("")).toContain(`Trace artifact: ${tracePath}`);
+      const url = studioUrl(io.output.join(""));
+      await expect(
+        fetch(`${url}/api/capabilities`).then((response) => response.json())
+      ).resolves.toEqual({ canCancel: false, canClearHistory: false });
+      await expect(
+        fetch(`${url}/api/snapshot`).then((response) => response.json())
+      ).resolves.toMatchObject({
+        runs: [expect.objectContaining({ runId: "portable-run", status: "completed" })],
+      });
+    } finally {
+      controller.abort();
+      await pending.catch(() => undefined);
+    }
+    await expect(pending).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+  });
+
   it("registers studio commands and clears launch bookkeeping after the run settles", async () => {
     const { directory, filePath } = await writeCommandFixture();
     await writeStudioConfig(directory);
@@ -175,7 +244,6 @@ describe("runUi", () => {
       ["--store", path.join(directory, "runs.sqlite"), "--port", "0", "config/tubeless.studio.mjs"],
       io
     );
-
     try {
       await vi.waitFor(() =>
         expect(io.output.join("")).toContain("Tubeless local studio: http://")

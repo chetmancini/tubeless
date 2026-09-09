@@ -1,7 +1,7 @@
 import {
   createPipelineRunProjector,
   type PipelineRunEventQuery,
-  type PipelineRunEventStore,
+  type PipelineRunEventReader,
   type PipelineRunStoreSnapshot,
   type StoredPipelineEvent,
 } from "./run-store.js";
@@ -24,7 +24,7 @@ export class PipelineRunStudioEventState {
   #operation: Promise<void> = Promise.resolve();
   #projector = createPipelineRunProjector({ retainLogs: false });
 
-  constructor(private readonly store: PipelineRunEventStore) {}
+  constructor(private readonly store: PipelineRunEventReader) {}
 
   #serialize<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.#operation.then(operation, operation);

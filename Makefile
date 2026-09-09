@@ -1,10 +1,11 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help verify inspect plan graph run ui require-file install build lint format \
+.PHONY: help list verify inspect plan graph run ui require-file install build lint format \
 	format-check typecheck test docs-check api-check api-generate eval-verify pack \
 	pack-verify tubeless check release release-notes website website-build
 
 export_arg = $(if $(strip $(EXPORT)),--export "$(EXPORT)",)
+project_arg = $(if $(strip $(PROJECT)),--project "$(PROJECT)",)
 store_arg = $(if $(strip $(STORE)),--store "$(STORE)",)
 port_arg = $(if $(strip $(PORT)),--port "$(PORT)",)
 ui_command_arg = $(if $(strip $(COMMAND)),--command "$(COMMAND)",)
@@ -17,7 +18,9 @@ help:
 	@echo "tubeless"
 	@echo
 	@echo "Pipeline tools"
-	@echo "  make verify FILE=path/to/module.ts [EXPORT=Name]"
+	@echo "  make list [PROJECT=path/to/tubeless.project.ts]"
+	@echo "      List explicitly registered project commands"
+	@echo "  make verify FILE=path/to/module.ts [EXPORT=Name] [PROJECT=manifest]"
 	@echo "      Load and verify a pipeline or command module; alias: make inspect"
 	@echo "  make plan FILE=path/to/module.ts ARGS=\"--target publish --explain\""
 	@echo "      Preview selected work without executing steps"
@@ -25,7 +28,7 @@ help:
 	@echo "      Generate the pipeline or command Mermaid graph"
 	@echo "  make run FILE=path/to/command.ts ARGS=\"--source input.json\""
 	@echo "      Run an exported definePipelineCommand"
-	@echo "  make ui [STUDIO=path/to/tubeless.studio.ts] [COMMAND=path/to/command.ts]"
+	@echo "  make ui [STUDIO=path/to/tubeless.project.ts] [COMMAND=path/to/command.ts]"
 	@echo "      Open the local run studio; a manifest or COMMAND enables browser launches"
 	@echo
 	@echo "Developing tubeless"
@@ -58,17 +61,20 @@ require-file:
 
 verify: inspect
 
+list:
+	bun run tubeless -- list $(project_arg) $(ARGS)
+
 inspect: require-file
-	bun run tubeless -- inspect $(export_arg) $(ARGS) "$(FILE)"
+	bun run tubeless -- inspect $(export_arg) $(project_arg) $(ARGS) "$(FILE)"
 
 plan: require-file
-	bun run tubeless -- plan $(export_arg) $(ARGS) "$(FILE)"
+	bun run tubeless -- plan $(export_arg) $(project_arg) $(ARGS) "$(FILE)"
 
 graph: require-file
-	bun run tubeless -- graph $(export_arg) $(ARGS) "$(FILE)"
+	bun run tubeless -- graph $(export_arg) $(project_arg) $(ARGS) "$(FILE)"
 
 run: require-file
-	bun run tubeless -- run $(export_arg) $(store_arg) "$(FILE)" -- $(ARGS)
+	bun run tubeless -- run $(export_arg) $(project_arg) $(store_arg) "$(FILE)" -- $(ARGS)
 
 ui:
 	$(if $(filter ui,$(tubeless_command)),@:,bun run tubeless -- ui $(ui_command_arg) $(export_arg) $(store_arg) $(port_arg) $(ARGS) $(studio_arg))

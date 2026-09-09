@@ -69,6 +69,48 @@ export interface PipelineTraceExporter {
   flush?(): void | Promise<void>;
 }
 
+/**
+ * Fan one trace stream out to multiple exporters. An exporter is retired after
+ * its first failure so healthy destinations continue receiving later events.
+ * The composite throws only when no configured exporter remains healthy.
+ */
+export function composeTraceExporters(
+  exporters: readonly PipelineTraceExporter[]
+): PipelineTraceExporter {
+  if (exporters.length === 1) return exporters[0]!;
+  const failed = new WeakSet<PipelineTraceExporter>();
+  let lastError: unknown;
+  const invokeHealthy = async (
+    invoke: (exporter: PipelineTraceExporter) => void | Promise<void>
+  ): Promise<void> => {
+    let succeeded = 0;
+    let roundError: unknown;
+    for (const exporter of exporters) {
+      if (failed.has(exporter)) continue;
+      try {
+        await invoke(exporter);
+        succeeded += 1;
+      } catch (error) {
+        failed.add(exporter);
+        lastError = error;
+        roundError ??= error;
+      }
+    }
+    if (succeeded === 0) {
+      const error = roundError ?? lastError;
+      if (error !== undefined) throw error;
+    }
+  };
+  return {
+    export(event) {
+      return invokeHealthy((exporter) => exporter.export(event));
+    },
+    flush() {
+      return invokeHealthy((exporter) => exporter.flush?.());
+    },
+  };
+}
+
 /** Configuration supplied through `PipelineContext.tracing`. */
 export interface PipelineTracingOptions {
   exporter: PipelineTraceExporter;

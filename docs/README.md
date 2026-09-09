@@ -2,23 +2,23 @@
 
 ## Start here
 
-| Document                                                  | Use it for                                            |
-| --------------------------------------------------------- | ----------------------------------------------------- |
-| [Website](https://chetmancini.github.io/tubeless/)        | Human docs site and agent entrypoints                 |
-| [Package README](../README.md)                            | What it is, a first example, and a pattern table      |
-| [Getting started](./getting-started.md)                   | Building, running, and testing a first pipeline       |
-| [Recipe index](./recipes.md)                              | Choosing an executable example by intent              |
-| [Project catalog](../examples/catalog/tubeless.studio.ts) | File layout, stable IDs, and studio registration      |
-| [Core concepts](./concepts.md)                            | Dependencies, skips, failures, dry runs, and contexts |
-| [Agent guide](./agent-guide.md)                           | Rules for generating and modifying pipeline code      |
-| [Comparison](./comparison.md)                             | When to use tubeless vs other tools                   |
+| Document                                                    | Use it for                                            |
+| ----------------------------------------------------------- | ----------------------------------------------------- |
+| [Website](https://chetmancini.github.io/tubeless/)          | Human docs site and agent entrypoints                 |
+| [Package README](../README.md)                              | What it is, a first example, and a pattern table      |
+| [Getting started](./getting-started.md)                     | Building, running, and testing a first pipeline       |
+| [Recipe index](./recipes.md)                                | Choosing an executable example by intent              |
+| [Project manifest](../examples/catalog/tubeless.project.ts) | File layout, stable IDs, and workbench registration   |
+| [Core concepts](./concepts.md)                              | Dependencies, skips, failures, dry runs, and contexts |
+| [Agent guide](./agent-guide.md)                             | Rules for generating and modifying pipeline code      |
+| [Comparison](./comparison.md)                               | When to use tubeless vs other tools                   |
 
 ## How to
 
-| Document                    | Use it for                                                   |
-| --------------------------- | ------------------------------------------------------------ |
-| [CLI](./cli.md)             | `inspect`, `plan`, `graph`, `run`, `history`, and exit codes |
-| [Local studio](./studio.md) | Optional run history, `tubeless ui`, and catalogs            |
+| Document                    | Use it for                                                           |
+| --------------------------- | -------------------------------------------------------------------- |
+| [CLI](./cli.md)             | `list`, `inspect`, `plan`, `graph`, `run`, `history`, and exit codes |
+| [Local studio](./studio.md) | Optional run history, `tubeless ui`, and catalogs                    |
 
 ## Deeper reference
 

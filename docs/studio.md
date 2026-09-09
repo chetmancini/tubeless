@@ -1,7 +1,8 @@
 # Local studio
 
 Normal pipeline and CLI execution is storage-free. The studio is an optional
-local projection of an append-only SQLite event store. Core does not import it.
+local projection of an append-only SQLite event store or a finished NDJSON
+trace. Core does not import it.
 
 Record one workbench run by placing `--store` before the command file:
 
@@ -14,16 +15,20 @@ Inspect recorded runs without a browser:
 ```sh
 bunx tubeless history --store .tubeless/runs.sqlite
 bunx tubeless history --json <run-id>
+bunx tubeless history --trace run.ndjson
 ```
 
 Open the studio only when you want a browser view:
 
 ```sh
 bunx tubeless ui --store .tubeless/runs.sqlite
+bunx tubeless ui --trace run.ndjson
 ```
 
-That form is read-only. It does not guess executable modules from recorded
-definitions. Register marked `definePipelineCommand` exports to make a
+Both forms can be read-only. The NDJSON form is always read-only: it does not
+offer clear-history or accept a studio catalog / `--command`. Studio never
+guesses executable modules from recorded definitions. Register marked
+`definePipelineCommand` exports to make a
 **Run pipeline** action available:
 
 ```sh
@@ -47,34 +52,50 @@ rejected when any command is registered. A non-loopback `--host` without
 commands is allowed and stays read-only: the store is visible to anyone who
 can reach the port, and clear-history is not wired. That bind is a risk you
 enable; see [SECURITY.md](https://github.com/chetmancini/tubeless/blob/main/SECURITY.md).
+NDJSON traces can include sensitive log messages, structured errors, and
+attributes. They are validated and bounded before serving, but their contents
+are not redacted; keep Studio on loopback unless disclosure is intentional.
 When `--host` is `0.0.0.0` or `::`, a matching `Host` cannot be the bind
 address, so the studio also accepts `localhost` or a literal IP on the same
 port. DNS names are still refused.
 
-## Checked-in catalog
+## Checked-in project manifest
 
-Declare module references once for a repeatable project catalog:
+Declare stable IDs and module references once for every workbench surface:
 
 ```ts
-// tubeless.studio.ts
-import { definePipelineStudio } from "tubeless/workbench/studio";
+// tubeless.project.ts
+import { definePipelineProject } from "tubeless/workbench/project";
 
-export default definePipelineStudio({
+export default definePipelineProject({
   cwd: ".",
   commands: [
-    { file: "./scripts/import.ts", export: "ImportCommand", name: "Import rows" },
-    { file: "./scripts/publish.ts", export: "PublishCommand" },
+    {
+      id: "import-rows",
+      file: "./scripts/import.ts",
+      export: "ImportCommand",
+      name: "Import rows",
+    },
+    { id: "publish", file: "./scripts/publish.ts", export: "PublishCommand" },
   ],
 });
 ```
 
 ```sh
-bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.studio.ts
+bunx tubeless list
+bunx tubeless inspect import-rows
+bunx tubeless run import-rows -- --source rows.txt
+bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.project.ts
 ```
 
 Command paths and `cwd` are relative to the manifest file. Empty or duplicate
-registrations fail before the studio starts. Presentation-name overrides do not
-change run or pipeline identity.
+IDs and duplicate module registrations fail when the manifest loads.
+Presentation-name overrides do not change the registered, run, or pipeline
+identities. The Studio uses the stable registered ID in its local protocol.
+
+Legacy `definePipelineStudio` catalogs remain accepted by `tubeless ui`; their
+historical `file#export` Studio identity is unchanged. They are UI-only and do
+not participate in `list`, `inspect`, `plan`, `graph`, or `run` identity lookup.
 
 ## What the UI shows
 
@@ -103,5 +124,6 @@ The header names are part of the local studio protocol. They are same-origin
 guards, not authentication.
 
 Programmatic callers can compose the same pieces from
-`tubeless/run-store/sqlite` and `tubeless/run-store/ui`. See
+`tubeless/run-store/sqlite`, `tubeless/run-store/ndjson`, and
+`tubeless/run-store/ui`. See
 [`local-observability.ts`](../examples/local-observability.ts).

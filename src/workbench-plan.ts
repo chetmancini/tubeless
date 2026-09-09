@@ -1,19 +1,21 @@
 import { parseArgs } from "node:util";
 import type { PipelineRunControls } from "./pipeline.js";
 import { renderPipelinePlan } from "./render.js";
+import { loadPlanSourceTarget } from "./workbench-project-loader.js";
 import {
-  loadPlanSource,
   TUBELESS_WORKBENCH_EXIT_CODE,
+  writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
 import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 const PLAN_USAGE = `Usage: tubeless plan [options] <pipeline-or-command-file>
 
-Preview pipeline selection without running steps or requiring domain options.
+Preview a registered or exported pipeline without running steps or requiring domain options.
 
 Options:
   -e, --export <name>   Select a pipeline or command export when the file has more than one
+  -p, --project <path>  Resolve a registered id from this project manifest
   -t, --target <id>     Select a declared target and its prerequisites (repeatable)
   -s, --step <id>       Select exact internal steps (repeatable)
       --dry-run         Show each step's dry-run disposition
@@ -32,6 +34,7 @@ function parsePlanArgs(argv: readonly string[]) {
       export: { type: "string", short: "e" },
       help: { type: "boolean", short: "h" },
       json: { type: "boolean" },
+      project: { type: "string", short: "p" },
       step: { type: "string", short: "s", multiple: true },
       target: { type: "string", short: "t", multiple: true },
     },
@@ -51,9 +54,17 @@ export async function runPlan(argv: readonly string[], io: WorkbenchCliIo): Prom
         message: "Pass exactly one pipeline or command file.",
       },
       async run(parsed, commandIo) {
-        const loaded = await loadPlanSource(
+        if (parsed.values.export !== undefined && parsed.values.project !== undefined) {
+          return writeUsageError(
+            commandIo,
+            "--export cannot be combined with --project; the manifest owns export selection.",
+            PLAN_USAGE
+          );
+        }
+        const loaded = await loadPlanSourceTarget(
           parsed.positionals[0]!,
           parsed.values.export,
+          parsed.values.project,
           commandIo
         );
         if ("exitCode" in loaded) return loaded.exitCode;
