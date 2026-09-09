@@ -137,8 +137,9 @@ or shared helpers in this repository.
   valid domain result.
 - Preserve the dependency-free runtime. Keep application telemetry SDKs at the
   exporter boundary. Use `composeTraceExporters` from `tubeless/tracing` when
-  one run must fan out to multiple destinations; a failed destination is retired
-  while healthy exporters keep receiving events.
+  one run must fan out to multiple destinations; `onExporterError` reports the
+  first partial drop, the failed destination is retired, and healthy exporters
+  keep receiving events.
 - Keep durable local observation opt-in. Use the append-only adapter from
   `tubeless/run-store/sqlite` or `tubeless run --store`; inspect recorded runs
   with `tubeless history`. Use the strictly read-only adapter from

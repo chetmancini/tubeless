@@ -34,7 +34,7 @@ describe("pipeline tracing", () => {
     };
     const composite = composeTraceExporters([first, failed]);
 
-    await composite.export(event);
+    await expect(composite.export(event)).rejects.toThrow("destination failed");
     await composite.export(event);
     await composite.flush?.();
 
@@ -42,6 +42,43 @@ describe("pipeline tracing", () => {
     expect(first.flush).toHaveBeenCalledOnce();
     expect(failed.export).toHaveBeenCalledOnce();
     expect(failed.flush).not.toHaveBeenCalled();
+  });
+
+  it("reports a partial composition failure while continuing healthy destinations", async () => {
+    const step = createSteps();
+    const pipeline = definePipeline({
+      id: "trace-partial-composition",
+      steps: [step("work", { run: () => "ok" })],
+      finalize: () => "ok",
+    });
+    const events: PipelineTraceEvent[] = [];
+    const failure = new Error("secondary unavailable");
+    const failed = { export: vi.fn().mockRejectedValue(failure) };
+    const onExporterError = vi.fn();
+
+    const result = await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log: createLogger(),
+      runId: "partial-composition",
+      tracing: {
+        exporter: composeTraceExporters([{ export: (event) => void events.push(event) }, failed]),
+        onExporterError,
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(failed.export).toHaveBeenCalledOnce();
+    expect(onExporterError).toHaveBeenCalledOnce();
+    expect(onExporterError).toHaveBeenCalledWith(failure);
+    expect(events.map(({ name }) => name)).toEqual([
+      "pipeline.started",
+      "step.planned",
+      "step.running",
+      "step.complete",
+      "pipeline.finalize.started",
+      "pipeline.finalize.completed",
+      "pipeline.completed",
+    ]);
   });
 
   it("reports failure when every composed exporter is retired", async () => {

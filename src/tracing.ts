@@ -5,6 +5,7 @@ import type {
   PipelineErrorPhase,
   PipelineValidationIssue,
 } from "./pipeline.js";
+import { PartialPipelineTraceExporterError } from "./trace-exporter-error.js";
 
 /** Values that can be safely carried in a structured trace attribute. */
 export type PipelineTraceAttributeValue = boolean | number | string;
@@ -71,8 +72,9 @@ export interface PipelineTraceExporter {
 
 /**
  * Fan one trace stream out to multiple exporters. An exporter is retired after
- * its first failure so healthy destinations continue receiving later events.
- * The composite throws only when no configured exporter remains healthy.
+ * its first failure so healthy destinations continue receiving later events. A
+ * partial failure rejects that operation after every healthy exporter receives
+ * it, allowing tracing error handlers to report the dropped destination.
  */
 export function composeTraceExporters(
   exporters: readonly PipelineTraceExporter[]
@@ -80,11 +82,13 @@ export function composeTraceExporters(
   if (exporters.length === 1) return exporters[0]!;
   const failed = new WeakSet<PipelineTraceExporter>();
   let lastError: unknown;
+  let hasLastError = false;
   const invokeHealthy = async (
     invoke: (exporter: PipelineTraceExporter) => void | Promise<void>
   ): Promise<void> => {
     let succeeded = 0;
     let roundError: unknown;
+    let hadRoundError = false;
     for (const exporter of exporters) {
       if (failed.has(exporter)) continue;
       try {
@@ -93,13 +97,21 @@ export function composeTraceExporters(
       } catch (error) {
         failed.add(exporter);
         lastError = error;
-        roundError ??= error;
+        hasLastError = true;
+        if (!hadRoundError) roundError = error;
+        hadRoundError = true;
       }
     }
-    if (succeeded === 0) {
-      const error = roundError ?? lastError;
-      if (error !== undefined) throw error;
+    if (hadRoundError) {
+      if (succeeded > 0) {
+        throw new PartialPipelineTraceExporterError({
+          error: roundError,
+          message: roundError instanceof Error ? roundError.message : String(roundError),
+        });
+      }
+      throw roundError;
     }
+    if (succeeded === 0 && hasLastError) throw lastError;
   };
   return {
     export(event) {
@@ -117,7 +129,8 @@ export interface PipelineTracingOptions {
   itemKey?: string;
   /**
    * Called once, on the first exporter failure of the run. The run itself is
-   * not failed; after this fires, subsequent trace events are dropped.
+   * not failed. A single failed exporter drops later events; a composed exporter
+   * retires only the failed destination while healthy destinations continue.
    */
   readonly onExporterError?: (error: unknown) => void;
 }

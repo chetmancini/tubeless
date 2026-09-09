@@ -22,6 +22,7 @@ import type {
 const DEFAULT_MAX_BYTES = 64 * 1_024 * 1_024;
 const DEFAULT_MAX_EVENT_BYTES = 1 * 1_024 * 1_024;
 const DEFAULT_MAX_EVENTS = 100_000;
+const pipelineRunStatuses: ReadonlySet<string> = new Set(["cancelled", "completed", "failed"]);
 
 const eventNames: ReadonlySet<string> = new Set([
   "pipeline.completed",
@@ -237,6 +238,14 @@ function parseEvent(value: unknown): PipelineTraceEvent {
   if (parentRunId !== undefined) event.parentRunId = parentRunId;
   const stepId = optionalString(value, "stepId");
   if (stepId !== undefined) event.stepId = stepId;
+  if (event.name === "pipeline.completed") {
+    const status = event.attributes.status;
+    if (typeof status !== "string" || !pipelineRunStatuses.has(status)) {
+      throw new Error(
+        "attributes.status must be cancelled, completed, or failed for pipeline.completed"
+      );
+    }
+  }
   return event;
 }
 

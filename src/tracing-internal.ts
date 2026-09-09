@@ -16,6 +16,7 @@ import type {
   PipelineTraceError,
   PipelineTracingOptions,
 } from "./tracing.js";
+import { PARTIAL_PIPELINE_TRACE_EXPORTER_ERROR } from "./trace-exporter-error.js";
 
 /** Runtime trace writer used internally by the pipeline executor. */
 export interface PipelineTraceEmitter {
@@ -122,6 +123,12 @@ function elapsedMs(record: { finishedAtMs: number; startedAtMs?: number }): numb
   return record.startedAtMs === undefined ? undefined : record.finishedAtMs - record.startedAtMs;
 }
 
+function isPartialExporterError(error: unknown): error is { readonly exporterError: unknown } {
+  if (typeof error !== "object" || error === null || !("exporterError" in error)) return false;
+  const marker = Object.getOwnPropertyDescriptor(error, PARTIAL_PIPELINE_TRACE_EXPORTER_ERROR);
+  return marker !== undefined && "value" in marker && marker.value === true;
+}
+
 function formatLogValue(value: unknown): string {
   try {
     if (typeof value === "string") return value;
@@ -152,6 +159,7 @@ export function createPipelineTraceEmitter(
   const context: PipelineTraceContext = identity;
   let queue = Promise.resolve();
   let sawExporterError = false;
+  let stopExporting = false;
 
   const formatExporterError = (error: unknown): string =>
     error instanceof Error ? error.message : String(error);
@@ -160,15 +168,17 @@ export function createPipelineTraceEmitter(
     log.warn(`Pipeline trace onExporterError failed: ${formatExporterError(callbackError)}`);
   };
 
-  const captureExporterError = (error: unknown, message: string): void => {
-    if (sawExporterError) return;
-    sawExporterError = true;
-    log.warn(message);
-    if (!options.onExporterError) return;
-    try {
-      void Promise.resolve(options.onExporterError(error)).catch(warnCallbackError);
-    } catch (callbackError) {
-      warnCallbackError(callbackError);
+  const captureExporterError = (error: unknown, message: string, terminal: boolean): void => {
+    if (terminal) stopExporting = true;
+    if (!sawExporterError) {
+      sawExporterError = true;
+      log.warn(message);
+      if (!options.onExporterError) return;
+      try {
+        void Promise.resolve(options.onExporterError(error)).catch(warnCallbackError);
+      } catch (callbackError) {
+        warnCallbackError(callbackError);
+      }
     }
   };
 
@@ -189,15 +199,20 @@ export function createPipelineTraceEmitter(
     };
     queue = queue
       .then(() => {
-        if (sawExporterError) return;
+        if (stopExporting) return;
         return options.exporter.export(event);
       })
-      .catch((error) =>
+      .catch((error) => {
+        const partial = isPartialExporterError(error);
+        const exporterError = partial ? error.exporterError : error;
         captureExporterError(
-          error,
-          `Pipeline trace exporter failed; further trace events for this run will be dropped: ${formatExporterError(error)}`
-        )
-      );
+          exporterError,
+          partial
+            ? `Pipeline trace exporter failed; the destination was retired while healthy exporters continue: ${formatExporterError(exporterError)}`
+            : `Pipeline trace exporter failed; further trace events for this run will be dropped: ${formatExporterError(exporterError)}`,
+          !partial
+        );
+      });
   };
 
   type EmitFields = Parameters<typeof emit>[1];
@@ -337,9 +352,14 @@ export function createPipelineTraceEmitter(
       try {
         await options.exporter.flush?.();
       } catch (error) {
+        const partial = isPartialExporterError(error);
+        const exporterError = partial ? error.exporterError : error;
         captureExporterError(
-          error,
-          `Pipeline trace exporter flush failed: ${formatExporterError(error)}`
+          exporterError,
+          partial
+            ? `Pipeline trace exporter flush failed for a retired destination: ${formatExporterError(exporterError)}`
+            : `Pipeline trace exporter flush failed: ${formatExporterError(exporterError)}`,
+          !partial
         );
       }
     },

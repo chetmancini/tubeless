@@ -70,6 +70,25 @@ describe("openNdjsonPipelineRunStore", () => {
     await expect(invalidOpening).rejects.not.toThrow(secret);
   });
 
+  it("rejects completion events without a supported terminal status", async () => {
+    const completion = {
+      ...event("run-1"),
+      attributes: {},
+      name: "pipeline.completed",
+    };
+    const missingStatus = await tempFile(`${JSON.stringify(completion)}\n`);
+    const unsupportedStatus = await tempFile(
+      `${JSON.stringify({ ...completion, attributes: { status: "running" } })}\n`
+    );
+
+    await expect(openNdjsonPipelineRunStore(missingStatus)).rejects.toThrow(
+      "attributes.status must be cancelled, completed, or failed for pipeline.completed"
+    );
+    await expect(openNdjsonPipelineRunStore(unsupportedStatus)).rejects.toThrow(
+      "attributes.status must be cancelled, completed, or failed for pipeline.completed"
+    );
+  });
+
   it("enforces artifact, event, and event-count limits", async () => {
     const line = JSON.stringify(event("run-1"));
     const filename = await tempFile(`${line}\n${line}\n`);

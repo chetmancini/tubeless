@@ -203,8 +203,10 @@ The terminal record deliberately does not copy log or progress streams. Use the
 injected logger and hooks for live observation, or tracing when durable event
 export is required. Errors and cancellation remain represented directly in the
 run and terminal step reports. A failing `tracing.exporter` does not fail the
-run: the executor warns once on the first export or flush error for that emitter
-and drops later events. Nested child runs each construct their own emitter, so
+run: the executor warns once on the first export or flush error for that emitter.
+A standalone failure drops later events. `composeTraceExporters` instead retires
+a failed destination after reporting the first partial drop and keeps sending to
+healthy destinations. Nested child runs each construct their own emitter, so
 `tracing.onExporterError` fires once per nested run rather than once for the
 whole parent tree. The run currently has `version: 2`, also exported
 as `RUN_MODEL_VERSION`; persist that field and branch on it before decoding a
