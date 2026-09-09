@@ -51,8 +51,10 @@ function loadEntries<TMeta>(
 
 export interface OpenCheckpointOptions {
   /**
-   * Called when the checkpoint file exists but fails to parse, right before falling
-   * back to an empty checkpoint. Starting fresh from a corrupt file is silent
+   * Called when the checkpoint file exists but is unusable, right before falling
+   * back to an empty checkpoint. That includes JSON syntax errors and valid JSON
+   * whose top-level value is not an object keyed by item IDs (arrays, strings,
+   * numbers, booleans, and `null`). Starting fresh from a corrupt file is silent
    * reprocessing of every previously-checkpointed item — the default logs a warning to
    * `console` so that cost is visible instead of masked. Pass a no-op to suppress it.
    */
