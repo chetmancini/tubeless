@@ -17,6 +17,7 @@ inventory.
 | Mixed local and remote steps                   | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `fromRemote`, `RemoteStepAdapter`, inverse dry-run                           |
 | Host a pipeline in a durable engine            | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `runOrThrow`, pass `runId` / `parentRunId`                                   |
 | Fan out over runtime items                     | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline.skippable`, stable keys, concurrency, progress              |
+| Inspect keyed fan-out failures                 | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `error.fanOut`, bounded diagnostics, caller-directed reruns                  |
 | Show determinate progress                      | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `reportProgress`, mapped-child progress                                      |
 | Watch the live TTY reporter                    | [`live-tui.ts`](../examples/live-tui.ts)                                 | named steps, nested `details`; persist with `--store`                        |
 | Retry and rate-limit remote calls              | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `withRetry`, `RateLimiter`, injected sleep and signal                        |

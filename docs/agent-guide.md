@@ -130,6 +130,9 @@ or shared helpers in this repository.
   bounded JSON-safe snapshot; a thrown `PipelineExecutionError` retains the
   original value through native `Error.cause`. Use `renderPipelineError` when a
   diagnostic crosses a human or JSON presentation boundary.
+- Inspect `error.fanOut` for bounded keyed failures from `forEachPipeline`. Check
+  `omittedFailureCount` and `keyTruncated` before selecting rerun inputs; unstarted
+  items are not failures. Reruns remain caller-owned new runs.
 - Standard Schema failures use `kind: "validation"`, retain normalized `issues`,
   and have boundary-specific codes for options, step outputs, and final results.
   Async schemas run during `run`; synchronous `plan()` previews graph and

@@ -207,3 +207,30 @@ Hierarchical or versioned external events, flattened or namespaced child
 selection, and parallel DAG scheduling remain out of scope. Mapped children
 provide bounded parallelism inside one opaque parent step; they do not make
 the pipeline DAG executor parallel.
+
+## Structured fan-out failures
+
+A failed or cancelled `forEachPipeline` step exposes `error.fanOut` on the parent
+run error and step report (also available to failure hooks and JSON error rendering).
+`failures` contains at most the first 32 failed started items in input order,
+with the original `index`, `key`, `keyTruncated`, `cancelled`, and a JSON-safe
+`error` cause snapshot. `failureCount` counts all failed started items;
+`omittedFailureCount` counts entries beyond the limit. Scheduler failures appear
+separately as `schedulerError`; unstarted items are not failures. Setup errors,
+such as duplicate keys or an exception in `items`, have no `fanOut` diagnostic.
+
+Keys and snapshot strings are capped at 1024 UTF-16 code units, and cause chains
+use the existing eight-level bound. `keyTruncated` explicitly marks shortened
+keys; use the original input index to recover those identities. Snapshots retain
+messages, names, source codes, and causes, without stacks, options, successful
+outputs, or nested run objects. Nested fan-outs do not recursively expand here.
+
+Use complete keys to select original inputs for a caller-directed rerun. Check
+`omittedFailureCount` before treating the list as exhaustive, and account for
+unstarted work after cancellation. Reruns are ordinary new pipeline runs; the
+caller owns retry policy and side-effect safety. See the helper in
+[`fan-out-progress.ts`](../examples/fan-out-progress.ts).
+
+This additive diagnostic does not change parent failure/cancellation precedence,
+primary causes, scheduling, downstream dependency skips, or `continueOnError`.
+Successful siblings still do not produce a partial parent step output.

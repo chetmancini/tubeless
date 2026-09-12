@@ -29,7 +29,12 @@ export class PipelineChildError extends Error {
   constructor(
     message: string,
     readonly cancelled = false,
-    cause?: unknown
+    cause?: unknown,
+    readonly fanOut?: {
+      failures: readonly { error: Error; key: string; index: number; cancelled: boolean }[];
+      failureCount: number;
+      schedulerError?: Error;
+    }
   ) {
     super(message, cause === undefined ? undefined : { cause });
     this.name = "PipelineChildError";
@@ -391,7 +396,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
     );
     type Outcome =
       | { key: string; ok: true; value: unknown }
-      | { error: Error; key: string; ok: false };
+      | { error: Error; key: string; index: number; ok: false };
 
     const active = new Map<string, string>();
     const childTerminalSteps = new Map<string, Set<string>>();
@@ -526,7 +531,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
           active.delete(key);
           failedItems += 1;
           publishProgress(`${key}: failed`);
-          return { error: cause, key, ok: false };
+          return { error: cause, key, index: itemIndex, ok: false };
         }
       }
     );
@@ -556,7 +561,16 @@ export function createMappedChildRunner<TParentOptions extends object>(
         failures.length > 0
           ? `Mapped child pipeline ${config.pipeline.id} failed for ${failures.length} item(s): ${details}`
           : `Mapped child pipeline ${config.pipeline.id} failed: ${primaryError?.message ?? "aborted"}`;
-      throw new PipelineChildError(message, cancelled, primaryError);
+      throw new PipelineChildError(message, cancelled, primaryError, {
+        failures: failures.slice(0, 32).map(({ error, key, index }) => ({
+          error,
+          key,
+          index,
+          cancelled: dependencies.isCancellation(error, context),
+        })),
+        failureCount: failures.length,
+        schedulerError: schedulerFailure,
+      });
     }
     // SAFETY: when failures.length === 0 every outcome was produced by the
     // success branch (return { key, ok: true, value }), so each outcome is
