@@ -355,7 +355,7 @@ export const PIPELINE_RUN_STUDIO_HTML =
     </div>
   </div>
   <div class="toast hidden" id="toast" role="status"></div>
-  <script>` +
+  <script type="module">` +
   PIPELINE_RUN_STUDIO_SCRIPT +
   String.raw`</script>
 </body>

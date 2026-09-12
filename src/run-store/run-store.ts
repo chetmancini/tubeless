@@ -449,21 +449,6 @@ function createRunProjection(event: StoredPipelineEvent, retainLogs = true): Mut
   return projection;
 }
 
-function cloneStep(step: StoredPipelineStep): StoredPipelineStep {
-  const cloned: StoredPipelineStep = { ...step };
-  if (step.attempt) cloned.attempt = { ...step.attempt, retries: [...step.attempt.retries] };
-  if (step.progress) {
-    cloned.progress = { ...step.progress };
-    if (step.progress.details)
-      cloned.progress.details = step.progress.details.map((detail) => ({ ...detail }));
-  }
-  if (step.nestedPipeline) {
-    cloned.nestedPipeline = { ...step.nestedPipeline, stepIds: [...step.nestedPipeline.stepIds] };
-  }
-  if (step.remote) cloned.remote = { ...step.remote };
-  return cloned;
-}
-
 function materializeRun(projection: MutableRunProjection): StoredPipelineRun {
   const { completed, eventCount, first, logs, started, stepOrder, steps } = projection;
   const statusValue = completed && stringAttribute(completed.attributes, "status");
@@ -481,7 +466,7 @@ function materializeRun(projection: MutableRunProjection): StoredPipelineRun {
     runId: first.runId,
     startedAtMs: started.timestampMs,
     status,
-    steps: stepOrder.map((stepId) => cloneStep(steps.get(stepId)!)),
+    steps: stepOrder.map((stepId) => structuredClone(steps.get(stepId)!)),
     version: RUN_MODEL_VERSION,
   };
   if (completed?.durationMs !== undefined) run.durationMs = completed.durationMs;
@@ -574,20 +559,6 @@ function applyPipelineEvent(
   }
 }
 
-function cloneDefinitionStep(step: StoredPipelineDefinitionStep): StoredPipelineDefinitionStep {
-  const cloned: StoredPipelineDefinitionStep = {
-    ...step,
-    dependencies: [...step.dependencies],
-    optionalDependencies: [...step.optionalDependencies],
-    skipAfterFailureOf: [...step.skipAfterFailureOf],
-  };
-  if (step.nestedPipeline) {
-    cloned.nestedPipeline = { ...step.nestedPipeline, stepIds: [...step.nestedPipeline.stepIds] };
-  }
-  if (step.remote) cloned.remote = { ...step.remote };
-  return cloned;
-}
-
 export interface PipelineRunProjector {
   append(events: readonly StoredPipelineEvent[]): void;
   clear(): void;
@@ -636,7 +607,7 @@ export function createPipelineRunProjector(
           lastSeenAtMs: pipeline.lastSeenAtMs,
           pipelineId,
           runCount: pipelineRuns.length,
-          steps: [...pipeline.latestSteps.values()].map(cloneDefinitionStep),
+          steps: [...pipeline.latestSteps.values()].map((step) => structuredClone(step)),
           targetIds: [...pipeline.targetIds],
         };
       })

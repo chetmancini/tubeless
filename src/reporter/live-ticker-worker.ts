@@ -1,17 +1,12 @@
 import { writeSync } from "node:fs";
 import { parentPort, workerData } from "node:worker_threads";
 import {
+  TickerFrame,
   currentSpinner,
   paintLiveLines,
   SHIMMER_TOKEN_START,
   SPINNER_TOKEN,
 } from "./live-ticker.js";
-
-const ANSI = {
-  clearDown: "\u001B[J",
-  hideCursor: "\u001B[?25l",
-  showCursor: "\u001B[?25h",
-} as const;
 
 interface LiveTickerWorkerData {
   color: boolean;
@@ -38,57 +33,30 @@ const data = workerData as LiveTickerWorkerData;
 const handshake = new Int32Array(data.handshakeBuffer);
 let columns = data.columns;
 let lines: string[] = [];
-let frameLineCount = 0;
-let cursorHidden = false;
+const frame = new TickerFrame((chunk) => writeSync(data.fd, chunk));
 let announcedReady = false;
 
 function publishFrame(): void {
-  Atomics.store(handshake, 1, frameLineCount);
+  Atomics.store(handshake, 1, frame.frameLineCount);
 }
 
 function announceReady(): void {
   publishFrame();
   if (announcedReady || port === null) return;
   announcedReady = true;
-  port.postMessage({ type: "ready", frameLineCount });
-}
-
-function write(chunk: string): void {
-  writeSync(data.fd, chunk);
-}
-
-function hideCursor(): void {
-  if (cursorHidden) return;
-  write(ANSI.hideCursor);
-  cursorHidden = true;
-}
-
-function showCursor(): void {
-  if (!cursorHidden) return;
-  write(ANSI.showCursor);
-  cursorHidden = false;
-}
-
-function clearFrame(): void {
-  if (frameLineCount === 0) return;
-  write(`\u001B[${frameLineCount}F${ANSI.clearDown}`);
-  frameLineCount = 0;
+  port.postMessage({ type: "ready", frameLineCount: frame.frameLineCount });
 }
 
 function redraw(): void {
-  hideCursor();
-  clearFrame();
-  if (lines.length !== 0) {
-    const painted = paintLiveLines(
+  frame.redraw(
+    paintLiveLines(
       lines,
       currentSpinner(data.unicode, data.refreshIntervalMs),
       Date.now(),
       columns,
       data.color
-    );
-    write(`${painted.join("\n")}\n`);
-    frameLineCount = painted.length;
-  }
+    )
+  );
   publishFrame();
 }
 
@@ -112,9 +80,8 @@ const timer = setInterval(() => {
 
 port.on("message", (msg: TickerWorkerMessage) => {
   if (msg.type === "log") {
-    clearFrame();
-    write(msg.text);
-    frameLineCount = 0;
+    frame.clear();
+    writeSync(data.fd, msg.text);
     publishFrame();
     Atomics.add(handshake, 2, 1);
     announceReady();
@@ -132,7 +99,7 @@ port.on("message", (msg: TickerWorkerMessage) => {
     clearInterval(timer);
     if (msg.lines) lines = msg.lines;
     redraw();
-    showCursor();
+    frame.showCursor();
     done();
     port.close();
   }

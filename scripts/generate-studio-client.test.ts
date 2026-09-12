@@ -2,75 +2,36 @@ import { describe, expect, it } from "vitest";
 import { compiledClientSource } from "./generate-studio-client.mjs";
 
 describe("compiledClientSource", () => {
-  it("strips the export and source map, then invokes initStudio", () => {
+  it("preserves ESM exports, removes the source map, and invokes initStudio", async () => {
     const compiled = [
-      "export function initStudio() {",
-      "    const ready = true;",
-      "}",
+      "export let initialized = 0;",
+      "export function initStudio() { initialized += 1; }",
+      "function createStudioRunIndex(runs) { return runs; }",
+      "export { createStudioRunIndex };",
       `//# sourceMappingURL=${"studio-client.example.map"}`,
       "",
     ].join("\n");
-    expect(compiledClientSource(compiled)).toBe(`function initStudio() {
-    const ready = true;
-}
-initStudio();
-`);
-  });
-
-  it("strips the supported initStudio and createStudioRunIndex exports", () => {
-    const compiled = [
-      "export function createStudioRunIndex(runs) {",
-      "    return runs;",
-      "}",
-      "export function initStudio() {",
-      "    const ready = true;",
-      "}",
-      "",
-    ].join("\n");
-    expect(compiledClientSource(compiled)).toBe(`function createStudioRunIndex(runs) {
-    return runs;
-}
-function initStudio() {
-    const ready = true;
-}
-initStudio();
-`);
-  });
-
-  it("strips a combined named export of the two allowed functions", () => {
-    const compiled = [
-      "function createStudioRunIndex(runs) {",
-      "    return runs;",
-      "}",
-      "function initStudio() {}",
-      "export { createStudioRunIndex, initStudio };",
-      "",
-    ].join("\n");
-    expect(compiledClientSource(compiled)).toBe(`function createStudioRunIndex(runs) {
-    return runs;
-}
-function initStudio() {}
-initStudio();
-`);
-  });
-
-  it("rejects leftover module syntax", () => {
-    expect(() =>
-      compiledClientSource(`import { x } from "./x.js";\nexport function initStudio() {}\n`)
-    ).toThrow(/import/);
-    expect(() =>
-      compiledClientSource(`export function initStudio() {}\nexport const leftover = 1;\n`)
-    ).toThrow(/export/);
-    expect(() =>
-      compiledClientSource(
-        `export function createStudioRunIndex() {}\nexport function initStudio() {}\nexport function leftover() {}\n`
-      )
-    ).toThrow(/export/);
-    expect(() => compiledClientSource(`export function createStudioRunIndex() {}\n`)).toThrow(
-      /export/
+    const source = compiledClientSource(compiled);
+    expect(source).not.toContain("sourceMappingURL");
+    expect(source).toContain("export { createStudioRunIndex };");
+    const client = await import(
+      `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
     );
-    expect(() =>
-      compiledClientSource(`export function initStudio() {}\nexport { initStudio };\n`)
-    ).toThrow(/export/);
+    expect(client.initialized).toBe(1);
+    expect(client.createStudioRunIndex(["run-1"])).toEqual(["run-1"]);
   });
+
+  it("does not append a second initialization call", () => {
+    const compiled = "export function initStudio() {}\ninitStudio();\n";
+    expect(compiledClientSource(compiled)).toBe(compiled);
+  });
+
+  it.each(['import { x } from "./x.js";', 'import "./x.js";', 'const x = import("./x.js");'])(
+    "rejects imports requiring separate browser assets: %s",
+    (statement) => {
+      expect(() => compiledClientSource(`${statement}\nexport function initStudio() {}\n`)).toThrow(
+        /import/
+      );
+    }
+  );
 });

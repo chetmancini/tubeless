@@ -161,11 +161,39 @@ type TickerWorkerMessage =
   | { text: string; type: "log" }
   | { columns?: number; lines: string[]; type: "stop" };
 
-interface TickerState {
-  cursorHidden: boolean;
-  disposed: boolean;
-  frameLineCount: number;
-  lines: readonly string[];
+/** Cursor and frame ownership shared by inline and worker tickers. */
+export class TickerFrame {
+  private cursorHidden: boolean;
+
+  constructor(
+    private readonly write: (chunk: string) => void,
+    public frameLineCount = 0
+  ) {
+    this.cursorHidden = frameLineCount > 0;
+  }
+
+  showCursor(): void {
+    if (!this.cursorHidden) return;
+    this.write(ANSI.showCursor);
+    this.cursorHidden = false;
+  }
+
+  clear(): void {
+    if (this.frameLineCount === 0) return;
+    this.write(`\u001B[${this.frameLineCount}F${ANSI.clearDown}`);
+    this.frameLineCount = 0;
+  }
+
+  redraw(lines: readonly string[]): void {
+    if (!this.cursorHidden) {
+      this.write(ANSI.hideCursor);
+      this.cursorHidden = true;
+    }
+    this.clear();
+    if (lines.length === 0) return;
+    this.write(`${lines.join("\n")}\n`);
+    this.frameLineCount = lines.length;
+  }
 }
 
 function resolveColumns(options: LiveTickerOptions): number | undefined {
@@ -178,57 +206,26 @@ export function currentSpinner(unicode: boolean, refreshIntervalMs: number): str
 }
 
 function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 0): LiveTicker {
-  const state: TickerState = {
-    cursorHidden: adoptedFrameLineCount > 0,
-    disposed: false,
-    frameLineCount: adoptedFrameLineCount,
-    lines: [],
-  };
-
-  const write = (chunk: string): void => {
-    options.write(chunk);
-  };
-
-  const hideCursor = (): void => {
-    if (state.cursorHidden) return;
-    write(ANSI.hideCursor);
-    state.cursorHidden = true;
-  };
-
-  const showCursor = (): void => {
-    if (!state.cursorHidden) return;
-    write(ANSI.showCursor);
-    state.cursorHidden = false;
-  };
-
-  const clearFrame = (): void => {
-    if (state.frameLineCount === 0) return;
-    write(`\u001B[${state.frameLineCount}F${ANSI.clearDown}`);
-    state.frameLineCount = 0;
-  };
-
+  let disposed = false;
+  let lines: readonly string[] = [];
+  const frame = new TickerFrame((chunk) => options.write(chunk), adoptedFrameLineCount);
   const redraw = (): void => {
-    if (state.disposed) return;
-    hideCursor();
-    clearFrame();
-    if (state.lines.length === 0) return;
-    const painted = paintLiveLines(
-      state.lines,
-      currentSpinner(options.unicode, options.refreshIntervalMs),
-      Date.now(),
-      resolveColumns(options),
-      options.color === true
+    if (disposed) return;
+    frame.redraw(
+      paintLiveLines(
+        lines,
+        currentSpinner(options.unicode, options.refreshIntervalMs),
+        Date.now(),
+        resolveColumns(options),
+        options.color === true
+      )
     );
-    write(`${painted.join("\n")}\n`);
-    state.frameLineCount = painted.length;
   };
 
   const timer = setInterval(() => {
     if (
-      state.disposed ||
-      !state.lines.some(
-        (line) => line.includes(SPINNER_TOKEN) || line.includes(SHIMMER_TOKEN_START)
-      )
+      disposed ||
+      !lines.some((line) => line.includes(SPINNER_TOKEN) || line.includes(SHIMMER_TOKEN_START))
     ) {
       return;
     }
@@ -237,24 +234,23 @@ function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 
   timer.unref();
 
   return {
-    setLines(lines) {
-      state.lines = lines;
+    setLines(nextLines) {
+      lines = nextLines;
       redraw();
     },
     writeLog(text) {
-      if (state.disposed) {
-        write(text);
+      if (disposed) {
+        options.write(text);
         return;
       }
-      clearFrame();
-      write(text);
-      state.frameLineCount = 0;
+      frame.clear();
+      options.write(text);
     },
     dispose() {
-      if (state.disposed) return;
-      state.disposed = true;
+      if (disposed) return;
+      disposed = true;
       clearInterval(timer);
-      showCursor();
+      frame.showCursor();
     },
   };
 }

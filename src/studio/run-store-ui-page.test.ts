@@ -8,15 +8,19 @@ import {
 import { startPipelineRunStudio } from "./run-store-ui.js";
 
 describe("pipeline run studio page composition", () => {
-  it("embeds one compiled initStudio script without module syntax", () => {
-    expect(PIPELINE_RUN_STUDIO_HTML.match(/<script>/g)).toEqual(["<script>"]);
+  it("embeds one compiled initStudio script as a native module", () => {
+    expect(PIPELINE_RUN_STUDIO_HTML.match(/<script type="module">/g)).toEqual([
+      '<script type="module">',
+    ]);
     expect(PIPELINE_RUN_STUDIO_HTML.match(/<\/html>/g)).toEqual(["</html>"]);
     expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("initStudio");
     expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("initStudio();");
     expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("function createStudioRunIndex");
-    expect(PIPELINE_RUN_STUDIO_SCRIPT).not.toMatch(/^\s*export\b/m);
+    expect(PIPELINE_RUN_STUDIO_SCRIPT).toMatch(/^export function initStudio\b/m);
     expect(PIPELINE_RUN_STUDIO_SCRIPT).not.toMatch(/\bimport\s/);
-    expect(PIPELINE_RUN_STUDIO_HTML).toContain(`<script>${PIPELINE_RUN_STUDIO_SCRIPT}</script>`);
+    expect(PIPELINE_RUN_STUDIO_HTML).toContain(
+      `<script type="module">${PIPELINE_RUN_STUDIO_SCRIPT}</script>`
+    );
     expect(PIPELINE_RUN_STUDIO_HTML).toContain(`<style>${PIPELINE_RUN_STUDIO_STYLE}</style>`);
   });
 
@@ -43,7 +47,7 @@ describe("pipeline run studio page composition", () => {
       const page = await fetch(server.url);
       const csp = page.headers.get("content-security-policy") ?? "";
       const html = await page.text();
-      const script = /<script>([\s\S]*)<\/script>/.exec(html)?.[1];
+      const script = /<script type="module">([\s\S]*)<\/script>/.exec(html)?.[1];
       const style = /<style>([\s\S]*)<\/style>/.exec(html)?.[1];
       expect(script).toBe(PIPELINE_RUN_STUDIO_SCRIPT);
       expect(style).toBe(PIPELINE_RUN_STUDIO_STYLE);

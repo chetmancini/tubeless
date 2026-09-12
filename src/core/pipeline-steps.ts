@@ -623,7 +623,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
       ) => unknown;
     }
   ) => {
-    const definition = {
+    const definition: StepDefinitionBody<TOptions> = {
       [STEP_NESTED_PIPELINE]: {
         mode: "single" as const,
         pipelineId: config.pipeline.id,
@@ -644,19 +644,10 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
       }),
     };
 
-    if ("skip" in config && config.skip !== undefined) {
-      const skip = config.skip;
-      // SAFETY: the skip predicate is invoked with the step's own inputs and
-      // returns a step-skip decision; the casts only align the generic
-      // predicate signature with the concrete step context.
-      return buildStep(id, {
-        ...definition,
-        skip: (
-          inputs: RequiredInputs<readonly AnyStep<TOptions>[]> &
-            OptionalInputs<readonly AnyStep<TOptions>[]>,
-          context: PipelineExecutionContext<TOptions>
-        ) => skip(inputs as never, context) as StepSkipDecision | Promise<StepSkipDecision>,
-      });
+    const skip = config.skip;
+    if (skip !== undefined) {
+      // SAFETY: each constructor preserves the skip predicate's dependency inputs and context.
+      definition.skip = (inputs, context) => skip(inputs as never, context);
     }
     return buildStep(id, definition);
   }) as StepFactory<TOptions, TInputOptions>["fromPipeline"];
@@ -688,7 +679,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
   ) => {
     const remote: NonNullable<PipelinePlanStep["remote"]> = { engine: config.adapter.engine };
     if (config.adapter.target !== undefined) remote.target = config.adapter.target;
-    const definition = {
+    const definition: StepDefinitionBody<TOptions> = {
       [STEP_REMOTE]: remote,
       dependsOn: config.dependsOn,
       optionalDependsOn: config.optionalDependsOn,
@@ -700,13 +691,10 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
       run: (inputs: Record<string, unknown>, context: PipelineStepContext<TOptions>) =>
         config.adapter.invoke(config.mapInput(inputs, context), context),
     };
-    if ("skip" in config && config.skip !== undefined) {
-      const skip = config.skip;
-      return buildStep(id, {
-        ...definition,
-        // SAFETY: skippable fromRemote configs share the same dependency input map as the non-skippable overload.
-        skip: (inputs, context) => skip(inputs as never, context),
-      });
+    const skip = config.skip;
+    if (skip !== undefined) {
+      // SAFETY: each constructor preserves the skip predicate's dependency inputs and context.
+      definition.skip = (inputs, context) => skip(inputs as never, context);
     }
     return buildStep(id, definition);
   }) as StepFactory<TOptions, TInputOptions>["fromRemote"];
@@ -737,7 +725,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
       >;
     }
   ) => {
-    const definition = {
+    const definition: StepDefinitionBody<TOptions> = {
       [STEP_NESTED_PIPELINE]: {
         mode: "for-each" as const,
         pipelineId: config.pipeline.id,
@@ -758,13 +746,10 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
       }),
     };
 
-    if ("skip" in config && config.skip !== undefined) {
-      const skip = config.skip;
-      return buildStep(id, {
-        ...definition,
-        // SAFETY: skippable mapped-child configs share the same dependency input map as the non-skippable overload.
-        skip: (inputs, context) => skip(inputs as never, context),
-      });
+    const skip = config.skip;
+    if (skip !== undefined) {
+      // SAFETY: each constructor preserves the skip predicate's dependency inputs and context.
+      definition.skip = (inputs, context) => skip(inputs as never, context);
     }
     return buildStep(id, definition);
   }) as StepFactory<TOptions, TInputOptions>["forEachPipeline"];
