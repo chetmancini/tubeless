@@ -1,6 +1,6 @@
 {
   "name": "tubeless",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Typed pipeline primitives for composable data-processing workflows.",
   "author": {
     "name": "Chet Mancini",
@@ -56,7 +56,7 @@
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "lint": "bun run build && bun run lint:run",
-    "lint:run": "oxlint .",
+    "lint:run": "bunx --bun oxlint .",
     "knip": "knip",
     "tubeless": "bun run --silent build && bun dist/workbench/workbench-bin.js",
     "prepack": "bun run build",
