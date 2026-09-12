@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { packedTarballFilename, resolveNpm } from "./resolve-npm.mjs";
@@ -66,7 +66,7 @@ function assertPackedLlmsLinks(docsDirectory) {
 
 function assertPackedSourceMaps(installedPackage) {
   const distDirectory = join(installedPackage, "dist");
-  const entries = readdirSync(distDirectory);
+  const entries = readdirSync(distDirectory, { recursive: true });
   const declarationMaps = entries.filter((name) => name.endsWith(".d.ts.map"));
   if (declarationMaps.length > 0) {
     throw new Error(
@@ -89,7 +89,7 @@ function assertPackedSourceMaps(installedPackage) {
     const pairedJavaScript = name.slice(0, -".map".length);
     const pairedPath = join(distDirectory, pairedJavaScript);
     const pairedSource = existsSync(pairedPath) ? readFileSync(pairedPath, "utf8") : "";
-    if (!pairedSource.includes(`sourceMappingURL=${name}`)) {
+    if (!pairedSource.includes(`sourceMappingURL=${basename(name)}`)) {
       throw new Error(
         `Packed tubeless artifact map dist/${name} is not referenced by dist/${pairedJavaScript}`
       );

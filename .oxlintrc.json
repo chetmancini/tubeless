@@ -45,12 +45,20 @@
   },
   "overrides": [
     {
+      // These adapters parse unknown thrown values at the error boundary.
+      "files": ["src/cli/cli-exit.ts", "src/utilities/tubeless-error.ts"],
+      "rules": {
+        "anti-slop/no-unknown-parameters": "off",
+        "anti-slop/no-runtime-typeof": "off"
+      }
+    },
+    {
       "files": [
-        "src/pipeline.ts",
-        "src/pipeline-execute.ts",
-        "src/pipeline-plan.ts",
-        "src/pipeline-steps.ts",
-        "src/pipeline-types.ts"
+        "src/core/pipeline.ts",
+        "src/core/pipeline-execute.ts",
+        "src/core/pipeline-plan.ts",
+        "src/core/pipeline-steps.ts",
+        "src/core/pipeline-types.ts"
       ],
       "rules": {
         "anti-slop/no-chained-type-assertions": "off",
@@ -63,11 +71,11 @@
     },
     {
       "files": [
-        "src/child-execution.ts",
-        "src/cli-pipeline-command.ts",
-        "src/pipeline-module.ts",
-        "src/run-store-ui.ts",
-        "src/workbench-run.ts"
+        "src/core/child-execution.ts",
+        "src/cli/cli-pipeline-command.ts",
+        "src/workbench/pipeline-module.ts",
+        "src/studio/run-store-ui.ts",
+        "src/workbench/workbench-run.ts"
       ],
       "rules": {
         "anti-slop/no-unknown-parameters": "off",
@@ -77,13 +85,13 @@
     },
     {
       "files": [
-        "src/cli-command.ts",
-        "src/pipeline-command-marker.ts",
-        "src/run-store-ui-protocol.ts",
-        "src/run-store-ndjson.ts",
-        "src/tracing-internal.ts",
-        "src/workbench-shared.ts",
-        "src/workbench-ui.ts"
+        "src/cli/cli-command.ts",
+        "src/cli/pipeline-command-marker.ts",
+        "src/studio/run-store-ui-protocol.ts",
+        "src/run-store/run-store-ndjson.ts",
+        "src/tracing/tracing-internal.ts",
+        "src/workbench/workbench-shared.ts",
+        "src/workbench/workbench-ui.ts"
       ],
       "rules": {
         "anti-slop/no-runtime-typeof": "off",
@@ -93,21 +101,21 @@
       }
     },
     {
-      "files": ["src/cli-types.ts"],
+      "files": ["src/cli/cli-types.ts"],
       "rules": {
         "anti-slop/no-unsafe-dictionary-type": "off"
       }
     },
     {
       "files": [
-        "src/file-utils.ts",
-        "src/interactive-reporter.ts",
-        "src/lifecycle.ts",
-        "src/retry.ts",
-        "src/testing.ts",
-        "src/tracing.ts",
-        "src/workbench-project.ts",
-        "src/workbench-studio.ts"
+        "src/node/file-utils.ts",
+        "src/reporter/interactive-reporter.ts",
+        "src/core/lifecycle.ts",
+        "src/utilities/retry.ts",
+        "src/testing/testing.ts",
+        "src/tracing/tracing.ts",
+        "src/workbench/workbench-project.ts",
+        "src/workbench/workbench-studio.ts"
       ],
       "rules": {
         "anti-slop/no-unknown-parameters": "off",

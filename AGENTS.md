@@ -13,3 +13,12 @@
 - The public website lives in `website/` and is not part of the npm package.
   Rebuild it when human-facing docs or recommended usage change.
 - Run `make check` from this package directory before handoff.
+
+## Source organization
+
+- Follow [`src/README.md`](./src/README.md) for module ownership and dependency
+  direction. Keep tests beside their implementations and preserve public subpaths.
+- Keep storage and studio optional; the workbench supplies concrete adapters and
+  execution capabilities. Do not introduce reverse runtime dependencies into core.
+- Preserve the runtime graph checks in `src/core/pipeline-entry.test.ts` when
+  moving modules, including their coverage of transitive and lazy imports.

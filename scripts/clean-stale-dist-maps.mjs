@@ -18,7 +18,7 @@ function hasLiveSource(stem) {
 }
 
 if (existsSync(dist)) {
-  for (const name of readdirSync(dist)) {
+  for (const name of readdirSync(dist, { recursive: true })) {
     if (name.endsWith(".d.ts.map")) {
       rmSync(join(dist, name));
       continue;

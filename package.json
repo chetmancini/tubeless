@@ -34,7 +34,7 @@
   "sideEffects": false,
   "type": "module",
   "bin": {
-    "tubeless": "./dist/workbench-bin.js"
+    "tubeless": "./dist/workbench/workbench-bin.js"
   },
   "files": [
     "dist",
@@ -58,7 +58,7 @@
     "lint": "bun run build && bun run lint:run",
     "lint:run": "oxlint .",
     "knip": "knip",
-    "tubeless": "bun run --silent build && bun dist/workbench-bin.js",
+    "tubeless": "bun run --silent build && bun dist/workbench/workbench-bin.js",
     "prepack": "bun run build",
     "test": "bun run build && bun run test:run",
     "test:run": "vitest run --config vitest.config.ts",
@@ -77,94 +77,94 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/pipeline.d.ts",
-      "import": "./dist/pipeline.js",
-      "default": "./dist/pipeline.js"
+      "types": "./dist/core/pipeline.d.ts",
+      "import": "./dist/core/pipeline.js",
+      "default": "./dist/core/pipeline.js"
     },
     "./batch": {
-      "types": "./dist/batch.d.ts",
-      "import": "./dist/batch.js",
-      "default": "./dist/batch.js"
+      "types": "./dist/utilities/batch.d.ts",
+      "import": "./dist/utilities/batch.js",
+      "default": "./dist/utilities/batch.js"
     },
     "./cli": {
-      "types": "./dist/cli.d.ts",
-      "import": "./dist/cli.js",
-      "default": "./dist/cli.js"
+      "types": "./dist/cli/cli.d.ts",
+      "import": "./dist/cli/cli.js",
+      "default": "./dist/cli/cli.js"
     },
     "./node": {
-      "types": "./dist/node.d.ts",
-      "import": "./dist/node.js",
-      "default": "./dist/node.js"
+      "types": "./dist/node/node.d.ts",
+      "import": "./dist/node/node.js",
+      "default": "./dist/node/node.js"
     },
     "./rate-limit": {
-      "types": "./dist/rate-limit.d.ts",
-      "import": "./dist/rate-limit.js",
-      "default": "./dist/rate-limit.js"
+      "types": "./dist/utilities/rate-limit.d.ts",
+      "import": "./dist/utilities/rate-limit.js",
+      "default": "./dist/utilities/rate-limit.js"
     },
     "./render": {
-      "types": "./dist/render.d.ts",
-      "import": "./dist/render.js",
-      "default": "./dist/render.js"
+      "types": "./dist/render/render.d.ts",
+      "import": "./dist/render/render.js",
+      "default": "./dist/render/render.js"
     },
     "./reporter": {
-      "types": "./dist/reporter-entry.d.ts",
-      "import": "./dist/reporter-entry.js",
-      "default": "./dist/reporter-entry.js"
+      "types": "./dist/reporter/reporter-entry.d.ts",
+      "import": "./dist/reporter/reporter-entry.js",
+      "default": "./dist/reporter/reporter-entry.js"
     },
     "./retry": {
-      "types": "./dist/retry.d.ts",
-      "import": "./dist/retry.js",
-      "default": "./dist/retry.js"
+      "types": "./dist/utilities/retry.d.ts",
+      "import": "./dist/utilities/retry.js",
+      "default": "./dist/utilities/retry.js"
     },
     "./run-store": {
-      "types": "./dist/run-store.d.ts",
-      "import": "./dist/run-store.js",
-      "default": "./dist/run-store.js"
+      "types": "./dist/run-store/run-store.d.ts",
+      "import": "./dist/run-store/run-store.js",
+      "default": "./dist/run-store/run-store.js"
     },
     "./run-store/sqlite": {
-      "types": "./dist/run-store-sqlite.d.ts",
-      "import": "./dist/run-store-sqlite.js",
-      "default": "./dist/run-store-sqlite.js"
+      "types": "./dist/run-store/run-store-sqlite.d.ts",
+      "import": "./dist/run-store/run-store-sqlite.js",
+      "default": "./dist/run-store/run-store-sqlite.js"
     },
     "./run-store/ndjson": {
-      "types": "./dist/run-store-ndjson.d.ts",
-      "import": "./dist/run-store-ndjson.js",
-      "default": "./dist/run-store-ndjson.js"
+      "types": "./dist/run-store/run-store-ndjson.d.ts",
+      "import": "./dist/run-store/run-store-ndjson.js",
+      "default": "./dist/run-store/run-store-ndjson.js"
     },
     "./workbench/studio": {
-      "types": "./dist/workbench-studio.d.ts",
-      "import": "./dist/workbench-studio.js",
-      "default": "./dist/workbench-studio.js"
+      "types": "./dist/workbench/workbench-studio.d.ts",
+      "import": "./dist/workbench/workbench-studio.js",
+      "default": "./dist/workbench/workbench-studio.js"
     },
     "./workbench/project": {
-      "types": "./dist/workbench-project.d.ts",
-      "import": "./dist/workbench-project.js",
-      "default": "./dist/workbench-project.js"
+      "types": "./dist/workbench/workbench-project.d.ts",
+      "import": "./dist/workbench/workbench-project.js",
+      "default": "./dist/workbench/workbench-project.js"
     },
     "./run-store/ui": {
-      "types": "./dist/run-store-ui.d.ts",
-      "import": "./dist/run-store-ui.js",
-      "default": "./dist/run-store-ui.js"
+      "types": "./dist/studio/run-store-ui.d.ts",
+      "import": "./dist/studio/run-store-ui.js",
+      "default": "./dist/studio/run-store-ui.js"
     },
     "./testing": {
-      "types": "./dist/testing.d.ts",
-      "import": "./dist/testing.js",
-      "default": "./dist/testing.js"
+      "types": "./dist/testing/testing.d.ts",
+      "import": "./dist/testing/testing.js",
+      "default": "./dist/testing/testing.js"
     },
     "./tracing": {
-      "types": "./dist/tracing.d.ts",
-      "import": "./dist/tracing.js",
-      "default": "./dist/tracing.js"
+      "types": "./dist/tracing/tracing.d.ts",
+      "import": "./dist/tracing/tracing.js",
+      "default": "./dist/tracing/tracing.js"
     },
     "./tracing/json": {
-      "types": "./dist/tracing-json.d.ts",
-      "import": "./dist/tracing-json.js",
-      "default": "./dist/tracing-json.js"
+      "types": "./dist/tracing/tracing-json.d.ts",
+      "import": "./dist/tracing/tracing-json.js",
+      "default": "./dist/tracing/tracing-json.js"
     },
     "./tracing/otel": {
-      "types": "./dist/tracing-otel.d.ts",
-      "import": "./dist/tracing-otel.js",
-      "default": "./dist/tracing-otel.js"
+      "types": "./dist/tracing/tracing-otel.d.ts",
+      "import": "./dist/tracing/tracing-otel.js",
+      "default": "./dist/tracing/tracing-otel.js"
     }
   }
 }
