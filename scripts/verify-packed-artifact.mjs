@@ -210,7 +210,24 @@ const runners = {
     defined(await mod.runChildPipelineExample(), "child-pipeline.ts");
   },
   "remote-steps.ts": async (mod) => {
-    defined(await mod.runRemoteStepsExample(), "remote-steps.ts");
+    const { createServer } = await import("node:http");
+    const server = createServer((request, response) => {
+      request.resume();
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ orderId: "packed-order", rows: ["Alpha", "Beta"] }));
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const result = await mod.runRemoteStepsExample("http://127.0.0.1:" + server.address().port);
+      if (result.count !== 2) fail("remote-steps.ts", "expected validated remote rows");
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  },
+  "host-embedding.ts": async (mod) => {
+    const result = await mod.runHostEmbeddingExample();
+    if (!result.preview || result.rows[0] !== "Alpha") fail("host-embedding.ts", "expected host preview");
   },
   "fan-out-progress.ts": async (mod) => {
     defined(

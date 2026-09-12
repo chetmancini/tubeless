@@ -19,9 +19,11 @@ unchanged.
 | The graph must outlive the process, sleep for days, or wait on humans | Host embedding: a Temporal workflow, Lambda handler, or queue worker calls `pipeline.runOrThrow(...)` and passes `runId` / `parentRunId` | The engine           | The engine                                        |
 | Some steps run elsewhere; the rest stay local                         | `fromRemote`: one opaque parent step per remote unit of work                                                                             | The tubeless process | Only the remote job, not the parent `PipelineRun` |
 
-These are complementary. Embedding makes the _graph_ durable. `fromRemote`
-makes _a step_ remote. Do not treat a remote invoker inside today's loop as
-crash-resume.
+These are complementary. A host can persist job delivery and retry a whole
+invocation; calling `runOrThrow` does not checkpoint the graph. Put arbitrary
+pipeline I/O in an activity or worker handler, not a replayed workflow body.
+The host owns durable orchestration, idempotency, retries, and acknowledgements.
+Neither correlation IDs nor a remote invoker provide crash-resume.
 
 ## Adapter mapping
 
@@ -88,3 +90,42 @@ Use `context.reportProgress` for status and a job-id detail row. Use
 - Flattening remote activity, workflow, or request IDs into the parent DAG.
 - Injected runner overrides (same rejection as child pipelines).
 - `fromRemote` `mapResult`. Reshape in the adapter or a later local step.
+
+## Executable HTTP boundary
+
+[`remote-steps.ts`](../examples/remote-steps.ts) uses native `fetch`, with no
+provider dependency. Call `runRemoteStepsExample("http://127.0.0.1:8080")` against
+a service implementing this application-owned protocol:
+
+- `POST /enrich`, JSON body `{ rows: string[], runId: string, dryRun: boolean }`.
+- Success: a 2xx JSON response `{ orderId: string, rows: string[] }`.
+- Failure: a non-2xx status. The adapter throws with code `HTTP_<status>` and a
+  status cause, without copying response bodies into diagnostics.
+
+The service must validate the request and gate all writes on `dryRun`. A pipeline
+dry run still sends this request. If the service cannot guarantee a side-effect-free
+preview, add `dryRun: "skip"` or a local preview handler instead.
+`outputSchema` checks the object and every row before the local summary step runs;
+malformed JSON and invalid output fail the step. Customize authentication and
+endpoint configuration in the application adapter.
+
+Cancellation passes the caller signal through to `fetch`, aborting the HTTP wait.
+It does not guarantee that the server stopped work or rolled back writes. A
+service that starts durable jobs needs its own cancellation protocol. Automatic
+retries are deliberately absent: the service must define idempotency before
+retrying a request that may already have committed.
+
+The integration tests in `src/testing/remote-steps.example.test.ts` use a real
+loopback server, covering live and dry-run requests, invalid output, malformed
+JSON, HTTP errors, and an aborted in-flight connection. The packed-artifact check
+also runs the recipe over HTTP without credentials or an external service.
+
+## Separate host handler
+
+[`host-embedding.ts`](../examples/host-embedding.ts) exports `handleHostJob` for a
+queue worker or activity handler. It passes host-owned `runId`, `parentRunId`,
+`dryRun`, and `signal` to `runOrThrow`. Failed or cancelled runs reject, allowing
+the host to withhold acknowledgement and apply its failure policy. Assign a
+unique run ID per invocation/attempt and a stable parent workflow ID. Validate
+the job envelope before invocation; keep host SDKs and persistence outside the
+pipeline module.

@@ -14,8 +14,8 @@ inventory.
 | Deliberately omit unnecessary work             | [`conditional-step.ts`](../examples/conditional-step.ts)                 | `step.skippable`, valued skip, skip-aware output typing                      |
 | Preserve independent work after failure        | [`best-effort.ts`](../examples/best-effort.ts)                           | `continueOnError`, structured `run` result                                   |
 | Compose one reusable workflow                  | [`child-pipeline.ts`](../examples/child-pipeline.ts)                     | `fromPipeline`, `mapOptions`, `mapResult`                                    |
-| Mixed local and remote steps                   | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `fromRemote`, `RemoteStepAdapter`, inverse dry-run                           |
-| Host a pipeline in a durable engine            | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `runOrThrow`, pass `runId` / `parentRunId`                                   |
+| Call a real HTTP service                       | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `fromRemote`, fetch cancellation, validated HTTP output                      |
+| Host a pipeline in a durable engine            | [`host-embedding.ts`](../examples/host-embedding.ts)                     | `runOrThrow`, pass `runId` / `parentRunId`                                   |
 | Fan out over runtime items                     | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline.skippable`, stable keys, concurrency, progress              |
 | Show determinate progress                      | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `reportProgress`, mapped-child progress                                      |
 | Watch the live TTY reporter                    | [`live-tui.ts`](../examples/live-tui.ts)                                 | named steps, nested `details`; persist with `--store`                        |
