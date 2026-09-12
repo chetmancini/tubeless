@@ -1262,6 +1262,43 @@ describe("defineCommand: checkpoint", () => {
     }
   });
 
+  it.each(["run", "execute", "main"] as const)(
+    "%s(): preserves a resumed checkpoint when caller-triggered cancellation cleanup returns normally",
+    async (entrypoint) => {
+      seedCheckpoint();
+      const controller = new AbortController();
+      const log = testLog();
+      let resolveStarted: (() => void) | undefined;
+      const started = new Promise<void>((resolve) => {
+        resolveStarted = resolve;
+      });
+      const command = defineCommand({
+        checkpoint: { path: checkpointPath },
+        params: {},
+        run: async (_v, context) => {
+          resolveStarted?.();
+          await new Promise<void>((resolve) => {
+            context.signal?.addEventListener("abort", () => resolve(), { once: true });
+          });
+          context.checkpoint?.record("b");
+          context.checkpoint?.flush();
+        },
+      });
+
+      const runPromise =
+        entrypoint === "execute"
+          ? command.execute({ dryRun: false, resume: true }, { signal: controller.signal, log })
+          : command[entrypoint](["--resume"], { signal: controller.signal, log });
+      await started;
+      controller.abort();
+      await runPromise;
+
+      const checkpoint = openCheckpoint(checkpointPath);
+      expect(checkpoint.has("a")).toBe(true);
+      expect(checkpoint.has("b")).toBe(true);
+    }
+  );
+
   it("lists --resume in help for every command, checkpoint or not", () => {
     const withCheckpoint = defineCommand({
       checkpoint: { path: checkpointPath },

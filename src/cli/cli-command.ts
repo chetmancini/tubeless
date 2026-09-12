@@ -248,10 +248,13 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     return { ...context, checkpoint: store };
   }
 
-  /** No-op unless `config.checkpoint` is set, a store is attached, and the run wasn't a dry run. */
+  /**
+   * No-op unless `config.checkpoint` is set, a store is attached, and the run completed
+   * without a dry run or caller cancellation.
+   */
   function finalizeCheckpoint(context: CliContext, values: CliParams<TSchema>): void {
     const checkpointConfig = config.checkpoint;
-    if (!checkpointConfig || !context.checkpoint || values.dryRun) {
+    if (!checkpointConfig || !context.checkpoint || values.dryRun || context.signal?.aborted) {
       return;
     }
     if (checkpointConfig.clearOnSuccess === false) {
