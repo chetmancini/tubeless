@@ -22,7 +22,7 @@ import {
   type CliParamsSchema,
   type CliParseResult,
 } from "./cli-types.js";
-import { isCliValidationError, isPipelineExecutionError, toExitCode } from "./workbench-shared.js";
+import { isCliValidationError, isPipelineExecutionError, toExitCode } from "./cli-exit.js";
 
 function resolveContext(overrides?: Partial<CliContext>): CliContext {
   return {

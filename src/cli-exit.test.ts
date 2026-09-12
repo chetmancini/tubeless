@@ -5,9 +5,9 @@ import {
   isPipelineExecutionError,
   toExitCode,
   TUBELESS_WORKBENCH_EXIT_CODE,
-} from "./workbench-shared.js";
+} from "./cli-exit.js";
 
-describe("workbench error predicates", () => {
+describe("CLI error exit mapping", () => {
   it("recognizes unbranded CliHelpRequested copies by name and helpText", () => {
     const error = Object.assign(new Error("Usage: toy\n"), {
       helpText: "Usage: toy\n",

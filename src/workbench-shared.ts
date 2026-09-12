@@ -2,14 +2,14 @@ import { stat } from "node:fs/promises";
 import * as path from "node:path";
 import type { CliContext } from "./cli.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE } from "./cli-exit.js";
-import { type PipelineContext, type PipelineError } from "./pipeline.js";
+import type { PipelineContext } from "./pipeline.js";
 import {
   loadPipelineCommandModule,
   loadPlanSourceModule,
   type WorkbenchPipelineCommand,
   type WorkbenchPlanSource,
 } from "./pipeline-module.js";
-import { TUBELESS_ERROR } from "./tubeless-error.js";
+import { tubelessErrorKind } from "./tubeless-error.js";
 
 export { TUBELESS_WORKBENCH_EXIT_CODE };
 
@@ -116,18 +116,6 @@ export function writeUsageError(io: WorkbenchCliIo, message: string, usage: stri
   return TUBELESS_WORKBENCH_EXIT_CODE.usage;
 }
 
-function tubelessErrorKind(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-  const kind = Object.getOwnPropertyDescriptor(error, TUBELESS_ERROR)?.value;
-  return typeof kind === "string" ? kind : undefined;
-}
-
-function errorName(error: unknown): string | undefined {
-  return typeof error === "object" && error !== null && "name" in error
-    ? String(error.name)
-    : undefined;
-}
-
 function isDefinitionError(error: unknown): boolean {
   // Dual library copies under dynamic import break instanceof; identify
   // errors by branded discriminant, then the historical name used by loaded modules.
@@ -139,69 +127,6 @@ function isDefinitionError(error: unknown): boolean {
 
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-export function isCliHelpRequested(error: unknown): error is { helpText: string } {
-  // Dual library copies under dynamic import break instanceof. Key on the
-  // brand, then the pre-brand name-and-shape used by older loaded copies.
-  return (
-    (tubelessErrorKind(error) === "cli-help" || errorName(error) === "CliHelpRequested") &&
-    typeof error === "object" &&
-    error !== null &&
-    "helpText" in error &&
-    typeof error.helpText === "string"
-  );
-}
-
-export function isCliValidationError(
-  error: unknown
-): error is { errors: readonly string[]; helpText: string } {
-  // Dual library copies under dynamic import break instanceof. Key on the
-  // brand, then the pre-brand name-and-shape used by older loaded copies.
-  return (
-    (tubelessErrorKind(error) === "cli-validation" || errorName(error) === "CliValidationError") &&
-    typeof error === "object" &&
-    error !== null &&
-    "errors" in error &&
-    Array.isArray(error.errors) &&
-    "helpText" in error &&
-    typeof error.helpText === "string"
-  );
-}
-
-export function isPipelineExecutionError(
-  error: unknown
-): error is { result: { errors: PipelineError[] } } {
-  // Dual library copies under dynamic import break instanceof. Key on the
-  // brand, then the pre-brand name-and-shape used by older loaded copies.
-  return (
-    (tubelessErrorKind(error) === "pipeline-execution" ||
-      errorName(error) === "PipelineExecutionError") &&
-    typeof error === "object" &&
-    error !== null &&
-    "result" in error &&
-    typeof error.result === "object" &&
-    error.result !== null &&
-    "errors" in error.result &&
-    Array.isArray(error.result.errors)
-  );
-}
-
-/** Map a thrown CLI or pipeline error onto the workbench exit-code family. */
-export function toExitCode(error: unknown): number {
-  if (isCliHelpRequested(error)) return TUBELESS_WORKBENCH_EXIT_CODE.success;
-  if (isCliValidationError(error)) return TUBELESS_WORKBENCH_EXIT_CODE.validation;
-  if (isPipelineExecutionError(error)) {
-    const errors = error.result.errors;
-    if (errors.length > 0 && errors.every(({ kind }) => kind === "cancellation")) {
-      return TUBELESS_WORKBENCH_EXIT_CODE.cancellation;
-    }
-    if (errors.some(({ phase }) => phase === "planning")) {
-      return TUBELESS_WORKBENCH_EXIT_CODE.planning;
-    }
-    return TUBELESS_WORKBENCH_EXIT_CODE.execution;
-  }
-  return TUBELESS_WORKBENCH_EXIT_CODE.execution;
 }
 
 async function loadWorkbenchModule<T>(

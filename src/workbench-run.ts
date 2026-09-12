@@ -8,16 +8,18 @@ import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import { renderPipelineError } from "./render.js";
 import type { PipelineRunEventStore } from "./run-store.js";
 import { composeTraceExporters, type PipelineTraceExporter } from "./tracing.js";
+import {
+  isCliHelpRequested,
+  isCliValidationError,
+  isPipelineExecutionError,
+  toExitCode,
+} from "./cli-exit.js";
 import { loadPipelineCommandTarget } from "./workbench-project-loader.js";
 import {
   commandContext,
   errorMessage,
-  isCliHelpRequested,
-  isCliValidationError,
-  isPipelineExecutionError,
   manageWorkbenchSignal,
   TUBELESS_WORKBENCH_EXIT_CODE,
-  toExitCode,
   writeCliChunk,
   writeUsageError,
   type WorkbenchCliIo,
