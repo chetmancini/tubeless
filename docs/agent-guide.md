@@ -48,7 +48,11 @@ or shared helpers in this repository.
   `runId` / `parentRunId` when the graph must outlive the process. Parent
   plans expose `remote` with `engine` and optional `target`. Adapters may
   forward remote lines through `context.log` and must rethrow remote
-  failures as `Error` with `cause` / `code`.
+  failures as `Error` with `cause` / `code`. Copy the native-fetch boundary in
+  [`remote-steps.ts`](../examples/remote-steps.ts), including validation of
+  unknown JSON and forwarding the signal. Use
+  [`host-embedding.ts`](../examples/host-embedding.ts) for host-owned invocation;
+  correlation IDs do not provide persistence or checkpoint/resume.
 - Use `runConcurrent` for bounded lightweight functions that do not need child
   lifecycle events. Use `runConcurrentSettled` when the caller needs completed
   results and the first failure instead of a throw.
