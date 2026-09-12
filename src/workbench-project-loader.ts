@@ -3,8 +3,8 @@ import * as path from "node:path";
 import {
   importModuleNamespace,
   selectUniqueExport,
+  type WorkbenchPipeline,
   type WorkbenchPipelineCommand,
-  type WorkbenchPlanSource,
 } from "./pipeline-module.js";
 import {
   isPipelineProjectManifest,
@@ -16,6 +16,7 @@ import {
   loadPipelineCommand,
   loadPlanSource,
   TUBELESS_WORKBENCH_EXIT_CODE,
+  writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
 
@@ -36,6 +37,16 @@ export interface ResolvedPipelineProjectCommand {
 }
 
 type LoadFailure = { exitCode: number };
+
+const EXPORT_PROJECT_MUTEX_ERROR =
+  "--export cannot be combined with --project; the manifest owns export selection.";
+
+interface ResolvedTargetLoad {
+  exportName: string | undefined;
+  fileArgument: string;
+  loadIo: WorkbenchCliIo;
+  registration?: ResolvedPipelineProjectCommand;
+}
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
@@ -140,11 +151,38 @@ async function projectFileForTarget(
   return (await pathExists(defaultFile)) ? defaultFile : undefined;
 }
 
+async function resolveTargetLoad(
+  target: string,
+  exportName: string | undefined,
+  projectFile: string | undefined,
+  io: WorkbenchCliIo,
+  usage: string
+): Promise<ResolvedTargetLoad | LoadFailure> {
+  if (exportName !== undefined && projectFile !== undefined) {
+    return { exitCode: writeUsageError(io, EXPORT_PROJECT_MUTEX_ERROR, usage) };
+  }
+
+  const resolvedProjectFile = await projectFileForTarget(target, projectFile, io);
+  if (resolvedProjectFile === undefined) {
+    return { exportName, fileArgument: target, loadIo: io };
+  }
+
+  const registration = await resolveRegisteredTarget(target, resolvedProjectFile, io);
+  if ("exitCode" in registration) return registration;
+  return {
+    exportName: registration.exportName,
+    fileArgument: registration.filePath,
+    loadIo: { ...io, cwd: registration.cwd },
+    registration,
+  };
+}
+
 export async function loadPipelineCommandTarget(
   target: string,
   exportName: string | undefined,
   projectFile: string | undefined,
-  io: WorkbenchCliIo
+  io: WorkbenchCliIo,
+  usage: string
 ): Promise<
   | {
       command: WorkbenchPipelineCommand;
@@ -154,44 +192,36 @@ export async function loadPipelineCommandTarget(
     }
   | LoadFailure
 > {
-  const resolvedProjectFile = await projectFileForTarget(target, projectFile, io);
-  if (resolvedProjectFile === undefined) {
-    const loaded = await loadPipelineCommand(target, exportName, io);
-    if ("exitCode" in loaded) return loaded;
-    return { ...loaded, commandIo: io };
-  }
-
-  const registration = await resolveRegisteredTarget(target, resolvedProjectFile, io);
-  if ("exitCode" in registration) return registration;
-  const commandIo = { ...io, cwd: registration.cwd };
+  const resolved = await resolveTargetLoad(target, exportName, projectFile, io, usage);
+  if ("exitCode" in resolved) return resolved;
   const loaded = await loadPipelineCommand(
-    registration.filePath,
-    registration.exportName,
-    commandIo
+    resolved.fileArgument,
+    resolved.exportName,
+    resolved.loadIo
   );
   if ("exitCode" in loaded) return loaded;
-  return { ...loaded, commandIo, registration };
+  return { ...loaded, commandIo: resolved.loadIo, registration: resolved.registration };
 }
 
 export async function loadPlanSourceTarget(
   target: string,
   exportName: string | undefined,
   projectFile: string | undefined,
-  io: WorkbenchCliIo
+  io: WorkbenchCliIo,
+  usage: string
 ): Promise<
   | {
-      source: WorkbenchPlanSource;
       registration?: ResolvedPipelineProjectCommand;
+      view: WorkbenchPipeline;
     }
   | LoadFailure
 > {
-  const resolvedProjectFile = await projectFileForTarget(target, projectFile, io);
-  if (resolvedProjectFile === undefined) return loadPlanSource(target, exportName, io);
-
-  const registration = await resolveRegisteredTarget(target, resolvedProjectFile, io);
-  if ("exitCode" in registration) return registration;
-  const commandIo = { ...io, cwd: registration.cwd };
-  const loaded = await loadPlanSource(registration.filePath, registration.exportName, commandIo);
+  const resolved = await resolveTargetLoad(target, exportName, projectFile, io, usage);
+  if ("exitCode" in resolved) return resolved;
+  const loaded = await loadPlanSource(resolved.fileArgument, resolved.exportName, resolved.loadIo);
   if ("exitCode" in loaded) return loaded;
-  return { ...loaded, registration };
+  return {
+    view: loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline,
+    registration: resolved.registration,
+  };
 }

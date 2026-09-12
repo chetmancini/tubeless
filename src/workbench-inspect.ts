@@ -2,11 +2,7 @@ import { parseArgs } from "node:util";
 import type { PipelinePlan } from "./pipeline.js";
 import { renderPipelinePlan } from "./render.js";
 import { loadPlanSourceTarget } from "./workbench-project-loader.js";
-import {
-  TUBELESS_WORKBENCH_EXIT_CODE,
-  writeUsageError,
-  type WorkbenchCliIo,
-} from "./workbench-shared.js";
+import { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "./workbench-shared.js";
 import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 const INSPECT_USAGE = `Usage: tubeless inspect [options] <pipeline-or-command-file>
@@ -58,23 +54,16 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
         message: "Pass exactly one pipeline or command file.",
       },
       async run(parsed, commandIo) {
-        if (parsed.values.export !== undefined && parsed.values.project !== undefined) {
-          return writeUsageError(
-            commandIo,
-            "--export cannot be combined with --project; the manifest owns export selection.",
-            INSPECT_USAGE
-          );
-        }
         const loaded = await loadPlanSourceTarget(
           parsed.positionals[0]!,
           parsed.values.export,
           parsed.values.project,
-          commandIo
+          commandIo,
+          INSPECT_USAGE
         );
         if ("exitCode" in loaded) return loaded.exitCode;
 
-        const view =
-          loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
+        const { view } = loaded;
         const plan = view.plan();
         if (parsed.values.json) {
           const inspection: WorkbenchInspection = {

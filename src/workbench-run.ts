@@ -148,19 +148,12 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
     return writeUsageError(io, "Pass exactly one pipeline command file.", RUN_USAGE);
   }
 
-  if (parsed.parsed.values.export !== undefined && parsed.parsed.values.project !== undefined) {
-    return writeUsageError(
-      io,
-      "--export cannot be combined with --project; the manifest owns export selection.",
-      RUN_USAGE
-    );
-  }
-
   const loaded = await loadPipelineCommandTarget(
     parsed.parsed.positionals[0]!,
     parsed.parsed.values.export,
     parsed.parsed.values.project,
-    io
+    io,
+    RUN_USAGE
   );
   if ("exitCode" in loaded) return loaded.exitCode;
 

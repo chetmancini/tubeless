@@ -64,25 +64,16 @@ export async function runGraph(argv: readonly string[], io: WorkbenchCliIo): Pro
           );
         }
 
-        if (parsed.values.export !== undefined && parsed.values.project !== undefined) {
-          return writeUsageError(
-            commandIo,
-            "--export cannot be combined with --project; the manifest owns export selection.",
-            GRAPH_USAGE
-          );
-        }
-
         const loaded = await loadPlanSourceTarget(
           parsed.positionals[0]!,
           parsed.values.export,
           parsed.values.project,
-          commandIo
+          commandIo,
+          GRAPH_USAGE
         );
         if ("exitCode" in loaded) return loaded.exitCode;
 
-        const view =
-          loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
-        const source = view.toMermaid({
+        const source = loaded.view.toMermaid({
           direction,
           includeDescriptions: parsed.values.descriptions,
         });

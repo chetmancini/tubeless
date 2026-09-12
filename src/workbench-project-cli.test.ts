@@ -171,6 +171,22 @@ describe("project manifest workbench", () => {
     );
   });
 
+  it("rejects --export combined with --project on inspect, plan, graph, and run", async () => {
+    const { directory, manifest } = await writeProjectFixture();
+    const mutexArgs = ["--export", "FixtureCommand", "--project", manifest, "import-data"] as const;
+
+    for (const command of ["inspect", "plan", "graph", "run"] as const) {
+      const io = captureIo(directory);
+      expect(await runWorkbenchCli([command, ...mutexArgs], io)).toBe(
+        TUBELESS_WORKBENCH_EXIT_CODE.usage
+      );
+      expect(io.errors.join("")).toContain(
+        "--export cannot be combined with --project; the manifest owns export selection."
+      );
+      expect(io.errors.join("")).toContain(`Usage: tubeless ${command}`);
+    }
+  });
+
   it("uses a bare id from the current directory default manifest", async () => {
     const { directory } = await writeProjectFixture();
     const io = captureIo(directory);

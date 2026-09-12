@@ -2,11 +2,7 @@ import { parseArgs } from "node:util";
 import type { PipelineRunControls } from "./pipeline.js";
 import { renderPipelinePlan } from "./render.js";
 import { loadPlanSourceTarget } from "./workbench-project-loader.js";
-import {
-  TUBELESS_WORKBENCH_EXIT_CODE,
-  writeUsageError,
-  type WorkbenchCliIo,
-} from "./workbench-shared.js";
+import { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "./workbench-shared.js";
 import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 const PLAN_USAGE = `Usage: tubeless plan [options] <pipeline-or-command-file>
@@ -54,18 +50,12 @@ export async function runPlan(argv: readonly string[], io: WorkbenchCliIo): Prom
         message: "Pass exactly one pipeline or command file.",
       },
       async run(parsed, commandIo) {
-        if (parsed.values.export !== undefined && parsed.values.project !== undefined) {
-          return writeUsageError(
-            commandIo,
-            "--export cannot be combined with --project; the manifest owns export selection.",
-            PLAN_USAGE
-          );
-        }
         const loaded = await loadPlanSourceTarget(
           parsed.positionals[0]!,
           parsed.values.export,
           parsed.values.project,
-          commandIo
+          commandIo,
+          PLAN_USAGE
         );
         if ("exitCode" in loaded) return loaded.exitCode;
 
@@ -74,9 +64,7 @@ export async function runPlan(argv: readonly string[], io: WorkbenchCliIo): Prom
         };
         if (parsed.values.step !== undefined) controls.stepIds = parsed.values.step;
         if (parsed.values.target !== undefined) controls.targets = parsed.values.target;
-        const view =
-          loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline;
-        const plan = view.plan(controls);
+        const plan = loaded.view.plan(controls);
         const rendered = parsed.values.json
           ? renderPipelinePlan(plan, { format: "json", pretty: true })
           : renderPipelinePlan(plan, { explain: parsed.values.explain ?? false });
