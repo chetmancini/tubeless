@@ -4,6 +4,8 @@ import { definePipelineProject } from "tubeless/workbench/project";
 // the local studio. Module paths resolve from this file; cwd controls command
 // execution. Command argv flags stay --step/--target, while mapOptions and hooks
 // receive stepIds and targets.
+// History uses recorded pipeline IDs: `tubeless history --pipeline import`
+// selects the pipeline behind the registered command `import-rows`.
 
 /** Checked-in project command catalog with stable registered identities. */
 export default definePipelineProject({

@@ -133,6 +133,66 @@ const secondRunEvents: PipelineTraceEvent[] = [
 ];
 
 describe("runHistory", () => {
+  it.each(["--store", "--trace"])("filters recorded pipeline IDs with %s", async (source) => {
+    const directory = await tempDir();
+    const filename = path.join(directory, source === "--store" ? "runs.sqlite" : "runs.ndjson");
+    const events = [...failedRunEvents, ...secondRunEvents];
+    if (source === "--store") await seedStore(filename, events);
+    else await writeFile(filename, `${events.map((next) => JSON.stringify(next)).join("\n")}\n`);
+    // A catalog must not resolve registered IDs or load modules during history reads.
+    await writeFile(path.join(directory, "tubeless.project.ts"), 'throw new Error("do not load");');
+
+    for (const mode of [[], ["--json"], ["--events"]]) {
+      const args = [source, filename, "--pipeline", "import", ...mode];
+      const listIo = captureIo(directory);
+      expect(await runHistory(args, listIo)).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+      expect(listIo.errors).toEqual([]);
+      expect(listIo.output.join("")).toContain("run-failed");
+      expect(listIo.output.join("")).not.toContain("run-ok");
+      if (mode.includes("--events")) {
+        const recorded = listIo.output
+          .join("")
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line));
+        expect(recorded).toHaveLength(failedRunEvents.length);
+        expect(recorded.every((next) => next.pipelineId === "import")).toBe(true);
+      }
+
+      const detailIo = captureIo(directory);
+      expect(await runHistory([...args, "run-failed"], detailIo)).toBe(
+        TUBELESS_WORKBENCH_EXIT_CODE.success
+      );
+      expect(detailIo.output.join("")).toContain("source slowed");
+      const mismatchIo = captureIo(directory);
+      expect(await runHistory([...args, "run-ok"], mismatchIo)).toBe(
+        TUBELESS_WORKBENCH_EXIT_CODE.usage
+      );
+      expect(mismatchIo.output).toEqual([]);
+      expect(mismatchIo.errors.join("")).toContain('Unknown run "run-ok".');
+
+      for (const pipelineId of ["missing", "import-rows"]) {
+        const emptyIo = captureIo(directory);
+        expect(
+          await runHistory([source, filename, "--pipeline", pipelineId, ...mode], emptyIo)
+        ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+        expect(emptyIo.errors).toEqual([]);
+        if (mode.includes("--json"))
+          expect(JSON.parse(emptyIo.output.join(""))).toEqual({ runs: [] });
+        else expect(emptyIo.output).toEqual([]);
+      }
+    }
+  });
+
+  it("requires a pipeline selector value and documents its identity", async () => {
+    const io = captureIo(await tempDir());
+    expect(await runHistory(["--pipeline"], io)).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    const helpIo = captureIo(io.cwd);
+    expect(await runHistory(["--help"], helpIo)).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(helpIo.output.join("")).toContain("--pipeline <id>");
+    expect(helpIo.output.join("")).toContain("not registered command ID");
+  });
+
   it("lists one line per recorded run", async () => {
     const directory = await tempDir();
     const storePath = path.join(directory, "runs.sqlite");

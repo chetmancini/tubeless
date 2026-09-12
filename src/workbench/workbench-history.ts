@@ -25,6 +25,7 @@ Show recorded pipeline runs from SQLite or an NDJSON trace.
 Options:
       --store <path>    SQLite database (default: .tubeless/runs.sqlite)
       --trace <path>    Read a finished NDJSON trace artifact
+      --pipeline <id>   Filter by recorded pipeline ID (not registered command ID)
       --json            Emit the projected run list or run as JSON
       --events          Emit raw store events as NDJSON
   -h, --help            Show this help
@@ -40,6 +41,7 @@ function parseHistoryArgs(argv: readonly string[]) {
       events: { type: "boolean" },
       help: { type: "boolean", short: "h" },
       json: { type: "boolean" },
+      pipeline: { type: "string" },
       store: { type: "string" },
       trace: { type: "string" },
     },
@@ -173,6 +175,7 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
           return TUBELESS_WORKBENCH_EXIT_CODE.load;
         }
         const query: PipelineRunEventQuery = runId === undefined ? {} : { runId };
+        if (parsed.values.pipeline !== undefined) query.pipelineId = parsed.values.pipeline;
         try {
           if (parsed.values.events) {
             const eventCount = await forEachEventPage(store, query, (page) =>

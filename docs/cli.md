@@ -161,11 +161,16 @@ tubeless history [options] [run-id]
 
 - `--store <path>` selects the SQLite database (default `.tubeless/runs.sqlite`)
 - `--trace <path>` selects a finished NDJSON trace artifact
+- `--pipeline <id>` filters by the exact recorded pipeline ID, not a registered command ID
 - `--json` emits the projected run list, or one projected run when `run-id` is set
 - `--events` emits raw store events as NDJSON (run-scoped when `run-id` is set)
 
 `--store` and `--trace` cannot be combined. `--json` and `--events` cannot be
-combined. The default print is the projection:
+combined. `--pipeline` applies to every output mode and both artifact sources.
+With `run-id`, both selectors must match; a mismatch is an unknown run (exit `1`).
+A pipeline with no recorded runs returns an empty list or event stream (exit `0`).
+History reads recorded IDs directly without loading a project catalog or command module.
+The default print is the projection:
 a run list, or one run's steps, logs, and error. A missing store exits `2`. A
 store that cannot be opened read-only — a pending `-wal` or `-journal`,
 multiple hard links, or a file that is not a versioned run store — also exits
@@ -182,6 +187,7 @@ avoid exposing Studio beyond the intended host.
 ```sh
 bunx tubeless run --store .tubeless/runs.sqlite --trace run.ndjson ./scripts/import.ts -- --source rows.txt
 bunx tubeless history
+bunx tubeless history --pipeline import
 bunx tubeless history --json <run-id>
 bunx tubeless history --events <run-id>
 bunx tubeless history --trace run.ndjson

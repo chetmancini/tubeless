@@ -79,6 +79,8 @@ or shared helpers in this repository.
   and `--store` for SQLite; they compose. Use `tubeless history` to list or show
   recorded runs from SQLite, or pass `--trace` to inspect a finished NDJSON
   artifact without importing it.
+  Filter shared history with `--pipeline <recorded-pipeline-id>` in any output
+  mode. This is the pipeline definition's ID, not its registered command ID.
 
 ## Runtime rules
 
