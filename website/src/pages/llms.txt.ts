@@ -11,75 +11,41 @@ export const GET: APIRoute = () => {
 Version: ${PACKAGE.version}
 Full documentation: ${absUrl("llms-full.txt")}
 
-Markdown pages (same source as the human site):
+Tubeless is a TypeScript library by Chet Mancini, called from your own code or local CLI; it is not a hosted execution API.
+Use it for typed ETL/import jobs, dependency-ordered validation and publication,
+and observable multi-step CLI workflows. Choose a durable workflow engine instead
+when you need persisted execution, crash recovery, or distributed scheduling.
+
+Read the guide and smallest matching recipe before authoring. Import public package
+entrypoints, preserve stable IDs, and mark external side effects dryRun: "skip".
+Use context.log and context.signal. Inspect or plan before running a registered
+command; execution requires the caller's authorization for its side effects.
+This static site provides explicit Markdown URLs; Accept negotiation is not available.
+
+## When to use Tubeless
+
+- [Typed imports and ETL](${absUrl("docs/recipes.md")}): Choose the smallest matching executable recipe for ingestion, enrichment, or export jobs.
+- [Validation and publication workflows](${absUrl("docs/agent-guide.md")}): Model required dependencies and failure gates; never publish after unsuccessful validation.
+- [Pipeline-backed CLI programs](${absUrl("docs/cli.md")}): Use definePipelineCommand, tubeless list, tubeless inspect <registered-id>, and tubeless plan <registered-id>. Run with tubeless run <registered-id> -- <command-args> only when execution is intended.
+- [Choosing an execution model](${absUrl("docs/comparison.md")}): Check fit before choosing Tubeless for durable or distributed execution.
+
+## Documentation
 
 ${DOC_NAV.map(({ slug, label, blurb }) => `- [${label}](${absUrl(`docs/${slug}.md`)}): ${blurb}`).join("\n")}
 
-Human site: ${absUrl()}
-Package source: ${GITHUB_BLOB}
+## Agent instructions
 
-Start:
+- [Canonical agent guide](${absUrl("docs/agent-guide.md")}): Primitive selection, runtime contracts, and safety rules.
+- [Authoring skill](${GITHUB_BLOB}/skills/tubeless/SKILL.md): Repository authoring workflow.
+- [Project manifest](${GITHUB_BLOB}/examples/catalog/tubeless.project.ts): File layout, stable registered IDs, and exports.
+- [API report](${absUrl("api-report.json")}): Machine-readable public declarations.
 
-- First pipeline: ${absUrl("start")}
-- Getting started: ${absUrl("docs/getting-started")}
-- CLI: ${absUrl("docs/cli")}
-- Local studio: ${absUrl("docs/studio")}
-- Choose a pattern: ${absUrl("docs/recipes")}
-- Execution semantics: ${absUrl("docs/concepts")}
-- Comparison: ${absUrl("docs/comparison")}
+## Optional
 
-Agent instructions:
-
-- This map: ${absUrl("llms.txt")}
-- Agent entrypoints: ${absUrl("agents")}
-- Canonical guide: ${absUrl("docs/agent-guide")}
-- Raw guide: ${absUrl("docs/agent-guide.md")}
-- Skill: ${GITHUB_BLOB}/skills/tubeless/SKILL.md
-- Project manifest: ${GITHUB_BLOB}/examples/catalog/tubeless.project.ts
-- Maintain stable step IDs.
-- Use optional step names only as display overrides; dependencies and selection use IDs.
-- Use pipeline.toMermaid() to generate static graph documentation.
-- Use tubeless list to enumerate only explicitly registered commands from the project manifest. Use stable registered IDs with inspect, plan, graph, and run; no command modules are discovered from the filesystem or history.
-- Use tubeless inspect with a registered ID, pipeline, or marked command module for a read-only inventory of identity plus the default plan. Prefer the marked command when both are exported.
-- Use tubeless plan with a pipeline or marked command module to preview target, exact-step, and dry-run selection without executing or supplying domain options. Prefer the marked command when both are exported. Use command.plan() or tubeless plan; do not simulate planning with --plan.
-- Use tubeless graph with a pipeline or marked command module to print Mermaid without a wrapper script. Prefer the marked command when both are exported.
-- Use tubeless run only with a definePipelineCommand module; put the command's validated application arguments after --.
-- Set dryRun: "skip" on external side effects, or provide a side-effect-free dryRun handler.
-- Use context.log, context.signal, context.sleep, and progress APIs.
-- Use createPipelineTestRuntime from tubeless/testing for deterministic tests.
-- Use definePipelineCommand for pipeline-backed scripts.
-- Declare public goals with targets: [step] on definePipeline. stepIds is an exact filter and cannot be combined with targets.
-- Use PipelinePlanStep.selectionReasons for selection explanations.
-- Branch on PipelineError code/phase/kind, not message text.
-- Use requireOutputs for finalizers that need specific completed step outputs.
-- Core imports no schema library.
-
-Advanced:
-
-- Child pipelines: ${absUrl("docs/child-pipeline-composition")}
-- Remote steps: ${absUrl("docs/remote-step-composition")}
-- Public exports: ${absUrl("docs/api-reference")}
-- Machine-readable surface: ${absUrl("api-report.json")}
-- Agent evaluation cases: ${absUrl("docs/agent-evaluations")}
-
-Executable examples:
-
-- ${GITHUB_BLOB}/examples/catalog/tubeless.project.ts
-- ${GITHUB_BLOB}/examples/typed-import.ts
-- ${GITHUB_BLOB}/examples/validated-boundaries.ts
-- ${GITHUB_BLOB}/examples/publish-with-gates.ts
-- ${GITHUB_BLOB}/examples/conditional-step.ts
-- ${GITHUB_BLOB}/examples/best-effort.ts
-- ${GITHUB_BLOB}/examples/child-pipeline.ts
-- ${GITHUB_BLOB}/examples/fan-out-progress.ts
-- ${GITHUB_BLOB}/examples/resumable-enrichment.ts
-- ${GITHUB_BLOB}/examples/cli-job.ts
-- ${GITHUB_BLOB}/examples/rendering.ts
-- ${GITHUB_BLOB}/examples/cancellation-and-testing.ts
-- ${GITHUB_BLOB}/examples/live-tui.ts
-- ${GITHUB_BLOB}/examples/peloton.ts
-- ${GITHUB_BLOB}/examples/tracing.ts
-- ${GITHUB_BLOB}/examples/local-observability.ts
+- [Complete documentation](${absUrl("llms-full.txt")}): All docs from this build, agent guide first.
+- [Human documentation index](${absUrl("docs")}): Browse the same documentation as HTML.
+- [Sitemap](${absUrl("sitemap.xml")}): All indexable human pages.
+- [Source and executable examples](${GITHUB_BLOB}/examples): Public-import examples compiled in CI.
 `;
 
   return new Response(body, {

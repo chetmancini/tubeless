@@ -15,7 +15,7 @@ type Props = {
 const { title, description, slug, headings = [] } = Astro.props;
 ---
 
-<Base title={title} description={description}>
+<Base title={title} description={description} markdown={slug ? `docs/${slug}.md` : undefined}>
   <main class="wrap doc-shell">
     <nav class="doc-nav" aria-label="Documentation">
       <a class="jump-article" href="#article">Jump to article ↓</a>

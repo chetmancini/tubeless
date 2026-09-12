@@ -7,12 +7,26 @@ import Terminal from "../components/Terminal.astro";
 import TtyBar from "../components/TtyBar.astro";
 import { planTape } from "../data/tapes";
 import { PACKAGE } from "../lib/package";
-import { githubBlob, href } from "../lib/paths";
+import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
 ---
 
 <Base
   title="Tubeless"
-  description="Define and run typed data pipelines and multi-step workflow graphs."
+  structuredData={{
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "@id": `${absUrl()}#software`,
+    name: "Tubeless",
+    description: PACKAGE.description,
+    url: absUrl(),
+    applicationCategory: "DeveloperApplication",
+    operatingSystem: "Cross-platform",
+    softwareVersion: PACKAGE.version,
+    license: `${GITHUB_REPO}/blob/main/LICENSE`,
+    sameAs: [GITHUB_REPO],
+    author: { "@type": "Person", name: "Chet Mancini", url: "https://github.com/chetmancini" },
+  }}
+  description="Tubeless by Chet Mancini: dependency-free TypeScript primitives for typed data pipelines and multi-step workflow graphs."
 >
   <main>
     <section class="wrap hero">

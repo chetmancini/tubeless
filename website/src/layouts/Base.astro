@@ -8,9 +8,12 @@ import "../styles/global.css";
 type Props = {
   title: string;
   description: string;
+  markdown?: string;
+  structuredData?: Record<string, unknown>;
+  noindex?: boolean;
 };
 
-const { title, description } = Astro.props;
+const { title, description, markdown, structuredData, noindex } = Astro.props;
 const pageTitle = title === "Tubeless" ? title : `${title} · Tubeless`;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
@@ -24,6 +27,12 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta name="description" content={description} />
     <link rel="alternate" type="text/plain" title="Agent documentation index" href={href("llms.txt")} />
     <link rel="alternate" type="text/plain" title="Complete documentation" href={href("llms-full.txt")} />
+    <meta name="author" content="Chet Mancini" />
+    {noindex && <meta name="robots" content="noindex" />}
+    <link rel="describedby" href={href("llms.txt")} />
+    <link rel="sitemap" type="application/xml" href={href("sitemap.xml")} />
+    {markdown && <link rel="alternate" type="text/markdown" href={href(markdown)} />}
+    {structuredData && <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData).replace(/</g, "\\u003c")} />}
     <link rel="canonical" href={canonical} />
     <link rel="icon" href={href("favicon.svg")} type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
