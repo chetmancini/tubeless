@@ -26,6 +26,7 @@ From the package root: `make website`.
 | Rendered-link check | `scripts/check-built-links.mjs` (runs after `astro build`) |
 | CLI tapes | `src/data/tapes.ts` (used on Start) |
 | Studio screenshot | `public/studio.png` (recapture from `tubeless ui`) |
+| Markdown downloads and full text | `src/pages/docs/[slug].md.ts`, `src/pages/llms-full.txt.ts`; generated from `DOC_NAV` and `../docs/*.md` |
 | Agent URL table | `src/pages/agents.astro`, `src/pages/llms.txt.ts` |
 | Visual system | `src/styles/global.css` |
 | Logo and social card | `../docs/assets/logo.svg` and `../docs/assets/social.svg`; rasterize social to `public/og.png` |
@@ -41,3 +42,8 @@ The GitHub repo already uses **GitHub Actions** as the Pages source.
 
 - Site: `https://chetmancini.github.io/tubeless`
 - Package `make check` does not include this project
+
+Every documentation page links to its `.md` counterpart. `/llms.txt` lists all
+Markdown URLs; `/llms-full.txt` bundles the same build’s docs with the agent guide
+first. Links in Markdown are absolute, so downloaded context remains navigable.
+These routes use the same documentation catalog as the human navigation.

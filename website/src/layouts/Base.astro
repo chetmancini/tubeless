@@ -22,6 +22,8 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{pageTitle}</title>
     <meta name="description" content={description} />
+    <link rel="alternate" type="text/plain" title="Agent documentation index" href={href("llms.txt")} />
+    <link rel="alternate" type="text/plain" title="Complete documentation" href={href("llms-full.txt")} />
     <link rel="canonical" href={canonical} />
     <link rel="icon" href={href("favicon.svg")} type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -35,7 +37,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={absUrl("og.png")} />
-    <meta property="og:image:alt" content="Tubeless — define a typed graph, plan a target, run it from Node" />
+    <meta property="og:image:alt" content="Tubeless: typed pipelines for Node.js" />
     <meta property="og:image:width" content="1280" />
     <meta property="og:image:height" content="640" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -53,6 +55,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       <slot />
     </div>
     <SiteFooter />
+    <span class="sr-only" role="status" id="copy-status"></span>
     <script>
       document.addEventListener("click", (event) => {
         const target = event.target;
@@ -61,11 +64,15 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
         if (!button) return;
         const text = button.dataset.copy;
         if (!text) return;
-        void navigator.clipboard.writeText(text).then(() => {
+        const status = document.getElementById("copy-status");
+        void Promise.resolve().then(() => navigator.clipboard.writeText(text)).then(() => {
+          if (status) status.textContent = "Copied to clipboard.";
           button.dataset.copied = "";
           window.setTimeout(() => {
             delete button.dataset.copied;
           }, 1600);
+        }).catch(() => {
+          if (status) status.textContent = "Could not copy. Select and copy the text directly.";
         });
       });
     </script>

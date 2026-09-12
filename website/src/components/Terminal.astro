@@ -7,7 +7,7 @@ type Props = {
   replay?: boolean;
 };
 
-const { tape, replay = true } = Astro.props;
+const { tape, replay = false } = Astro.props;
 ---
 
 <figure class="tty" data-replay={replay ? "" : undefined} aria-label={`Terminal: ${tape.command}`}>

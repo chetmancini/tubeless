@@ -37,8 +37,21 @@ import { githubBlob, href } from "../lib/paths";
         <circle cx="200" cy="16" r="7" fill="#c4a046"></circle>
       </svg>
       <div>
-        <p class="kicker">In-process typed DAGs</p>
         <h1>Tubeless</h1>
+        <p class="lede">
+          Typed pipelines for Node.js. Define dependencies, preview execution,
+          and inspect step results.
+        </p>
+        <Install command={`npm install ${PACKAGE.name}`} />
+        <div class="actions">
+          <a class="btn" href={href("start")}>Getting started</a>
+          <a class="btn ghost" href={href("agents")}>Agent documentation</a>
+        </div>
+      </div>
+      <Terminal tape={planTape} />
+    </section>
+
+    <div class="wrap package-strip">
         <dl class="pkg" aria-label="Package">
           <div>
             <dt>Version</dt>
@@ -69,23 +82,12 @@ import { githubBlob, href } from "../lib/paths";
             <dd>{PACKAGE.runtimeDeps}</dd>
           </div>
         </dl>
-        <p class="lede">
-          Define a typed graph. Plan a target. Run it from Node.
-        </p>
-        <Install command={`npm install ${PACKAGE.name}`} />
-        <div class="actions">
-          <a class="btn" href={href("start")}>Start a pipeline</a>
-          <a class="btn ghost" href={href("docs")}>Docs</a>
-        </div>
-      </div>
-      <Terminal tape={planTape} />
-    </section>
+    </div>
 
     <section class="wrap section">
       <div class="section-head">
         <div>
-          <p class="kicker">Library</p>
-          <h2>What it is</h2>
+          <h2>Runtime</h2>
         </div>
         <p>
           Import <code>createSteps</code> and <code>definePipeline</code>. Invalid graphs fail at definition.
@@ -103,8 +105,8 @@ import { githubBlob, href } from "../lib/paths";
           <p><code>inspect</code>, <code>plan</code>, <code>graph</code>, <code>run</code>, and <code>ui</code>. Bun 1.3.14+. <code>npx tubeless</code> relaunches through Bun.</p>
         </article>
         <article>
-          <h3>Lightweight</h3>
-          <p>Zero infra. Import it and call <code>run</code> anywhere Node 22 already is.</p>
+          <h3>Execution</h3>
+          <p>Pipelines run in your Node.js process. No separate server is required.</p>
         </article>
       </div>
     </section>
@@ -112,13 +114,11 @@ import { githubBlob, href } from "../lib/paths";
     <section class="wrap section">
       <div class="feature">
         <div class="feature-copy">
-          <p class="bib">01</p>
           <h2>Define</h2>
           <p>
-            The graph is typed. A step is both the work and the token later
-            steps depend on, so a missing edge, a cycle, or a duplicate ID fails
-            at definition. The same IDs drive plans, reports, hooks, and CLI
-            selection.
+            Steps declare typed inputs and outputs. Pipeline definitions reject
+            missing dependencies, cycles, and duplicate IDs. Plans, reports,
+            hooks, and CLI selection use the declared step IDs.
           </p>
         </div>
         <figure class="shot">
@@ -154,12 +154,11 @@ export const ImportPipeline = definePipeline({
     <section class="wrap section">
       <div class="feature reverse">
         <div class="feature-copy">
-          <p class="bib">02</p>
           <h2>Plan</h2>
           <p>
-            The same definition prints as Mermaid. Required edges are solid.
-            Optional inputs and failure gates are dotted. <code>plan()</code>
-            names which nodes a target will visit, before anything writes.
+            <code>plan()</code> lists the steps selected for a target without
+            executing them. Export the dependency graph as Mermaid with
+            <code>toMermaid()</code>.
           </p>
         </div>
         <MermaidGraph />
@@ -169,12 +168,11 @@ export const ImportPipeline = definePipeline({
     <section class="wrap section">
       <div class="feature">
         <div class="feature-copy">
-          <p class="bib">03</p>
           <h2>Run</h2>
           <p>
-            The same export plans, dry-runs, and executes. Preview a target
-            before anything writes. Persist the run if you want history. The TTY
-            reports the selected graph, not a spinner.
+            <code>run()</code> returns step results, failures, and timings.
+            The terminal reporter displays progress during execution.
+            Run history can be stored in SQLite or exported as NDJSON.
           </p>
         </div>
         <LiveTerminal />
@@ -184,12 +182,10 @@ export const ImportPipeline = definePipeline({
     <section class="wrap section">
       <div class="feature reverse">
         <div class="feature-copy">
-          <p class="bib">04</p>
-          <h2>Control</h2>
+          <h2>Studio</h2>
           <p>
-            The studio reads the local run store. After the process exits you
-            still have completed runs, step timelines, and nested children on
-            disk next to the repo.
+            The local studio displays recorded runs, step timelines, and
+            nested pipelines from SQLite or NDJSON history.
           </p>
         </div>
         <figure class="shot">
@@ -198,9 +194,19 @@ export const ImportPipeline = definePipeline({
             src={href("studio.png")}
             width="1440"
             height="813"
+            loading="lazy"
             alt="Local studio listing completed import and publish runs, with the import step timeline and a nested normalize run selected."
           />
         </figure>
+      </div>
+    </section>
+    <section class="wrap section next-steps" aria-labelledby="next-heading">
+      <h2 id="next-heading">Documentation</h2>
+      <div class="agent-grid">
+        <a href={href("start")}><h3>Getting started</h3></a>
+        <a href={href("agents")}><h3>Agent documentation</h3></a>
+        <a href={href("docs/recipes")}><h3>Recipes</h3></a>
+        <a href={href("docs/concepts")}><h3>Execution semantics</h3></a>
       </div>
     </section>
   </main>

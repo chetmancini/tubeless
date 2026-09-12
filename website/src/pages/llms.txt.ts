@@ -1,10 +1,19 @@
 import type { APIRoute } from "astro";
-import { GITHUB_BLOB, absUrl, githubRaw } from "../lib/paths";
+import { DOC_NAV } from "../lib/docs";
+import { PACKAGE } from "../lib/package";
+import { GITHUB_BLOB, absUrl } from "../lib/paths";
 
 export const GET: APIRoute = () => {
   const body = `# tubeless
 
 > Dependency-free TypeScript primitives for typed, observable data pipelines and their CLI programs.
+
+Version: ${PACKAGE.version}
+Full documentation: ${absUrl("llms-full.txt")}
+
+Markdown pages (same source as the human site):
+
+${DOC_NAV.map(({ slug, label, blurb }) => `- [${label}](${absUrl(`docs/${slug}.md`)}): ${blurb}`).join("\n")}
 
 Human site: ${absUrl()}
 Package source: ${GITHUB_BLOB}
@@ -24,7 +33,7 @@ Agent instructions:
 - This map: ${absUrl("llms.txt")}
 - Agent entrypoints: ${absUrl("agents")}
 - Canonical guide: ${absUrl("docs/agent-guide")}
-- Raw guide: ${githubRaw("docs/agent-guide.md")}
+- Raw guide: ${absUrl("docs/agent-guide.md")}
 - Skill: ${GITHUB_BLOB}/skills/tubeless/SKILL.md
 - Project manifest: ${GITHUB_BLOB}/examples/catalog/tubeless.project.ts
 - Maintain stable step IDs.

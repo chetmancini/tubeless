@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { marked } from "marked";
-import { GITHUB_BLOB, href } from "./paths";
+import { GITHUB_BLOB, absUrl, href } from "./paths";
 
 const docsDir = join(dirname(fileURLToPath(import.meta.url)), "../../../docs");
 
@@ -16,11 +16,11 @@ export type DocPage = {
 
 export const DOC_NAV = [
   { slug: "getting-started", label: "Getting started", blurb: "Install, first pipeline, and the testing runtime." },
-  { slug: "recipes", label: "Recipes", blurb: "Smallest compiled example for the job." },
+  { slug: "recipes", label: "Recipes", blurb: "Examples by use case." },
   { slug: "concepts", label: "Concepts", blurb: "Skip, failure, selection, and dry-run." },
   { slug: "cli", label: "CLI", blurb: "inspect, plan, graph, run, and history." },
   { slug: "studio", label: "Studio", blurb: "Local SQLite or NDJSON history and tubeless ui." },
-  { slug: "comparison", label: "Comparison", blurb: "What this is, and what it is not." },
+  { slug: "comparison", label: "Comparison", blurb: "Comparison with other pipeline tools." },
   { slug: "child-pipeline-composition", label: "Child pipelines", blurb: "Nested pipelines and fan-out." },
   { slug: "remote-step-composition", label: "Remote steps", blurb: "Remote engines as parent steps." },
   { slug: "agent-guide", label: "Agent guide", blurb: "Rules for generating pipeline code." },
@@ -87,9 +87,22 @@ export function loadDoc(slug: string): DocPage {
   const html = marked.parse(rewriteDocLinks(source), { async: false, gfm: true }) as string;
   const rendered = addHeadingIds(html);
   const body = rendered.html.replace(/^\s*<h1\b[^>]*>[\s\S]*?<\/h1>/, "");
-  return { slug, title, description, html: body, headings: rendered.headings };
+  return { slug, title, description, html: body.replace(/<pre>/g, '<pre tabindex="0">'), headings: rendered.headings };
 }
 
 export function listDocs(): DocPage[] {
   return DOC_NAV.map((item) => loadDoc(item.slug));
+}
+
+// Keep agent downloads aligned with the exact sources rendered by this build.
+export function loadMarkdown(slug: string): string {
+  if (!DOC_SLUGS.has(slug as (typeof DOC_NAV)[number]["slug"])) {
+    throw new Error(`Unknown documentation page: ${slug}`);
+  }
+  return rewriteDocLinks(readFileSync(join(docsDir, `${slug}.md`), "utf8"))
+    .replace(/\]\((\/[^)]+)\)/g, (_match, path: string) => {
+      const url = new URL(path, absUrl());
+      if (url.pathname.startsWith(href("docs/"))) url.pathname += ".md";
+      return `](${url.href})`;
+    });
 }

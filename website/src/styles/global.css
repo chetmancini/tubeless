@@ -1,12 +1,12 @@
 :root {
-  --road: #e6e4de;
-  --paper: #f3f2ed;
+  --road: #f7f5ef;
+  --paper: #fffdf8;
   --mist: #d8d5cc;
   --carbon: #121212;
   --ink: #1b1b1b;
   --muted: #5c594f;
-  --line: #c4c0b4;
-  --gold: #c4a046;
+  --line: #dedbd1;
+  --gold: #866522;
   --gold-hot: #e0c36a;
   --ok: #2f6f4a;
   --skip: #8a6a1a;
@@ -48,14 +48,7 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(1100px 480px at 82% -12%, rgb(196 160 70 / 14%), transparent 58%),
-    radial-gradient(900px 380px at -10% 8%, rgb(18 18 18 / 5%), transparent 50%),
-    repeating-linear-gradient(
-      -18deg,
-      transparent 0 13px,
-      rgb(196 160 70 / 0.04) 13px 14px
-    ),
-    linear-gradient(180deg, rgb(255 255 255 / 32%), transparent 26%),
+    radial-gradient(ellipse at 90% 0%, rgb(213 183 111 / 15%), transparent 35%),
     var(--road);
 }
 
@@ -220,8 +213,8 @@ a:hover {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(20rem, 0.95fr);
   gap: 3.2rem;
-  padding: 4.8rem 0 3.8rem;
-  align-items: end;
+  padding: 6rem 0 4rem;
+  align-items: center;
 }
 
 .hero-wheel {
@@ -251,24 +244,15 @@ a:hover {
   text-transform: uppercase;
 }
 
-.bib {
-  margin: 0 0 0.3rem;
-  color: var(--gold);
-  font-family: var(--display);
-  font-size: clamp(2.3rem, 4vw, 3.1rem);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 0.9;
-}
 
 .hero h1,
 .page-title {
   margin: 0;
   font-family: var(--display);
-  font-size: clamp(3.6rem, 9vw, 7.6rem);
+  font-size: clamp(3.6rem, 7.3vw, 6.4rem);
   font-weight: 800;
   letter-spacing: 0.02em;
-  line-height: 0.84;
+  line-height: 0.98;
   text-wrap: balance;
 }
 
@@ -346,6 +330,7 @@ a:hover {
   min-height: 2.75rem;
   padding: 0.45rem 1.1rem;
   border: 1px solid var(--carbon);
+  border-radius: 6px;
   background: var(--carbon);
   color: var(--paper);
   font: 500 0.92rem/1 var(--sans);
@@ -379,7 +364,8 @@ a:hover {
   padding: 0.7rem 0.85rem 0.7rem 0.95rem;
   width: fit-content;
   max-width: 100%;
-  border-left: 3px solid var(--gold);
+  border: 1px solid var(--line);
+  border-radius: 6px;
   background: var(--paper);
   font-family: var(--mono);
   font-size: 0.86rem;
@@ -388,7 +374,8 @@ a:hover {
 .copy-cmd {
   appearance: none;
   margin-left: 0.35rem;
-  padding: 0.2rem 0;
+  min-height: 2rem;
+  padding: 0.3rem;
   border: 0;
   background: transparent;
   color: var(--gold);
@@ -416,7 +403,7 @@ a:hover {
 }
 
 .section {
-  padding: 4rem 0;
+  padding: 4.8rem 0;
   border-top: 1px solid var(--line);
 }
 
@@ -433,7 +420,7 @@ a:hover {
   font-size: clamp(2.1rem, 4vw, 3.3rem);
   font-weight: 700;
   letter-spacing: 0.04em;
-  line-height: 0.95;
+  line-height: 1.1;
 }
 
 .section-head {
@@ -451,7 +438,7 @@ a:hover {
 
 .section-head > p {
   margin: 0;
-  padding-top: calc(0.76rem * 1.55 + 0.85rem);
+  padding-top: 0;
 }
 
 .page-lead {
@@ -553,10 +540,12 @@ a:hover {
 }
 
 .tty {
+  margin: 0;
   overflow: hidden;
   background: var(--tire);
   color: var(--chalk);
   border: 1px solid #2a2924;
+  border-radius: 10px;
   box-shadow: 0 22px 48px rgb(18 18 18 / 16%);
 }
 
@@ -565,6 +554,7 @@ a:hover {
   overflow: hidden;
   background: var(--tire);
   border: 1px solid #2a2924;
+  border-radius: 10px;
   box-shadow: 0 22px 48px rgb(18 18 18 / 16%);
 }
 
@@ -669,17 +659,7 @@ a:hover {
   border-top: 2px dashed var(--gold);
 }
 
-.graph-source {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
+
 
 .tty-bar {
   display: flex;
@@ -703,7 +683,7 @@ a:hover {
 
 .tty-host {
   margin-left: auto;
-  color: #7d786a;
+  color: #aaa390;
   letter-spacing: 0.14em;
 }
 
@@ -714,7 +694,7 @@ a:hover {
 }
 
 .graph-shot .tty-host {
-  color: #8a867c;
+  color: #6a665c;
 }
 
 .tty pre {
@@ -754,8 +734,7 @@ a:hover {
 }
 
 .tty .line {
-  opacity: 0;
-  animation: fade-line 0.01s var(--delay, 0s) forwards;
+  opacity: 1;
 }
 
 .tty[data-replay] .line {
@@ -882,6 +861,7 @@ tbody tr:hover td {
   display: grid;
   grid-template-columns: 14rem minmax(0, 1fr);
   gap: 3rem;
+  padding-top: 2rem;
   padding-bottom: 4.5rem;
 }
 
@@ -927,7 +907,10 @@ tbody tr:hover td {
 .doc-body {
   min-width: 0;
   overflow-x: auto;
-  padding-top: 1.15rem;
+  padding: 2rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
 }
 
 .doc-body h1 {
@@ -1002,7 +985,7 @@ main pre code {
   font-size: 0.86em;
   padding: 0.08em 0.28em;
   background: rgb(18 18 18 / 6%);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .shot pre {
@@ -1237,3 +1220,50 @@ main pre code {
     color: #8fd0a6;
   }
 }
+
+/* Shared editorial details and clear paths into the documentation. */
+.hero h1::after { display: none; }
+.hero .lede { max-width: 30rem; line-height: 1.65; }
+.hero-wheel { opacity: 0.035; }
+.package-strip { padding-bottom: 2.5rem; }
+.package-strip .pkg { max-width: none; margin: 0; padding: 1.2rem 0; gap: 2rem 4rem; }
+.pkg dd { font-size: 0.85rem; }
+.facts { border-radius: 9px; overflow: hidden; }
+.facts article { padding: 1.7rem; }
+.facts h3 { color: var(--gold); }
+.next-steps .agent-grid { margin-top: 2rem; }
+.agent-grid { gap: 1rem; background: transparent; border: 0; }
+.agent-grid a { border: 1px solid var(--line); border-radius: 8px; padding: 1.7rem; overflow: hidden; }
+.agent-grid h3 { font-family: var(--sans); font-size: 1.2rem; letter-spacing: -0.02em; text-transform: none; }
+.doc-tools { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; font: 0.7rem var(--mono); color: var(--muted); }
+.doc-body h1 { font-size: clamp(2.2rem, 4vw, 3.2rem); }
+.doc-body h2 { line-height: 1.2; }
+.doc-body pre { border-radius: 6px; }
+.toc { max-height: 18rem; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--road); }
+.agent-handoff { margin-top: 2rem; padding: 1.5rem; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+.agent-handoff p { max-width: 55rem; overflow-wrap: anywhere; }
+.agent-handoff .install { display: flex; width: 100%; margin-top: 1rem; }
+.agent-handoff .install > span { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+.agent-handoff .copy-cmd { margin-left: auto; flex-shrink: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (max-width: 880px) {
+  .hero { gap: 2.8rem; }
+  .hero h1 { font-size: clamp(3.6rem, 12vw, 6rem); }
+  .package-strip .pkg { gap: 1rem 2rem; }
+  .section { padding: 3rem 0; }
+  .doc-shell { gap: 1.5rem; }
+  .doc-body { padding: 1.25rem; }
+  .doc-nav { padding-top: 0; }
+  .page-title { font-size: clamp(3.3rem, 10vw, 5rem); }
+  :is(h1, h2, h3, h4, [id]) { scroll-margin-top: 8rem; }
+}
+
+.doc-nav .jump-article { color: var(--gold); grid-column: 1 / -1; margin-bottom: 0.6rem; }
+@media (min-width: 881px) { .doc-nav .jump-article { display: none; } }
+
+.graph-details { margin-top: 1rem; border-top: 1px solid var(--line); padding-top: 0.8rem; }
+.graph-details summary { cursor: pointer; color: var(--muted); font: 0.72rem var(--mono); }
+.graph-details pre { margin-top: 0.8rem; color: var(--ink); }
+
+.agent-handoff + .section { margin-top: 0; }
+.section > h2 + .facts, .section > h2 + .table-wrap { margin-top: 1.5rem; }

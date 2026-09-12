@@ -15,14 +15,12 @@ const agents = DOC_NAV.filter((item) =>
 ---
 
 <Doc title="Docs" description="Human documentation for tubeless, with agent entrypoints beside it.">
-  <p class="kicker">Documentation</p>
-  <h1>Docs</h1>
+  <h1>Documentation</h1>
   <p>
-    Getting started, recipes, CLI, studio, comparison, and the agent guide.
     These pages render <code>docs/*.md</code> from the package.
   </p>
 
-  <h2>Start here</h2>
+  <h2>Usage</h2>
   <div class="agent-grid">
     {human.map((item) => (
       <a href={href(`docs/${item.slug}`)}>

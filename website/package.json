@@ -5,7 +5,7 @@
   "packageManager": "bun@1.3.14",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build && node scripts/check-built-links.mjs",
+    "build": "astro build && node scripts/check-built-links.mjs && node scripts/check-agent-docs.mjs",
     "preview": "astro preview"
   },
   "devDependencies": {

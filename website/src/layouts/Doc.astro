@@ -16,8 +16,9 @@ const { title, description, slug, headings = [] } = Astro.props;
 ---
 
 <Base title={title} description={description}>
-  <div class="wrap doc-shell">
+  <main class="wrap doc-shell">
     <nav class="doc-nav" aria-label="Documentation">
+      <a class="jump-article" href="#article">Jump to article ↓</a>
       <p>Docs</p>
       <a href={href("docs")} aria-current={slug ? undefined : "page"}>Index</a>
       {DOC_NAV.map((item) => (
@@ -29,7 +30,8 @@ const { title, description, slug, headings = [] } = Astro.props;
       <a href={href("agents")}>Entrypoints</a>
       <a href={href("llms.txt")}>llms.txt</a>
     </nav>
-    <article class="doc-body">
+    <article class="doc-body" id="article">
+      {slug && <div class="doc-tools"><a href={href(`docs/${slug}.md`)}>Markdown</a></div>}
       {slug && <h1>{title}</h1>}
       {headings.length > 0 && (
         <nav class="toc" aria-label="On this page">
@@ -41,5 +43,5 @@ const { title, description, slug, headings = [] } = Astro.props;
       )}
       <slot />
     </article>
-  </div>
+  </main>
 </Base>

@@ -1,6 +1,17 @@
 ---
 import Base from "../layouts/Base.astro";
-import { githubBlob, githubRaw, href } from "../lib/paths";
+import { absUrl, githubBlob, href } from "../lib/paths";
+
+const resources = [
+  { name: "LLM index", url: href("llms.txt"), use: "Documentation index" },
+  { name: "Complete documentation", url: href("llms-full.txt"), use: "All documentation in one text response" },
+  { name: "Agent guide", url: href("docs/agent-guide.md"), use: "Primitive, runtime, and safety rules in Markdown" },
+  { name: "Recipes", url: href("docs/recipes.md"), use: "Examples by use case" },
+  { name: "API report", url: href("api-report.json"), use: "Public surface for automated review" },
+  { name: "Skill", url: githubBlob("skills/tubeless/SKILL.md"), label: "skills/tubeless/SKILL.md", use: "Authoring workflow for this repo" },
+  { name: "Project manifest", url: githubBlob("examples/catalog/tubeless.project.ts"), label: "examples/catalog/tubeless.project.ts", use: "File layout, registered IDs, exports" },
+  { name: "Evaluations", url: href("docs/agent-evaluations.md"), use: "Forward-testing cases" },
+];
 ---
 
 <Base
@@ -9,34 +20,25 @@ import { githubBlob, githubRaw, href } from "../lib/paths";
 >
   <main class="wrap">
     <header class="page-lead">
-      <p class="kicker">For agents</p>
-      <h1 class="page-title">Entrypoints</h1>
+      <h1 class="page-title">Agent documentation</h1>
       <p>
-        Start with the map, then the guide, then the smallest recipe. Copy file
-        layout and stable IDs from the catalog. This site is the human docs. The
-        package ships <code>docs/</code> and <code>examples/</code> in the tarball.
+        Documentation is available as HTML, individual Markdown files, or one
+        text file. The package includes <code>docs/</code> and <code>examples/</code>.
       </p>
+      <div class="actions">
+        <a class="btn" href={href("llms.txt")}>Documentation index</a>
+        <a class="btn ghost" href={href("llms-full.txt")}>Full documentation (text)</a>
+      </div>
+      <div class="agent-handoff">
+        <p id="agent-prompt">Read {absUrl("llms.txt")}, then the agent guide and the smallest matching recipe before writing a Tubeless pipeline.</p>
+        <button class="btn ghost" type="button" data-copy={`Read ${absUrl("llms.txt")}, then the agent guide and the smallest matching recipe before writing a Tubeless pipeline.`}>Copy instructions</button>
+      </div>
     </header>
 
-    <section class="section">
-      <div class="facts">
-        <article>
-          <h3>1 · Map</h3>
-          <p>GET <a href={href("llms.txt")}>{href("llms.txt")}</a>.</p>
-        </article>
-        <article>
-          <h3>2 · Rules</h3>
-          <p>Read the <a href={href("docs/agent-guide")}>agent guide</a> before generating pipeline code.</p>
-        </article>
-        <article>
-          <h3>3 · Example</h3>
-          <p>Open the smallest row in <a href={href("docs/recipes")}>recipes</a>.</p>
-        </article>
-      </div>
-    </section>
+
 
     <section class="section">
-      <p class="kicker">Stable URLs</p>
+      <h2>Resources</h2>
       <div class="table-wrap">
         <table>
           <thead>
@@ -47,53 +49,20 @@ import { githubBlob, githubRaw, href } from "../lib/paths";
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>LLM index</td>
-              <td><a href={href("llms.txt")}>{href("llms.txt")}</a></td>
-              <td>Compact documentation map</td>
-            </tr>
-            <tr>
-              <td>Agent guide</td>
-              <td><a href={href("docs/agent-guide")}>{href("docs/agent-guide")}</a></td>
-              <td>Primitive, runtime, and safety rules</td>
-            </tr>
-            <tr>
-              <td>Recipes</td>
-              <td><a href={href("docs/recipes")}>{href("docs/recipes")}</a></td>
-              <td>Intent → compiled example</td>
-            </tr>
-            <tr>
-              <td>API report</td>
-              <td><a href={href("api-report.json")}>{href("api-report.json")}</a></td>
-              <td>Public surface for automated review</td>
-            </tr>
-            <tr>
-              <td>Skill</td>
-              <td><a href={githubBlob("skills/tubeless/SKILL.md")}>skills/tubeless/SKILL.md</a></td>
-              <td>Authoring workflow for this repo</td>
-            </tr>
-            <tr>
-              <td>Project manifest</td>
-              <td><a href={githubBlob("examples/catalog/tubeless.project.ts")}>examples/catalog/tubeless.project.ts</a></td>
-              <td>File layout, registered IDs, exports</td>
-            </tr>
-            <tr>
-              <td>Evaluations</td>
-              <td><a href={href("docs/agent-evaluations")}>{href("docs/agent-evaluations")}</a></td>
-              <td>Forward-testing cases</td>
-            </tr>
-            <tr>
-              <td>Raw markdown</td>
-              <td><a href={githubRaw("docs/agent-guide.md")}>raw agent-guide.md</a></td>
-              <td>When HTML is the wrong shape</td>
-            </tr>
+            {resources.map((resource) => (
+              <tr>
+                <td>{resource.name}</td>
+                <td><a href={resource.url}>{resource.label ?? resource.url}</a></td>
+                <td>{resource.use}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
     </section>
 
     <section class="section">
-      <p class="kicker">Invariants</p>
+      <h2>Authoring rules</h2>
       <div class="facts">
         <article>
           <h3>IDs</h3>
