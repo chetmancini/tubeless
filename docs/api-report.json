@@ -135,7 +135,7 @@
         "PromptMultiSelectOptions",
         "TUBELESS_WORKBENCH_EXIT_CODE"
       ],
-      "sha256": "bda6164c46db5927669c667f9268e3479f7951e1afe0cbc0ffa557cfd25b1cbb",
+      "sha256": "a5eef1459b6a7c31d9aa1ea09fc0033d4525d07f00513ce21db3c0855b040044",
       "specifier": "tubeless/cli"
     },
     {
@@ -282,7 +282,7 @@
         "PipelineRunStudioServer",
         "startPipelineRunStudio"
       ],
-      "sha256": "bcb737d1b47b518510b06272ef13ba145124f338ec3d81330e9a35b82e0b9bfc",
+      "sha256": "7a79cec5c72721d875a681020b481f1245a97eb4cfa03ad34b5529d41c8f5166",
       "specifier": "tubeless/run-store/ui"
     },
     {

@@ -321,7 +321,7 @@ export function definePipelineCommand<
     },
   } satisfies CliCommandConfig<PipelineCliBuiltins & TSchema, TResult>;
 
-  const command = createCommand(commandConfig, undefined, {
+  const command = createCommand(commandConfig, {
     validation: TUBELESS_WORKBENCH_EXIT_CODE.validation,
   });
 

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { formatWithOxfmt } from "./format-with-oxfmt.mjs";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,19 +7,6 @@ import { fileURLToPath } from "node:url";
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const packageJson = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8"));
 const check = process.argv.includes("--check");
-
-function formatWithOxfmt(contents, filepath) {
-  const result = spawnSync("oxfmt", ["--stdin-filepath", filepath], {
-    cwd: packageRoot,
-    encoding: "utf8",
-    input: contents,
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`oxfmt failed for ${filepath}: ${result.stderr}`);
-  }
-  return result.stdout;
-}
 
 function exportedSymbols(declaration) {
   const symbols = new Set();

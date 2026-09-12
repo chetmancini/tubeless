@@ -5,11 +5,9 @@ import { fileURLToPath } from "node:url";
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 function filesUnder(directory, extension) {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) return filesUnder(path, extension);
-    return extname(path) === extension ? [path] : [];
-  });
+  return readdirSync(directory, { recursive: true, withFileTypes: true })
+    .filter((entry) => !entry.isDirectory() && extname(entry.name) === extension)
+    .map((entry) => join(entry.parentPath, entry.name));
 }
 
 function assert(condition, message) {

@@ -37,17 +37,10 @@ export function runCheck(outputRoot, write = (line) => console.error(line)) {
 }
 
 function listHtmlFiles(root) {
-  const files = [];
-  const stack = [root];
-  while (stack.length > 0) {
-    const dir = stack.pop();
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) stack.push(path);
-      else if (entry.isFile() && entry.name.endsWith(".html")) files.push(path);
-    }
-  }
-  return files.sort();
+  return readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".html"))
+    .map((entry) => join(entry.parentPath, entry.name))
+    .sort();
 }
 
 function pagePathFromFile(root, file) {

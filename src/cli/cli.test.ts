@@ -120,6 +120,22 @@ describe("defineCommand: string params", () => {
     });
   });
 
+  it("does not fall back to env or validate domain values after malformed structured input", () => {
+    const validate = vi.fn();
+    const command = defineCommand({
+      params: { count: { type: "number", env: "TUBELESS_COUNT" } },
+      validate,
+      run: (values) => values,
+    });
+    expect(
+      command.parseValues({ count: "bad" }, { env: { TUBELESS_COUNT: "private-invalid" } })
+    ).toMatchObject({
+      kind: "error",
+      errors: ["--count must be a finite number."],
+    });
+    expect(validate).not.toHaveBeenCalled();
+  });
+
   it("keeps boolean environment fallbacks when structured values omit the control", () => {
     const command = defineCommand({
       params: { enabled: { type: "boolean", env: "TUBELESS_ENABLED" } },

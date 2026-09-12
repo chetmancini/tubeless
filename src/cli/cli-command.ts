@@ -94,7 +94,6 @@ function inMemoryCheckpointView(seed: ReadonlyMap<string, unknown>): CheckpointS
 
 export function createCommand<const TSchema extends CliParamsSchema, TResult = void>(
   config: CliCommandConfig<TSchema, TResult>,
-  prepareContext?: (values: CliParams<TSchema>, context: CliContext) => CliContext,
   mainExits?: { validation?: number }
 ): CliCommand<TSchema, TResult> {
   const effectiveParams = buildEffectiveSchema(config.params, config.checkpoint);
@@ -105,6 +104,39 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
   assertValidPositionals(positionals, effectiveParams);
   const descriptor = commandDescriptor(config, effectiveParams, positionals);
 
+  function resolveValues(
+    readValue: (
+      key: string,
+      param: CliParamsSchema[string]
+    ) => string | boolean | string[] | undefined,
+    context: CliContext,
+    errors: string[],
+    helpText: string
+  ): CliParseResult<TSchema> {
+    const values: Record<string, ResolvedParamValue> = {};
+    for (const [key, param] of Object.entries(effectiveParams)) {
+      const errorCount = errors.length;
+      const raw = readValue(key, param);
+      if (errors.length > errorCount) continue;
+      const envValue = raw === undefined && param.env ? context.env?.[param.env] : undefined;
+      values[key] = resolveParam(
+        key,
+        param,
+        raw ?? envValue,
+        context.cwd,
+        errors,
+        raw !== undefined ? "argv" : envValue !== undefined ? "env" : "default"
+      );
+    }
+    if (errors.length > 0) return { kind: "error", errors, helpText };
+    // SAFETY: resolveParam populated every effective schema key and all input checks passed.
+    const typedValues = values as CliParams<TSchema>;
+    const validationErrors = config.validate?.(typedValues, context) ?? [];
+    return validationErrors.length > 0
+      ? { kind: "error", errors: validationErrors, helpText }
+      : { kind: "values", values: typedValues };
+  }
+
   function parseWithContext(argv: readonly string[], context: CliContext): CliParseResult<TSchema> {
     const helpText = renderHelp(
       descriptor.name,
@@ -112,40 +144,14 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       effectiveParams,
       positionals
     );
-
     const tokenized = tokenize(argv, effectiveParams, positionals);
-    if (tokenized.help) {
-      return { kind: "help", helpText };
-    }
-
-    const errors = [...tokenized.errors];
-    const values: Record<string, ResolvedParamValue> = {};
-    for (const [key, param] of Object.entries(effectiveParams)) {
-      const argvValue = tokenized.values.get(key);
-      const envValue = argvValue === undefined && param.env ? context.env?.[param.env] : undefined;
-      values[key] = resolveParam(
-        key,
-        param,
-        argvValue ?? envValue,
-        context.cwd,
-        errors,
-        argvValue !== undefined ? "argv" : envValue !== undefined ? "env" : "default"
-      );
-    }
-
-    if (errors.length > 0) {
-      return { kind: "error", errors, helpText };
-    }
-
-    // SAFETY: `values` was populated by `resolveParam` for every key in `effectiveParams`,
-    // which is exactly the schema `TSchema` describes, so its runtime shape matches `CliParams<TSchema>`.
-    const typedValues = values as CliParams<TSchema>;
-    const validationErrors = config.validate?.(typedValues, context) ?? [];
-    if (validationErrors.length > 0) {
-      return { kind: "error", errors: validationErrors, helpText };
-    }
-
-    return { kind: "values", values: typedValues };
+    if (tokenized.help) return { kind: "help", helpText };
+    return resolveValues(
+      (key) => tokenized.values.get(key),
+      context,
+      [...tokenized.errors],
+      helpText
+    );
   }
 
   function parse(
@@ -166,37 +172,17 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       positionals
     );
     const errors: string[] = [];
-    const values: Record<string, ResolvedParamValue> = {};
     for (const key of Object.keys(structuredValues)) {
       if (!Object.prototype.hasOwnProperty.call(effectiveParams, key)) {
         errors.push(`Unknown parameter: ${key}`);
       }
     }
-    for (const [key, param] of Object.entries(effectiveParams)) {
-      const provided = structuredValues[key];
-      const raw = normalizeStructuredValue(key, param, provided, errors);
-      if (provided !== undefined && raw === undefined) {
-        values[key] = undefined;
-        continue;
-      }
-      const envValue = raw === undefined && param.env ? context.env?.[param.env] : undefined;
-      values[key] = resolveParam(
-        key,
-        param,
-        raw ?? envValue,
-        context.cwd,
-        errors,
-        raw !== undefined ? "argv" : envValue !== undefined ? "env" : "default"
-      );
-    }
-    if (errors.length > 0) return { kind: "error", errors, helpText };
-    // SAFETY: `values` was populated by `resolveParam` for every key in `effectiveParams`,
-    // which is exactly the schema `TSchema` describes, so its runtime shape matches `CliParams<TSchema>`.
-    const typedValues = values as CliParams<TSchema>;
-    const validationErrors = config.validate?.(typedValues, context) ?? [];
-    return validationErrors.length > 0
-      ? { kind: "error", errors: validationErrors, helpText }
-      : { kind: "values", values: typedValues };
+    return resolveValues(
+      (key, param) => normalizeStructuredValue(key, param, structuredValues[key], errors),
+      context,
+      errors,
+      helpText
+    );
   }
 
   /**
@@ -275,8 +261,7 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
   }
 
   async function executeValues(values: CliParams<TSchema>, context: CliContext): Promise<TResult> {
-    const preparedContext = prepareContext?.(values, context) ?? context;
-    const runContext = attachCheckpoint(preparedContext, values);
+    const runContext = attachCheckpoint(context, values);
     const value = await config.run(values, runContext);
     finalizeCheckpoint(runContext, values);
     return value;
@@ -340,9 +325,7 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     }
     const managedSignal = manageMainSignal(context);
     try {
-      const preparedContext =
-        prepareContext?.(result.values, managedSignal.context) ?? managedSignal.context;
-      const runContext = attachCheckpoint(preparedContext, result.values);
+      const runContext = attachCheckpoint(managedSignal.context, result.values);
       await config.run(result.values, runContext);
       if (!managedSignal.wasInterrupted()) {
         finalizeCheckpoint(runContext, result.values);
