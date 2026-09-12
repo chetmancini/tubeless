@@ -44,6 +44,16 @@ for (const section of index.split(/^## /m).slice(1)) {
 }
 
 const homepage = read("index.html");
+assert.match(homepage, /<link rel="alternate" type="text\/markdown" href="\/tubeless\/index.md"/);
+assert.match(read("index.md"), /^# Tubeless\n/);
+assert.match(read("index.md"), /## When to use Tubeless\n/);
+assert.ok(index.includes("https://chetmancini.github.io/tubeless/index.md"));
+for (const [, target] of read("index.md").matchAll(/\]\(([^)]+)\)/g)) {
+  const url = new URL(target);
+  if (url.origin === "https://chetmancini.github.io") {
+    assert.ok(existsSync(join(root, url.pathname.slice("/tubeless/".length))), `Missing overview target: ${target}`);
+  }
+}
 const jsonld = [...homepage.matchAll(/<script\b[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)];
 assert.equal(jsonld.length, 1);
 const software = JSON.parse(jsonld[0][1]);
