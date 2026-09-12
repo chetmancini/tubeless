@@ -61,7 +61,11 @@ const enrichAdapter: RemoteStepAdapter<RemoteStepsOptions, RemotePayload, unknow
     if (!response.ok) {
       // Status remains actionable even for an HTML or empty error body. Limit
       // diagnostics to status; do not copy potentially sensitive response bodies.
-      await response.body?.cancel();
+      try {
+        await response.body?.cancel();
+      } catch {
+        // Body cleanup is best-effort; preserve the actionable HTTP status below.
+      }
       throw Object.assign(new Error(`Remote enrichment failed: HTTP ${response.status}`), {
         code: `HTTP_${response.status}`,
         cause: new Error(`HTTP ${response.status} ${response.statusText}`),
