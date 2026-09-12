@@ -38,6 +38,8 @@ or shared helpers in this repository.
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
   Use `forEachPipeline.skippable` only when the whole fan-out may be intentionally
   omitted; handle its `readonly T[] | undefined` output explicitly.
+  Async `fromPipeline` result mappings publish resolved values; use that resolved
+  shape for dependent inputs and policy-skip values.
   Parent plans keep these steps opaque but expose `nestedPipeline` with the child
   pipeline id, declared step ids, and single/fan-out mode for presentation.
 - Use `fromRemote` for a unit of work that lives on another engine. Required

@@ -9,6 +9,9 @@ import { definePipelineProject } from "tubeless/workbench/project";
 // History uses recorded pipeline IDs: `tubeless history --pipeline import`
 // selects the pipeline behind the registered command `import-rows`.
 
+// ../child-pipeline.ts demonstrates fromPipeline result mapping; async mappings
+// publish resolved values to parent dependents and use resolved skip values.
+
 // Remote integration recipes are library handlers rather than CLI commands:
 // ../remote-steps.ts exports RemoteStepsPipeline (id: remote-steps).
 // ../host-embedding.ts exports HostedPipeline (id: hosted-import) and handleHostJob.

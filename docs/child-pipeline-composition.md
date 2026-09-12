@@ -4,7 +4,9 @@
 
 Compose a child pipeline as one typed parent step with
 `createSteps<TOptions>().fromPipeline(...)`. Overloads cover identity and
-mapped results. Child lifecycle hooks stay isolated, and child work reports
+mapped results. An async `fromPipeline` `mapResult` publishes its resolved value;
+dependents receive `Awaited<TOut>` and skippable adapters accept that resolved
+shape as their skip value. Child lifecycle hooks stay isolated, and child work reports
 through parent-step progress without changing the pipeline run loop or
 reporter contracts.
 

@@ -343,7 +343,7 @@ interface FromPipelineConstructor<
         context: PipelineStepContext<TOptions>
       ): TOut;
     }
-  ): Step<TId, TOut, TOptions, TInputOptions>;
+  ): Step<TId, Awaited<TOut>, TOptions, TInputOptions>;
 
   skippable: SkippableFromPipelineConstructor<TOptions, TInputOptions>;
 }
@@ -376,14 +376,14 @@ interface SkippableFromPipelineConstructor<
   >(
     id: TId,
     definition: ChildPipelineStepDefinitionBase<TOptions, TDeps, TOptionalDeps, TChildPipeline> & {
-      skip: StepSkipPredicate<TOptions, TDeps, TOptionalDeps, NoInfer<TOut>> | undefined;
+      skip: StepSkipPredicate<TOptions, TDeps, TOptionalDeps, NoInfer<Awaited<TOut>>> | undefined;
       mapResult(
         value: PipelineResultOf<TChildPipeline>,
         result: PipelineRun<PipelineResultOf<TChildPipeline>>,
         context: PipelineStepContext<TOptions>
       ): TOut;
     }
-  ): Step<TId, TOut | undefined, TOptions, TInputOptions>;
+  ): Step<TId, Awaited<TOut> | undefined, TOptions, TInputOptions>;
 }
 
 interface ForEachPipelineConstructor<
