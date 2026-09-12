@@ -1,4 +1,4 @@
-import { createSteps, definePipeline } from "tubeless";
+import { createSteps, definePipeline, type PipelineError } from "tubeless";
 
 interface ShardOptions {
   records: readonly string[];
@@ -53,3 +53,12 @@ export const FanOutPipeline = definePipeline({
   steps: [processShards],
   finalize: (outputs) => outputs["process-shards"] ?? [],
 });
+
+/** Select only fully identified failures; callers decide whether and when to rerun. */
+export function failedShards(options: FanOutOptions, error: PipelineError) {
+  const diagnostics = error.fanOut;
+  if (!diagnostics || diagnostics.omittedFailureCount > 0) return undefined;
+  if (diagnostics.failures.some((failure) => failure.keyTruncated)) return undefined;
+  const keys = new Set(diagnostics.failures.map((failure) => failure.key));
+  return options.shards.filter((shard) => keys.has(shard.id));
+}

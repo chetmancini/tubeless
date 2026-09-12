@@ -202,6 +202,19 @@ function normalizePipelineCause(
   return cause;
 }
 
+// Fan-out snapshots bound every string as well as cause depth and item count.
+function fanOutCause(error: unknown): PipelineErrorCause {
+  const cause = normalizePipelineCause(error, new WeakSet<object>());
+  let current: PipelineErrorCause | undefined = cause;
+  while (current) {
+    current.message = current.message.slice(0, 1024);
+    if (current.name) current.name = current.name.slice(0, 1024);
+    if (current.sourceCode) current.sourceCode = current.sourceCode.slice(0, 1024);
+    current = current.cause;
+  }
+  return cause;
+}
+
 function normalizedNestedCause(error: unknown): PipelineErrorCause | undefined {
   if (typeof error !== "object" || error === null) return undefined;
   const cause = readErrorField(error, "cause");
@@ -226,6 +239,22 @@ function toPipelineError(
   if (typeof sourceCode === "string") pipelineError.sourceCode = sourceCode;
   if (cause) pipelineError.cause = cause;
   if (error instanceof PipelineBoundaryValidationError) pipelineError.issues = error.issues;
+  if (error instanceof PipelineChildError && error.fanOut) {
+    const { failures, failureCount, schedulerError } = error.fanOut;
+    pipelineError.fanOut = {
+      failures: failures.map(({ error: itemError, key, index, cancelled }) => ({
+        index,
+        key: key.slice(0, 1024),
+        keyTruncated: key.length > 1024,
+        cancelled,
+        error: fanOutCause(itemError),
+      })),
+      failureCount,
+      omittedFailureCount: failureCount - failures.length,
+    };
+    if (schedulerError !== undefined)
+      pipelineError.fanOut.schedulerError = fanOutCause(schedulerError);
+  }
   originalPipelineErrors.set(pipelineError, error);
   return pipelineError;
 }

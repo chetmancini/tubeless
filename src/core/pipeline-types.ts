@@ -175,7 +175,30 @@ export interface PipelineValidationIssue {
   path?: readonly (number | string)[];
 }
 
+/** Bounded diagnostics for a failed or cancelled runtime fan-out. */
+export interface PipelineFanOutFailure {
+  /** Original input position, including when the key is truncated. */
+  index: number;
+  /** At most 1024 UTF-16 code units; do not rerun by key when keyTruncated is true. */
+  key: string;
+  keyTruncated: boolean;
+  cancelled: boolean;
+  error: PipelineErrorCause;
+}
+
+export interface PipelineFanOutDiagnostics {
+  /** Failed started items, in input order; at most 32 entries. */
+  failures: readonly PipelineFanOutFailure[];
+  /** Total failed started items, including omitted diagnostics. */
+  failureCount: number;
+  omittedFailureCount: number;
+  /** Scheduler failure is separate and never assigned an item key. */
+  schedulerError?: PipelineErrorCause;
+}
+
 export interface PipelineError {
+  /** Present for aggregated fan-out failures; absent for setup errors. */
+  fanOut?: PipelineFanOutDiagnostics;
   /** Bounded, JSON-safe snapshot of the thrown error's cause chain. */
   cause?: PipelineErrorCause;
   code: PipelineErrorCode;

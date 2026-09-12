@@ -51,6 +51,8 @@ export type {
   PipelineErrorCode,
   PipelineValidationIssue,
   PipelineError,
+  PipelineFanOutDiagnostics,
+  PipelineFanOutFailure,
   StandardSchemaV1,
   StandardSchemaV1Props,
   StandardSchemaV1Result,
