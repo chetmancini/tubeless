@@ -53,7 +53,6 @@ export interface StudioRunIndex {
   ancestorsOf(runId: string | null | undefined): StoredPipelineRun[];
   childrenOf(runId: string): readonly StoredPipelineRun[];
   descendantCount(runId: string): number;
-  descendantsOf(runId: string): StoredPipelineRun[];
   matchingRootIds(query: string): ReadonlySet<string>;
   rootRunId(runId: string | null | undefined): string | null | undefined;
   runById(runId: string | null | undefined): StoredPipelineRun | undefined;
@@ -175,24 +174,6 @@ export function createStudioRunIndex(runs: readonly StoredPipelineRun[]): Studio
     }
     return ancestors;
   }
-  function descendantsOf(runId: string): StoredPipelineRun[] {
-    const result: StoredPipelineRun[] = [];
-    const seen = new Set<string>([runId]);
-    const stack = childrenOf(runId).slice().reverse();
-    while (stack.length > 0) {
-      const child = stack.pop();
-      if (!child || seen.has(child.runId)) continue;
-      seen.add(child.runId);
-      result.push(child);
-      const nested = childrenByParentId.get(child.runId);
-      if (!nested) continue;
-      for (let index = nested.length - 1; index >= 0; index -= 1) {
-        const next = nested[index];
-        if (next) stack.push(next);
-      }
-    }
-    return result;
-  }
   function matchingRootIds(query: string): ReadonlySet<string> {
     const needle = query.toLowerCase();
     const matched = new Set<string>();
@@ -220,7 +201,6 @@ export function createStudioRunIndex(runs: readonly StoredPipelineRun[]): Studio
     descendantCount(runId: string) {
       return descendantCountById.get(runId) ?? 0;
     },
-    descendantsOf,
     matchingRootIds,
     rootRunId(runId: string | null | undefined) {
       return runId == null ? runId : (rootIdByRunId.get(runId) ?? runId);
@@ -755,7 +735,7 @@ export function initStudio(): void {
       '<button class="run-row ' +
       esc(run.status) +
       " " +
-      (rootRunId(state.selectedRunId) === run.runId ? "selected" : "") +
+      (state.runIndex.rootRunId(state.selectedRunId) === run.runId ? "selected" : "") +
       '" data-run-id="' +
       esc(run.runId) +
       '"><div class="run-primary">' +
@@ -945,7 +925,7 @@ export function initStudio(): void {
         ) +
         "</div>"
       );
-    const ancestors = ancestorsOf(run.runId);
+    const ancestors = state.runIndex.ancestorsOf(run.runId);
     const parentage = ancestors.length
       ? '<div class="run-parentage">' +
         ancestors
@@ -962,7 +942,7 @@ export function initStudio(): void {
         esc(run.pipelineId) +
         "</span></div>"
       : "";
-    const children = childrenOf(run.runId);
+    const children = state.runIndex.childrenOf(run.runId);
     const nested = children.length
       ? '<div class="section-title"><span>Nested runs</span><span>' +
         children.length +
@@ -1068,15 +1048,6 @@ export function initStudio(): void {
       "</div></article>"
     );
   }
-  function childrenOf(runId: string) {
-    return state.runIndex.childrenOf(runId);
-  }
-  function ancestorsOf(runId: string | null | undefined) {
-    return state.runIndex.ancestorsOf(runId);
-  }
-  function rootRunId(runId: string | null | undefined) {
-    return state.runIndex.rootRunId(runId);
-  }
   function renderRuns() {
     const matchedRoots = state.query ? state.runIndex.matchingRootIds(state.query) : null;
     const roots = state.runIndex.roots
@@ -1087,7 +1058,10 @@ export function initStudio(): void {
             Number(state.runIndex.subtreeIsRunning(left.runId)) ||
           right.startedAtMs - left.startedAtMs
       );
-    if (!state.selectedRunId || !roots.some((run) => run.runId === rootRunId(state.selectedRunId)))
+    if (
+      !state.selectedRunId ||
+      !roots.some((run) => run.runId === state.runIndex.rootRunId(state.selectedRunId))
+    )
       state.selectedRunId = roots[0]?.runId ?? null;
     const selected = state.detail?.run?.runId === state.selectedRunId ? state.detail.run : null;
     const activeRuns: StoredPipelineRun[] = [];

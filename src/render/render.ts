@@ -31,19 +31,12 @@ function renderJson<T>(value: T, pretty = false): string {
   return JSON.stringify(value, null, pretty ? 2 : undefined);
 }
 
-/** True when the caller asked for machine-readable JSON output. */
-function isJsonRenderOptions(
-  options: PipelineRenderOptions | PipelinePlanRenderOptions
-): options is PipelineJsonRenderOptions {
-  return options.format === "json";
-}
-
 /** Render one structured diagnostic for a person or a machine consumer. */
 export function renderPipelineError(
   error: PipelineError,
   options: PipelineRenderOptions = {}
 ): string {
-  if (isJsonRenderOptions(options)) return renderJson(error, options.pretty);
+  if (options.format === "json") return renderJson(error, options.pretty);
   return formatPipelineError(error);
 }
 
@@ -118,6 +111,6 @@ export function renderPipelinePlan(
   plan: PipelinePlan,
   options: PipelinePlanRenderOptions = {}
 ): string {
-  if (isJsonRenderOptions(options)) return renderJson(plan, options.pretty);
+  if (options.format === "json") return renderJson(plan, options.pretty);
   return renderHumanPlan(plan, options);
 }

@@ -77,7 +77,6 @@ describe("createStudioRunIndex", () => {
     expect(index.roots).toEqual([]);
     expect(index.runById("missing")).toBeUndefined();
     expect(index.childrenOf("missing")).toEqual([]);
-    expect(index.descendantsOf("missing")).toEqual([]);
     expect(index.ancestorsOf("missing")).toEqual([]);
     expect(index.descendantCount("missing")).toBe(0);
     expect(index.subtreeIsRunning("missing")).toBe(false);
@@ -129,7 +128,6 @@ describe("createStudioRunIndex", () => {
     const idle = run({ pipelineId: "idle", runId: "idle", startedAtMs: 4, status: "completed" });
     const index = createStudioRunIndex([root, child, grandchild, idle]);
     expect(index.roots.map((item) => item.runId)).toEqual(["root", "idle"]);
-    expect(index.descendantsOf("root").map((item) => item.runId)).toEqual(["child", "grand"]);
     expect(index.descendantCount("root")).toBe(2);
     expect(index.descendantCount("child")).toBe(1);
     expect(index.subtreeIsRunning("root")).toBe(true);
@@ -191,8 +189,6 @@ describe("createStudioRunIndex", () => {
     const visible = run({ pipelineId: "visible", runId: "visible", startedAtMs: 3 });
     const index = createStudioRunIndex([left, right, visible]);
     expect(index.roots.map((item) => item.runId)).toEqual(["visible"]);
-    expect(index.descendantsOf("left").map((item) => item.runId)).toEqual(["right"]);
-    expect(index.descendantsOf("right").map((item) => item.runId)).toEqual(["left"]);
     expect(index.descendantCount("left")).toBe(1);
     expect(index.ancestorsOf("left").map((item) => item.runId)).toEqual(["left", "right"]);
     expect(index.rootRunId("left")).toBe("left");
@@ -203,24 +199,18 @@ describe("createStudioRunIndex", () => {
     const loop = run({ parentRunId: "loop", pipelineId: "loop", runId: "loop", startedAtMs: 1 });
     const index = createStudioRunIndex([loop]);
     expect(index.roots).toEqual([]);
-    expect(index.descendantsOf("loop")).toEqual([]);
     expect(index.descendantCount("loop")).toBe(0);
     expect(index.ancestorsOf("loop")).toEqual([loop]);
     expect(index.rootRunId("loop")).toBe("loop");
   });
 
-  it("does not mutate snapshot records or cache descendant arrays", () => {
+  it("does not mutate snapshot records", () => {
     const runs = [
       run({ runId: "root", startedAtMs: 1 }),
       run({ parentRunId: "root", runId: "child", startedAtMs: 2 }),
     ];
     const before = cloneRuns(runs);
     const index = createStudioRunIndex(runs);
-    const first = index.descendantsOf("root");
-    const second = index.descendantsOf("root");
-    first.pop();
-    expect(index.descendantsOf("root").map((item) => item.runId)).toEqual(["child"]);
-    expect(second.map((item) => item.runId)).toEqual(["child"]);
     expect(runs).toEqual(before);
     expect(runs[0]).toBe(index.runById("root"));
   });
@@ -239,7 +229,6 @@ describe("createStudioRunIndex", () => {
     const index = createStudioRunIndex(runs);
     expect(index.roots.map((item) => item.runId)).toEqual(["node-0"]);
     expect(index.descendantCount("node-0")).toBe(1_999);
-    expect(index.descendantsOf("node-0")).toHaveLength(1_999);
     expect(index.ancestorsOf("node-1999").map((item) => item.runId)[0]).toBe("node-0");
   });
 
