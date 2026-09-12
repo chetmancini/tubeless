@@ -137,6 +137,12 @@ function optionalString(record: Record<string, unknown>, key: string): string | 
   return value;
 }
 
+function diagnosticMessage(record: Record<string, unknown>): string {
+  const message = optionalString(record, "message");
+  if (message === undefined) throw new Error("message is required");
+  return message;
+}
+
 function finiteNumber(record: Record<string, unknown>, key: string): number {
   const value = record[key];
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -164,7 +170,7 @@ function parseAttributes(value: unknown): PipelineTraceAttributes {
 function parseCause(value: unknown, depth = 0): PipelineErrorCause {
   if (!isRecord(value)) throw new Error("error.cause must be an object");
   if (depth >= 16) throw new Error("error.cause exceeds 16 levels");
-  const cause: PipelineErrorCause = { message: requiredString(value, "message") };
+  const cause: PipelineErrorCause = { message: diagnosticMessage(value) };
   const name = optionalString(value, "name");
   if (name !== undefined) cause.name = name;
   const sourceCode = optionalString(value, "sourceCode");
@@ -271,7 +277,7 @@ function parseError(value: unknown): PipelineTraceError {
   const error: PipelineTraceError = {
     code,
     kind,
-    message: requiredString(value, "message"),
+    message: diagnosticMessage(value),
     phase,
   };
   if (value.cause !== undefined) error.cause = parseCause(value.cause);

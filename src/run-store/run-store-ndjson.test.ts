@@ -113,6 +113,46 @@ describe("openNdjsonPipelineRunStore", () => {
 
     await expect(openNdjsonPipelineRunStore(filename)).rejects.toThrow("line 1 is not valid UTF-8");
   });
+
+  it("round-trips empty error messages and nested cause messages", async () => {
+    const steps = createSteps();
+    const failing = steps("failing", {
+      run: () => {
+        const error = new Error() as Error & { cause?: unknown };
+        error.cause = new Error();
+        throw error;
+      },
+    });
+    const pipeline = definePipeline({
+      id: "empty-diagnostic-message",
+      steps: [failing],
+      finalize: () => undefined,
+    });
+    const lines: string[] = [];
+
+    const run = await pipeline.run(
+      {},
+      {},
+      { tracing: { exporter: createJsonTraceExporter({ write: (line) => lines.push(line) }) } }
+    );
+    expect(run.errors[0]).toMatchObject({ message: "", cause: { message: "" } });
+
+    const filename = await tempFile(`${lines.join("\n")}\n`);
+    const store = await openNdjsonPipelineRunStore(filename);
+    try {
+      const events = await store.listEvents();
+      expect(events.find((entry) => entry.name === "step.failed")?.error).toMatchObject({
+        message: "",
+        cause: { message: "" },
+      });
+      expect(projectPipelineRunStore(events).runs[0]?.error).toMatchObject({
+        message: "",
+        cause: { message: "" },
+      });
+    } finally {
+      await store.close();
+    }
+  });
 });
 
 describe("recorded fan-out diagnostics", () => {

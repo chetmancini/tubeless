@@ -18,14 +18,11 @@ import { pathToFileURL } from "node:url";
 
 const execFileAsync = promisify(execFile);
 import { describe, expect, it, vi } from "vitest";
-import { defineCommand, definePipelineCommand } from "../cli/cli.js";
-import { markPipelineCommand } from "../cli/pipeline-command-marker.js";
 import {
-  selectPipelineCommandExport,
-  selectPipelineExport,
+  loadPipelineCommandModule,
+  loadPlanSourceModule,
   selectUniqueExport,
 } from "./pipeline-module.js";
-import { createSteps, definePipeline } from "../core/pipeline.js";
 import { projectPipelineRun } from "../run-store/run-store.js";
 import { openSqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import {
@@ -2188,31 +2185,25 @@ describe("tubeless workbench", () => {
     expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
     expect(io.output.join("")).toContain("Pipeline second");
 
-    const pipeline = {
-      id: "same",
-      stepIds: [],
-      targetIds: [],
-      plan: () => ({ dryRun: false, errors: [], ok: true, pipelineId: "same", steps: [] }),
-      toMermaid: () => "flowchart TD",
-    };
-    expect(selectPipelineExport({ Pipeline: pipeline, default: pipeline })).toBe(pipeline);
+    const fixture = await writeActualPipelineModule();
+    const { filePath } = await writeModule(`
+      export { PlanningPipeline, PlanningPipeline as default } from ${JSON.stringify(pathToFileURL(fixture.filePath).href)};
+    `);
+    await expect(loadPlanSourceModule(filePath)).resolves.toMatchObject({
+      kind: "pipeline",
+      pipeline: { id: "planning-fixture" },
+    });
   });
 
-  it("selects a unique export and can retain its name", () => {
+  it("selects a unique export with its name", () => {
     const isNumber = (value: unknown): value is number => typeof value === "number";
     expect(
       selectUniqueExport({ only: 7, alias: 7, other: "x" }, undefined, isNumber, "number")
-    ).toBe(7);
-    expect(
-      selectUniqueExport({ only: 7, alias: 7, other: "x" }, undefined, isNumber, "number", {
-        retainName: true,
-      })
     ).toEqual({ exportName: "only", value: 7 });
-    expect(
-      selectUniqueExport({ First: 1, Second: 2 }, "Second", isNumber, "number", {
-        retainName: true,
-      })
-    ).toEqual({ exportName: "Second", value: 2 });
+    expect(selectUniqueExport({ First: 1, Second: 2 }, "Second", isNumber, "number")).toEqual({
+      exportName: "Second",
+      value: 2,
+    });
     expect(() =>
       selectUniqueExport({ First: 1, Second: 2 }, undefined, isNumber, "number")
     ).toThrow("Module exports multiple numbers (First, Second); pass --export <name>.");
@@ -2223,42 +2214,57 @@ describe("tubeless workbench", () => {
     ).toThrow("Module exports multiple numbers (First, Second).");
   });
 
-  it("discovers only pipeline commands, deduplicates aliases, and supports explicit selection", () => {
-    const step = createSteps();
-    const work = step("work", { run: () => "done" });
-    const pipeline = definePipeline({
-      id: "command-selection",
-      steps: [work],
-      finalize: (outputs) => outputs.work,
-    });
-    const first = definePipelineCommand(pipeline, { mapOptions: () => ({}), reporter: false });
-    const second = definePipelineCommand(pipeline, { mapOptions: () => ({}), reporter: false });
-    const generic = defineCommand({ params: {}, run: () => "not a pipeline" });
+  it("discovers only pipeline commands, deduplicates aliases, and supports explicit selection", async () => {
+    const fixture = await writeActualPipelineCommandModule();
+    const fixtureUrl = JSON.stringify(pathToFileURL(fixture.filePath).href);
+    const cliUrl = JSON.stringify(pathToFileURL(path.resolve("dist/cli/cli.js")).href);
+    const aliases = await writeModule(`
+      export { FixtureCommand as First, FixtureCommand as default } from ${fixtureUrl};
+      import { defineCommand } from ${cliUrl};
+      export const Generic = defineCommand({ params: {}, run: () => "not a pipeline" });
+    `);
+    const multiple = await writeModule(`
+      import { CommandPipeline } from ${fixtureUrl};
+      import { definePipelineCommand } from ${cliUrl};
+      export { FixtureCommand as First } from ${fixtureUrl};
+      export const Second = definePipelineCommand(CommandPipeline, { reporter: false });
+    `);
 
-    expect(selectPipelineCommandExport({ First: first, default: first, Generic: generic })).toBe(
-      first
-    );
-    expect(selectPipelineCommandExport({ First: first, Second: second }, "Second")).toBe(second);
-    expect(() => selectPipelineCommandExport({ First: first, Second: second })).toThrow(
+    await expect(loadPipelineCommandModule(aliases.filePath)).resolves.toMatchObject({
+      exportName: "First",
+      command: { id: "command-fixture" },
+    });
+    await expect(loadPipelineCommandModule(multiple.filePath, "Second")).resolves.toMatchObject({
+      exportName: "Second",
+      command: { id: "command-fixture" },
+    });
+    await expect(loadPipelineCommandModule(multiple.filePath)).rejects.toThrow(
       "Module exports multiple pipeline commands (First, Second); pass --export <name>."
     );
-    expect(() => selectPipelineCommandExport({ Generic: generic })).toThrow(
+    const generic = await writeModule(
+      `export { Generic } from ${JSON.stringify(pathToFileURL(aliases.filePath).href)};`
+    );
+    await expect(loadPipelineCommandModule(generic.filePath)).rejects.toThrow(
       "Module does not export an tubeless pipeline command."
     );
   });
 
-  it("rejects a marked command that is missing structured launch methods", () => {
-    const incomplete = markPipelineCommand({
-      id: "from-command",
-      stepIds: ["work"],
-      targetIds: ["work"],
-      descriptor: { name: "fixture", parameters: [] },
-      plan: () => ({ dryRun: false, errors: [], ok: true, pipelineId: "from-command", steps: [] }),
-      parse: () => ({ kind: "values" }),
-      run: async () => undefined,
-      toMermaid: () => "flowchart TD",
-    });
-    expect(() => selectPipelineCommandExport({ Incomplete: incomplete })).toThrow(
+  it("rejects a marked command that is missing structured launch methods", async () => {
+    const markerUrl = pathToFileURL(path.resolve("dist/cli/pipeline-command-marker.js")).href;
+    const { filePath } = await writeModule(`
+      import { markPipelineCommand } from ${JSON.stringify(markerUrl)};
+      export const Incomplete = markPipelineCommand({
+        id: "from-command",
+        stepIds: ["work"],
+        targetIds: ["work"],
+        descriptor: { name: "fixture", parameters: [] },
+        plan: () => ({ dryRun: false, errors: [], ok: true, pipelineId: "from-command", steps: [] }),
+        parse: () => ({ kind: "values" }),
+        run: async () => undefined,
+        toMermaid: () => "flowchart TD",
+      });
+    `);
+    await expect(loadPipelineCommandModule(filePath)).rejects.toThrow(
       "Module does not export an tubeless pipeline command."
     );
   });

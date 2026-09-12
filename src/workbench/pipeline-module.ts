@@ -48,7 +48,6 @@ export type WorkbenchPlanSource =
 
 export type SelectUniqueExportOptions = {
   hintExport?: boolean;
-  retainName?: boolean;
 };
 
 function isWorkbenchPipeline(value: unknown): value is WorkbenchPipeline {
@@ -111,28 +110,14 @@ function uniqueNamedExports<T>(
   );
 }
 
-/** Select one matching export, deduplicating aliases. Optionally keep the chosen name. */
-export function selectUniqueExport<T>(
-  moduleExports: Record<string, unknown>,
-  exportName: string | undefined,
-  predicate: (value: unknown) => value is T,
-  label: string,
-  options: SelectUniqueExportOptions & { retainName: true }
-): { exportName: string; value: T };
-export function selectUniqueExport<T>(
-  moduleExports: Record<string, unknown>,
-  exportName: string | undefined,
-  predicate: (value: unknown) => value is T,
-  label: string,
-  options?: SelectUniqueExportOptions & { retainName?: false }
-): T;
+/** Select one matching export and its name, deduplicating aliases. */
 export function selectUniqueExport<T>(
   moduleExports: Record<string, unknown>,
   exportName: string | undefined,
   predicate: (value: unknown) => value is T,
   label: string,
   options?: SelectUniqueExportOptions
-): T | { exportName: string; value: T } {
+) {
   if (exportName !== undefined) {
     if (!Object.prototype.hasOwnProperty.call(moduleExports, exportName)) {
       throw new Error(`Module does not export ${JSON.stringify(exportName)}.`);
@@ -141,7 +126,7 @@ export function selectUniqueExport<T>(
     if (!predicate(selected)) {
       throw new Error(`Export ${JSON.stringify(exportName)} is not an tubeless ${label}.`);
     }
-    return options?.retainName === true ? { exportName, value: selected } : selected;
+    return { exportName, value: selected };
   }
 
   const unique = uniqueNamedExports(moduleExports, predicate);
@@ -154,28 +139,7 @@ export function selectUniqueExport<T>(
     throw new Error(`Module exports multiple ${label}s (${names})${hint}.`);
   }
   const [name, value] = unique[0]!;
-  return options?.retainName === true ? { exportName: name, value } : value;
-}
-
-/** Select one real pipeline from a loaded module, deduplicating export aliases. */
-export function selectPipelineExport(
-  moduleExports: Record<string, unknown>,
-  exportName?: string
-): WorkbenchPipeline {
-  return selectUniqueExport(moduleExports, exportName, isWorkbenchPipeline, "pipeline");
-}
-
-/** Select one definePipelineCommand export, deduplicating export aliases. */
-export function selectPipelineCommandExport(
-  moduleExports: Record<string, unknown>,
-  exportName?: string
-): WorkbenchPipelineCommand {
-  return selectUniqueExport(
-    moduleExports,
-    exportName,
-    isWorkbenchPipelineCommand,
-    "pipeline command"
-  );
+  return { exportName: name, value };
 }
 
 /**
@@ -242,8 +206,7 @@ export async function loadPipelineCommandModule(
     await importModuleNamespace(filePath),
     exportName,
     isWorkbenchPipelineCommand,
-    "pipeline command",
-    { retainName: true }
+    "pipeline command"
   );
   return { command: selected.value, exportName: selected.exportName };
 }

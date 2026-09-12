@@ -134,7 +134,7 @@ async function loadPipelineUiManifest(
           isPipelineProjectManifest(value) || isPipelineStudioConfig(value),
         "project or studio manifest",
         { hintExport: false }
-      ),
+      ).value,
       filePath,
     };
   } catch (error) {

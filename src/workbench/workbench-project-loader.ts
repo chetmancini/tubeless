@@ -72,7 +72,7 @@ export async function loadPipelineProjectManifest(
       isPipelineProjectManifest,
       "project manifest",
       { hintExport: false }
-    );
+    ).value;
     const moduleIdentities = new Set<string>();
     for (const command of manifest.commands) {
       const moduleIdentity = `${path.resolve(path.dirname(filePath), command.file)}\0${command.export ?? ""}`;
