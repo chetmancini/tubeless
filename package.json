@@ -58,6 +58,7 @@
     "lint": "bun run build && bun run lint:run",
     "lint:run": "bunx --bun oxlint .",
     "knip": "knip",
+    "pack:dry-run": "bun pm pack --dry-run --ignore-scripts",
     "tubeless": "bun run --silent build && bun dist/workbench/workbench-bin.js",
     "prepack": "bun run build",
     "test": "bun run build && bun run test:run",
