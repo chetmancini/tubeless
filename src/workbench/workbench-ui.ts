@@ -148,8 +148,6 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
     {
       usage: UI_USAGE,
       parse: parseUiArgs,
-      helpRequested: (parsed) => parsed.values.help === true,
-      positionals: (parsed) => parsed.positionals,
       async run(parsed, commandIo) {
         if (parsed.positionals.length > 1) {
           return writeUsageError(commandIo, "Pass at most one studio config file.", UI_USAGE);

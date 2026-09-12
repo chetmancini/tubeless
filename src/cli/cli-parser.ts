@@ -9,7 +9,6 @@ import type {
   CliParam,
   CliParameterDescriptor,
   CliParamsSchema,
-  CliParamType,
   CliStringParam,
 } from "./cli-types.js";
 
@@ -414,34 +413,10 @@ export function tokenize(
 /** A single resolved parameter value after CLI/environment/default decoding. */
 export type ResolvedParamValue = string | number | boolean | (string | number)[] | undefined;
 
-/** Mutable intermediate shape used to build a frozen `CliParameterDescriptor`. */
-type MutableCliParameterDescriptor = {
-  choices?: readonly string[];
-  default?: string | number | boolean;
-  description?: string;
-  environment?: string;
-  exclusive?: true;
-  flag: string;
-  group?: "execution";
-  integer?: boolean;
-  key: string;
-  max?: number;
-  min?: number;
-  multiple: boolean;
-  mustExist?: boolean;
-  pathKind?: "directory" | "file";
-  positional: boolean;
-  required: boolean;
-  short?: string;
-  type: CliParamType;
-};
-
-/** Mutable intermediate shape used to build a frozen `CliCommandDescriptor`. */
-type MutableCliCommandDescriptor = {
-  description?: string;
-  name: string;
-  parameters: readonly CliParameterDescriptor[];
-};
+/** Mutable build-time views of the public descriptors, frozen before return. */
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+type MutableCliParameterDescriptor = Mutable<CliParameterDescriptor>;
+type MutableCliCommandDescriptor = Mutable<CliCommandDescriptor>;
 
 function isBooleanValue(value: string | boolean | string[] | undefined): value is boolean {
   return typeof value === "boolean";

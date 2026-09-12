@@ -1,5 +1,5 @@
 import * as fs from "fs";
-import * as path from "path";
+import { writeAtomicText } from "./atomic-text.js";
 
 export interface CheckpointStore<TMeta = unknown> {
   has(key: string): boolean;
@@ -81,7 +81,6 @@ export function openCheckpoint<TMeta = unknown>(
     },
     entries: () => entries,
     flush: () => {
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
       // Records made without a `meta` argument store `undefined`, which JSON.stringify
       // silently drops from object properties — without the replacer below, every
       // meta-less key would vanish from the file on flush. Substituting `null` keeps
@@ -92,24 +91,7 @@ export function openCheckpoint<TMeta = unknown>(
         (_key, value) => (value === undefined ? null : value),
         2
       );
-      // Write to a sibling temp file and rename over the destination rather than
-      // writeFileSync-ing the target directly: a crash or process kill mid-write would
-      // otherwise leave a truncated, unparseable checkpoint file, and the next run would
-      // silently treat it as empty and reprocess everything already done. Rename is
-      // atomic on the same filesystem, so the checkpoint file is always either the
-      // previous complete flush or the new complete one, never a partial write.
-      const tmpPath = `${filePath}.tmp-${process.pid}`;
-      try {
-        fs.writeFileSync(tmpPath, `${json}\n`);
-        fs.renameSync(tmpPath, filePath);
-      } catch (error) {
-        try {
-          fs.rmSync(tmpPath, { force: true });
-        } catch {
-          // Best-effort cleanup; surface the original write/rename error.
-        }
-        throw error;
-      }
+      writeAtomicText(filePath, `${json}\n`);
     },
     clear: () => {
       entries.clear();

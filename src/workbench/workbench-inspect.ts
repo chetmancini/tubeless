@@ -47,8 +47,6 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
     {
       usage: INSPECT_USAGE,
       parse: parseInspectArgs,
-      helpRequested: (parsed) => parsed.values.help === true,
-      positionals: (parsed) => parsed.positionals,
       positionalCountError: {
         count: 1,
         message: "Pass exactly one pipeline or command file.",

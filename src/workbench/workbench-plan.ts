@@ -43,8 +43,6 @@ export async function runPlan(argv: readonly string[], io: WorkbenchCliIo): Prom
     {
       usage: PLAN_USAGE,
       parse: parsePlanArgs,
-      helpRequested: (parsed) => parsed.values.help === true,
-      positionals: (parsed) => parsed.positionals,
       positionalCountError: {
         count: 1,
         message: "Pass exactly one pipeline or command file.",

@@ -34,8 +34,6 @@ export async function runList(argv: readonly string[], io: WorkbenchCliIo): Prom
     {
       usage: LIST_USAGE,
       parse: parseListArgs,
-      helpRequested: (parsed) => parsed.values.help === true,
-      positionals: (parsed) => parsed.positionals,
       positionalCountError: { count: 0, message: "List does not accept a positional argument." },
       async run(parsed, commandIo) {
         const loaded = await loadPipelineProjectManifest(

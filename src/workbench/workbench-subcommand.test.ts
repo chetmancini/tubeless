@@ -23,7 +23,7 @@ function captureIo(): WorkbenchCliIo & { errors: string[]; output: string[] } {
 }
 
 interface ToyParsed {
-  help: boolean;
+  values: { help: boolean };
   positionals: string[];
 }
 
@@ -37,12 +37,10 @@ function toyCommand(
     parse(argv) {
       if (argv.includes("--bad")) throw new Error("Unknown option --bad");
       return {
-        help: argv.includes("--help"),
+        values: { help: argv.includes("--help") },
         positionals: argv.filter((arg) => !arg.startsWith("-")),
       };
     },
-    helpRequested: (parsed) => parsed.help,
-    positionals: (parsed) => parsed.positionals,
     positionalCountError: {
       count: 1,
       message: "Pass exactly one pipeline or command file.",

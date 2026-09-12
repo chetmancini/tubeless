@@ -5,21 +5,24 @@ import {
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
 
+interface ParsedSubcommand {
+  values: { help?: boolean };
+  positionals: readonly string[];
+}
+
 /**
  * Shared prologue for workbench subcommands. New subcommands should be written
  * against `runWorkbenchSubcommand` so usage, help, and positional checks stay
  * in one place. Extra validation after that prologue belongs in `run`.
  */
-export interface WorkbenchSubcommand<TParsed> {
+export interface WorkbenchSubcommand<TParsed extends ParsedSubcommand> {
   readonly usage: string;
   parse(argv: readonly string[]): TParsed;
-  helpRequested(parsed: TParsed): boolean;
-  positionals(parsed: TParsed): readonly string[];
   readonly positionalCountError?: { count: number; message: string };
   run(parsed: TParsed, io: WorkbenchCliIo): Promise<number>;
 }
 
-export async function runWorkbenchSubcommand<TParsed>(
+export async function runWorkbenchSubcommand<TParsed extends ParsedSubcommand>(
   command: WorkbenchSubcommand<TParsed>,
   argv: readonly string[],
   io: WorkbenchCliIo
@@ -30,12 +33,12 @@ export async function runWorkbenchSubcommand<TParsed>(
   } catch (error) {
     return writeUsageError(io, errorMessage(error), command.usage);
   }
-  if (command.helpRequested(parsed)) {
+  if (parsed.values.help === true) {
     io.stdout.write(command.usage);
     return TUBELESS_WORKBENCH_EXIT_CODE.success;
   }
   const positionalError = command.positionalCountError;
-  if (positionalError && command.positionals(parsed).length !== positionalError.count) {
+  if (positionalError && parsed.positionals.length !== positionalError.count) {
     return writeUsageError(io, positionalError.message, command.usage);
   }
   return command.run(parsed, io);

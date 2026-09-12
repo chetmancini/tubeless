@@ -51,8 +51,6 @@ export async function runGraph(argv: readonly string[], io: WorkbenchCliIo): Pro
     {
       usage: GRAPH_USAGE,
       parse: parseGraphArgs,
-      helpRequested: (parsed) => parsed.values.help === true,
-      positionals: (parsed) => parsed.positionals,
       positionalCountError: {
         count: 1,
         message: "Pass exactly one pipeline or command file.",

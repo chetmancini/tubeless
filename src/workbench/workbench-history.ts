@@ -131,8 +131,6 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
     {
       usage: HISTORY_USAGE,
       parse: parseHistoryArgs,
-      helpRequested: (parsed) => parsed.values.help === true,
-      positionals: (parsed) => parsed.positionals,
       async run(parsed, commandIo) {
         if (parsed.values.json && parsed.values.events) {
           return writeUsageError(commandIo, "Use --json or --events, not both.", HISTORY_USAGE);
