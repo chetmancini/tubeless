@@ -80,7 +80,7 @@ export async function loadPipelineProjectManifest(
 }
 
 /** Resolve one stable command id from a loaded manifest. */
-export function resolvePipelineProjectCommand(
+function resolvePipelineProjectCommand(
   loaded: LoadedPipelineProjectManifest,
   id: string,
   io: WorkbenchCliIo

@@ -3,10 +3,10 @@ import { Worker } from "node:worker_threads";
 import { formatDurationMs } from "./reporter.js";
 
 export const SPINNER_TOKEN = "\u0001";
-export const ELAPSED_TOKEN_START = "\u0002";
-export const ELAPSED_TOKEN_END = "\u0003";
+const ELAPSED_TOKEN_START = "\u0002";
+const ELAPSED_TOKEN_END = "\u0003";
 export const SHIMMER_TOKEN_START = "\u0004";
-export const SHIMMER_TOKEN_END = "\u0005";
+const SHIMMER_TOKEN_END = "\u0005";
 
 const ANSI = {
   clearDown: "\u001B[J",

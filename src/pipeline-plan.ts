@@ -26,9 +26,7 @@ export const PIPELINE_FINALIZE_STEP_ID = "__finalize__";
 export const STEP_OPTIONS_SCHEMA: unique symbol = Symbol("tubeless.stepOptionsSchema");
 export const STEP_NESTED_PIPELINE: unique symbol = Symbol("tubeless.stepNestedPipeline");
 export const STEP_REMOTE: unique symbol = Symbol("tubeless.stepRemote");
-export const REQUIRED_FINALIZER_OUTPUTS: unique symbol = Symbol(
-  "tubeless.requiredFinalizerOutputs"
-);
+const REQUIRED_FINALIZER_OUTPUTS: unique symbol = Symbol("tubeless.requiredFinalizerOutputs");
 export const EXECUTE_COMPILED_RUN: unique symbol = Symbol("tubeless.executeCompiledRun");
 
 const compiledPipelines = new WeakSet<object>();
@@ -230,7 +228,7 @@ function targetClosure<TOptions extends object>(
  * Returns null if the graph has a cycle (shouldn't happen given `const`-reference
  * construction, but the executor should never spin or drop steps if it somehow does).
  */
-export function topologicalSort<TOptions extends object>(
+function topologicalSort<TOptions extends object>(
   steps: readonly AnyStep<TOptions>[]
 ): readonly AnyStep<TOptions>[] | null {
   const indexById = new Map(steps.map((step, index) => [step.id, index]));
@@ -434,7 +432,7 @@ function skipsInDryRun<TOptions extends object>(step: AnyStep<TOptions>): boolea
   return step.dryRun === "skip";
 }
 
-export function validatePipelineDefinition<
+function validatePipelineDefinition<
   TSteps extends readonly AnyStep[],
   TResult,
   TTargets extends readonly TSteps[number][],

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/live-ticker-worker.ts",
+    "src/live-ticker-supervisor.ts",
+    "src/run-store-ui-client.ts"
+  ],
+  "project": ["src/**/*.ts", "scripts/**/*.{js,mjs,ts}", "!scripts/fixtures/**"],
+  "ignoreExportsUsedInFile": {
+    "interface": true,
+    "type": true
+  },
+  "ignoreBinaries": ["fzf"]
+}

@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help list verify inspect plan graph run ui require-file install build lint format \
-	format-check typecheck test docs-check api-check api-generate eval-verify pack \
+	format-check typecheck knip test docs-check api-check api-generate eval-verify pack \
 	pack-verify tubeless check release release-notes website website-build
 
 export_arg = $(if $(strip $(EXPORT)),--export "$(EXPORT)",)
@@ -47,6 +47,7 @@ help:
 	@echo "  make lint          Lint sources"
 	@echo "  make format-check  Check formatting without writing"
 	@echo "  make typecheck     Type-check library, examples, and tests"
+	@echo "  make knip          Report unused exports, files, and dependencies"
 	@echo "  make test          Build once, run the vitest suite"
 	@echo "  make docs-check    Validate the learning-surface docs"
 	@echo "  make api-check     Verify generated public API docs"
@@ -96,6 +97,9 @@ format-check:
 
 typecheck:
 	bun run typecheck
+
+knip:
+	bun run knip
 
 test:
 	bun run test
