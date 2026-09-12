@@ -3,6 +3,7 @@ import type {
   PipelineErrorCode,
   PipelineErrorKind,
   PipelineErrorPhase,
+  PipelineFanOutDiagnostics,
   PipelineValidationIssue,
 } from "../core/pipeline.js";
 import { PartialPipelineTraceExporterError } from "./trace-exporter-error.js";
@@ -24,6 +25,7 @@ export interface PipelineTraceContext {
 
 /** Structured error attributes emitted without retaining the original error object. */
 export interface PipelineTraceError {
+  fanOut?: PipelineFanOutDiagnostics;
   cause?: PipelineErrorCause;
   code: PipelineErrorCode;
   kind: PipelineErrorKind;

@@ -211,7 +211,7 @@ the pipeline DAG executor parallel.
 ## Structured fan-out failures
 
 A failed or cancelled `forEachPipeline` step exposes `error.fanOut` on the parent
-run error and step report (also available to failure hooks and JSON error rendering).
+run error and step report (also available to failure hooks, JSON error rendering, and recorded trace history).
 `failures` contains at most the first 32 failed started items in input order,
 with the original `index`, `key`, `keyTruncated`, `cancelled`, and a JSON-safe
 `error` cause snapshot. `failureCount` counts all failed started items;

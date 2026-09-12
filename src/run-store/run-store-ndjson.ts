@@ -5,6 +5,7 @@ import type {
   PipelineErrorCode,
   PipelineErrorKind,
   PipelineErrorPhase,
+  PipelineFanOutDiagnostics,
   PipelineValidationIssue,
 } from "../core/pipeline.js";
 import type {
@@ -192,6 +193,73 @@ function parseIssues(value: unknown): readonly PipelineValidationIssue[] {
   });
 }
 
+function nonnegativeInteger(record: Record<string, unknown>, key: string): number {
+  const value = finiteNumber(record, key);
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`error.fanOut.${key} must be a nonnegative safe integer`);
+  }
+  return value;
+}
+
+function parseFanOutCause(value: unknown, depth = 0): PipelineErrorCause {
+  if (!isRecord(value)) throw new Error("error.fanOut cause must be an object");
+  // Core emits eight cause levels followed by a truncation marker.
+  if (depth > 8) throw new Error("error.fanOut cause exceeds its depth limit");
+  const message = optionalString(value, "message");
+  if (message === undefined) throw new Error("error.fanOut cause requires message");
+  const cause: PipelineErrorCause = { message };
+  for (const key of ["name", "sourceCode"] as const) {
+    const text = optionalString(value, key);
+    if (text !== undefined) cause[key] = text;
+  }
+  if (
+    [cause.message, cause.name, cause.sourceCode].some(
+      (text) => text !== undefined && text.length > 1024
+    )
+  ) {
+    throw new Error("error.fanOut cause strings exceed 1024 code units");
+  }
+  if (value.cause !== undefined) cause.cause = parseFanOutCause(value.cause, depth + 1);
+  return cause;
+}
+
+function parseFanOut(value: unknown): PipelineFanOutDiagnostics {
+  if (!isRecord(value)) throw new Error("error.fanOut must be an object");
+  if (!Array.isArray(value.failures) || value.failures.length > 32) {
+    throw new Error("error.fanOut.failures must be an array of at most 32 entries");
+  }
+  const failureCount = nonnegativeInteger(value, "failureCount");
+  const omittedFailureCount = nonnegativeInteger(value, "omittedFailureCount");
+  if (failureCount - value.failures.length !== omittedFailureCount) {
+    throw new Error("error.fanOut counts do not match failures");
+  }
+  let previousIndex = -1;
+  const failures = value.failures.map((failure) => {
+    if (!isRecord(failure)) throw new Error("error.fanOut failure must be an object");
+    const index = nonnegativeInteger(failure, "index");
+    if (index <= previousIndex) throw new Error("error.fanOut indices must be in input order");
+    previousIndex = index;
+    const key = optionalString(failure, "key");
+    if (key === undefined || key.length > 1024) {
+      throw new Error("error.fanOut key must be a string of at most 1024 code units");
+    }
+    if (typeof failure.keyTruncated !== "boolean" || typeof failure.cancelled !== "boolean") {
+      throw new Error("error.fanOut keyTruncated and cancelled must be booleans");
+    }
+    return {
+      index,
+      key,
+      keyTruncated: failure.keyTruncated,
+      cancelled: failure.cancelled,
+      error: parseFanOutCause(failure.error),
+    };
+  });
+  const diagnostics: PipelineFanOutDiagnostics = { failures, failureCount, omittedFailureCount };
+  if (value.schedulerError !== undefined)
+    diagnostics.schedulerError = parseFanOutCause(value.schedulerError);
+  return diagnostics;
+}
+
 function parseError(value: unknown): PipelineTraceError {
   if (!isRecord(value)) throw new Error("error must be an object");
   const code = requiredString(value, "code");
@@ -207,6 +275,7 @@ function parseError(value: unknown): PipelineTraceError {
     phase,
   };
   if (value.cause !== undefined) error.cause = parseCause(value.cause);
+  if (value.fanOut !== undefined) error.fanOut = parseFanOut(value.fanOut);
   if (value.issues !== undefined) error.issues = parseIssues(value.issues);
   const sourceCode = optionalString(value, "sourceCode");
   if (sourceCode !== undefined) error.sourceCode = sourceCode;

@@ -114,6 +114,7 @@ function toTraceError(error: PipelineError | undefined): PipelineTraceError | un
     stack: error.stack,
   };
   if (error.cause) traceError.cause = error.cause;
+  if (error.fanOut) traceError.fanOut = error.fanOut;
   if (error.issues) traceError.issues = error.issues;
   if (error.sourceCode) traceError.sourceCode = error.sourceCode;
   return traceError;
