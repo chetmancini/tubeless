@@ -37,6 +37,52 @@ function event(runId: string, pipelineId = "import"): PipelineTraceEvent {
 }
 
 describe("openNdjsonPipelineRunStore", () => {
+  it.each(["a", "界", '\u0000"\\'])(
+    "reopens large detail payloads containing %j with default byte limits",
+    async (text) => {
+      const step = createSteps();
+      const details = Array.from({ length: 128 }, (_, index) => ({
+        id: `${index}${text.repeat(2048)}`.slice(0, 2048),
+        label: text.repeat(2048).slice(0, 2048),
+        name: text.repeat(4096).slice(0, 4096),
+        status: "running" as const,
+      }));
+      const pipeline = definePipeline({
+        id: "large-details",
+        steps: [
+          step("work", {
+            run: (_, context) => {
+              context.reportProgress({ completed: 1, total: 2, details });
+            },
+          }),
+        ],
+        finalize: () => true,
+      });
+      const lines: string[] = [];
+      await pipeline.run({}, undefined, {
+        tracing: { exporter: createJsonTraceExporter({ write: (line) => lines.push(line) }) },
+      });
+      expect(Math.max(...lines.map((line) => Buffer.byteLength(line, "utf8")))).toBeLessThan(
+        1024 * 1024
+      );
+      const store = await openNdjsonPipelineRunStore(await tempFile(`${lines.join("\n")}\n`));
+      try {
+        const events = await store.listEvents();
+        const recorded = events.find((event) => event.attributes.detail_count === 128)!;
+        expect(
+          Buffer.byteLength(JSON.stringify(recorded.attributes.details), "utf8")
+        ).toBeLessThanOrEqual(256 * 1024);
+        const progress = projectPipelineRunStore(events).runs[0]?.steps[0]?.progress;
+        expect(progress?.detailCount).toBe(128);
+        expect(progress?.details?.length).toBeGreaterThan(0);
+        expect(progress?.details?.length).toBeLessThan(128);
+        expect(progress?.details?.[0]).toEqual(details[0]);
+      } finally {
+        await store.close();
+      }
+    }
+  );
+
   it("assigns zero-based ids and supports store-compatible filters and pagination", async () => {
     const filename = await tempFile(
       `${JSON.stringify(event("run-1"))}\n\n${JSON.stringify(event("run-2", "publish"))}\n`

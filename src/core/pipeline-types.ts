@@ -75,6 +75,7 @@ export interface PipelineExecutionContext<TOptions extends object> extends Pipel
  * Domain-agnostic: mapped children, nested work units, per-file status, etc.
  */
 export type PipelineStepProgressDetailStatus =
+  | "cancelled"
   | "completed"
   | "failed"
   | "pending"
@@ -84,6 +85,13 @@ export type PipelineStepProgressDetailStatus =
 export interface PipelineStepProgressDetail {
   /** Stable identity for the row (item key, path, job id, …). */
   id: string;
+  /** Optional display name; identity remains `id`. */
+  name?: string;
+  /** Indentation relative to direct child rows (0). Rows are in tree preorder. */
+  depth?: number;
+  /** Inner work counts, independent of the parent's lifecycle count. */
+  completed?: number;
+  total?: number;
   /** Short status text shown after the id. */
   label?: string;
   /** Controls the detail row symbol. Defaults to `running`. */

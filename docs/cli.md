@@ -153,6 +153,31 @@ the flag names; the parsed keys are `stepIds` and `targets`.
 A first script is [`cli-job.ts`](../examples/cli-job.ts). Local history with
 `--store` is covered in [the studio](./studio.md) and `tubeless history`.
 
+## Nested progress
+
+In a capable TTY, composed pipelines automatically show indented substeps:
+
+```text
+  ⠋ build-database
+    ✓ prepare-artifacts
+    ⠋ build-database [████░░░░] 50% 2/4
+    · validate-and-promote
+```
+
+`fromPipeline` shows child steps; `forEachPipeline` adds an item-key row above
+each child's steps. Deeper composition stays nested. Completed rows remain after
+parents settle, and failed, cancelled, and skipped work retain distinct states.
+Inner progress bars require the child to call `context.reportProgress`; lifecycle
+rows work without instrumentation. Tall trees use a live window with omitted-row
+counts and print the full retained tree at completion. Fan-out progress snapshots
+show at most 32 live item groups by default, prioritizing active items and failures;
+the complete tree is emitted once at settlement. `progress.detailLimit` overrides
+the live cap and caps the final snapshot too. Plain/non-TTY output uses aggregate
+progress messages.
+
+See [child composition](./child-pipeline-composition.md) for item-group display
+limits and [fan-out progress](../examples/fan-out-progress.ts) for an example.
+
 ## History
 
 ```

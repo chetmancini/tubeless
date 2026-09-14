@@ -594,7 +594,11 @@ describe("pipeline tracing", () => {
           details: Array.from({ length: 130 }, (_, index) => ({
             id: index === 0 ? "x".repeat(5_000) : `item-${index}`,
             label: index === 0 ? "y".repeat(5_000) : "scan",
-            status: "running",
+            name: "Nested work",
+            depth: 3,
+            completed: 2,
+            total: 5,
+            status: "cancelled",
           })),
           message: "items",
           total: 130,
@@ -626,6 +630,13 @@ describe("pipeline tracing", () => {
     expect(details).toHaveLength(128);
     expect(details[0]?.id).toHaveLength(4_096);
     expect(details[0]?.label).toHaveLength(4_096);
+    expect(details[0]).toMatchObject({
+      name: "Nested work",
+      depth: 3,
+      completed: 2,
+      total: 5,
+      status: "cancelled",
+    });
   });
 
   it("omits detail attributes when progress has no detail rows", async () => {

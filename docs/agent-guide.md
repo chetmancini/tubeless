@@ -42,6 +42,12 @@ or shared helpers in this repository.
   shape for dependent inputs and policy-skip values.
   Parent plans keep these steps opaque but expose `nestedPipeline` with the child
   pipeline id, declared step ids, and single/fan-out mode for presentation.
+  The interactive CLI automatically expands selected child steps and fan-out
+  items into nested progress rows and retains completed states. Inner progress
+  counts and details propagate through both adapters; do not forward raw child
+  hooks or duplicate this bookkeeping in consumers. Fan-outs materialize up to
+  32 live item groups by default and emit the full retained tree once at settlement.
+  Set `progress.detailLimit` to override that live cap and cap the final snapshot.
 - Use `fromRemote` for a unit of work that lives on another engine. Required
   fields are `adapter`, `mapInput`, and `outputSchema`. Omitting `dryRun`
   contacts the engine during a pipeline dry run; the adapter and remote

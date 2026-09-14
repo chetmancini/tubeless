@@ -5,6 +5,7 @@ import type {
   PipelinePlanStep,
   PipelineRun,
   PipelineStepProgress,
+  PipelineStepProgressDetail,
   PipelineStepStatus,
 } from "../core/pipeline.js";
 import type {
@@ -55,31 +56,48 @@ function compactAttributes(
 
 const TRACE_LIST_LIMIT = 128;
 const TRACE_STRING_LIMIT = 4_096;
-const DETAIL_STATUSES = new Set(["completed", "failed", "pending", "running", "skipped"]);
+// Leave room for the rest of a trace event below the default 1 MiB NDJSON limit.
+const TRACE_DETAIL_BYTE_LIMIT = 256 * 1_024;
+const traceEncoder = new TextEncoder();
+const DETAIL_STATUSES = new Set([
+  "cancelled",
+  "completed",
+  "failed",
+  "pending",
+  "running",
+  "skipped",
+]);
 
 function boundTraceString(value: string): string {
   return value.length > TRACE_STRING_LIMIT ? value.slice(0, TRACE_STRING_LIMIT) : value;
-}
-
-interface SerializedProgressDetail {
-  id: string;
-  label?: string;
-  status?: "completed" | "failed" | "pending" | "running" | "skipped";
 }
 
 function serializeProgressDetails(
   details: PipelineStepProgress["details"]
 ): { detail_count: number; details: string } | undefined {
   if (!details || details.length === 0) return undefined;
-  const serialized = details.slice(0, TRACE_LIST_LIMIT).map((detail) => {
-    const row: SerializedProgressDetail = { id: boundTraceString(detail.id) };
+  const serialized: string[] = [];
+  let bytes = 4; // Quotes and brackets of the details string in the enclosing event.
+  for (const detail of details.slice(0, TRACE_LIST_LIMIT)) {
+    const row: PipelineStepProgressDetail = { id: boundTraceString(detail.id) };
+    if (detail.name) row.name = boundTraceString(detail.name);
+    for (const key of ["depth", "completed", "total"] as const) {
+      if (Number.isFinite(detail[key])) row[key] = detail[key];
+    }
     if (detail.label) row.label = boundTraceString(detail.label);
     if (detail.status && DETAIL_STATUSES.has(detail.status)) row.status = detail.status;
-    return row;
-  });
+    const json = JSON.stringify(row);
+    // `details` is itself JSON inside an event string: count its second escaping
+    // layer as UTF-8, not just the row's characters or its first serialization.
+    const rowBytes = traceEncoder.encode(JSON.stringify(json)).byteLength - 2;
+    const nextBytes = bytes + rowBytes + (serialized.length > 0 ? 1 : 0);
+    if (nextBytes > TRACE_DETAIL_BYTE_LIMIT) break;
+    serialized.push(json);
+    bytes = nextBytes;
+  }
   return {
     detail_count: details.length,
-    details: JSON.stringify(serialized),
+    details: `[${serialized.join(",")}]`,
   };
 }
 

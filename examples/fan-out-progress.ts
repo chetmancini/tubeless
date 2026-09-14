@@ -8,6 +8,7 @@ interface ShardOptions {
 const shardStep = createSteps<ShardOptions>();
 
 const processRecords = shardStep("process-records", {
+  name: "Process records",
   description: "Process every record in one shard",
   run: async (_inputs, context) => {
     const processed: string[] = [];
@@ -23,10 +24,21 @@ const processRecords = shardStep("process-records", {
   },
 });
 
+const validateRecords = shardStep("validate-records", {
+  description: "Check the processed shard before completing it",
+  dependsOn: [processRecords],
+  run: ({ "process-records": result }, context) => {
+    if (result.processed.length !== context.options.records.length) {
+      throw new Error(`Incomplete shard ${result.shardId}`);
+    }
+    return result;
+  },
+});
+
 export const ShardPipeline = definePipeline({
   id: "process-shard",
-  steps: [processRecords],
-  finalize: (outputs) => outputs["process-records"],
+  steps: [processRecords, validateRecords],
+  finalize: (outputs) => outputs["validate-records"],
 });
 
 interface FanOutOptions {
@@ -44,6 +56,8 @@ const processShards = fanOutStep.forEachPipeline.skippable("process-shards", {
   items: (_inputs, context) => context.options.shards,
   key: (shard) => shard.id,
   concurrency: (_inputs, context) => context.options.concurrency,
+  // The CLI automatically shows shard -> process-records / validate-records,
+  // including inner record counts and retained completion states.
   progress: { itemNoun: "shards" },
   mapOptions: (shard) => ({ records: shard.records, shardId: shard.id }),
 });

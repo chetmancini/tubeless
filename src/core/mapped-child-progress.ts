@@ -46,8 +46,10 @@ export interface FormatMappedChildProgressOptions {
    */
   sampleLimit?: number;
   /**
-   * Max detail rows emitted for multi-line reporters. Defaults to unlimited
-   * (all active items). Use a positive cap for very large fan-outs.
+   * For `forEachPipeline`, cap visible item groups, including the final snapshot.
+   * By default, live snapshots show up to 32 groups and the final snapshot shows all.
+   * Larger caps increase per-event presentation work. Standalone formatting
+   * helpers apply this to active rows and default to all supplied active items.
    */
   detailLimit?: number;
   /**
