@@ -43,6 +43,8 @@ export class PipelineChildError extends Error {
   }
 }
 
+const LIVE_FAN_OUT_GROUP_LIMIT = 32;
+
 type ChildPipeline = Pipeline<object, unknown, string, string>;
 
 type CompiledChildExecute = (
@@ -404,6 +406,11 @@ export function createMappedChildRunner<TParentOptions extends object>(
       | { error: Error; key: string; index: number; ok: false };
 
     const active = new Map<string, string>();
+    const failedKeys = new Set<string>();
+    const itemIndexes = new Map(keys.map((key, index) => [key, index]));
+    const hooks = Array.isArray(context.hooks) ? context.hooks : [context.hooks];
+    const observesProgress =
+      Boolean(context.tracing) || hooks.some((hook) => hook?.onStepProgress || hook?.onStepStatus);
     const itemRows = new Map<string, PipelineStepProgressDetail>(
       keys.map((id) => [id, { id, status: "pending" }])
     );
@@ -416,7 +423,8 @@ export function createMappedChildRunner<TParentOptions extends object>(
     let plannedItems = 0;
     let terminalChildSteps = 0;
 
-    const publishProgress = (spotlight?: string): void => {
+    const publishProgress = (spotlight?: string, final = false): void => {
+      if (!observesProgress) return;
       const snapshot: MappedChildProgressSnapshot = {
         active,
         concurrency,
@@ -429,32 +437,34 @@ export function createMappedChildRunner<TParentOptions extends object>(
         terminalChildSteps,
         spotlight,
       };
-      // A cap counts item groups, so a child tree is never cut in half. Prefer
-      // active items, then failures, while displaying groups in input order.
-      const priority = (key: string): number => {
-        if (active.has(key)) return 0;
-        const status = itemRows.get(key)?.status;
-        return status === "failed" || status === "cancelled" ? 1 : 2;
-      };
-      const limit = config.progress?.detailLimit;
-      const visibleKeys =
-        limit === undefined
-          ? keys
-          : [...keys]
-              .sort((left, right) => priority(left) - priority(right))
-              .slice(0, Math.max(0, Math.floor(limit)));
-      const visible = new Set(visibleKeys);
-      const details = keys
-        .filter((key) => visible.has(key))
-        .flatMap((key) => [
-          { ...itemRows.get(key)! },
-          ...(itemProgress.get(key)?.details() ?? []).map((detail) => ({
-            ...detail,
-            depth: (detail.depth ?? 0) + 1,
-          })),
-        ]);
-      if (visible.size < keys.length) {
-        details.push({ id: `+${keys.length - visible.size} more`, status: "pending" });
+      // Materialize a bounded live window; expand the default final snapshot once.
+      // Active and failed sets avoid scanning or sorting the full fan-out per event.
+      const limit =
+        Math.max(0, Math.floor(config.progress?.detailLimit ?? LIVE_FAN_OUT_GROUP_LIMIT)) || 0;
+      let visibleKeys: readonly string[];
+      if (final && config.progress?.detailLimit === undefined) {
+        visibleKeys = keys;
+      } else {
+        const visible = new Set<string>();
+        for (const candidates of [active.keys(), failedKeys.keys(), keys.values()]) {
+          for (const key of candidates) {
+            if (visible.size >= limit) break;
+            visible.add(key);
+          }
+        }
+        visibleKeys = [...visible].sort(
+          (left, right) => itemIndexes.get(left)! - itemIndexes.get(right)!
+        );
+      }
+      const details = visibleKeys.flatMap((key) => [
+        { ...itemRows.get(key)! },
+        ...(itemProgress.get(key)?.details() ?? []).map((detail) => ({
+          ...detail,
+          depth: (detail.depth ?? 0) + 1,
+        })),
+      ]);
+      if (visibleKeys.length < keys.length) {
+        details.push({ id: `+${keys.length - visibleKeys.length} more`, status: "pending" });
       }
       context.reportProgress({ ...toMappedChildStepProgress(snapshot, config.progress), details });
     };
@@ -575,6 +585,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
             status: dependencies.isCancellation(cause, context) ? "cancelled" : "failed",
             label: cause.message,
           });
+          failedKeys.add(key);
           failedItems += 1;
           publishProgress(`${key}: failed`);
           return { error: cause, key, index: itemIndex, ok: false };
@@ -582,6 +593,9 @@ export function createMappedChildRunner<TParentOptions extends object>(
       }
     );
 
+    if (config.progress?.detailLimit === undefined && keys.length > LIVE_FAN_OUT_GROUP_LIMIT) {
+      publishProgress(undefined, true);
+    }
     const outcomes = settled.results.filter((outcome): outcome is Outcome => outcome !== undefined);
     const schedulerFailure =
       settled.failure === undefined

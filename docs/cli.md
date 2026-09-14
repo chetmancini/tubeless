@@ -169,8 +169,11 @@ each child's steps. Deeper composition stays nested. Completed rows remain after
 parents settle, and failed, cancelled, and skipped work retain distinct states.
 Inner progress bars require the child to call `context.reportProgress`; lifecycle
 rows work without instrumentation. Tall trees use a live window with omitted-row
-counts and print the full retained tree at completion. Plain/non-TTY output uses
-aggregate progress messages.
+counts and print the full retained tree at completion. Fan-out progress snapshots
+show at most 32 live item groups by default, prioritizing active items and failures;
+the complete tree is emitted once at settlement. `progress.detailLimit` overrides
+the live cap and caps the final snapshot too. Plain/non-TTY output uses aggregate
+progress messages.
 
 See [child composition](./child-pipeline-composition.md) for item-group display
 limits and [fan-out progress](../examples/fan-out-progress.ts) for an example.

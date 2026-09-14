@@ -1,10 +1,97 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createSteps, definePipeline, type PipelineStepProgress } from "./pipeline.js";
 import { createPipelineReporter } from "../reporter/interactive-reporter.js";
 
 const log = { log() {}, warn() {}, error() {} };
 
 describe("nested child progress", () => {
+  it.each([undefined, 8])(
+    "bounds live fan-out materialization with detailLimit %s",
+    async (detailLimit) => {
+      const count = 512;
+      const step = createSteps();
+      const child = definePipeline({
+        id: "child",
+        steps: [
+          step("work", {
+            run: (_, context) => {
+              context.reportProgress({ completed: 1, total: 2 });
+              return 1;
+            },
+          }),
+        ],
+        finalize: () => 1,
+      });
+      const parent = definePipeline({
+        id: "parent",
+        steps: [
+          step.forEachPipeline("items", {
+            pipeline: child,
+            items: () => Array.from({ length: count }, (_, index) => index),
+            key: String,
+            concurrency: 4,
+            mapOptions: () => ({}),
+            progress: { detailLimit },
+          }),
+        ],
+        finalize: () => 1,
+      });
+      const snapshots: PipelineStepProgress[] = [];
+      await parent.run({}, undefined, {
+        log,
+        hooks: {
+          onStepProgress: ({ progress }) => snapshots.push(progress),
+        },
+      });
+      const liveLimit = detailLimit ?? 32;
+      expect(
+        Math.max(...snapshots.slice(0, -1).map(({ details }) => details?.length ?? 0))
+      ).toBeLessThanOrEqual(2 * liveLimit + 1);
+      // Guard total allocation growth without relying on noisy wall-clock timings.
+      expect(snapshots.reduce((sum, { details }) => sum + (details?.length ?? 0), 0)).toBeLessThan(
+        count * 400
+      );
+      expect(snapshots[0]?.details?.[0]).toMatchObject({ id: "0", status: "pending" });
+      const final = snapshots.at(-1)?.details ?? [];
+      expect(final.filter((row) => !row.depth && row.status === "completed")).toHaveLength(
+        detailLimit ?? count
+      );
+      if (detailLimit === undefined) {
+        expect(final).toHaveLength(count * 2);
+        expect(final.at(-2)?.id).toBe(String(count - 1));
+      } else {
+        expect(final.at(-1)?.id).toBe(`+${count - detailLimit} more`);
+      }
+    }
+  );
+
+  it("does not construct fan-out progress payloads when nothing observes progress", async () => {
+    const step = createSteps();
+    const child = definePipeline({
+      id: "child",
+      steps: [step("work", { run: () => 1 })],
+      finalize: () => 1,
+    });
+    const formatMessage = vi.fn(() => "items");
+    const parent = definePipeline({
+      id: "parent",
+      steps: [
+        step.forEachPipeline("items", {
+          pipeline: child,
+          items: () => ["a", "b"],
+          key: (key) => key,
+          mapOptions: () => ({}),
+          progress: { formatMessage },
+        }),
+      ],
+      finalize: () => 1,
+    });
+    await parent.run({}, undefined, { log });
+    expect(formatMessage).not.toHaveBeenCalled();
+    await parent.run({}, undefined, { log, hooks: { onStepProgress() {} } });
+    expect(formatMessage).toHaveBeenCalled();
+  });
+
   it.each([undefined, 8, 3])(
     "keeps a three-level tree and completed rows with terminal height %s",
     async (rows) => {
