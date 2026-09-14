@@ -58,7 +58,17 @@ const historyFixture: StoredPipelineEvent[] = [
     attributes: {
       completed: 4,
       detail_count: 1,
-      details: JSON.stringify([{ id: "rows.csv", label: "read", status: "running" }]),
+      details: JSON.stringify([
+        {
+          id: "rows.csv",
+          name: "Rows",
+          depth: 2,
+          completed: 4,
+          total: 10,
+          label: "read",
+          status: "cancelled",
+        },
+      ]),
       message: "loaded",
       total: 10,
     },
@@ -172,7 +182,17 @@ describe("pipeline run store projections", () => {
           progress: {
             completed: 4,
             detailCount: 1,
-            details: [{ id: "rows.csv", label: "read", status: "running" }],
+            details: [
+              {
+                id: "rows.csv",
+                name: "Rows",
+                depth: 2,
+                completed: 4,
+                total: 10,
+                label: "read",
+                status: "cancelled",
+              },
+            ],
             message: "loaded",
             total: 10,
           },

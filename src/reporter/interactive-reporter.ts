@@ -29,6 +29,7 @@ export type ResolvedPipelineReporterMode = Exclude<PipelineReporterMode, "auto">
 
 export interface ReporterOutput {
   readonly columns?: number;
+  readonly rows?: number;
   /**
    * File descriptor for live frames. When set, spinner, elapsed time, and shimmer
    * paint on a worker thread so they keep moving during CPU-bound steps. Defaults
@@ -65,6 +66,7 @@ export interface PipelineReporterController<TResult = unknown> {
 type StepState = PipelineStepStatus & {
   /** Wall-clock ms from Date.now() when the step entered the running state. */
   startedAtMs?: number;
+  details?: PipelineStepProgress["details"];
 };
 
 type FinalizeState =
@@ -139,29 +141,43 @@ function renderProgress(progress: PipelineStepProgress, width: number, unicode: 
 function renderProgressDetail(
   detail: NonNullable<PipelineStepProgress["details"]>[number],
   theme: ReporterTheme,
-  spinner: string
+  spinner: string,
+  progressBarWidth: number,
+  parentStatus: PipelineStepStatus["status"]
 ): string {
-  const status = detail.status ?? "running";
+  const status =
+    (detail.status ?? "running") === "running" && parentStatus !== "running"
+      ? parentStatus
+      : (detail.status ?? "running");
   const symbol =
     status === "completed"
       ? theme.styled.complete(theme.symbols.complete)
       : status === "failed"
         ? theme.styled.fail(theme.symbols.fail)
-        : status === "skipped"
+        : status === "skipped" || status === "cancelled"
           ? theme.styled.skip(theme.symbols.skip)
           : status === "pending"
             ? theme.styled.description(theme.symbols.pending)
             : theme.styled.start(spinner);
-  const id = safeTerminalText(detail.id);
-  const labelText = detail.label ? safeTerminalText(detail.label) : "";
-  const running =
-    status !== "completed" && status !== "failed" && status !== "skipped" && status !== "pending";
+  const id = safeTerminalText(detail.name ?? detail.id);
+  const label = detail.label ? safeTerminalText(detail.label) : "";
+  const labelText = status === "cancelled" ? `cancelled${label ? `: ${label}` : ""}` : label;
+  const running = status === "running";
   const body = labelText ? `${id} ${labelText}` : id;
   const paintedBody =
     running && theme.colorEnabled
       ? shimmerToken(body)
       : `${id}${labelText ? ` ${theme.styled.description(labelText)}` : ""}`;
-  return `    ${symbol} ${paintedBody}`;
+  const depth = Math.max(0, Math.min(32, Math.floor(safeNumber(detail.depth ?? 0))));
+  const progress =
+    detail.completed === undefined
+      ? ""
+      : ` ${renderProgress(
+          { completed: detail.completed, total: detail.total },
+          progressBarWidth,
+          theme.capabilities.unicode
+        )}`;
+  return `${"  ".repeat(depth + 2)}${symbol} ${paintedBody}${progress}`;
 }
 
 function renderStep(
@@ -185,12 +201,6 @@ function renderStep(
       const lines = [
         `  ${theme.styled.start(spinner)} ${shimmerToken(displayName)}${progress}${elapsed}`,
       ];
-      const details = state.progress?.details;
-      if (details && details.length > 0) {
-        for (const detail of details) {
-          lines.push(renderProgressDetail(detail, theme, spinner));
-        }
-      }
       return lines;
     }
     case "completed":
@@ -274,6 +284,11 @@ function createInteractiveReporter<TResult>(
     }
     for (const state of steps.values()) {
       lines.push(...renderStep(state, theme, SPINNER_TOKEN, progressBarWidth));
+      for (const detail of state.details ?? []) {
+        lines.push(
+          renderProgressDetail(detail, theme, SPINNER_TOKEN, progressBarWidth, state.status)
+        );
+      }
     }
     if (finalize.status === "running") {
       lines.push(`  ${theme.styled.start(SPINNER_TOKEN)} ${shimmerToken("finalize")}`);
@@ -314,7 +329,39 @@ function createInteractiveReporter<TResult>(
     if (disposed) return;
     const lines = frameLines();
     if (lines.length === 0) return;
-    ensureTicker().setLines(lines);
+    const rows = output.rows;
+    if (rows === undefined || rows < 2 || lines.length < rows) {
+      ensureTicker().setLines(lines);
+      return;
+    }
+    if (result) {
+      // A finished tree can scroll normally; never try to erase beyond the viewport.
+      ensureTicker().setLines([]);
+      ensureTicker().writeLog(`${lines.join("\n")}\n`);
+      return;
+    }
+    const ellipsis = theme.capabilities.unicode ? "…" : "...";
+    if (rows < 5) {
+      ensureTicker().setLines(
+        [lines[0]!, `  ${ellipsis} ${lines.length - 1} rows omitted`].slice(0, rows - 1)
+      );
+      return;
+    }
+    const available = rows - 4;
+    let focus = 0;
+    for (const [index, line] of lines.entries()) {
+      if (line.includes(SPINNER_TOKEN)) focus = index;
+    }
+    const start = Math.max(
+      1,
+      Math.min(lines.length - available, focus - Math.floor(available / 2))
+    );
+    const end = start + available;
+    const visible = [lines[0]!];
+    if (start > 1) visible.push(`  ${ellipsis} ${start - 1} rows above`);
+    visible.push(...lines.slice(start, end));
+    if (end < lines.length) visible.push(`  ${ellipsis} ${lines.length - end} rows below`);
+    ensureTicker().setLines(visible);
   };
 
   const flushProgress = (): void => {
@@ -393,6 +440,7 @@ function createInteractiveReporter<TResult>(
         steps.set(event.step.id, {
           ...event,
           progress,
+          details: progress?.details,
           startedAtMs: previous?.startedAtMs ?? Date.now(),
         });
         const now = Date.now();
@@ -414,7 +462,7 @@ function createInteractiveReporter<TResult>(
         return;
       }
       if (event.status !== "planned") flushProgress();
-      steps.set(event.step.id, event);
+      steps.set(event.step.id, { ...event, details: previous?.details });
       redraw();
     },
     onFinalizeStart: () => {

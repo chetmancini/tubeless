@@ -239,7 +239,11 @@ describe("child-pipeline composition", () => {
         total: 3,
       });
       expect(progress.at(-1)?.message).toMatch(/3\/3 shards/);
-      expect(progress.at(-1)?.details ?? []).toEqual([]);
+      expect(progress.at(-1)?.details?.filter((detail) => !detail.depth)).toEqual([
+        { id: "first", status: "completed" },
+        { id: "second", status: "completed" },
+        { id: "third", status: "completed" },
+      ]);
     });
 
     it("policy-skips mapped children with the parent-facing result array", async () => {
@@ -1110,12 +1114,14 @@ describe("child-pipeline composition", () => {
       expect(progress.map(({ completed }) => completed)).toEqual(
         [...progress.map(({ completed }) => completed)].sort((left, right) => left - right)
       );
-      expect(progress).toContainEqual({
-        completed: 0,
-        total: 2,
-        message: "typed-child/load: half",
-      });
-      expect(progress.at(-1)).toEqual({
+      expect(progress).toContainEqual(
+        expect.objectContaining({
+          completed: 0,
+          total: 2,
+          message: "typed-child/load: half",
+        })
+      );
+      expect(progress.at(-1)).toMatchObject({
         completed: 2,
         total: 2,
         message: "typed-child/write: complete",

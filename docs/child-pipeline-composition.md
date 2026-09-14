@@ -7,8 +7,8 @@ Compose a child pipeline as one typed parent step with
 mapped results. An async `fromPipeline` `mapResult` publishes its resolved value;
 dependents receive `Awaited<TOut>` and skippable adapters accept that resolved
 shape as their skip value. Child lifecycle hooks stay isolated, and child work reports
-through parent-step progress without changing the pipeline run loop or
-reporter contracts.
+through parent-step progress. Interactive reporters display selected child steps
+as an indented tree, retaining their terminal states and inner work counts.
 
 Map a runtime item list onto the same child pipeline with
 `createSteps<TOptions>().forEachPipeline(...)`. Item keys are stable,
@@ -151,12 +151,36 @@ complete parent-facing array and bypasses `items`, child execution, and
 
 The parent sees one opaque `process-shards` step. Progress is domain-neutral by
 default: a one-line item/concurrency summary plus structured `details` rows for
-each in-flight child (`id` + `label`). Interactive reporters render those as
-indented lines under the parent step so high concurrency stays readable. The
+each item and its selected child steps. Interactive reporters render these as
+an indented tree: parent step, item key, child steps, and any deeper composition.
+Pending, running, completed, failed, cancelled, and skipped rows retain their
+states; filtered steps are omitted. Completed item groups remain in the tree.
+`fromPipeline` provides the same child-step breakdown without an item-key level.
+Inner `reportProgress` counts and details survive both composition boundaries. The
 progress bar advances on terminal child steps so long fan-out work does not look
 hung at 0%. Override `progress.itemNoun` or `progress.formatMessage` for domain
 labels without changing scheduling. Duplicate keys fail before any child starts.
 Parent dry-run overrides the mapped child run object's `dryRun` value.
+
+`progress.detailLimit` optionally limits visible item groups, prioritizing active
+items and then failures while keeping displayed groups in input order. Descendants
+stay with their item; an overflow row reports omitted groups. The default retains
+all groups. The standalone `mappedChildProgressDetails` helper continues to format
+only the active entries supplied in its snapshot.
+
+Progress `details` use preorder rows with `depth: 0` (or omitted) for direct
+children. Each composition level adds one to descendant depths. IDs are stable
+within their containing group; `name` provides optional display text. `completed`
+and `total` describe inner work independently of the parent's terminal-step count.
+Reporters cap visual indentation at 32 levels. Trace snapshots preserve these
+fields within the existing 128-row and 4096-character bounds, with `detail_count`
+recording the pre-truncation row count.
+
+The interactive CLI keeps completed details after their parent settles. Trees
+larger than the terminal use a live window around active work, with omitted-row
+counts; the full retained tree prints at completion. Plain/non-TTY reporting
+continues to emit aggregate progress messages. Presentation does not change
+parent plans, child selection, hook isolation, scheduling, or result types.
 
 ## Semantics matrix
 

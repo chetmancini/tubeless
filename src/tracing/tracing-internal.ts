@@ -5,6 +5,7 @@ import type {
   PipelinePlanStep,
   PipelineRun,
   PipelineStepProgress,
+  PipelineStepProgressDetail,
   PipelineStepStatus,
 } from "../core/pipeline.js";
 import type {
@@ -55,16 +56,17 @@ function compactAttributes(
 
 const TRACE_LIST_LIMIT = 128;
 const TRACE_STRING_LIMIT = 4_096;
-const DETAIL_STATUSES = new Set(["completed", "failed", "pending", "running", "skipped"]);
+const DETAIL_STATUSES = new Set([
+  "cancelled",
+  "completed",
+  "failed",
+  "pending",
+  "running",
+  "skipped",
+]);
 
 function boundTraceString(value: string): string {
   return value.length > TRACE_STRING_LIMIT ? value.slice(0, TRACE_STRING_LIMIT) : value;
-}
-
-interface SerializedProgressDetail {
-  id: string;
-  label?: string;
-  status?: "completed" | "failed" | "pending" | "running" | "skipped";
 }
 
 function serializeProgressDetails(
@@ -72,7 +74,11 @@ function serializeProgressDetails(
 ): { detail_count: number; details: string } | undefined {
   if (!details || details.length === 0) return undefined;
   const serialized = details.slice(0, TRACE_LIST_LIMIT).map((detail) => {
-    const row: SerializedProgressDetail = { id: boundTraceString(detail.id) };
+    const row: PipelineStepProgressDetail = { id: boundTraceString(detail.id) };
+    if (detail.name) row.name = boundTraceString(detail.name);
+    for (const key of ["depth", "completed", "total"] as const) {
+      if (Number.isFinite(detail[key])) row[key] = detail[key];
+    }
     if (detail.label) row.label = boundTraceString(detail.label);
     if (detail.status && DETAIL_STATUSES.has(detail.status)) row.status = detail.status;
     return row;

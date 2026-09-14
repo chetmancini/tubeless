@@ -138,6 +138,35 @@ describe("createPipelineReporter", () => {
     expect(rendered).toMatch(/\n {4}[^\n]*shard-a[^\n]*parse/);
   });
 
+  it("labels cancelled details distinctly from skips after the parent settles", async () => {
+    const output = captureOutput();
+    const reporter = createPipelineReporter({
+      log: captureLog(),
+      output,
+      mode: "interactive",
+      color: "never",
+      symbols: "ascii",
+    });
+    const step = createSteps();
+    const pipeline = definePipeline({
+      id: "cancelled-details",
+      steps: [
+        step("work", {
+          run: (_, context) => {
+            context.reportProgress({
+              completed: 0,
+              details: [{ id: "child", status: "cancelled", label: "operator stopped" }],
+            });
+          },
+        }),
+      ],
+      finalize: () => true,
+    });
+    await pipeline.run({}, undefined, { cwd: "/tmp", log: reporter.log, hooks: reporter.hooks });
+    reporter.dispose();
+    expect(output.chunks.join("")).toContain("child cancelled: operator stopped");
+  });
+
   it("uses the plain reporter when auto mode has no interactive TTY", async () => {
     const output = captureOutput(false);
     const log = captureLog();

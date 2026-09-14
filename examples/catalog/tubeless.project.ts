@@ -6,6 +6,8 @@ import { definePipelineProject } from "tubeless/workbench/project";
 // receive stepIds and targets.
 // For caller-directed fan-out reruns, see ../fan-out-progress.ts: inspect
 // error.fanOut and check omitted entries and truncated keys before selecting inputs.
+// That example also shows automatic nested CLI rows and retained substep completion;
+// fromPipeline and forEachPipeline forward progress without consumer hook wiring.
 // History uses recorded pipeline IDs: `tubeless history --pipeline import`
 // selects the pipeline behind the registered command `import-rows`.
 

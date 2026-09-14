@@ -18,7 +18,7 @@ inventory.
 | Host a pipeline in a durable engine            | [`host-embedding.ts`](../examples/host-embedding.ts)                     | `runOrThrow`, pass `runId` / `parentRunId`                                   |
 | Fan out over runtime items                     | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline.skippable`, stable keys, concurrency, progress              |
 | Inspect keyed fan-out failures                 | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `error.fanOut`, bounded diagnostics, caller-directed reruns                  |
-| Show determinate progress                      | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `reportProgress`, mapped-child progress                                      |
+| Show determinate progress                      | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `reportProgress`, nested CLI rows and inner work counts                      |
 | Watch the live TTY reporter                    | [`live-tui.ts`](../examples/live-tui.ts)                                 | named steps, nested `details`; persist with `--store`                        |
 | Retry and rate-limit remote calls              | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `withRetry`, `RateLimiter`, injected sleep and signal                        |
 | Resume durable long-running work               | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `dryRun`, `openCheckpoint`, `withCheckpointedBatch`                          |

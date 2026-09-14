@@ -212,6 +212,14 @@ function parseProgressDetails(
       const id = item.id as PipelineTraceAttributeValue | undefined;
       if (!("id" in item) || !isStringValue(id) || id.length === 0) return [];
       const detail: PipelineStepProgressDetail = { id: id.slice(0, 4_096) };
+      // SAFETY: parsed fields are checked by the same guards as other trace attributes.
+      const fields = item as Record<string, PipelineTraceAttributeValue | undefined>;
+      const name = fields.name;
+      if (isStringValue(name) && name) detail.name = name.slice(0, 4_096);
+      for (const key of ["depth", "completed", "total"] as const) {
+        const number = fields[key];
+        if (isNumberValue(number) && Number.isFinite(number)) detail[key] = number;
+      }
       // SAFETY: JSON.parse leaves object fields untyped; isStringValue keeps strings only.
       const label = ("label" in item ? item.label : undefined) as
         | PipelineTraceAttributeValue
@@ -225,7 +233,8 @@ function parseProgressDetails(
         | undefined;
       if (
         isStringValue(status) &&
-        (status === "completed" ||
+        (status === "cancelled" ||
+          status === "completed" ||
           status === "failed" ||
           status === "pending" ||
           status === "running" ||
