@@ -167,5 +167,8 @@
       "import": "./dist/tracing/tracing-otel.js",
       "default": "./dist/tracing/tracing-otel.js"
     }
+  },
+  "dependencies": {
+    "tubeless": "^0.2.2"
   }
 }
