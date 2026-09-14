@@ -319,6 +319,13 @@ async function runChildPipeline(
   return result;
 }
 
+function hasProgressObserver(context: PipelineContext): boolean {
+  const hooks = Array.isArray(context.hooks) ? context.hooks : [context.hooks];
+  return (
+    Boolean(context.tracing) || hooks.some((hook) => hook?.onStepProgress || hook?.onStepStatus)
+  );
+}
+
 export function createSingleChildRunner<TParentOptions extends object>(
   config: SingleChildExecutionConfig<TParentOptions>,
   dependencies: ChildExecutionDependencies<TParentOptions>
@@ -342,9 +349,10 @@ export function createSingleChildRunner<TParentOptions extends object>(
     const selectedStepCount = childPlan.ok
       ? childPlan.steps.filter((step) => step.selected).length
       : 0;
-    const childProgress = createChildProgress(childPlan);
+    const childProgress = hasProgressObserver(context) ? createChildProgress(childPlan) : undefined;
     const terminalSteps = new Set<string>();
     const report = (step: PipelinePlanStep, message: string, terminal = false): void => {
+      if (!childProgress) return;
       if (terminal) terminalSteps.add(step.id);
       context.reportProgress({
         details: childProgress.details(),
@@ -354,7 +362,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
       });
     };
     const childHooks: PipelineHooks = {
-      onStepStatus: childProgress.update,
+      onStepStatus: childProgress?.update,
       onStepStart: ({ step }) => report(step, "started"),
       onStepProgress: ({ progress, step }) => {
         if (!hasVisibleStepProgress(progress)) return;
@@ -370,7 +378,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
       domainOptions,
       controls,
       baseChildContext,
-      childHooks,
+      childProgress ? childHooks : {},
       dependencies,
       `Child pipeline ${config.pipeline.id} `,
       childPlan
@@ -408,9 +416,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
     const active = new Map<string, string>();
     const failedKeys = new Set<string>();
     const itemIndexes = new Map(keys.map((key, index) => [key, index]));
-    const hooks = Array.isArray(context.hooks) ? context.hooks : [context.hooks];
-    const observesProgress =
-      Boolean(context.tracing) || hooks.some((hook) => hook?.onStepProgress || hook?.onStepStatus);
+    const observesProgress = hasProgressObserver(context);
     const itemRows = new Map<string, PipelineStepProgressDetail>(
       keys.map((id) => [id, { id, status: "pending" }])
     );
@@ -511,10 +517,10 @@ export function createMappedChildRunner<TParentOptions extends object>(
             if (plannedSteps > stepsPerItem) stepsPerItem = plannedSteps;
           }
 
-          const childProgress = createChildProgress(childPlan);
-          itemProgress.set(key, childProgress);
+          const childProgress = observesProgress ? createChildProgress(childPlan) : undefined;
+          if (childProgress) itemProgress.set(key, childProgress);
           const childHooks: PipelineHooks = {
-            onStepStatus: childProgress.update,
+            onStepStatus: childProgress?.update,
             onStepStart: ({ step }) => {
               active.set(key, step.name ?? step.id);
               publishProgress();
@@ -553,7 +559,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
               sleep: context.sleep,
               tracing: childTracingOptions(context, key),
             },
-            childHooks,
+            observesProgress ? childHooks : {},
             dependencies,
             "",
             childPlan

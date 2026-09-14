@@ -1,10 +1,95 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSteps, definePipeline, type PipelineStepProgress } from "./pipeline.js";
+import {
+  createSteps,
+  definePipeline,
+  type PipelineContext,
+  type PipelineStepProgress,
+} from "./pipeline.js";
 import { createPipelineReporter } from "../reporter/interactive-reporter.js";
 
 const log = { log() {}, warn() {}, error() {} };
 
 describe("nested child progress", () => {
+  describe.each(["single", "mapped"] as const)("%s wrapper observation", (kind) => {
+    it.each(["none", "completion", "progress", "status", "tracing"] as const)(
+      "only materializes nested trees for progress observers (%s)",
+      async (observer) => {
+        let detailReads = 0;
+        const detail = {
+          get id() {
+            detailReads += 1;
+            return "record";
+          },
+          status: "completed" as const,
+        };
+        const step = createSteps();
+        const leaf = definePipeline({
+          id: "leaf",
+          steps: Array.from({ length: 16 }, (_, index) =>
+            step(`work-${index}`, {
+              run: (_, context) => {
+                for (let completed = 1; completed <= 4; completed += 1) {
+                  context.reportProgress({ completed, total: 4, details: [detail] });
+                }
+                return 1;
+              },
+            })
+          ),
+          finalize: () => 1,
+        });
+        const middle = definePipeline({
+          id: "middle",
+          steps: [step.fromPipeline("nested", { pipeline: leaf, mapOptions: () => ({}) })],
+          finalize: () => 1,
+        });
+        const work =
+          kind === "single"
+            ? step.fromPipeline("work", { pipeline: middle, mapOptions: () => ({}) })
+            : step.forEachPipeline("work", {
+                pipeline: middle,
+                items: () => ["a"],
+                key: (key) => key,
+                mapOptions: () => ({}),
+              });
+        const root = definePipeline({ id: "root", steps: [work], finalize: () => 1 });
+        const runtime: Partial<PipelineContext> = { log };
+        const snapshots: PipelineStepProgress[] = [];
+        const recorded: string[] = [];
+        const onComplete = vi.fn();
+        if (observer === "completion") runtime.hooks = { onPipelineComplete: onComplete };
+        if (observer === "progress")
+          runtime.hooks = [{ onStepProgress: ({ progress }) => snapshots.push(progress) }];
+        if (observer === "status")
+          runtime.hooks = {
+            onStepStatus: (event) => {
+              if (event.status === "running" && event.progress) snapshots.push(event.progress);
+            },
+          };
+        if (observer === "tracing")
+          runtime.tracing = {
+            exporter: {
+              export: (event) => {
+                if (event.pipelineId === "root" && event.attributes.details)
+                  recorded.push(String(event.attributes.details));
+              },
+            },
+          };
+        expect((await root.run({}, undefined, runtime)).value).toBe(1);
+        if (observer === "none" || observer === "completion") {
+          expect(detailReads).toBe(0);
+          if (observer === "completion") expect(onComplete).toHaveBeenCalledOnce();
+        } else {
+          expect(detailReads).toBeGreaterThan(0);
+          if (observer === "tracing") expect(recorded.at(-1)).toContain("work-15");
+          else
+            expect(snapshots.at(-1)?.details).toContainEqual(
+              expect.objectContaining({ id: "work-15", status: "completed" })
+            );
+        }
+      }
+    );
+  });
+
   it.each([undefined, 8])(
     "bounds live fan-out materialization with detailLimit %s",
     async (detailLimit) => {
