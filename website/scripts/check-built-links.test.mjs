@@ -35,9 +35,9 @@ function page(links) {
 describe("checkBuiltLinks", () => {
   it("accepts local pages, directory indexes, and file assets", () => {
     const dir = fixture({
-      "index.html": page(["/tubeless/docs", "/tubeless/llms.txt", "/tubeless/api-report.json"]),
-      "docs/index.html": page(["/tubeless/docs/concepts"]),
-      "docs/concepts/index.html": page(["/tubeless"]),
+      "index.html": page(["/docs", "/llms.txt", "/api-report.json"]),
+      "docs/index.html": page(["/docs/concepts"]),
+      "docs/concepts/index.html": page(["/"]),
       "llms.txt": "map",
       "api-report.json": "{}",
     });
@@ -45,10 +45,10 @@ describe("checkBuiltLinks", () => {
     assert.deepEqual(checkBuiltLinks(dir), { ok: true, errors: [] });
   });
 
-  it("resolves base-prefixed paths and relative links from a leaf page", () => {
+  it("resolves root-relative paths and relative links from a leaf page", () => {
     const dir = fixture({
       "docs/concepts/index.html": page([
-        "/tubeless/docs/child-pipeline-composition",
+        "/docs/child-pipeline-composition",
         "remote-step-composition",
         "../start",
       ]),
@@ -62,7 +62,7 @@ describe("checkBuiltLinks", () => {
 
   it("treats name.html and directory indexes as the same route", () => {
     const dir = fixture({
-      "index.html": page(["/tubeless/alt", "/tubeless/dir"]),
+      "index.html": page(["/alt", "/dir"]),
       "alt.html": page([]),
       "dir/index.html": page([]),
     });
@@ -73,8 +73,8 @@ describe("checkBuiltLinks", () => {
   it("strips query strings and fragments before looking up files", () => {
     const dir = fixture({
       "docs/concepts/index.html": page([
-        "/tubeless/docs/studio?from=nav",
-        "/tubeless/docs/studio#local-event-store-and-studio",
+        "/docs/studio?from=nav",
+        "/docs/studio#local-event-store-and-studio",
         "#remote-steps",
       ]),
       "docs/studio/index.html": page([]),
@@ -99,30 +99,30 @@ describe("checkBuiltLinks", () => {
 
   it("fails a missing local route with the source page and target", () => {
     const dir = fixture({
-      "docs/concepts/index.html": page(["/tubeless/docs/missing-route"]),
+      "docs/concepts/index.html": page(["/docs/missing-route"]),
     });
 
     const result = checkBuiltLinks(dir);
     assert.equal(result.ok, false);
     assert.equal(result.errors.length, 1);
-    assert.equal(result.errors[0].source, "/tubeless/docs/concepts");
-    assert.equal(result.errors[0].target, "/tubeless/docs/missing-route");
-    assert.match(result.errors[0].message, /\/tubeless\/docs\/concepts/);
-    assert.match(result.errors[0].message, /\/tubeless\/docs\/missing-route/);
+    assert.equal(result.errors[0].source, "/docs/concepts");
+    assert.equal(result.errors[0].target, "/docs/missing-route");
+    assert.match(result.errors[0].message, /\/docs\/concepts/);
+    assert.match(result.errors[0].message, /\/docs\/missing-route/);
   });
 
   it("fails a remote-step-shaped missing route clearly", () => {
     const dir = fixture({
       "docs/concepts/index.html":
-        '<p>See <a href="/tubeless/docs/remote-step-composition">remote-step composition</a>.</p>',
+        '<p>See <a href="/docs/remote-step-composition">remote-step composition</a>.</p>',
     });
 
     const lines = [];
     const code = runCheck(dir, (line) => lines.push(line));
     assert.equal(code, 1);
     assert.equal(lines.length, 1);
-    assert.match(lines[0], /\/tubeless\/docs\/concepts/);
-    assert.match(lines[0], /\/tubeless\/docs\/remote-step-composition/);
+    assert.match(lines[0], /\/docs\/concepts/);
+    assert.match(lines[0], /\/docs\/remote-step-composition/);
   });
 
   it("does not interpret destinations outside the output root", () => {
@@ -134,7 +134,7 @@ describe("checkBuiltLinks", () => {
     const result = checkBuiltLinks(dir);
     assert.equal(result.ok, false);
     assert.equal(result.errors.length, 2);
-    assert.ok(result.errors.every((error) => error.source === "/tubeless/docs/concepts"));
+    assert.ok(result.errors.every((error) => error.source === "/docs/concepts"));
   });
 });
 
@@ -142,12 +142,12 @@ describe("check-built-links CLI", () => {
   it("exits nonzero for a missing remote-step-shaped route", () => {
     const dir = fixture({
       "docs/concepts/index.html":
-        '<p>See <a href="/tubeless/docs/remote-step-composition">remote-step composition</a>.</p>',
+        '<p>See <a href="/docs/remote-step-composition">remote-step composition</a>.</p>',
     });
 
     const result = spawnSync(process.execPath, [script, dir], { encoding: "utf8" });
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /\/tubeless\/docs\/concepts/);
-    assert.match(result.stderr, /\/tubeless\/docs\/remote-step-composition/);
+    assert.match(result.stderr, /\/docs\/concepts/);
+    assert.match(result.stderr, /\/docs\/remote-step-composition/);
   });
 });

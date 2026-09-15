@@ -18,6 +18,6 @@ export function githubRaw(repoPath: string): string {
 }
 
 export function absUrl(path = ""): string {
-  const site = (import.meta.env.SITE ?? "https://chetmancini.github.io").replace(/\/+$/, "");
+  const site = (import.meta.env.SITE ?? "https://tubeless.io").replace(/\/+$/, "");
   return `${site}${href(path)}`;
 }

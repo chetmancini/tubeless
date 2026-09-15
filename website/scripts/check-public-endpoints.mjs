@@ -70,7 +70,7 @@ export async function checkPublicEndpoints(base) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const results = await checkPublicEndpoints(process.argv[2] ?? "https://chetmancini.github.io/tubeless/");
+  const results = await checkPublicEndpoints(process.argv[2] ?? "https://tubeless.io/");
   console.log(JSON.stringify(results, null, 2));
   process.exitCode = results.some(({ problems }) => problems.length) ? 1 : 0;
 }

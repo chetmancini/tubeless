@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://chetmancini.github.io/tubeless/">
+  <a href="https://tubeless.io/">
     <img src="docs/assets/logo.svg" width="72" height="72" alt="Tubeless">
   </a>
 </p>
@@ -103,7 +103,7 @@ The [recipe index](./docs/recipes.md) explains when to use each pattern.
 
 ## Docs
 
-[Website](https://chetmancini.github.io/tubeless/) ·
+[Website](https://tubeless.io/) ·
 [Getting started](./docs/getting-started.md) · [CLI](./docs/cli.md) ·
 [Studio](./docs/studio.md) · [Concepts](./docs/concepts.md) ·
 [Comparison](./docs/comparison.md) · [API](./docs/api-reference.md) ·

@@ -2,9 +2,9 @@
 
 > Dependency-free TypeScript primitives for typed, observable data pipelines and their CLI programs.
 
-Human site: https://chetmancini.github.io/tubeless/
-Agent entrypoints: https://chetmancini.github.io/tubeless/agents
-LLM index on the site: https://chetmancini.github.io/tubeless/llms.txt
+Human site: https://tubeless.io/
+Agent entrypoints: https://tubeless.io/agents
+LLM index on the site: https://tubeless.io/llms.txt
 
 Start:
 

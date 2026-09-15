@@ -7,6 +7,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "../dist");
 const read = (path) => readFileSync(join(root, path), "utf8");
 const index = read("llms.txt");
 const bundle = read("llms-full.txt");
+assert.equal(read("CNAME").trim(), "tubeless.io", "Pages artifact must preserve the custom domain");
 const pages = readdirSync(join(root, "docs"))
   .filter((name) => existsSync(join(root, "docs", name, "index.html")));
 assert.ok(pages.length > 0, "Built documentation pages must exist");
@@ -14,19 +15,19 @@ for (const slug of pages) {
   const path = `docs/${slug}.md`;
   const markdown = read(path);
   assert.match(markdown, /^# /, `${path} must contain a document title`);
-  assert.ok(index.includes(`/tubeless/${path}`), `${path} must be discoverable in llms.txt`);
+  assert.ok(index.includes(`https://tubeless.io/${path}`), `${path} must be discoverable in llms.txt`);
   assert.ok(bundle.includes(markdown), `${path} must be included in full documentation`);
-  assert.ok(read(`docs/${slug}/index.html`).includes(`/tubeless/${path}`), `${slug} must link to Markdown`);
+  assert.ok(read(`docs/${slug}/index.html`).includes(`/${path}`), `${slug} must link to Markdown`);
   for (const [, target] of markdown.matchAll(/\]\(([^)]+)\)/g)) {
     if (target.startsWith("#")) continue;
     assert.match(target, /^(https?:|mailto:)/, `${path} has a relative link: ${target}`);
     const url = new URL(target);
-    if (url.origin !== "https://chetmancini.github.io" || !url.pathname.startsWith("/tubeless/")) continue;
-    const local = decodeURIComponent(url.pathname.slice("/tubeless/".length));
+    if (url.origin !== "https://tubeless.io") continue;
+    const local = decodeURIComponent(url.pathname.slice(1));
     assert.ok(existsSync(join(root, local)), `${path} has a missing local target: ${target}`);
   }
 }
-assert.ok(bundle.indexOf("Source: https://chetmancini.github.io/tubeless/docs/agent-guide.md") < bundle.indexOf("Source: https://chetmancini.github.io/tubeless/docs/getting-started.md"), "Full documentation must lead with the agent guide");
+assert.ok(bundle.indexOf("Source: https://tubeless.io/docs/agent-guide.md") < bundle.indexOf("Source: https://tubeless.io/docs/getting-started.md"), "Full documentation must lead with the agent guide");
 console.log(`Verified ${pages.length} Markdown documents, discovery links, and full documentation bundle.`);
 
 // Validate the llms.txt file-list grammar, not just the presence of keywords.
@@ -44,14 +45,14 @@ for (const section of index.split(/^## /m).slice(1)) {
 }
 
 const homepage = read("index.html");
-assert.match(homepage, /<link rel="alternate" type="text\/markdown" href="\/tubeless\/index.md"/);
+assert.match(homepage, /<link rel="alternate" type="text\/markdown" href="\/index.md"/);
 assert.match(read("index.md"), /^# Tubeless\n/);
 assert.match(read("index.md"), /## When to use Tubeless\n/);
-assert.ok(index.includes("https://chetmancini.github.io/tubeless/index.md"));
+assert.ok(index.includes("https://tubeless.io/index.md"));
 for (const [, target] of read("index.md").matchAll(/\]\(([^)]+)\)/g)) {
   const url = new URL(target);
-  if (url.origin === "https://chetmancini.github.io") {
-    assert.ok(existsSync(join(root, url.pathname.slice("/tubeless/".length))), `Missing overview target: ${target}`);
+  if (url.origin === "https://tubeless.io") {
+    assert.ok(existsSync(join(root, url.pathname.slice(1))), `Missing overview target: ${target}`);
   }
 }
 const jsonld = [...homepage.matchAll(/<script\b[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)];
@@ -60,7 +61,7 @@ const software = JSON.parse(jsonld[0][1]);
 assert.equal(software["@context"], "https://schema.org");
 assert.equal(software["@type"], "SoftwareApplication");
 assert.equal(software.name, "Tubeless");
-assert.equal(software.url, "https://chetmancini.github.io/tubeless");
+assert.equal(software.url, "https://tubeless.io/");
 assert.equal(software.author.name, "Chet Mancini");
 assert.equal(software.author["@type"], "Person");
 assert.ok(software.description.length > 0);
@@ -75,25 +76,25 @@ const locations = [...sitemap.matchAll(/<url><loc>([^<]+)<\/loc><\/url>/g)].map(
 const humanPages = readdirSync(root, { recursive: true })
   .filter((file) => file.endsWith(".html") && file !== "404.html")
   .map((file) => file === "index.html" ? "" : file.replace(/\/index\.html$/, ""));
-assert.deepEqual(locations.sort(), humanPages.map((path) => `https://chetmancini.github.io/tubeless${path ? `/${path}` : ""}`).sort());
+assert.deepEqual(locations.sort(), humanPages.map((path) => `https://tubeless.io/${path}`).sort());
 assert.equal(new Set(locations).size, locations.length);
-assert.match(read("robots.txt"), /Sitemap: https:\/\/chetmancini.github.io\/tubeless\/sitemap.xml/);
+assert.match(read("robots.txt"), /Sitemap: https:\/\/tubeless.io\/sitemap.xml/);
 
 for (const path of humanPages) {
   const html = read(path ? `${path}/index.html` : "index.html");
-  assert.match(html, /<link rel="describedby" href="\/tubeless\/llms.txt"/);
-  assert.match(html, /<link rel="sitemap" type="application\/xml" href="\/tubeless\/sitemap.xml"/);
+  assert.match(html, /<link rel="describedby" href="\/llms.txt"/);
+  assert.match(html, /<link rel="sitemap" type="application\/xml" href="\/sitemap.xml"/);
 }
 for (const slug of pages) {
   const html = read(`docs/${slug}/index.html`);
-  assert.ok(html.includes(`<link rel="alternate" type="text/markdown" href="/tubeless/docs/${slug}.md"`));
+  assert.ok(html.includes(`<link rel="alternate" type="text/markdown" href="/docs/${slug}.md"`));
 }
 const recovery = read("404.md");
 assert.match(recovery, /^# 404 — Page not found\n/);
 for (const path of ["llms.txt", "docs", "sitemap.xml"]) {
-  assert.ok(recovery.includes(`https://chetmancini.github.io/tubeless/${path}`));
+  assert.ok(recovery.includes(`https://tubeless.io/${path}`));
 }
 assert.ok(read("404.html").includes(recovery), "404 HTML must include the short Markdown recovery body");
 assert.match(read("404.html"), /name="robots" content="noindex"/);
-assert.match(read("404.html"), /type="text\/markdown" href="\/tubeless\/404.md"/);
+assert.match(read("404.html"), /type="text\/markdown" href="\/404.md"/);
 console.log(`Verified software identity, llms.txt grammar, recovery content, and ${locations.length} sitemap pages.`);

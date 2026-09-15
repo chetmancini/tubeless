@@ -2,7 +2,6 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SITE_BASE = "/tubeless";
 const ORIGIN = "https://built.invalid";
 
 export function checkBuiltLinks(outputRoot) {
@@ -45,10 +44,10 @@ function listHtmlFiles(root) {
 
 function pagePathFromFile(root, file) {
   const rel = relative(root, file).split(sep).join("/");
-  if (rel === "index.html") return SITE_BASE;
-  if (rel.endsWith("/index.html")) return `${SITE_BASE}/${rel.slice(0, -"/index.html".length)}`;
-  if (rel.endsWith(".html")) return `${SITE_BASE}/${rel.slice(0, -".html".length)}`;
-  return `${SITE_BASE}/${rel}`;
+  if (rel === "index.html") return "/";
+  if (rel.endsWith("/index.html")) return `/${rel.slice(0, -"/index.html".length)}`;
+  if (rel.endsWith(".html")) return `/${rel.slice(0, -".html".length)}`;
+  return `/${rel}`;
 }
 
 function extractAnchorHrefs(html) {
@@ -87,8 +86,7 @@ function resolveLocalTarget(target, source, root) {
   const pathname = normalizePathname(url.pathname);
   if (pathname === undefined) return { exists: false };
 
-  const relativePath = stripSiteBase(pathname);
-  if (relativePath === undefined) return { exists: false };
+  const relativePath = pathname.replace(/^\/+/, "");
 
   let decoded;
   try {
@@ -103,15 +101,8 @@ function resolveLocalTarget(target, source, root) {
 }
 
 function normalizePathname(pathname) {
-  if (pathname === SITE_BASE || pathname === `${SITE_BASE}/`) return SITE_BASE;
   if (pathname.endsWith("/") && pathname.length > 1) return pathname.slice(0, -1);
   return pathname;
-}
-
-function stripSiteBase(pathname) {
-  if (pathname === SITE_BASE) return "";
-  if (pathname.startsWith(`${SITE_BASE}/`)) return pathname.slice(SITE_BASE.length + 1);
-  return undefined;
 }
 
 function outputExists(candidate) {

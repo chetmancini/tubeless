@@ -41,7 +41,8 @@ The GitHub repo already uses **GitHub Actions** as the Pages source.
 `.github/workflows/pages.yml` is the deploy job: it builds `website/` on
 `main` and uploads `website/dist`.
 
-- Site: `https://chetmancini.github.io/tubeless`
+- Site: `https://tubeless.io`
+- Custom domain source: `public/CNAME`
 - Package `make check` does not include this project
 
 Every documentation page links to its `.md` counterpart. `/llms.txt` lists all
@@ -56,7 +57,7 @@ checks homepage [SoftwareApplication](https://schema.org/SoftwareApplication) JS
 and verifies the [sitemap](https://www.sitemaps.org/protocol.html) covers every human
 page except the noindex 404. Every documentation page advertises its Markdown
 alternate in the HTML head. The existing 404 design includes a short Markdown
-recovery block, also downloadable at `/tubeless/404.md`. That download is a normal
+recovery block, also downloadable at `/404.md`. That download is a normal
 static file (200); unknown paths must still return 404 from the host.
 
 GitHub Pages serves static files. Astro endpoint headers are build-time metadata;
@@ -71,24 +72,13 @@ orders, GET and HEAD, and unknown paths before claiming compliance. A true
 with the homepage or add a client-side redirect.
 
 Keep GitHub Pages for now; Accept negotiation remains an accepted hosting limitation.
-The intended interim URL is `https://chetmancini.github.io/tubeless/`; a separate
-product domain will be purchased later. `chetmancini.com/tubeless/` is not the
-intended canonical URL.
-
-Before deployment, resolve the public domain configuration. On 2026-09-12 the
-configured `https://chetmancini.github.io/tubeless/` redirected to
-`http://chetmancini.com/tubeless/`; HTTPS on the custom domain failed certificate
-validation. Confirm the intended domain and fix Pages HTTPS/domain settings before
-changing `astro.config.ts`, canonical URLs, sitemap URLs, or package metadata.
-The Pages API confirms this project has no custom domain of its own; the account
-site `chetmancini/chetmancini.github.io` has `cname: chetmancini.com` and HTTPS
-enforcement disabled. Changing that account setting affects the personal site,
-so do not clear it as part of this project's documentation work. Resolve that
-account-wide decision or attach the future product domain when available.
-The project-path `robots.txt` is not the host-wide robots policy: the owner of
-`/robots.txt` must advertise this sitemap there, or submit the sitemap through a
-verified search-console property. Search rankings cannot be guaranteed by code;
-use Tubeless as the product identity and Chet Mancini as its author consistently.
+The canonical site is `https://tubeless.io/`. Astro builds it at the domain root,
+and `public/CNAME` keeps the deployed artifact aligned with the Pages custom-domain
+setting. The apex DNS records point to GitHub Pages; `www.tubeless.io` points to
+`chetmancini.github.io` so Pages can redirect it to the canonical apex domain.
+Keep HTTPS enforcement enabled in the repository's Pages settings. Search rankings
+cannot be guaranteed by code; use Tubeless as the product identity and Chet Mancini
+as its author consistently.
 
 Run `bun run check:public` from `website/` after building and publishing. It checks
 every generated HTML and machine-readable endpoint against the local build, using
@@ -97,7 +87,7 @@ a JSON report and exits nonzero for stale content, wrong status/media type,
 missing negotiation headers, missing recovery links, or HTTPS-to-HTTP redirects.
 This is an audit, not a Pages deployment gate: negotiation failures are expected
 on the retained host. Tests for the checker run during `bun run build`.
-An optional base URL argument supports verification after the future domain move.
+An optional base URL argument supports verification against another deployment.
 
 After publishing, check every sitemap URL, `llms.txt`, `llms-full.txt`, `index.md`,
 `api-report.json`, every `docs/*.md`, `404.md`, and an arbitrary nonexistent path.
