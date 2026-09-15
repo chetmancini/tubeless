@@ -50,6 +50,11 @@ Markdown URLs; `/llms-full.txt` bundles the same build’s docs with the agent g
 first. Links in Markdown are absolute, so downloaded context remains navigable.
 These routes use the same documentation catalog as the human navigation.
 
+`/openapi.json` documents the local Studio HTTP API. The spec points to a
+loopback server and states that `tubeless.io` does not execute pipelines. Studio
+errors return JSON with stable `code`, `message`, and `hint` fields plus the
+existing `error` string.
+
 ## Agent readiness and hosting boundaries
 
 The build checks `llms.txt` against the [published file-list format](https://llmstxt.org/),
@@ -76,9 +81,11 @@ The canonical site is `https://tubeless.io/`. Astro builds it at the domain root
 and `public/CNAME` keeps the deployed artifact aligned with the Pages custom-domain
 setting. The apex DNS records point to GitHub Pages; `www.tubeless.io` points to
 `chetmancini.github.io` so Pages can redirect it to the canonical apex domain.
-Keep HTTPS enforcement enabled in the repository's Pages settings. Search rankings
-cannot be guaranteed by code; use Tubeless as the product identity and Chet Mancini
-as its author consistently.
+Keep HTTPS enforcement enabled in the repository's Pages settings. The homepage
+title, canonical URL, sitemap, and structured data use Tubeless as the product name
+and Chet Mancini as its author. Submit `/sitemap.xml` through the domain's search
+console property after deployment; indexing and rank still depend on the search
+engine and inbound links.
 
 Run `bun run check:public` from `website/` after building and publishing. It checks
 every generated HTML and machine-readable endpoint against the local build, using

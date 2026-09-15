@@ -5,6 +5,16 @@ import type { PipelineRunEventStore, StoredPipelineEvent } from "../run-store/ru
 import { PIPELINE_RUN_STUDIO_SCRIPT, PIPELINE_RUN_STUDIO_STYLE } from "./run-store-ui-page.js";
 import { startPipelineRunStudio, type PipelineRunStudioServer } from "./run-store-ui.js";
 
+function studioError(code: string, message: string, hint: string) {
+  return { code, error: message, hint, message };
+}
+
+const untrustedHostError = studioError(
+  "untrusted_host",
+  "The request host is not trusted.",
+  "Use the exact local Studio URL printed by tubeless ui."
+);
+
 async function requestWithHost(
   url: string,
   options: {
@@ -227,6 +237,22 @@ describe("local pipeline run studio", () => {
     expect(cancel.status).toBe(405);
   });
 
+  it("returns actionable structured JSON errors for unknown API routes", async () => {
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
+    servers.push(server);
+
+    const response = await fetch(`${server.url}/api/missing`);
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    await expect(response.json()).resolves.toEqual(
+      studioError(
+        "endpoint_not_found",
+        "Not found.",
+        "Read https://tubeless.io/openapi.json and choose a documented Studio endpoint."
+      )
+    );
+  });
+
   it("pins the studio page CSP hashes to the exact inline script and style", async () => {
     const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
     servers.push(server);
@@ -416,7 +442,7 @@ describe("local pipeline run studio", () => {
       method: "POST",
     });
     expect(forgedHost.status).toBe(403);
-    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+    expect(forgedHost.body).toEqual(untrustedHostError);
     expect(launches).toHaveLength(1);
     await expect(
       fetch(`${server.url}/api/capabilities`).then((response) => response.json())
@@ -501,13 +527,19 @@ describe("local pipeline run studio", () => {
       method: "POST",
     });
     expect(forgedHost.status).toBe(403);
-    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+    expect(forgedHost.body).toEqual(untrustedHostError);
     const unknown = await fetch(`${server.url}/api/runs/missing-run/cancel`, {
       headers: { "x-tubeless-studio-cancel": "1" },
       method: "POST",
     });
     expect(unknown.status).toBe(404);
-    await expect(unknown.json()).resolves.toEqual({ error: "The run is not a live launch." });
+    await expect(unknown.json()).resolves.toEqual(
+      studioError(
+        "run_not_live",
+        "The run is not a live launch.",
+        "Refresh /api/snapshot and cancel a run listed in liveRunIds."
+      )
+    );
     const response = await fetch(`${server.url}/api/runs/live-run/cancel`, {
       headers: { "x-tubeless-studio-cancel": "1" },
       method: "POST",
@@ -669,7 +701,13 @@ describe("local pipeline run studio", () => {
 
     const missing = await fetch(`${server.url}/api/runs/missing`);
     expect(missing.status).toBe(404);
-    await expect(missing.json()).resolves.toEqual({ error: "Run not found." });
+    await expect(missing.json()).resolves.toEqual(
+      studioError(
+        "run_not_found",
+        "Run not found.",
+        "Refresh /api/snapshot and choose an available runId."
+      )
+    );
   });
 
   it("includes a first store event whose id is zero in snapshots", async () => {
@@ -729,7 +767,7 @@ describe("local pipeline run studio", () => {
       method: "DELETE",
     });
     expect(forgedHost.status).toBe(403);
-    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+    expect(forgedHost.body).toEqual(untrustedHostError);
     expect(clearCount).toBe(0);
     const response = await fetch(`${server.url}/api/history`, {
       headers: { "x-tubeless-studio-clear-history": "1" },
@@ -791,9 +829,13 @@ describe("local pipeline run studio", () => {
       method: "DELETE",
     });
     expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
-      error: "Wait for active runs to finish before clearing history.",
-    });
+    await expect(response.json()).resolves.toEqual(
+      studioError(
+        "history_busy",
+        "Wait for active runs to finish before clearing history.",
+        "Wait for live runs to finish, then retry the clear request."
+      )
+    );
     expect(clearCount).toBe(0);
   });
 
@@ -829,7 +871,7 @@ describe("local pipeline run studio", () => {
       method: "GET",
     });
     expect(forgedHost.status).toBe(403);
-    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+    expect(forgedHost.body).toEqual(untrustedHostError);
   });
 
   it("rejects the studio page when Host does not match the bound authority", async () => {
@@ -841,7 +883,7 @@ describe("local pipeline run studio", () => {
       method: "GET",
     });
     expect(forgedHost.status).toBe(403);
-    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+    expect(forgedHost.body).toEqual(untrustedHostError);
   });
 
   it("rejects a run read whose Host does not match the bound authority", async () => {
@@ -853,7 +895,7 @@ describe("local pipeline run studio", () => {
       method: "GET",
     });
     expect(forgedHost.status).toBe(403);
-    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+    expect(forgedHost.body).toEqual(untrustedHostError);
   });
 
   it("rejects a literal-IP Host that does not match a specific bind", async () => {
@@ -866,7 +908,7 @@ describe("local pipeline run studio", () => {
       method: "GET",
     });
     expect(forgedHost.status).toBe(403);
-    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+    expect(forgedHost.body).toEqual(untrustedHostError);
   });
 
   it("accepts localhost and literal-IP Hosts on a wildcard bind", async () => {
@@ -894,7 +936,7 @@ describe("local pipeline run studio", () => {
       method: "GET",
     });
     expect(forgedHost.status).toBe(403);
-    expect(forgedHost.body).toEqual({ error: "The request host is not trusted." });
+    expect(forgedHost.body).toEqual(untrustedHostError);
   });
 
   it("rejects a malformed run path segment with a generic 400", async () => {
@@ -903,7 +945,13 @@ describe("local pipeline run studio", () => {
 
     const response = await fetch(`${server.url}/api/runs/%zz`);
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: "Malformed path segment." });
+    await expect(response.json()).resolves.toEqual(
+      studioError(
+        "malformed_path_segment",
+        "Malformed path segment.",
+        "Percent-encode the path segment as valid UTF-8."
+      )
+    );
   });
 
   it("hides unexpected store errors from the client and logs them", async () => {
@@ -928,7 +976,13 @@ describe("local pipeline run studio", () => {
       const response = await fetch(`${server.url}/api/snapshot`);
       const body = await response.json();
       expect(response.status).toBe(500);
-      expect(body).toEqual({ error: "The studio hit an unexpected error." });
+      expect(body).toEqual(
+        studioError(
+          "studio_internal_error",
+          "The studio hit an unexpected error.",
+          "Inspect the local Studio process logs and retry after fixing the reported cause."
+        )
+      );
       expect(JSON.stringify(body)).not.toContain(secret);
       expect(logged.flat().join("\n")).toContain(secret);
     } finally {

@@ -28,6 +28,7 @@
 | [Remote-step composition](./remote-step-composition.md)                                          | Opaque remote steps and mixed-engine placement       |
 | [Generated API inventory](./api-reference.md)                                                    | Entrypoints, exported symbols, and surface hashes    |
 | [Machine-readable API report](./api-report.json)                                                 | Automated public-surface review                      |
+| [Local Studio OpenAPI](https://tubeless.io/openapi.json)                                         | Local HTTP operations and JSON error schemas         |
 | [Agent evaluations](https://github.com/chetmancini/tubeless/blob/main/docs/agent-evaluations.md) | Forward-testing the guidance against realistic tasks |
 | [LLM index](./llms.txt)                                                                          | Compact machine-readable documentation map           |
 

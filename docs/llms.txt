@@ -54,6 +54,7 @@ Advanced:
 - Remote steps: ./remote-step-composition.md
 - Public exports: ./api-reference.md
 - Machine-readable surface: ./api-report.json
+- Local Studio OpenAPI: https://tubeless.io/openapi.json
 - Agent evaluation cases: https://github.com/chetmancini/tubeless/blob/main/docs/agent-evaluations.md
 
 Executable examples:

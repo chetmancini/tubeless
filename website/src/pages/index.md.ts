@@ -23,6 +23,7 @@ a durable execution engine with crash recovery or distributed scheduling.
 - [Authoring guide](${absUrl("docs/agent-guide.md")})
 - [Recipes](${absUrl("docs/recipes.md")})
 - [CLI reference](${absUrl("docs/cli.md")})
+- [Local Studio OpenAPI contract](${absUrl("openapi.json")})
 - [Complete documentation](${absUrl("llms-full.txt")})
 - [Source code](${GITHUB_REPO})
 
