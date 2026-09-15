@@ -1,25 +1,24 @@
 # Core concepts
 
-## Definition model
+## Steps, dependencies, and results
 
-A pipeline is an ordered declaration of typed steps plus a finalizer.
-`definePipeline` immediately rejects invalid static graphs (duplicate/reserved
-IDs, missing or contradictory dependencies, and cycles) and stores a compiled
-graph. Planning applies option-dependent step selection against that compiled
-graph and does not re-validate the definition.
-Dependency arrays are snapshotted in that compiled storage; caller-owned step
-objects are left unchanged.
+A pipeline describes a series of steps and the values passed between them.
+Each step has an ID, a function to run, and any dependencies. A finalizer
+combines step outputs into the value returned to the caller.
 
-Literal duplicate step IDs are also rejected by TypeScript at the
-`definePipeline` call. Runtime definition validation remains the backstop for
-widened arrays and dynamically assembled definitions.
+Create steps with one `createSteps<TOptions>()` builder per pipeline. Pass a
+step object to another step's `dependsOn` array to require its output;
+TypeScript then infers that input's type.
 
-Use one `createSteps<TOptions>()` factory per pipeline. A step object is both its
-definition and its typed dependency token.
+`definePipeline` checks the graph immediately. Duplicate or reserved IDs,
+missing dependencies, contradictory dependencies, and cycles cause a
+`PipelineDefinitionError`. TypeScript also catches duplicate literal step IDs.
+The definition stores a copy of the dependency arrays, so later changes to
+those arrays do not alter the graph.
 
-The ID is the stable machine identity used for dependencies, output keys,
-selection, and tracing. An optional `name` overrides how reporters and printed
-plans display the step without changing that identity.
+Keep IDs stable: dependencies, output keys, selection, and traces use them.
+Set `name` when a step needs a different label in plans and progress reports.
+Changing the label does not change the ID.
 
 ## Dependency choices
 
@@ -33,25 +32,48 @@ Prefer required dependencies unless partial execution is an intentional part of
 the workflow. A failure gate blocks after either `failed` or `cancelled`; both
 mean the guarded prerequisite did not safely complete.
 
-Shorter aliases such as `needs`, `uses`, and `gatedBy` were evaluated and not
-adopted. `uses` does not communicate optionality, and aliases would leave two
-vocabularies for the same graph. The explicit fields above remain canonical.
+For example, a publish step that needs a validated artifact should require the
+validation step with `dependsOn`. If it needs only the build output but must
+stop when validation fails, use `skipAfterFailureOf` for validation. An
+`optionalDependsOn` entry alone does not block publication after a failure.
 
-## Three kinds of non-execution
+## Skips and failures
 
-- **Structural skip:** a dependency, dry-run rule, filter, abort, or fail-fast
-  decision prevents execution. Dependents that require the step do not run.
-- **Policy skip:** a `step.skippable` predicate deliberately decides that work
-  is unnecessary. It may publish a value and unlock dependents.
-- **Failure:** the step ran and threw. Fail-fast stops new work by default;
-  `continueOnError` lets independent work proceed.
+A step can be omitted before its handler starts, intentionally skip its work,
+or fail while running. These cases have different effects on dependent steps.
 
-`continueOnError` changes scheduling, not success: the structured run result
-remains unsuccessful and `runOrThrow` still throws. Inspect `run()` when a
-best-effort final value is useful despite recorded failures.
+| Outcome         | What happened                                                                             | What dependents receive                              |
+| --------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Structural skip | A filter, dry-run rule, missing dependency, abort, or earlier failure prevented execution | No output; required dependents cannot run            |
+| Policy skip     | A `step.skippable` predicate decided that work was unnecessary                            | The supplied skip value, or `undefined`              |
+| Failure         | The step's work failed                                                                    | No successful output; required dependents cannot run |
 
-Any `step.skippable` step has output type `T | undefined`, even if current skip
-paths publish a value. Dependents must handle the absence explicitly.
+Fail-fast is the default: a failure stops new work. Set `continueOnError` to
+allow independent steps to proceed. The run still reports failure, and
+`runOrThrow` still throws. Use `run` to inspect any partial result.
+
+A `step.skippable` output is always typed as `T | undefined`, even if all current
+skip paths return a value. Dependent steps must handle that possible absence.
+
+## Execution controls
+
+Pass business inputs as the first argument and execution controls as the second:
+
+```ts
+await pipeline.run(options, { dryRun: true });
+await pipeline.runOrThrow(options, { targets: ["publish"] });
+```
+
+| Control           | Default   | Effect                                                                   |
+| ----------------- | --------- | ------------------------------------------------------------------------ |
+| `dryRun`          | `false`   | Applies each step's dry-run policy; unmarked steps still run             |
+| `continueOnError` | `false`   | Lets independent work continue after a failure                           |
+| `targets`         | All steps | Selects declared goals and their required dependencies and failure gates |
+| `stepIds`         | All steps | Selects exactly the listed steps, without adding dependencies            |
+
+`targets` and `stepIds` cannot be combined. Use `pipeline.plan(controls)` to
+check selection before running. Planning requires no business inputs and does
+not call step handlers or schema validators.
 
 ## Selection and finalization
 
@@ -75,9 +97,8 @@ workflows and does not add prerequisites. Empty selections, unknown,
 undeclared, or duplicate IDs, and a run that supplies both fields fail during
 planning.
 
-Every planned step includes `selectionReasons`, a stable discriminated union
-that explains inclusion or omission without requiring callers to reconstruct
-the graph. A target plan can report a direct `target`, a
+Each planned step includes `selectionReasons`, which explains why it was
+selected or omitted. A target plan can report a direct `target`, a
 `required-dependency`, a `failure-gate`, an excluded `optional-only` input, or
 an `outside-target-closure` omission. Exact filters use `exact` and
 `not-selected`; unfiltered plans use `all`.
@@ -91,11 +112,10 @@ load?.selectionReasons;
 // [{ kind: "required-dependency", dependentId: "build", targetId: "publish" }]
 ```
 
-`selected` remains the convenient boolean and `skipReason` describes execution
-disposition such as `filtered`, `dry-run`, or `unmet-dependency`.
+`selected` tells you whether selection includes the step. `skipReason` explains
+why it will not run, such as `filtered`, `dry-run`, or `unmet-dependency`.
 
-Render a plan at the presentation boundary instead of duplicating its selection
-reason switch in each command or tool:
+Use `renderPipelinePlan` to display a plan in a terminal or return it as JSON:
 
 ```ts
 import { renderPipelinePlan } from "tubeless/render";
@@ -105,13 +125,27 @@ const terminalText = renderPipelinePlan(plan);
 const machineJson = renderPipelinePlan(plan, { format: "json" });
 ```
 
-Human output explains target and dependency provenance by default; pass
-`{ explain: false }` for a compact disposition-only view. JSON output preserves
-the original structured plan fields for machine consumers.
+Text output includes selection reasons by default. Pass `{ explain: false }`
+for a shorter view. JSON output retains all structured plan fields.
+
+### Required final outputs
+
+A finalizer may receive only some step outputs: dry runs, exact step filters,
+and failures can leave others missing. Use
+`requireOutputs([stepA, stepB], callback)` when a valid result needs those
+outputs. It checks their presence and makes them required properties in the
+callback. If an output is missing, finalization fails and reports its step ID.
+A step that successfully returns `undefined` still produced an output; that
+is different from a step that never supplied one.
+
+Tubeless also checks declared targets against these requirements. Each target
+must include all steps needed by `requireOutputs`, either directly or through
+its dependencies and failure gates. Use a plain finalizer when different
+selected goals are allowed to return partial results.
 
 ## Step statuses and structured errors
 
-Steps have one canonical, enforced lifecycle:
+A step moves through these states:
 
 ```text
 planned ──┬──> running ──┬──> complete
@@ -122,13 +156,12 @@ planned ──┬──> running ──┬──> complete
           └──> cancelled
 ```
 
-The runtime derives focused hooks from this state machine. Use
-`onStepStart`, `onStepProgress`, `onStepComplete`, `onStepSkip`,
-`onStepCancel`, or `onStepFail` for ordinary pipeline integration; each
-callback receives metadata narrowed to that case. `onStepPlan` is available
-for plan-aware tooling. `onStepStatus` is an additive catch-all for consumers
-that need the complete discriminated lifecycle, such as renderers and event
-stores. Registering it does not replace the focused callbacks.
+Hooks let your application respond to these changes. Use `onStepStart`,
+`onStepProgress`, `onStepComplete`, `onStepSkip`, `onStepCancel`, or `onStepFail`
+for a specific event; TypeScript narrows the callback data to that event.
+Use `onStepPlan` to observe planning. Use `onStepStatus` when one listener
+needs every status, for example to update a progress display. It runs in
+addition to any specific hooks you register.
 
 A `running` status may be published repeatedly as progress changes. Every
 selected step ends in exactly one terminal report; cancellation is distinct
@@ -151,9 +184,9 @@ const hooks: PipelineHooks = {
 };
 ```
 
-Every `PipelineError` has package-owned `code`, `phase`, and `kind` fields.
-Branch on those fields rather than message text. `phase` locates the lifecycle
-boundary (`definition`, `planning`, `execution`, or `finalization`); `kind`
+Every `PipelineError` has `code`, `phase`, and `kind` fields defined by
+Tubeless. Branch on those fields rather than message text. `phase` identifies
+where the error occurred (`definition`, `planning`, `execution`, or `finalization`); `kind`
 distinguishes definition, selection, step, dependency, cancellation, child, and
 finalization problems. If a thrown error supplied its own machine code, it is
 retained separately as `sourceCode`. Native `Error.cause` chains are copied into
@@ -176,11 +209,10 @@ identifies the pipeline, phase, package code, step, and deepest normalized cause
 definition issue. `renderPipelineError` from `tubeless/render` exposes that
 same diagnostic formatting directly and can emit the structured error as JSON.
 
-`PipelineStepReport` is the terminal-state union. Successful reports carry
+`PipelineStepReport` describes a step's final status. Successful reports carry
 timing, skipped reports carry `reason` plus optional `message` and
 `dependencyId`, and failed/cancelled reports carry a structured `error`.
-Hooks and tracing consume the same terminal objects rather than reconstructing
-status from separate callbacks.
+Hooks and trace events use these same reports.
 
 ## Versioned run records
 
@@ -188,23 +220,21 @@ status from separate callbacks.
 `runId`, terminal `status`, start and finish timestamps, structured errors, and
 one terminal report per planned step. Pass `context.runId` and
 `context.parentRunId` when an external orchestrator owns correlation; otherwise
-core generates an opaque run ID. The same IDs are available in step contexts
+Tubeless generates a run ID. The same IDs are available in step contexts
 and optional trace exports.
 
 An actual step execution receives one `attemptId`. It appears on the
 `PipelineStepContext`, its terminal `PipelineStepReport`, and trace lifecycle
 records. Executed reports also carry start and finish timestamps. Structural
 skips and steps cancelled before starting have neither an attempt ID nor a start
-timestamp because their handlers never ran. `context.reportAttempt()` describes
-retry activity within that execution; it does not create another persisted
-attempt model.
+timestamp because their handlers never ran. `context.reportAttempt()` records retry progress inside that step execution;
+it does not create a new `attemptId`.
 
-The terminal record deliberately does not copy log or progress streams. Use the
-injected logger and hooks for live observation, or tracing when durable event
-export is required. Errors and cancellation remain represented directly in the
-run and terminal step reports. A failing `tracing.exporter` does not fail the
+The run report includes errors and cancellation details, but not a stream of
+logs or progress updates. Use a logger and hooks for live updates, or a trace
+exporter to record events for later inspection. A failing `tracing.exporter` does not fail the
 run: the executor warns once on the first export or flush error for that emitter.
-A standalone failure drops later events. `composeTraceExporters` instead retires
+If a single exporter fails, later events are dropped. `composeTraceExporters` instead retires
 a failed destination after reporting the first partial drop and keeps sending to
 healthy destinations. Nested child runs each construct their own emitter, so
 `tracing.onExporterError` fires once per nested run rather than once for the
@@ -227,133 +257,18 @@ result.finishedAtMs - result.startedAtMs;
 
 ### Local event store and studio
 
-The local studio is a composition of existing boundaries, not part of pipeline
-execution:
+Record events when you need to inspect runs after the process exits. The CLI
+can write a SQLite database with `--store`, an NDJSON trace with `--trace`, or
+both. NDJSON stores one JSON event per line. Use `tubeless history` to inspect
+recordings in the terminal or `tubeless ui` to open them in a browser.
 
-```text
-pipeline definition → dependency-free executor → trace exporter
-                                               ↘ append-only SQLite ↘ local studio
-                                               ↘ portable NDJSON   ↗
-                                                                    ↘ injected command launcher (SQLite only)
-```
+Recording is optional. Importing `tubeless` does not load SQLite or the UI.
+For programmatic recording, use `tubeless/run-store/sqlite`; to read a finished
+trace, use `tubeless/run-store/ndjson`. See [the studio guide](./studio.md) for
+recording, storage limits, browser controls, and custom readers.
 
-`openSqlitePipelineRunStore()` implements `PipelineTraceExporter` and appends
-every lifecycle record to one versioned SQLite event table. Database triggers
-reject updates and deletes. Current run state, history, step attempts, progress,
-logs, errors, and observed definition graphs are projections of that immutable
-stream; they are not competing executor models.
-
-The SQLite adapter also exposes an explicit `clearHistory()` maintenance reset.
-It deletes the complete event history and compacts the database while restoring
-the append-only triggers in the same transaction; individual event updates and
-deletes remain forbidden. The workbench injects this capability into its
-loopback studio with a destructive confirmation and refuses to clear while it
-knows a browser-launched run is still live. Persisted runs left active by an
-interrupted process can still be cleared after confirmation. A directly embedded
-studio stays history-immutable unless its caller explicitly injects the same
-capability and may report its own known live writers through `isBusy()`.
-
-`openNdjsonPipelineRunStore()` gives a finished trace artifact the same
-read-only event-query boundary. It validates and bounds the artifact, assigns
-store-local ids in file order, closes the file, and never exposes an exporter or
-maintenance capability. History and Studio can therefore project CI or support
-traces directly without copying them into SQLite. Trace contents are not
-redacted and should be handled as sensitive operational data.
-
-Trace-enabled contexts route calls made through `context.log` into correlated
-`pipeline.log` events while still forwarding them to the injected logger.
-Definition metadata is attached to `step.planned` records, so the studio can
-render observed graphs without importing application pipeline modules.
-Opaque child steps include `nested_pipeline` on those records. Progress-bearing
-`step.running` events carry the parent summary plus bounded `details` rows so
-history can show the same per-item status as the live TTY. The
-first planned step from a newer run replaces that pipeline ID's observed targets
-and steps, so a changed definition does not retain older structure while a run
-that fails validation before planning does not erase the last usable graph.
-
-The main `tubeless` entrypoint never imports SQLite or the UI. The optional
-`tubeless/run-store/sqlite` adapter selects the runtime-provided SQLite
-implementation, `tubeless/run-store/ndjson` reads portable artifacts, and
-`tubeless/run-store/ui` is a separate HTTP projection.
-It is read-only unless the caller injects a `PipelineRunStudioLauncher`.
-Likewise, ordinary `tubeless run` remains unchanged; pass `--store` to record a
-run, `--trace` for NDJSON, `tubeless history` to inspect SQLite, `tubeless
-history --trace` to inspect portable output, and `tubeless ui` only when a
-browser view is useful.
-
-Observed definitions are never treated as executable registrations: an event
-stream does not contain a trusted module path or a command's domain contract.
-`tubeless ui --command ./path/to/command.ts` explicitly loads only marked
-`definePipelineCommand` exports and passes bounded structured form values
-through their validation, option mapping, and execution path. No shell or argv
-round trip is involved. Launch-enabled workbench servers are restricted to
-loopback, while the UI HTTP module stays execution-agnostic through its injected
-capability. Each command exposes an immutable, JSON-safe descriptor derived
-from the same effective schema used by its parser, including built-in flags.
-The studio uses that descriptor for checkboxes, numeric inputs, constrained
-selects, paths, and repeatable values.
-Planning is a separate read-only capability: **Preview plan** passes the current
-dry-run and step/target values to the real pipeline planner and expands the
-result beneath the launch form. Domain parameters remain visible for the
-eventual run but are not interpreted by the planner, no run is recorded, and
-previewing is optional. Opaque `fromPipeline` and `forEachPipeline` steps carry
-`nestedPipeline` metadata so the preview can distinguish ordinary work from a
-single child pipeline or runtime fan-out without flattening child selection.
-
-Studio snapshots page through the store once and then fetch only events after
-the last observed sequence. Those pages go through `createPipelineRunProjector`
-from `tubeless/run-store`; a refresh with no newer ids returns the cached
-snapshot instead of re-folding history. Store-local event ids are monotonic and
-may start at `0`. Duplicate or out-of-order ids are ignored. Use
-`projectPipelineRunStore` when the caller already holds a complete event list
-and does not need incremental refresh. History therefore continues past an
-adapter's per-query safety cap without reloading the entire database on every
-refresh.
-
-For a reusable project interface, `definePipelineProject` declares stable
-command IDs and versioned module references in one dependency-free manifest.
-`tubeless list`, `inspect`, `plan`, `graph`, and `run` resolve those IDs without
-scanning for executable files. Module paths and the optional execution `cwd`
-resolve from the manifest instead of the caller's shell directory; duplicate or
-malformed declarations fail when it loads. Presentation-name overrides never
-change registered, run, or pipeline identity. Legacy `definePipelineStudio`
-catalogs remain accepted by `ui` with their historical UI-only identities.
-
-Cancellation is classified from an actual abort error or propagated child
-cancellation, not merely from the signal's current state. An unrelated failure
-that races with `abort()` remains a step or finalization failure.
-
-Finalizer inputs remain partial because dry-run policy, exact filtering, and
-best-effort execution can omit outputs. Wrap a normal finalizer with
-`requireOutputs([stepA, stepB], callback)` to declare which output slots make a
-valid result. The callback receives those values as required properties, and
-the run fails finalization with the missing step IDs if any slot is absent. A
-successfully published `undefined` still counts as an output; structural
-absence is determined by whether the slot was published.
-
-When a pipeline uses `requireOutputs`, every declared target is checked during
-definition construction. Its required-input and failure-gate closure must
-contain all required finalizer steps, so an advertised target cannot complete
-its work and then fail only because it intentionally omitted the pipeline's
-result. Plain finalizers remain appropriate when selected goals intentionally
-produce a partial domain result.
-
-### Why targets are declared
-
-Three contracts were evaluated after dependency-aware selection shipped:
-
-- expose every step as a target and keep the global finalizer;
-- add a separate selected-execution runner returning raw output slots; or
-- declare the pipeline's meaningful public goals and retain one finalized
-  domain result.
-
-Declared targets were selected because they preserve the existing
-`run`/`runOrThrow` result contract, add only one short definition field, keep
-steps as implementation details, and let definition validation prove
-`requireOutputs` compatibility. A second runner would create competing
-execution/result semantics, while goal-specific finalizers add ceremony that
-current production pipelines do not need. Exact `stepIds` remains the explicit
-escape hatch for low-level partial work.
+Cancellation is determined from an abort error or a cancelled child run. If an
+unrelated error occurs at the same time as an abort, it remains a failure.
 
 ## Dry runs
 
@@ -380,8 +295,9 @@ may run normally so the preview remains useful.
 
 ## Validated boundaries
 
-`tubeless` implements the small Standard Schema V1 structural contract and
-does not import a validation library. Pass a domain-options schema to
+TypeScript checks types at build time. To check values from files, requests, or
+other external sources at runtime, use a validator that supports Standard
+Schema V1. Tubeless accepts these schemas without importing a validation library. Pass a domain-options schema to
 `createSteps(schema)`, an `outputSchema` to an ordinary step, or a
 `resultSchema` to `definePipeline`:
 
@@ -401,17 +317,21 @@ const pipeline = definePipeline({
 });
 ```
 
-Schema input and output types are inferred independently. Callers pass the
-options schema's input type, steps read its validated output type, a step's
-`run` and dry-run handler return its schema input type, dependents receive its
-schema output type, and `runOrThrow` returns the result schema's output type.
-Built-in run controls are separate from domain-options validation, so strict
-object schemas do not need to know about `dryRun`, `targets`, or other executor
-policy. Callers pass those controls alongside domain fields; the executor removes
-the reserved control keys before validation while preserving class methods,
-getters, inherited and non-enumerable properties, and symbol keys. Steps receive
-the validated output object directly; the executor neither flattens it nor
-overlays control fields onto it.
+Schemas can validate and transform values. TypeScript infers the types on both
+sides of each validation step:
+
+| Schema         | Value it receives                                                        | Value available after validation |
+| -------------- | ------------------------------------------------------------------------ | -------------------------------- |
+| Options schema | The caller's domain options                                              | `context.options` in each step   |
+| `outputSchema` | The step's return value, including custom dry-run and policy-skip values | Input to dependent steps         |
+| `resultSchema` | The finalizer's return value                                             | The final pipeline result        |
+
+Built-in run controls are passed separately from domain options, so strict
+object schemas do not need fields for `dryRun` or `targets`. For child
+`mapOptions`, which combines options and controls in one object, Tubeless
+separates the controls before validation. The options object retains its
+methods, getters, inherited properties, non-enumerable properties, and symbols.
+Steps receive the validated object without added control fields.
 
 Options are validated once after structural planning and before any step
 starts. Step values are validated before publication, including values from a
@@ -429,20 +349,24 @@ options-schema factory scopes.
 
 ## Child pipelines
 
-Use `step.fromPipeline` for one child run and `step.forEachPipeline` when runtime
-items each need the same child. Children are opaque to the parent's plan and
-hooks; their activity is summarized as progress on the parent step. See
-[child-pipeline composition](./child-pipeline-composition.md) for propagation and
-selection boundaries. When the whole mapped fan-out is optional, use
-`step.forEachPipeline.skippable`; only that opt-in constructor widens the mapped
-array output with `undefined`.
+Use `step.fromPipeline` to run one reusable child pipeline. Use
+`step.forEachPipeline` to run that child for each item in a list. The parent
+plan contains one wrapper step; child activity appears as progress beneath it.
+Read [child-pipeline composition](./child-pipeline-composition.md) for option
+mapping, selection, failures, and progress controls.
+
+Use `step.forEachPipeline.skippable` when the entire batch may be intentionally
+omitted. Its output can be `undefined`, which dependent code must handle.
 
 ## Remote steps
 
-Use `step.fromRemote` when one parent step's work lives on another engine.
-The parent plan stays local and opaque; `remote.engine` and optional
-`remote.target` are presentation only. Dry-run remains a side-effect gate:
-omitting `dryRun` still calls the adapter. See
+Use `step.fromRemote` to call a service or execution engine from one step.
+The parent pipeline still runs locally. The step's `remote.engine` and optional
+`remote.target` describe the destination for display and inspection.
+
+Omitting a dry-run policy still contacts the service during a dry run. Mark
+unsafe calls with `dryRun: "skip"`, provide a local preview, or ensure the
+remote service honors the dry-run flag. See
 [remote-step composition](./remote-step-composition.md).
 
 ## Mermaid diagrams
@@ -454,80 +378,85 @@ as solid arrows, while optional inputs and failure gates render as labeled
 dotted arrows. Use `direction` to change layout and `includeDescriptions` to add
 operational descriptions to node labels.
 
-## Module workbench
+## CLI commands
 
-Command-by-command usage lives in [the CLI](./cli.md). The optional local UI is
-documented in [the studio](./studio.md).
+Wrap a pipeline with `definePipelineCommand` to give it command-line arguments,
+validation, help, progress reporting, and a result summary. See
+[`cli-job.ts`](../examples/cli-job.ts) for a complete example and
+[the CLI guide](./cli.md) for all commands and flags.
 
-`tubeless inspect`, `tubeless plan`, and `tubeless graph` load a registered
-project command, a pipeline, or a marked `definePipelineCommand` without
-executing steps or requiring domain options, and prefer the command when both
-are exported. `tubeless run`
-deliberately accepts only a command created by `definePipelineCommand`, because
-that export carries the application-owned parser, validation, option mapping,
-reporter, and result summary needed for safe execution. A raw pipeline is not
-executable through the workbench. `tubeless history` reads the optional local
-SQLite store; `tubeless run --trace` writes NDJSON without requiring a store.
+`tubeless inspect`, `plan`, and `graph` accept a pipeline or command export.
+They load the module without executing step handlers or requiring business
+inputs. If a module exports both a pipeline and a command, they prefer the
+command. Keep module imports free of side effects.
 
-`definePipelineCommand` defaults to a same-name mapping when its validated flag
-values structurally satisfy the pipeline's domain options. Command-only values
-such as `resume`, `stepIds`, and `targets` are removed before execution;
-bridge-owned selection and failure controls are applied separately. The argv
-flags stay `--resume`, `--step`, and `--target`. If flags do not satisfy
-required domain options, `mapOptions` remains required at compile time. Keep
-explicit mapping for renamed fields, file loading, adaptive defaults, prompts,
-or other derived values.
+`tubeless run` requires a `definePipelineCommand` export. A raw pipeline can
+instead be invoked from application code through `run` or `runOrThrow`.
+Register commands in `tubeless.project.ts` to address them by stable project ID.
+The [project manifest example](../examples/catalog/tubeless.project.ts) shows
+file layout and registrations; the [Studio guide](./studio.md) shows how to
+use the same catalog in the browser.
 
-The returned command's `descriptor` is the non-terminal view of that contract:
-name, description, and immutable parameter metadata for flags, types, defaults,
-choices, numeric constraints, repeatability, paths, and positional support. It
-is presentation-neutral; consumers still submit argv through `parse` or `run`
-so one validation and execution path remains authoritative.
-`command.plan()` always exposes structural planning from `PipelineRunControls`
-(`dryRun`, `stepIds`, and `targets`) only. It deliberately skips domain parsing, option mapping,
-execution, and persistence. Use `command.plan()` or `tubeless plan`; do not
-simulate planning with `--plan`.
+### Map command arguments to pipeline inputs
 
-Keep the workbench's module-selection arguments before the `--` boundary and
-the command's application arguments after it:
+Omit `mapOptions` when validated flags already have the same names and types
+as the pipeline's domain options. Supply it when inputs need to be renamed,
+loaded from files, calculated, or prompted for. TypeScript requires the mapper
+when the flag values alone cannot satisfy the pipeline's required options.
+
+Command-only values such as `resume`, `stepIds`, and `targets` are removed from
+domain options before execution. Selection and failure controls are applied
+separately. The command-line flags are `--resume`, `--step`, and `--target`;
+option mappers and hooks use the parsed property names.
+
+A command's `descriptor` lists parameter names, descriptions, types, defaults,
+choices, numeric constraints, repeatability, paths, and positional support.
+Use it to build forms or other tools. Submit arguments through `parse` or `run`
+to validate them; the descriptor only describes the parameters.
+
+`command.plan()` accepts selection and dry-run controls without parsing domain
+arguments, mapping options, executing steps, or recording a run. Use
+`command.plan()` or `tubeless plan`; there is no command `--plan` flag.
+
+Place CLI file-selection flags before `--` and pipeline-command arguments after
+it:
 
 ```sh
 tubeless run --export PublishCommand ./scripts/publish.ts -- --source input.json --target publish
 ```
 
-The workbench forwards SIGINT through the command context and classifies exits
-as validation, planning, execution, or cancellation without parsing diagnostic
-messages.
+The CLI forwards SIGINT to the run's abort signal and uses distinct exit codes
+for validation, planning, execution, and cancellation errors. Pass `--store`
+to record SQLite history or `--trace` to write an NDJSON file.
 
 ## Runtime context
 
-Use the step context instead of global facilities:
+The step context supplies inputs and services controlled by the caller:
 
 - `context.options` for validated domain options and `context.dryRun` for the active mode.
-- `context.log` so interactive reporters can preserve output.
-- `context.signal` for cooperative cancellation.
+- `context.log` to write messages through the active logger or reporter.
+- `context.signal` to pass cancellation to I/O and other asynchronous work.
 - `context.sleep` for cancellation-aware, testable delays.
-- `context.reportProgress` and `context.reportAttempt` for observability.
-- `context.cwd` for caller-controlled path resolution.
+- `context.reportProgress` to update progress and `context.reportAttempt` to report retries.
+- `context.cwd` as the base directory for relative paths.
 
 Callers may inject the logger, clock, sleep function, signal, hooks, and tracing.
 This makes a pipeline embeddable and deterministic under test.
 
 ## Deterministic testing
 
-`createPipelineTestRuntime` from `tubeless/testing` packages the ordinary
-runtime injection points into a framework-neutral harness. Its default sleep
-advances a monotonic clock immediately, its logger stays silent while capturing
-calls, and its canonical status hook records lifecycle events and latest
-progress. The harness owns an `AbortController` and delegates `run`,
-`runOrThrow`, and `plan` to the real pipeline, preserving option and result
-inference without implementing alternate execution semantics.
+`createPipelineTestRuntime` from `tubeless/testing` supplies a test clock, a
+logger that captures messages, and hooks that record status changes and
+progress. Its default sleep advances the clock immediately. Its `run`,
+`runOrThrow`, and `plan` methods call the real pipeline with this context,
+so tests exercise the same execution logic as normal runs.
 
 Create one runtime per test. Customize `sleep` when a test needs to pause,
 interleave, or advance time differently; call `test.abort()` to exercise the
-normal cancellation path. Assertions remain application- or framework-owned.
+normal cancellation path. Use your test framework to assert on the results. Replace external I/O yourself;
+the test runtime does not mock network or filesystem operations.
 
-## Stable boundaries
+## Implementation guidelines
 
 - Keep step IDs stable, use `name` only for a friendlier display label, and keep
   descriptions operationally useful.

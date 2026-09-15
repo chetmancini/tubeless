@@ -1,14 +1,17 @@
-# `tubeless` documentation
+# Tubeless documentation
+
+Start with a small pipeline, then choose the controls and integrations your
+workflow needs. The guides link to examples you can adapt in your project.
 
 ## Start here
 
 | Document                                                    | Use it for                                            |
 | ----------------------------------------------------------- | ----------------------------------------------------- |
-| [Website](https://tubeless.io/)                             | Human docs site and agent entrypoints                 |
+| [Website](https://tubeless.io/)                             | Guides for developers and coding agents               |
 | [Package README](../README.md)                              | What it is, a first example, and a pattern table      |
 | [Getting started](./getting-started.md)                     | Building, running, and testing a first pipeline       |
-| [Recipe index](./recipes.md)                                | Choosing an executable example by intent              |
-| [Project manifest](../examples/catalog/tubeless.project.ts) | File layout, stable IDs, and workbench registration   |
+| [Recipe index](./recipes.md)                                | Finding a working example for your task               |
+| [Project manifest](../examples/catalog/tubeless.project.ts) | Registering commands and choosing a file layout       |
 | [Core concepts](./concepts.md)                              | Dependencies, skips, failures, dry runs, and contexts |
 | [Agent guide](./agent-guide.md)                             | Rules for generating and modifying pipeline code      |
 | [Comparison](./comparison.md)                               | When to use tubeless vs other tools                   |
@@ -24,15 +27,15 @@ Install the [agent skill pack](./agent-skills.md) to author pipelines or convert
 
 ## Deeper reference
 
-| Document                                                                                         | Use it for                                           |
-| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
-| [Child-pipeline composition](./child-pipeline-composition.md)                                    | Opaque child and fan-out semantics                   |
-| [Remote-step composition](./remote-step-composition.md)                                          | Opaque remote steps and mixed-engine placement       |
-| [Generated API inventory](./api-reference.md)                                                    | Entrypoints, exported symbols, and surface hashes    |
-| [Machine-readable API report](./api-report.json)                                                 | Automated public-surface review                      |
-| [Local Studio OpenAPI](https://tubeless.io/openapi.json)                                         | Local HTTP operations and JSON error schemas         |
-| [Agent evaluations](https://github.com/chetmancini/tubeless/blob/main/docs/agent-evaluations.md) | Forward-testing the guidance against realistic tasks |
-| [LLM index](./llms.txt)                                                                          | Compact machine-readable documentation map           |
+| Document                                                                                         | Use it for                                         |
+| ------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| [Child-pipeline composition](./child-pipeline-composition.md)                                    | Running a reusable pipeline once or for many items |
+| [Remote-step composition](./remote-step-composition.md)                                          | Calling remote services and running inside workers |
+| [Generated API inventory](./api-reference.md)                                                    | Entrypoints, exported symbols, and surface hashes  |
+| [Machine-readable API report](./api-report.json)                                                 | Automated public-surface review                    |
+| [Local Studio OpenAPI](https://tubeless.io/openapi.json)                                         | Local HTTP operations and JSON error schemas       |
+| [Agent evaluations](https://github.com/chetmancini/tubeless/blob/main/docs/agent-evaluations.md) | Checking whether agents can follow the guides      |
+| [LLM index](./llms.txt)                                                                          | Documentation links for coding agents              |
 
-The generated API inventory is an audit artifact, not a tutorial. Prefer the
-recipe index when deciding how to implement a workflow.
+Use the recipe index to choose an implementation pattern. Use the generated
+API inventory to check exported names and signatures.

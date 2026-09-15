@@ -15,17 +15,17 @@ export type DocPage = {
 };
 
 export const DOC_NAV = [
-  { slug: "getting-started", label: "Getting started", blurb: "Install, first pipeline, and the testing runtime." },
+  { slug: "getting-started", label: "Getting started", blurb: "Build, run, and test your first pipeline." },
   { slug: "recipes", label: "Recipes", blurb: "Examples by use case." },
-  { slug: "concepts", label: "Concepts", blurb: "Skip, failure, selection, and dry-run." },
-  { slug: "cli", label: "CLI", blurb: "inspect, plan, graph, run, and history." },
-  { slug: "studio", label: "Studio", blurb: "Local SQLite or NDJSON history and tubeless ui." },
-  { slug: "comparison", label: "Comparison", blurb: "Comparison with other pipeline tools." },
-  { slug: "child-pipeline-composition", label: "Child pipelines", blurb: "Nested pipelines and fan-out." },
-  { slug: "remote-step-composition", label: "Remote steps", blurb: "Remote engines as parent steps." },
+  { slug: "concepts", label: "Concepts", blurb: "Understand dependencies, results, failures, and execution controls." },
+  { slug: "cli", label: "CLI", blurb: "Select and run commands, record results, and inspect history." },
+  { slug: "studio", label: "Studio", blurb: "Inspect runs and use browser controls." },
+  { slug: "comparison", label: "Comparison", blurb: "Decide when to use pipelines, ordinary functions, or an external worker." },
+  { slug: "child-pipeline-composition", label: "Child pipelines", blurb: "Reuse a workflow once or run it for a list of items." },
+  { slug: "remote-step-composition", label: "Remote steps", blurb: "Call remote services and invoke pipelines from workers." },
   { slug: "agent-guide", label: "Agent guide", blurb: "Rules for generating pipeline code." },
   { slug: "agent-skills", label: "Agent skills", blurb: "Install the skill pack and convert existing code into pipelines." },
-  { slug: "agent-evaluations", label: "Evaluations", blurb: "Forward-testing cases." },
+  { slug: "agent-evaluations", label: "Evaluations", blurb: "Check whether agents can apply the documented patterns." },
   { slug: "api-reference", label: "API inventory", blurb: "Generated public surface." },
 ] as const;
 

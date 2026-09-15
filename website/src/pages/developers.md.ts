@@ -3,8 +3,9 @@ import { absUrl } from "../lib/paths";
 
 export const GET: APIRoute = () => new Response(`# Tubeless developer resources
 
-Tubeless is a dependency-free TypeScript library and local CLI for typed,
-observable pipelines. It is not a hosted execution API.
+Find guides for building TypeScript pipelines, running CLI commands, and using
+Studio. API references cover library exports and the HTTP interface of your
+local Studio server.
 
 ## Package and CLI
 

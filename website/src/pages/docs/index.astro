@@ -7,7 +7,7 @@ const human = DOC_NAV.filter((item) =>
   ["getting-started", "recipes", "concepts", "cli", "studio", "comparison"].includes(item.slug)
 );
 const deep = DOC_NAV.filter((item) =>
-  ["child-pipeline-composition", "api-reference"].includes(item.slug)
+  ["child-pipeline-composition", "remote-step-composition", "api-reference"].includes(item.slug)
 );
 const agents = DOC_NAV.filter((item) =>
   ["agent-guide", "agent-skills", "agent-evaluations"].includes(item.slug)
@@ -17,7 +17,8 @@ const agents = DOC_NAV.filter((item) =>
 <Doc title="Developer Documentation" description="Tubeless developer documentation for the TypeScript package, CLI, Local Studio API, and coding agents.">
   <h1>Tubeless developer documentation</h1>
   <p>
-    These pages render <code>docs/*.md</code> from the package.
+    Learn how to build a pipeline, choose execution controls, and inspect results.
+    Start with the getting-started guide or find an example for your task.
   </p>
 
   <h2>Usage</h2>
@@ -33,8 +34,8 @@ const agents = DOC_NAV.filter((item) =>
   <h2>Agents</h2>
   <div class="agent-grid">
     <a href={href("agents")}>
-      <h3>Entrypoints</h3>
-      <p>llms.txt, skill, catalog, and the API report.</p>
+      <h3>Agent resources</h3>
+      <p>Installable skills, Markdown guides, and examples for coding agents.</p>
     </a>
     {agents.map((item) => (
       <a href={href(`docs/${item.slug}`)}>
@@ -48,7 +49,7 @@ const agents = DOC_NAV.filter((item) =>
   <div class="agent-grid">
     <a href={href("developers")}>
       <h3>Developer resources</h3>
-      <p>Package, CLI, Local Studio API, OpenAPI, and machine-readable entrypoints.</p>
+      <p>Library and CLI documentation, the Studio HTTP API, and downloadable references.</p>
     </a>
     {deep.map((item) => (
       <a href={href(`docs/${item.slug}`)}>
@@ -58,7 +59,7 @@ const agents = DOC_NAV.filter((item) =>
     ))}
     <a href={href("api-report.json")}>
       <h3>api-report.json</h3>
-      <p>Machine-readable public surface.</p>
+      <p>Public TypeScript declarations in JSON for automated checks.</p>
     </a>
   </div>
 </Doc>

@@ -1,98 +1,23 @@
 # Child-pipeline composition
 
-## What ships
+Use a child pipeline when part of a workflow is useful on its own and should
+also run inside a larger pipeline. Tubeless provides two step builders:
 
-Compose a child pipeline as one typed parent step with
-`createSteps<TOptions>().fromPipeline(...)`. Overloads cover identity and
-mapped results. An async `fromPipeline` `mapResult` publishes its resolved value;
-dependents receive `Awaited<TOut>` and skippable adapters accept that resolved
-shape as their skip value. Child lifecycle hooks stay isolated, and child work reports
-through parent-step progress. Interactive reporters display selected child steps
-as an indented tree, retaining their terminal states and inner work counts.
+| Builder                | Use it to                                       | Step output                              |
+| ---------------------- | ----------------------------------------------- | ---------------------------------------- |
+| `step.fromPipeline`    | Run one child pipeline                          | The child's final result                 |
+| `step.forEachPipeline` | Run the same child pipeline for a list of items | An array of child results in input order |
 
-Map a runtime item list onto the same child pipeline with
-`createSteps<TOptions>().forEachPipeline(...)`. Item keys are stable,
-concurrency is bounded, and results keep input order even when children
-finish out of order. All running children settle before an aggregate failure
-is returned, so the parent cannot finalize while child side effects are still
-in flight.
+Both builders infer the child options and result types. They forward the
+parent's runtime context and report child progress through the parent step.
+Start with the [single-child example](../examples/child-pipeline.ts) or the
+[fan-out example](../examples/fan-out-progress.ts).
 
-Opaque parent steps pass outputs through typed dependencies, skip side
-effects in dry-run, and convert domain validation errors into failed parent
-steps.
+## Run a child pipeline
 
-## Why not call the child from an ordinary step
-
-Invoking a child pipeline from an ordinary parent step and passing the parent
-`PipelineStepContext` gives the child the parent's runtime seams, but it also
-gives the child the parent's raw hooks and parent-only `reportProgress`
-callback.
-
-The resulting lifecycle stream is flat. A direct nested run emits the child pipeline, step, finalize, and completion events between the parent wrapper step's start and completion events. Most events have no pipeline path or run identity. The interactive reporter also owns one plan, one step map, and one result. A child start replaces its visible plan, and a child completion disposes the reporter before the parent completes.
-
-The package needs a composition contract that preserves typing and runtime behavior without exposing two pipeline frames through hooks designed for one pipeline.
-
-## Goals
-
-- Model a child pipeline as one typed step in the parent DAG.
-- Infer parent dependency inputs, parent options, child options, the child result, and any mapped result.
-- Preserve cancellation, logging, timing, working-directory, dry-run, progress, and failure behavior.
-- Keep raw child lifecycle hooks inside the adapter while reporting useful progress through the opaque parent step.
-- Keep the first slice bounded: one opaque child, or a mapped set of the same child.
-
-## Supported: policy skip on opaque steps
-
-Policy skip (`step.skippable` / `StepSkipDecision`) is part of the shipped API and
-applies to ordinary steps, `fromPipeline` adapters, and mapped
-`forEachPipeline` adapters (the opaque parent step is a normal step under the
-hood):
-
-- Return a non-empty string or `{ reason, value? }` from `skip` to skip without
-  calling `run` (or without running the child). Reporters show a yellow skip
-  whose terminal report has `status: "skipped"` and `reason: "policy"`.
-- Policy skips unlock required dependents. A bare string (or `{ reason }`
-  without `value`) publishes `undefined` as the step output.
-- Any step that declares `skip` is typed so dependents see `TOut | undefined`
-  (including `PipelineResultOf<Child> | undefined` for `fromPipeline` and
-  `readonly PipelineResultOf<Child>[] | undefined` for `forEachPipeline`, both
-  without `mapResult`). Prefer `{ reason, value }` on every skip path when
-  dependents need a real output. With `mapResult`, skip `value` is the
-  parent-facing mapped output — one `TOut` for `fromPipeline`, or the complete
-  `readonly TOut[]` for `forEachPipeline`. Policy skip does not call `mapResult`.
-
-Use `fromPipeline.skippable` or `forEachPipeline.skippable` to policy-skip
-optional child work and publish a concrete disabled result via
-`{ reason, value }`. The ordinary constructors reject `skip` and retain their
-non-optional output types.
-
-## Non-goals
-
-- Flatten child steps into the parent plan.
-- Add hierarchical or versioned external lifecycle events.
-- Support namespaced selection such as `parent.child-step`.
-- Add parallel DAG execution, remote checkpoints, or subcommands.
-- Injected runner overrides (substituting a child pipeline implementation at
-  test time via parent options) — separate from policy skip.
-
-## Why this shape
-
-| Model                                     | Typing                                                                                                                                                           | Planning                                                                                                      | Hooks and reporting                                                                                                                                | Selective execution                                                                                              | Failure                                                                                                                  | Dry run                                                                                              | Cost                                                                                             |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Continue manual shared-context calls      | Each wrapper can map options and return a typed value, but each wrapper repeats the contract and structural context passing makes unsafe fields easy to forward. | The parent sees only the wrapper step; the child creates a separate plan at runtime.                          | Raw child events enter the parent's flat hook stream. The current interactive reporter replaces the parent frame and disposes on child completion. | Parent selection can select the wrapper. Child selection depends on ad hoc mapped `stepIds`.                     | `runOrThrow` can fail the wrapper, but consistent child-identifying messages and progress require repeated wrapper code. | Each wrapper must remember parent/child dry-run precedence and per-step policy.                      | Low per call, with continuing duplication and reporter breakage.                                 |
-| Flatten the child DAG into the parent DAG | The API must translate child option and dependency types into a parent definition without losing inference.                                                      | Child ids need stable namespacing, and runtime option mapping can change which child plan is valid.           | A flat plan fits current hooks only after defining pipeline identity, paths, and collision rules.                                                  | Namespaced filters need semantics for parent dependencies, child dependencies, and finalization.                 | The parent must define how child failures, partial outputs, and child finalization affect the flattened DAG.             | The parent must reconcile its dry-run rules with every flattened child step.                         | High. It requires event identity and selection semantics before the first useful slice.          |
-| Opaque typed child-step adapter           | A parent-scoped factory can infer dependency inputs and parent options while a typed child pipeline constrains mapped options and results.                       | The parent plan contains one stable step. The adapter validates the child plan immediately before running it. | Parent hooks see the opaque step only. An internal bridge translates child terminal events into parent-step progress.                              | Selecting the opaque parent step runs the child according to mapped child options. Nested selection is deferred. | An unusable child result throws a parent-step error that retains the child pipeline and failing step identity.           | Framework-owned parent `dryRun` overrides the mapper, then the child applies its own per-step rules. | Medium. It uses existing pipeline and hook primitives without changing the external event model. |
-
-Shared raw hooks are rejected because they already corrupt the interactive reporter's single frame and cannot distinguish nested runs. Immediate flattening is rejected because it needs stable identity, selection, dependency, failure, and finalization rules that the current event and plan models don't provide. The opaque adapter addresses the existing composition case without deciding those broader contracts.
-
-## Contract
-
-The parent DAG contains one ordinary step. That step maps its typed parent inputs and context into typed child options, validates the child plan, runs the child with an isolated internal hook bridge, and returns either the child result or a mapped parent result.
-
-The bridge owns child lifecycle events. Parent and custom hooks receive only the parent pipeline and opaque parent-step events. The bridge reports terminal child-step counts through the parent step's `reportProgress`, so existing reporters keep one live frame.
-
-## API
-
-The parent-scoped step factory owns the adapter:
+Use `fromPipeline` with `pipeline` and `mapOptions`. The mapper receives the
+parent step's dependency outputs and context, and returns the inputs the child
+needs. Add `mapResult` if the parent needs a different result shape.
 
 ```ts
 const seedIndexStage = step.fromPipeline("seed-index", {
@@ -107,11 +32,10 @@ const seedIndexStage = step.fromPipeline("seed-index", {
 });
 ```
 
-`StepFactory.fromPipeline` and `StepFactory.fromPipeline.skippable` infer the
-child result when `mapResult` is absent, and infer the mapped result when it
-is present.
+## Run a child for each item
 
-For runtime-selected sets (any domain — shards, files, jobs, catalog rows):
+Use `items` to return the list to process, `key` for stable item IDs, and
+`concurrency` to limit simultaneous child runs:
 
 ```ts
 const processShards = step.forEachPipeline("process-shards", {
@@ -129,8 +53,7 @@ const processShards = step.forEachPipeline("process-shards", {
 });
 ```
 
-When the whole fan-out may be intentionally unnecessary, opt into the widened
-output explicitly:
+To skip the whole step when there are no items, use the skippable builder:
 
 ```ts
 const processShards = step.forEachPipeline.skippable("process-shards", {
@@ -144,101 +67,128 @@ const processShards = step.forEachPipeline.skippable("process-shards", {
 });
 ```
 
-Only `.skippable` produces `readonly ChildResult[] | undefined` (or
-`readonly TOut[] | undefined` with `mapResult`). A valued skip supplies the
-complete parent-facing array and bypasses `items`, child execution, and
-`mapResult`.
+## Results and type inference
 
-The parent sees one opaque `process-shards` step. Progress is domain-neutral by
-default: a one-line item/concurrency summary plus structured `details` rows for
-each item and its selected child steps. Interactive reporters render these as
-an indented tree: parent step, item key, child steps, and any deeper composition.
-Pending, running, completed, failed, cancelled, and skipped rows retain their
-states; filtered steps are omitted. Completed item groups remain in the tree.
-`fromPipeline` provides the same child-step breakdown without an item-key level.
-Inner `reportProgress` counts and details survive both composition boundaries. The
-progress bar advances on terminal child steps so long fan-out work does not look
-hung at 0%. Override `progress.itemNoun` or `progress.formatMessage` for domain
-labels without changing scheduling. Duplicate keys fail before any child starts.
-Parent dry-run overrides the mapped child run object's `dryRun` value.
+Without `mapResult`, a `fromPipeline` step returns the child's final result.
+With `mapResult`, it returns the mapped value. An asynchronous mapper is awaited
+before the value becomes available to dependent steps. Its policy-skip value,
+if supplied, must match that resolved result type.
 
-Live fan-out snapshots show up to 32 item groups by default, prioritizing active
-items and then failures while keeping displayed groups in input order. Descendants
-stay with their item; an overflow row reports omitted groups. All groups are
-retained and the complete default tree is emitted once after the fan-out settles.
-`progress.detailLimit` overrides the live cap and also caps the final snapshot;
-larger values increase per-event presentation work. Progress payloads are not
-constructed when neither hooks nor tracing observe them. The standalone
-`mappedChildProgressDetails` helper continues to format only the active entries
-supplied in its snapshot, with no default cap.
+`forEachPipeline` returns results in input order, even when child runs finish
+in a different order. `concurrency` limits the number of child runs in flight.
+Keys must be stable and unique; duplicate keys fail before any child starts.
+All running children finish or cancel before the parent step returns a failure.
+The parent therefore cannot finalize while those children are still running.
 
-Progress `details` use preorder rows with `depth: 0` (or omitted) for direct
-children. Each composition level adds one to descendant depths. IDs are stable
-within their containing group; `name` provides optional display text. `completed`
-and `total` describe inner work independently of the parent's terminal-step count.
-Reporters cap visual indentation at 32 levels. Trace snapshots preserve these
-fields within 128-row, 4096-character-per-field, and 256 KiB encoded-payload
-bounds, with `detail_count` recording the pre-truncation row count. The byte
-budget includes UTF-8 and escaping inside the enclosing JSON event, leaving
-room for event metadata below the default 1 MiB NDJSON event limit.
+Use `.skippable` when the entire child step may be intentionally omitted.
+Its `skip` callback returns `false` to proceed, a non-empty reason string to
+skip, or `{ reason, value }` to skip with an output. A skip without a value
+publishes `undefined`. Policy skips allow required dependents to run, so those
+dependents must handle `undefined` explicitly.
 
-The interactive CLI keeps completed details after their parent settles. Trees
-larger than the terminal use a live window around active work, with omitted-row
-counts; the full retained tree prints at completion. Plain/non-TTY reporting
-continues to emit aggregate progress messages. Presentation does not change
-parent plans, child selection, hook isolation, scheduling, or result types.
+The ordinary builders reject `skip` and keep non-optional output types.
+`fromPipeline.skippable` returns `T | undefined`, and
+`forEachPipeline.skippable` returns `readonly T[] | undefined`. For fan-out,
+the skip value is the complete result array. Skipping does not call `items`,
+run children, or apply `mapResult`.
 
-## Semantics matrix
+## Planning and execution controls
 
-| Concern             | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Parent plan         | The child is one opaque parent step. Its `nestedPipeline` metadata identifies the child pipeline, declared child step ids, and single/fan-out mode; child steps are not added to `PipelinePlan.steps` and runtime selection is not predicted.                                                                                                                                                                                                                                                                                                                                                                                             |
-| Option mapping      | `mapOptions(inputs, parentContext)` returns the child's complete run object: domain fields plus any child-specific controls. The adapter applies parent `dryRun` last so framework semantics win.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Other run controls  | The adapter does not automatically propagate parent `stepIds`, `targets`, or `continueOnError`. `mapOptions` may choose child-specific values; child `targets` are limited to that child's declared public goals. Mapping parent selection would usually be invalid because parent and child ids occupy different namespaces. Mapping `continueOnError` lets independent child work finish but does not make a failed child usable by the parent.                                                                                                                                                                                         |
-| Runtime context     | The adapter forwards `cwd`, `log`, `now`, `sleep`, and `signal` field by field. It does not forward parent hooks or the parent-only `reportProgress` field.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Hook isolation      | Parent and custom hooks see only the parent pipeline and opaque parent step. Raw child lifecycle events go only to an internal bridge.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Progress            | Single-child `fromPipeline` bridges terminal child steps into the opaque step (`completed` / plan step count, messages prefixed with `childPipelineId/childStepId`). Mapped `forEachPipeline` reports domain-neutral fan-out progress via `toMappedChildStepProgress`: `completed` counts terminal child steps across items, `total` is `items × stepsPerItem`, `message` is a one-line summary, and `details` contains a bounded live item tree and a complete default final tree. Presentation is optional (`progress.itemNoun` / `progress.formatMessage` / `progress.detailLimit`); neither path creates another live reporter frame. |
-| Result              | The default output is the typed child result. `mapResult` may transform it into a domain-specific parent-step output. A child result is usable only when its status is `"completed"`; best-effort child results must be handled through an explicit ordinary step that calls `run()` and inspects the structured result.                                                                                                                                                                                                                                                                                                                  |
-| Failure             | An unusable child result fails the opaque parent step. Its error names the child pipeline and the first failing child step and message, with `code: "TUBELESS_CHILD_FAILED"`, `phase: "execution"`, and `kind: "child"`; its JSON-safe cause chain retains the actionable child failure. When mapped children contain both cancellation and genuine failure, failure takes precedence; the aggregate is cancelled only when every unsuccessful child was cancelled.                                                                                                                                                                       |
-| Cancellation        | The child receives the exact parent `AbortSignal`. An already-aborted or later-aborted signal stops the child and transitions the parent step to `cancelled`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Dry run             | The child receives `dryRun: parentContext.dryRun` and applies its own per-step policy. Child steps with `dryRun: "skip"` are skipped; ordinary child steps run normally.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Selective execution | Selecting or targeting the opaque parent step runs the child according to its mapped controls. Parent selection is never forwarded into the child's ID namespace.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Checkpoints         | The adapter adds no checkpoint behavior. The child receives mapped options and the normal runtime context.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+The parent plan contains one step for the child workflow. This is what
+"opaque" means in the API: child steps are not added to `PipelinePlan.steps`.
+The parent's `nestedPipeline` metadata still identifies the child pipeline,
+its declared step IDs, and whether it runs once or for multiple items.
 
-## Guarantees
+Selecting the parent step runs the child using the values returned by
+`mapOptions`. Parent and child step IDs are separate. A parent target does not
+select an identically named child step, and `parent.child-step` selection is
+not supported.
 
-Call sites infer required and optional dependency inputs, parent domain
-options, required child options, the default child result, and a transformed
-`mapResult` output without explicit generic arguments. Missing required child
-options fail at compile time.
+| Control           | Child behavior                                                                                |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| `dryRun`          | Always takes the parent's value, overriding any value in `mapOptions`                         |
+| `stepIds`         | Uses only a child-specific value supplied by `mapOptions`                                     |
+| `targets`         | Uses only a child-specific value supplied by `mapOptions`; IDs must be declared child targets |
+| `continueOnError` | Uses only a value supplied by `mapOptions`                                                    |
 
-The parent plan contains only the opaque stage. The child receives the
-parent's working directory, logger, clock, sleep function, and abort signal.
-Parent hooks see no raw child lifecycle events. The internal bridge converts
-the child's canonical step statuses into monotonic progress on the opaque
-parent step.
+Child `mapOptions` returns domain inputs and any child-specific controls in
+one object. The adapter separates them before invoking the child. An invalid
+child plan fails the parent step before child execution begins.
 
-Parent dry-run precedence prevents a child side-effecting step from running.
-An unusable child result fails one opaque parent step and names the child
-pipeline, step, and error, including when `continueOnError` produced a
-best-effort final value. Later cancellation interrupts in-flight child work.
-An invalid child plan fails before the child starts.
+In a dry run, each child step still follows its own policy. Mark child writes
+with `dryRun: "skip"` or provide a side-effect-free preview handler. You can
+also set a dry-run policy on the parent wrapper step to skip or preview the
+whole child workflow.
 
-`fromPipeline` and `forEachPipeline` identity forms (no `mapResult`) use
-overloads so the parent-facing outputs stay the child result and child-result
-array, respectively. Their ordinary constructors remain non-optional;
-`.skippable` alone adds `undefined`.
+Composition adds no checkpoints or crash recovery. Fan-out runs children
+concurrently within one parent step; it does not make the parent graph execute
+its steps in parallel.
 
-## Out of scope
+## Failures and cancellation
 
-Policy skip plus explicit `undefined` typing cover skip-without-run for opaque
-single and mapped child steps. Runner substitution and any richer skipped-output
-shape beyond policy skip are not supported.
+A child must finish with status `"completed"` to provide a successful parent
+step output. `continueOnError` can let independent child work finish, but a
+failed child still fails the parent step. Successful siblings in a failed
+fan-out do not produce a partial parent-step output.
 
-Hierarchical or versioned external events, flattened or namespaced child
-selection, and parallel DAG scheduling remain out of scope. Mapped children
-provide bounded parallelism inside one opaque parent step; they do not make
-the pipeline DAG executor parallel.
+Child failures use `code: "TUBELESS_CHILD_FAILED"`, `phase: "execution"`, and
+`kind: "child"`. The error identifies the child pipeline and first failing
+step, and includes a JSON-safe cause chain. For multiple child runs, failure
+takes precedence over cancellation: the parent step is cancelled only when
+every unsuccessful child was cancelled.
+
+Children receive the parent's exact `AbortSignal`. They must pass it to their
+I/O and other cancellable work. The adapter waits for running children to
+finish or cancel before returning.
+
+If partial child results are valid for your application, use an ordinary step
+that calls the child's `run()` and explicitly handles its report. Supply an
+appropriate child context; do not forward the parent's raw hooks or progress
+callback, which belong to the parent run's reporter.
+
+## Progress and hooks
+
+The builders forward the parent's working directory, logger, clock, sleep
+function, and abort signal. Parent hooks observe the parent step. Child hooks
+are handled internally and converted into progress updates on that step.
+This keeps parent and child reporting separate.
+
+The interactive CLI displays `fromPipeline` child steps beneath the parent.
+For `forEachPipeline`, it adds an item-key row above each child's steps.
+Completed rows remain visible; failed, cancelled, and skipped rows keep their
+own statuses. Filtered steps are omitted. Nested progress counts and details
+are preserved, so a child can report progress inside a long-running step.
+
+The parent progress count advances as child steps reach a terminal state.
+For fan-out, `completed` counts finished child steps across items, and `total`
+is the number of items multiplied by the number of child steps. Use
+`progress.itemNoun` or `progress.formatMessage` to change labels and summaries
+without changing execution.
+
+### Display and trace limits
+
+Live fan-out updates show up to 32 item groups by default. Active items and
+failures take priority, and displayed groups remain in input order. An overflow
+row shows the number of omitted groups. All groups are retained, and a complete
+tree is emitted when the fan-out finishes. Set `progress.detailLimit` to change
+the live limit; this also limits the final snapshot.
+
+The CLI shows a scrolling window when the tree is taller than the terminal and
+prints the retained tree at completion. Non-interactive output uses summary
+messages. Progress data is not built when neither hooks nor tracing observe it.
+The standalone `mappedChildProgressDetails` helper formats the entries provided
+to it and has no default item limit.
+
+Custom renderers can read `details` as rows ordered parent before child.
+`depth: 0` (or no depth) identifies a direct child; each nested level adds one.
+IDs are stable within their group, and `name` is an optional label. Row
+`completed` and `total` values describe work inside the child, independently
+of the parent's count of finished steps. CLI indentation is capped at 32 levels.
+
+Recorded trace snapshots have separate limits: 128 rows, 4096 characters per
+field, and a 256 KiB encoded payload. `detail_count` records the row count before
+truncation. The byte limit includes UTF-8 encoding and JSON escaping, leaving
+space for event metadata within the default 1 MiB NDJSON event limit.
 
 ## Structured fan-out failures
 
@@ -263,6 +213,5 @@ unstarted work after cancellation. Reruns are ordinary new pipeline runs; the
 caller owns retry policy and side-effect safety. See the helper in
 [`fan-out-progress.ts`](../examples/fan-out-progress.ts).
 
-This additive diagnostic does not change parent failure/cancellation precedence,
-primary causes, scheduling, downstream dependency skips, or `continueOnError`.
-Successful siblings still do not produce a partial parent step output.
+The diagnostics describe which items failed; they do not retry work or change
+the parent step's failure behavior.

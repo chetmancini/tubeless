@@ -1,7 +1,7 @@
 import { definePipelineProject } from "tubeless/workbench/project";
 
-// This project manifest is the deterministic interface for people, agents, and
-// the local studio. Module paths resolve from this file; cwd controls command
+// Register commands here so the CLI, Studio, and coding agents can find them.
+// Module paths resolve from this file; cwd controls command
 // execution. Command argv flags stay --step/--target, while mapOptions and hooks
 // receive stepIds and targets.
 // When converting existing code, use the tubeless-make-pipeline agent skill.

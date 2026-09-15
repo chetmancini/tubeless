@@ -1,62 +1,63 @@
-# Comparison
+# Choosing an execution approach
 
-Tubeless is an in-process typed DAG you import from TypeScript or run from a
-Bun CLI. It is not a hosted workflow engine, a job queue, or a warehouse
-scheduler.
+Tubeless runs typed, dependency-ordered workflows inside a Node.js process.
+Use it when you need to pass results between steps, preview execution, control
+side effects during dry runs, or inspect step-level failures and progress.
 
-## Same job: local typed steps
+## When ordinary functions are enough
 
-These all run work in one process. The difference is how much graph, typing,
-and preview you get without writing it yourself.
+A few sequential function calls may need no pipeline framework. Use `await`
+for ordered work and `Promise.all` for independent work when your application
+already handles errors, concurrency, and reporting adequately.
 
-| Feature                                 | tubeless                   | roll your own   | p-graph | listr2                |
-| --------------------------------------- | -------------------------- | --------------- | ------- | --------------------- |
-| Typed step outputs through dependencies | Yes                        | If you write it | No      | Weak (shared context) |
-| Invalid graphs rejected at definition   | Yes                        | No              | Partial | No                    |
-| Plan / preview without executing        | Yes                        | No              | No      | No                    |
-| Dry-run and write gates                 | Yes                        | If you write it | No      | No                    |
-| Declared targets and partial rerun      | Yes                        | If you write it | No      | No                    |
-| Child pipelines and fan-out             | Yes                        | If you write it | No      | Nested tasks          |
-| Inspect / plan / graph / run CLI        | Yes (Bun)                  | No              | No      | TTY task renderer     |
-| Local run history                       | Optional SQLite or NDJSON  | No              | No      | No                    |
-| Crash-resume the graph                  | No (file checkpoints only) | If you write it | No      | No                    |
+Tubeless becomes useful when those calls need shared execution controls:
 
-Roll your own `await` / `Promise.all` is enough for two or three linear steps
-with no dry-run, no partial rerun, and no typed fan-out. p-graph is topo-order
-plus concurrency. listr2 is a terminal task list (pretty TTY, rollback), not a
-reusable typed data graph.
+| Requirement                       | Tubeless support                                                         |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| Pass typed results between steps  | Dependency output types become input types                               |
+| Check dependencies before running | Definitions reject missing dependencies, duplicate IDs, and cycles       |
+| Preview work                      | `plan()` shows selection without running step handlers                   |
+| Preview side effects              | Each step can skip or substitute a handler during a dry run              |
+| Run a specific goal               | Declared targets include required dependencies and failure gates         |
+| Reuse a workflow                  | Child pipelines run once or for a list of items                          |
+| Inspect execution                 | Run reports, logs, progress, and optional SQLite or NDJSON recording     |
+| Use a command line                | The Bun CLI lists, inspects, plans, graphs, and runs registered commands |
 
-File checkpoints (`openCheckpoint` in `tubeless/node`) record an "already
-done" set for batch API work. They do not replay a crashed process the way a
-durable workflow engine does.
+See [core concepts](./concepts.md) for control behavior and the
+[recipe index](./recipes.md) for implementation examples.
 
-## Different job
+## When you need another kind of system
 
-| If you need…                                          | Use                                     |
-| ----------------------------------------------------- | --------------------------------------- |
-| Typed local DAG, plan, dry-run, write gates           | tubeless                                |
-| Two or three `await`s and failure is "throw and exit" | roll your own                           |
-| Pretty CLI spinners, not a typed data graph           | listr2                                  |
-| Survive process death, sleep for days, wait on humans | Temporal, Inngest, Trigger.dev, or DBOS |
-| Thousands of the same job with retries across workers | BullMQ, pg-boss, or graphile-worker     |
-| Org-wide schedule, catalog, warehouse assets          | Airflow, Dagster, or dbt                |
-| Record-at-a-time streams                              | Node streams or RxJS                    |
+| Requirement                                                            | What must provide it          |
+| ---------------------------------------------------------------------- | ----------------------------- |
+| Resume execution after a process crash or wait across process restarts | A durable workflow engine     |
+| Distribute many independent jobs across workers                        | A job queue and worker system |
+| Schedule and manage shared warehouse or data-platform assets           | A data orchestration platform |
+| Process a continuous stream with backpressure                          | A streaming API or framework  |
 
-Those last four can still _call_ a tubeless pipeline. A queue worker or a
-durable step can run `pipeline.runOrThrow(...)` when the hard part inside the
-job is a gated, typed graph.
+Tubeless can run inside a worker or activity handler managed by one of these
+systems. The host owns delivery, persistence, retries, and acknowledgement;
+Tubeless runs the steps inside that invocation.
 
-| Need                                                                  | Composition                                                                                                                              | Who drives the DAG   | Who survives process death                        |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------- |
-| The graph must outlive the process, sleep for days, or wait on humans | Host embedding: a Temporal workflow, Lambda handler, or queue worker calls `pipeline.runOrThrow(...)` and passes `runId` / `parentRunId` | The engine           | The engine                                        |
-| Some steps run elsewhere; the rest stay local                         | `fromRemote`: one opaque parent step per remote unit of work                                                                             | The tubeless process | Only the remote job, not the parent `PipelineRun` |
+For example, a queue worker can call `pipeline.runOrThrow(...)` to validate and
+process a job. A rejected run tells the worker that processing failed. The
+worker decides whether to retry, and the application must make repeated side
+effects safe.
 
-## When tubeless is the wrong default
+## Remote work and checkpoints
 
-- The pipeline must outlive the process. Use a durable engine as the
-  orchestrator.
-- The unit of work is one item, tens of thousands of times. Queue the items.
-- The consumer is a data platform, not a TypeScript repo. Use the platform.
-- You need a stable 1.x API or Windows. This package is `0.1.0`, and Windows
-  is untested. The CLI runs through Bun; `npx tubeless` works wherever Bun is
-  installed and otherwise prints Bun install instructions.
+Use `fromRemote` when one part of a local pipeline runs on another service.
+The parent pipeline still runs in the local process. If that process exits,
+a remote job may continue, but Tubeless does not restore the parent run.
+See [remote-step composition](./remote-step-composition.md).
+
+File checkpoints from `tubeless/node` can record completed items in batch work
+so a later run can skip them. They do not persist or replay the full pipeline.
+See [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts).
+
+## Runtime and API stability
+
+Library imports require Node.js 22 or later and use ESM. The CLI requires
+Bun 1.3.14 or later. Linux and macOS are supported; Windows is untested.
+Tubeless is pre-1.0, so its public API may change. Check the installed version
+and release notes when upgrading.

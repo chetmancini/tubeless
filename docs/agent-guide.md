@@ -1,25 +1,26 @@
 # Agent guide for `tubeless`
 
-Use this guide when generating or modifying pipelines, pipeline-backed scripts,
-or shared helpers in this repository.
+Use this guide when writing or modifying Tubeless pipelines, CLI scripts, or
+shared helpers. It summarizes the implementation rules; the linked guides and
+examples explain each feature.
 
 For consumer projects, install the [agent skill pack](./agent-skills.md).
-Use `tubeless-make-pipeline` to convert existing code: trace caller contracts,
+Use `tubeless-make-pipeline` to convert existing code: check caller inputs and results,
 choose domain step boundaries, preserve types and failure behavior, and verify
 dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 ## Workflow
 
 1. Read the [recipe index](./recipes.md) and open the smallest matching example.
-2. Copy file layout and stable IDs from the
-   [project manifest](../examples/catalog/tubeless.project.ts).
+2. Use the [project manifest](../examples/catalog/tubeless.project.ts) as a layout
+   example. Keep existing project IDs; choose descriptive IDs for new commands.
 3. Declare stable IDs and operational descriptions. Add `name` only when printed
    output needs a friendlier display name.
 4. Model data dependencies before failure policy or CLI concerns.
 5. Typecheck the example or consumer, then run focused tests.
-6. Run `make check` from the package root after changing the package or its learning surface.
+6. Run `make check` from the package root after changing the package, documentation, or examples.
 
-## Primitive selection
+## Choose pipeline features
 
 - Use `createSteps<TDomainOptions>()` once per pipeline and `definePipeline` once
   after declaring its steps. Domain option types contain domain input only;
@@ -45,23 +46,23 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   omitted; handle its `readonly T[] | undefined` output explicitly.
   Async `fromPipeline` result mappings publish resolved values; use that resolved
   shape for dependent inputs and policy-skip values.
-  Parent plans keep these steps opaque but expose `nestedPipeline` with the child
+  Parent plans show one wrapper step and expose `nestedPipeline` with the child
   pipeline id, declared step ids, and single/fan-out mode for presentation.
   The interactive CLI automatically expands selected child steps and fan-out
   items into nested progress rows and retains completed states. Inner progress
   counts and details propagate through both adapters; do not forward raw child
-  hooks or duplicate this bookkeeping in consumers. Fan-outs materialize up to
-  32 live item groups by default and emit the full retained tree once at settlement.
+  hooks or duplicate this bookkeeping in consumers. Fan-out progress displays up to
+  32 live item groups by default and emit the full retained tree once at completion.
   Set `progress.detailLimit` to override that live cap and cap the final snapshot.
 - Use `fromRemote` for a unit of work that lives on another engine. Required
   fields are `adapter`, `mapInput`, and `outputSchema`. Omitting `dryRun`
   contacts the engine during a pipeline dry run; the adapter and remote
-  worker must honor `context.dryRun` and authors prove the flag crossed the
-  boundary in `mapInput`. Host-embed with `pipeline.runOrThrow` and pass
-  `runId` / `parentRunId` when the graph must outlive the process. Parent
+  worker must honor `context.dryRun` and include that flag in the
+  request built by `mapInput`. Call `pipeline.runOrThrow` from a worker or activity handler and pass
+  `runId` / `parentRunId` when an external system owns job delivery and retries. Parent
   plans expose `remote` with `engine` and optional `target`. Adapters may
   forward remote lines through `context.log` and must rethrow remote
-  failures as `Error` with `cause` / `code`. Copy the native-fetch boundary in
+  failures as `Error` with `cause` / `code`. Follow the native-fetch example in
   [`remote-steps.ts`](../examples/remote-steps.ts), including validation of
   unknown JSON and forwarding the signal. Use
   [`host-embedding.ts`](../examples/host-embedding.ts) for host-owned invocation;
@@ -76,7 +77,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   same-name pipeline options; provide it when names, types, defaults, or derived
   values differ.
   The returned command exposes an immutable `descriptor`; UI adapters should
-  render that structured parameter contract instead of parsing help text.
+  render those parameter definitions instead of parsing help text.
   Use `command.plan()` or `tubeless plan` for a selection-only preview. Do not
   simulate planning with `--plan`.
 - Use `pipeline.toMermaid()` or `command.toMermaid()` when documentation needs
@@ -127,7 +128,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   exact low-level filtering of any step is intentional; never combine the two.
 - Read `PipelinePlanStep.selectionReasons` when explaining selection. It already
   includes originating targets and immediate dependents; do not reconstruct
-  provenance by walking dependency arrays in application or CLI code. Use
+  selection reasons by walking dependency arrays in application or CLI code. Use
   `renderPipelinePlan` from `tubeless/render` for shared human or JSON output
   instead of maintaining another selection-reason formatter. Use
   `createPipelineReporter` / `createRunReporter` from `tubeless/reporter` for
@@ -145,20 +146,20 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   expose the structured error under `error`; skipped reports expose `reason`,
   optional `message`, and optional `dependencyId`. `PipelineError.cause` is a
   bounded JSON-safe snapshot; a thrown `PipelineExecutionError` retains the
-  original value through native `Error.cause`. Use `renderPipelineError` when a
-  diagnostic crosses a human or JSON presentation boundary.
+  original value through native `Error.cause`. Use `renderPipelineError` when
+  displaying an error as text or JSON.
 - Inspect `error.fanOut` in reports or recorded trace history for bounded keyed failures from `forEachPipeline`. Check
   `omittedFailureCount` and `keyTruncated` before selecting rerun inputs; unstarted
-  items are not failures. Reruns remain caller-owned new runs.
+  items are not failures. The caller starts a new run for any retry.
 - Standard Schema failures use `kind: "validation"`, retain normalized `issues`,
-  and have boundary-specific codes for options, step outputs, and final results.
+  and have separate codes for options, step outputs, and final results.
   Async schemas run during `run`; synchronous `plan()` previews graph and
   selection only and never invokes schemas.
 - Wrap normal finalizers in `requireOutputs` when a valid result requires
   specific step outputs. Use a plain finalizer only when partial output is a
   valid domain result.
-- Preserve the dependency-free runtime. Keep application telemetry SDKs at the
-  exporter boundary. Use `composeTraceExporters` from `tubeless/tracing` when
+- Preserve the dependency-free runtime. Connect application telemetry SDKs through
+  exporters. Use `composeTraceExporters` from `tubeless/tracing` when
   one run must fan out to multiple destinations; `onExporterError` reports the
   first partial drop, the failed destination is retired, and healthy exporters
   keep receiving events.
@@ -172,10 +173,10 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   refuses a store with a live writer or multiple hard links. SQLite `export()`
   may return before the row is on disk. Other connections cannot see that tail
   until a batch of 64, `flush()`, same-instance `listEvents`/`clearHistory`, or
-  `close()`. A crash can lose up to 63 unflushed events; `tubeless run --store`
+  `close()`. A crash can lose up to 63 buffered events; `tubeless run --store`
   flushes at completion so finished runs are durable. Do not make pipeline
   definitions depend on storage or the studio. Recorded history keeps the last
-  `reportProgress` `details` plus `detail_count`, and opaque child steps keep
+  `reportProgress` `details` plus `detail_count`, and child wrapper steps keep
   `nested_pipeline` with the original `step_count`. Studio renders those
   snapshots; it does not flatten child DAGs into the parent step.
   Observed definitions pick the latest `pipeline.started` by `timestampMs`, then
@@ -191,8 +192,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Pass caller-owned `runId` and `parentRunId` values through `PipelineContext`
   when joining an external execution tree. Do not derive correlation from step
   IDs or timestamps.
-- Treat `tubeless ui` as a local projection with no execution capability by
-  default. Use `definePipelineProject` for a checked-in command catalog with
+- Use `tubeless ui` to inspect local recordings. Browser execution requires
+  explicitly registered commands. Use `definePipelineProject` for a checked-in command catalog with
   stable registered IDs, and register only explicit `definePipelineCommand`
   modules; never make execution require the studio server or infer executable
   modules from observed history.
@@ -201,7 +202,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   same port. Browser plan, launch, cancel, and clear-history also send
   `x-tubeless-studio-*` headers; those are same-origin guards, not
   authentication. Studio HTTP errors contain stable `code`, `message`, `hint`,
-  and a backward-compatible `error` alias; the local-only contract is published
+  and a backward-compatible `error` alias; the local API is documented
   at `https://tubeless.io/openapi.json`. Cancel a live top-level launch from the running detail pane;
   that abort is process-local, leaves sibling launches running, and is not
   crash-resume.
@@ -230,7 +231,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   propagation, progress, or parent/child selection.
 - Read the relevant executable example linked from the
   [recipe index](./recipes.md) before writing new usage.
-- Copy consumer layout, export names, and IDs from the
+- Adapt consumer layout and export names from the
   [project manifest](../examples/catalog/tubeless.project.ts).
 - Use the [generated API inventory](./api-reference.md) only to verify exports;
   it is not implementation guidance.
@@ -244,5 +245,5 @@ make check
 ```
 
 For a consumer-only change, run its focused tests and the repository typecheck.
-If the public surface changes intentionally, regenerate the checked API artifacts
+If public declarations change intentionally, regenerate the checked API artifacts
 with `bun run api:generate` from the package root.

@@ -1,8 +1,8 @@
 # Agent evaluations
 
 The cases in [`../evals/agent-cases.json`](../evals/agent-cases.json) test whether
-an agent can discover and apply the package's important patterns. Prompts and
-provider invocation remain provider-neutral.
+an agent can find and apply the package's documented patterns. You can use
+them with any coding agent; the evaluator does not call a model provider.
 
 ## Generate a submission
 
@@ -39,11 +39,11 @@ Exit status is `0` when compilation passes and no assessed expectation fails,
 `1` for a compile or assessed expectation failure, and `2` for invalid runner
 configuration.
 
-## Score semantic expectations
+## Assess the implementation
 
-Compilation cannot decide whether a design materially demonstrates an
-expectation. An operator may add `assessment.json` without changing the
-generated solution:
+Compilation checks types, but it cannot prove that a solution meets the task
+requirements. A reviewer can record that assessment in `assessment.json`
+without changing the generated solution:
 
 ```json
 {
@@ -64,7 +64,7 @@ Categories and expectation text must exactly match the selected case. Partial
 assessments are valid; remaining entries stay `unscored`.
 
 The report contains normalized compiler diagnostics, installed package identity,
-submission file names, every semantic expectation in case order,
+submission file names, every task requirement in case order,
 `mechanicalStatus`, `assessmentStatus`, and the combined `ok` value.
 
 `make check` runs four representative fixtures: a valid assessed
@@ -77,13 +77,13 @@ execute submission code.
 ## Passing standard
 
 - The result typechecks using public package entrypoints.
-- Every `mustDemonstrate` item is materially present, not merely mentioned.
+- The code implements every `mustDemonstrate` requirement.
 - No `mustAvoid` behavior appears.
-- The solution uses the smallest fitting primitive and preserves dry-run and
+- The solution uses the simplest appropriate feature and preserves dry-run and
   cancellation safety.
 - The agent finds the relevant recipe without reading executor implementation.
 
 The simple, safety-sensitive, fan-out, and CLI cases are `learningSurfaceGate`
-cases. Their answers run on every `make check`. Re-run those four against a
+cases. Their assessed answers are compiled on every `make check`. Re-run those four against a
 fresh agent when changing the learning surface, and run all cases before a
 public release or declaration API redesign.

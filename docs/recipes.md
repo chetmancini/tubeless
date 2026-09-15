@@ -1,9 +1,8 @@
 # Recipe index
 
-Every linked TypeScript example is compiled by the package typecheck. `pack:verify`
-also executes these modules from the published tarball. Start with the smallest
-example matching the workflow rather than assembling primitives from the API
-inventory.
+Choose the example closest to your task, then adapt its inputs, step IDs, and
+outputs. Each linked TypeScript example uses public package imports and is
+compiled and checked against the packaged library.
 
 For an existing script or workflow, use `tubeless-make-pipeline` from the
 [agent skill pack](./agent-skills.md) to choose step boundaries before adapting
@@ -34,7 +33,7 @@ one of these recipes.
 | Watch many primitives in one run               | [`peloton.ts`](../examples/peloton.ts)                                   | delays, logs, children, fan-out, retry, gates, test runtime                  |
 | Project layout, IDs, and command manifest      | [`tubeless.project.ts`](../examples/catalog/tubeless.project.ts)         | `pipelines/`, `scripts/`, `definePipelineProject`, `tubeless list`           |
 
-## Selection rules
+## Choose a pattern
 
 1. Use an ordinary step for one unit of domain work.
 2. Set `dryRun: "skip"` or provide a side-effect-free `dryRun` handler before
@@ -44,15 +43,10 @@ one of these recipes.
    helper function when it does not.
 5. Use `forEachPipeline` when every item needs child-pipeline lifecycle and
    reporting. Opt into `forEachPipeline.skippable` when policy may omit the
-   whole fan-out and a canonical skipped disposition matters. Use `runConcurrent`
+   whole fan-out and a skip should appear in reports. Use `runConcurrent`
    for lightweight worker functions that should
    throw on the first failure. Use `runConcurrentSettled` when the caller needs
    completed results plus that failure without throwing.
-
-Use fromRemote when a unit of work lives on another engine but the parent
-DAG still runs in this process. Omit dryRun only when the adapter and the
-remote worker are side-effect free under context.dryRun. Embed the whole
-pipeline in Temporal/Lambda/a worker when the graph must outlive the process.
 
 6. Use `definePipelineCommand` for pipeline scripts; use `defineCommand` only
    when the script is not centered on a pipeline. Preview selection with
@@ -64,17 +58,22 @@ pipeline in Temporal/Lambda/a worker when the graph must outlive the process.
    `requireOutputs` when the final domain result is not meaningful without
    specific step outputs. Read plan `selectionReasons` instead of recreating
    target-closure logic in a CLI or application.
-8. Use `tubeless/render` when plans or diagnostics cross a human or JSON
-   presentation boundary; do not duplicate selection-reason or error formatting.
+8. Use `tubeless/render` to format plans and errors as text or JSON. It includes
+   formatting for selection reasons and error details.
    Use `tubeless/reporter` for optional TTY run reporters; do not import them
    from `tubeless`.
-9. Copy consumer file layout, export names, and IDs from the
-   [project manifest](../examples/catalog/tubeless.project.ts). Register
-   project commands explicitly; do not infer executable modules from run
+9. Use the file layout and export conventions in the
+   [project manifest](../examples/catalog/tubeless.project.ts), adapting IDs to
+   your own commands. Register project commands explicitly; do not infer executable modules from run
    history or the filesystem.
    Cancel only a live launch owned by the current studio process; it is not
    crash-resume and does not abort sibling launches.
 
-For semantics behind these choices, read [core concepts](./concepts.md).
+Use `fromRemote` when a step calls another execution system. If a dry run
+contacts that system, both the adapter and remote worker must honor
+`context.dryRun`. A worker or durable host can invoke the whole pipeline when
+it needs to own job delivery and retries; see [remote steps](./remote-step-composition.md).
+
+For dependency, failure, and selection behavior, read [core concepts](./concepts.md).
 For workbench commands, read [the CLI](./cli.md). For the local run UI, read
 [the studio](./studio.md).

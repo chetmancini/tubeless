@@ -15,7 +15,7 @@
 
 Typed, observable data pipelines you import from TypeScript or run from a Bun
 CLI. It is a library, not a hosted workflow engine or a Make/npm-scripts
-replacement. The public line is `0.1.x`; expect API change before 1.0.
+replacement. Tubeless is pre-1.0; its public API may change.
 
 ```sh
 npm install tubeless

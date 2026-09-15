@@ -113,9 +113,9 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
           <h2>Runtime</h2>
         </div>
         <p>
-          Import <code>createSteps</code> and <code>definePipeline</code>. Invalid graphs fail at definition.
-          <code>plan()</code> previews selection. <code>run</code> / <code>runOrThrow</code> execute. The CLI is a Bun
-          workbench around the same exports.
+          Build a pipeline with <code>createSteps</code> and <code>definePipeline</code>.
+          Preview the selected steps with <code>plan()</code>, then execute with
+          <code>run()</code> or <code>runOrThrow()</code>. The CLI uses the same pipeline definitions.
         </p>
       </div>
       <div class="facts">
@@ -139,9 +139,9 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
         <div class="feature-copy">
           <h2>Define</h2>
           <p>
-            Steps declare typed inputs and outputs. Pipeline definitions reject
-            missing dependencies, cycles, and duplicate IDs. Plans, reports,
-            hooks, and CLI selection use the declared step IDs.
+            Connect steps through their inputs and outputs. TypeScript checks the values
+            passed between them, and Tubeless checks for missing dependencies,
+            cycles, and duplicate IDs before execution.
           </p>
         </div>
         <figure class="shot">
@@ -207,8 +207,8 @@ export const ImportPipeline = definePipeline({
         <div class="feature-copy">
           <h2>Studio</h2>
           <p>
-            The local studio displays recorded runs, step timelines, and
-            nested pipelines from SQLite or NDJSON history.
+            Open recorded runs in your browser to inspect step timelines, logs, errors,
+            and child pipelines. Register commands to preview and launch new runs.
           </p>
         </div>
         <figure class="shot">

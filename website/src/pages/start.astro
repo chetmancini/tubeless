@@ -11,8 +11,8 @@ import { href } from "../lib/paths";
     <header class="page-lead">
       <h1 class="page-title">First pipeline</h1>
       <p>
-        Library imports need Node.js 22+. The CLI needs Bun 1.3.14+. Linux and macOS
-        are supported. Windows is untested.
+        Build a pipeline that reads a list of strings and normalizes each row.
+        Use Node.js 22+ for library code or Bun 1.3.14+ for the CLI.
       </p>
     </header>
 
@@ -21,7 +21,7 @@ import { href } from "../lib/paths";
         <div>
           <h3>Install the library</h3>
           <Install command="npm install tubeless" />
-          <p class="lede">Also <code>pnpm add</code>, <code>yarn add</code>, or <code>bun add</code>. ESM-only. Dependency-free at runtime.</p>
+          <p class="lede">You can also install with pnpm, Yarn, or Bun. Use ESM imports; the library has no runtime dependencies.</p>
         </div>
         <div>
           <h3>Use the CLI</h3>
@@ -34,8 +34,8 @@ import { href } from "../lib/paths";
     <section class="section">
       <h2>Define a pipeline</h2>
       <p class="lede">
-        One <code>createSteps</code> factory per pipeline. The step object is the typed dependency token.
-        IDs stay stable because plans, reports, hooks, and CLI selection use them.
+        Create steps with <code>createSteps</code>, then connect them with <code>dependsOn</code>.
+        The normalize step receives the load step’s output, with its type inferred automatically.
       </p>
       <pre><code>{`import { createSteps, definePipeline, requireOutputs } from "tubeless";
 
@@ -68,8 +68,9 @@ export const ImportPipeline = definePipeline({
         <div class="feature-copy">
           <h3>See the static graph</h3>
           <p>
-            <code>toMermaid()</code> prints the static graph. Required edges are solid. Optional
-            inputs and failure gates are dotted. Same source from <code>tubeless graph</code>.
+            <code>toMermaid()</code> returns a Mermaid diagram of the dependencies. Solid arrows
+            show required inputs; dotted arrows show optional inputs and failure gates.
+            The CLI’s <code>tubeless graph</code> command returns the same diagram.
           </p>
         </div>
         <Terminal tape={graphTape} />
@@ -81,9 +82,10 @@ export const ImportPipeline = definePipeline({
         <div class="feature-copy">
           <h3>Pick an execution method</h3>
           <p>
-            <code>runOrThrow</code> when failure should throw. <code>run</code> for the structured report.
-            <code>plan</code> when nothing may execute. Scripts should use <code>definePipelineCommand</code>
-            so <code>--target</code>, <code>--step</code>, and dry-run stay generated.
+            Use <code>runOrThrow</code> to receive the final value or an exception. Use <code>run</code>
+            to inspect step results and errors. Use <code>plan</code> to preview selection without
+            running steps. For CLI scripts, <code>definePipelineCommand</code> supplies help,
+            selection flags, and dry-run controls.
           </p>
         </div>
         <Terminal tape={runTape} />
@@ -94,7 +96,7 @@ export const ImportPipeline = definePipeline({
       <div class="agent-grid">
         <a href={href("docs/getting-started")}>
           <h3>Getting started</h3>
-          <p>Testing runtime, targets, and finalize rules.</p>
+          <p>Run your first pipeline, select steps, and test its results.</p>
         </a>
         <a href={href("docs/recipes")}>
           <h3>Recipe index</h3>
@@ -102,11 +104,11 @@ export const ImportPipeline = definePipeline({
         </a>
         <a href={href("docs/cli")}>
           <h3>CLI</h3>
-          <p>inspect, plan, graph, run, exit codes.</p>
+          <p>Preview and run commands, record history, and handle exit codes.</p>
         </a>
         <a href={href("docs/studio")}>
           <h3>Studio</h3>
-          <p>Optional SQLite or portable NDJSON history and <code>tubeless ui</code>.</p>
+          <p>View logs and progress, preview plans, and run registered commands in a browser.</p>
         </a>
       </div>
     </section>
