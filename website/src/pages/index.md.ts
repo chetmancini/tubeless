@@ -19,6 +19,7 @@ a durable execution engine with crash recovery or distributed scheduling.
 ## Start here
 
 - [Getting started](${absUrl("docs/getting-started.md")})
+- [Developer resources](${absUrl("developers.md")})
 - [Agent instructions and resource index](${absUrl("llms.txt")})
 - [Authoring guide](${absUrl("docs/agent-guide.md")})
 - [Recipes](${absUrl("docs/recipes.md")})

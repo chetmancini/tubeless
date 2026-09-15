@@ -3,7 +3,7 @@ import { DOC_NAV } from "../lib/docs";
 import { absUrl } from "../lib/paths";
 
 export const GET: APIRoute = () => {
-  const paths = ["", "start", "agents", "docs", ...DOC_NAV.map(({ slug }) => `docs/${slug}`)];
+  const paths = ["", "start", "developers", "agents", "docs", ...DOC_NAV.map(({ slug }) => `docs/${slug}`)];
   const escapeXml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
   return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

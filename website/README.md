@@ -3,7 +3,7 @@
 Human docs site plus agent entrypoints. **Not part of the npm package.**
 
 Source of truth for long-form docs remains `../docs/*.md`. This project renders
-those files and adds the landing, start, and agents pages.
+those files and adds the landing, start, developer-resource, and agents pages.
 
 ## Local
 
@@ -28,6 +28,7 @@ From the package root: `make website`.
 | Studio screenshot | `public/studio.png` (recapture from `tubeless ui`) |
 | Markdown downloads and full text | `src/pages/*.md.ts`, `src/pages/docs/[slug].md.ts`, `src/pages/llms-full.txt.ts`; generated from `DOC_NAV` and `../docs/*.md` |
 | Agent URL table | `src/pages/agents.astro`, `src/pages/llms.txt.ts` |
+| Developer resource hub | `src/pages/developers.astro`, `src/pages/developers.md.ts` |
 | Homepage Markdown overview | `src/pages/index.md.ts`; advertised in the homepage head and `llms.txt` |
 | Visual system | `src/styles/global.css` |
 | Logo and social card | `../docs/assets/logo.svg` and `../docs/assets/social.svg`; rasterize social to `public/og.png` |

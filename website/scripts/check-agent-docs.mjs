@@ -30,18 +30,23 @@ assert.deepEqual(openapi.components.schemas.ErrorResponse.required.sort(), [
   "hint",
   "message",
 ]);
-assert.equal(
-  openapi.paths["/api/commands/{commandId}/plan"].post.responses["413"].$ref,
-  "#/components/responses/PayloadTooLarge"
-);
-assert.equal(
-  openapi.paths["/api/commands/{commandId}/runs"].post.responses["413"].$ref,
-  "#/components/responses/PayloadTooLarge"
-);
-assert.equal(
-  openapi.components.responses.PayloadTooLarge.content["application/json"].schema.$ref,
-  "#/components/schemas/ErrorResponse"
-);
+assert.equal(openapi.components.schemas.ErrorResponse.properties.accepted.const, false);
+assert.equal(openapi.components.schemas.ErrorResponse.properties.errors.items.type, "string");
+for (const [path, pathItem] of Object.entries(openapi.paths)) {
+  for (const [method, operation] of Object.entries(pathItem)) {
+    assert.ok(operation.responses["500"], `${method.toUpperCase()} ${path} must document 500`);
+    for (const [status, response] of Object.entries(operation.responses)) {
+      if (!/^[45]\d\d$/.test(status)) continue;
+      assert.match(response.$ref, /^#\/components\/responses\//, `${method.toUpperCase()} ${path} ${status} must reuse a typed error response`);
+      const responseName = response.$ref.split("/").at(-1);
+      assert.equal(
+        openapi.components.responses[responseName].content["application/json"].schema.$ref,
+        "#/components/schemas/ErrorResponse",
+        `${method.toUpperCase()} ${path} ${status} must use ErrorResponse`
+      );
+    }
+  }
+}
 assert.deepEqual(openapi.components.schemas.Snapshot.required.sort(), [
   "activeRunCount",
   "completedRunCount",
@@ -78,6 +83,7 @@ assert.deepEqual(openapi.components.schemas.LaunchRequest.properties.values.prop
   type: "string",
 });
 assert.ok(index.includes("https://tubeless.io/openapi.json"));
+assert.ok(index.includes("https://tubeless.io/developers.md"));
 const pages = readdirSync(join(root, "docs"))
   .filter((name) => existsSync(join(root, "docs", name, "index.html")));
 assert.ok(pages.length > 0, "Built documentation pages must exist");
@@ -123,6 +129,7 @@ assert.match(homepage, /<link rel="alternate" type="text\/markdown" href="\/inde
 assert.match(read("index.md"), /^# Tubeless\n/);
 assert.match(read("index.md"), /## When to use Tubeless\n/);
 assert.ok(index.includes("https://tubeless.io/index.md"));
+assert.match(homepage, /href="\/developers"/);
 for (const [, target] of read("index.md").matchAll(/\]\(([^)]+)\)/g)) {
   const url = new URL(target);
   if (url.origin === "https://tubeless.io") {
@@ -144,6 +151,14 @@ assert.ok(software.softwareVersion.length > 0);
 assert.deepEqual(software.keywords, ["TypeScript pipelines", "Node.js workflows", "typed ETL"]);
 assert.deepEqual(software.sameAs, ["https://github.com/chetmancini/tubeless"]);
 assert.match(homepage, /name="description" content="Tubeless by Chet Mancini:/);
+
+const developers = read("developers/index.html");
+assert.match(developers, /<title>Developer Resources · Tubeless<\/title>/);
+assert.match(developers, /<h1 class="page-title">Tubeless developer resources<\/h1>/);
+assert.match(developers, /href="\/openapi\.json"/);
+assert.match(developers, /href="\/docs\/api-reference"/);
+assert.match(developers, /type="text\/markdown" href="\/developers\.md"/);
+assert.match(read("developers.md"), /^# Tubeless developer resources\n/);
 
 const sitemap = read("sitemap.xml");
 assert.match(sitemap, /^<\?xml version="1.0" encoding="UTF-8"\?>\n<urlset xmlns="http:\/\/www.sitemaps.org\/schemas\/sitemap\/0.9">/);

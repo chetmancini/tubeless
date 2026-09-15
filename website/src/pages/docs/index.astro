@@ -14,8 +14,8 @@ const agents = DOC_NAV.filter((item) =>
 );
 ---
 
-<Doc title="Docs" description="Human documentation for tubeless, with agent entrypoints beside it.">
-  <h1>Documentation</h1>
+<Doc title="Developer Documentation" description="Tubeless developer documentation for the TypeScript package, CLI, Local Studio API, and coding agents.">
+  <h1>Tubeless developer documentation</h1>
   <p>
     These pages render <code>docs/*.md</code> from the package.
   </p>
@@ -46,6 +46,10 @@ const agents = DOC_NAV.filter((item) =>
 
   <h2>Reference</h2>
   <div class="agent-grid">
+    <a href={href("developers")}>
+      <h3>Developer resources</h3>
+      <p>Package, CLI, Local Studio API, OpenAPI, and machine-readable entrypoints.</p>
+    </a>
     {deep.map((item) => (
       <a href={href(`docs/${item.slug}`)}>
         <h3>{item.label}</h3>

@@ -82,6 +82,7 @@ const spec = {
             ...json({ $ref: "#/components/schemas/Capabilities" }),
           },
           "403": error("Forbidden"),
+          "500": error("InternalError"),
         },
       },
     },
@@ -114,6 +115,7 @@ const spec = {
             ...json({ $ref: "#/components/schemas/CommandList" }),
           },
           "403": error("Forbidden"),
+          "500": error("InternalError"),
         },
       },
     },
@@ -163,15 +165,7 @@ const spec = {
             description: "Launch accepted.",
             ...json({ $ref: "#/components/schemas/LaunchAccepted" }),
           },
-          "400": {
-            description: "Invalid values or a launch rejected by command validation.",
-            ...json({
-              oneOf: [
-                { $ref: "#/components/schemas/ErrorResponse" },
-                { $ref: "#/components/schemas/LaunchRejected" },
-              ],
-            }),
-          },
+          "400": error("BadRequest"),
           "403": error("Forbidden"),
           "404": error("NotFound"),
           "405": error("CapabilityNotEnabled"),
@@ -229,7 +223,7 @@ const spec = {
   components: {
     responses: Object.fromEntries(
       [
-        ["BadRequest", "The request path or JSON body is invalid."],
+        ["BadRequest", "The request path or JSON body is invalid, or command validation rejected it."],
         ["Forbidden", "The Host header does not match the local Studio authority."],
         ["NotFound", "The requested command, run, or endpoint does not exist."],
         ["CapabilityNotEnabled", "The host process did not enable this capability."],
@@ -248,10 +242,20 @@ const spec = {
         additionalProperties: false,
         required: ["code", "error", "hint", "message"],
         properties: {
+          accepted: {
+            const: false,
+            type: "boolean",
+            description: "Present when command validation rejected a launch.",
+          },
           code: { type: "string", description: "Stable machine-readable error code." },
           error: {
             type: "string",
             description: "Backward-compatible alias of message.",
+          },
+          errors: {
+            type: "array",
+            description: "Validation failures present when code is launch_rejected.",
+            items: { type: "string" },
           },
           hint: { type: "string", description: "Actionable recovery guidance." },
           message: { type: "string", description: "Human-readable error summary." },
@@ -822,19 +826,6 @@ const spec = {
         properties: {
           accepted: { const: true, type: "boolean" },
           runId: { type: "string" },
-        },
-      },
-      LaunchRejected: {
-        type: "object",
-        additionalProperties: false,
-        required: ["accepted", "code", "error", "errors", "hint", "message"],
-        properties: {
-          accepted: { const: false, type: "boolean" },
-          code: { const: "launch_rejected", type: "string" },
-          error: { type: "string" },
-          errors: { type: "array", items: { type: "string" } },
-          hint: { type: "string" },
-          message: { type: "string" },
         },
       },
       CancelAccepted: {

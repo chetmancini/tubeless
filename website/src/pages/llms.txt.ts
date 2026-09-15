@@ -32,6 +32,7 @@ This static site provides explicit Markdown URLs; Accept negotiation is not avai
 ## Documentation
 
 - [Product overview](${absUrl("index.md")}): Identity, best-fit use cases, and where to start.
+- [Developer resources](${absUrl("developers.md")}): Package docs, CLI reference, Local Studio OpenAPI, and machine-readable resources.
 ${DOC_NAV.map(({ slug, label, blurb }) => `- [${label}](${absUrl(`docs/${slug}.md`)}): ${blurb}`).join("\n")}
 
 ## Agent instructions

@@ -10,6 +10,7 @@ and the smallest matching recipe before writing a Tubeless pipeline.
 - [Complete documentation](${absUrl("llms-full.txt")})
 - [Agent guide](${absUrl("docs/agent-guide.md")})
 - [Recipes](${absUrl("docs/recipes.md")})
+- [Developer resources](${absUrl("developers.md")})
 - [Authoring skill](${githubBlob("skills/tubeless/SKILL.md")})
 - [Project manifest](${githubBlob("examples/catalog/tubeless.project.ts")})
 - [Agent evaluations](${absUrl("docs/agent-evaluations.md")})
