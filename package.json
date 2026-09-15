@@ -68,13 +68,13 @@
     "pack:verify": "node scripts/verify-packed-artifact.mjs"
   },
   "devDependencies": {
-    "@oxlint/plugins": "1.81.0",
-    "@types/node": "26.4.1",
+    "@oxlint/plugins": "1.83.0",
+    "@types/node": "26.5.1",
     "knip": "6.35.1",
-    "oxfmt": "0.66.0",
-    "oxlint": "1.81.0",
+    "oxfmt": "0.68.0",
+    "oxlint": "1.83.0",
     "typescript": "7.0.2",
-    "vitest": "4.1.11"
+    "vitest": "5.0.0"
   },
   "exports": {
     ".": {
@@ -167,8 +167,5 @@
       "import": "./dist/tracing/tracing-otel.js",
       "default": "./dist/tracing/tracing-otel.js"
     }
-  },
-  "dependencies": {
-    "tubeless": "^0.2.2"
   }
 }
