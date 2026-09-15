@@ -74,6 +74,16 @@ function writeJson(
   response.end(JSON.stringify(value));
 }
 
+function writeError(
+  response: import("node:http").ServerResponse,
+  status: number,
+  code: string,
+  message: string,
+  hint: string
+): void {
+  writeJson(response, { code, error: message, hint, message }, status);
+}
+
 function isAddressInfo(
   address: string | import("node:net").AddressInfo | null
 ): address is import("node:net").AddressInfo {
@@ -86,20 +96,34 @@ async function readJsonBody(request: import("node:http").IncomingMessage): Promi
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     byteLength += buffer.byteLength;
-    if (byteLength > 65_536) throw new StudioRequestError("Request body exceeds 64 KiB.", 413);
+    if (byteLength > 65_536) {
+      throw new StudioRequestError(
+        "request_body_too_large",
+        "Request body exceeds 64 KiB.",
+        413,
+        "Send a JSON body no larger than 64 KiB."
+      );
+    }
     chunks.push(buffer);
   }
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
-    throw new StudioRequestError("Request body must be valid JSON.", 400);
+    throw new StudioRequestError(
+      "invalid_json",
+      "Request body must be valid JSON.",
+      400,
+      "Send a valid JSON object with content-type application/json."
+    );
   }
 }
 
 class StudioRequestError extends Error {
   constructor(
+    readonly code: string,
     message: string,
-    readonly status: number
+    readonly status: number,
+    readonly hint: string
   ) {
     super(message);
   }
@@ -109,7 +133,12 @@ function decodePathSegment(value: string): string {
   try {
     return decodeURIComponent(value);
   } catch {
-    throw new StudioRequestError("Malformed path segment.", 400);
+    throw new StudioRequestError(
+      "malformed_path_segment",
+      "Malformed path segment.",
+      400,
+      "Percent-encode the path segment as valid UTF-8."
+    );
   }
 }
 
@@ -165,7 +194,13 @@ export async function startPipelineRunStudio(
     try {
       const url = new URL(request.url ?? "/", "http://studio.local");
       if (!isTrustedAuthority(request)) {
-        writeJson(response, { error: "The request host is not trusted." }, 403);
+        writeError(
+          response,
+          403,
+          "untrusted_host",
+          "The request host is not trusted.",
+          "Use the exact local Studio URL printed by tubeless ui."
+        );
         return;
       }
       if (request.method === "GET" && url.pathname === "/") {
@@ -199,7 +234,13 @@ export async function startPipelineRunStudio(
         const runId = decodePathSegment(runMatch[1]!);
         const events = await eventState.readRun(runId);
         if (events.length === 0) {
-          writeJson(response, { error: "Run not found." }, 404);
+          writeError(
+            response,
+            404,
+            "run_not_found",
+            "Run not found.",
+            "Refresh /api/snapshot and choose an available runId."
+          );
           return;
         }
         writeJson(response, { events, run: projectPipelineRun(events) });
@@ -208,17 +249,35 @@ export async function startPipelineRunStudio(
       const cancelMatch = /^\/api\/runs\/([^/]+)\/cancel$/.exec(url.pathname);
       if (request.method === "POST" && cancelMatch) {
         if (!launcher?.cancel) {
-          writeJson(response, { error: "Pipeline cancellation is not enabled." }, 405);
+          writeError(
+            response,
+            405,
+            "cancellation_not_enabled",
+            "Pipeline cancellation is not enabled.",
+            "Start the Studio with a launcher that provides cancel and liveRunIds."
+          );
           return;
         }
         if (request.headers["x-tubeless-studio-cancel"] !== "1") {
-          writeJson(response, { error: "A same-origin cancel request is required." }, 415);
+          writeError(
+            response,
+            415,
+            "cancel_guard_required",
+            "A same-origin cancel request is required.",
+            "Send x-tubeless-studio-cancel: 1 from the Studio origin."
+          );
           return;
         }
         const runId = decodePathSegment(cancelMatch[1]!);
         const result = await launcher.cancel(runId);
         if (!result.cancelled) {
-          writeJson(response, { error: "The run is not a live launch." }, 404);
+          writeError(
+            response,
+            404,
+            "run_not_live",
+            "The run is not a live launch.",
+            "Refresh /api/snapshot and cancel a run listed in liveRunIds."
+          );
           return;
         }
         writeJson(response, { cancelled: true, runId: result.runId }, 202);
@@ -226,11 +285,23 @@ export async function startPipelineRunStudio(
       }
       if (request.method === "DELETE" && url.pathname === "/api/history") {
         if (!history) {
-          writeJson(response, { error: "History maintenance is not enabled." }, 405);
+          writeError(
+            response,
+            405,
+            "history_maintenance_not_enabled",
+            "History maintenance is not enabled.",
+            "Start the Studio with a history maintenance adapter."
+          );
           return;
         }
         if (request.headers["x-tubeless-studio-clear-history"] !== "1") {
-          writeJson(response, { error: "A same-origin history request is required." }, 415);
+          writeError(
+            response,
+            415,
+            "history_guard_required",
+            "A same-origin history request is required.",
+            "Send x-tubeless-studio-clear-history: 1 from the Studio origin."
+          );
           return;
         }
         const cleared = await eventState.clear(history);
@@ -245,19 +316,37 @@ export async function startPipelineRunStudio(
       if (request.method === "POST" && planMatch) {
         const commandId = decodePathSegment(planMatch[1]!);
         if (!launcher?.plan || !commandById.get(commandId)?.canPlan) {
-          writeJson(response, { error: "Pipeline planning is not enabled." }, 405);
+          writeError(
+            response,
+            405,
+            "planning_not_enabled",
+            "Pipeline planning is not enabled.",
+            "Choose a command with canPlan or start the Studio with a planning launcher."
+          );
           return;
         }
         if (
           !request.headers["content-type"]?.startsWith("application/json") ||
           request.headers["x-tubeless-studio-plan"] !== "1"
         ) {
-          writeJson(response, { error: "A same-origin JSON plan request is required." }, 415);
+          writeError(
+            response,
+            415,
+            "plan_guard_required",
+            "A same-origin JSON plan request is required.",
+            "Send application/json with x-tubeless-studio-plan: 1 from the Studio origin."
+          );
           return;
         }
         const input = parseStudioPlanInput(await readJsonBody(request));
         if (!input) {
-          writeJson(response, { error: "Plan input must contain bounded selections." }, 400);
+          writeError(
+            response,
+            400,
+            "invalid_plan_input",
+            "Plan input must contain bounded selections.",
+            "Send optional dryRun, stepIds, or targets fields within the documented limits."
+          );
           return;
         }
         writeJson(response, { plan: await launcher.plan(commandId, input) });
@@ -266,50 +355,108 @@ export async function startPipelineRunStudio(
       const launchMatch = /^\/api\/commands\/([^/]+)\/runs$/.exec(url.pathname);
       if (request.method === "POST" && launchMatch) {
         if (!launcher) {
-          writeJson(response, { error: "Pipeline launching is not enabled." }, 405);
+          writeError(
+            response,
+            405,
+            "launching_not_enabled",
+            "Pipeline launching is not enabled.",
+            "Start the Studio with an execution launcher."
+          );
           return;
         }
         if (
           !request.headers["content-type"]?.startsWith("application/json") ||
           request.headers["x-tubeless-studio-launch"] !== "1"
         ) {
-          writeJson(response, { error: "A same-origin JSON launch request is required." }, 415);
+          writeError(
+            response,
+            415,
+            "launch_guard_required",
+            "A same-origin JSON launch request is required.",
+            "Send application/json with x-tubeless-studio-launch: 1 from the Studio origin."
+          );
           return;
         }
         const launch = parseStudioLaunchRequest(await readJsonBody(request));
         if (!launch) {
-          writeJson(
+          writeError(
             response,
-            { error: "values must contain at most 128 bounded JSON-safe entries." },
-            400
+            400,
+            "invalid_launch_input",
+            "values must contain at most 128 bounded JSON-safe entries.",
+            "Send a values object matching the selected command descriptor."
           );
           return;
         }
         const commandId = decodePathSegment(launchMatch[1]!);
         if (!commandIds.has(commandId)) {
-          writeJson(response, { error: "Pipeline command not found." }, 404);
+          writeError(
+            response,
+            404,
+            "command_not_found",
+            "Pipeline command not found.",
+            "Refresh /api/commands and choose an available commandId."
+          );
           return;
         }
         const result = await launcher.launch(commandId, launch.values);
-        writeJson(response, result, result.accepted ? 202 : 400);
+        if (result.accepted) {
+          writeJson(response, result, 202);
+        } else {
+          writeJson(
+            response,
+            {
+              ...result,
+              code: "launch_rejected",
+              error: "Pipeline launch was rejected.",
+              hint: "Review errors and retry only after resolving the reported cause.",
+              message: "Pipeline launch was rejected.",
+            },
+            400
+          );
+        }
         return;
       }
       if (request.method !== "GET") {
-        writeJson(response, { error: "Method not allowed." }, 405);
+        writeError(
+          response,
+          405,
+          "method_not_allowed",
+          "Method not allowed.",
+          "Use an HTTP method documented in /openapi.json."
+        );
         return;
       }
-      writeJson(response, { error: "Not found." }, 404);
+      writeError(
+        response,
+        404,
+        "endpoint_not_found",
+        "Not found.",
+        "Read https://tubeless.io/openapi.json and choose a documented Studio endpoint."
+      );
     } catch (error) {
       if (error instanceof StudioRequestError) {
-        writeJson(response, { error: error.message }, error.status);
+        writeError(response, error.status, error.code, error.message, error.hint);
         return;
       }
       if (error instanceof PipelineRunStudioHistoryBusyError) {
-        writeJson(response, { error: error.message }, 409);
+        writeError(
+          response,
+          409,
+          "history_busy",
+          error.message,
+          "Wait for live runs to finish, then retry the clear request."
+        );
         return;
       }
       console.error(error instanceof Error ? (error.stack ?? error.message) : error);
-      writeJson(response, { error: "The studio hit an unexpected error." }, 500);
+      writeError(
+        response,
+        500,
+        "studio_internal_error",
+        "The studio hit an unexpected error.",
+        "Inspect the local Studio process logs and retry after fixing the reported cause."
+      );
     }
   });
 

@@ -123,6 +123,17 @@ run control appears only for top-level launches this studio process still owns.
 The header names are part of the local studio protocol. They are same-origin
 guards, not authentication.
 
+## HTTP contract and errors
+
+The published [OpenAPI document](https://tubeless.io/openapi.json) describes the
+local Studio HTTP API. Its server URL is loopback-only; `tubeless.io` hosts the
+contract but does not execute pipelines.
+
+Unsuccessful Studio API responses use `application/json` and include four
+fields: stable `code`, human-readable `message`, actionable `hint`, and the
+backward-compatible `error` alias. Use `code` for control flow. The `error` and
+`message` fields currently contain the same text.
+
 Programmatic callers can compose the same pieces from
 `tubeless/run-store/sqlite`, `tubeless/run-store/ndjson`, and
 `tubeless/run-store/ui`. See

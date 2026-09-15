@@ -195,7 +195,9 @@ or shared helpers in this repository.
   bound authority, or, on a wildcard bind, `localhost` or a literal IP on the
   same port. Browser plan, launch, cancel, and clear-history also send
   `x-tubeless-studio-*` headers; those are same-origin guards, not
-  authentication. Cancel a live top-level launch from the running detail pane;
+  authentication. Studio HTTP errors contain stable `code`, `message`, `hint`,
+  and a backward-compatible `error` alias; the local-only contract is published
+  at `https://tubeless.io/openapi.json`. Cancel a live top-level launch from the running detail pane;
   that abort is process-local, leaves sibling launches running, and is not
   crash-resume.
 

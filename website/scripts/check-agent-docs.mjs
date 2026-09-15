@@ -8,6 +8,29 @@ const read = (path) => readFileSync(join(root, path), "utf8");
 const index = read("llms.txt");
 const bundle = read("llms-full.txt");
 assert.equal(read("CNAME").trim(), "tubeless.io", "Pages artifact must preserve the custom domain");
+const openapi = JSON.parse(read("openapi.json"));
+assert.equal(openapi.openapi, "3.1.0");
+assert.equal(openapi.info.title, "Tubeless Local Studio API");
+assert.equal(openapi["x-tubeless-hosted-api"], false);
+assert.equal(openapi["x-tubeless-spec-url"], "https://tubeless.io/openapi.json");
+assert.match(openapi.servers[0].url, /^http:\/\/127\.0\.0\.1:/);
+assert.deepEqual(Object.keys(openapi.paths).sort(), [
+  "/api/capabilities",
+  "/api/commands",
+  "/api/commands/{commandId}/plan",
+  "/api/commands/{commandId}/runs",
+  "/api/history",
+  "/api/runs/{runId}",
+  "/api/runs/{runId}/cancel",
+  "/api/snapshot",
+]);
+assert.deepEqual(openapi.components.schemas.ErrorResponse.required.sort(), [
+  "code",
+  "error",
+  "hint",
+  "message",
+]);
+assert.ok(index.includes("https://tubeless.io/openapi.json"));
 const pages = readdirSync(join(root, "docs"))
   .filter((name) => existsSync(join(root, "docs", name, "index.html")));
 assert.ok(pages.length > 0, "Built documentation pages must exist");
@@ -45,6 +68,10 @@ for (const section of index.split(/^## /m).slice(1)) {
 }
 
 const homepage = read("index.html");
+assert.match(homepage, /<title>Tubeless — Typed pipelines for Node\.js<\/title>/);
+assert.match(homepage, /name="application-name" content="Tubeless"/);
+assert.match(homepage, /rel="service-desc" type="application\/vnd\.oai\.openapi\+json;version=3\.1" href="\/openapi\.json"/);
+assert.match(homepage, /property="og:site_name" content="Tubeless"/);
 assert.match(homepage, /<link rel="alternate" type="text\/markdown" href="\/index.md"/);
 assert.match(read("index.md"), /^# Tubeless\n/);
 assert.match(read("index.md"), /## When to use Tubeless\n/);
@@ -61,11 +88,13 @@ const software = JSON.parse(jsonld[0][1]);
 assert.equal(software["@context"], "https://schema.org");
 assert.equal(software["@type"], "SoftwareApplication");
 assert.equal(software.name, "Tubeless");
+assert.equal(software.alternateName, "Tubeless TypeScript Pipelines");
 assert.equal(software.url, "https://tubeless.io/");
 assert.equal(software.author.name, "Chet Mancini");
 assert.equal(software.author["@type"], "Person");
 assert.ok(software.description.length > 0);
 assert.ok(software.softwareVersion.length > 0);
+assert.deepEqual(software.keywords, ["TypeScript pipelines", "Node.js workflows", "typed ETL"]);
 assert.deepEqual(software.sameAs, ["https://github.com/chetmancini/tubeless"]);
 assert.match(homepage, /name="description" content="Tubeless by Chet Mancini:/);
 

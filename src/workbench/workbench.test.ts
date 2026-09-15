@@ -1693,9 +1693,13 @@ describe("tubeless workbench", () => {
     expect(failed.status).toBe(400);
     await expect(failed.json()).resolves.toEqual({
       accepted: false,
+      code: "launch_rejected",
+      error: "Pipeline launch was rejected.",
       errors: [
         `Pipeline command exited (${TUBELESS_WORKBENCH_EXIT_CODE.execution}) before recording a run.`,
       ],
+      hint: "Review errors and retry only after resolving the reported cause.",
+      message: "Pipeline launch was rejected.",
     });
     await expect(
       fetch(`${url}/api/snapshot`).then((response) => response.json())
@@ -1763,7 +1767,11 @@ describe("tubeless workbench", () => {
     expect(failed.status).toBe(400);
     await expect(failed.json()).resolves.toEqual({
       accepted: false,
+      code: "launch_rejected",
+      error: "Pipeline launch was rejected.",
       errors: ["The local studio is stopping."],
+      hint: "Review errors and retry only after resolving the reported cause.",
+      message: "Pipeline launch was rejected.",
     });
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
   });
