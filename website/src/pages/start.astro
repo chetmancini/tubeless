@@ -1,7 +1,9 @@
 ---
 import Base from "../layouts/Base.astro";
+import CodeBlock from "../components/CodeBlock.astro";
 import Install from "../components/Install.astro";
 import Terminal from "../components/Terminal.astro";
+import { FIRST_PIPELINE_SAMPLE } from "../data/code-samples";
 import { graphTape, runTape } from "../data/tapes";
 import { href } from "../lib/paths";
 ---
@@ -37,30 +39,7 @@ import { href } from "../lib/paths";
         Create steps with <code>createSteps</code>, then connect them with <code>dependsOn</code>.
         The normalize step receives the load step’s output, with its type inferred automatically.
       </p>
-      <pre><code>{`import { createSteps, definePipeline, requireOutputs } from "tubeless";
-
-interface ImportOptions {
-  lines: readonly string[];
-}
-
-const step = createSteps<ImportOptions>();
-
-const load = step("load", {
-  run: (_inputs, context) => context.options.lines,
-});
-
-const normalize = step("normalize", {
-  dependsOn: [load],
-  run: ({ load: rows }) =>
-    rows.map((row) => row.trim().toLowerCase()).filter(Boolean),
-});
-
-export const ImportPipeline = definePipeline({
-  id: "import",
-  steps: [load, normalize],
-  targets: [normalize],
-  finalize: requireOutputs([normalize], ({ normalize }) => normalize),
-});`}</code></pre>
+      <CodeBlock code={FIRST_PIPELINE_SAMPLE} lang="ts" />
     </section>
 
     <section class="section">

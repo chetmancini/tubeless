@@ -1,5 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
+import CodeBlock from "../components/CodeBlock.astro";
 import { absUrl, githubBlob, href } from "../lib/paths";
 
 const resources = [
@@ -42,7 +43,7 @@ const resources = [
 
     <section class="section">
       <h2>Install the agent skill pack</h2>
-      <pre tabindex="0"><code>npx skills add chetmancini/tubeless</code></pre>
+      <CodeBlock code="npx skills add chetmancini/tubeless" lang="sh" />
       <p>
         Use <code>tubeless-make-pipeline</code> to turn existing scripts and workflows
         into typed pipelines, or <code>tubeless</code> for ongoing authoring.

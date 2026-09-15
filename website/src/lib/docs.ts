@@ -2,9 +2,13 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { marked } from "marked";
+import { highlightCode } from "./highlight";
 import { GITHUB_BLOB, absUrl, href } from "./paths";
 
 const docsDir = join(dirname(fileURLToPath(import.meta.url)), "../../../docs");
+const renderer = new marked.Renderer();
+
+renderer.code = ({ text, lang }) => highlightCode(text, lang);
 
 export type DocPage = {
   slug: string;
@@ -85,7 +89,7 @@ export function loadDoc(slug: string): DocPage {
       .split("\n")
       .map((line) => line.trim())
       .find((line) => line.length > 0 && !line.startsWith("#") && !line.startsWith("|")) ?? title;
-  const html = marked.parse(rewriteDocLinks(source), { async: false, gfm: true }) as string;
+  const html = marked.parse(rewriteDocLinks(source), { async: false, gfm: true, renderer }) as string;
   const rendered = addHeadingIds(html);
   const body = rendered.html.replace(/^\s*<h1\b[^>]*>[\s\S]*?<\/h1>/, "");
   return { slug, title, description, html: body.replace(/<pre>/g, '<pre tabindex="0">'), headings: rendered.headings };

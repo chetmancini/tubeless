@@ -976,6 +976,10 @@ main pre {
   font: 400 0.8rem/1.55 var(--mono);
 }
 
+pre:is(.shiki, .astro-code) {
+  background: var(--tire) !important;
+}
+
 main pre code {
   font: inherit;
 }
@@ -996,6 +1000,10 @@ main pre code {
   color: var(--chalk);
   border: 0;
   font: 400 0.8rem/1.55 var(--mono);
+}
+
+.shot pre:is(.shiki, .astro-code) {
+  background: transparent !important;
 }
 
 .doc-body code {

@@ -1,10 +1,12 @@
 ---
 import Base from "../layouts/Base.astro";
+import CodeBlock from "../components/CodeBlock.astro";
 import Install from "../components/Install.astro";
 import LiveTerminal from "../components/LiveTerminal.astro";
 import MermaidGraph from "../components/MermaidGraph.astro";
 import Terminal from "../components/Terminal.astro";
 import TtyBar from "../components/TtyBar.astro";
+import { FIRST_PIPELINE_SAMPLE } from "../data/code-samples";
 import { planTape } from "../data/tapes";
 import { PACKAGE } from "../lib/package";
 import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
@@ -146,30 +148,7 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
         </div>
         <figure class="shot">
           <TtyBar title="import.ts" host="library" />
-          <pre><code>{`import { createSteps, definePipeline, requireOutputs } from "tubeless";
-
-interface ImportOptions {
-  lines: readonly string[];
-}
-
-const step = createSteps<ImportOptions>();
-
-const load = step("load", {
-  run: (_inputs, context) => context.options.lines,
-});
-
-const normalize = step("normalize", {
-  dependsOn: [load],
-  run: ({ load: rows }) =>
-    rows.map((row) => row.trim().toLowerCase()).filter(Boolean),
-});
-
-export const ImportPipeline = definePipeline({
-  id: "import",
-  steps: [load, normalize],
-  targets: [normalize],
-  finalize: requireOutputs([normalize], ({ normalize }) => normalize),
-});`}</code></pre>
+          <CodeBlock code={FIRST_PIPELINE_SAMPLE} lang="ts" />
         </figure>
       </div>
     </section>
