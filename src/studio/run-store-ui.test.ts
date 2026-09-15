@@ -251,6 +251,16 @@ describe("local pipeline run studio", () => {
         "Read https://tubeless.io/openapi.json and choose a documented Studio endpoint."
       )
     );
+
+    const unsupportedMethod = await fetch(`${server.url}/api/missing`, { method: "POST" });
+    expect(unsupportedMethod.status).toBe(405);
+    await expect(unsupportedMethod.json()).resolves.toEqual(
+      studioError(
+        "method_not_allowed",
+        "Method not allowed.",
+        "Use an HTTP method documented at https://tubeless.io/openapi.json."
+      )
+    );
   });
 
   it("pins the studio page CSP hashes to the exact inline script and style", async () => {

@@ -423,7 +423,7 @@ export async function startPipelineRunStudio(
           405,
           "method_not_allowed",
           "Method not allowed.",
-          "Use an HTTP method documented in /openapi.json."
+          "Use an HTTP method documented at https://tubeless.io/openapi.json."
         );
         return;
       }

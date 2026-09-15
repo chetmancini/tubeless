@@ -30,6 +30,53 @@ assert.deepEqual(openapi.components.schemas.ErrorResponse.required.sort(), [
   "hint",
   "message",
 ]);
+assert.equal(
+  openapi.paths["/api/commands/{commandId}/plan"].post.responses["413"].$ref,
+  "#/components/responses/PayloadTooLarge"
+);
+assert.equal(
+  openapi.paths["/api/commands/{commandId}/runs"].post.responses["413"].$ref,
+  "#/components/responses/PayloadTooLarge"
+);
+assert.equal(
+  openapi.components.responses.PayloadTooLarge.content["application/json"].schema.$ref,
+  "#/components/schemas/ErrorResponse"
+);
+assert.deepEqual(openapi.components.schemas.Snapshot.required.sort(), [
+  "activeRunCount",
+  "completedRunCount",
+  "definitions",
+  "failedRunCount",
+  "generatedAtMs",
+  "lastEventId",
+  "liveRunIds",
+  "runs",
+]);
+assert.equal(
+  openapi.components.schemas.Snapshot.properties.definitions.items.$ref,
+  "#/components/schemas/StoredPipelineDefinition"
+);
+assert.equal(
+  openapi.components.schemas.Snapshot.properties.runs.items.$ref,
+  "#/components/schemas/StoredPipelineRun"
+);
+assert.equal(
+  openapi.components.schemas.RunDetail.properties.events.items.$ref,
+  "#/components/schemas/StoredPipelineEvent"
+);
+assert.equal(
+  openapi.components.schemas.RunDetail.properties.run.$ref,
+  "#/components/schemas/StoredPipelineRun"
+);
+assert.equal(
+  openapi.components.schemas.PlanResult.properties.plan.$ref,
+  "#/components/schemas/PipelinePlan"
+);
+assert.deepEqual(openapi.components.schemas.LaunchRequest.properties.values.propertyNames, {
+  maxLength: 4096,
+  minLength: 1,
+  type: "string",
+});
 assert.ok(index.includes("https://tubeless.io/openapi.json"));
 const pages = readdirSync(join(root, "docs"))
   .filter((name) => existsSync(join(root, "docs", name, "index.html")));
