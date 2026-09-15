@@ -24,6 +24,7 @@ export const DOC_NAV = [
   { slug: "child-pipeline-composition", label: "Child pipelines", blurb: "Nested pipelines and fan-out." },
   { slug: "remote-step-composition", label: "Remote steps", blurb: "Remote engines as parent steps." },
   { slug: "agent-guide", label: "Agent guide", blurb: "Rules for generating pipeline code." },
+  { slug: "agent-skills", label: "Agent skills", blurb: "Install the skill pack and convert existing code into pipelines." },
   { slug: "agent-evaluations", label: "Evaluations", blurb: "Forward-testing cases." },
   { slug: "api-reference", label: "API inventory", blurb: "Generated public surface." },
 ] as const;

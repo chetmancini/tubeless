@@ -99,7 +99,7 @@ go after `--`. `history` lists recorded
 | Export lifecycle telemetry                   | [Structured tracing](./examples/tracing.ts)                               |
 | Persist and inspect local runs               | [Local observability](./examples/local-observability.ts)                  |
 
-The [recipe index](./docs/recipes.md) explains when to use each pattern.
+Install the [agent skill pack](./docs/agent-skills.md) with `npx skills add chetmancini/tubeless` to convert existing code using `tubeless-make-pipeline`. The [recipe index](./docs/recipes.md) explains each pattern.
 
 ## Docs
 

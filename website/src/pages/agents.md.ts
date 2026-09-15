@@ -6,12 +6,18 @@ export const GET: APIRoute = () => new Response(`# Tubeless agent documentation
 Start with the machine-readable documentation index, then read the agent guide
 and the smallest matching recipe before writing a Tubeless pipeline.
 
+Install the skill pack with \`npx skills add chetmancini/tubeless\`.
+Use \`tubeless-make-pipeline\` to convert existing code into a typed pipeline,
+or \`tubeless\` for ongoing authoring.
+
+- [Skill pack installation and example prompt](${absUrl("docs/agent-skills.md")})
 - [Documentation index](${absUrl("llms.txt")})
 - [Complete documentation](${absUrl("llms-full.txt")})
 - [Agent guide](${absUrl("docs/agent-guide.md")})
 - [Recipes](${absUrl("docs/recipes.md")})
 - [Developer resources](${absUrl("developers.md")})
 - [Authoring skill](${githubBlob("skills/tubeless/SKILL.md")})
+- [Code conversion skill](${githubBlob("skills/tubeless-make-pipeline/SKILL.md")})
 - [Project manifest](${githubBlob("examples/catalog/tubeless.project.ts")})
 - [Agent evaluations](${absUrl("docs/agent-evaluations.md")})
 - [Local Studio OpenAPI contract](${absUrl("openapi.json")})

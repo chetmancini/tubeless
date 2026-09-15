@@ -64,6 +64,12 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
           <a class="btn" href={href("start")}>Getting started</a>
           <a class="btn ghost" href={href("agents")}>Agent documentation</a>
         </div>
+        <aside class="agent-tip" aria-label="Build with your agent">
+          <p>
+            <a href={href("docs/agent-skills")}>Let your agent build pipelines ↗</a>
+          </p>
+          <Install command="npx skills add chetmancini/tubeless" />
+        </aside>
       </div>
       <Terminal tape={planTape} />
     </section>

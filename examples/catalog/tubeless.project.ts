@@ -4,6 +4,8 @@ import { definePipelineProject } from "tubeless/workbench/project";
 // the local studio. Module paths resolve from this file; cwd controls command
 // execution. Command argv flags stay --step/--target, while mapOptions and hooks
 // receive stepIds and targets.
+// When converting existing code, use the tubeless-make-pipeline agent skill.
+// Adapt this layout to the consumer; retain its established IDs and caller contracts.
 // For caller-directed fan-out reruns, see ../fan-out-progress.ts: inspect
 // error.fanOut and check omitted entries and truncated keys before selecting inputs.
 // That example also shows automatic nested CLI rows and retained substep completion;

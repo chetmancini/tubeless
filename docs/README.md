@@ -15,6 +15,8 @@
 
 ## How to
 
+Install the [agent skill pack](./agent-skills.md) to author pipelines or convert existing code.
+
 | Document                    | Use it for                                                           |
 | --------------------------- | -------------------------------------------------------------------- |
 | [CLI](./cli.md)             | `list`, `inspect`, `plan`, `graph`, `run`, `history`, and exit codes |

@@ -5,6 +5,10 @@ also executes these modules from the published tarball. Start with the smallest
 example matching the workflow rather than assembling primitives from the API
 inventory.
 
+For an existing script or workflow, use `tubeless-make-pipeline` from the
+[agent skill pack](./agent-skills.md) to choose step boundaries before adapting
+one of these recipes.
+
 | Intent                                         | Executable recipe                                                        | Main primitives                                                              |
 | ---------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | Sequential import or ETL                       | [`typed-import.ts`](../examples/typed-import.ts)                         | `createSteps`, `dependsOn`, `requireOutputs`, `targets`                      |

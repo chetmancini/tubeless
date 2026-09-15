@@ -18,6 +18,13 @@ a durable execution engine with crash recovery or distributed scheduling.
 
 ## Start here
 
+Let your agent build your pipelines. [Install the skills](${absUrl("docs/agent-skills.md")}),
+then hand it your next script:
+
+\`\`\`sh
+npx skills add chetmancini/tubeless
+\`\`\`
+
 - [Getting started](${absUrl("docs/getting-started.md")})
 - [Developer resources](${absUrl("developers.md")})
 - [Agent instructions and resource index](${absUrl("llms.txt")})

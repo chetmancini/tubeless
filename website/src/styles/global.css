@@ -1245,6 +1245,13 @@ main pre code {
 .agent-handoff .install { display: flex; width: 100%; margin-top: 1rem; }
 .agent-handoff .install > span { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
 .agent-handoff .copy-cmd { margin-left: auto; flex-shrink: 0; }
+.agent-tip { margin-top: 1.1rem; }
+.agent-tip p { margin: 0; font: 500 1.4rem/1.2 "Caveat", "Segoe Print", "Bradley Hand", cursive; }
+.agent-tip a { color: var(--gold); text-decoration: none; }
+.agent-tip a:hover { text-decoration: underline; text-underline-offset: 0.15em; }
+.agent-tip .install { gap: 0.6rem; margin-top: 0.15rem; padding: 0; border: 0; background: transparent; font-size: 0.72rem; color: var(--muted); }
+.agent-tip .install > span { min-width: 0; overflow-wrap: anywhere; }
+.agent-tip .copy-cmd { flex-shrink: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @media (max-width: 880px) {
   .hero { gap: 2.8rem; }

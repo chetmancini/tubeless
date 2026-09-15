@@ -18,6 +18,8 @@ Start:
 
 Agent instructions:
 
+- Installable skill pack: ./agent-skills.md
+- Convert existing code: tubeless-make-pipeline, installed with npx skills add chetmancini/tubeless
 - Canonical guide: ./agent-guide.md
 - Project manifest: ../examples/catalog/tubeless.project.ts
 - Maintain stable step IDs.

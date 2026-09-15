@@ -1,47 +1,83 @@
 ---
 name: tubeless
-description: Use when generating, modifying, or reviewing tubeless pipelines, pipeline-backed CLI commands, project manifests, studio catalogs, or agent evaluation submissions in this repository.
+description: Author, modify, or review typed Tubeless pipelines, pipeline-backed CLI commands, and project catalogs in TypeScript projects. Use for dependency modeling, failure and skip policies, dry runs, child pipelines, and pipeline tests.
 ---
 
-# Author tubeless pipelines
+# Author Tubeless pipelines
 
-Copy layout and IDs from the project manifest. Choose primitives from the recipe
-index. Follow the agent guide. Do not invent a second copy of those rules.
+Use the project's installed Tubeless version and public package imports. Keep
+domain logic in ordinary functions and make orchestration explicit in the graph.
 
-## Workflow
+## Find the matching documentation
 
-1. Open [examples/catalog/](../../examples/catalog/tubeless.project.ts). Reuse
-   its file names, export names, and kebab-case IDs.
-2. Open the smallest matching row in [docs/recipes.md](../../docs/recipes.md).
-3. Follow [docs/agent-guide.md](../../docs/agent-guide.md) for primitive
-   selection, runtime, and safety rules.
-4. Typecheck the consumer, then run focused tests.
-5. After package or learning-surface changes, run `make check` from the package
-   root.
+Read the consumer's package manifest, installed Tubeless version, and existing
+pipeline conventions first. The installed `tubeless` package includes `docs/`
+and `examples/`; locate it through the project's package manager. Within the
+Tubeless source repository, use those directories at the repository root.
 
-Use `composeTraceExporters` when one run needs multiple trace destinations.
-Open finished CI or support traces with `tubeless history --trace` or `tubeless
-ui --trace`; the NDJSON adapter is read-only, bounded, and does not redact
-sensitive event contents.
+Read `docs/agent-guide.md`, then the smallest matching example in
+`docs/recipes.md`. These paths are relative to the **Tubeless package**, not
+this installed skill or the consumer's repository. If package docs are absent,
+start with the [public documentation index](https://tubeless.io/llms.txt),
+[agent guide](https://tubeless.io/docs/agent-guide.md), and
+[recipes](https://tubeless.io/docs/recipes.md). Confirm newer examples against
+the installed declarations before using them; do not silently upgrade Tubeless.
 
-## Catalog
+## Authoring decisions
 
-A consumer project uses this shape:
+- Use `createSteps<TDomainOptions>()` per pipeline. Domain options contain
+  business inputs; pass built-in controls separately to `run(options, controls?)`.
+- Give steps stable kebab-case IDs and descriptions of their domain work.
+  `name` is an optional display label. Return values from steps and consume
+  inferred dependency outputs instead of sharing mutable state.
+- Use `dependsOn` for required outputs, `optionalDependsOn` for expected
+  absence, and `skipAfterFailureOf` for a failure gate without a required value.
+  Keep publication dependent on successful validation.
+- Use `step.skippable` for an intentional successful omission. Handle its
+  `T | undefined` output explicitly; do not turn exceptions into skips.
+- Set `dryRun: "skip"` on writes and other external side effects, or supply a
+  side-effect-free typed preview handler. Unmarked steps still run in dry runs.
+- Use `requireOutputs` when the final result requires specific outputs. A plain
+  finalizer is appropriate when partial results are valid domain results.
+- Use `runOrThrow` for callers expecting a successful value, `run` for callers
+  inspecting structured failures or partial results, and `plan(controls)` when
+  no work should execute. Plans do not validate domain input.
+- Use `context.log`, forward `context.signal`, use `context.sleep` for waits,
+  and report progress for long loops. Resolve relative paths from `context.cwd`.
+- Branch on structured error `code`, `phase`, and `kind`, not message text.
 
-- `pipelines/<name>.ts` — `createSteps` plus `definePipeline`; export `XPipeline`
-- `scripts/<name>.ts` — `definePipelineCommand`; export `XCommand`
-- `tubeless.project.ts` — `definePipelineProject` with stable IDs for those command modules
+## Add only the capabilities the workflow needs
 
-IDs are kebab-case and stable. Add `name` only when printed output needs a
-friendlier label. Register project commands explicitly; do not infer
-executables from run history or the filesystem. Use `tubeless list` before
-addressing a command by its registered ID.
+Read the corresponding package recipe before using these features:
 
-Read [docs/studio.md](../../docs/studio.md) before changing `tubeless ui` or
-project/studio manifest behavior.
+- `fromPipeline` for an independently useful child workflow;
+  `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
+  Use ordinary helpers or `runConcurrent` for lightweight work without child
+  lifecycle reporting.
+- `createSteps(optionsSchema)`, `outputSchema`, or `resultSchema` for runtime
+  validation at untrusted boundaries. Reuse the project's Standard Schema
+  implementation; core needs no schema dependency.
+- `definePipelineCommand` from `tubeless/cli` for pipeline-backed scripts.
+  Built-in `--step` / `--target` flags map to `stepIds` / `targets`. Do not
+  redeclare built-in flags. Read `docs/cli.md` for option mapping.
+- Use `pipelines/<name>.ts` for definitions and `scripts/<name>.ts` for command
+  wrappers when introducing a layout. Register commands explicitly in
+  `tubeless.project.ts`; adapt the package's `examples/catalog/` without copying
+  unrelated example IDs. Preserve existing consumer conventions.
+- Keep storage and Studio optional. Read `docs/studio.md` before adding them;
+  read the composition guides before adding child or remote execution.
+- Use `composeTraceExporters` for multiple trace destinations. Finished traces
+  can be read with `tubeless history --trace` or `tubeless ui --trace`; recorded
+  contents are not redacted.
 
-## Evaluation submissions
+## Verify
 
-Write into a disposable directory that contains `solution.ts`. Compile with
-`bun run eval:agent --`. Do not execute model-written submissions in this
-repository.
+Typecheck the consumer and run focused tests. Use `createPipelineTestRuntime`
+from `tubeless/testing` for deterministic observation and cancellation, with
+fake I/O for side effects. Check failure gates, skipped outputs, and dry-run
+behavior. Generate diagrams with `pipeline.toMermaid()` when useful.
+
+Within the Tubeless source repository, also follow its `AGENTS.md` and run
+`make check`. For repository evaluations, write `solution.ts` in a disposable
+directory and compile with `bun run eval:agent --`; do not execute model-written
+submissions in the repository. Follow `docs/agent-evaluations.md` for assessment.

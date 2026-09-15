@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -14,13 +14,19 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function validateMarkdownLinks(filePath) {
+function validateMarkdownLinks(filePath, skillRoot) {
   const source = readFileSync(filePath, "utf8");
   const links = source.matchAll(/\[[^\]]*\]\(([^)]+)\)/g);
   for (const match of links) {
     const target = match[1].replace(/^<|>$/g, "").split("#", 1)[0];
     if (!target || /^(?:https?:|mailto:)/.test(target)) continue;
     const resolved = resolve(dirname(filePath), decodeURIComponent(target));
+    if (skillRoot) {
+      assert(
+        !relative(skillRoot, resolved).startsWith(".."),
+        `${filePath} links outside its installable skill folder: ${target}`
+      );
+    }
     assert(existsSync(resolved), `${filePath} links to missing ${target}`);
   }
 }
@@ -32,9 +38,28 @@ assert(
   `README.md is ${readmeLines} lines; keep the entrypoint at 120 or fewer`
 );
 
-const skillPath = join(packageRoot, "skills", "tubeless", "SKILL.md");
-for (const filePath of [readmePath, skillPath, ...filesUnder(join(packageRoot, "docs"), ".md")]) {
+for (const filePath of [readmePath, ...filesUnder(join(packageRoot, "docs"), ".md")]) {
   validateMarkdownLinks(filePath);
+}
+
+// Skills are installed independently; sibling repository files are not copied.
+const skillsRoot = join(packageRoot, "skills");
+for (const entry of readdirSync(skillsRoot, { withFileTypes: true })) {
+  if (!entry.isDirectory()) continue;
+  const skillRoot = join(skillsRoot, entry.name);
+  const skillPath = join(skillRoot, "SKILL.md");
+  assert(existsSync(skillPath), `${skillRoot} is missing SKILL.md`);
+  const source = readFileSync(skillPath, "utf8");
+  const frontmatter = source.match(/^---\n([\s\S]*?)\n---\n/);
+  assert(frontmatter, `${skillPath} needs YAML frontmatter`);
+  const name = frontmatter[1].match(/^name: (.+)$/m)?.[1];
+  assert(name === basename(skillRoot), `${skillPath} name must match its folder`);
+  assert(/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name), `${skillPath} needs a skill name`);
+  assert(name.length <= 64, `${skillPath} name exceeds 64 characters`);
+  assert(/^description: \S.+$/m.test(frontmatter[1]), `${skillPath} needs a description`);
+  for (const filePath of filesUnder(skillRoot, ".md")) {
+    validateMarkdownLinks(filePath, skillRoot);
+  }
 }
 
 const recipes = readFileSync(join(packageRoot, "docs", "recipes.md"), "utf8");
@@ -178,6 +203,7 @@ const requiredDocuments = [
   "README.md",
   "docs/README.md",
   "docs/agent-guide.md",
+  "docs/agent-skills.md",
   "docs/cli.md",
   "docs/concepts.md",
   "docs/getting-started.md",
@@ -186,6 +212,7 @@ const requiredDocuments = [
   "docs/studio.md",
   "evals/agent-cases.json",
   "skills/tubeless/SKILL.md",
+  "skills/tubeless-make-pipeline/SKILL.md",
   "examples/catalog/tubeless.project.ts",
   "examples/catalog/tubeless.studio.ts",
   "examples/catalog/pipelines/import.ts",

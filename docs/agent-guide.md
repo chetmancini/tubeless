@@ -3,6 +3,11 @@
 Use this guide when generating or modifying pipelines, pipeline-backed scripts,
 or shared helpers in this repository.
 
+For consumer projects, install the [agent skill pack](./agent-skills.md).
+Use `tubeless-make-pipeline` to convert existing code: trace caller contracts,
+choose domain step boundaries, preserve types and failure behavior, and verify
+dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
+
 ## Workflow
 
 1. Read the [recipe index](./recipes.md) and open the smallest matching example.

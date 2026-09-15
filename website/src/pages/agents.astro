@@ -9,7 +9,8 @@ const resources = [
   { name: "Recipes", url: href("docs/recipes.md"), use: "Examples by use case" },
   { name: "OpenAPI", url: href("openapi.json"), use: "Local Studio HTTP contract and error schemas" },
   { name: "API report", url: href("api-report.json"), use: "Public surface for automated review" },
-  { name: "Skill", url: githubBlob("skills/tubeless/SKILL.md"), label: "skills/tubeless/SKILL.md", use: "Authoring workflow for this repo" },
+  { name: "Skill pack", url: href("docs/agent-skills"), use: "Install authoring and code-conversion skills" },
+  { name: "Make pipeline", url: githubBlob("skills/tubeless-make-pipeline/SKILL.md"), label: "tubeless-make-pipeline", use: "Convert existing code into a typed pipeline" },
   { name: "Project manifest", url: githubBlob("examples/catalog/tubeless.project.ts"), label: "examples/catalog/tubeless.project.ts", use: "File layout, registered IDs, exports" },
   { name: "Evaluations", url: href("docs/agent-evaluations.md"), use: "Forward-testing cases" },
 ];
@@ -38,6 +39,16 @@ const resources = [
     </header>
 
 
+
+    <section class="section">
+      <h2>Install the agent skill pack</h2>
+      <pre tabindex="0"><code>npx skills add chetmancini/tubeless</code></pre>
+      <p>
+        Use <code>tubeless-make-pipeline</code> to turn existing scripts and workflows
+        into typed pipelines, or <code>tubeless</code> for ongoing authoring.
+        See the <a href={href("docs/agent-skills")}>installation guide and example prompt</a>.
+      </p>
+    </section>
 
     <section class="section">
       <h2>Resources</h2>
