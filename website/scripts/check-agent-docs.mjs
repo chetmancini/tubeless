@@ -160,6 +160,8 @@ for (const path of humanPages) {
   const html = read(path ? `${path}/index.html` : "index.html");
   assert.match(html, /<link rel="describedby" href="\/llms.txt"/);
   assert.match(html, /<link rel="sitemap" type="application\/xml" href="\/sitemap.xml"/);
+  const markdown = path ? `/${path}.md` : "/index.md";
+  assert.ok(html.includes(`<link rel="alternate" type="text/markdown" href="${markdown}"`), `${path || "homepage"} must advertise Markdown`);
 }
 for (const slug of pages) {
   const html = read(`docs/${slug}/index.html`);

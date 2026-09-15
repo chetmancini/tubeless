@@ -26,7 +26,7 @@ From the package root: `make website`.
 | Rendered-link check | `scripts/check-built-links.mjs` (runs after `astro build`) |
 | CLI tapes | `src/data/tapes.ts` (used on Start) |
 | Studio screenshot | `public/studio.png` (recapture from `tubeless ui`) |
-| Markdown downloads and full text | `src/pages/docs/[slug].md.ts`, `src/pages/llms-full.txt.ts`; generated from `DOC_NAV` and `../docs/*.md` |
+| Markdown downloads and full text | `src/pages/*.md.ts`, `src/pages/docs/[slug].md.ts`, `src/pages/llms-full.txt.ts`; generated from `DOC_NAV` and `../docs/*.md` |
 | Agent URL table | `src/pages/agents.astro`, `src/pages/llms.txt.ts` |
 | Homepage Markdown overview | `src/pages/index.md.ts`; advertised in the homepage head and `llms.txt` |
 | Visual system | `src/styles/global.css` |
@@ -60,7 +60,7 @@ existing `error` string.
 The build checks `llms.txt` against the [published file-list format](https://llmstxt.org/),
 checks homepage [SoftwareApplication](https://schema.org/SoftwareApplication) JSON-LD,
 and verifies the [sitemap](https://www.sitemaps.org/protocol.html) covers every human
-page except the noindex 404. Every documentation page advertises its Markdown
+page except the noindex 404. Every human page advertises its Markdown
 alternate in the HTML head. The existing 404 design includes a short Markdown
 recovery block, also downloadable at `/404.md`. That download is a normal
 static file (200); unknown paths must still return 404 from the host.
