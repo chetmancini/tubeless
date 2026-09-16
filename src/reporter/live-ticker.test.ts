@@ -198,8 +198,8 @@ const { closeSync, openSync, readFileSync, unlinkSync } = require("node:fs");
       write: (chunk) => inlineWrites.push(chunk),
     });
     ticker.setLines([\`\${SPINNER_TOKEN} \${shimmerToken("load")}\`]);
-    // If CI flakes with "worker did not paint", raise this 1s deadline. Do not change the yield.
-    const deadline = Date.now() + 1000;
+    // Node 22 can take more than one second to start a file worker on a loaded CI host.
+    const deadline = Date.now() + 2000;
     let rendered = "";
     for (;;) {
       rendered = readFileSync(${JSON.stringify(path)}, "utf8");
