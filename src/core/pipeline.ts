@@ -4,7 +4,7 @@ import {
   PipelineExecutionError,
   resolvePipelineRuntime,
 } from "./pipeline-execute.js";
-import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
+import { RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { compilePipeline } from "./pipeline-compiler.js";
 import type {
   PipelineDefinition,
@@ -18,7 +18,6 @@ import { brandCompiledPipeline, EXECUTE_COMPILED_RUN } from "./pipeline-identity
 import { renderPipelineMermaid } from "./pipeline-mermaid.js";
 import { buildPipelinePlan } from "./pipeline-plan.js";
 import type { AnyStep } from "./pipeline-steps.js";
-import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import type {
   InferSchemaOutput,
   Pipeline,
@@ -30,14 +29,13 @@ import type {
   StandardSchemaV1,
 } from "./pipeline-types.js";
 
-export { createRunId, PIPELINE_FINALIZE_STEP_ID, PipelineExecutionError, RUN_MODEL_VERSION };
+export { PipelineExecutionError, RUN_MODEL_VERSION };
 export {
   isPipelineErrorCode,
   PIPELINE_ERROR_CODES,
   PIPELINE_MERMAID_DIRECTIONS,
 } from "./pipeline-types.js";
 export { createSteps } from "./pipeline-steps.js";
-export { defaultPipelineContext };
 export { PipelineDefinitionError, requireOutputs };
 export type {
   PipelineLogger,
@@ -216,15 +214,3 @@ export function definePipeline<
   brandCompiledPipeline(pipeline);
   return pipeline;
 }
-
-export {
-  formatMappedChildProgressMessage,
-  mappedChildProgressDetails,
-  mappedChildProgressUnits,
-  toMappedChildStepProgress,
-  type FormatMappedChildProgressOptions,
-  type MappedChildProgressDetail,
-  type MappedChildProgressSnapshot,
-  type MappedChildProgressUnits,
-  type ToMappedChildStepProgressOptions,
-} from "./mapped-child-progress.js";

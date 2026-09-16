@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  createSteps,
-  definePipeline,
-  PIPELINE_FINALIZE_STEP_ID,
-  PipelineExecutionError,
-} from "./pipeline.js";
+import { createSteps, definePipeline, PipelineExecutionError } from "./pipeline.js";
+import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import { makePipeline } from "./pipeline.test-support.js";
 
 describe("definePipeline failures and cancellation", () => {

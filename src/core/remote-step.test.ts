@@ -1,12 +1,12 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   createSteps,
-  defaultPipelineContext,
   definePipeline,
   type RemoteStepAdapter,
   type StandardSchemaV1,
   type Step,
 } from "./pipeline.js";
+import { defaultPipelineContext } from "./pipeline-execute.js";
 import { STEP_REMOTE } from "./pipeline-step-metadata.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 

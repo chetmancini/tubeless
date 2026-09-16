@@ -89,8 +89,8 @@ describe("definePipeline run and selection", () => {
     expectTypeOf<import("./pipeline.js").PipelineStepProgressDetailStatus>().toEqualTypeOf<
       "cancelled" | "completed" | "failed" | "pending" | "running" | "skipped"
     >();
-    expectTypeOf<import("./pipeline.js").MappedChildProgressDetail>().toEqualTypeOf<
-      import("./pipeline.js").PipelineStepProgressDetail
+    expectTypeOf<import("./pipeline.js").MappedChildProgressOptions["itemNoun"]>().toEqualTypeOf<
+      string | undefined
     >();
   });
 

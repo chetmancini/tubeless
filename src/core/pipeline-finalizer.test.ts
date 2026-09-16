@@ -1,10 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import {
-  createSteps,
-  definePipeline,
-  PIPELINE_FINALIZE_STEP_ID,
-  requireOutputs,
-} from "./pipeline.js";
+import { createSteps, definePipeline, requireOutputs } from "./pipeline.js";
+import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 
 describe("pipeline finalizers", () => {
   it("requires declared finalizer outputs without rejecting a published undefined", async () => {

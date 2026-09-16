@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSteps, definePipeline, PIPELINE_FINALIZE_STEP_ID } from "./pipeline.js";
+import { createSteps, definePipeline } from "./pipeline.js";
+import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import {
   inspectDependencyInputs,
   makePipeline,

@@ -1,4 +1,4 @@
-import { createSteps, defaultPipelineContext, definePipeline, requireOutputs } from "tubeless";
+import { createSteps, definePipeline, requireOutputs } from "tubeless";
 import { createPipelineRunProjector, type StoredPipelineEvent } from "tubeless/run-store";
 import { openNdjsonPipelineRunStore } from "tubeless/run-store/ndjson";
 import { openSqlitePipelineRunStore } from "tubeless/run-store/sqlite";
@@ -73,7 +73,6 @@ export async function runWithLocalHistory(
   const store = await openSqlitePipelineRunStore(filename);
   try {
     return await LocallyObservedPipeline.runOrThrow({ rows }, undefined, {
-      ...defaultPipelineContext(),
       tracing: { exporter: store },
     });
   } finally {

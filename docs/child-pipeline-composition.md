@@ -176,9 +176,6 @@ the live limit; this also limits the final snapshot.
 The CLI shows a scrolling window when the tree is taller than the terminal and
 prints the retained tree at completion. Non-interactive output uses summary
 messages. Progress data is not built when neither hooks nor tracing observe it.
-The standalone `mappedChildProgressDetails` helper formats the entries provided
-to it and has no default item limit.
-
 Custom renderers can read `details` as rows ordered parent before child.
 `depth: 0` (or no depth) identifies a direct child; each nested level adds one.
 IDs are stable within their group, and `name` is an optional label. Row

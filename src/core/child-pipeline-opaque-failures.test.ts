@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSteps, defaultPipelineContext, definePipeline } from "./pipeline.js";
+import { createSteps, definePipeline } from "./pipeline.js";
+import { defaultPipelineContext } from "./pipeline-execute.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
 describe("opaque child adapter: failures and planning", () => {

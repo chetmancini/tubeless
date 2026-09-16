@@ -246,7 +246,6 @@ Durations are derived by subtracting the relevant timestamps.
 
 ```ts
 const result = await pipeline.run(options, undefined, {
-  ...defaultPipelineContext(),
   correlationId: externalJobId,
 });
 

@@ -4,7 +4,6 @@ import {
   definePipeline,
   isPipelineErrorCode,
   PIPELINE_ERROR_CODES,
-  PIPELINE_FINALIZE_STEP_ID,
   PipelineDefinitionError,
   requireOutputs,
   type AnyStep,
@@ -14,6 +13,7 @@ import {
   type PipelineErrorPhase,
   type StandardSchemaV1,
 } from "./pipeline.js";
+import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 
 function standardSchema<TInput, TOutput>(
   validate: StandardSchemaV1<TInput, TOutput>["~standard"]["validate"],

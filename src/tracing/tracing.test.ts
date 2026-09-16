@@ -1,10 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import {
-  createSteps,
-  defaultPipelineContext,
-  definePipeline,
-  type PipelineLogger,
-} from "../core/pipeline.js";
+import { createSteps, definePipeline, type PipelineLogger } from "../core/pipeline.js";
+import { defaultPipelineContext } from "../core/pipeline-execute.js";
 import {
   composeTraceExporters,
   type PipelineTraceAttributes,

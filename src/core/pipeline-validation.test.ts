@@ -1,11 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import {
-  createSteps,
-  definePipeline,
-  PIPELINE_FINALIZE_STEP_ID,
-  requireOutputs,
-  type StandardSchemaV1,
-} from "./pipeline.js";
+import { createSteps, definePipeline, requireOutputs, type StandardSchemaV1 } from "./pipeline.js";
+import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 
 function standardSchema<TInput, TOutput>(
   validate: StandardSchemaV1<TInput, TOutput>["~standard"]["validate"],

@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
-import { createRunId } from "../core/pipeline.js";
+import { createRunId } from "../core/pipeline-ids.js";
 import { observePipelineRunId } from "../core/pipeline-execute.js";
 import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import { loadPipelineProjectManifest } from "./workbench-project-loader.js";

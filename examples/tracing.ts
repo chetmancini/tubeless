@@ -1,4 +1,4 @@
-import { createSteps, defaultPipelineContext, definePipeline } from "tubeless";
+import { createSteps, definePipeline } from "tubeless";
 import { withRetry } from "tubeless/retry";
 import { composeTraceExporters, type PipelineTraceExporter } from "tubeless/tracing";
 import { createJsonTraceExporter } from "tubeless/tracing/json";
@@ -30,7 +30,6 @@ export async function runTracingExample(
   additionalExporters: readonly PipelineTraceExporter[] = []
 ): Promise<readonly string[]> {
   return TracingExamplePipeline.runOrThrow({ rows }, undefined, {
-    ...defaultPipelineContext(),
     tracing: {
       exporter: composeTraceExporters([
         createJsonTraceExporter({ log: console }),

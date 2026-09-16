@@ -2,11 +2,11 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   createSteps,
   definePipeline,
-  PIPELINE_FINALIZE_STEP_ID,
   PipelineDefinitionError,
   requireOutputs,
   type AnyStep,
 } from "./pipeline.js";
+import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import { makePipeline, thrownDefinitionErrors } from "./pipeline.test-support.js";
 
 describe("definePipeline targets and definitions", () => {
