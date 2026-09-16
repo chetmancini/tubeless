@@ -7,6 +7,7 @@ import type {
   PipelineStepProgress,
   PipelineStepProgressDetail,
   PipelineStepStatus,
+  PipelineValidationIssue,
 } from "../core/pipeline.js";
 import type {
   PipelineTraceAttributeValue,
@@ -79,6 +80,20 @@ function boundTraceString(value: string): string {
     : value;
 }
 
+function traceValidationIssues(
+  issues: readonly PipelineValidationIssue[]
+): readonly PipelineValidationIssue[] {
+  return issues.slice(0, PIPELINE_TRACE_LIST_LIMIT).map((issue) => {
+    const traced: PipelineValidationIssue = { message: boundTraceString(issue.message) };
+    if (issue.path) {
+      traced.path = issue.path
+        .slice(0, PIPELINE_TRACE_LIST_LIMIT)
+        .map((part) => (typeof part === "string" ? boundTraceString(part) : part));
+    }
+    return traced;
+  });
+}
+
 function traceProgress(
   details: PipelineStepProgress["details"]
 ): Pick<PipelineTraceProgress, "detailCount" | "details"> | undefined {
@@ -138,7 +153,7 @@ function toTraceError(error: PipelineError | undefined): PipelineTraceError | un
   };
   if (error.cause) traceError.cause = error.cause;
   if (error.fanOut) traceError.fanOut = error.fanOut;
-  if (error.issues) traceError.issues = error.issues;
+  if (error.issues) traceError.issues = traceValidationIssues(error.issues);
   if (error.sourceCode) traceError.sourceCode = error.sourceCode;
   return traceError;
 }

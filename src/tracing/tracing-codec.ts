@@ -211,16 +211,14 @@ function optionalBoundedString(
   return item;
 }
 
-function stringArray(value: unknown, label: string): readonly string[] {
-  if (!Array.isArray(value) || value.length > PIPELINE_TRACE_LIST_LIMIT) {
-    throw new Error(`${label} must be an array of at most ${PIPELINE_TRACE_LIST_LIMIT} strings`);
+function stringArray(value: unknown, label: string, maxItems?: number): readonly string[] {
+  if (!Array.isArray(value) || (maxItems !== undefined && value.length > maxItems)) {
+    const bound = maxItems === undefined ? "" : ` of at most ${maxItems} strings`;
+    throw new Error(`${label} must be an array${bound}`);
   }
   return value.map((item, index) => {
     if (typeof item !== "string" || item.length === 0) {
       throw new Error(`${label}[${index}] must be a non-empty string`);
-    }
-    if (item.length > PIPELINE_TRACE_STRING_LIMIT) {
-      throw new Error(`${label}[${index}] exceeds ${PIPELINE_TRACE_STRING_LIMIT} code units`);
     }
     return item;
   });
@@ -254,21 +252,46 @@ function parseCause(value: unknown, depth = 0): PipelineErrorCause {
   return cause;
 }
 
-function parseIssues(value: unknown): readonly PipelineValidationIssue[] {
+function parseIssues(value: unknown, compatibility = false): readonly PipelineValidationIssue[] {
   if (!Array.isArray(value)) throw new Error("error.issues must be an array");
-  return value.map((item, index) => {
+  if (!compatibility && value.length > PIPELINE_TRACE_LIST_LIMIT) {
+    throw new Error(`error.issues must contain at most ${PIPELINE_TRACE_LIST_LIMIT} entries`);
+  }
+  return value.slice(0, PIPELINE_TRACE_LIST_LIMIT).map((item, index) => {
     const issue = record(item, `error.issues[${index}]`);
-    const parsed: PipelineValidationIssue = { message: requiredString(issue, "message") };
+    const message = requiredString(issue, "message", `error.issues[${index}].message`);
+    if (!compatibility && message.length > PIPELINE_TRACE_STRING_LIMIT) {
+      throw new Error(
+        `error.issues[${index}].message exceeds ${PIPELINE_TRACE_STRING_LIMIT} code units`
+      );
+    }
+    const parsed: PipelineValidationIssue = {
+      message: compatibility ? message.slice(0, PIPELINE_TRACE_STRING_LIMIT) : message,
+    };
     if (issue.path !== undefined) {
       if (
         !Array.isArray(issue.path) ||
+        (!compatibility && issue.path.length > PIPELINE_TRACE_LIST_LIMIT) ||
         !issue.path.every(
           (part) => typeof part === "string" || (typeof part === "number" && Number.isFinite(part))
         )
       ) {
         throw new Error(`error.issues[${index}].path must contain strings or finite numbers`);
       }
-      parsed.path = issue.path;
+      const path = issue.path.slice(0, PIPELINE_TRACE_LIST_LIMIT);
+      if (
+        !compatibility &&
+        path.some((part) => typeof part === "string" && part.length > PIPELINE_TRACE_STRING_LIMIT)
+      ) {
+        throw new Error(
+          `error.issues[${index}].path string exceeds ${PIPELINE_TRACE_STRING_LIMIT} code units`
+        );
+      }
+      parsed.path = path.map((part) =>
+        compatibility && typeof part === "string"
+          ? part.slice(0, PIPELINE_TRACE_STRING_LIMIT)
+          : part
+      );
     }
     return parsed;
   });
@@ -335,7 +358,7 @@ function parseFanOut(value: unknown): PipelineFanOutDiagnostics {
   return parsed;
 }
 
-function parseError(value: unknown): PipelineTraceError {
+function parseError(value: unknown, compatibility = false): PipelineTraceError {
   const source = record(value, "error");
   const code = requiredString(source, "code", "error.code");
   const kind = requiredString(source, "kind", "error.kind");
@@ -351,7 +374,7 @@ function parseError(value: unknown): PipelineTraceError {
   };
   if (source.cause !== undefined) parsed.cause = parseCause(source.cause);
   if (source.fanOut !== undefined) parsed.fanOut = parseFanOut(source.fanOut);
-  if (source.issues !== undefined) parsed.issues = parseIssues(source.issues);
+  if (source.issues !== undefined) parsed.issues = parseIssues(source.issues, compatibility);
   const sourceCode = optionalString(source, "sourceCode", "error.sourceCode");
   if (sourceCode !== undefined) parsed.sourceCode = sourceCode;
   const stack = optionalString(source, "stack", "error.stack");
@@ -369,11 +392,8 @@ function nestedPipeline(value: unknown, label: string): PipelineTraceNestedPipel
     mode,
     pipelineId: requiredString(source, "pipelineId", `${label}.pipelineId`),
     stepCount: nonnegativeInteger(source, "stepCount", `${label}.stepCount`),
-    stepIds: stringArray(source.stepIds, `${label}.stepIds`),
+    stepIds: stringArray(source.stepIds, `${label}.stepIds`, PIPELINE_TRACE_LIST_LIMIT),
   };
-  if (parsed.pipelineId.length > PIPELINE_TRACE_STRING_LIMIT) {
-    throw new Error(`${label}.pipelineId exceeds ${PIPELINE_TRACE_STRING_LIMIT} code units`);
-  }
   if (parsed.stepCount < parsed.stepIds.length) {
     throw new Error(`${label}.stepCount must be at least the retained stepIds length`);
   }
@@ -766,6 +786,12 @@ function legacyProgress(source: PipelineTraceAttributes): PipelineTraceProgress 
   return progress(value);
 }
 
+function legacySelectionReasons(value: unknown): unknown {
+  if (typeof value !== "string") return [];
+  const parsed: unknown = JSON.parse(value);
+  return Array.isArray(parsed) ? parsed.slice(0, PIPELINE_TRACE_LIST_LIMIT) : parsed;
+}
+
 function parseLegacyV1(
   source: Record<string, unknown>,
   name: PipelineTraceEventName
@@ -773,6 +799,7 @@ function parseLegacyV1(
   const legacy = attributes(source.attributes, "attributes");
   const common = base(source);
   const v2: Record<string, unknown> = { ...source, ...common, name, version: 2 };
+  if (source.error !== undefined) v2.error = parseError(source.error, true);
   switch (name) {
     case "pipeline.started":
       v2.payload = {
@@ -822,8 +849,7 @@ function parseLegacyV1(
         runtimeSkipPossible:
           typeof legacy.runtime_skip_possible === "boolean" ? legacy.runtime_skip_possible : false,
         selected: typeof legacy.selected === "boolean" ? legacy.selected : true,
-        selectionReasons:
-          typeof legacy.selection_reasons === "string" ? JSON.parse(legacy.selection_reasons) : [],
+        selectionReasons: legacySelectionReasons(legacy.selection_reasons),
         skipAfterFailureOf: legacyJsonArray(
           legacy.skip_after_failure_of ?? "[]",
           "attributes.skip_after_failure_of"

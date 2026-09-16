@@ -46,6 +46,16 @@ describe("createOpenTelemetryTraceExporter", () => {
     });
     exporter.export({
       attemptId: "run-1:attempt:1",
+      name: "step.attempted",
+      payload: { attempt: 2, attributes: { attempt: "custom", provider: "test" } },
+      pipelineId: "import",
+      runId: "run-1",
+      stepId: "fetch",
+      timestampMs: 11,
+      version: 2,
+    });
+    exporter.export({
+      attemptId: "run-1:attempt:1",
       error: {
         // SAFETY: fixture uses a non-kernel code the exporter should copy onto
         // the OTEL event; PipelineTraceError.code is the closed union.
@@ -85,6 +95,11 @@ describe("createOpenTelemetryTraceExporter", () => {
       }),
       startTime: 10,
     });
+    expect(span.addEvent).toHaveBeenCalledWith(
+      "step.attempted",
+      expect.objectContaining({ attempt: 2, provider: "test" }),
+      11
+    );
     expect(span.addEvent).toHaveBeenCalledWith(
       "step.failed",
       expect.objectContaining({

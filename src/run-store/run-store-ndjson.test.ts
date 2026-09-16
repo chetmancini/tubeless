@@ -7,6 +7,7 @@ import { createSteps, definePipeline } from "tubeless";
 import { createJsonTraceExporter } from "../tracing/tracing-json.js";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite.js";
 import { projectPipelineRunStore } from "./run-store.js";
+import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
 const directories: string[] = [];
 
@@ -116,6 +117,33 @@ describe("openNdjsonPipelineRunStore", () => {
     await expect(store.listEvents()).rejects.toThrow("closed NDJSON pipeline run store");
   });
 
+  it("preserves version 1 target and dependency lists beyond version 2 emission bounds", async () => {
+    const ids = Array.from({ length: 130 }, (_, index) => `step-${index}`);
+    const filename = await tempFile(
+      [
+        { ...event("run-1"), attributes: { dry_run: false, target_ids: JSON.stringify(ids) } },
+        {
+          ...event("run-1"),
+          attributes: { dependencies: JSON.stringify(ids) },
+          name: "step.planned",
+          stepId: "work",
+        },
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n")
+    );
+    const store = await openNdjsonPipelineRunStore(filename);
+    try {
+      const events = await store.listEvents();
+      const started = events.find((entry) => entry.name === "pipeline.started");
+      const planned = events.find((entry) => entry.name === "step.planned");
+      expect(started?.name === "pipeline.started" && started.payload.targetIds).toEqual(ids);
+      expect(planned?.name === "step.planned" && planned.payload.dependencies).toEqual(ids);
+    } finally {
+      await store.close();
+    }
+  });
+
   it("rejects malformed events without echoing their contents", async () => {
     const secret = "do-not-repeat-this-secret";
     const filename = await tempFile(`{"token":"${secret}"}\n`);
@@ -180,6 +208,51 @@ describe("openNdjsonPipelineRunStore", () => {
       void sqlite.export(malformed);
     }).toThrow("payload.dependencies must be an array");
     expect(() => sqlite.close()).toThrow("payload.dependencies must be an array");
+  });
+
+  it.each([
+    {
+      expected: "error.issues must contain at most 128 entries",
+      issues: Array.from({ length: 129 }, () => ({ message: "invalid" })),
+    },
+    {
+      expected: "error.issues[0].message exceeds 4096 code units",
+      issues: [{ message: "m".repeat(4_097) }],
+    },
+    {
+      expected: "error.issues[0].path string exceeds 4096 code units",
+      issues: [{ message: "invalid", path: ["p".repeat(4_097)] }],
+    },
+  ])("bounds validation issues consistently: $expected", async ({ expected, issues }) => {
+    const malformed: PipelineTraceEvent = {
+      error: {
+        code: "TUBELESS_OPTIONS_VALIDATION_FAILED",
+        issues,
+        kind: "validation",
+        message: "validation failed",
+        phase: "planning",
+      },
+      name: "pipeline.completed",
+      payload: {
+        dryRun: false,
+        errorCount: 1,
+        finalized: false,
+        status: "failed",
+        stepCount: 0,
+      },
+      pipelineId: "import",
+      runId: "run-1",
+      timestampMs: 1,
+      version: 2,
+    };
+    const filename = await tempFile(`${JSON.stringify(malformed)}\n`);
+    await expect(openNdjsonPipelineRunStore(filename)).rejects.toThrow(expected);
+
+    const sqlite = await openSqlitePipelineRunStore(
+      path.join(path.dirname(filename), "malformed-issues.sqlite")
+    );
+    expect(() => sqlite.export(malformed)).toThrow(expected);
+    expect(() => sqlite.close()).toThrow(expected);
   });
 
   it("enforces artifact, event, and event-count limits", async () => {

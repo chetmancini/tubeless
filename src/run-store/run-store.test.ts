@@ -16,6 +16,7 @@ import {
   type StoredPipelineStep,
 } from "./run-store.js";
 import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
+import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
 function event(
   id: number,
@@ -159,8 +160,8 @@ describe("pipeline run store projections", () => {
     const events: StoredPipelineEvent[] = [];
     const tracing = {
       exporter: {
-        export(event: Omit<StoredPipelineEvent, "id">) {
-          events.push({ ...event, id: events.length });
+        export(event: PipelineTraceEvent) {
+          events.push(Object.assign({ id: events.length }, event));
         },
       },
     };

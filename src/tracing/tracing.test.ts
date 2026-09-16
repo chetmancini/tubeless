@@ -660,6 +660,74 @@ describe("pipeline tracing", () => {
     });
   });
 
+  it("keeps tracing enabled for valid identifiers longer than metadata bounds", async () => {
+    const pipelineId = `pipeline-${"p".repeat(5_000)}`;
+    const stepId = `step-${"s".repeat(5_000)}`;
+    const step = createSteps();
+    const work = step(stepId, { run: () => "ok" });
+    const pipeline = definePipeline({
+      id: pipelineId,
+      steps: [work],
+      targets: [work],
+      finalize: () => "ok",
+    });
+    const events: PipelineTraceEvent[] = [];
+    const log = createLogger();
+
+    await pipeline.run(
+      {},
+      { targets: [stepId] },
+      {
+        ...defaultPipelineContext(),
+        log,
+        tracing: { exporter: { export: (event) => void events.push(event) } },
+      }
+    );
+
+    expect(log.warnings).toEqual([]);
+    expect(events.find((event) => event.name === "pipeline.started")).toMatchObject({
+      payload: { targetIds: [stepId] },
+      pipelineId,
+    });
+    expect(events.at(-1)?.name).toBe("pipeline.completed");
+  });
+
+  it("bounds validation issues before codec validation without failing the run trace", async () => {
+    const optionsSchema = {
+      "~standard": {
+        validate: () => ({
+          issues: Array.from({ length: 130 }, () => ({
+            message: "m".repeat(5_000),
+            path: ["p".repeat(5_000)],
+          })),
+        }),
+        vendor: "test",
+        version: 1 as const,
+      },
+    };
+    const step = createSteps(optionsSchema);
+    const pipeline = definePipeline({
+      id: "bounded-validation-issues",
+      steps: [step("work", { run: () => "never" })],
+      finalize: () => undefined,
+    });
+    const events: PipelineTraceEvent[] = [];
+    const log = createLogger();
+
+    await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log,
+      tracing: { exporter: { export: (event) => void events.push(event) } },
+    });
+
+    expect(log.warnings).toEqual([]);
+    const completed = events.find((event) => event.name === "pipeline.completed");
+    expect(completed?.error?.issues).toHaveLength(128);
+    expect(completed?.error?.issues?.[0]?.message).toHaveLength(4_096);
+    expect(completed?.error?.issues?.[0]?.path?.[0]).toHaveLength(4_096);
+    expect(events.at(-1)?.name).toBe("pipeline.completed");
+  });
+
   it("omits detail attributes when progress has no detail rows", async () => {
     const step = createSteps();
     const work = step("work", {
