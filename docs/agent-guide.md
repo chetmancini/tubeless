@@ -179,8 +179,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   flushes at completion so finished runs are durable. Do not make pipeline
   definitions depend on storage or the studio. Version 2 trace events are a
   discriminated union keyed by `name`; use their typed `payload` rather than
-  parsing scalar attributes. Readers upgrade valid version 1 artifacts through
-  the shared codec. Recorded history keeps the last `reportProgress` `details`
+  parsing scalar attributes. Recorded history keeps the last `reportProgress` `details`
   plus `detailCount`, and child wrapper steps keep `nestedPipeline` with the
   original `stepCount`. Studio renders those
   snapshots; it does not flatten child DAGs into the parent step.

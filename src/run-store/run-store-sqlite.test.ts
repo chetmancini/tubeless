@@ -94,74 +94,17 @@ describe("SQLite pipeline run store", () => {
     await reopened.close();
   });
 
-  it("refuses a database created by a newer store schema", async () => {
+  it.each([1, 2, 4])("refuses unsupported store schema version %i", async (storeVersion) => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-version-"));
     directories.push(directory);
     const filename = path.join(directory, "runs.sqlite");
     const database = new DatabaseSync(filename);
-    database.exec("PRAGMA user_version = 3");
+    database.exec(`PRAGMA user_version = ${storeVersion}`);
     database.close();
 
     await expect(openSqlitePipelineRunStore(filename)).rejects.toThrow(
-      "Unsupported pipeline run store schema version 3"
+      `Unsupported pipeline run store schema version ${storeVersion}`
     );
-  });
-
-  it("reads and migrates schema version 1 stores without inventing correlation", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-v1-"));
-    directories.push(directory);
-    const filename = path.join(directory, "runs.sqlite");
-    const database = new DatabaseSync(filename);
-    database.exec(`
-      CREATE TABLE pipeline_run_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        version INTEGER NOT NULL,
-        run_id TEXT NOT NULL,
-        parent_run_id TEXT,
-        pipeline_id TEXT NOT NULL,
-        step_id TEXT,
-        attempt_id TEXT,
-        item_key TEXT,
-        event_name TEXT NOT NULL,
-        timestamp_ms INTEGER NOT NULL,
-        duration_ms REAL,
-        attributes_json TEXT NOT NULL,
-        error_json TEXT
-      );
-      INSERT INTO pipeline_run_events (
-        version, run_id, pipeline_id, event_name, timestamp_ms, attributes_json
-      ) VALUES (1, 'legacy-run', 'legacy', 'pipeline.started', 10, '{"dry_run":false}');
-      PRAGMA user_version = 1;
-    `);
-    database.close();
-
-    const legacyReader = await openSqlitePipelineRunStore(filename, {
-      initialize: false,
-      readOnly: true,
-    });
-    expect(await legacyReader.listEvents()).toEqual([
-      expect.objectContaining({ pipelineId: "legacy", runId: "legacy-run" }),
-    ]);
-    expect((await legacyReader.listEvents())[0]).not.toHaveProperty("correlationId");
-    await legacyReader.close();
-
-    const migrated = await openSqlitePipelineRunStore(filename);
-    await migrated.export({
-      ...startedEvent("new-run", 20, "new"),
-      correlationId: "job-2",
-    });
-    expect(await migrated.listEvents()).toEqual([
-      expect.objectContaining({ runId: "legacy-run" }),
-      expect.objectContaining({ correlationId: "job-2", runId: "new-run" }),
-    ]);
-    await migrated.close();
-
-    const migratedDatabase = new DatabaseSync(filename);
-    const version = migratedDatabase.prepare("PRAGMA user_version").get() as {
-      user_version: number;
-    };
-    expect(version.user_version).toBe(2);
-    migratedDatabase.close();
   });
 
   it("clears all history while preserving append-only protection", async () => {

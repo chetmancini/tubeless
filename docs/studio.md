@@ -128,11 +128,6 @@ a batch fills, `flush()` runs, the writer calls its own `listEvents` or
 `clearHistory`, or the store closes. A crash can lose up to 63 unflushed events.
 `tubeless run --store` flushes at completion.
 
-Opening an existing schema-version-1 store for writing upgrades it in place to
-schema version 2 by adding nullable correlation storage; existing events remain
-unchanged. Read-only history and Studio can inspect either schema version without
-migrating the file. Legacy events have no separate correlation ID.
-
 Read-only history and Studio inspect committed events. They refuse databases
 with a pending SQLite write-ahead log (`-wal`) or rollback journal (`-journal`),
 and files with multiple hard links. A single buffered `export()` does not
@@ -147,9 +142,8 @@ supplies one; use `isBusy()` to report other known active writers.
 NDJSON readers validate a finished file, assign event IDs in file order, and
 close the file. They do not modify the artifact or copy it into SQLite. The
 [CLI guide](./cli.md#history) lists file-size, event-size, and event-count limits.
-Trace envelope version 1 remains supported: legacy events without
-`correlationId` use their recorded `runId` as-is, while newly emitted events use
-a unique execution `runId` and store reusable correlation separately.
+Trace files contain version 2 events with unique execution IDs and separate
+reusable correlation IDs.
 
 Recorded definitions come from planned-step events, so Studio can draw graphs
 without importing the application. It uses the latest run by

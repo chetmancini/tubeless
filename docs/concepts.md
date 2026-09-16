@@ -258,11 +258,8 @@ result.steps.find((step) => step.attemptId)?.attemptId;
 result.finishedAtMs - result.startedAtMs;
 ```
 
-Trace envelope version 1 remains readable. Older version 1 artifacts do not
-have `correlationId`, and traces produced before execution IDs became
-package-owned may still collapse reused legacy `runId` values during projection.
-New events keep version 1 for envelope compatibility, always use a unique
-execution `runId`, and carry reusable external correlation separately.
+Trace events use the version 2 discriminated payload model. Every event carries
+a unique execution `runId` and keeps reusable external correlation separate.
 
 ### Local event store and studio
 

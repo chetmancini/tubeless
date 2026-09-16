@@ -35,14 +35,14 @@ interface SqliteModule {
 
 interface StoredEventRow {
   attempt_id: string | null;
-  attributes_json: string;
-  correlation_id?: string | null;
+  correlation_id: string | null;
   duration_ms: number | null;
   error_json: string | null;
   event_name: string;
   id: number | bigint;
   item_key: string | null;
   parent_run_id: string | null;
+  payload_json: string;
   pipeline_id: string;
   run_id: string;
   step_id: string | null;
@@ -50,8 +50,7 @@ interface StoredEventRow {
   version: number;
 }
 
-const RUN_EVENT_STORE_VERSION = 2;
-const LEGACY_RUN_EVENT_STORE_VERSION = 1;
+const RUN_EVENT_STORE_VERSION = 3;
 /** Larger batches mean fewer commits but more tail loss on crash. */
 const EXPORT_BATCH_SIZE = 64;
 
@@ -67,7 +66,7 @@ type EventRow = readonly [
   name: string,
   timestampMs: number,
   durationMs: number | null,
-  attributesJson: string,
+  payloadJson: string,
   errorJson: string | null,
 ];
 
@@ -122,7 +121,7 @@ const RUN_EVENT_STORE_SCHEMA = `
     event_name TEXT NOT NULL,
     timestamp_ms INTEGER NOT NULL,
     duration_ms REAL,
-    attributes_json TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
     error_json TEXT
   );
 
@@ -295,7 +294,7 @@ function mapRow(row: StoredEventRow): StoredPipelineEvent {
     timestampMs: Number(row.timestamp_ms),
     version: row.version,
   };
-  encoded[row.version === 1 ? "attributes" : "payload"] = JSON.parse(row.attributes_json);
+  encoded.payload = JSON.parse(row.payload_json);
   if (row.attempt_id) encoded.attemptId = row.attempt_id;
   if (row.correlation_id != null) encoded.correlationId = row.correlation_id;
   if (row.duration_ms !== null) encoded.durationMs = Number(row.duration_ms);
@@ -352,15 +351,9 @@ export async function openSqlitePipelineRunStore(
     }
   }
   const database = await openDatabase(resolvedFilename, { create: initialize, readOnly });
-  let storeVersion = 0;
   try {
     const version = readStoreVersion(database);
-    storeVersion = version;
-    if (
-      version !== 0 &&
-      version !== LEGACY_RUN_EVENT_STORE_VERSION &&
-      version !== RUN_EVENT_STORE_VERSION
-    ) {
+    if (version !== 0 && version !== RUN_EVENT_STORE_VERSION) {
       throw new Error(
         `Unsupported pipeline run store schema version ${version}; expected ${RUN_EVENT_STORE_VERSION}.`
       );
@@ -368,51 +361,19 @@ export async function openSqlitePipelineRunStore(
     if (!initialize && version === 0) {
       throw new Error(`${resolvedFilename} is not a pipeline run store.`);
     }
-    if (!readOnly && version === LEGACY_RUN_EVENT_STORE_VERSION) {
-      database.exec("PRAGMA busy_timeout = 5000");
-      database.exec("BEGIN IMMEDIATE");
-      try {
-        const lockedVersion = readStoreVersion(database);
-        if (lockedVersion === LEGACY_RUN_EVENT_STORE_VERSION) {
-          database.exec("ALTER TABLE pipeline_run_events ADD COLUMN correlation_id TEXT");
-          database.exec(`PRAGMA user_version = ${RUN_EVENT_STORE_VERSION}`);
-          storeVersion = RUN_EVENT_STORE_VERSION;
-        } else if (lockedVersion === RUN_EVENT_STORE_VERSION) {
-          storeVersion = lockedVersion;
-        } else {
-          throw new Error(
-            `Unsupported pipeline run store schema version ${lockedVersion}; expected ${RUN_EVENT_STORE_VERSION}.`
-          );
-        }
-        database.exec("COMMIT");
-      } catch (error) {
-        try {
-          database.exec("ROLLBACK");
-        } catch {
-          // Preserve the migration failure when SQLite already ended the transaction.
-        }
-        throw error;
-      }
-    } else if (initialize) {
+    if (initialize) {
       database.exec(RUN_EVENT_STORE_SCHEMA);
       database.exec(`PRAGMA user_version = ${RUN_EVENT_STORE_VERSION}`);
-      storeVersion = RUN_EVENT_STORE_VERSION;
     }
   } catch (error) {
     database.close();
     throw error;
   }
-  const legacyReadOnly = readOnly && storeVersion === LEGACY_RUN_EVENT_STORE_VERSION;
   const insert = statement(
     database,
-    legacyReadOnly
-      ? `INSERT INTO pipeline_run_events (
-          version, run_id, parent_run_id, pipeline_id, step_id, attempt_id, item_key,
-          event_name, timestamp_ms, duration_ms, attributes_json, error_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      : `INSERT INTO pipeline_run_events (
+    `INSERT INTO pipeline_run_events (
           version, run_id, correlation_id, parent_run_id, pipeline_id, step_id, attempt_id,
-          item_key, event_name, timestamp_ms, duration_ms, attributes_json, error_json
+          item_key, event_name, timestamp_ms, duration_ms, payload_json, error_json
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   let closed = false;
@@ -423,12 +384,7 @@ export async function openSqlitePipelineRunStore(
     if (pending.length === 0) return;
     try {
       database.exec("BEGIN IMMEDIATE");
-      for (const row of pending) {
-        if (legacyReadOnly) {
-          const [version, runId, , ...rest] = row;
-          insert.run(version, runId, ...rest);
-        } else insert.run(...row);
-      }
+      for (const row of pending) insert.run(...row);
       database.exec("COMMIT");
       pending.length = 0;
     } catch (error) {

@@ -252,26 +252,26 @@ function parseCause(value: unknown, depth = 0): PipelineErrorCause {
   return cause;
 }
 
-function parseIssues(value: unknown, compatibility = false): readonly PipelineValidationIssue[] {
+function parseIssues(value: unknown): readonly PipelineValidationIssue[] {
   if (!Array.isArray(value)) throw new Error("error.issues must be an array");
-  if (!compatibility && value.length > PIPELINE_TRACE_LIST_LIMIT) {
+  if (value.length > PIPELINE_TRACE_LIST_LIMIT) {
     throw new Error(`error.issues must contain at most ${PIPELINE_TRACE_LIST_LIMIT} entries`);
   }
   return value.slice(0, PIPELINE_TRACE_LIST_LIMIT).map((item, index) => {
     const issue = record(item, `error.issues[${index}]`);
     const message = requiredString(issue, "message", `error.issues[${index}].message`);
-    if (!compatibility && message.length > PIPELINE_TRACE_STRING_LIMIT) {
+    if (message.length > PIPELINE_TRACE_STRING_LIMIT) {
       throw new Error(
         `error.issues[${index}].message exceeds ${PIPELINE_TRACE_STRING_LIMIT} code units`
       );
     }
     const parsed: PipelineValidationIssue = {
-      message: compatibility ? message.slice(0, PIPELINE_TRACE_STRING_LIMIT) : message,
+      message,
     };
     if (issue.path !== undefined) {
       if (
         !Array.isArray(issue.path) ||
-        (!compatibility && issue.path.length > PIPELINE_TRACE_LIST_LIMIT) ||
+        issue.path.length > PIPELINE_TRACE_LIST_LIMIT ||
         !issue.path.every(
           (part) => typeof part === "string" || (typeof part === "number" && Number.isFinite(part))
         )
@@ -280,18 +280,13 @@ function parseIssues(value: unknown, compatibility = false): readonly PipelineVa
       }
       const path = issue.path.slice(0, PIPELINE_TRACE_LIST_LIMIT);
       if (
-        !compatibility &&
         path.some((part) => typeof part === "string" && part.length > PIPELINE_TRACE_STRING_LIMIT)
       ) {
         throw new Error(
           `error.issues[${index}].path string exceeds ${PIPELINE_TRACE_STRING_LIMIT} code units`
         );
       }
-      parsed.path = path.map((part) =>
-        compatibility && typeof part === "string"
-          ? part.slice(0, PIPELINE_TRACE_STRING_LIMIT)
-          : part
-      );
+      parsed.path = path;
     }
     return parsed;
   });
@@ -358,7 +353,7 @@ function parseFanOut(value: unknown): PipelineFanOutDiagnostics {
   return parsed;
 }
 
-function parseError(value: unknown, compatibility = false): PipelineTraceError {
+function parseError(value: unknown): PipelineTraceError {
   const source = record(value, "error");
   const code = requiredString(source, "code", "error.code");
   const kind = requiredString(source, "kind", "error.kind");
@@ -374,7 +369,7 @@ function parseError(value: unknown, compatibility = false): PipelineTraceError {
   };
   if (source.cause !== undefined) parsed.cause = parseCause(source.cause);
   if (source.fanOut !== undefined) parsed.fanOut = parseFanOut(source.fanOut);
-  if (source.issues !== undefined) parsed.issues = parseIssues(source.issues, compatibility);
+  if (source.issues !== undefined) parsed.issues = parseIssues(source.issues);
   const sourceCode = optionalString(source, "sourceCode", "error.sourceCode");
   if (sourceCode !== undefined) parsed.sourceCode = sourceCode;
   const stack = optionalString(source, "stack", "error.stack");
@@ -731,171 +726,12 @@ function parsePayloadV2(
   }
 }
 
-function legacyJsonArray(value: unknown, label: string): readonly string[] {
-  if (typeof value !== "string") return [];
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    throw new Error(`${label} must contain a JSON string array`);
-  }
-  return stringArray(parsed, label);
-}
-
-function legacyNestedPipeline(value: unknown): PipelineTraceNestedPipeline | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string") throw new Error("attributes.nested_pipeline must be a string");
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    throw new Error("attributes.nested_pipeline must contain JSON");
-  }
-  const source = record(parsed, "attributes.nested_pipeline");
-  const stepIds = Array.isArray(source.stepIds) ? source.stepIds : [];
-  return nestedPipeline(
-    { ...source, stepCount: source.step_count ?? stepIds.length },
-    "attributes.nested_pipeline"
-  );
-}
-
-function legacyRemote(value: unknown): PipelineTraceRemote | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string") throw new Error("attributes.remote must be a string");
-  try {
-    return remote(JSON.parse(value), "attributes.remote");
-  } catch (error) {
-    if (error instanceof SyntaxError) throw new Error("attributes.remote must contain JSON");
-    throw error;
-  }
-}
-
-function legacyProgress(source: PipelineTraceAttributes): PipelineTraceProgress | undefined {
-  if (typeof source.completed !== "number") return undefined;
-  const value: Record<string, unknown> = { completed: source.completed };
-  if (typeof source.total === "number") value.total = source.total;
-  if (typeof source.message === "string") value.message = source.message;
-  if (typeof source.detail_count === "number") value.detailCount = source.detail_count;
-  if (typeof source.details === "string") {
-    try {
-      value.details = JSON.parse(source.details);
-    } catch {
-      throw new Error("attributes.details must contain JSON");
-    }
-  }
-  return progress(value);
-}
-
-function legacySelectionReasons(value: unknown): unknown {
-  if (typeof value !== "string") return [];
-  const parsed: unknown = JSON.parse(value);
-  return Array.isArray(parsed) ? parsed.slice(0, PIPELINE_TRACE_LIST_LIMIT) : parsed;
-}
-
-function parseLegacyV1(
-  source: Record<string, unknown>,
-  name: PipelineTraceEventName
-): PipelineTraceEvent {
-  const legacy = attributes(source.attributes, "attributes");
-  const common = base(source);
-  const v2: Record<string, unknown> = { ...source, ...common, name, version: 2 };
-  if (source.error !== undefined) v2.error = parseError(source.error, true);
-  switch (name) {
-    case "pipeline.started":
-      v2.payload = {
-        dryRun: typeof legacy.dry_run === "boolean" ? legacy.dry_run : false,
-        planOk: typeof legacy.plan_ok === "boolean" ? legacy.plan_ok : true,
-        stepCount: typeof legacy.step_count === "number" ? legacy.step_count : 0,
-        targetIds: legacyJsonArray(legacy.target_ids ?? "[]", "attributes.target_ids"),
-      };
-      break;
-    case "pipeline.log":
-      v2.payload = {
-        level:
-          legacy.level === "error" || legacy.level === "warn" || legacy.level === "log"
-            ? legacy.level
-            : "log",
-        message: typeof legacy.message === "string" ? legacy.message : "",
-      };
-      break;
-    case "pipeline.completed":
-      v2.payload = {
-        dryRun: typeof legacy.dry_run === "boolean" ? legacy.dry_run : false,
-        errorCount: typeof legacy.error_count === "number" ? legacy.error_count : 0,
-        finalized: typeof legacy.finalized === "boolean" ? legacy.finalized : false,
-        status: legacy.status,
-        stepCount: typeof legacy.step_count === "number" ? legacy.step_count : 0,
-      };
-      break;
-    case "pipeline.finalize.started":
-    case "pipeline.finalize.completed":
-    case "pipeline.finalize.failed":
-      v2.payload = {};
-      break;
-    case "step.planned": {
-      const nested = legacyNestedPipeline(legacy.nested_pipeline);
-      const remoteValue = legacyRemote(legacy.remote);
-      v2.payload = {
-        dependencies: legacyJsonArray(legacy.dependencies ?? "[]", "attributes.dependencies"),
-        description: legacy.description,
-        dryRun: legacy.dry_run ?? "run",
-        name: legacy.name,
-        nestedPipeline: nested,
-        optionalDependencies: legacyJsonArray(
-          legacy.optional_dependencies ?? "[]",
-          "attributes.optional_dependencies"
-        ),
-        remote: remoteValue,
-        runtimeSkipPossible:
-          typeof legacy.runtime_skip_possible === "boolean" ? legacy.runtime_skip_possible : false,
-        selected: typeof legacy.selected === "boolean" ? legacy.selected : true,
-        selectionReasons: legacySelectionReasons(legacy.selection_reasons),
-        skipAfterFailureOf: legacyJsonArray(
-          legacy.skip_after_failure_of ?? "[]",
-          "attributes.skip_after_failure_of"
-        ),
-      };
-      break;
-    }
-    case "step.running":
-      v2.payload = { progress: legacyProgress(legacy) };
-      break;
-    case "step.attempted": {
-      const { attempt, ...custom } = legacy;
-      v2.payload = { attempt, attributes: custom };
-      break;
-    }
-    case "step.complete":
-      v2.payload = { status: "completed" };
-      break;
-    case "step.skipped":
-      v2.payload = {
-        dependencyId: legacy.dependency_id,
-        message: legacy.message,
-        reason: legacy.reason,
-        status: "skipped",
-      };
-      break;
-    case "step.cancelled":
-      v2.payload = { status: "cancelled" };
-      break;
-    case "step.failed":
-      v2.payload = { status: "failed" };
-      break;
-  }
-  return parsePayloadV2(v2, name);
-}
-
-/**
- * Decode and validate a trace record. Version 1 scalar-attribute records are
- * upgraded to the canonical version 2 discriminated payload model.
- */
+/** Decode and validate a version 2 trace record. */
 export function decodePipelineTraceEvent(value: unknown): PipelineTraceEvent {
   const source = record(value, "event");
   const name = eventName(source.name);
-  if (source.version === 1) return parseLegacyV1(source, name);
   if (source.version !== PIPELINE_TRACE_VERSION) {
-    throw new Error(`version must be 1 or ${PIPELINE_TRACE_VERSION}`);
+    throw new Error(`version must be ${PIPELINE_TRACE_VERSION}`);
   }
   return parsePayloadV2(source, name);
 }

@@ -1406,7 +1406,7 @@ describe("tubeless workbench", () => {
     await goodStore.close();
     const database = new DatabaseSync(damagedPath);
     database.exec("DROP TRIGGER IF EXISTS pipeline_run_events_no_update");
-    database.exec("UPDATE pipeline_run_events SET attributes_json = 'not-json'");
+    database.exec("UPDATE pipeline_run_events SET payload_json = 'not-json'");
     database.close();
     const damagedIo = captureIo(directory);
     expect(await runWorkbenchCli(["history", "--store", damagedPath], damagedIo)).toBe(

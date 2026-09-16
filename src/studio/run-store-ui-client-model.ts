@@ -74,9 +74,8 @@ export function createStudioRunIndex(runs: readonly StoredPipelineRun[]): Studio
     if (!parentIdByRunId.has(run.runId)) parentIdByRunId.set(run.runId, parentRunId);
   }
 
-  // Legacy traces allowed caller-owned run identities, including self-parent
-  // and cyclic relationships. Break one edge per cycle so every recorded run
-  // remains reachable from a Studio root.
+  // Break one edge per malformed parent cycle so every recorded run remains
+  // reachable from a Studio root.
   const resolvedParents = new Set<string>();
   for (const run of runs) {
     if (resolvedParents.has(run.runId)) continue;
