@@ -29,6 +29,11 @@ export const STEP_REMOTE: unique symbol = Symbol("tubeless.stepRemote");
 const REQUIRED_FINALIZER_OUTPUTS: unique symbol = Symbol("tubeless.requiredFinalizerOutputs");
 export const EXECUTE_COMPILED_RUN: unique symbol = Symbol("tubeless.executeCompiledRun");
 
+interface RequiredFinalizerMetadata<TOptions extends object> {
+  readonly steps: readonly AnyStep<TOptions>[];
+  compile(requiredStepIds: readonly string[]): (...args: never[]) => unknown;
+}
+
 const compiledPipelines = new WeakSet<object>();
 
 /** Marks the exact object returned by `definePipeline` as a compiled pipeline. */
@@ -47,6 +52,11 @@ export interface CompiledStepGraph<TOptions extends object = object> {
   readonly skipAfterFailureOf: readonly AnyStep<TOptions>[];
 }
 
+type CompiledStep<TOptions extends object = object> = Omit<
+  AnyStep<TOptions>,
+  "dependsOn" | "optionalDependsOn" | "skipAfterFailureOf"
+>;
+
 function liveStepGraph<TOptions extends object>(
   step: AnyStep<TOptions>
 ): CompiledStepGraph<TOptions> {
@@ -57,19 +67,63 @@ function liveStepGraph<TOptions extends object>(
   };
 }
 
-function freezeStepList<TOptions extends object>(
-  steps: readonly AnyStep<TOptions>[] | undefined
-): readonly AnyStep<TOptions>[] {
-  return Object.freeze([...(steps ?? [])]);
+function compileStep<TOptions extends object>(step: AnyStep<TOptions>): CompiledStep<TOptions> {
+  const nestedPipeline = step[STEP_NESTED_PIPELINE];
+  const remote = step[STEP_REMOTE];
+  const optionsSchema = step[STEP_OPTIONS_SCHEMA];
+  const name = step.name;
+  const description = step.description;
+  const dryRun = step.dryRun;
+  const outputSchema = step.outputSchema;
+  const skip = step.skip;
+  const compiled = {
+    id: step.id,
+    run: step.run.bind(step),
+  };
+  if (nestedPipeline !== undefined) {
+    Object.assign(compiled, {
+      [STEP_NESTED_PIPELINE]: Object.freeze({
+        ...nestedPipeline,
+        stepIds: Object.freeze([...nestedPipeline.stepIds]),
+      }),
+    });
+  }
+  if (remote !== undefined)
+    Object.assign(compiled, { [STEP_REMOTE]: Object.freeze({ ...remote }) });
+  if (optionsSchema !== undefined)
+    Object.assign(compiled, { [STEP_OPTIONS_SCHEMA]: optionsSchema });
+  if (name !== undefined) Object.assign(compiled, { name });
+  if (description !== undefined) Object.assign(compiled, { description });
+  if (dryRun !== undefined) {
+    Object.assign(compiled, {
+      dryRun: typeof dryRun === "function" ? dryRun.bind(step) : dryRun,
+    });
+  }
+  if (outputSchema !== undefined) Object.assign(compiled, { outputSchema });
+  if (skip !== undefined) Object.assign(compiled, { skip: skip.bind(step) });
+  return Object.freeze(compiled);
 }
 
 function snapshotCompiledStepGraph<TOptions extends object>(
-  step: AnyStep<TOptions>
+  step: AnyStep<TOptions>,
+  compiledByAuthorStep: ReadonlyMap<AnyStep<TOptions>, CompiledStep<TOptions>>
 ): CompiledStepGraph<TOptions> {
+  const compileDependencies = (
+    dependencies: readonly AnyStep<TOptions>[] | undefined
+  ): readonly CompiledStep<TOptions>[] =>
+    Object.freeze(
+      (dependencies ?? []).map((dependency) => {
+        const compiled = compiledByAuthorStep.get(dependency);
+        if (compiled === undefined) {
+          throw new Error(`Compiled pipeline graph is missing dependency ${dependency.id}`);
+        }
+        return compiled;
+      })
+    );
   return Object.freeze({
-    dependsOn: freezeStepList(step.dependsOn),
-    optionalDependsOn: freezeStepList(step.optionalDependsOn),
-    skipAfterFailureOf: freezeStepList(step.skipAfterFailureOf),
+    dependsOn: compileDependencies(step.dependsOn),
+    optionalDependsOn: compileDependencies(step.optionalDependsOn),
+    skipAfterFailureOf: compileDependencies(step.skipAfterFailureOf),
   });
 }
 
@@ -81,7 +135,7 @@ export function compiledStepGraph<TOptions extends object>(
   if (graph === undefined) {
     throw new Error(`Compiled pipeline graph is missing step ${step.id}`);
   }
-  // SAFETY: compile stores each original step object as the map key.
+  // SAFETY: compile stores each descriptor as the map key.
   return graph as CompiledStepGraph<TOptions>;
 }
 
@@ -605,14 +659,14 @@ function validatePipelineDefinition<
     );
   }
 
-  // SAFETY: `requireOutputs` stamps the required step ids onto the finalizer
-  // function under `REQUIRED_FINALIZER_OUTPUTS`; the intersection only widens
-  // the function type to expose that optional property.
-  const requiredFinalizerSteps = (
+  // SAFETY: `requireOutputs` stamps internal compilation metadata onto the
+  // finalizer; the intersection only exposes that optional property.
+  const requiredFinalizerMetadata = (
     definition.finalize as typeof definition.finalize & {
-      [REQUIRED_FINALIZER_OUTPUTS]?: readonly AnyStep<TOptions>[];
+      [REQUIRED_FINALIZER_OUTPUTS]?: RequiredFinalizerMetadata<TOptions>;
     }
   )[REQUIRED_FINALIZER_OUTPUTS];
+  const requiredFinalizerSteps = requiredFinalizerMetadata?.steps;
   const missingFinalizerSteps = (requiredFinalizerSteps ?? []).filter(
     (step) => !knownSteps.has(step)
   );
@@ -921,39 +975,57 @@ export function compilePipeline<
   type TOptions = StepsOptions<TSteps>;
   // SAFETY: `steps` is `TSteps extends readonly AnyStep[]`; the cast restores
   // the `TOptions` generic that the tuple erased, without changing the values.
-  const orderedSteps = topologicalSort(definition.steps as readonly AnyStep<TOptions>[])!;
-  // Keep the author's step objects so class private accessors and prototype
-  // `run`/`skip` keep working. Graph arrays live in compiled storage so frozen
-  // or later-mutated caller-owned steps cannot change planning.
-  const stepGraph = new Map<AnyStep, CompiledStepGraph>(
-    orderedSteps.map((step) => [step, snapshotCompiledStepGraph(step)])
+  const orderedAuthorSteps = topologicalSort(definition.steps as readonly AnyStep<TOptions>[])!;
+  const compiledByAuthorStep = new Map<AnyStep<TOptions>, CompiledStep<TOptions>>(
+    orderedAuthorSteps.map((step) => [step, compileStep(step)])
   );
-  // SAFETY: `requireOutputs` stamps the required step ids onto the finalizer
-  // function under `REQUIRED_FINALIZER_OUTPUTS`; the intersection only widens
-  // the function type to expose that optional property.
-  const requiredFinalizerSteps = (
+  const orderedSteps = orderedAuthorSteps.map((step) => compiledByAuthorStep.get(step)!);
+  const stepGraph = new Map<AnyStep, CompiledStepGraph>(
+    orderedAuthorSteps.map((step) => {
+      const compiled = compiledByAuthorStep.get(step)!;
+      return [compiled, snapshotCompiledStepGraph(step, compiledByAuthorStep)];
+    })
+  );
+  // SAFETY: `requireOutputs` stamps internal compilation metadata onto the
+  // finalizer; the intersection only exposes that optional property.
+  const requiredFinalizerMetadata = (
     definition.finalize as typeof definition.finalize & {
-      [REQUIRED_FINALIZER_OUTPUTS]?: readonly AnyStep<TOptions>[];
+      [REQUIRED_FINALIZER_OUTPUTS]?: RequiredFinalizerMetadata<TOptions>;
     }
   )[REQUIRED_FINALIZER_OUTPUTS];
+  const requiredFinalizerSteps = requiredFinalizerMetadata?.steps;
   // SAFETY: targets are a subset of `TSteps[number]`, each an `AnyStep<TOptions>`.
   const declaredTargets = (definition.targets ?? []) as readonly AnyStep<TOptions>[];
+  const compiledTargets = declaredTargets.map((target) => compiledByAuthorStep.get(target)!);
+  const compiledRequiredFinalizerSteps = requiredFinalizerSteps?.map((step) =>
+    compiledByAuthorStep.get(step)!
+  );
+  const compiledFinalize = requiredFinalizerMetadata
+    ? requiredFinalizerMetadata.compile(compiledRequiredFinalizerSteps!.map((step) => step.id))
+    : (
+        outputs: Parameters<typeof definition.finalize>[0],
+        context: Parameters<typeof definition.finalize>[1]
+      ) => definition.finalize(outputs, context);
   return Object.freeze({
-    declaredTargets: Object.freeze([...declaredTargets]),
-    // Invoke on the author's definition so method-style finalizers keep `this`.
-    // SAFETY: the wrapper only forwards to `definition.finalize`.
-    finalize: ((outputs, context) =>
-      definition.finalize(outputs, context)) as typeof definition.finalize,
+    declaredTargets: Object.freeze(compiledTargets),
+    // Invoke ordinary finalizers on the author's definition so method-style
+    // implementations keep `this`. Required finalizers compile the same input
+    // and context contract with stable required ids.
+    // SAFETY: both branches preserve `definition.finalize`'s call signature.
+    finalize: compiledFinalize as typeof definition.finalize,
     id: definition.id,
-    optionsSchema: definition.steps[0]?.[STEP_OPTIONS_SCHEMA],
+    optionsSchema:
+      definition.steps.length === 0
+        ? undefined
+        : compiledByAuthorStep.get(definition.steps[0]!)?.[STEP_OPTIONS_SCHEMA],
     orderedSteps: Object.freeze([...orderedSteps]),
     stepGraph,
-    requiredFinalizerSteps: requiredFinalizerSteps
-      ? Object.freeze([...requiredFinalizerSteps])
+    requiredFinalizerSteps: compiledRequiredFinalizerSteps
+      ? Object.freeze(compiledRequiredFinalizerSteps)
       : undefined,
     resultSchema: definition.resultSchema,
-    stepIds: Object.freeze(definition.steps.map((step) => step.id)),
-    targetIds: Object.freeze((definition.targets ?? []).map((step) => step.id)),
+    stepIds: Object.freeze(definition.steps.map((step) => compiledByAuthorStep.get(step)!.id)),
+    targetIds: Object.freeze(compiledTargets.map((step) => step.id)),
   });
 }
 
@@ -981,13 +1053,14 @@ export function requireOutputs<const TRequiredSteps extends readonly AnyStep[], 
   context: PipelineExecutionContext<StepsOptions<TRequiredSteps>>
 ) => TResult | Promise<TResult> {
   const uniqueRequiredSteps = [...new Set(requiredSteps)];
-  const requiredFinalizer = (
+  const invoke = (
+    requiredStepIds: readonly string[],
     outputs: Partial<RequiredPipelineOutputs<TRequiredSteps>>,
     context: PipelineExecutionContext<StepsOptions<TRequiredSteps>>
   ) => {
-    const missingStepIds = uniqueRequiredSteps
-      .filter((step) => !Object.prototype.hasOwnProperty.call(outputs, step.id))
-      .map((step) => step.id);
+    const missingStepIds = requiredStepIds.filter(
+      (stepId) => !Object.prototype.hasOwnProperty.call(outputs, stepId)
+    );
     if (missingStepIds.length > 0) {
       throw new Error(`Required pipeline outputs missing: ${missingStepIds.join(", ")}`);
     }
@@ -996,8 +1069,27 @@ export function requireOutputs<const TRequiredSteps extends readonly AnyStep[], 
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions
     return finalize(outputs as unknown as RequiredPipelineOutputs<TRequiredSteps>, context);
   };
+  const requiredFinalizer = (
+    outputs: Partial<RequiredPipelineOutputs<TRequiredSteps>>,
+    context: PipelineExecutionContext<StepsOptions<TRequiredSteps>>
+  ) =>
+    invoke(
+      uniqueRequiredSteps.map((step) => step.id),
+      outputs,
+      context
+    );
+  const metadata: RequiredFinalizerMetadata<StepsOptions<TRequiredSteps>> = Object.freeze({
+    compile: (requiredStepIds: readonly string[]) => {
+      const snapshot = Object.freeze([...requiredStepIds]);
+      return (
+        outputs: Partial<RequiredPipelineOutputs<TRequiredSteps>>,
+        context: PipelineExecutionContext<StepsOptions<TRequiredSteps>>
+      ) => invoke(snapshot, outputs, context);
+    },
+    steps: Object.freeze([...uniqueRequiredSteps]),
+  });
   Object.defineProperty(requiredFinalizer, REQUIRED_FINALIZER_OUTPUTS, {
-    value: uniqueRequiredSteps,
+    value: metadata,
   });
   return requiredFinalizer;
 }
