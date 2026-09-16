@@ -2587,6 +2587,89 @@ describe("definePipeline", () => {
     expect(result.steps.map((report) => report.id)).toEqual(["later", "earlier"]);
   });
 
+  it("compiles immutable step metadata, handlers, schemas, and dependency graphs", async () => {
+    const originalSchema = standardSchema<string, string>((value) => ({
+      value: `validated:${value as string}`,
+    }));
+    const replacementSchema = standardSchema<string, string>(() => ({
+      issues: [{ message: "replacement schema ran" }],
+    }));
+    const originalValidate = vi.spyOn(originalSchema["~standard"], "validate");
+    const replacementValidate = vi.spyOn(replacementSchema["~standard"], "validate");
+    const step = createSteps();
+    const required = step("required", { run: () => "required" });
+    const optional = step("optional", { run: () => "optional" });
+    const gate = step("gate", { run: () => "gate" });
+
+    class MethodStep implements AnyStep {
+      readonly #prefix = "private";
+      id = "work";
+      name = "Original name";
+      description = "Original description";
+      outputSchema: StandardSchemaV1 = originalSchema;
+      dependsOn: AnyStep[] = [required];
+      optionalDependsOn: AnyStep[] = [optional];
+      skipAfterFailureOf: AnyStep[] = [gate];
+
+      skip() {
+        return this.#prefix === "private" ? false : "unreachable";
+      }
+
+      dryRun() {
+        return `${this.#prefix}:dry`;
+      }
+
+      run(inputs: Record<string, unknown>) {
+        return `${this.#prefix}:${inputs.required}:${inputs.optional}`;
+      }
+    }
+
+    const work = new MethodStep();
+    const pipeline = definePipeline({
+      id: "immutable-steps",
+      steps: [required, optional, gate, work],
+      targets: [work],
+      finalize: (outputs) => outputs.work,
+    });
+
+    Reflect.set(required, "id", "renamed-required");
+    Reflect.set(required, "run", () => "mutated-required");
+    Reflect.set(optional, "id", "renamed-optional");
+    Reflect.set(gate, "id", "renamed-gate");
+    Reflect.set(work, "id", "renamed-work");
+    Reflect.set(work, "name", "Mutated name");
+    Reflect.set(work, "description", "Mutated description");
+    Reflect.set(work, "run", () => "mutated-run");
+    Reflect.set(work, "skip", () => "mutated-skip");
+    Reflect.set(work, "dryRun", "skip");
+    Reflect.set(work, "outputSchema", replacementSchema);
+    work.dependsOn.length = 0;
+    work.optionalDependsOn.length = 0;
+    work.skipAfterFailureOf.length = 0;
+
+    expect(pipeline.stepIds).toEqual(["required", "optional", "gate", "work"]);
+    expect(pipeline.targetIds).toEqual(["work"]);
+    expect(pipeline.plan().steps.at(-1)).toMatchObject({
+      dependencies: ["required"],
+      description: "Original description",
+      dryRun: "custom",
+      id: "work",
+      name: "Original name",
+      optionalDependencies: ["optional"],
+      runtimeSkipPossible: true,
+      skipAfterFailureOf: ["gate"],
+    });
+    expect(pipeline.toMermaid({ includeDescriptions: true })).toContain(
+      "Original name — Original description"
+    );
+    expect(pipeline.toMermaid({ includeDescriptions: true })).not.toContain("Mutated");
+
+    await expect(pipeline.runOrThrow({})).resolves.toBe("validated:private:required:optional");
+    await expect(pipeline.runOrThrow({}, { dryRun: true })).resolves.toBe("validated:private:dry");
+    expect(originalValidate).toHaveBeenCalledTimes(2);
+    expect(replacementValidate).not.toHaveBeenCalled();
+  });
+
   it("runs class steps whose contract members live on the prototype", async () => {
     const deps: AnyStep[] = [];
     class PrototypeStep implements AnyStep {
