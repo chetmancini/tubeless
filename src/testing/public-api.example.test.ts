@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createSteps,
   definePipeline,
+  isPipelineErrorCode,
+  PIPELINE_ERROR_CODES,
   type PipelineLogger,
   type PipelineRun,
   type RemoteStepAdapter,
@@ -139,6 +141,12 @@ function capturingLogger(): PipelineLogger & {
 }
 
 describe("public API example", () => {
+  it("exposes stable pipeline error codes for discovery and lookup", () => {
+    expect(PIPELINE_ERROR_CODES).toContain("TUBELESS_STEP_FAILED");
+    expect(isPipelineErrorCode("TUBELESS_STEP_FAILED")).toBe(true);
+    expect(isPipelineErrorCode("application_error")).toBe(false);
+  });
+
   it("runs a neutral import pipeline through the package entrypoint", async () => {
     const result = await ImportPipeline.runOrThrow({
       lines: [" Alpha ", "", "Beta"],

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createSteps,
   definePipeline,
+  isPipelineErrorCode,
+  PIPELINE_ERROR_CODES,
   PIPELINE_FINALIZE_STEP_ID,
   PipelineDefinitionError,
   requireOutputs,
@@ -483,6 +485,15 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
 } satisfies Record<PipelineErrorCode, DiagnosticContract>;
 
 describe("PipelineErrorCode", () => {
+  it("publishes an exhaustive runtime catalog and lookup guard", () => {
+    expect([...PIPELINE_ERROR_CODES].sort()).toEqual(
+      Object.keys(PIPELINE_ERROR_CODE_CONTRACTS).sort()
+    );
+    expect(isPipelineErrorCode("TUBELESS_STEP_FAILED")).toBe(true);
+    expect(isPipelineErrorCode("TUBELESS_UNKNOWN")).toBe(false);
+    expect(isPipelineErrorCode(undefined)).toBe(false);
+  });
+
   it.each(
     Object.entries(PIPELINE_ERROR_CODE_CONTRACTS) as [PipelineErrorCode, DiagnosticContract][]
   )("emits %s with stable phase and kind", async (code, { phase, kind, emit }) => {

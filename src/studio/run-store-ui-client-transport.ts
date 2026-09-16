@@ -4,6 +4,7 @@ import type {
   StoredPipelineRun,
   StoredPipelineStep,
 } from "../run-store/run-store.js";
+import { isPipelineTraceError, isStoredPipelineEvent } from "../run-store/run-store-codec.js";
 import type { StudioRunDetail, StudioSnapshot } from "./run-store-ui-client-model.js";
 import {
   isPipelineRunStudioParameter,
@@ -159,12 +160,7 @@ function isStoredStudioRun(value: unknown): value is StoredPipelineRun {
     isFiniteNumber(value.version) &&
     isOptionalString(value.correlationId) &&
     isOptionalString(value.parentRunId) &&
-    (value.error === undefined ||
-      (isRecord(value.error) &&
-        typeof value.error.code === "string" &&
-        typeof value.error.kind === "string" &&
-        typeof value.error.message === "string" &&
-        typeof value.error.phase === "string"))
+    (value.error === undefined || isPipelineTraceError(value.error))
   );
 }
 
@@ -300,7 +296,12 @@ export function createStudioApi(fetcher: typeof fetch = fetch): StudioApi {
       const payload = await readJson(response);
       if (response.status === 404) return null;
       if (!response.ok) throw responseError(payload, "Run detail request failed.");
-      if (!isRecord(payload) || !isStoredStudioRun(payload.run)) {
+      if (
+        !isRecord(payload) ||
+        !isStoredStudioRun(payload.run) ||
+        !Array.isArray(payload.events) ||
+        !payload.events.every(isStoredPipelineEvent)
+      ) {
         throw invalidResponse("run detail");
       }
       return { run: payload.run };
