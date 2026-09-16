@@ -192,21 +192,27 @@ describe("runUi", () => {
     const tracePath = path.join(directory, "run.ndjson");
     const events = [
       {
-        attributes: { dry_run: false },
         name: "pipeline.started",
+        payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
         pipelineId: "portable",
         runId: "portable-run",
         timestampMs: 1_700_000_000_000,
-        version: 1,
+        version: 2,
       },
       {
-        attributes: { status: "completed" },
         durationMs: 5,
         name: "pipeline.completed",
+        payload: {
+          dryRun: false,
+          errorCount: 0,
+          finalized: false,
+          status: "completed",
+          stepCount: 0,
+        },
         pipelineId: "portable",
         runId: "portable-run",
         timestampMs: 1_700_000_000_005,
-        version: 1,
+        version: 2,
       },
     ];
     await writeFile(tracePath, `${events.map((event) => JSON.stringify(event)).join("\n")}\n`);

@@ -3,6 +3,7 @@ import { request as httpRequest } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import type { PipelineRunEventStore, StoredPipelineEvent } from "../run-store/run-store.js";
 import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
+import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { PIPELINE_RUN_STUDIO_SCRIPT, PIPELINE_RUN_STUDIO_STYLE } from "./run-store-ui-page.js";
 import { startPipelineRunStudio, type PipelineRunStudioServer } from "./run-store-ui.js";
 
@@ -89,30 +90,48 @@ function memoryStore(events: readonly StoredPipelineEvent[]): PipelineRunEventSt
   };
 }
 
-function legacyEvent(value: Record<string, unknown> & { id: number }): StoredPipelineEvent {
-  const { id, ...event } = value;
-  return { ...decodePipelineTraceEvent(event), id };
+function storedEvent(
+  value: Record<string, unknown> & { id: number; name: PipelineTraceEvent["name"] }
+): StoredPipelineEvent {
+  const { id, name, payload: payloadOverrides, ...event } = value;
+  const payloads: Partial<Record<PipelineTraceEvent["name"], Record<string, unknown>>> = {
+    "pipeline.completed": {
+      dryRun: false,
+      errorCount: 0,
+      finalized: false,
+      status: "completed",
+      stepCount: 0,
+    },
+    "pipeline.log": { level: "log", message: "" },
+    "pipeline.started": { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+  };
+  return {
+    ...decodePipelineTraceEvent({
+      ...event,
+      name,
+      payload: { ...payloads[name], ...(payloadOverrides as object | undefined) },
+    }),
+    id,
+  };
 }
 
 const events: StoredPipelineEvent[] = [
-  legacyEvent({
-    attributes: { dry_run: false },
+  storedEvent({
     id: 1,
     name: "pipeline.started",
     pipelineId: "studio-fixture",
     runId: "run-1",
     timestampMs: 10,
-    version: 1,
+    version: 2,
   }),
-  legacyEvent({
-    attributes: { status: "completed" },
+  storedEvent({
     durationMs: 5,
     id: 2,
     name: "pipeline.completed",
     pipelineId: "studio-fixture",
     runId: "run-1",
     timestampMs: 15,
-    version: 1,
+    version: 2,
   }),
 ];
 
@@ -589,24 +608,22 @@ describe("local pipeline run studio", () => {
     expect(cursors).toEqual([undefined, 1, 2]);
 
     stored.push(
-      legacyEvent({
-        attributes: { dry_run: false },
+      storedEvent({
         id: 3,
         name: "pipeline.started",
         pipelineId: "studio-fixture",
         runId: "run-2",
         timestampMs: 20,
-        version: 1,
+        version: 2,
       }),
-      legacyEvent({
-        attributes: { status: "completed" },
+      storedEvent({
         durationMs: 5,
         id: 4,
         name: "pipeline.completed",
         pipelineId: "studio-fixture",
         runId: "run-2",
         timestampMs: 25,
-        version: 1,
+        version: 2,
       })
     );
     await expect(
@@ -618,52 +635,49 @@ describe("local pipeline run studio", () => {
   it("reads one run from the store and omits snapshot log bodies", async () => {
     const queries: { afterId?: number; runId?: string }[] = [];
     const stored: StoredPipelineEvent[] = [
-      legacyEvent({
-        attributes: { dry_run: false },
+      storedEvent({
         id: 1,
         name: "pipeline.started",
         pipelineId: "studio-fixture",
         runId: "run-1",
         timestampMs: 10,
-        version: 1,
+        version: 2,
       }),
-      legacyEvent({
-        attributes: { level: "log", message: "loaded rows" },
+      storedEvent({
         id: 2,
         name: "pipeline.log",
+        payload: { level: "log", message: "loaded rows" },
         pipelineId: "studio-fixture",
         runId: "run-1",
         stepId: "load",
         timestampMs: 12,
-        version: 1,
+        version: 2,
       }),
-      legacyEvent({
-        attributes: { status: "completed" },
+      storedEvent({
         durationMs: 5,
         id: 3,
         name: "pipeline.completed",
         pipelineId: "studio-fixture",
         runId: "run-1",
         timestampMs: 15,
-        version: 1,
+        version: 2,
       }),
-      legacyEvent({
-        attributes: { dry_run: false },
+      storedEvent({
         id: 4,
         name: "pipeline.started",
         pipelineId: "other",
         runId: "run-2",
         timestampMs: 20,
-        version: 1,
+        version: 2,
       }),
-      legacyEvent({
-        attributes: { level: "warn", message: "other run only" },
+      storedEvent({
         id: 5,
         name: "pipeline.log",
+        payload: { level: "warn", message: "other run only" },
         pipelineId: "other",
         runId: "run-2",
         timestampMs: 21,
-        version: 1,
+        version: 2,
       }),
     ];
     const store: PipelineRunEventStore = {
@@ -728,14 +742,13 @@ describe("local pipeline run studio", () => {
 
   it("includes a first store event whose id is zero in snapshots", async () => {
     const store = memoryStore([
-      legacyEvent({
-        attributes: { dry_run: false },
+      storedEvent({
         id: 0,
         name: "pipeline.started",
         pipelineId: "studio-fixture",
         runId: "run-zero",
         timestampMs: 1,
-        version: 1,
+        version: 2,
       }),
     ]);
     const server = await startPipelineRunStudio({ port: 0, store });

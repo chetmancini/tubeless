@@ -193,7 +193,7 @@ describe("createStudioRunIndex", () => {
     expect(index.rootRunId(null)).toBeNull();
   });
 
-  it("breaks legacy cycles so every run remains visible from a root", () => {
+  it("breaks malformed cycles so every run remains visible from a root", () => {
     const left = run({ parentRunId: "right", pipelineId: "left", runId: "left", startedAtMs: 1 });
     const right = run({ parentRunId: "left", pipelineId: "right", runId: "right", startedAtMs: 2 });
     const visible = run({ pipelineId: "visible", runId: "visible", startedAtMs: 3 });
@@ -205,7 +205,7 @@ describe("createStudioRunIndex", () => {
     expect(index.matchingRootIds("right")).toEqual(new Set(["left"]));
   });
 
-  it("promotes a legacy self-parent to a root", () => {
+  it("promotes a self-parented run to a root", () => {
     const loop = run({ parentRunId: "loop", pipelineId: "loop", runId: "loop", startedAtMs: 1 });
     const index = createStudioRunIndex([loop]);
     expect(index.roots).toEqual([loop]);

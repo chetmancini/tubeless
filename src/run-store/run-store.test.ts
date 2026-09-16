@@ -23,15 +23,45 @@ function event(
   name: StoredPipelineEvent["name"],
   overrides: Record<string, unknown> = {}
 ): StoredPipelineEvent {
+  const { payload: payloadOverrides, ...fields } = overrides;
+  const payloads: Record<StoredPipelineEvent["name"], Record<string, unknown>> = {
+    "pipeline.completed": {
+      dryRun: false,
+      errorCount: 0,
+      finalized: false,
+      status: "completed",
+      stepCount: 0,
+    },
+    "pipeline.finalize.completed": {},
+    "pipeline.finalize.failed": {},
+    "pipeline.finalize.started": {},
+    "pipeline.log": { level: "log", message: "" },
+    "pipeline.started": { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+    "step.attempted": { attempt: 1, attributes: {} },
+    "step.cancelled": { status: "cancelled" },
+    "step.complete": { status: "completed" },
+    "step.failed": { status: "failed" },
+    "step.planned": {
+      dependencies: [],
+      dryRun: "run",
+      optionalDependencies: [],
+      runtimeSkipPossible: false,
+      selected: true,
+      selectionReasons: [],
+      skipAfterFailureOf: [],
+    },
+    "step.running": {},
+    "step.skipped": { reason: "policy", status: "skipped" },
+  };
   return {
     ...decodePipelineTraceEvent({
-      attributes: {},
       name,
+      payload: { ...payloads[name], ...(payloadOverrides as object | undefined) },
       pipelineId: "import",
       runId: "run-1",
       timestampMs: 100 + id,
-      version: 1,
-      ...overrides,
+      version: 2,
+      ...fields,
     }),
     id,
   };
@@ -39,50 +69,47 @@ function event(
 
 const historyFixture: StoredPipelineEvent[] = [
   event(1, "pipeline.started", {
-    attributes: { dry_run: false, target_ids: '["publish"]' },
+    payload: { targetIds: ["publish"] },
   }),
   event(2, "step.planned", {
-    attributes: {
-      dependencies: "[]",
+    payload: {
       description: "Load source rows.",
-      dry_run: "run",
       name: "Load rows",
-      optional_dependencies: "[]",
-      runtime_skip_possible: false,
-      skip_after_failure_of: "[]",
     },
     stepId: "load",
   }),
   event(3, "step.running", { attemptId: "attempt-1", stepId: "load" }),
   event(4, "step.attempted", {
     attemptId: "attempt-1",
-    attributes: { attempt: 2 },
+    payload: { attempt: 2 },
     stepId: "load",
   }),
   event(5, "step.running", {
     attemptId: "attempt-1",
-    attributes: {
-      completed: 4,
-      detail_count: 1,
-      details: JSON.stringify([
-        {
-          id: "rows.csv",
-          name: "Rows",
-          depth: 2,
-          completed: 4,
-          total: 10,
-          label: "read",
-          status: "cancelled",
-        },
-      ]),
-      message: "loaded",
-      total: 10,
+    payload: {
+      progress: {
+        completed: 4,
+        detailCount: 1,
+        details: [
+          {
+            id: "rows.csv",
+            name: "Rows",
+            depth: 2,
+            completed: 4,
+            total: 10,
+            label: "read",
+            status: "cancelled",
+          },
+        ],
+        message: "loaded",
+        total: 10,
+      },
     },
     stepId: "load",
   }),
   event(6, "pipeline.log", {
     attemptId: "attempt-1",
-    attributes: { level: "log", message: "reading rows.csv" },
+    payload: { level: "log", message: "reading rows.csv" },
     stepId: "load",
   }),
   event(7, "step.failed", {
@@ -97,7 +124,7 @@ const historyFixture: StoredPipelineEvent[] = [
     stepId: "load",
   }),
   event(8, "pipeline.completed", {
-    attributes: { status: "failed" },
+    payload: { errorCount: 1, status: "failed" },
     durationMs: 7,
     error: {
       code: "TUBELESS_STEP_FAILED",
@@ -110,24 +137,24 @@ const historyFixture: StoredPipelineEvent[] = [
 
 const definitionReplacementFixture: StoredPipelineEvent[] = [
   event(1, "pipeline.started", {
-    attributes: { target_ids: '["old-target"]' },
+    payload: { targetIds: ["old-target"] },
     runId: "old-run",
   }),
   event(2, "step.planned", { runId: "old-run", stepId: "old-step" }),
-  event(3, "pipeline.started", { attributes: { target_ids: "[]" }, runId: "new-run" }),
+  event(3, "pipeline.started", { runId: "new-run" }),
   event(4, "step.planned", { runId: "old-run", stepId: "late-old-step" }),
   event(5, "step.planned", { runId: "new-run", stepId: "new-step" }),
 ];
 
 const failedBeforePlanningFixture: StoredPipelineEvent[] = [
   event(1, "pipeline.started", {
-    attributes: { target_ids: '["publish"]' },
+    payload: { targetIds: ["publish"] },
     runId: "valid-run",
   }),
   event(2, "step.planned", { runId: "valid-run", stepId: "publish" }),
-  event(3, "pipeline.started", { attributes: { target_ids: "[]" }, runId: "invalid-run" }),
+  event(3, "pipeline.started", { runId: "invalid-run" }),
   event(4, "pipeline.completed", {
-    attributes: { status: "failed" },
+    payload: { errorCount: 1, status: "failed" },
     runId: "invalid-run",
   }),
 ];
@@ -268,20 +295,15 @@ describe("pipeline run store projections", () => {
       stepIds: ["process"],
     };
     const snapshot = projectPipelineRunStore([
-      event(1, "pipeline.started", { attributes: { target_ids: "[]" } }),
+      event(1, "pipeline.started"),
       event(2, "step.planned", {
-        attributes: {
-          dependencies: "[]",
-          dry_run: "run",
-          nested_pipeline: JSON.stringify({
+        payload: {
+          nestedPipeline: {
             mode: nested.mode,
             pipelineId: nested.pipelineId,
-            step_count: nested.stepCount,
+            stepCount: nested.stepCount,
             stepIds: nested.stepIds,
-          }),
-          optional_dependencies: "[]",
-          runtime_skip_possible: false,
-          skip_after_failure_of: "[]",
+          },
         },
         stepId: "children",
       }),
@@ -303,16 +325,9 @@ describe("pipeline run store projections", () => {
   it("retains remote metadata from step.planned on runs and definitions", () => {
     const remote = { engine: "lambda", target: "enrich-v2" };
     const snapshot = projectPipelineRunStore([
-      event(1, "pipeline.started", { attributes: { target_ids: "[]" } }),
+      event(1, "pipeline.started"),
       event(2, "step.planned", {
-        attributes: {
-          dependencies: "[]",
-          dry_run: "run",
-          optional_dependencies: "[]",
-          remote: JSON.stringify(remote),
-          runtime_skip_possible: false,
-          skip_after_failure_of: "[]",
-        },
+        payload: { remote },
         stepId: "enrich",
       }),
       event(3, "step.running", { attemptId: "attempt-1", stepId: "enrich" }),
@@ -325,35 +340,30 @@ describe("pipeline run store projections", () => {
 
   it("keeps original counts when details and nested step IDs are truncated", () => {
     const snapshot = projectPipelineRunStore([
-      event(1, "pipeline.started", { attributes: { target_ids: "[]" } }),
+      event(1, "pipeline.started"),
       event(2, "step.planned", {
-        attributes: {
-          dependencies: "[]",
-          dry_run: "run",
-          nested_pipeline: JSON.stringify({
+        payload: {
+          nestedPipeline: {
             mode: "single",
             pipelineId: "wide-child",
-            step_count: 200,
+            stepCount: 200,
             stepIds: Array.from({ length: 128 }, (_, index) => `step-${index}`),
-          }),
-          optional_dependencies: "[]",
-          runtime_skip_possible: false,
-          skip_after_failure_of: "[]",
+          },
         },
         stepId: "child",
       }),
       event(3, "step.running", {
         attemptId: "attempt-1",
-        attributes: {
-          completed: 128,
-          detail_count: 200,
-          details: JSON.stringify(
-            Array.from({ length: 128 }, (_, index) => ({
+        payload: {
+          progress: {
+            completed: 128,
+            detailCount: 200,
+            details: Array.from({ length: 128 }, (_, index) => ({
               id: `item-${index}`,
               status: "completed",
-            }))
-          ),
-          total: 200,
+            })),
+            total: 200,
+          },
         },
         stepId: "child",
       }),
@@ -378,18 +388,20 @@ describe("pipeline run store projections", () => {
       event(2, "step.running", { attemptId: "attempt-1", stepId: "load" }),
       event(3, "step.running", {
         attemptId: "attempt-1",
-        attributes: {
-          completed: 4,
-          detail_count: 1,
-          details: JSON.stringify(details),
-          message: "loaded",
-          total: 10,
+        payload: {
+          progress: {
+            completed: 4,
+            detailCount: 1,
+            details,
+            message: "loaded",
+            total: 10,
+          },
         },
         stepId: "load",
       }),
       event(4, "step.running", {
         attemptId: "attempt-1",
-        attributes: { completed: 0 },
+        payload: { progress: { completed: 0 } },
         stepId: "load",
       }),
       event(5, "step.complete", { attemptId: "attempt-1", stepId: "load" }),
@@ -410,12 +422,12 @@ describe("pipeline run store projections", () => {
       event(2, "step.running", { attemptId: "attempt-1", stepId: "load" }),
       event(3, "step.attempted", {
         attemptId: "attempt-1",
-        attributes: { attempt: 1 },
+        payload: { attempt: 1 },
         stepId: "load",
       }),
       event(4, "step.attempted", {
         attemptId: "attempt-1",
-        attributes: { attempt: 2 },
+        payload: { attempt: 2 },
         stepId: "load",
       }),
       event(5, "step.complete", { attemptId: "attempt-1", stepId: "load" }),
@@ -448,13 +460,12 @@ describe("pipeline run store projections", () => {
   it("keeps the later-started definition when an earlier run is inserted with higher ids", () => {
     const snapshot = projectPipelineRunStore([
       event(1, "pipeline.started", {
-        attributes: { target_ids: "[]" },
         runId: "later-short",
         timestampMs: 200,
       }),
       event(2, "step.planned", { runId: "later-short", stepId: "new-step", timestampMs: 201 }),
       event(3, "pipeline.started", {
-        attributes: { target_ids: '["old-target"]' },
+        payload: { targetIds: ["old-target"] },
         runId: "earlier-long",
         timestampMs: 100,
       }),
@@ -505,7 +516,6 @@ describe("incremental pipeline run projector", () => {
       event(1, "pipeline.started"),
       event(2, "pipeline.started", { runId: "run-2" }),
       event(3, "pipeline.completed", {
-        attributes: { status: "completed" },
         runId: "run-2",
       }),
     ]);
@@ -514,7 +524,6 @@ describe("incremental pipeline run projector", () => {
     expected.append([
       event(2, "pipeline.started", { runId: "run-2" }),
       event(3, "pipeline.completed", {
-        attributes: { status: "completed" },
         runId: "run-2",
       }),
     ]);
@@ -525,7 +534,6 @@ describe("incremental pipeline run projector", () => {
         [
           event(2, "pipeline.started", { runId: "run-2" }),
           event(3, "pipeline.completed", {
-            attributes: { status: "completed" },
             runId: "run-2",
           }),
         ],
@@ -535,10 +543,8 @@ describe("incremental pipeline run projector", () => {
   });
 
   it("accepts a first event whose store-local id is zero", () => {
-    const started = event(0, "pipeline.started", {
-      attributes: { dry_run: false, target_ids: "[]" },
-    });
-    const completed = event(1, "pipeline.completed", { attributes: { status: "completed" } });
+    const started = event(0, "pipeline.started");
+    const completed = event(1, "pipeline.completed");
 
     expect(projectPipelineRunStore([started], 200)).toMatchObject({
       lastEventId: 0,
@@ -568,7 +574,7 @@ describe("incremental pipeline run projector", () => {
       const runId = `run-${index}`;
       events.push(
         event(id, "pipeline.started", {
-          attributes: { target_ids: index % 5 === 0 ? '["work"]' : "[]" },
+          payload: { targetIds: index % 5 === 0 ? ["work"] : [] },
           pipelineId,
           runId,
           timestampMs: index * 10,
@@ -581,7 +587,10 @@ describe("incremental pipeline run projector", () => {
       }
       events.push(
         event(id, "pipeline.completed", {
-          attributes: { status: index % 7 === 0 ? "failed" : "completed" },
+          payload: {
+            errorCount: index % 7 === 0 ? 1 : 0,
+            status: index % 7 === 0 ? "failed" : "completed",
+          },
           pipelineId,
           runId,
           timestampMs: index * 10 + 5,
@@ -618,10 +627,10 @@ describe("incremental pipeline run projector", () => {
     projector.append([
       event(1, "pipeline.started"),
       event(2, "pipeline.log", {
-        attributes: { level: "log", message: "secret payload" },
+        payload: { level: "log", message: "secret payload" },
         stepId: "load",
       }),
-      event(3, "pipeline.completed", { attributes: { status: "completed" } }),
+      event(3, "pipeline.completed"),
     ]);
 
     const snapshot = projector.snapshot(1);

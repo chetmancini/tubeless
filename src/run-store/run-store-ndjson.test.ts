@@ -27,12 +27,12 @@ async function tempFile(contents: string | Buffer): Promise<string> {
 
 function event(runId: string, pipelineId = "import"): Record<string, unknown> {
   return {
-    attributes: { dry_run: false },
     name: "pipeline.started",
+    payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
     pipelineId,
     runId,
     timestampMs: 1_700_000_000_000,
-    version: 1,
+    version: 2,
   };
 }
 
@@ -117,33 +117,6 @@ describe("openNdjsonPipelineRunStore", () => {
     await expect(store.listEvents()).rejects.toThrow("closed NDJSON pipeline run store");
   });
 
-  it("preserves version 1 target and dependency lists beyond version 2 emission bounds", async () => {
-    const ids = Array.from({ length: 130 }, (_, index) => `step-${index}`);
-    const filename = await tempFile(
-      [
-        { ...event("run-1"), attributes: { dry_run: false, target_ids: JSON.stringify(ids) } },
-        {
-          ...event("run-1"),
-          attributes: { dependencies: JSON.stringify(ids) },
-          name: "step.planned",
-          stepId: "work",
-        },
-      ]
-        .map((entry) => JSON.stringify(entry))
-        .join("\n")
-    );
-    const store = await openNdjsonPipelineRunStore(filename);
-    try {
-      const events = await store.listEvents();
-      const started = events.find((entry) => entry.name === "pipeline.started");
-      const planned = events.find((entry) => entry.name === "step.planned");
-      expect(started?.name === "pipeline.started" && started.payload.targetIds).toEqual(ids);
-      expect(planned?.name === "step.planned" && planned.payload.dependencies).toEqual(ids);
-    } finally {
-      await store.close();
-    }
-  });
-
   it("rejects malformed events without echoing their contents", async () => {
     const secret = "do-not-repeat-this-secret";
     const filename = await tempFile(`{"token":"${secret}"}\n`);
@@ -161,12 +134,12 @@ describe("openNdjsonPipelineRunStore", () => {
   it("rejects completion events without a supported terminal status", async () => {
     const completion = {
       ...event("run-1"),
-      attributes: {},
       name: "pipeline.completed",
+      payload: { dryRun: false, errorCount: 0, finalized: false, stepCount: 0 },
     };
     const missingStatus = await tempFile(`${JSON.stringify(completion)}\n`);
     const unsupportedStatus = await tempFile(
-      `${JSON.stringify({ ...completion, attributes: { status: "running" } })}\n`
+      `${JSON.stringify({ ...completion, payload: { ...completion.payload, status: "running" } })}\n`
     );
 
     await expect(openNdjsonPipelineRunStore(missingStatus)).rejects.toThrow(
@@ -390,8 +363,14 @@ describe("recorded fan-out diagnostics", () => {
   };
   const failedEvent = () => ({
     ...event("run-1"),
-    attributes: { status: "failed" },
     name: "pipeline.completed",
+    payload: {
+      dryRun: false,
+      errorCount: 1,
+      finalized: false,
+      status: "failed",
+      stepCount: 0,
+    },
   });
 
   it("preserves cancellation, scheduler causes, and empty snapshot strings", async () => {

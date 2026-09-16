@@ -46,14 +46,37 @@ function event(
   name: PipelineTraceEvent["name"],
   overrides: Record<string, unknown> = {}
 ): PipelineTraceEvent {
+  const { payload: payloadOverrides, ...fields } = overrides;
+  const payloads: Partial<Record<PipelineTraceEvent["name"], Record<string, unknown>>> = {
+    "pipeline.completed": {
+      dryRun: false,
+      errorCount: 0,
+      finalized: false,
+      status: "completed",
+      stepCount: 0,
+    },
+    "pipeline.log": { level: "log", message: "" },
+    "pipeline.started": { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+    "step.failed": { status: "failed" },
+    "step.planned": {
+      dependencies: [],
+      dryRun: "run",
+      optionalDependencies: [],
+      runtimeSkipPossible: false,
+      selected: true,
+      selectionReasons: [],
+      skipAfterFailureOf: [],
+    },
+    "step.running": {},
+  };
   return decodePipelineTraceEvent({
-    attributes: {},
     name,
+    payload: { ...payloads[name], ...(payloadOverrides as object | undefined) },
     pipelineId: "import",
     runId: "run-failed",
     timestampMs: 1_700_000_000_000,
-    version: 1,
-    ...overrides,
+    version: 2,
+    ...fields,
   });
 }
 
@@ -68,14 +91,11 @@ async function seedStore(filename: string, events: readonly PipelineTraceEvent[]
 
 const failedRunEvents: PipelineTraceEvent[] = [
   event("pipeline.started", {
-    attributes: { dry_run: false },
     timestampMs: 1_700_000_000_000,
   }),
   event("step.planned", {
-    attributes: {
-      dependencies: "[]",
+    payload: {
       description: "Load source rows.",
-      dry_run: "run",
       name: "Load rows",
     },
     stepId: "load",
@@ -88,7 +108,7 @@ const failedRunEvents: PipelineTraceEvent[] = [
   }),
   event("pipeline.log", {
     attemptId: "attempt-1",
-    attributes: { level: "warn", message: "source slowed" },
+    payload: { level: "warn", message: "source slowed" },
     stepId: "load",
     timestampMs: 1_700_000_000_003,
   }),
@@ -105,7 +125,7 @@ const failedRunEvents: PipelineTraceEvent[] = [
     timestampMs: 1_700_000_000_004,
   }),
   event("pipeline.completed", {
-    attributes: { status: "failed" },
+    payload: { errorCount: 1, status: "failed" },
     durationMs: 7,
     error: {
       code: "TUBELESS_STEP_FAILED",
@@ -119,13 +139,11 @@ const failedRunEvents: PipelineTraceEvent[] = [
 
 const secondRunEvents: PipelineTraceEvent[] = [
   event("pipeline.started", {
-    attributes: { dry_run: false },
     pipelineId: "publish",
     runId: "run-ok",
     timestampMs: 1_700_000_000_100,
   }),
   event("pipeline.completed", {
-    attributes: { status: "completed" },
     durationMs: 3,
     pipelineId: "publish",
     runId: "run-ok",
