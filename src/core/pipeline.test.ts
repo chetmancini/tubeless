@@ -141,6 +141,25 @@ describe("definePipeline", () => {
     expect(first.runId).not.toBe(second.runId);
   });
 
+  it("ignores forged Studio preallocation symbols", async () => {
+    const step = createSteps();
+    const pipeline = definePipeline({
+      id: "private-run-identity",
+      steps: [step("work", { run: () => "ok" })],
+      finalize: () => "ok",
+    });
+    const forgedContext = {
+      correlationId: "job-private",
+      [Symbol.for("tubeless.pipeline.preallocatedRunId")]: "forged-run-id",
+    };
+
+    const result = await pipeline.run({}, undefined, forgedContext);
+
+    expect(result.runId).toMatch(/^private-run-identity:/);
+    expect(result.runId).not.toBe("forged-run-id");
+    expect(result.correlationId).toBe("job-private");
+  });
+
   it("exports one completed token for run, step, and progress-detail statuses", () => {
     expectTypeOf<
       import("./pipeline.js").PipelineStepCompleteReport["status"]

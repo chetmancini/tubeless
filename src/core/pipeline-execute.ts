@@ -45,11 +45,20 @@ import type {
 import { PipelineBoundaryValidationError, validateStandardSchema } from "./pipeline-validation.js";
 import { createPipelineTraceEmitter } from "../tracing/tracing-internal.js";
 
-/** Internal-only escape hatch for a host that must announce an execution ID before it starts. */
-export const PIPELINE_PREALLOCATED_RUN_ID = Symbol.for("tubeless.pipeline.preallocatedRunId");
+const PIPELINE_RUN_ID_OBSERVER = Symbol.for("tubeless.pipeline.runIdObserver");
 
-interface PreallocatedPipelineRuntime {
-  [PIPELINE_PREALLOCATED_RUN_ID]?: string;
+interface ObservedPipelineRuntime {
+  [PIPELINE_RUN_ID_OBSERVER]?: (runId: string) => void;
+}
+
+/** Observe an execution ID from an internal host without allowing it to be overridden. */
+export function observePipelineRunId<TContext extends object>(
+  context: TContext,
+  observer: (runId: string) => void
+): TContext {
+  // SAFETY: the internal observer is intentionally hidden from the returned
+  // public type and can observe, but never choose, the generated run ID.
+  return { ...context, [PIPELINE_RUN_ID_OBSERVER]: observer };
 }
 
 const PIPELINE_LOGGER_BASE = Symbol("pipelineLoggerBase");
@@ -235,12 +244,14 @@ export async function executePlannedRun<
   type TOptions = StepsOptions<TSteps>;
   const { compiled, controls, runtime } = input;
   const startedAtMs = runtime.now();
-  // SAFETY: only the package-owned Studio launcher attaches this internal symbol;
-  // ordinary PipelineRuntime values simply read as undefined.
-  const preallocatedRunId = (runtime as PipelineRuntime & PreallocatedPipelineRuntime)[
-    PIPELINE_PREALLOCATED_RUN_ID
-  ];
-  const runId = preallocatedRunId ?? createRunId(compiled.id);
+  const runId = createRunId(compiled.id);
+  try {
+    // SAFETY: only internal hosts attach this observation callback. A callback
+    // failure must not change whether the pipeline execution itself can start.
+    (runtime as PipelineRuntime & ObservedPipelineRuntime)[PIPELINE_RUN_ID_OBSERVER]?.(runId);
+  } catch {
+    // Ignore observation failures; execution identity remains package-owned.
+  }
   const correlationId = runtime.correlationId ?? runtime.runId;
   const identity: PipelineRunIdentity = { runId };
   if (correlationId !== undefined) identity.correlationId = correlationId;
