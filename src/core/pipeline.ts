@@ -5,19 +5,20 @@ import {
   resolvePipelineRuntime,
 } from "./pipeline-execute.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
-import {
-  PIPELINE_FINALIZE_STEP_ID,
-  PipelineDefinitionError,
-  requireOutputs,
-  buildPipelinePlan,
-  brandCompiledPipeline,
-  compilePipeline,
-  EXECUTE_COMPILED_RUN,
-  renderPipelineMermaid,
-  type PipelineDefinition,
-} from "./pipeline-plan.js";
-import type { StepIds, StepsInputOptions, TargetIds } from "./pipeline-plan.js";
+import { compilePipeline } from "./pipeline-compiler.js";
+import type {
+  PipelineDefinition,
+  StepIds,
+  StepsInputOptions,
+  TargetIds,
+} from "./pipeline-definition.js";
+import { PipelineDefinitionError } from "./pipeline-errors.js";
+import { requireOutputs } from "./pipeline-finalizer.js";
+import { brandCompiledPipeline, EXECUTE_COMPILED_RUN } from "./pipeline-identity.js";
+import { renderPipelineMermaid } from "./pipeline-mermaid.js";
+import { buildPipelinePlan } from "./pipeline-plan.js";
 import type { AnyStep } from "./pipeline-steps.js";
+import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import type {
   InferSchemaOutput,
   Pipeline,
@@ -88,7 +89,7 @@ export type {
   Pipeline,
 } from "./pipeline-types.js";
 
-export type { PipelineDefinition } from "./pipeline-plan.js";
+export type { PipelineDefinition } from "./pipeline-definition.js";
 
 export type { AnyStep, Step, MappedChildProgressOptions, StepFactory } from "./pipeline-steps.js";
 

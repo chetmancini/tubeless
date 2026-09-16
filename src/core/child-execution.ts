@@ -8,7 +8,7 @@ import {
 } from "./mapped-child-progress.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { duplicateValues } from "../utilities/collections.js";
-import { EXECUTE_COMPILED_RUN, isCompiledPipeline } from "./pipeline-plan.js";
+import { EXECUTE_COMPILED_RUN, isCompiledPipeline } from "./pipeline-identity.js";
 import { createChildProgress } from "./child-progress.js";
 import { hasVisibleStepProgress } from "./progress.js";
 import type {

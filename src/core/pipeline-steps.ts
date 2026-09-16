@@ -6,7 +6,11 @@ import {
 } from "./child-execution.js";
 import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.js";
 import { isPipelineCancellation, PipelineExecutionError } from "./pipeline-execute.js";
-import { STEP_NESTED_PIPELINE, STEP_OPTIONS_SCHEMA, STEP_REMOTE } from "./pipeline-plan.js";
+import {
+  STEP_NESTED_PIPELINE,
+  STEP_OPTIONS_SCHEMA,
+  STEP_REMOTE,
+} from "./pipeline-step-metadata.js";
 import type {
   InferSchemaInput,
   InferSchemaOutput,

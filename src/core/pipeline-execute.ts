@@ -8,21 +8,18 @@ import { brandTubelessError } from "../utilities/tubeless-error.js";
 import { createPipelineLifecycleObserver } from "./lifecycle.js";
 import { formatPipelineError } from "./pipeline-diagnostics.js";
 import { createRunId } from "./pipeline-ids.js";
-import {
-  PIPELINE_FINALIZE_STEP_ID,
-  compiledStepGraph,
-  decideStepDisposition,
-  planStepById,
-  stepToPlanStep,
-  type CompiledPipeline,
-} from "./pipeline-plan.js";
-import type { StepsOptions } from "./pipeline-plan.js";
+import type { CompiledPipeline } from "./pipeline-compiler.js";
+import type { StepsOptions } from "./pipeline-definition.js";
+import { decideStepDisposition } from "./pipeline-disposition.js";
+import { compiledStepGraph } from "./pipeline-graph.js";
+import { planStepById, stepToPlanStep } from "./pipeline-plan.js";
 import {
   PipelineRunState,
   isCancellationOnly,
   type PipelineStepAttempt,
 } from "./pipeline-run-state.js";
 import type { AnyStep } from "./pipeline-steps.js";
+import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import {
   evaluateStepSkip,
   executeStepAttempt,
