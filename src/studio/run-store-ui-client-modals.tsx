@@ -3,6 +3,7 @@ import type { CliParameterDescriptor } from "../cli/cli.js";
 import type { PipelinePlan } from "../core/pipeline.js";
 import { CommandFields, commandDescription, PlanView } from "./run-store-ui-client-commands.js";
 import {
+  initialStudioParameterValues,
   serializeLaunchValues,
   serializePlanInput,
   type StudioParameterValue,
@@ -13,14 +14,6 @@ import type { PipelineRunStudioCommand } from "./run-store-ui-protocol.js";
 
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message || String(error) : String(error);
-}
-
-function initialParameterValues(command: PipelineRunStudioCommand): StudioParameterValue[][] {
-  return command.parameters.map((parameter) => {
-    if (parameter.type === "boolean") return [Boolean(parameter.default)];
-    if (parameter.multiple && !parameter.choices) return [""];
-    return parameter.default === undefined ? [""] : [parameter.default];
-  });
 }
 
 interface LaunchModalProps {
@@ -40,13 +33,15 @@ export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: L
   const [launching, setLaunching] = useState(false);
   const [planning, setPlanning] = useState(false);
   const firstField = useRef<HTMLDivElement>(null);
+  const planVersion = useRef(0);
 
   useEffect(() => {
     setSelectedId(commandId ?? commands[0]?.id ?? "");
   }, [commandId, commands]);
 
   useEffect(() => {
-    setValues(command ? initialParameterValues(command) : []);
+    planVersion.current += 1;
+    setValues(command ? initialStudioParameterValues(command) : []);
     setPlan(null);
     setError("");
     requestAnimationFrame(() =>
@@ -70,6 +65,7 @@ export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: L
   };
   const updateValue = (index: number, next: StudioParameterValue[]) => {
     if (!command) return;
+    planVersion.current += 1;
     setValues((current) =>
       current.map((value, candidateIndex) => {
         if (candidateIndex === index) return next;
@@ -96,12 +92,14 @@ export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: L
   };
   const preview = async () => {
     if (!command?.canPlan || planning) return;
+    const requestedVersion = planVersion.current;
     setPlanning(true);
     setError("");
     try {
-      setPlan(await api.previewPlan(command.id, serializePlanInput(command, readValues)));
+      const nextPlan = await api.previewPlan(command.id, serializePlanInput(command, readValues));
+      if (planVersion.current === requestedVersion) setPlan(nextPlan);
     } catch (caught) {
-      setError(errorMessage(caught));
+      if (planVersion.current === requestedVersion) setError(errorMessage(caught));
     } finally {
       setPlanning(false);
     }
@@ -148,7 +146,12 @@ export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: L
             <select
               id="launchCommand"
               value={selectedId}
-              onChange={(event) => setSelectedId(event.currentTarget.value)}
+              onChange={(event) => {
+                planVersion.current += 1;
+                setPlan(null);
+                setError("");
+                setSelectedId(event.currentTarget.value);
+              }}
             >
               {commands.map((candidate) => (
                 <option key={candidate.id} value={candidate.id}>

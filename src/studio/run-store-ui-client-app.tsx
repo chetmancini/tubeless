@@ -13,6 +13,7 @@ import type { PipelineRunStudioCommand } from "./run-store-ui-protocol.js";
 
 type StudioView = "pipelines" | "runs";
 const defaultStudioApi = createStudioApi();
+const DETAIL_RETRY_MS = 1_200;
 
 export function connectionPresentation(connected: boolean) {
   return {
@@ -29,6 +30,7 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [detail, setDetail] = useState<StudioRunDetail | null>(null);
   const [detailFingerprint, setDetailFingerprint] = useState<string | null>(null);
+  const [detailRetry, setDetailRetry] = useState(0);
   const [connected, setConnected] = useState(true);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [canCancel, setCanCancel] = useState(false);
@@ -111,6 +113,7 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     }
     if (selectedFingerprint === detailFingerprint && detail) return;
     let current = true;
+    let retryTimeout: ReturnType<typeof setTimeout> | undefined;
     void api
       .loadRunDetail(selectedRunId)
       .then((loaded) => {
@@ -118,11 +121,15 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
         setDetail(loaded);
         setDetailFingerprint(loaded ? selectedFingerprint : null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!current) return;
+        retryTimeout = setTimeout(() => setDetailRetry((attempt) => attempt + 1), DETAIL_RETRY_MS);
+      });
     return () => {
       current = false;
+      if (retryTimeout) clearTimeout(retryTimeout);
     };
-  }, [api, detail, detailFingerprint, selectedFingerprint, selectedRunId]);
+  }, [api, detail, detailFingerprint, detailRetry, selectedFingerprint, selectedRunId]);
 
   const showToast = (message: string) => setToast(message);
   const cancelRun = async (runId: string) => {

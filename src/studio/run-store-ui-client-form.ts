@@ -12,6 +12,17 @@ export type ReadStudioParameterValues = (
   index: number
 ) => readonly StudioParameterValue[];
 
+/** Initial form values that match the rendered controls. */
+export function initialStudioParameterValues(
+  command: PipelineRunStudioCommand
+): StudioParameterValue[][] {
+  return command.parameters.map((parameter) => {
+    if (parameter.type === "boolean") return [Boolean(parameter.default)];
+    if (parameter.multiple) return parameter.choices ? [] : [""];
+    return parameter.default === undefined ? [""] : [parameter.default];
+  });
+}
+
 /** Convert launch-form values into the bounded wire shape expected by the Studio API. */
 export function serializeLaunchValues(
   command: PipelineRunStudioCommand,
