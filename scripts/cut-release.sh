@@ -23,6 +23,17 @@ if [[ -n "${BUMP:-}" && -n "${VERSION:-}" ]]; then
 	exit 1
 fi
 
+current="$(node -p 'require("./package.json").version')"
+latest_tag="$(git tag -l 'v*' --sort=-version:refname | awk 'NR == 1 { print; exit }')"
+if [[ -n "${latest_tag}" ]]; then
+	latest="${latest_tag#v}"
+	if [[ -n "${VERSION:-}" ]]; then
+		bash scripts/check-release-version.sh "${VERSION}" "${latest}"
+	else
+		bash scripts/check-release-version.sh "${current}" "${latest}" newer-or-equal
+	fi
+fi
+
 requested="${VERSION:-${BUMP:-patch}}"
 args=("${requested}" --no-git-tag-version --ignore-scripts)
 if [[ "${requested}" == "prerelease" ]]; then
@@ -32,6 +43,9 @@ npm version "${args[@]}" >/dev/null
 
 version="$(node -p 'require("./package.json").version')"
 tag="v${version}"
+if [[ -n "${latest_tag}" ]]; then
+	bash scripts/check-release-version.sh "${version}" "${latest}"
+fi
 if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
 	echo "local tag ${tag} already exists" >&2
 	exit 1

@@ -39,8 +39,9 @@ make release VERSION=0.2.0
 
 Version increments use `npm version --no-git-tag-version`. Default bump is
 patch. `BUMP=prerelease` uses the `rc` prerelease identifier; use `VERSION=`
-for an exact version. If `make check` fails after the version is written,
-restore `package.json` before retrying.
+for an exact version. Both release paths reject a version older than the latest
+version tag. If `make check` fails after the version is written, restore
+`package.json` before retrying.
 
 Without a checkout: Actions → **publish** → **Run workflow** on `main`.
 That path does not bump `package.json`; land the version first (or use
