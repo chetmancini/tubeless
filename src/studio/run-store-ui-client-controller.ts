@@ -2,7 +2,7 @@ import type { CliParameterDescriptor } from "../cli/cli.js";
 import type { PipelinePlan } from "../core/pipeline.js";
 import type { PipelineRunStudioCommand } from "./run-store-ui-protocol.js";
 import { createStudioRunIndex } from "./run-store-ui-client-model.js";
-import type { StudioState } from "./run-store-ui-client-model.js";
+import type { StudioRunDetail, StudioState } from "./run-store-ui-client-model.js";
 import { serializeLaunchValues, serializePlanInput } from "./run-store-ui-client-form.js";
 import { createStudioApi } from "./run-store-ui-client-transport.js";
 import {
@@ -28,6 +28,46 @@ interface StudioNode extends HTMLElement {
 export interface StudioController {
   bind(): void;
   start(): void;
+}
+
+function selectedRunFingerprint(state: StudioState) {
+  const run = state.runIndex.runById(state.selectedRunId);
+  return run ? [run.runId, run.eventCount, run.status].join(":") : null;
+}
+
+/** Refresh selected-run detail without allowing its optional endpoint to fail snapshot polling. */
+export async function loadSelectedRunDetail(
+  state: StudioState,
+  loadRunDetail: (runId: string) => Promise<StudioRunDetail | null>
+): Promise<void> {
+  if (!state.selectedRunId) {
+    state.detail = null;
+    state.detailFingerprint = null;
+    return;
+  }
+  const requestedRunId = state.selectedRunId;
+  const fingerprint = selectedRunFingerprint(state);
+  if (!fingerprint) {
+    state.detail = null;
+    state.detailFingerprint = null;
+    return;
+  }
+  if (fingerprint === state.detailFingerprint && state.detail) return;
+  let detail: StudioRunDetail | null;
+  try {
+    detail = await loadRunDetail(requestedRunId);
+  } catch {
+    /* Detail is optional; retain the last successful detail and snapshot connection state. */
+    return;
+  }
+  if (state.selectedRunId !== requestedRunId) return;
+  if (!detail) {
+    state.detail = null;
+    state.detailFingerprint = null;
+    return;
+  }
+  state.detail = detail;
+  state.detailFingerprint = fingerprint;
 }
 
 /** DOM event and polling controller for one Studio client state instance. */
@@ -287,38 +327,10 @@ export function createStudioController(state: StudioState): StudioController {
     if (isPipelines) renderPipelines();
     else renderRuns();
   }
-  function selectedRunFingerprint() {
-    const run = state.runIndex.runById(state.selectedRunId);
-    return run ? [run.runId, run.eventCount, run.status].join(":") : null;
-  }
-  async function loadSelectedRunDetail() {
-    if (!state.selectedRunId) {
-      state.detail = null;
-      state.detailFingerprint = null;
-      return;
-    }
-    const requestedRunId = state.selectedRunId;
-    const fingerprint = selectedRunFingerprint();
-    if (!fingerprint) {
-      state.detail = null;
-      state.detailFingerprint = null;
-      return;
-    }
-    if (fingerprint === state.detailFingerprint && state.detail) return;
-    const detail = await api.loadRunDetail(requestedRunId);
-    if (state.selectedRunId !== requestedRunId) return;
-    if (!detail) {
-      state.detail = null;
-      state.detailFingerprint = null;
-      return;
-    }
-    state.detail = detail;
-    state.detailFingerprint = fingerprint;
-  }
   async function selectRun(runId: string | undefined) {
     state.selectedRunId = runId ?? null;
     render();
-    await loadSelectedRunDetail();
+    await loadSelectedRunDetail(state, api.loadRunDetail);
     render();
   }
   async function refresh(manual = false) {
@@ -330,7 +342,7 @@ export function createStudioController(state: StudioState): StudioController {
       state.snapshot = snapshot;
       state.runIndex = createStudioRunIndex(snapshot.runs);
       render();
-      await loadSelectedRunDetail();
+      await loadSelectedRunDetail(state, api.loadRunDetail);
       setConnected(true);
       render();
     } catch {
