@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { PipelineChildError } from "./child-execution.js";
-import { STEP_NESTED_PIPELINE } from "./pipeline-plan.js";
+import { STEP_NESTED_PIPELINE } from "./pipeline-step-metadata.js";
 import { createPipelineReporter, type ReporterOutput } from "../reporter/interactive-reporter.js";
 import {
   createSteps,

@@ -8,23 +8,23 @@ Package: `tubeless`
 
 | Entrypoint                   | Declaration                               | Surface hash                                                       | Exported symbols |
 | ---------------------------- | ----------------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless`                   | `./dist/core/pipeline.d.ts`               | `23ec631ccaa3a6bf0bac8084521c6b7a035df074228ed135945c2c76284fd368` |               75 |
+| `tubeless`                   | `./dist/core/pipeline.d.ts`               | `c64489e2b68532c6159c212bdcb9c475d0a16cca8be7c064ad6b4e5533c28bb4` |               75 |
 | `tubeless/batch`             | `./dist/utilities/batch.d.ts`             | `6b7fe7d6eec6532cc835505517c3481e4290a2a606c2fddf6c80367f5c76c5f5` |                7 |
-| `tubeless/cli`               | `./dist/cli/cli.d.ts`                     | `de8257022a5d3bbbd3579967c8200ddec470ed9e9332529bd2a47adc459676c2` |               28 |
+| `tubeless/cli`               | `./dist/cli/cli.d.ts`                     | `1676697866263f7e91c397edbfdc199df8c1e4674ee02b54ca135ea360ff7fbc` |               28 |
 | `tubeless/node`              | `./dist/node/node.d.ts`                   | `1bf8549ca953a11e7202dbda8013db2a8f1d56286f1618bad929efbbb2efd302` |                3 |
 | `tubeless/rate-limit`        | `./dist/utilities/rate-limit.d.ts`        | `5cd093bb780a19e44b087b01e2b38e06f07e7233c9920988ba399036e319c368` |                1 |
-| `tubeless/render`            | `./dist/render/render.d.ts`               | `b6c00503e92662fc0285ed6ff5e8bc60bf457bad67cb6a53daa8b8bd0e3f9b93` |                6 |
-| `tubeless/reporter`          | `./dist/reporter/reporter-entry.d.ts`     | `addbcb509e48d69b6512fa6cf8619d3439764834d3a98c73a0e0bb98a54f40f1` |               13 |
+| `tubeless/render`            | `./dist/render/render.d.ts`               | `3be31e21c17308128266686c7e4d6ca5eba20f16a4b3feed5f1307e0b4e3fe74` |                6 |
+| `tubeless/reporter`          | `./dist/reporter/reporter-entry.d.ts`     | `5fd52ef0982f5159a95fefbfcef32a2a1bc8fa3a17802967ff443a9a85d54f82` |               13 |
 | `tubeless/retry`             | `./dist/utilities/retry.d.ts`             | `f91f83f8e31e3e629ed90d1b04656110572ea970187a92369f0908cd75ae8f00` |                4 |
-| `tubeless/run-store`         | `./dist/run-store/run-store.d.ts`         | `e6d15c1e93042f8599185a433b5f45cb9056d866008baa5bd6b89ebd43e728d1` |               18 |
-| `tubeless/run-store/sqlite`  | `./dist/run-store/run-store-sqlite.d.ts`  | `9903e705b9fd5c5d3f562d7325ac59cbd6f9a4898731f18227f24b4d4e6819e2` |                3 |
-| `tubeless/run-store/ndjson`  | `./dist/run-store/run-store-ndjson.d.ts`  | `fc29c88a10c2c9d8281bba3bcaae44fa2ac33df92f1c2395062ae720391d2a5a` |                3 |
+| `tubeless/run-store`         | `./dist/run-store/run-store.d.ts`         | `72891a980ec6993af0e3c04de4c4e777249a05fc285ba4a5bb0af1364c054c1a` |               18 |
+| `tubeless/run-store/sqlite`  | `./dist/run-store/run-store-sqlite.d.ts`  | `1c1b72cea305fb84aa70069e3cdfb60e1fb5f6d5a6310726c2931ddfc504b87a` |                3 |
+| `tubeless/run-store/ndjson`  | `./dist/run-store/run-store-ndjson.d.ts`  | `6a5896b1e200005087338d18dc755bdc3df86d4d6c6c22c659a065f5ec3dd7cc` |                3 |
 | `tubeless/workbench/project` | `./dist/workbench/workbench-project.d.ts` | `eac0931b2968d98c1b7d41503c1ea61477a2685e8cfebd22863255fce67085a7` |                6 |
-| `tubeless/run-store/ui`      | `./dist/studio/run-store-ui.d.ts`         | `ed53c67e56641731f3443afb33a1aed2a2954c8d59f6df89d3819cf2eed7918f` |                9 |
-| `tubeless/testing`           | `./dist/testing/testing.d.ts`             | `b6f3479c404a6837d662a1d59389adb395628553dc4329f01f48a9507f2bae7e` |                7 |
-| `tubeless/tracing`           | `./dist/tracing/tracing.d.ts`             | `23ec631ccaa3a6bf0bac8084521c6b7a035df074228ed135945c2c76284fd368` |               25 |
-| `tubeless/tracing/json`      | `./dist/tracing/tracing-json.d.ts`        | `9cb66d64f03ad51c2fdb8424faaea5221e5a8fc829e549f0e6862f1d0be39435` |                2 |
-| `tubeless/tracing/otel`      | `./dist/tracing/tracing-otel.d.ts`        | `9b2086e51d55666a44d3755b5ebc93d6dea6d7b261d73c72cf9d2bea0188c6ad` |                4 |
+| `tubeless/run-store/ui`      | `./dist/studio/run-store-ui.d.ts`         | `403f2cfdc31e073cc4dfa687cec7225eec41ee3c8c45e55fc7a2e57bbe3601e1` |                9 |
+| `tubeless/testing`           | `./dist/testing/testing.d.ts`             | `ed4e87bcbb03abd6778a688c43019114dd19ea738f6dc306e07c3814893f71f8` |                7 |
+| `tubeless/tracing`           | `./dist/tracing/tracing.d.ts`             | `c64489e2b68532c6159c212bdcb9c475d0a16cca8be7c064ad6b4e5533c28bb4` |               25 |
+| `tubeless/tracing/json`      | `./dist/tracing/tracing-json.d.ts`        | `9a6f11b8b694d4d0debb96d2b519a0fe1461d8b44caecce13367a8e9525f9d19` |                2 |
+| `tubeless/tracing/otel`      | `./dist/tracing/tracing-otel.d.ts`        | `456962beabb27245e7a00190211f2ba5445965547b30db6d65a7f14f20adfc2c` |                4 |
 
 ## Symbols
 

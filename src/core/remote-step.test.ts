@@ -7,7 +7,7 @@ import {
   type StandardSchemaV1,
   type Step,
 } from "./pipeline.js";
-import { STEP_REMOTE } from "./pipeline-plan.js";
+import { STEP_REMOTE } from "./pipeline-step-metadata.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
 function standardSchema<TInput, TOutput>(
