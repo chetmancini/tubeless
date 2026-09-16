@@ -178,4 +178,4 @@ The studio is a local process, not an authenticated network service.
   Those are same-origin guards, not authentication.
 
 Documented in `SECURITY.md` and `docs/studio.md`. Covered by
-`src/studio/run-store-ui.test.ts` and `src/workbench/workbench.test.ts`.
+`src/studio/run-store-ui.test.ts` and `src/workbench/workbench-ui-integration.test.ts`.
