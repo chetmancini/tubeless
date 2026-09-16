@@ -36,20 +36,34 @@ const OPEN_TELEMETRY_ERROR_STATUS_CODE = 2;
 export function createOpenTelemetryExporter(tracer: OpenTelemetryTracer): PipelineTraceExporter {
   const spans = new Map<string, OpenTelemetrySpan>();
   const attributes = (event: PipelineTraceEvent): Record<string, boolean | number | string> => {
-    const values: Record<string, boolean | number | string> = {
-      "pipeline.id": event.pipelineId,
-      "pipeline.run_id": event.runId,
-      "pipeline.trace_version": event.version,
-    };
-    for (const [key, value] of Object.entries(event.payload)) {
-      if (value !== undefined) {
-        values[key] =
-          typeof value === "boolean" || typeof value === "number" || typeof value === "string"
-            ? value
-            : JSON.stringify(value);
+    const values = new Map<string, boolean | number | string>();
+    if (event.name === "step.attempted") {
+      for (const [key, value] of Object.entries(event.payload.attributes)) {
+        if (value !== undefined) values.set(key, value);
       }
     }
-    return values;
+    for (const [key, value] of Object.entries(event.payload)) {
+      if (value === undefined || key === "attributes") continue;
+      const telemetryKey = key.replaceAll(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+      values.set(
+        telemetryKey,
+        typeof value === "boolean" || typeof value === "number" || typeof value === "string"
+          ? value
+          : JSON.stringify(value)
+      );
+    }
+    values.set("pipeline.correlation_id", event.correlationId ?? "");
+    values.set("pipeline.id", event.pipelineId);
+    values.set("pipeline.item_key", event.itemKey ?? "");
+    values.set("pipeline.parent_run_id", event.parentRunId ?? "");
+    values.set("pipeline.run_id", event.runId);
+    values.set("pipeline.trace_version", event.version);
+    if (event.attemptId) values.set("pipeline.attempt_id", event.attemptId);
+    if (event.stepId) values.set("pipeline.step_id", event.stepId);
+    if (event.durationMs !== undefined) values.set("pipeline.duration_ms", event.durationMs);
+    if (event.error?.code) values.set("error.code", event.error.code);
+    if (event.error) values.set("error.message", event.error.message);
+    return Object.fromEntries(values);
   };
   return {
     export(event) {
