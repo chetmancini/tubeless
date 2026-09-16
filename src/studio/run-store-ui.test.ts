@@ -323,7 +323,7 @@ describe("local pipeline run studio", () => {
       },
     };
     const query = (selector: string) => (selector === ".pulse" ? pulse : label);
-    const source = /function setConnected\(connected\) \{[\s\S]*?\n    \}/.exec(
+    const source = /function setConnected\(connected\) \{[\s\S]*?\n  \}/.exec(
       PIPELINE_RUN_STUDIO_SCRIPT
     )?.[0];
     expect(source).toBeTruthy();
@@ -348,8 +348,8 @@ describe("local pipeline run studio", () => {
 
     const html = await fetch(server.url).then((response) => response.text());
     expect(html).toContain('role="img" aria-label="');
-    expect(html).toContain("esc(label)");
-    expect(html).toContain("if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15)");
+    expect(html).toContain("escapeHtml(label)");
+    expect(html).toContain("if (!Number.isFinite(ms) || Math.abs(ms) > 8640000000000000)");
   });
 
   it("exposes only injected commands and delegates bounded structured launch values", async () => {
