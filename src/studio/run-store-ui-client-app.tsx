@@ -336,21 +336,23 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
           )}
         </main>
       </div>
-      <LaunchModal
-        api={api}
-        commands={commands}
-        commandId={launchCommandId}
-        onClose={() => setLaunchCommandId(null)}
-        onLaunched={(runId) => {
-          pendingRunId.current = runId;
-          setSelectedRunId(runId);
-          setView("runs");
-          setQuery("");
-          setLaunchCommandId(null);
-          showToast("Run accepted · " + shortId(runId));
-          setTimeout(() => void refresh(true), 80);
-        }}
-      />
+      {launchCommandId !== null && (
+        <LaunchModal
+          api={api}
+          commands={commands}
+          commandId={launchCommandId}
+          onClose={() => setLaunchCommandId(null)}
+          onLaunched={(runId) => {
+            pendingRunId.current = runId;
+            setSelectedRunId(runId);
+            setView("runs");
+            setQuery("");
+            setLaunchCommandId(null);
+            showToast("Run accepted · " + shortId(runId));
+            setTimeout(() => void refresh(true), 80);
+          }}
+        />
+      )}
       {clearHistoryOpen && snapshot && (
         <ClearHistoryModal
           api={api}
