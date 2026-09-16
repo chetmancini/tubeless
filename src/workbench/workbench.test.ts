@@ -1990,7 +1990,7 @@ describe("tubeless workbench", () => {
     expect(await runWorkbenchCli(["run", "pipeline.mjs"], rawPipelineIo)).toBe(
       TUBELESS_WORKBENCH_EXIT_CODE.load
     );
-    expect(rawPipelineIo.errors.join("")).toContain("does not export an tubeless pipeline command");
+    expect(rawPipelineIo.errors.join("")).toContain("does not export a tubeless pipeline command");
     expect(
       await runWorkbenchCli(
         ["run", "pipeline.mjs", "--message", "outside-boundary"],
@@ -2252,7 +2252,7 @@ describe("tubeless workbench", () => {
       `export { Generic } from ${JSON.stringify(pathToFileURL(aliases.filePath).href)};`
     );
     await expect(loadPipelineCommandModule(generic.filePath)).rejects.toThrow(
-      "Module does not export an tubeless pipeline command."
+      "Module does not export a tubeless pipeline command."
     );
   });
 
@@ -2272,7 +2272,7 @@ describe("tubeless workbench", () => {
       });
     `);
     await expect(loadPipelineCommandModule(filePath)).rejects.toThrow(
-      "Module does not export an tubeless pipeline command."
+      "Module does not export a tubeless pipeline command."
     );
   });
 

@@ -124,14 +124,14 @@ export function selectUniqueExport<T>(
     }
     const selected = moduleExports[exportName];
     if (!predicate(selected)) {
-      throw new Error(`Export ${JSON.stringify(exportName)} is not an tubeless ${label}.`);
+      throw new Error(`Export ${JSON.stringify(exportName)} is not a tubeless ${label}.`);
     }
     return { exportName, value: selected };
   }
 
   const unique = uniqueNamedExports(moduleExports, predicate);
   if (unique.length === 0) {
-    throw new Error(`Module does not export an tubeless ${label}.`);
+    throw new Error(`Module does not export a tubeless ${label}.`);
   }
   if (unique.length > 1) {
     const names = unique.map(([name]) => name).join(", ");
@@ -162,7 +162,7 @@ function selectPlanSourceExport(
       return { kind: "pipeline", pipeline: selected };
     }
     throw new Error(
-      `Export ${JSON.stringify(exportName)} is not an tubeless pipeline or pipeline command.`
+      `Export ${JSON.stringify(exportName)} is not a tubeless pipeline or pipeline command.`
     );
   }
 
@@ -185,7 +185,7 @@ function selectPlanSourceExport(
       `Module exports multiple pipelines (${pipelines.map(([name]) => name).join(", ")}); pass --export <name>.`
     );
   }
-  throw new Error("Module does not export an tubeless pipeline or pipeline command.");
+  throw new Error("Module does not export a tubeless pipeline or pipeline command.");
 }
 
 /** Import a JS/TS module as a string-keyed export namespace. */
