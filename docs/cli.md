@@ -228,7 +228,7 @@ NDJSON files are opened read-only and validated before their events are
 displayed. Event IDs start at zero and follow file order. By default, artifacts over 64 MiB, individual event
 lines over 1 MiB, and traces over 100,000 events are refused. Diagnostics name
 the line and invalid field without echoing its contents. Trace artifacts may
-contain sensitive logs, errors, and attributes; inspect only files you trust and
+contain sensitive logs, errors, and event payloads; inspect only files you trust and
 avoid exposing Studio beyond the intended host.
 
 ```sh

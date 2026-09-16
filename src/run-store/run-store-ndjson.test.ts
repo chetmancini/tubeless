@@ -25,7 +25,7 @@ async function tempFile(contents: string | Buffer): Promise<string> {
   return filename;
 }
 
-function event(runId: string, pipelineId = "import"): PipelineTraceEvent {
+function event(runId: string, pipelineId = "import"): Record<string, unknown> {
   return {
     attributes: { dry_run: false },
     name: "pipeline.started",
@@ -68,9 +68,12 @@ describe("openNdjsonPipelineRunStore", () => {
       const store = await openNdjsonPipelineRunStore(await tempFile(`${lines.join("\n")}\n`));
       try {
         const events = await store.listEvents();
-        const recorded = events.find((event) => event.attributes.detail_count === 128)!;
+        const recorded = events.find(
+          (event) => event.name === "step.running" && event.payload.progress?.detailCount === 128
+        );
+        if (recorded?.name !== "step.running") throw new Error("missing progress trace");
         expect(
-          Buffer.byteLength(JSON.stringify(recorded.attributes.details), "utf8")
+          Buffer.byteLength(JSON.stringify(recorded?.payload.progress?.details), "utf8")
         ).toBeLessThanOrEqual(256 * 1024);
         const progress = projectPipelineRunStore(events).runs[0]?.steps[0]?.progress;
         expect(progress?.detailCount).toBe(128);
@@ -93,8 +96,15 @@ describe("openNdjsonPipelineRunStore", () => {
     expect("export" in store).toBe(false);
 
     await expect(store.listEvents()).resolves.toMatchObject([
-      { correlationId: "job-1", id: 0, pipelineId: "import", runId: "run-1" },
-      { id: 1, pipelineId: "publish", runId: "run-2" },
+      {
+        correlationId: "job-1",
+        id: 0,
+        payload: { dryRun: false, targetIds: [] },
+        pipelineId: "import",
+        runId: "run-1",
+        version: 2,
+      },
+      { id: 1, pipelineId: "publish", runId: "run-2", version: 2 },
     ]);
     await expect(store.listEvents({ afterId: 0 })).resolves.toMatchObject([
       { id: 1, runId: "run-2" },
@@ -105,6 +115,33 @@ describe("openNdjsonPipelineRunStore", () => {
 
     await store.close();
     await expect(store.listEvents()).rejects.toThrow("closed NDJSON pipeline run store");
+  });
+
+  it("preserves version 1 target and dependency lists beyond version 2 emission bounds", async () => {
+    const ids = Array.from({ length: 130 }, (_, index) => `step-${index}`);
+    const filename = await tempFile(
+      [
+        { ...event("run-1"), attributes: { dry_run: false, target_ids: JSON.stringify(ids) } },
+        {
+          ...event("run-1"),
+          attributes: { dependencies: JSON.stringify(ids) },
+          name: "step.planned",
+          stepId: "work",
+        },
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n")
+    );
+    const store = await openNdjsonPipelineRunStore(filename);
+    try {
+      const events = await store.listEvents();
+      const started = events.find((entry) => entry.name === "pipeline.started");
+      const planned = events.find((entry) => entry.name === "step.planned");
+      expect(started?.name === "pipeline.started" && started.payload.targetIds).toEqual(ids);
+      expect(planned?.name === "step.planned" && planned.payload.dependencies).toEqual(ids);
+    } finally {
+      await store.close();
+    }
   });
 
   it("rejects malformed events without echoing their contents", async () => {
@@ -133,11 +170,89 @@ describe("openNdjsonPipelineRunStore", () => {
     );
 
     await expect(openNdjsonPipelineRunStore(missingStatus)).rejects.toThrow(
-      "attributes.status must be cancelled, completed, or failed for pipeline.completed"
+      "payload.status must be cancelled, completed, or failed"
     );
     await expect(openNdjsonPipelineRunStore(unsupportedStatus)).rejects.toThrow(
-      "attributes.status must be cancelled, completed, or failed for pipeline.completed"
+      "payload.status must be cancelled, completed, or failed"
     );
+  });
+
+  it("uses the same payload validation for NDJSON and SQLite", async () => {
+    const malformed = {
+      name: "step.planned",
+      payload: {
+        dependencies: "load",
+        dryRun: "run",
+        optionalDependencies: [],
+        runtimeSkipPossible: false,
+        selected: true,
+        selectionReasons: [],
+        skipAfterFailureOf: [],
+      },
+      pipelineId: "import",
+      runId: "run-1",
+      stepId: "load",
+      timestampMs: 1,
+      version: 2,
+    };
+    const filename = await tempFile(`${JSON.stringify(malformed)}\n`);
+    await expect(openNdjsonPipelineRunStore(filename)).rejects.toThrow(
+      "payload.dependencies must be an array"
+    );
+
+    const sqlite = await openSqlitePipelineRunStore(
+      path.join(path.dirname(filename), "malformed.sqlite")
+    );
+    expect(() => {
+      // @ts-expect-error Runtime validation must reject untyped adapter input consistently.
+      void sqlite.export(malformed);
+    }).toThrow("payload.dependencies must be an array");
+    expect(() => sqlite.close()).toThrow("payload.dependencies must be an array");
+  });
+
+  it.each([
+    {
+      expected: "error.issues must contain at most 128 entries",
+      issues: Array.from({ length: 129 }, () => ({ message: "invalid" })),
+    },
+    {
+      expected: "error.issues[0].message exceeds 4096 code units",
+      issues: [{ message: "m".repeat(4_097) }],
+    },
+    {
+      expected: "error.issues[0].path string exceeds 4096 code units",
+      issues: [{ message: "invalid", path: ["p".repeat(4_097)] }],
+    },
+  ])("bounds validation issues consistently: $expected", async ({ expected, issues }) => {
+    const malformed: PipelineTraceEvent = {
+      error: {
+        code: "TUBELESS_OPTIONS_VALIDATION_FAILED",
+        issues,
+        kind: "validation",
+        message: "validation failed",
+        phase: "planning",
+      },
+      name: "pipeline.completed",
+      payload: {
+        dryRun: false,
+        errorCount: 1,
+        finalized: false,
+        status: "failed",
+        stepCount: 0,
+      },
+      pipelineId: "import",
+      runId: "run-1",
+      timestampMs: 1,
+      version: 2,
+    };
+    const filename = await tempFile(`${JSON.stringify(malformed)}\n`);
+    await expect(openNdjsonPipelineRunStore(filename)).rejects.toThrow(expected);
+
+    const sqlite = await openSqlitePipelineRunStore(
+      path.join(path.dirname(filename), "malformed-issues.sqlite")
+    );
+    expect(() => sqlite.export(malformed)).toThrow(expected);
+    expect(() => sqlite.close()).toThrow(expected);
   });
 
   it("enforces artifact, event, and event-count limits", async () => {
@@ -273,10 +388,15 @@ describe("recorded fan-out diagnostics", () => {
     phase: "execution",
     message: "failed",
   };
+  const failedEvent = () => ({
+    ...event("run-1"),
+    attributes: { status: "failed" },
+    name: "pipeline.completed",
+  });
 
   it("preserves cancellation, scheduler causes, and empty snapshot strings", async () => {
     const filename = await tempFile(
-      JSON.stringify({ ...event("run-1"), error: { ...error, fanOut: diagnostics } })
+      JSON.stringify({ ...failedEvent(), error: { ...error, fanOut: diagnostics } })
     );
     const store = await openNdjsonPipelineRunStore(filename);
     try {
@@ -301,7 +421,7 @@ describe("recorded fan-out diagnostics", () => {
     { ...diagnostics, schedulerError: { message: "stop", cause: null } },
   ])("rejects malformed fan-out diagnostics %#", async (fanOut) => {
     const filename = await tempFile(
-      JSON.stringify({ ...event("run-1"), error: { ...error, fanOut } })
+      JSON.stringify({ ...failedEvent(), error: { ...error, fanOut } })
     );
     await expect(openNdjsonPipelineRunStore(filename)).rejects.toThrow("line 1 is invalid");
   });

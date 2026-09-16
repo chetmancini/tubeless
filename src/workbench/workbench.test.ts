@@ -663,10 +663,10 @@ describe("tubeless workbench", () => {
       "pipeline.completed",
     ]);
     expect(events.find(({ name }) => name === "pipeline.log")).toMatchObject({
-      attributes: { level: "log", message: "worked:hello" },
+      payload: { level: "log", message: "worked:hello" },
       stepId: "work",
     });
-    expect(events.find(({ name }) => name === "step.planned")?.attributes).toMatchObject({
+    expect(events.find(({ name }) => name === "step.planned")?.payload).toMatchObject({
       description: "Exercise workbench execution.",
     });
   });
@@ -1396,12 +1396,12 @@ describe("tubeless workbench", () => {
     const damagedPath = path.join(directory, "history", "damaged.sqlite");
     const goodStore = await openSqlitePipelineRunStore(damagedPath);
     await goodStore.export({
-      attributes: { dry_run: false },
       name: "pipeline.started",
+      payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
       pipelineId: "command-fixture",
       runId: "run-1",
       timestampMs: 1,
-      version: 1,
+      version: 2,
     });
     await goodStore.close();
     const database = new DatabaseSync(damagedPath);

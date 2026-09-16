@@ -170,16 +170,19 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   with `tubeless history`. Use the strictly read-only adapter from
   `tubeless/run-store/ndjson`, `tubeless history --trace`, or the `--trace`
   option to `tubeless ui` for a finished portable trace. Treat trace files as sensitive: logs,
-  errors, and attributes are displayed as recorded, and malformed or oversized
+  errors, and event payloads are displayed as recorded, and malformed or oversized
   artifacts are rejected. `tubeless history` inspects a finished artifact and
   refuses a store with a live writer or multiple hard links. SQLite `export()`
   may return before the row is on disk. Other connections cannot see that tail
   until a batch of 64, `flush()`, same-instance `listEvents`/`clearHistory`, or
   `close()`. A crash can lose up to 63 buffered events; `tubeless run --store`
   flushes at completion so finished runs are durable. Do not make pipeline
-  definitions depend on storage or the studio. Recorded history keeps the last
-  `reportProgress` `details` plus `detail_count`, and child wrapper steps keep
-  `nested_pipeline` with the original `step_count`. Studio renders those
+  definitions depend on storage or the studio. Version 2 trace events are a
+  discriminated union keyed by `name`; use their typed `payload` rather than
+  parsing scalar attributes. Readers upgrade valid version 1 artifacts through
+  the shared codec. Recorded history keeps the last `reportProgress` `details`
+  plus `detailCount`, and child wrapper steps keep `nestedPipeline` with the
+  original `stepCount`. Studio renders those
   snapshots; it does not flatten child DAGs into the parent step.
   Observed definitions pick the latest `pipeline.started` by `timestampMs`, then
   store-local id.

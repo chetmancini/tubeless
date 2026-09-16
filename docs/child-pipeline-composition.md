@@ -186,7 +186,7 @@ IDs are stable within their group, and `name` is an optional label. Row
 of the parent's count of finished steps. CLI indentation is capped at 32 levels.
 
 Recorded trace snapshots have separate limits: 128 rows, 4096 characters per
-field, and a 256 KiB encoded payload. `detail_count` records the row count before
+field, and a 256 KiB encoded payload. `detailCount` records the row count before
 truncation. The byte limit includes UTF-8 encoding and JSON escaping, leaving
 space for event metadata within the default 1 MiB NDJSON event limit.
 

@@ -15,21 +15,25 @@ import {
   type StoredPipelineRunStatus,
   type StoredPipelineStep,
 } from "./run-store.js";
+import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
+import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
 function event(
   id: number,
   name: StoredPipelineEvent["name"],
-  overrides: Partial<StoredPipelineEvent> = {}
+  overrides: Record<string, unknown> = {}
 ): StoredPipelineEvent {
   return {
-    attributes: {},
+    ...decodePipelineTraceEvent({
+      attributes: {},
+      name,
+      pipelineId: "import",
+      runId: "run-1",
+      timestampMs: 100 + id,
+      version: 1,
+      ...overrides,
+    }),
     id,
-    name,
-    pipelineId: "import",
-    runId: "run-1",
-    timestampMs: 100 + id,
-    version: 1,
-    ...overrides,
   };
 }
 
@@ -156,8 +160,8 @@ describe("pipeline run store projections", () => {
     const events: StoredPipelineEvent[] = [];
     const tracing = {
       exporter: {
-        export(event: Omit<StoredPipelineEvent, "id">) {
-          events.push({ ...event, id: events.length });
+        export(event: PipelineTraceEvent) {
+          events.push(Object.assign({ id: events.length }, event));
         },
       },
     };

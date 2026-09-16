@@ -4,6 +4,10 @@ import type {
   PipelineErrorKind,
   PipelineErrorPhase,
   PipelineFanOutDiagnostics,
+  PipelineRunStatus,
+  PipelineStepProgressDetail,
+  PipelineStepSelectionReason,
+  PipelineStepSkipReason,
   PipelineValidationIssue,
 } from "../core/pipeline.js";
 import { PartialPipelineTraceExporterError } from "./trace-exporter-error.js";
@@ -11,7 +15,7 @@ import { PartialPipelineTraceExporterError } from "./trace-exporter-error.js";
 /** Values that can be safely carried in a structured trace attribute. */
 export type PipelineTraceAttributeValue = boolean | number | string;
 
-/** Additional, serializable data attached to a trace event. */
+/** Additional scalar telemetry supplied by a step attempt. */
 export type PipelineTraceAttributes = Readonly<
   Record<string, PipelineTraceAttributeValue | undefined>
 >;
@@ -38,35 +42,176 @@ export interface PipelineTraceError {
   stack?: string;
 }
 
-/** Stable lifecycle names emitted by the pipeline executor. */
-export type PipelineTraceEventName =
-  | "pipeline.completed"
-  | "pipeline.log"
-  | "pipeline.started"
-  | "pipeline.finalize.completed"
-  | "pipeline.finalize.failed"
-  | "pipeline.finalize.started"
-  | "step.attempted"
-  | "step.cancelled"
-  | "step.failed"
-  | "step.planned"
-  | "step.running"
-  | "step.skipped"
-  | "step.complete";
+/** Static child-pipeline metadata retained in a planned-step trace. */
+export interface PipelineTraceNestedPipeline {
+  mode: "for-each" | "single";
+  pipelineId: string;
+  /** Original declared step count, before the bounded `stepIds` snapshot. */
+  stepCount: number;
+  stepIds: readonly string[];
+}
 
-/** A versioned lifecycle record suitable for JSON logs and telemetry adapters. */
-export interface PipelineTraceEvent extends PipelineTraceContext {
-  attributes: PipelineTraceAttributes;
-  /** Stable public step-attempt identity when the event belongs to an execution attempt. */
+/** Static remote-adapter metadata retained in a planned-step trace. */
+export interface PipelineTraceRemote {
+  engine: string;
+  target?: string;
+}
+
+/** Bounded progress snapshot retained in a running-step trace. */
+export interface PipelineTraceProgress {
+  completed: number;
+  /** Original detail count, before the bounded `details` snapshot. */
+  detailCount?: number;
+  details?: readonly PipelineStepProgressDetail[];
+  message?: string;
+  total?: number;
+}
+
+interface PipelineTraceEventBase extends PipelineTraceContext {
   attemptId?: string;
   durationMs?: number;
   error?: PipelineTraceError;
-  name: PipelineTraceEventName;
   pipelineId: string;
   stepId?: string;
   timestampMs: number;
-  version: 1;
+  version: 2;
 }
+
+interface PipelineTraceStepEventBase extends PipelineTraceEventBase {
+  /** Stable public step identity. */
+  stepId: string;
+}
+
+interface PipelineTraceAttemptEventBase extends PipelineTraceStepEventBase {
+  /** Stable public step-attempt identity. */
+  attemptId?: string;
+}
+
+export interface PipelineStartedTraceEvent extends PipelineTraceEventBase {
+  name: "pipeline.started";
+  payload: {
+    dryRun: boolean;
+    planOk: boolean;
+    stepCount: number;
+    targetIds: readonly string[];
+  };
+}
+
+export interface PipelineLogTraceEvent extends PipelineTraceEventBase {
+  attemptId?: string;
+  name: "pipeline.log";
+  payload: { level: "error" | "log" | "warn"; message: string };
+  stepId?: string;
+}
+
+export interface PipelineCompletedTraceEvent extends PipelineTraceEventBase {
+  durationMs?: number;
+  error?: PipelineTraceError;
+  name: "pipeline.completed";
+  payload: {
+    dryRun: boolean;
+    errorCount: number;
+    finalized: boolean;
+    status: PipelineRunStatus;
+    stepCount: number;
+  };
+}
+
+export interface PipelineFinalizeStartedTraceEvent extends PipelineTraceEventBase {
+  name: "pipeline.finalize.started";
+  payload: Readonly<Record<string, never>>;
+}
+
+export interface PipelineFinalizeCompletedTraceEvent extends PipelineTraceEventBase {
+  durationMs: number;
+  name: "pipeline.finalize.completed";
+  payload: Readonly<Record<string, never>>;
+}
+
+export interface PipelineFinalizeFailedTraceEvent extends PipelineTraceEventBase {
+  durationMs: number;
+  error: PipelineTraceError;
+  name: "pipeline.finalize.failed";
+  payload: Readonly<Record<string, never>>;
+}
+
+export interface StepPlannedTraceEvent extends PipelineTraceStepEventBase {
+  name: "step.planned";
+  payload: {
+    dependencies: readonly string[];
+    description?: string;
+    dryRun: "custom" | "run" | "skip";
+    name?: string;
+    nestedPipeline?: PipelineTraceNestedPipeline;
+    optionalDependencies: readonly string[];
+    remote?: PipelineTraceRemote;
+    runtimeSkipPossible: boolean;
+    selected: boolean;
+    selectionReasons: readonly PipelineStepSelectionReason[];
+    skipAfterFailureOf: readonly string[];
+  };
+}
+
+export interface StepRunningTraceEvent extends PipelineTraceAttemptEventBase {
+  attemptId: string;
+  name: "step.running";
+  payload: { progress?: PipelineTraceProgress };
+}
+
+export interface StepAttemptedTraceEvent extends PipelineTraceAttemptEventBase {
+  name: "step.attempted";
+  payload: { attempt: number; attributes: PipelineTraceAttributes };
+}
+
+export interface StepCompletedTraceEvent extends PipelineTraceAttemptEventBase {
+  durationMs?: number;
+  name: "step.complete";
+  payload: { status: "completed" };
+}
+
+export interface StepSkippedTraceEvent extends PipelineTraceAttemptEventBase {
+  durationMs?: number;
+  name: "step.skipped";
+  payload: {
+    dependencyId?: string;
+    message?: string;
+    reason: PipelineStepSkipReason;
+    status: "skipped";
+  };
+}
+
+export interface StepCancelledTraceEvent extends PipelineTraceAttemptEventBase {
+  durationMs?: number;
+  error: PipelineTraceError;
+  name: "step.cancelled";
+  payload: { status: "cancelled" };
+}
+
+export interface StepFailedTraceEvent extends PipelineTraceAttemptEventBase {
+  durationMs?: number;
+  error: PipelineTraceError;
+  name: "step.failed";
+  payload: { status: "failed" };
+}
+
+/** A versioned lifecycle record with an event-specific, structured payload. */
+export type PipelineTraceEvent =
+  | PipelineCompletedTraceEvent
+  | PipelineFinalizeCompletedTraceEvent
+  | PipelineFinalizeFailedTraceEvent
+  | PipelineFinalizeStartedTraceEvent
+  | PipelineLogTraceEvent
+  | PipelineStartedTraceEvent
+  | StepAttemptedTraceEvent
+  | StepCancelledTraceEvent
+  | StepCompletedTraceEvent
+  | StepFailedTraceEvent
+  | StepPlannedTraceEvent
+  | StepRunningTraceEvent
+  | StepSkippedTraceEvent;
+
+/** Stable lifecycle names emitted by the pipeline executor. */
+export type PipelineTraceEventName = PipelineTraceEvent["name"];
 
 /** Asynchronous boundary for trace destinations. */
 export interface PipelineTraceExporter {

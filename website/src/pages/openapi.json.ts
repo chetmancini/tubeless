@@ -519,21 +519,15 @@ const spec = {
         type: "object",
         additionalProperties: false,
         required: [
-          "attributes",
           "id",
           "name",
+          "payload",
           "pipelineId",
           "runId",
           "timestampMs",
           "version",
         ],
         properties: {
-          attributes: {
-            type: "object",
-            additionalProperties: {
-              oneOf: [{ type: "boolean" }, { type: "number" }, { type: "string" }],
-            },
-          },
           attemptId: { type: "string" },
           correlationId: { type: "string" },
           durationMs: { type: "number" },
@@ -559,11 +553,12 @@ const spec = {
             ],
           },
           parentRunId: { type: "string" },
+          payload: { type: "object", additionalProperties: true },
           pipelineId: { type: "string" },
           runId: { type: "string" },
           stepId: { type: "string" },
           timestampMs: { type: "number" },
-          version: { type: "integer", const: 1 },
+          version: { type: "integer", const: 2 },
         },
       },
       PipelineError: {

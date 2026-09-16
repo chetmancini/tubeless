@@ -227,12 +227,18 @@ describe("public API example", () => {
   it("exports structured traces through the documented public subpaths", () => {
     const lines: string[] = [];
     const event: PipelineTraceEvent = {
-      attributes: {},
       name: "pipeline.completed",
+      payload: {
+        dryRun: false,
+        errorCount: 0,
+        finalized: true,
+        status: "completed",
+        stepCount: 1,
+      },
       pipelineId: "import",
       runId: "public-api",
       timestampMs: 1,
-      version: 1,
+      version: 2,
     };
     createJsonTraceExporter({ write: (line) => lines.push(line) }).export(event);
 

@@ -42,8 +42,20 @@ export interface OpenTelemetryTraceExporterOptions {
 
 function attributesFor(event: PipelineTraceEvent) {
   const attributes = new Map<string, PipelineTraceAttributeValue>();
-  for (const [key, value] of Object.entries(event.attributes)) {
-    if (value !== undefined) attributes.set(key, value);
+  if (event.name === "step.attempted") {
+    for (const [attributeKey, attributeValue] of Object.entries(event.payload.attributes)) {
+      if (attributeValue !== undefined) attributes.set(attributeKey, attributeValue);
+    }
+  }
+  for (const [key, value] of Object.entries(event.payload)) {
+    if (value === undefined) continue;
+    if (key === "attributes") continue;
+    const telemetryKey = key.replaceAll(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+    if (typeof value === "boolean" || typeof value === "number" || typeof value === "string") {
+      attributes.set(telemetryKey, value);
+    } else {
+      attributes.set(telemetryKey, JSON.stringify(value));
+    }
   }
   attributes.set("pipeline.correlation_id", event.correlationId ?? "");
   attributes.set("pipeline.id", event.pipelineId);

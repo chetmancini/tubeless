@@ -34,12 +34,12 @@ async function openTempStore() {
 
 function startedEvent(runId: string, timestampMs: number, pipelineId = "import") {
   return {
-    attributes: { dry_run: false },
     name: "pipeline.started" as const,
+    payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
     pipelineId,
     runId,
     timestampMs,
-    version: 1 as const,
+    version: 2 as const,
   };
 }
 
@@ -51,31 +51,31 @@ describe("SQLite pipeline run store", () => {
     const store = await openSqlitePipelineRunStore(filename);
 
     await store.export({
-      attributes: { dry_run: false },
       correlationId: "job-1",
       name: "pipeline.started",
+      payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
       pipelineId: "import",
       runId: "run-1",
       timestampMs: 10,
-      version: 1,
+      version: 2,
     });
     await store.export({
       attemptId: "attempt-1",
-      attributes: { level: "warn", message: "slow source" },
       name: "pipeline.log",
+      payload: { level: "warn", message: "slow source" },
       pipelineId: "import",
       runId: "run-1",
       stepId: "load",
       timestampMs: 11,
-      version: 1,
+      version: 2,
     });
 
     expect(await store.listEvents({ runId: "run-1" })).toEqual([
       expect.objectContaining({ correlationId: "job-1", id: 1, name: "pipeline.started" }),
       expect.objectContaining({
         attemptId: "attempt-1",
-        attributes: { level: "warn", message: "slow source" },
         id: 2,
+        payload: { level: "warn", message: "slow source" },
       }),
     ]);
     await store.close();
@@ -170,23 +170,23 @@ describe("SQLite pipeline run store", () => {
     const filename = path.join(directory, "runs.sqlite");
     const store = await openSqlitePipelineRunStore(filename);
     await store.export({
-      attributes: { dry_run: false },
       name: "pipeline.started",
+      payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
       pipelineId: "import",
       runId: "run-1",
       timestampMs: 10,
-      version: 1,
+      version: 2,
     });
 
     await store.clearHistory();
     expect(await store.listEvents()).toEqual([]);
     await store.export({
-      attributes: { dry_run: false },
       name: "pipeline.started",
+      payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
       pipelineId: "import",
       runId: "run-2",
       timestampMs: 20,
-      version: 1,
+      version: 2,
     });
     expect(await store.listEvents()).toEqual([expect.objectContaining({ id: 2, runId: "run-2" })]);
     await store.close();
@@ -460,20 +460,28 @@ describe("SQLite pipeline run store", () => {
     await expect(stat(`${alias}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("surfaces the first append failure from flush and close", async () => {
+  it("surfaces the first codec failure from flush and close", async () => {
     const store = await openTempStore();
     const cycle: Record<string, unknown> = {};
     cycle.self = cycle;
     expect(() => {
       void store.export({
-        ...startedEvent("run-1", 10),
-        // SAFETY: circular object is the runtime fixture; attributes are
-        // otherwise JSON-safe PipelineTraceAttributeValue records.
-        attributes: cycle as import("../tracing/tracing.js").PipelineTraceAttributes,
+        name: "step.attempted",
+        payload: {
+          attempt: 1,
+          // SAFETY: malformed runtime input proves the SQLite adapter invokes
+          // the same codec as the NDJSON reader.
+          attributes: cycle as import("../tracing/tracing.js").PipelineTraceAttributes,
+        },
+        pipelineId: "import",
+        runId: "run-1",
+        stepId: "load",
+        timestampMs: 10,
+        version: 2,
       });
-    }).toThrow(/circular/i);
-    expect(() => store.flush!()).toThrow(/circular/i);
-    expect(() => store.close()).toThrow(/circular/i);
+    }).toThrow(/attribute.*values/i);
+    expect(() => store.flush!()).toThrow(/attribute.*values/i);
+    expect(() => store.close()).toThrow(/attribute.*values/i);
   });
 
   it("does not treat a dangling WAL sidecar symlink as absent", async () => {

@@ -69,8 +69,13 @@ describe("nested child progress", () => {
           runtime.tracing = {
             exporter: {
               export: (event) => {
-                if (event.pipelineId === "root" && event.attributes.details)
-                  recorded.push(String(event.attributes.details));
+                if (
+                  event.pipelineId === "root" &&
+                  event.name === "step.running" &&
+                  event.payload.progress?.details
+                ) {
+                  recorded.push(JSON.stringify(event.payload.progress.details));
+                }
               },
             },
           };
