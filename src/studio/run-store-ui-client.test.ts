@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RUN_MODEL_VERSION } from "../core/pipeline.js";
+import { resolveSelectedRunId } from "./run-store-ui-client-app.js";
 import { createStudioRunIndex } from "./run-store-ui-client.js";
 import type { StoredPipelineRun, StoredPipelineRunStatus } from "../run-store/run-store.js";
 
@@ -72,6 +73,24 @@ function renderLike(index: ReturnType<typeof createStudioRunIndex>, query = "") 
 }
 
 describe("createStudioRunIndex", () => {
+  it("preserves a pending launched run until it appears in the snapshot", () => {
+    const previous = run({ runId: "previous", startedAtMs: 1 });
+    const currentIndex = createStudioRunIndex([previous]);
+
+    expect(resolveSelectedRunId("launched", "launched", currentIndex.roots, currentIndex)).toBe(
+      "launched"
+    );
+    expect(resolveSelectedRunId("missing", null, currentIndex.roots, currentIndex)).toBe(
+      "previous"
+    );
+
+    const launched = run({ runId: "launched", startedAtMs: 2 });
+    const refreshedIndex = createStudioRunIndex([previous, launched]);
+    expect(resolveSelectedRunId("launched", "launched", refreshedIndex.roots, refreshedIndex)).toBe(
+      "launched"
+    );
+  });
+
   it("returns empty lookups for empty history", () => {
     const index = createStudioRunIndex([]);
     expect(index.roots).toEqual([]);

@@ -3,6 +3,7 @@ import { commandDescription, PipelinesView } from "./run-store-ui-client-command
 import {
   createStudioRunIndex,
   type StudioRunDetail,
+  type StudioRunIndex,
   type StudioSnapshot,
 } from "./run-store-ui-client-model.js";
 import { Metrics, RunsView } from "./run-store-ui-client-runs.js";
@@ -20,6 +21,21 @@ export function connectionPresentation(connected: boolean) {
     className: `pulse${connected ? "" : " lost"}`,
     label: connected ? "Connected · local" : "Connection lost",
   };
+}
+
+export function resolveSelectedRunId(
+  selectedRunId: string | null,
+  pendingRunId: string | null,
+  roots: readonly { runId: string }[],
+  runIndex: Pick<StudioRunIndex, "rootRunId" | "runById">
+): string | null {
+  if (selectedRunId && selectedRunId === pendingRunId && !runIndex.runById(selectedRunId)) {
+    return selectedRunId;
+  }
+  if (!selectedRunId || !roots.some((run) => run.runId === runIndex.rootRunId(selectedRunId))) {
+    return roots[0]?.runId ?? null;
+  }
+  return selectedRunId;
 }
 
 export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
@@ -40,6 +56,7 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
   const [toast, setToast] = useState("");
   const loading = useRef(false);
+  const pendingRunId = useRef<string | null>(null);
   const runIndex = useMemo(() => createStudioRunIndex(snapshot?.runs ?? []), [snapshot]);
 
   const refresh = useCallback(
@@ -96,9 +113,10 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     );
 
   useEffect(() => {
-    if (!selectedRunId || !roots.some((run) => run.runId === runIndex.rootRunId(selectedRunId))) {
-      setSelectedRunId(roots[0]?.runId ?? null);
-    }
+    const pending = pendingRunId.current;
+    const next = resolveSelectedRunId(selectedRunId, pending, roots, runIndex);
+    if (pending && runIndex.runById(pending)) pendingRunId.current = null;
+    if (next !== selectedRunId) setSelectedRunId(next);
   }, [roots, runIndex, selectedRunId]);
 
   const selectedSummary = runIndex.runById(selectedRunId);
@@ -132,6 +150,10 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
   }, [api, detail, detailFingerprint, detailRetry, selectedFingerprint, selectedRunId]);
 
   const showToast = (message: string) => setToast(message);
+  const selectRun = (runId: string) => {
+    pendingRunId.current = null;
+    setSelectedRunId(runId);
+  };
   const cancelRun = async (runId: string) => {
     if (!canCancel || cancelling) return;
     setCancelling(true);
@@ -301,7 +323,7 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
                     liveRunIds={snapshot.liveRunIds ?? []}
                     nowMs={Date.now()}
                     onCancel={(id) => void cancelRun(id)}
-                    onSelect={setSelectedRunId}
+                    onSelect={selectRun}
                     roots={roots}
                     runIndex={runIndex}
                     selectedRun={selectedRun}
@@ -320,8 +342,10 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
         commandId={launchCommandId}
         onClose={() => setLaunchCommandId(null)}
         onLaunched={(runId) => {
+          pendingRunId.current = runId;
           setSelectedRunId(runId);
           setView("runs");
+          setQuery("");
           setLaunchCommandId(null);
           showToast("Run accepted · " + shortId(runId));
           setTimeout(() => void refresh(true), 80);
@@ -333,6 +357,7 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
           snapshot={snapshot}
           onClose={() => setClearHistoryOpen(false)}
           onCleared={(eventCount) => {
+            pendingRunId.current = null;
             setSelectedRunId(null);
             setClearHistoryOpen(false);
             showToast("Cleared " + eventCount + " recorded event" + (eventCount === 1 ? "" : "s"));
