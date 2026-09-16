@@ -1,6 +1,7 @@
 ---
 const projectKey = import.meta.env.PUBLIC_POSTHOG_KEY?.trim();
 const apiHost = import.meta.env.PUBLIC_POSTHOG_HOST?.trim().replace(/\/+$/, "");
+const assetHost = apiHost?.replace(/\.i\.posthog\.com$/, "-assets.i.posthog.com");
 
 if (Boolean(projectKey) !== Boolean(apiHost)) {
   throw new Error("PUBLIC_POSTHOG_KEY and PUBLIC_POSTHOG_HOST must be set together");
@@ -9,7 +10,7 @@ if (Boolean(projectKey) !== Boolean(apiHost)) {
 
 {
   projectKey && apiHost && (
-    <script is:inline define:vars={{ projectKey, apiHost }}>
+    <script is:inline define:vars={{ projectKey, apiHost, assetHost }}>
       if (!window.__posthog_initialized) {
         window.__posthog_initialized = true;
 
@@ -36,7 +37,7 @@ if (Boolean(projectKey) !== Boolean(apiHost)) {
               script.type = "text/javascript";
               script.crossOrigin = "anonymous";
               script.async = true;
-              script.src = config.api_host + "/static/array.js";
+              script.src = config.asset_host + "/static/array.js";
               firstScript = document.getElementsByTagName("script")[0];
               firstScript.parentNode.insertBefore(script, firstScript);
               let queue = posthog;
@@ -72,6 +73,7 @@ if (Boolean(projectKey) !== Boolean(apiHost)) {
 
         posthog.init(projectKey, {
           api_host: apiHost,
+          asset_host: assetHost,
           autocapture: false,
           capture_pageleave: true,
           capture_pageview: true,
