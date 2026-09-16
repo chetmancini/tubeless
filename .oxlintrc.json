@@ -87,6 +87,7 @@
       "files": [
         "src/cli/cli-command.ts",
         "src/cli/pipeline-command-marker.ts",
+        "src/studio/run-store-ui-client-transport.ts",
         "src/studio/run-store-ui-protocol.ts",
         "src/run-store/run-store-ndjson.ts",
         "src/tracing/tracing-internal.ts",
@@ -98,6 +99,13 @@
         "anti-slop/no-unknown-parameters": "off",
         "anti-slop/no-unknown-returns": "off",
         "anti-slop/no-unsafe-dictionary-type": "off"
+      }
+    },
+    {
+      // Form serialization narrows values read from heterogeneous DOM controls.
+      "files": ["src/studio/run-store-ui-client-form.ts"],
+      "rules": {
+        "anti-slop/no-runtime-typeof": "off"
       }
     },
     {

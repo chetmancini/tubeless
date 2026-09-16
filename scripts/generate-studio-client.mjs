@@ -7,7 +7,7 @@ const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const check = process.argv.includes("--check");
 const distOnly = process.argv.includes("--dist");
 
-const compiledClientPath = resolve(packageRoot, "dist/studio/run-store-ui-client.js");
+const clientEntryPath = resolve(packageRoot, "src/studio/run-store-ui-client.ts");
 const sourceModulePath = resolve(packageRoot, "src/studio/run-store-ui-client-source.ts");
 const distSourcePath = resolve(packageRoot, "dist/studio/run-store-ui-client-source.js");
 const distSourceMapPath = `${distSourcePath}.map`;
@@ -22,6 +22,22 @@ export function compiledClientSource(js) {
   let source = withoutMaps.replace(/\s+$/u, "");
   if (!/\ninitStudio\(\);\s*$/.test(source)) source += "\ninitStudio();";
   return `${source}\n`;
+}
+
+async function bundledClientSource() {
+  if (typeof Bun === "undefined") {
+    throw new Error("Generate the Studio client with Bun: bun scripts/generate-studio-client.mjs");
+  }
+  const result = await Bun.build({
+    entrypoints: [clientEntryPath],
+    format: "esm",
+    target: "browser",
+  });
+  if (!result.success || result.outputs.length !== 1) {
+    const details = result.logs.map((log) => log.message).join("\n");
+    throw new Error(`Studio client bundle failed.${details ? `\n${details}` : ""}`);
+  }
+  return compiledClientSource(await result.outputs[0].text());
 }
 
 function generatedTypeScript(source) {
@@ -47,12 +63,7 @@ const isMain =
   process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isMain) {
-  if (!existsSync(compiledClientPath)) {
-    throw new Error(
-      "Build tubeless before generating its studio client: missing dist/studio/run-store-ui-client.js"
-    );
-  }
-  const source = compiledClientSource(readFileSync(compiledClientPath, "utf8"));
+  const source = await bundledClientSource();
   const typeScript = formatWithOxfmt(generatedTypeScript(source), sourceModulePath);
   const javascript = generatedJavascript(source);
   const declaration = generatedDeclaration();
