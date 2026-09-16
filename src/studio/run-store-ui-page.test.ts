@@ -8,15 +8,12 @@ import {
 import { startPipelineRunStudio } from "./run-store-ui.js";
 
 describe("pipeline run studio page composition", () => {
-  it("embeds one compiled initStudio script as a native module", () => {
+  it("embeds one compiled Studio script as a native module", () => {
     expect(PIPELINE_RUN_STUDIO_HTML.match(/<script type="module">/g)).toEqual([
       '<script type="module">',
     ]);
     expect(PIPELINE_RUN_STUDIO_HTML.match(/<\/html>/g)).toEqual(["</html>"]);
-    expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("initStudio");
-    expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("initStudio();");
-    expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("function createStudioRunIndex");
-    expect(PIPELINE_RUN_STUDIO_SCRIPT).toMatch(/export \{[\s\S]*\binitStudio\b[\s\S]*\};/);
+    expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("#studio-root");
     expect(PIPELINE_RUN_STUDIO_SCRIPT).not.toMatch(/\bimport\s/);
     expect(PIPELINE_RUN_STUDIO_HTML).toContain(
       `<script type="module">${PIPELINE_RUN_STUDIO_SCRIPT}</script>`
@@ -26,10 +23,9 @@ describe("pipeline run studio page composition", () => {
 
   it("keeps the studio shell tokens the existing tests rely on", () => {
     expect(PIPELINE_RUN_STUDIO_HTML).toContain("Tubeless — Local Studio");
-    expect(PIPELINE_RUN_STUDIO_HTML).toContain('id="content"');
-    expect(PIPELINE_RUN_STUDIO_HTML).toContain('id="metrics"');
+    expect(PIPELINE_RUN_STUDIO_HTML).toContain('id="studio-root"');
     expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("data-run-id");
-    expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("function runRow");
+    expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("Pipeline runs");
   });
 
   it("pins the served CSP hashes to the composed inline script and style", async () => {

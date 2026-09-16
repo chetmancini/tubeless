@@ -1,4 +1,11 @@
-import { PIPELINE_RUN_STUDIO_CLIENT_SOURCE } from "./run-store-ui-client-source.js";
+import { existsSync, readFileSync } from "node:fs";
+
+const distributedClientUrl = new URL("./run-store-ui-client-browser.js", import.meta.url);
+const workspaceClientUrl = new URL(
+  "../../dist/studio/run-store-ui-client-browser.js",
+  import.meta.url
+);
+const clientUrl = existsSync(distributedClientUrl) ? distributedClientUrl : workspaceClientUrl;
 
 export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
     :root {
@@ -270,9 +277,9 @@ export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
 
 /**
  * Compiled studio client inlined into the served page. Refresh with
- * `bun run studio:generate` after editing src/studio/run-store-ui-client.ts.
+ * `bun run studio:generate` after editing the Studio client components.
  */
-export const PIPELINE_RUN_STUDIO_SCRIPT = PIPELINE_RUN_STUDIO_CLIENT_SOURCE;
+export const PIPELINE_RUN_STUDIO_SCRIPT = readFileSync(clientUrl, "utf8");
 
 export const PIPELINE_RUN_STUDIO_HTML =
   String.raw`<!doctype html>
@@ -287,74 +294,7 @@ export const PIPELINE_RUN_STUDIO_HTML =
   String.raw`</style>
 </head>
 <body>
-  <div class="shell">
-    <aside class="rail">
-      <div class="brand">
-        <div class="mark" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 4.5h6a3 3 0 0 1 3 3v6" stroke="#f7f8f3" stroke-width="1.5"/><circle cx="3" cy="4.5" r="2" fill="#7396ff"/><circle cx="12" cy="13.5" r="2" fill="#63d297"/></svg>
-        </div>
-        <div class="brand-copy"><strong>Tubeless</strong><small>Local studio</small></div>
-      </div>
-      <div class="rail-label">Workspace</div>
-      <nav class="nav" aria-label="Studio sections">
-        <button class="hidden" data-view="pipelines" id="pipelineNav" title="Pipelines">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 5h7M4 10h12M9 15h7"/><circle cx="14.5" cy="5" r="1.5"/><circle cx="5.5" cy="15" r="1.5"/></svg>
-          <span>Pipelines</span><b class="nav-count" id="pipelineCount">0</b>
-        </button>
-        <button class="active" data-view="runs" title="Runs">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3v4l2.5 1.5M17 10a7 7 0 1 1-2.05-4.95"/><path d="M14.5 2.8v3.5H18"/></svg>
-          <span>Runs</span><b class="nav-count" id="runCount">0</b>
-        </button>
-      </nav>
-      <div class="rail-foot">
-        <div class="connection"><i class="pulse"></i><span id="connectionLabel">Connected · local</span></div>
-        <div class="database">append-only SQLite</div>
-      </div>
-    </aside>
-    <main class="workspace">
-      <header class="topbar">
-        <div><div class="eyebrow">Execution workspace</div><h1 id="pageTitle">Runs</h1><p class="lede" id="pageLede">Live work and durable history in one place.</p></div>
-        <div class="toolbar">
-          <input class="search" id="search" type="search" placeholder="Filter runs or IDs" aria-label="Filter" />
-          <button class="primary-button hidden" id="launchButton">Run pipeline</button>
-          <button class="danger-button hidden" id="clearHistoryButton" type="button" title="Clear history"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M3 4.5h10M6 2.5h4M5 4.5l.5 9h5l.5-9M7 7v4M9 7v4"/></svg><span>Clear history</span></button>
-          <button class="icon-button" id="refresh" title="Refresh now" aria-label="Refresh now"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16.5 7A7 7 0 1 0 17 11"/><path d="M16.5 3v4h-4"/></svg></button>
-        </div>
-      </header>
-      <section class="metrics" id="metrics"></section>
-      <section id="content"></section>
-    </main>
-  </div>
-  <div class="modal-backdrop hidden" id="launchModal" role="dialog" aria-modal="true" aria-labelledby="launchTitle">
-    <div class="modal">
-      <div class="modal-head">
-        <div><div class="detail-kicker">Configure pipeline</div><h2 id="launchTitle">Run a pipeline</h2><p id="launchDescription">Choose a declared pipeline and provide its inputs.</p></div>
-        <button class="close-button" id="closeLaunch" type="button" aria-label="Close">&times;</button>
-      </div>
-      <form class="launch-form" id="launchForm">
-        <div class="field"><label for="launchCommand">Pipeline command</label><select id="launchCommand"></select></div>
-        <div id="runPane"><div class="parameter-fields" id="parameterFields"></div></div>
-        <div class="plan-result hidden" id="planResult" aria-live="polite"></div>
-        <div class="launch-error hidden" id="launchError"></div>
-        <div class="modal-actions"><button class="secondary-button" id="cancelLaunch" type="button">Cancel</button><button class="secondary-button hidden" id="previewPlan" type="button">Preview plan</button><button class="primary-button" id="submitLaunch" type="submit">Run</button></div>
-      </form>
-    </div>
-  </div>
-  <div class="modal-backdrop hidden" id="clearHistoryModal" role="dialog" aria-modal="true" aria-labelledby="clearHistoryTitle">
-    <div class="modal confirm-modal">
-      <div class="modal-head">
-        <div><div class="detail-kicker">Local maintenance</div><h2 id="clearHistoryTitle">Clear run history?</h2><p>This permanently resets the local studio history.</p></div>
-        <button class="close-button" id="closeClearHistory" type="button" aria-label="Close">&times;</button>
-      </div>
-      <div class="confirm-body">
-        <p class="confirm-copy" id="clearHistoryCopy"></p>
-        <div class="confirm-warning">This cannot be undone. Pipeline definitions and execution remain unchanged; only recorded local events are removed.</div>
-        <div class="launch-error hidden" id="clearHistoryError"></div>
-        <div class="confirm-actions"><button class="secondary-button" id="cancelClearHistory" type="button">Cancel</button><button class="danger-button" id="confirmClearHistory" type="button">Clear history</button></div>
-      </div>
-    </div>
-  </div>
-  <div class="toast hidden" id="toast" role="status"></div>
+  <div id="studio-root"></div>
   <script type="module">` +
   PIPELINE_RUN_STUDIO_SCRIPT +
   String.raw`</script>

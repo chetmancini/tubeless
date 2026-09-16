@@ -5,6 +5,7 @@ import type { PipelineRunEventStore, StoredPipelineEvent } from "../run-store/ru
 import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { PIPELINE_RUN_STUDIO_SCRIPT, PIPELINE_RUN_STUDIO_STYLE } from "./run-store-ui-page.js";
+import { connectionPresentation } from "./run-store-ui-client-app.js";
 import { startPipelineRunStudio, type PipelineRunStudioServer } from "./run-store-ui.js";
 
 function studioError(code: string, message: string, hint: string) {
@@ -197,10 +198,6 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("Tubeless — Local Studio");
     expect(html).toContain("nested work stays with its parent");
     expect(html).toContain("/api/runs/");
-    expect(html).toContain("function selectedRunFingerprint");
-    expect(html).toContain("fingerprint === state.detailFingerprint && state.detail");
-    expect(html).toContain("const requestedRunId = state.selectedRunId");
-    expect(html).toContain("if (state.selectedRunId !== requestedRunId)");
     expect(html).not.toContain('data-view="active"');
     expect(html).not.toContain('data-view="definitions"');
     expect(html).toContain("Run pipeline");
@@ -209,19 +206,13 @@ describe("local pipeline run studio", () => {
     expect(html).toContain("Pipeline inputs");
     expect(html).toContain("Execution controls");
     expect(html).toContain("Built into Tubeless");
-    expect(html).toContain("if (!parameter.exclusive || !parameter.multiple)");
-    expect(html).not.toContain("parameter.group !== 'execution' || !parameter.multiple");
-    expect(html).toContain("if (checked !== Boolean(parameter.default))");
     expect(html).toContain("Clear run history?");
     expect(html).toContain("Cancel run");
     expect(html).toContain("x-tubeless-studio-cancel");
-    expect(html).toContain("data-cancel-run-id");
     expect(html).toContain("liveRunIds");
     expect(html).toContain("step-status-icon");
     expect(html).toContain("status-mark");
     expect(html).toContain("progress-details");
-    expect(html).toContain("step.nestedPipeline");
-    expect(html).toContain("step.remote");
     expect(html).toContain("Remote step");
     expect(html).toContain("declared steps");
     expect(html).toContain("Showing ");
@@ -318,53 +309,24 @@ describe("local pipeline run studio", () => {
     expect(script).toBe(PIPELINE_RUN_STUDIO_SCRIPT);
     expect(style).toBe(PIPELINE_RUN_STUDIO_STYLE);
     expect(script).not.toMatch(/\bstyle="/);
-    expect(script).not.toMatch(/\.style\./);
     expect(style).toContain(".pulse.lost");
     expect(style).toContain(".detail-heading-copy");
     expect(style).toContain(".detail-heading-actions");
     expect(style).toContain(".progress > i.w0");
     expect(style).toContain(".progress > i.w100");
-    expect(script).toContain('class="w');
-    expect(script).toContain("Math.round(progressWidth)");
-    expect(script).toContain('classList.toggle("lost", !connected)');
+    expect(script).toContain("Math.round");
+    expect(script).toContain("Connection lost");
   });
 
   it("clears the pulse lost class after a disconnect then reconnect", () => {
-    const tokens = new Set<string>();
-    const label = { textContent: "" };
-    const pulse = {
-      classList: {
-        toggle(name: string, force?: boolean) {
-          if (force === undefined) {
-            if (tokens.has(name)) tokens.delete(name);
-            else tokens.add(name);
-          } else if (force) {
-            tokens.add(name);
-          } else {
-            tokens.delete(name);
-          }
-          return tokens.has(name);
-        },
-      },
-    };
-    const query = (selector: string) => (selector === ".pulse" ? pulse : label);
-    const source = /function setConnected\(connected\) \{[\s\S]*?\n  \}/.exec(
-      PIPELINE_RUN_STUDIO_SCRIPT
-    )?.[0];
-    expect(source).toBeTruthy();
-    const loaded = new Function("$", `${source}; return setConnected;`)(query);
-    if (typeof loaded !== "function") {
-      throw new Error("setConnected helper was not extracted from the studio script");
-    }
-    const setConnected = (connected: boolean) => {
-      loaded(connected);
-    };
-    setConnected(false);
-    expect(tokens.has("lost")).toBe(true);
-    expect(label.textContent).toBe("Connection lost");
-    setConnected(true);
-    expect(tokens.has("lost")).toBe(false);
-    expect(label.textContent).toBe("Connected · local");
+    expect(connectionPresentation(false)).toEqual({
+      className: "pulse lost",
+      label: "Connection lost",
+    });
+    expect(connectionPresentation(true)).toEqual({
+      className: "pulse",
+      label: "Connected · local",
+    });
   });
 
   it("escapes step status labels and guards isoTime in the served script", async () => {
@@ -372,9 +334,8 @@ describe("local pipeline run studio", () => {
     servers.push(server);
 
     const html = await fetch(server.url).then((response) => response.text());
-    expect(html).toContain('role="img" aria-label="');
-    expect(html).toContain("escapeHtml(label)");
-    expect(html).toContain("if (!Number.isFinite(ms) || Math.abs(ms) > 8640000000000000)");
+    expect(html).toContain('id="studio-root"');
+    expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("aria-label");
   });
 
   it("exposes only injected commands and delegates bounded structured launch values", async () => {

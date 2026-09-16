@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CliParameterDescriptor } from "../cli/cli.js";
 import type { PipelineRunStudioCommand } from "./run-store-ui-protocol.js";
-import { serializeLaunchValues, serializePlanInput } from "./run-store-ui-client-form.js";
+import {
+  initialStudioParameterValues,
+  serializeLaunchValues,
+  serializePlanInput,
+} from "./run-store-ui-client-form.js";
 
 function parameter(
   key: string,
@@ -23,6 +27,16 @@ function command(parameters: readonly CliParameterDescriptor[]): PipelineRunStud
 }
 
 describe("Studio form serialization", () => {
+  it("starts multiple-choice controls with no selected values", () => {
+    const parameters = [
+      parameter("stepIds", { choices: ["load", "publish"], multiple: true }),
+      parameter("targets", { multiple: true }),
+      parameter("dryRun", { default: false, type: "boolean" }),
+    ];
+
+    expect(initialStudioParameterValues(command(parameters))).toEqual([[], [""], [false]]);
+  });
+
   it("omits unchanged booleans and empty scalars from launch values", () => {
     const parameters = [
       parameter("enabled", { default: false, type: "boolean" }),

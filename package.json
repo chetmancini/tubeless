@@ -45,7 +45,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && bun scripts/generate-studio-client.mjs --dist",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && bun scripts/generate-studio-client.mjs",
     "api:check": "node scripts/generate-api-reference.mjs --check",
     "api:generate": "bun run build && node scripts/generate-api-reference.mjs",
     "studio:check": "bun scripts/generate-studio-client.mjs --check",
@@ -74,6 +74,8 @@
     "knip": "6.35.1",
     "oxfmt": "0.68.0",
     "oxlint": "1.83.0",
+    "preact": "10.29.8",
+    "preact-render-to-string": "6.7.0",
     "typescript": "7.0.2",
     "vitest": "5.0.0"
   },

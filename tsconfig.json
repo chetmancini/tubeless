@@ -4,6 +4,8 @@
     "declarationMap": false,
     "esModuleInterop": true,
     "inlineSources": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
     "lib": ["ES2022", "DOM"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
@@ -17,6 +19,6 @@
     "types": ["node"],
     "verbatimModuleSyntax": true
   },
-  "exclude": ["src/**/*.test.ts"],
-  "include": ["src/**/*.ts"]
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }
