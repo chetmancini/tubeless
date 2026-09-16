@@ -96,6 +96,7 @@ export interface StoredPipelineStep {
 }
 
 export interface StoredPipelineRun {
+  correlationId?: string;
   dryRun: boolean;
   durationMs?: number;
   error?: PipelineTraceError;
@@ -478,6 +479,7 @@ function materializeRun(projection: MutableRunProjection): StoredPipelineRun {
     steps: stepOrder.map((stepId) => structuredClone(steps.get(stepId)!)),
     version: RUN_MODEL_VERSION,
   };
+  if (first.correlationId !== undefined) run.correlationId = first.correlationId;
   if (completed?.durationMs !== undefined) run.durationMs = completed.durationMs;
   if (completed?.error) run.error = completed.error;
   if (completed) run.finishedAtMs = completed.timestampMs;

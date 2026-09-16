@@ -303,6 +303,8 @@ function parseEvent(value: unknown): PipelineTraceEvent {
     timestampMs: finiteNumber(value, "timestampMs"),
     version: 1,
   };
+  const correlationId = optionalString(value, "correlationId");
+  if (correlationId !== undefined) event.correlationId = correlationId;
   const attemptId = optionalString(value, "attemptId");
   if (attemptId !== undefined) event.attemptId = attemptId;
   if (value.durationMs !== undefined) event.durationMs = finiteNumber(value, "durationMs");

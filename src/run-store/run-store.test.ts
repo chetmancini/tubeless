@@ -1,5 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import {
+  createSteps,
+  definePipeline,
   RUN_MODEL_VERSION,
   type PipelineRunStatus,
   type PipelineStepLifecycleStatus,
@@ -138,6 +140,47 @@ function snapshotFromChunks(events: readonly StoredPipelineEvent[], generatedAtM
 }
 
 describe("pipeline run store projections", () => {
+  it("keeps executions distinct when external correlation is reused", async () => {
+    const step = createSteps();
+    const firstPipeline = definePipeline({
+      id: "first-correlated",
+      steps: [step("work", { run: () => "first" })],
+      finalize: () => "first",
+    });
+    const secondStep = createSteps();
+    const secondPipeline = definePipeline({
+      id: "second-correlated",
+      steps: [secondStep("work", { run: () => "second" })],
+      finalize: () => "second",
+    });
+    const events: StoredPipelineEvent[] = [];
+    const tracing = {
+      exporter: {
+        export(event: Omit<StoredPipelineEvent, "id">) {
+          events.push({ ...event, id: events.length });
+        },
+      },
+    };
+
+    const first = await firstPipeline.run({}, undefined, { correlationId: "job-42", tracing });
+    const repeated = await firstPipeline.run({}, undefined, {
+      correlationId: "job-42",
+      tracing,
+    });
+    const other = await secondPipeline.run({}, undefined, { correlationId: "job-42", tracing });
+    const snapshot = projectPipelineRunStore(events, 999);
+
+    expect(new Set([first.runId, repeated.runId, other.runId]).size).toBe(3);
+    expect(snapshot.runs).toHaveLength(3);
+    expect(snapshot.runs.every((run) => run.correlationId === "job-42")).toBe(true);
+    expect(snapshot.definitions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ pipelineId: "first-correlated", runCount: 2 }),
+        expect.objectContaining({ pipelineId: "second-correlated", runCount: 1 }),
+      ])
+    );
+  });
+
   it("reuses live status unions for stored run, step, and attempt records", () => {
     expectTypeOf<StoredPipelineRunStatus>().toEqualTypeOf<PipelineRunStatus | "running">();
     expectTypeOf<StoredPipelineStep["status"]>().toEqualTypeOf<PipelineStepLifecycleStatus>();

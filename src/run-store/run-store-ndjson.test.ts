@@ -84,15 +84,16 @@ describe("openNdjsonPipelineRunStore", () => {
   );
 
   it("assigns zero-based ids and supports store-compatible filters and pagination", async () => {
+    const correlated = { ...event("run-1"), correlationId: "job-1" };
     const filename = await tempFile(
-      `${JSON.stringify(event("run-1"))}\n\n${JSON.stringify(event("run-2", "publish"))}\n`
+      `${JSON.stringify(correlated)}\n\n${JSON.stringify(event("run-2", "publish"))}\n`
     );
     const store = await openNdjsonPipelineRunStore(filename);
 
     expect("export" in store).toBe(false);
 
     await expect(store.listEvents()).resolves.toMatchObject([
-      { id: 0, pipelineId: "import", runId: "run-1" },
+      { correlationId: "job-1", id: 0, pipelineId: "import", runId: "run-1" },
       { id: 1, pipelineId: "publish", runId: "run-2" },
     ]);
     await expect(store.listEvents({ afterId: 0 })).resolves.toMatchObject([

@@ -68,6 +68,7 @@ async function forEachEventPage(
 }
 
 interface HistoryRunSummary {
+  correlationId?: string;
   durationMs?: number;
   pipelineId: string;
   runId: string;
@@ -86,6 +87,7 @@ function summarizeRun(run: StoredPipelineRun): HistoryRunSummary {
     startedAtMs: run.startedAtMs,
     status: run.status,
   };
+  if (run.correlationId) summary.correlationId = run.correlationId;
   if (run.durationMs !== undefined) summary.durationMs = run.durationMs;
   return summary;
 }
@@ -93,7 +95,10 @@ function summarizeRun(run: StoredPipelineRun): HistoryRunSummary {
 function formatRunListLine(run: StoredPipelineRun): string {
   const started = new Date(run.startedAtMs).toISOString();
   const duration = run.durationMs === undefined ? "" : `  ${run.durationMs}ms`;
-  return `${terminalSafeText(run.runId)}  ${terminalSafeText(run.pipelineId)}  ${run.status}  started ${started}${duration}`;
+  const correlation = run.correlationId
+    ? `  correlation ${terminalSafeText(run.correlationId)}`
+    : "";
+  return `${terminalSafeText(run.runId)}  ${terminalSafeText(run.pipelineId)}  ${run.status}${correlation}  started ${started}${duration}`;
 }
 
 function formatRunDetail(run: StoredPipelineRun): string {
@@ -103,6 +108,7 @@ function formatRunDetail(run: StoredPipelineRun): string {
     `Status ${run.status}`,
     `Started ${new Date(run.startedAtMs).toISOString()}`,
   ];
+  if (run.correlationId) lines.splice(1, 0, `Correlation ${terminalSafeText(run.correlationId)}`);
   if (run.durationMs !== undefined) lines.push(`Duration ${run.durationMs}ms`);
   lines.push("", "Steps:");
   for (const step of run.steps) {

@@ -354,6 +354,9 @@ function runRow(
     '</time></div><div class="run-secondary"><code>' +
     escapeHtml(shortId(run.runId)) +
     '</code><i class="dot"></i><span>' +
+    (run.correlationId
+      ? "correlation " + escapeHtml(run.correlationId) + '</span><i class="dot"></i><span>'
+      : "") +
     duration(run.durationMs) +
     '</span><i class="dot"></i><span>' +
     run.steps.length +
@@ -622,7 +625,11 @@ function runDetailView(input: RunDetailViewInput) {
     escapeHtml(run.pipelineId) +
     '</h2><div class="run-id">' +
     escapeHtml(run.runId) +
-    '</div></div><div class="detail-heading-actions">' +
+    "</div>" +
+    (run.correlationId
+      ? '<div class="run-id">Correlation: ' + escapeHtml(run.correlationId) + "</div>"
+      : "") +
+    '</div><div class="detail-heading-actions">' +
     status(run.status) +
     (canCancel && run.status === "running" && !run.parentRunId && liveRunIds.includes(run.runId)
       ? '<button class="danger-button" type="button" data-cancel-run-id="' +

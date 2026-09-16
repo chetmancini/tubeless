@@ -31,8 +31,9 @@ run is not automatically restored.
 For host-owned execution, the host must provide persistence, retries,
 idempotency, and acknowledgement. Calling `runOrThrow` does not checkpoint the
 pipeline. In a durable engine with replayed workflow code, put pipeline I/O in
-an activity or worker handler. Use `runId` and `parentRunId` to correlate runs;
-those IDs do not provide crash recovery.
+an activity or worker handler. Use `correlationId` for the host's reusable job
+identity. Use `parentRunId` only to link a known Tubeless execution; these
+identities do not provide crash recovery.
 
 ## Adapter mapping
 
@@ -93,7 +94,8 @@ Remote activity and request IDs do not become steps in the parent graph.
 provider dependency. Call `runRemoteStepsExample("http://127.0.0.1:8080")` against
 a service implementing this application-owned protocol:
 
-- `POST /enrich`, JSON body `{ rows: string[], runId: string, dryRun: boolean }`.
+- `POST /enrich`, JSON body
+  `{ rows: string[], parentRunId: string, correlationId?: string, dryRun: boolean }`.
 - Success: a 2xx JSON response `{ orderId: string, rows: string[] }`.
 - Failure: a non-2xx status. The adapter throws with code `HTTP_<status>` and a
   status cause, without copying response bodies into diagnostics.
@@ -117,9 +119,8 @@ tests use a local HTTP server so they need no credentials or external service.
 ## Invoke a pipeline from a worker
 
 [`host-embedding.ts`](../examples/host-embedding.ts) exports `handleHostJob` for a
-queue worker or activity handler. It passes host-owned `runId`, `parentRunId`,
-`dryRun`, and `signal` to `runOrThrow`. Failed or cancelled runs reject, allowing
-the host to withhold acknowledgement and apply its failure policy. Assign a
-unique run ID per invocation/attempt and a stable parent workflow ID. Validate
-the job envelope before invocation; keep host SDKs and persistence outside the
-pipeline module.
+queue worker or activity handler. It passes the host-owned `correlationId`, an
+optional known Tubeless `parentRunId`, `dryRun`, and `signal` to `runOrThrow`.
+Failed or cancelled runs reject, allowing the host to withhold acknowledgement
+and apply its failure policy. Validate the job envelope before invocation; keep
+host SDKs and persistence outside the pipeline module.

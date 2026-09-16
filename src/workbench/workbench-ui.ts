@@ -7,6 +7,7 @@ import {
   type WorkbenchPipelineCommand,
 } from "./pipeline-module.js";
 import { createRunId } from "../core/pipeline.js";
+import { observePipelineRunId } from "../core/pipeline-execute.js";
 import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import type { PipelineStudioConfig } from "./workbench-studio.js";
 import { isPipelineProjectManifest, type PipelineProjectManifest } from "./workbench-project.js";
@@ -320,14 +321,21 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
                     const registration = commandById.get(commandId);
                     if (!registration)
                       return { accepted: false, errors: ["Pipeline command not found."] };
-                    const runId = createRunId(registration.runIdPrefix);
-                    const pipelineContext = { runId, tracing: { exporter: writableStore! } };
                     const runController = new AbortController();
                     const signal = AbortSignal.any([
                       studioStopController.signal,
                       runController.signal,
                     ]);
-                    launchControllers.set(runId, runController);
+                    const launchId = createRunId(registration.runIdPrefix);
+                    launchControllers.set(launchId, runController);
+                    let announceRunId: (runId: string) => void = () => {};
+                    const announcedRunId = new Promise<string>((resolve) => {
+                      announceRunId = resolve;
+                    });
+                    const pipelineContext = observePipelineRunId(
+                      { tracing: { exporter: writableStore! } },
+                      announceRunId
+                    );
                     let parsedCommand: ReturnType<WorkbenchPipelineCommand["parseValues"]>;
                     try {
                       parsedCommand = registration.command.parseValues(
@@ -335,15 +343,15 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
                         commandContext(registration.commandIo, signal, pipelineContext)
                       );
                     } catch (error) {
-                      launchControllers.delete(runId);
+                      launchControllers.delete(launchId);
                       return { accepted: false, errors: [errorMessage(error)] };
                     }
                     if (parsedCommand.kind === "error") {
-                      launchControllers.delete(runId);
+                      launchControllers.delete(launchId);
                       return { accepted: false, errors: parsedCommand.errors };
                     }
                     if (parsedCommand.kind === "help") {
-                      launchControllers.delete(runId);
+                      launchControllers.delete(launchId);
                       return { accepted: false, errors: ["Help is not a launchable value set."] };
                     }
                     const execution = executePipelineCommandValues(
@@ -354,8 +362,12 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
                       pipelineContext
                     );
                     activeLaunches.add(execution);
+                    let runId = launchId;
+                    let executionSettled = false;
                     const cleanupLaunch = () => {
+                      executionSettled = true;
                       activeLaunches.delete(execution);
+                      launchControllers.delete(launchId);
                       launchControllers.delete(runId);
                     };
                     // Settle the acknowledgement loop before observing a late
@@ -379,6 +391,16 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
                       }
                     });
                     try {
+                      const executionRunId = await Promise.race([
+                        announcedRunId,
+                        execution.then(() => undefined),
+                        studioStopping.then(() => undefined),
+                      ]);
+                      if (executionRunId) {
+                        launchControllers.delete(launchId);
+                        runId = executionRunId;
+                        if (!executionSettled) launchControllers.set(runId, runController);
+                      }
                       return await acknowledgeRecordedLaunch(
                         store!,
                         runId,

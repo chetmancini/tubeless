@@ -18,6 +18,8 @@ export type PipelineTraceAttributes = Readonly<
 
 /** Stable identities propagated through a traced parent/child pipeline tree. */
 export interface PipelineTraceContext {
+  /** Reusable caller-owned correlation, distinct from the unique run identity. */
+  correlationId?: string;
   itemKey?: string;
   parentRunId?: string;
   runId: string;

@@ -55,7 +55,7 @@ const parseRows = step("parse-rows", {
 
 const enrichAdapter: RemoteStepAdapter<
   EnrichOptions,
-  { dryRun: boolean; rows: readonly string[]; runId: string },
+  { dryRun: boolean; parentRunId: string; rows: readonly string[] },
   EnrichResult
 > = {
   engine: "test",
@@ -72,7 +72,7 @@ const enrichRows = step.fromRemote("enrich-rows", {
   adapter: enrichAdapter,
   mapInput: ({ "parse-rows": parse }, ctx) => ({
     rows: parse.rows,
-    runId: ctx.runId,
+    parentRunId: ctx.runId,
     dryRun: ctx.dryRun,
   }),
   outputSchema: enrichSchema,

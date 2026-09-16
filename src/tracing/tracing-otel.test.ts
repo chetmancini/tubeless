@@ -37,6 +37,7 @@ describe("createOpenTelemetryTraceExporter", () => {
 
     exporter.export({
       attributes: { dry_run: false },
+      correlationId: "job-1",
       name: "pipeline.started",
       pipelineId: "import",
       runId: "run-1",
@@ -72,7 +73,10 @@ describe("createOpenTelemetryTraceExporter", () => {
     });
 
     expect(tracer.startSpan).toHaveBeenCalledWith("pipeline import", {
-      attributes: expect.objectContaining({ "pipeline.run_id": "run-1" }),
+      attributes: expect.objectContaining({
+        "pipeline.correlation_id": "job-1",
+        "pipeline.run_id": "run-1",
+      }),
       startTime: 10,
     });
     expect(span.addEvent).toHaveBeenCalledWith(

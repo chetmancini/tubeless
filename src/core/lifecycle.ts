@@ -129,6 +129,7 @@ export async function emitRejectedPlanLifecycle(
   result: PipelineRun<unknown>
 ): Promise<void> {
   const identity: PipelineTraceContext = { runId: result.runId };
+  if (result.correlationId !== undefined) identity.correlationId = result.correlationId;
   if (result.parentRunId) identity.parentRunId = result.parentRunId;
   if (runtime.tracing?.itemKey) identity.itemKey = runtime.tracing.itemKey;
   const lifecycle = createPipelineLifecycleObserver(

@@ -78,11 +78,14 @@ describe("definePipeline", () => {
     const log = { error: vi.fn(), log: vi.fn(), warn: vi.fn() };
     let timestampMs = 100;
     const step = createSteps<{ source: string }>();
+    let executionRunId = "";
     const load = step("load", {
       run: (_inputs, context) => {
-        expect(context.runId).toBe("run-public");
+        executionRunId = context.runId;
+        expect(context.correlationId).toBe("job-public");
+        expect(context.runId).toMatch(/^public-run-model:/);
         expect(context.parentRunId).toBe("run-parent");
-        expect(context.attemptId).toMatch(/^run-public:attempt:/);
+        expect(context.attemptId).toBe(`${context.runId}:attempt:1`);
         expect(context.log).toBe(log);
         context.log.log("loading", context.options.source);
         context.reportProgress({ completed: 1, total: 1, message: "loaded" });
@@ -100,13 +103,14 @@ describe("definePipeline", () => {
       log,
       now: () => timestampMs++,
       parentRunId: "run-parent",
-      runId: "run-public",
+      correlationId: "job-public",
     });
 
     expect(result).toMatchObject({
+      correlationId: "job-public",
       parentRunId: "run-parent",
       pipelineId: "public-run-model",
-      runId: "run-public",
+      runId: executionRunId,
       status: "completed",
       version: 2,
     });
@@ -114,11 +118,46 @@ describe("definePipeline", () => {
     const report = result.steps[0]!;
     expect(report.finishedAtMs).toBeGreaterThanOrEqual(report.startedAtMs!);
     expect(report).toMatchObject({
-      attemptId: expect.stringMatching(/^run-public:attempt:/),
+      attemptId: `${executionRunId}:attempt:1`,
       id: "load",
       status: "completed",
     });
     expect(log.log).toHaveBeenCalledWith("loading", "rows.json");
+  });
+
+  it("treats the deprecated caller runId as reusable correlation", async () => {
+    const step = createSteps();
+    const pipeline = definePipeline({
+      id: "legacy-correlation",
+      steps: [step("work", { run: () => "ok" })],
+      finalize: () => "ok",
+    });
+
+    const first = await pipeline.run({}, undefined, { runId: "reused" });
+    const second = await pipeline.run({}, undefined, { runId: "reused" });
+
+    expect(first.correlationId).toBe("reused");
+    expect(second.correlationId).toBe("reused");
+    expect(first.runId).not.toBe(second.runId);
+  });
+
+  it("ignores forged Studio preallocation symbols", async () => {
+    const step = createSteps();
+    const pipeline = definePipeline({
+      id: "private-run-identity",
+      steps: [step("work", { run: () => "ok" })],
+      finalize: () => "ok",
+    });
+    const forgedContext = {
+      correlationId: "job-private",
+      [Symbol.for("tubeless.pipeline.preallocatedRunId")]: "forged-run-id",
+    };
+
+    const result = await pipeline.run({}, undefined, forgedContext);
+
+    expect(result.runId).toMatch(/^private-run-identity:/);
+    expect(result.runId).not.toBe("forged-run-id");
+    expect(result.correlationId).toBe("job-private");
   });
 
   it("exports one completed token for run, step, and progress-detail statuses", () => {

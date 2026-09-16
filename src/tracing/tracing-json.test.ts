@@ -8,6 +8,7 @@ describe("createJsonTraceExporter", () => {
 
     exporter.export({
       attributes: { attempt: 1 },
+      correlationId: "job-1",
       name: "step.attempted",
       pipelineId: "import",
       runId: "run-1",
@@ -17,7 +18,7 @@ describe("createJsonTraceExporter", () => {
     });
 
     expect(lines).toEqual([
-      '{"attributes":{"attempt":1},"name":"step.attempted","pipelineId":"import","runId":"run-1","stepId":"fetch","timestampMs":42,"version":1}',
+      '{"attributes":{"attempt":1},"correlationId":"job-1","name":"step.attempted","pipelineId":"import","runId":"run-1","stepId":"fetch","timestampMs":42,"version":1}',
     ]);
   });
 });

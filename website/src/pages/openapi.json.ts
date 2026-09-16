@@ -377,6 +377,7 @@ const spec = {
           "version",
         ],
         properties: {
+          correlationId: { type: "string" },
           dryRun: { type: "boolean" },
           durationMs: { type: "number" },
           error: { $ref: "#/components/schemas/PipelineError" },
@@ -534,6 +535,7 @@ const spec = {
             },
           },
           attemptId: { type: "string" },
+          correlationId: { type: "string" },
           durationMs: { type: "number" },
           error: { $ref: "#/components/schemas/PipelineError" },
           id: { type: "integer", minimum: 0 },

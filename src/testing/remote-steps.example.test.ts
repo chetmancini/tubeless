@@ -49,7 +49,7 @@ describe("HTTP remote recipe", () => {
     const result = await RemoteStepsPipeline.runOrThrow(
       options(endpoint),
       { dryRun },
-      { runId: "caller-1" }
+      { correlationId: "caller-1" }
     );
     expect(result).toEqual({ orderId: "order-1", count: 2 });
     expect(requests).toEqual([
@@ -57,9 +57,10 @@ describe("HTTP remote recipe", () => {
         method: "POST",
         path: "/enrich",
         payload: {
+          correlationId: "caller-1",
           dryRun,
+          parentRunId: expect.stringMatching(/^remote-steps:/),
           rows: ["Alpha", "Beta"],
-          runId: "caller-1",
         },
       },
     ]);
@@ -127,7 +128,12 @@ describe("HTTP remote recipe", () => {
 });
 
 describe("host embedding recipe", () => {
-  const job = { runId: "attempt-1", parentRunId: "workflow-1", dryRun: true, lines: [" Alpha "] };
+  const job = {
+    correlationId: "job-1",
+    parentRunId: "workflow:parent-execution",
+    dryRun: true,
+    lines: [" Alpha "],
+  };
   it("passes host IDs and dry-run into the embedded pipeline", async () => {
     const run = vi.spyOn(HostedPipeline, "runOrThrow");
     try {
@@ -136,8 +142,8 @@ describe("host embedding recipe", () => {
         { lines: job.lines },
         { dryRun: true },
         {
-          runId: "attempt-1",
-          parentRunId: "workflow-1",
+          correlationId: "job-1",
+          parentRunId: "workflow:parent-execution",
           signal: undefined,
         }
       );

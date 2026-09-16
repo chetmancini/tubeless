@@ -20,8 +20,8 @@ export const HostedPipeline = definePipeline({
 // The host owns retries, acknowledgements, persistence, and cancellation.
 export async function handleHostJob(
   job: {
-    runId: string;
-    parentRunId: string;
+    correlationId: string;
+    parentRunId?: string;
     dryRun: boolean;
     lines: readonly string[];
   },
@@ -31,14 +31,13 @@ export async function handleHostJob(
   return HostedPipeline.runOrThrow(
     { lines: job.lines },
     { dryRun: job.dryRun },
-    { runId: job.runId, parentRunId: job.parentRunId, signal }
+    { correlationId: job.correlationId, parentRunId: job.parentRunId, signal }
   );
 }
 
 export async function runHostEmbeddingExample() {
   return handleHostJob({
-    runId: "host-job-42-attempt-1",
-    parentRunId: "host-workflow-42",
+    correlationId: "host-job-42",
     dryRun: true,
     lines: [" Alpha ", "Beta"],
   });

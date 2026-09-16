@@ -45,6 +45,7 @@ function attributesFor(event: PipelineTraceEvent) {
   for (const [key, value] of Object.entries(event.attributes)) {
     if (value !== undefined) attributes.set(key, value);
   }
+  attributes.set("pipeline.correlation_id", event.correlationId ?? "");
   attributes.set("pipeline.id", event.pipelineId);
   attributes.set("pipeline.item_key", event.itemKey ?? "");
   attributes.set("pipeline.parent_run_id", event.parentRunId ?? "");

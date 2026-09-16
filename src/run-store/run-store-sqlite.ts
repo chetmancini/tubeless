@@ -35,6 +35,7 @@ interface SqliteModule {
 interface StoredEventRow {
   attempt_id: string | null;
   attributes_json: string;
+  correlation_id?: string | null;
   duration_ms: number | null;
   error_json: string | null;
   event_name: PipelineTraceEvent["name"];
@@ -48,13 +49,15 @@ interface StoredEventRow {
   version: 1;
 }
 
-const RUN_EVENT_STORE_VERSION = 1;
+const RUN_EVENT_STORE_VERSION = 2;
+const LEGACY_RUN_EVENT_STORE_VERSION = 1;
 /** Larger batches mean fewer commits but more tail loss on crash. */
 const EXPORT_BATCH_SIZE = 64;
 
 type EventRow = readonly [
   version: PipelineTraceEvent["version"],
   runId: string,
+  correlationId: string | null,
   parentRunId: string | null,
   pipelineId: string,
   stepId: string | null,
@@ -71,6 +74,7 @@ function eventRow(event: PipelineTraceEvent): EventRow {
   return [
     event.version,
     event.runId,
+    event.correlationId ?? null,
     event.parentRunId ?? null,
     event.pipelineId,
     event.stepId ?? null,
@@ -107,6 +111,7 @@ const RUN_EVENT_STORE_SCHEMA = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     version INTEGER NOT NULL,
     run_id TEXT NOT NULL,
+    correlation_id TEXT,
     parent_run_id TEXT,
     pipeline_id TEXT NOT NULL,
     step_id TEXT,
@@ -139,6 +144,15 @@ function statement(database: SqliteDatabase, sql: string): SqliteStatement {
   const prepared = database.query?.(sql) ?? database.prepare?.(sql);
   if (!prepared) throw new Error("The current SQLite runtime does not support prepared queries.");
   return prepared;
+}
+
+function readStoreVersion(database: SqliteDatabase): number {
+  // SAFETY: `PRAGMA user_version` always returns a single row with a
+  // `user_version` column, so the first result row matches this shape.
+  const versionRow = statement(database, "PRAGMA user_version").all()[0] as
+    | { user_version?: number | bigint }
+    | undefined;
+  return Number(versionRow?.user_version ?? 0);
 }
 
 async function loadSqliteModule(): Promise<SqliteModule> {
@@ -291,6 +305,7 @@ function mapRow(row: StoredEventRow): StoredPipelineEvent {
     event.error = JSON.parse(row.error_json) as NonNullable<PipelineTraceEvent["error"]>;
   }
   if (row.item_key) event.itemKey = row.item_key;
+  if (row.correlation_id != null) event.correlationId = row.correlation_id;
   if (row.parent_run_id) event.parentRunId = row.parent_run_id;
   if (row.step_id) event.stepId = row.step_id;
   return event;
@@ -342,35 +357,68 @@ export async function openSqlitePipelineRunStore(
     }
   }
   const database = await openDatabase(resolvedFilename, { create: initialize, readOnly });
+  let storeVersion = 0;
   try {
-    // SAFETY: `PRAGMA user_version` always returns a single row with a
-    // `user_version` column, so the first result row matches this shape.
-    const versionRow = statement(database, "PRAGMA user_version").all()[0] as
-      | { user_version?: number | bigint }
-      | undefined;
-    const version = Number(versionRow?.user_version ?? 0);
-    if (version !== 0 && version !== RUN_EVENT_STORE_VERSION) {
+    const version = readStoreVersion(database);
+    storeVersion = version;
+    if (
+      version !== 0 &&
+      version !== LEGACY_RUN_EVENT_STORE_VERSION &&
+      version !== RUN_EVENT_STORE_VERSION
+    ) {
       throw new Error(
         `Unsupported pipeline run store schema version ${version}; expected ${RUN_EVENT_STORE_VERSION}.`
       );
     }
-    if (!initialize && version !== RUN_EVENT_STORE_VERSION) {
+    if (!initialize && version === 0) {
       throw new Error(`${resolvedFilename} is not a pipeline run store.`);
     }
-    if (initialize) {
+    if (!readOnly && version === LEGACY_RUN_EVENT_STORE_VERSION) {
+      database.exec("PRAGMA busy_timeout = 5000");
+      database.exec("BEGIN IMMEDIATE");
+      try {
+        const lockedVersion = readStoreVersion(database);
+        if (lockedVersion === LEGACY_RUN_EVENT_STORE_VERSION) {
+          database.exec("ALTER TABLE pipeline_run_events ADD COLUMN correlation_id TEXT");
+          database.exec(`PRAGMA user_version = ${RUN_EVENT_STORE_VERSION}`);
+          storeVersion = RUN_EVENT_STORE_VERSION;
+        } else if (lockedVersion === RUN_EVENT_STORE_VERSION) {
+          storeVersion = lockedVersion;
+        } else {
+          throw new Error(
+            `Unsupported pipeline run store schema version ${lockedVersion}; expected ${RUN_EVENT_STORE_VERSION}.`
+          );
+        }
+        database.exec("COMMIT");
+      } catch (error) {
+        try {
+          database.exec("ROLLBACK");
+        } catch {
+          // Preserve the migration failure when SQLite already ended the transaction.
+        }
+        throw error;
+      }
+    } else if (initialize) {
       database.exec(RUN_EVENT_STORE_SCHEMA);
       database.exec(`PRAGMA user_version = ${RUN_EVENT_STORE_VERSION}`);
+      storeVersion = RUN_EVENT_STORE_VERSION;
     }
   } catch (error) {
     database.close();
     throw error;
   }
+  const legacyReadOnly = readOnly && storeVersion === LEGACY_RUN_EVENT_STORE_VERSION;
   const insert = statement(
     database,
-    `INSERT INTO pipeline_run_events (
-      version, run_id, parent_run_id, pipeline_id, step_id, attempt_id, item_key,
-      event_name, timestamp_ms, duration_ms, attributes_json, error_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    legacyReadOnly
+      ? `INSERT INTO pipeline_run_events (
+          version, run_id, parent_run_id, pipeline_id, step_id, attempt_id, item_key,
+          event_name, timestamp_ms, duration_ms, attributes_json, error_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      : `INSERT INTO pipeline_run_events (
+          version, run_id, correlation_id, parent_run_id, pipeline_id, step_id, attempt_id,
+          item_key, event_name, timestamp_ms, duration_ms, attributes_json, error_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   let closed = false;
   let exportError: Error | undefined;
@@ -380,7 +428,12 @@ export async function openSqlitePipelineRunStore(
     if (pending.length === 0) return;
     try {
       database.exec("BEGIN IMMEDIATE");
-      for (const row of pending) insert.run(...row);
+      for (const row of pending) {
+        if (legacyReadOnly) {
+          const [version, runId, , ...rest] = row;
+          insert.run(version, runId, ...rest);
+        } else insert.run(...row);
+      }
       database.exec("COMMIT");
       pending.length = 0;
     } catch (error) {

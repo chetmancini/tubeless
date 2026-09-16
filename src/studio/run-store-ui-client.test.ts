@@ -168,6 +168,16 @@ describe("createStudioRunIndex", () => {
     expect(renderLike(index, "beta").roots.map((item) => item.runId)).toEqual(["root-1"]);
   });
 
+  it("matches reusable correlation identifiers", () => {
+    const correlated = run({
+      correlationId: "external-job-42",
+      runId: "execution",
+      startedAtMs: 1,
+    });
+    const index = createStudioRunIndex([correlated]);
+    expect(index.matchingRootIds("JOB-42")).toEqual(new Set(["execution"]));
+  });
+
   it("walks ancestors from nearest missing parent stop", () => {
     const root = run({ pipelineId: "root", runId: "root", startedAtMs: 1 });
     const child = run({ parentRunId: "root", pipelineId: "child", runId: "child", startedAtMs: 2 });
@@ -183,24 +193,24 @@ describe("createStudioRunIndex", () => {
     expect(index.rootRunId(null)).toBeNull();
   });
 
-  it("hides pure cycles from roots and still terminates lookups", () => {
+  it("breaks legacy cycles so every run remains visible from a root", () => {
     const left = run({ parentRunId: "right", pipelineId: "left", runId: "left", startedAtMs: 1 });
     const right = run({ parentRunId: "left", pipelineId: "right", runId: "right", startedAtMs: 2 });
     const visible = run({ pipelineId: "visible", runId: "visible", startedAtMs: 3 });
     const index = createStudioRunIndex([left, right, visible]);
-    expect(index.roots.map((item) => item.runId)).toEqual(["visible"]);
+    expect(index.roots.map((item) => item.runId)).toEqual(["left", "visible"]);
     expect(index.descendantCount("left")).toBe(1);
-    expect(index.ancestorsOf("left").map((item) => item.runId)).toEqual(["left", "right"]);
+    expect(index.ancestorsOf("left")).toEqual([]);
     expect(index.rootRunId("left")).toBe("left");
-    expect(index.matchingRootIds("left")).toEqual(new Set());
+    expect(index.matchingRootIds("right")).toEqual(new Set(["left"]));
   });
 
-  it("hides a self-parent from roots and reports no descendants", () => {
+  it("promotes a legacy self-parent to a root", () => {
     const loop = run({ parentRunId: "loop", pipelineId: "loop", runId: "loop", startedAtMs: 1 });
     const index = createStudioRunIndex([loop]);
-    expect(index.roots).toEqual([]);
+    expect(index.roots).toEqual([loop]);
     expect(index.descendantCount("loop")).toBe(0);
-    expect(index.ancestorsOf("loop")).toEqual([loop]);
+    expect(index.ancestorsOf("loop")).toEqual([]);
     expect(index.rootRunId("loop")).toBe("loop");
   });
 

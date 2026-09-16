@@ -157,6 +157,7 @@ function isStoredStudioRun(value: unknown): value is StoredPipelineRun {
     Array.isArray(value.steps) &&
     value.steps.every(isStoredStep) &&
     isFiniteNumber(value.version) &&
+    isOptionalString(value.correlationId) &&
     isOptionalString(value.parentRunId) &&
     (value.error === undefined ||
       (isRecord(value.error) &&

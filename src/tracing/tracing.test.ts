@@ -59,7 +59,7 @@ describe("pipeline tracing", () => {
     const result = await pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
       log: createLogger(),
-      runId: "partial-composition",
+      correlationId: "partial-composition",
       tracing: {
         exporter: composeTraceExporters([{ export: (event) => void events.push(event) }, failed]),
         onExporterError,
@@ -139,7 +139,7 @@ describe("pipeline tracing", () => {
       log: createLogger(),
       now: () => timestamp++,
       parentRunId: "parent-1",
-      runId: "run-1",
+      correlationId: "job-1",
       tracing: {
         exporter: { export: (event) => void events.push(event), flush },
         itemKey: "chapter-3",
@@ -147,7 +147,8 @@ describe("pipeline tracing", () => {
     });
 
     expect(result.status).not.toBe("completed");
-    expect(result.runId).toBe("run-1");
+    expect(result.correlationId).toBe("job-1");
+    expect(result.runId).toMatch(/^traced:/);
     expect(result.parentRunId).toBe("parent-1");
     expect(events.map((event) => event.name)).toEqual([
       "pipeline.started",
@@ -164,7 +165,8 @@ describe("pipeline tracing", () => {
       "step.skipped",
       "pipeline.completed",
     ]);
-    expect(events.every((event) => event.runId === "run-1")).toBe(true);
+    expect(events.every((event) => event.runId === result.runId)).toBe(true);
+    expect(events.every((event) => event.correlationId === "job-1")).toBe(true);
     expect(events.every((event) => event.parentRunId === "parent-1")).toBe(true);
     expect(events.every((event) => event.itemKey === "chapter-3")).toBe(true);
     expect(events.find((event) => event.name === "step.attempted")).toMatchObject({
@@ -238,7 +240,7 @@ describe("pipeline tracing", () => {
     const result = await pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
       log,
-      runId: "isolated",
+      correlationId: "isolated",
       tracing: {
         exporter: {
           export: () => Promise.reject(new Error("collector unavailable")),
@@ -271,7 +273,7 @@ describe("pipeline tracing", () => {
     const result = await pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
       log,
-      runId: "export-once",
+      correlationId: "export-once",
       tracing: {
         exporter: { export: () => Promise.reject(exportError) },
         onExporterError,
@@ -300,7 +302,7 @@ describe("pipeline tracing", () => {
     const result = await pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
       log: createLogger(),
-      runId: "export-drop",
+      correlationId: "export-drop",
       tracing: {
         exporter: {
           export: () => {
@@ -327,7 +329,7 @@ describe("pipeline tracing", () => {
     const result = await pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
       log: createLogger(),
-      runId: "export-ok",
+      correlationId: "export-ok",
       tracing: {
         exporter: { export: () => undefined },
         onExporterError,
@@ -352,7 +354,7 @@ describe("pipeline tracing", () => {
     const result = await pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
       log,
-      runId: "flush-once",
+      correlationId: "flush-once",
       tracing: {
         exporter: {
           export: () => undefined,
@@ -380,7 +382,7 @@ describe("pipeline tracing", () => {
     const result = await pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
       log,
-      runId: "callback-throw",
+      correlationId: "callback-throw",
       tracing: {
         exporter: { export: () => Promise.reject(new Error("collector unavailable")) },
         onExporterError: () => {
@@ -405,7 +407,7 @@ describe("pipeline tracing", () => {
     const result = await pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
       log,
-      runId: "callback-reject",
+      correlationId: "callback-reject",
       tracing: {
         exporter: { export: () => Promise.reject(new Error("collector unavailable")) },
         onExporterError: () => Promise.reject(new Error("callback exploded")),
@@ -431,7 +433,7 @@ describe("pipeline tracing", () => {
     const runPromise = pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
       log: createLogger(),
-      runId: "callback-slow",
+      correlationId: "callback-slow",
       tracing: {
         exporter: { export: () => Promise.reject(new Error("collector unavailable")) },
         onExporterError: () => hung,
@@ -469,21 +471,20 @@ describe("pipeline tracing", () => {
     });
     const events: PipelineTraceEvent[] = [];
 
-    await expect(
-      parent.run({}, undefined, {
-        ...defaultPipelineContext(),
-        runId: "parent-run",
-        tracing: {
-          exporter: { export: (event) => void events.push(event) },
-        },
-      })
-    ).resolves.toMatchObject({ status: "completed" });
+    const parentRun = await parent.run({}, undefined, {
+      ...defaultPipelineContext(),
+      correlationId: "parent-job",
+      tracing: {
+        exporter: { export: (event) => void events.push(event) },
+      },
+    });
+    expect(parentRun).toMatchObject({ correlationId: "parent-job", status: "completed" });
 
     expect(
       events.find(
         (event) => event.name === "pipeline.started" && event.pipelineId === "trace-child"
       )
-    ).toMatchObject({ parentRunId: "parent-run" });
+    ).toMatchObject({ correlationId: "parent-job", parentRunId: parentRun.runId });
     expect(
       events.find((event) => event.name === "step.planned" && event.pipelineId === "trace-parent")
     ).toMatchObject({
@@ -522,7 +523,7 @@ describe("pipeline tracing", () => {
 
     await pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
-      runId: "remote-run",
+      correlationId: "remote-run",
       tracing: {
         exporter: { export: (event) => void events.push(event) },
       },
@@ -567,22 +568,21 @@ describe("pipeline tracing", () => {
     });
     const events: PipelineTraceEvent[] = [];
 
-    await expect(
-      parent.run({ values: ["first", "second"] }, undefined, {
-        ...defaultPipelineContext(),
-        runId: "mapped-parent-run",
-        tracing: {
-          exporter: { export: (event) => void events.push(event) },
-        },
-      })
-    ).resolves.toMatchObject({ status: "completed" });
+    const parentRun = await parent.run({ values: ["first", "second"] }, undefined, {
+      ...defaultPipelineContext(),
+      correlationId: "mapped-parent-job",
+      tracing: {
+        exporter: { export: (event) => void events.push(event) },
+      },
+    });
+    expect(parentRun).toMatchObject({ status: "completed" });
 
     const childStarts = events.filter(
       (event) => event.name === "pipeline.started" && event.pipelineId === "trace-mapped-child"
     );
     expect(childStarts).toHaveLength(2);
     expect(childStarts.map((event) => event.itemKey).sort()).toEqual(["first", "second"]);
-    expect(childStarts.every((event) => event.parentRunId === "mapped-parent-run")).toBe(true);
+    expect(childStarts.every((event) => event.parentRunId === parentRun.runId)).toBe(true);
   });
 
   it("bounds progress details and records the original detail count", async () => {

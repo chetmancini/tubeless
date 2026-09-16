@@ -72,6 +72,31 @@ export function createStudioRunIndex(runs: readonly StoredPipelineRun[]): Studio
     if (!runsById.has(run.runId)) runsById.set(run.runId, run);
     const parentRunId = run.parentRunId;
     if (!parentIdByRunId.has(run.runId)) parentIdByRunId.set(run.runId, parentRunId);
+  }
+
+  // Legacy traces allowed caller-owned run identities, including self-parent
+  // and cyclic relationships. Break one edge per cycle so every recorded run
+  // remains reachable from a Studio root.
+  const resolvedParents = new Set<string>();
+  for (const run of runs) {
+    if (resolvedParents.has(run.runId)) continue;
+    const path: string[] = [];
+    const onPath = new Set<string>();
+    let currentId: string | undefined = run.runId;
+    while (currentId && runsById.has(currentId) && !resolvedParents.has(currentId)) {
+      if (onPath.has(currentId)) {
+        parentIdByRunId.set(currentId, undefined);
+        break;
+      }
+      onPath.add(currentId);
+      path.push(currentId);
+      currentId = parentIdByRunId.get(currentId);
+    }
+    for (const id of path) resolvedParents.add(id);
+  }
+
+  for (const run of runs) {
+    const parentRunId = parentIdByRunId.get(run.runId);
     if (!parentRunId) continue;
     const siblings = childrenByParentId.get(parentRunId);
     if (siblings) siblings.push(run);
@@ -188,7 +213,8 @@ export function createStudioRunIndex(runs: readonly StoredPipelineRun[]): Studio
     for (const run of runs) {
       if (
         !run.pipelineId.toLowerCase().includes(needle) &&
-        !run.runId.toLowerCase().includes(needle)
+        !run.runId.toLowerCase().includes(needle) &&
+        !run.correlationId?.toLowerCase().includes(needle)
       ) {
         continue;
       }

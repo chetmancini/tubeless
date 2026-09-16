@@ -59,7 +59,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   contacts the engine during a pipeline dry run; the adapter and remote
   worker must honor `context.dryRun` and include that flag in the
   request built by `mapInput`. Call `pipeline.runOrThrow` from a worker or activity handler and pass
-  `runId` / `parentRunId` when an external system owns job delivery and retries. Parent
+  `correlationId` when an external system owns job delivery and retries. Pass
+  `parentRunId` only when linking to a known Tubeless execution. Parent
   plans expose `remote` with `engine` and optional `target`. Adapters may
   forward remote lines through `context.log` and must rethrow remote
   failures as `Error` with `cause` / `code`. Follow the native-fetch example in
@@ -116,7 +117,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Use `runOrThrow` when every step must succeed and the caller expects a value.
   It always throws for an unsuccessful run, including `continueOnError` runs.
   Use `run` when the caller must inspect failures, skips, timings, or best-effort
-  output. Its versioned `PipelineRun` exposes `runId`, terminal status and
+  output. Its versioned `PipelineRun` exposes its unique `runId`, optional
+  reusable `correlationId`, terminal status and
   timestamps, errors, and timestamped step reports with correlated attempt IDs;
   structural skips have no attempt ID or start timestamp. Use hooks or tracing
   for streaming logs and progress. Exporter failures warn once per emitter and
@@ -189,9 +191,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   without log bodies. Use `projectPipelineRunStore` only for a one-shot fold
   of a complete list. See
   [`local-observability.ts`](../examples/local-observability.ts).
-- Pass caller-owned `runId` and `parentRunId` values through `PipelineContext`
-  when joining an external execution tree. Do not derive correlation from step
-  IDs or timestamps.
+- Pass caller-owned `correlationId` through `PipelineContext` when joining an
+  external job or workflow. `runId` is package-generated for every execution;
+  pass a known execution `runId` as `parentRunId` only to link that parent.
 - Use `tubeless ui` to inspect local recordings. Browser execution requires
   explicitly registered commands. Use `definePipelineProject` for a checked-in command catalog with
   stable registered IDs, and register only explicit `definePipelineCommand`
