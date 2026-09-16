@@ -6,12 +6,18 @@ on:
     paths:
       - "website/**"
       - "docs/**"
+      - "src/tracing/tracing-constants.ts"
+      - "src/tracing/tracing-schema.ts"
+      - "src/tracing/wire-schema.ts"
       - "package.json"
       - ".github/workflows/pages.yml"
   pull_request:
     paths:
       - "website/**"
       - "docs/**"
+      - "src/tracing/tracing-constants.ts"
+      - "src/tracing/tracing-schema.ts"
+      - "src/tracing/wire-schema.ts"
       - "package.json"
       - ".github/workflows/pages.yml"
   workflow_dispatch:

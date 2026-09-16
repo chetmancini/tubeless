@@ -6,10 +6,10 @@ import type {
 } from "./tracing-schema.js";
 
 /** Values that can be safely carried in a structured trace attribute. */
-export type PipelineTraceAttributeValue = Extract<
-  PipelineTraceEventContract,
-  { name: "step.attempted" }
->["payload"]["attributes"][string];
+export type PipelineTraceAttributeValue = Exclude<
+  Extract<PipelineTraceEventContract, { name: "step.attempted" }>["payload"]["attributes"][string],
+  undefined
+>;
 
 /** Additional scalar telemetry supplied by a step attempt. */
 export type PipelineTraceAttributes = Extract<
