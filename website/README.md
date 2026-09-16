@@ -15,6 +15,19 @@ bun run dev
 
 From the package root: `make website`.
 
+## Analytics
+
+PostHog pageview analytics are optional. Copy `.env.example` to `.env` for a
+local analytics-enabled build, or configure both `PUBLIC_POSTHOG_KEY` and
+`PUBLIC_POSTHOG_HOST` as GitHub Actions repository variables for production.
+Use the project key and ingestion host from the PostHog Web analytics install
+snippet. These values are public browser configuration, not secrets.
+
+When configured, the site captures pageview and page-leave events. Interaction
+autocapture, person profiles for anonymous visitors, and session recording stay
+disabled. When neither variable is configured, Astro omits PostHog entirely.
+The build fails when only one variable is set.
+
 ## Update content
 
 | Change | Edit |

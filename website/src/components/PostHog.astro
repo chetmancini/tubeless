@@ -1,0 +1,84 @@
+---
+const projectKey = import.meta.env.PUBLIC_POSTHOG_KEY?.trim();
+const apiHost = import.meta.env.PUBLIC_POSTHOG_HOST?.trim().replace(/\/+$/, "");
+
+if (Boolean(projectKey) !== Boolean(apiHost)) {
+  throw new Error("PUBLIC_POSTHOG_KEY and PUBLIC_POSTHOG_HOST must be set together");
+}
+---
+
+{
+  projectKey && apiHost && (
+    <script is:inline define:vars={{ projectKey, apiHost }}>
+      if (!window.__posthog_initialized) {
+        window.__posthog_initialized = true;
+
+        !(function (document, posthog) {
+          let method;
+          let index;
+          let script;
+          let firstScript;
+          posthog.__SV ||
+            ((window.posthog = posthog),
+            (posthog._i = []),
+            (posthog.init = function (token, config, name) {
+              function stub(target, methodName) {
+                const parts = methodName.split(".");
+                if (parts.length === 2) {
+                  target = target[parts[0]];
+                  methodName = parts[1];
+                }
+                target[methodName] = function () {
+                  target.push([methodName].concat(Array.prototype.slice.call(arguments, 0)));
+                };
+              }
+              script = document.createElement("script");
+              script.type = "text/javascript";
+              script.crossOrigin = "anonymous";
+              script.async = true;
+              script.src = config.api_host + "/static/array.js";
+              firstScript = document.getElementsByTagName("script")[0];
+              firstScript.parentNode.insertBefore(script, firstScript);
+              let queue = posthog;
+              if (name !== undefined) queue = posthog[name] = [];
+              else name = "posthog";
+              queue.people = queue.people || [];
+              Object.defineProperty(queue, "toString", {
+                configurable: true,
+                enumerable: false,
+                value: function (asPerson) {
+                  let label = "posthog";
+                  if (name !== "posthog") label += "." + name;
+                  if (!asPerson) label += " (stub)";
+                  return label;
+                },
+              });
+              Object.defineProperty(queue.people, "toString", {
+                configurable: true,
+                enumerable: false,
+                value: function () {
+                  return queue.toString(1) + ".people (stub)";
+                },
+              });
+              method =
+                "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagResult reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(
+                  " ",
+                );
+              for (index = 0; index < method.length; index += 1) stub(queue, method[index]);
+              posthog._i.push([token, config, name]);
+            }),
+            (posthog.__SV = 1));
+        })(document, window.posthog || []);
+
+        posthog.init(projectKey, {
+          api_host: apiHost,
+          autocapture: false,
+          capture_pageleave: true,
+          capture_pageview: true,
+          disable_session_recording: true,
+          person_profiles: "identified_only",
+        });
+      }
+    </script>
+  )
+}
