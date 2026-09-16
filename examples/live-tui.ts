@@ -1,5 +1,5 @@
 import { createSteps, definePipeline } from "tubeless";
-import { definePipelineCommand } from "tubeless/cli";
+import { definePipelineCommand } from "tubeless/workbench";
 
 interface LiveTuiOptions {
   delay: number;

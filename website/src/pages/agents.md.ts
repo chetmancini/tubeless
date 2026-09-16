@@ -20,6 +20,5 @@ or \`tubeless\` for ongoing authoring.
 - [Code conversion skill](${githubBlob("skills/tubeless-make-pipeline/SKILL.md")})
 - [Project manifest](${githubBlob("examples/catalog/tubeless.project.ts")})
 - [Agent evaluations](${absUrl("docs/agent-evaluations.md")})
-- [Local Studio OpenAPI contract](${absUrl("openapi.json")})
 - [Machine-readable API report](${absUrl("api-report.json")})
 `, { headers: { "content-type": "text/markdown; charset=utf-8" } });

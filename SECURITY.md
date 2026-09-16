@@ -35,17 +35,8 @@ the run store. Anyone who can reach that port can read recorded events,
 including log text your pipelines wrote. Binding `0.0.0.0` or a LAN address is
 out of scope; you enabled it.
 
-`startPipelineRunStudio` also defaults to `127.0.0.1`, but it does not refuse a
-non-loopback host plus an injected launcher or history capability. That
-combination is out of scope.
-
-Every studio route, including reads, requires a `Host` header that matches
-the bound authority. A wildcard bind (`0.0.0.0` or `::`) cannot appear in a
-client `Host`, so those listeners also accept `localhost` or a literal IP on
-the same port. DNS names are still refused. Browser plan, launch, cancel, and
-clear-history also require a custom `x-tubeless-studio-*` header, and
-`application/json` for plan and launch. Those checks stop ordinary cross-site
-form posts and DNS-rebinding reads. They are not authentication. Do not expose
-studio to a network you do not trust.
+Studio applies host and same-origin request guards, but those checks are not
+authentication. Its HTTP server and browser protocol are internal workbench
+details. Do not expose Studio to a network you do not trust.
 
 See [the studio docs](./docs/studio.md).

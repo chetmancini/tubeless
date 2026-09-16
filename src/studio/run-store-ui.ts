@@ -30,11 +30,9 @@ import {
 } from "./run-store-ui-state.js";
 
 export type {
-  PipelineRunStudioCancelResult,
   PipelineRunStudioCommand,
   PipelineRunStudioLauncher,
   PipelineRunStudioLaunchResult,
-  PipelineRunStudioLaunchRequest,
 } from "./run-store-ui-protocol.js";
 export type { PipelineRunStudioHistoryMaintenance } from "./run-store-ui-state.js";
 

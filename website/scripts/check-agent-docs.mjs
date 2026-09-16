@@ -8,80 +8,6 @@ const read = (path) => readFileSync(join(root, path), "utf8");
 const index = read("llms.txt");
 const bundle = read("llms-full.txt");
 assert.equal(read("CNAME").trim(), "tubeless.io", "Pages artifact must preserve the custom domain");
-const openapi = JSON.parse(read("openapi.json"));
-assert.equal(openapi.openapi, "3.1.0");
-assert.equal(openapi.info.title, "Tubeless Local Studio API");
-assert.equal(openapi["x-tubeless-hosted-api"], false);
-assert.equal(openapi["x-tubeless-spec-url"], "https://tubeless.io/openapi.json");
-assert.match(openapi.servers[0].url, /^http:\/\/127\.0\.0\.1:/);
-assert.deepEqual(Object.keys(openapi.paths).sort(), [
-  "/api/capabilities",
-  "/api/commands",
-  "/api/commands/{commandId}/plan",
-  "/api/commands/{commandId}/runs",
-  "/api/history",
-  "/api/runs/{runId}",
-  "/api/runs/{runId}/cancel",
-  "/api/snapshot",
-]);
-assert.deepEqual(openapi.components.schemas.ErrorResponse.required.sort(), [
-  "code",
-  "hint",
-  "message",
-]);
-assert.equal(openapi.components.schemas.ErrorResponse.properties.accepted.const, false);
-assert.equal(openapi.components.schemas.ErrorResponse.properties.errors.items.type, "string");
-for (const [path, pathItem] of Object.entries(openapi.paths)) {
-  for (const [method, operation] of Object.entries(pathItem)) {
-    assert.ok(operation.responses["500"], `${method.toUpperCase()} ${path} must document 500`);
-    for (const [status, response] of Object.entries(operation.responses)) {
-      if (!/^[45]\d\d$/.test(status)) continue;
-      assert.match(response.$ref, /^#\/components\/responses\//, `${method.toUpperCase()} ${path} ${status} must reuse a typed error response`);
-      const responseName = response.$ref.split("/").at(-1);
-      assert.equal(
-        openapi.components.responses[responseName].content["application/json"].schema.$ref,
-        "#/components/schemas/ErrorResponse",
-        `${method.toUpperCase()} ${path} ${status} must use ErrorResponse`
-      );
-    }
-  }
-}
-assert.deepEqual(openapi.components.schemas.Snapshot.required.sort(), [
-  "activeRunCount",
-  "completedRunCount",
-  "definitions",
-  "failedRunCount",
-  "generatedAtMs",
-  "lastEventId",
-  "liveRunIds",
-  "runs",
-]);
-assert.equal(
-  openapi.components.schemas.Snapshot.properties.definitions.items.$ref,
-  "#/components/schemas/StoredPipelineDefinition"
-);
-assert.equal(
-  openapi.components.schemas.Snapshot.properties.runs.items.$ref,
-  "#/components/schemas/StoredPipelineRun"
-);
-assert.equal(
-  openapi.components.schemas.RunDetail.properties.events.items.$ref,
-  "#/components/schemas/StoredPipelineEvent"
-);
-assert.equal(
-  openapi.components.schemas.RunDetail.properties.run.$ref,
-  "#/components/schemas/StoredPipelineRun"
-);
-assert.equal(
-  openapi.components.schemas.PlanResult.properties.plan.$ref,
-  "#/components/schemas/PipelinePlan"
-);
-assert.deepEqual(openapi.components.schemas.LaunchRequest.properties.values.propertyNames, {
-  maxLength: 4096,
-  minLength: 1,
-  type: "string",
-});
-assert.ok(index.includes("https://tubeless.io/openapi.json"));
 assert.ok(index.includes("https://tubeless.io/developers.md"));
 const pages = readdirSync(join(root, "docs"))
   .filter((name) => existsSync(join(root, "docs", name, "index.html")));
@@ -122,7 +48,6 @@ for (const section of index.split(/^## /m).slice(1)) {
 const homepage = read("index.html");
 assert.match(homepage, /<title>Tubeless — Typed pipelines for Node\.js<\/title>/);
 assert.match(homepage, /name="application-name" content="Tubeless"/);
-assert.match(homepage, /rel="service-desc" type="application\/vnd\.oai\.openapi\+json;version=3\.1" href="\/openapi\.json"/);
 assert.match(homepage, /property="og:site_name" content="Tubeless"/);
 assert.match(homepage, /<link rel="alternate" type="text\/markdown" href="\/index.md"/);
 assert.match(read("index.md"), /^# Tubeless\n/);
@@ -154,7 +79,6 @@ assert.match(homepage, /name="description" content="Tubeless by Chet Mancini:/);
 const developers = read("developers/index.html");
 assert.match(developers, /<title>Developer Resources · Tubeless<\/title>/);
 assert.match(developers, /<h1 class="page-title">Tubeless developer resources<\/h1>/);
-assert.match(developers, /href="\/openapi\.json"/);
 assert.match(developers, /href="\/docs\/api-reference"/);
 assert.match(developers, /type="text\/markdown" href="\/developers\.md"/);
 assert.match(read("developers.md"), /^# Tubeless developer resources\n/);

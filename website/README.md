@@ -64,11 +64,6 @@ Markdown URLs; `/llms-full.txt` bundles the same build’s docs with the agent g
 first. Links in Markdown are absolute, so downloaded context remains navigable.
 These routes use the same documentation catalog as the human navigation.
 
-`/openapi.json` documents the local Studio HTTP API. The spec points to a
-loopback server and states that `tubeless.io` does not execute pipelines. Studio
-errors return JSON with stable `code`, `message`, and `hint` fields plus the
-existing `error` string.
-
 ## Agent readiness and hosting boundaries
 
 The build checks `llms.txt` against the [published file-list format](https://llmstxt.org/),

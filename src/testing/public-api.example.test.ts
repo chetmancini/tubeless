@@ -4,18 +4,15 @@ import {
   definePipeline,
   isPipelineErrorCode,
   PIPELINE_ERROR_CODES,
-  type PipelineLogger,
-  type PipelineRun,
   type RemoteStepAdapter,
 } from "tubeless";
-import { createPipelineReporter, createRunReporter } from "tubeless/reporter";
 import { chunk, runConcurrent } from "tubeless/batch";
-import { TUBELESS_WORKBENCH_EXIT_CODE } from "tubeless/cli";
 import { RateLimiter } from "tubeless/rate-limit";
 import { withRetry } from "tubeless/retry";
 import type { PipelineTraceEvent } from "tubeless/tracing";
 import { createJsonTraceExporter } from "tubeless/tracing/json";
 import { createOpenTelemetryTraceExporter } from "tubeless/tracing/otel";
+import { definePipelineCommand, definePipelineProject } from "tubeless/workbench";
 
 interface ImportOptions {
   lines: readonly string[];
@@ -128,18 +125,6 @@ const RemotePipeline = definePipeline({
   finalize: (outputs) => outputs["remote-enrich"],
 });
 
-function capturingLogger(): PipelineLogger & {
-  messages: { error: string[]; log: string[]; warn: string[] };
-} {
-  const messages = { error: [] as string[], log: [] as string[], warn: [] as string[] };
-  return {
-    messages,
-    log: (message?: unknown) => messages.log.push(String(message ?? "")),
-    warn: (message?: unknown) => messages.warn.push(String(message ?? "")),
-    error: (message?: unknown) => messages.error.push(String(message ?? "")),
-  };
-}
-
 describe("public API example", () => {
   it("exposes stable pipeline error codes for discovery and lookup", () => {
     expect(PIPELINE_ERROR_CODES).toContain("TUBELESS_STEP_FAILED");
@@ -190,19 +175,6 @@ describe("public API example", () => {
     ).resolves.toEqual([2, 4]);
   });
 
-  it("exports workbench exit codes through tubeless/cli", () => {
-    expect(TUBELESS_WORKBENCH_EXIT_CODE).toMatchObject({
-      success: 0,
-      usage: 1,
-      load: 2,
-      definition: 3,
-      validation: 4,
-      planning: 5,
-      execution: 6,
-      cancellation: 7,
-    });
-  });
-
   it("schedules once through tubeless/rate-limit", async () => {
     const limiter = new RateLimiter(0);
     await limiter.wait();
@@ -235,30 +207,18 @@ describe("public API example", () => {
     expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({ pipelineId: "import" });
   });
 
-  it("creates plain pipeline reporters through the package entrypoint", async () => {
-    const logger = capturingLogger();
-    const reporter = createPipelineReporter({
-      color: "never",
-      log: logger,
-      mode: "plain",
-      symbols: "ascii",
+  it("registers commands and project catalogs through the workbench entrypoint", () => {
+    const command = definePipelineCommand(ImportPipeline, {
+      params: {
+        lines: { type: "string", multiple: true },
+      },
+      reporter: false,
     });
-    expect(reporter.mode).toBe("plain");
-
-    const result = await ImportPipeline.run({ lines: ["one"] }, undefined, {
-      cwd: "/tmp",
-      hooks: createRunReporter({
-        color: "never",
-        log: logger,
-        symbols: "ascii",
-      }),
-      log: logger,
+    const project = definePipelineProject({
+      commands: [{ id: "import", file: "./import.ts", export: "ImportCommand" }],
     });
 
-    expect(result.status).toBe("completed");
-    const publicRun: PipelineRun<{ count: number; rows: string[] }> = result;
-    expect(publicRun.steps[0]?.attemptId).toMatch(new RegExp(`^${result.runId}:attempt:`));
-    expect(logger.messages.log.some((line) => line.includes("Pipeline import"))).toBe(true);
-    reporter.dispose();
+    expect(command.descriptor.name).toBe("import");
+    expect(project.commands[0]?.id).toBe("import");
   });
 });

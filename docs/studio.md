@@ -82,7 +82,7 @@ Use a project manifest to register commands once for both the CLI and Studio:
 
 ```ts
 // tubeless.project.ts
-import { definePipelineProject } from "tubeless/workbench/project";
+import { definePipelineProject } from "tubeless/workbench";
 
 export default definePipelineProject({
   cwd: ".",
@@ -149,20 +149,6 @@ validation before planning does not erase the last recorded definition.
 Nested metadata includes the declared `stepCount`; truncated progress includes
 its original `detailCount`.
 
-## Embed Studio or build a reader
-
-Use `tubeless/run-store/sqlite`, `tubeless/run-store/ndjson`, and
-`tubeless/run-store/ui` to assemble a programmatic viewer. The UI has no execution
-capability unless you supply a `PipelineRunStudioLauncher`. See
-[`local-observability.ts`](../examples/local-observability.ts).
-
-For a reader that polls `listEvents({ afterId })`, use
-`createPipelineRunProjector` from `tubeless/run-store`. Append each new page and
-call `snapshot()`. A refresh with no new IDs returns the cached snapshot;
-duplicate or out-of-order IDs are ignored. IDs can start at `0`.
-Use `projectPipelineRunStore` for a one-time summary of a complete event list.
-Studio uses incremental projection so refreshes do not reread the whole store.
-
 ## Network access
 
 Studio binds to `127.0.0.1` by default. Browser execution requires a loopback
@@ -175,19 +161,6 @@ read the store. Logs, errors, and event payloads are displayed without redaction
 Keep the default loopback binding unless you intend to share that data. See
 [SECURITY.md](https://github.com/chetmancini/tubeless/blob/main/SECURITY.md).
 
-Every request must send a `Host` header matching the bound host and port. For
-wildcard binds (`0.0.0.0` or `::`), use `localhost` or a literal IP on the same
-port; DNS names are refused. Plan, launch, cancel, and clear requests also
-require the corresponding `x-tubeless-studio-*` header. These headers check
-request origin; they do not authenticate users. Plan and launch requests use
-`application/json`.
-
-## HTTP contract and errors
-
-The [OpenAPI document](https://tubeless.io/openapi.json) describes the local
-Studio API, including the exact headers for each operation. `tubeless.io`
-hosts that specification; pipeline execution takes place on your machine.
-A launch response with HTTP 202 means its run ID is already queryable.
-
-Error responses use JSON with a stable `code`, a readable `message`, and a
-`hint`. Branch on `code` when handling errors in application code.
+Studio's HTTP server and browser protocol are internal workbench details, not a
+supported embedding API. Use the `tubeless ui` command instead of calling its
+local routes directly.

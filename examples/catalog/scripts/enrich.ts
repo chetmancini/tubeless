@@ -1,4 +1,4 @@
-import { definePipelineCommand } from "tubeless/cli";
+import { definePipelineCommand } from "tubeless/workbench";
 import { EnrichPipeline } from "../pipelines/enrich.ts";
 
 export const EnrichCommand = definePipelineCommand(EnrichPipeline, {

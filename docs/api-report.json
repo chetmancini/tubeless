@@ -87,41 +87,6 @@
       "specifier": "tubeless/batch"
     },
     {
-      "declaration": "./dist/cli/cli.d.ts",
-      "exports": [
-        "CliBooleanParam",
-        "CliCheckpointConfig",
-        "CliCommand",
-        "CliCommandConfig",
-        "CliCommandDescriptor",
-        "CliContext",
-        "CliHelpRequested",
-        "CliNumberParam",
-        "CliParam",
-        "CliParameterDescriptor",
-        "CliParams",
-        "CliParamsSchema",
-        "CliParamType",
-        "CliParseResult",
-        "CliPathParam",
-        "CliStringParam",
-        "CliValidationError",
-        "defineCommand",
-        "definePipelineCommand",
-        "DefinePipelineCommandConfig",
-        "PipelineCliBuiltins",
-        "PipelineCliParseResult",
-        "PipelineCliValues",
-        "PipelineCommand",
-        "PipelineCommandHookConfig",
-        "PipelineCommandHookContext",
-        "PipelineCommandHookSets",
-        "TUBELESS_WORKBENCH_EXIT_CODE"
-      ],
-      "sha256": "43a2aed574d9d03c15207b7b6fd9604037680712daa91fdfe29a1bfc8cc7d12e",
-      "specifier": "tubeless/cli"
-    },
-    {
       "declaration": "./dist/node/node.d.ts",
       "exports": ["CheckpointStore", "openCheckpoint", "withCheckpointedBatch"],
       "sha256": "1bf8549ca953a11e7202dbda8013db2a8f1d56286f1618bad929efbbb2efd302",
@@ -134,117 +99,16 @@
       "specifier": "tubeless/rate-limit"
     },
     {
-      "declaration": "./dist/render/render.d.ts",
-      "exports": [
-        "PipelineHumanRenderOptions",
-        "PipelineJsonRenderOptions",
-        "PipelinePlanRenderOptions",
-        "PipelineRenderOptions",
-        "renderPipelineError",
-        "renderPipelinePlan"
-      ],
-      "sha256": "b04dc479fae73b7c8f739b069824bf9a6419becd112adc5247852ba2a664cf15",
-      "specifier": "tubeless/render"
-    },
-    {
-      "declaration": "./dist/reporter/reporter-entry.d.ts",
-      "exports": [
-        "createPipelineReporter",
-        "createRunReporter",
-        "PipelineReporterConfig",
-        "PipelineReporterController",
-        "PipelineReporterMode",
-        "PipelineReporterOptions",
-        "ReporterColorMode",
-        "ReporterOutput",
-        "ReporterSymbolMode",
-        "ReporterTerminalCapabilities",
-        "ResolvedPipelineReporterMode",
-        "RunReporterConfig",
-        "RunReporterOptions"
-      ],
-      "sha256": "0c8710258cdcf5004d631431019db9c2de70c3d663e354372689f088d0619ff8",
-      "specifier": "tubeless/reporter"
-    },
-    {
       "declaration": "./dist/utilities/retry.d.ts",
       "exports": ["RetryAttemptContext", "RetryOperation", "RetryOptions", "withRetry"],
       "sha256": "f91f83f8e31e3e629ed90d1b04656110572ea970187a92369f0908cd75ae8f00",
       "specifier": "tubeless/retry"
     },
     {
-      "declaration": "./dist/run-store/run-store.d.ts",
-      "exports": [
-        "createPipelineRunProjector",
-        "PipelineRunEventQuery",
-        "PipelineRunEventReader",
-        "PipelineRunEventStore",
-        "PipelineRunProjector",
-        "PipelineRunStoreSnapshot",
-        "projectPipelineRun",
-        "projectPipelineRunStore",
-        "StoredNestedPipeline",
-        "StoredPipelineAttempt",
-        "StoredPipelineDefinition",
-        "StoredPipelineDefinitionStep",
-        "StoredPipelineEvent",
-        "StoredPipelineLog",
-        "StoredPipelineRun",
-        "StoredPipelineRunStatus",
-        "StoredPipelineStep",
-        "StoredRemote"
-      ],
-      "sha256": "7b8c0cc757e5cfb9d5be9e4d91a3ef4aae9e8934989d08366994980ea2e6d047",
-      "specifier": "tubeless/run-store"
-    },
-    {
-      "declaration": "./dist/run-store/run-store-sqlite.d.ts",
-      "exports": [
-        "openSqlitePipelineRunStore",
-        "OpenSqlitePipelineRunStoreOptions",
-        "SqlitePipelineRunStore"
-      ],
-      "sha256": "b747f696fcd8c715a4a7d347d62d4428d0c538dae7b852a4ea4c12d4afd235c1",
-      "specifier": "tubeless/run-store/sqlite"
-    },
-    {
-      "declaration": "./dist/run-store/run-store-ndjson.d.ts",
-      "exports": [
-        "NdjsonPipelineRunStore",
-        "openNdjsonPipelineRunStore",
-        "OpenNdjsonPipelineRunStoreOptions"
-      ],
-      "sha256": "c2ebca4851ff949d9f25a33558c78562327328507379858d7ad6d0d07fa50b08",
-      "specifier": "tubeless/run-store/ndjson"
-    },
-    {
-      "declaration": "./dist/workbench/workbench-project.d.ts",
-      "exports": [
-        "definePipelineProject",
-        "isPipelineProjectManifest",
-        "PIPELINE_PROJECT_MANIFEST_VERSION",
-        "PipelineProjectCommandModule",
-        "PipelineProjectManifest",
-        "PipelineProjectManifestInput"
-      ],
-      "sha256": "eac0931b2968d98c1b7d41503c1ea61477a2685e8cfebd22863255fce67085a7",
-      "specifier": "tubeless/workbench/project"
-    },
-    {
-      "declaration": "./dist/studio/run-store-ui.d.ts",
-      "exports": [
-        "PipelineRunStudioCancelResult",
-        "PipelineRunStudioCommand",
-        "PipelineRunStudioHistoryMaintenance",
-        "PipelineRunStudioLauncher",
-        "PipelineRunStudioLaunchRequest",
-        "PipelineRunStudioLaunchResult",
-        "PipelineRunStudioOptions",
-        "PipelineRunStudioServer",
-        "startPipelineRunStudio"
-      ],
-      "sha256": "41349975b80c3381d7c5758cd3eb88d83e8dc099026171ce566f262b83f97ca9",
-      "specifier": "tubeless/run-store/ui"
+      "declaration": "./dist/workbench/workbench-entry.d.ts",
+      "exports": ["definePipelineCommand", "definePipelineProject"],
+      "sha256": "9712ef77fb78259261f0bfff0443b2f489bf0d6d47fa48e1d996eefce8a08ff6",
+      "specifier": "tubeless/workbench"
     },
     {
       "declaration": "./dist/testing/testing.d.ts",

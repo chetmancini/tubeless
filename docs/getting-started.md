@@ -14,8 +14,8 @@ npm install tubeless
 The same package works with `pnpm add tubeless`, `yarn add tubeless`, and
 `bun add tubeless`. The README quick start is a complete first program.
 
-The package also includes a CLI for loading TypeScript pipeline files. The CLI
-requires Bun 1.3.14 or later:
+The optional `tubeless/workbench` entry and bundled CLI load operational tools
+only when you use them. The CLI requires Bun 1.3.14 or later:
 
 ```sh
 bunx tubeless --help
@@ -123,9 +123,10 @@ const normalizePlan = ImportPipeline.plan({ targets: ["normalize"] });
   failure gates. `stepIds` is an exact low-level filter and cannot be combined
   with `targets`. See [core concepts](./concepts.md) for examples of both controls.
 
-For a CLI script, wrap the pipeline with `definePipelineCommand`. It supplies
-help, target and step selection, dry-run flags, and cancellation handling. See [the CLI](./cli.md)
-and [`cli-job.ts`](../examples/cli-job.ts).
+For a CLI script, import `definePipelineCommand` from `tubeless/workbench` and
+wrap the pipeline. It supplies help, target and step selection, dry-run flags,
+and cancellation handling. See [the CLI](./cli.md) and
+[`cli-job.ts`](../examples/cli-job.ts).
 
 ## 5. Draw the pipeline
 

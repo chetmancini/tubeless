@@ -21,7 +21,7 @@ name; recheck immediately before the first publish.
       and supported operating systems.
 - [x] Audit the public API for names that should be stable at launch, including
       export paths, the `tubeless` binary, `TUBELESS_*` error codes,
-      `TUBELESS_WORKBENCH_EXIT_CODE`, `.tubeless` storage, studio headers, and
+      workbench exit behavior, `.tubeless` storage, Studio guards, and
       runtime symbol keys. See [Public names](#public-names).
 - [x] Perform a legal and public-source scrub: confirm MIT ownership and
       copyright, third-party notices, contributor attribution/history, and that
@@ -114,23 +114,15 @@ name; recheck immediately before the first publish.
 
 These names are the 0.1.0 contract. Treat a change as a breaking change.
 
-| Kind               | Stable name                                                                                                                                                                                                                                                                                                                                                                     | Notes                                                                                     |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Package and binary | `tubeless`                                                                                                                                                                                                                                                                                                                                                                      | Bin path `./dist/workbench/workbench-bin.js` is an implementation detail.                 |
-| Export paths       | `tubeless`, `tubeless/batch`, `tubeless/cli`, `tubeless/node`, `tubeless/rate-limit`, `tubeless/render`, `tubeless/reporter`, `tubeless/retry`, `tubeless/run-store`, `tubeless/run-store/ndjson`, `tubeless/run-store/sqlite`, `tubeless/run-store/ui`, `tubeless/workbench/project`, `tubeless/testing`, `tubeless/tracing`, `tubeless/tracing/json`, `tubeless/tracing/otel` | `workbench` is the CLI family name, not leftover `pipes` branding.                        |
-| Error codes        | `TUBELESS_*` on `PipelineErrorCode`                                                                                                                                                                                                                                                                                                                                             | Prefix and current spellings stay.                                                        |
-| CLI exit codes     | `TUBELESS_WORKBENCH_EXIT_CODE` from `tubeless/cli`                                                                                                                                                                                                                                                                                                                              | `0`–`7`: success, usage, load, definition, validation, planning, execution, cancellation. |
-| Storage            | `.tubeless/runs.sqlite`                                                                                                                                                                                                                                                                                                                                                         | Default studio/CLI store path.                                                            |
-| Studio headers     | `x-tubeless-studio-plan`, `x-tubeless-studio-launch`, `x-tubeless-studio-cancel`, `x-tubeless-studio-clear-history`                                                                                                                                                                                                                                                             | Local studio protocol.                                                                    |
-| Runtime symbols    | `Symbol.for("tubeless/pipeline-command")`                                                                                                                                                                                                                                                                                                                                       | Cross-instance marker. Consumers should not set it.                                       |
-| Other constants    | `PIPELINE_FINALIZE_STEP_ID` (`__finalize__`), `RUN_MODEL_VERSION` (`2`)                                                                                                                                                                                                                                                                                                         | Reserved finalize id and stored-run version.                                              |
-
-`tubeless/run-store/ui` also re-exports `PipelineRunStudioCommand`,
-`PipelineRunStudioLauncher`, `PipelineRunStudioLaunchResult`,
-`PipelineRunStudioLaunchRequest`, `PipelineRunStudioCancelResult`, and
-`PipelineRunStudioHistoryMaintenance`.
-The inventory generator now counts `export type { … }` blocks so those names
-stay reviewable.
+| Kind               | Stable name                                                                                                                                                                                            | Notes                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Package and binary | `tubeless`                                                                                                                                                                                             | Bin path `./dist/workbench/workbench-bin.js` is an implementation detail.                      |
+| Export paths       | `tubeless`, `tubeless/batch`, `tubeless/node`, `tubeless/rate-limit`, `tubeless/retry`, `tubeless/testing`, `tubeless/tracing`, `tubeless/tracing/json`, `tubeless/tracing/otel`, `tubeless/workbench` | Workbench exposes only command and project registration; its operational modules are internal. |
+| Error codes        | `TUBELESS_*` on `PipelineErrorCode`                                                                                                                                                                    | Prefix and current spellings stay.                                                             |
+| CLI exit behavior  | Codes `0`–`7`                                                                                                                                                                                          | Success, usage, load, definition, validation, planning, execution, cancellation.               |
+| Storage            | `.tubeless/runs.sqlite`                                                                                                                                                                                | Default Studio/CLI store path.                                                                 |
+| Runtime symbols    | `Symbol.for("tubeless/pipeline-command")`                                                                                                                                                              | Cross-instance marker. Consumers should not set it.                                            |
+| Other constants    | `RUN_MODEL_VERSION` (`2`)                                                                                                                                                                              | Stored-run version.                                                                            |
 
 `TUBELESS_VERSION`, `TUBELESS_LIMIT`, `TUBELESS_NAMES`, and
 `TUBELESS_CORE_PUBLIC_API_SMOKE_ENV` appear only in tests. They are not package
@@ -167,15 +159,8 @@ The studio is a local process, not an authenticated network service.
 - Clear-history is injected only on those loopback hosts. A non-loopback
   `--host` without commands is read-only; anyone who can reach the port can
   read the store, including pipeline log text.
-- `startPipelineRunStudio` defaults to `127.0.0.1` but does not refuse a
-  non-loopback host plus an injected launcher or history capability. That
-  combination is out of scope, same as a non-loopback CLI bind the user
-  enables.
-- Every studio route requires a `Host` matching the bound authority (or,
-  on a wildcard bind, localhost or a literal IP on the same port). Plan,
-  launch, cancel, and clear-history also require a custom
-  `x-tubeless-studio-*` header, and `application/json` for plan and launch.
-  Those are same-origin guards, not authentication.
+- Studio applies host and same-origin request guards. Those are not
+  authentication, and the HTTP/browser protocol is internal to the workbench.
 
 Documented in `SECURITY.md` and `docs/studio.md`. Covered by
 `src/studio/run-store-ui.test.ts` and `src/workbench/workbench-ui-integration.test.ts`.

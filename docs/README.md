@@ -35,7 +35,6 @@ Install the [agent skill pack](./agent-skills.md) to author pipelines or convert
 | [Remote-step composition](./remote-step-composition.md)                                          | Calling remote services and running inside workers |
 | [Generated API inventory](./api-reference.md)                                                    | Entrypoints, exported symbols, and surface hashes  |
 | [Machine-readable API report](./api-report.json)                                                 | Automated public-surface review                    |
-| [Local Studio OpenAPI](https://tubeless.io/openapi.json)                                         | Local HTTP operations and JSON error schemas       |
 | [Agent evaluations](https://github.com/chetmancini/tubeless/blob/main/docs/agent-evaluations.md) | Checking whether agents can follow the guides      |
 | [LLM index](./llms.txt)                                                                          | Documentation links for coding agents              |
 

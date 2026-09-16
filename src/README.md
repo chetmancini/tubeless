@@ -1,9 +1,10 @@
 # Source modules
 
-Keep one dependency-free runtime package with focused public entrypoints. Directory
-names describe internal ownership; consumers continue to use the subpaths declared
-in `package.json`, such as `tubeless`, `tubeless/reporter`, and
-`tubeless/run-store/ui`. Keep implementation tests beside their source files.
+Keep one dependency-free runtime with focused public entrypoints. Operational
+tools are optional behind the `tubeless/workbench` registration entry and the
+bundled executable; their implementation modules are not public subpaths.
+Directory names describe internal ownership. Keep implementation tests beside
+their source files.
 
 | Directory    | Responsibility                                                                                |
 | ------------ | --------------------------------------------------------------------------------------------- |

@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import { createSteps, definePipeline, requireOutputs } from "tubeless";
-import { definePipelineCommand } from "tubeless/cli";
+import { definePipelineCommand } from "tubeless/workbench";
 
 interface ImportOptions {
   concurrency?: number;

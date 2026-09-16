@@ -1,4 +1,4 @@
-import { definePipelineProject } from "tubeless/workbench/project";
+import { definePipelineProject } from "tubeless/workbench";
 
 // Register commands here so the CLI, Studio, and coding agents can find them.
 // Module paths resolve from this file; cwd controls command
