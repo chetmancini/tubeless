@@ -1,0 +1,4 @@
+export const PIPELINE_TRACE_VERSION = 2 as const;
+export const PIPELINE_TRACE_LIST_LIMIT = 128;
+export const PIPELINE_TRACE_STRING_LIMIT = 4_096;
+export const PIPELINE_TRACE_DETAIL_BYTE_LIMIT = 256 * 1_024;

@@ -1692,7 +1692,7 @@ describe("child-pipeline composition", () => {
         events.find(
           (event) => event.name === "pipeline.started" && event.pipelineId === "invalid-trace-child"
         )
-      ).toMatchObject({ parentRunId: result.runId, attributes: { plan_ok: false } });
+      ).toMatchObject({ parentRunId: result.runId, payload: { planOk: false } });
       expect(
         events.find(
           (event) =>

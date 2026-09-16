@@ -6,17 +6,16 @@ import {
 } from "../core/pipeline.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
 import type {
-  PipelineTraceAttributeValue,
   PipelineTraceError,
   PipelineTraceEvent,
   PipelineTraceExporter,
 } from "../tracing/tracing.js";
 
 /** One trace event after it has been appended to a durable local store. */
-export interface StoredPipelineEvent extends PipelineTraceEvent {
+export type StoredPipelineEvent = PipelineTraceEvent & {
   /** Store-local, monotonically increasing sequence. `0` is a valid first id. */
   id: number;
-}
+};
 
 export interface PipelineRunEventQuery {
   /** Return events strictly after this store-local sequence. */
@@ -147,169 +146,6 @@ export interface PipelineRunStoreSnapshot {
   runs: StoredPipelineRun[];
 }
 
-function isStringValue(value: PipelineTraceAttributeValue | undefined): value is string {
-  return typeof value === "string";
-}
-
-function isNumberValue(value: PipelineTraceAttributeValue | undefined): value is number {
-  return typeof value === "number";
-}
-
-function isBooleanValue(value: PipelineTraceAttributeValue | undefined): value is boolean {
-  return typeof value === "boolean";
-}
-
-function stringAttribute(
-  attributes: Readonly<Record<string, PipelineTraceAttributeValue | undefined>>,
-  key: string
-): string | undefined {
-  const value = attributes[key];
-  return isStringValue(value) ? value : undefined;
-}
-
-function numberAttribute(
-  attributes: Readonly<Record<string, PipelineTraceAttributeValue | undefined>>,
-  key: string
-): number | undefined {
-  const value = attributes[key];
-  return isNumberValue(value) ? value : undefined;
-}
-
-function booleanAttribute(
-  attributes: Readonly<Record<string, PipelineTraceAttributeValue | undefined>>,
-  key: string
-): boolean | undefined {
-  const value = attributes[key];
-  return isBooleanValue(value) ? value : undefined;
-}
-
-function stringArrayAttribute(
-  attributes: Readonly<Record<string, PipelineTraceAttributeValue | undefined>>,
-  key: string
-): string[] {
-  const value = stringAttribute(attributes, key);
-  if (!value) return [];
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function parseProgressDetails(
-  attributes: Readonly<Record<string, PipelineTraceAttributeValue | undefined>>
-): PipelineStepProgressDetail[] | undefined {
-  const value = stringAttribute(attributes, "details");
-  if (!value) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (!Array.isArray(parsed)) return undefined;
-    const details = parsed.flatMap((item): PipelineStepProgressDetail[] => {
-      if (item === null || Array.isArray(item) || !(item instanceof Object)) return [];
-      // SAFETY: JSON.parse leaves object fields untyped; isStringValue keeps strings only.
-      const id = item.id as PipelineTraceAttributeValue | undefined;
-      if (!("id" in item) || !isStringValue(id) || id.length === 0) return [];
-      const detail: PipelineStepProgressDetail = { id: id.slice(0, 4_096) };
-      // SAFETY: parsed fields are checked by the same guards as other trace attributes.
-      const fields = item as Record<string, PipelineTraceAttributeValue | undefined>;
-      const name = fields.name;
-      if (isStringValue(name) && name) detail.name = name.slice(0, 4_096);
-      for (const key of ["depth", "completed", "total"] as const) {
-        const number = fields[key];
-        if (isNumberValue(number) && Number.isFinite(number)) detail[key] = number;
-      }
-      // SAFETY: JSON.parse leaves object fields untyped; isStringValue keeps strings only.
-      const label = ("label" in item ? item.label : undefined) as
-        | PipelineTraceAttributeValue
-        | undefined;
-      if (isStringValue(label) && label) {
-        detail.label = label.slice(0, 4_096);
-      }
-      // SAFETY: JSON.parse leaves object fields untyped; isStringValue keeps strings only.
-      const status = ("status" in item ? item.status : undefined) as
-        | PipelineTraceAttributeValue
-        | undefined;
-      if (
-        isStringValue(status) &&
-        (status === "cancelled" ||
-          status === "completed" ||
-          status === "failed" ||
-          status === "pending" ||
-          status === "running" ||
-          status === "skipped")
-      ) {
-        detail.status = status;
-      }
-      return [detail];
-    });
-    return details.length > 0 ? details.slice(0, 128) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function parseNestedPipeline(
-  attributes: Readonly<Record<string, PipelineTraceAttributeValue | undefined>>
-): NonNullable<StoredPipelineStep["nestedPipeline"]> | undefined {
-  const value = stringAttribute(attributes, "nested_pipeline");
-  if (!value) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (parsed === null || Array.isArray(parsed) || !(parsed instanceof Object)) return undefined;
-    if (!("mode" in parsed) || !("pipelineId" in parsed) || !("stepIds" in parsed))
-      return undefined;
-    if (parsed.mode !== "for-each" && parsed.mode !== "single") return undefined;
-    // SAFETY: JSON.parse leaves object fields untyped; isStringValue keeps strings only.
-    const pipelineId = parsed.pipelineId as PipelineTraceAttributeValue | undefined;
-    if (!isStringValue(pipelineId) || pipelineId.length === 0) return undefined;
-    if (!Array.isArray(parsed.stepIds)) return undefined;
-    const stepIds = parsed.stepIds
-      .filter(isStringValue)
-      .slice(0, 128)
-      .map((item) => item.slice(0, 4_096));
-    // SAFETY: JSON.parse leaves object fields untyped; isNumberValue keeps numbers only.
-    const recorded = ("step_count" in parsed ? parsed.step_count : undefined) as
-      | PipelineTraceAttributeValue
-      | undefined;
-    const recordedCount =
-      isNumberValue(recorded) && Number.isFinite(recorded) ? Math.floor(recorded) : stepIds.length;
-    return {
-      mode: parsed.mode,
-      pipelineId: pipelineId.slice(0, 4_096),
-      stepCount: Math.max(stepIds.length, recordedCount),
-      stepIds,
-    };
-  } catch {
-    return undefined;
-  }
-}
-function parseRemote(
-  attributes: Readonly<Record<string, PipelineTraceAttributeValue | undefined>>
-): StoredRemote | undefined {
-  const value = stringAttribute(attributes, "remote");
-  if (!value) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (parsed === null || Array.isArray(parsed) || !(parsed instanceof Object)) return undefined;
-    if (!("engine" in parsed)) return undefined;
-    // SAFETY: JSON.parse returned a plain object and we confirmed an engine key exists.
-    const engine = parsed.engine as PipelineTraceAttributeValue | undefined;
-    if (!isStringValue(engine) || engine.length === 0) return undefined;
-    const remote: StoredRemote = { engine: engine.slice(0, 4_096) };
-    if ("target" in parsed) {
-      // SAFETY: target is optional metadata on the same parsed remote object.
-      const target = parsed.target as PipelineTraceAttributeValue | undefined;
-      if (isStringValue(target) && target.length > 0) remote.target = target.slice(0, 4_096);
-    }
-    return remote;
-  } catch {
-    return undefined;
-  }
-}
-
 function terminalStepStatus(event: StoredPipelineEvent): StoredPipelineStep["status"] | undefined {
   switch (event.name) {
     case "step.cancelled":
@@ -364,11 +200,10 @@ function applyRunEvent(projection: MutableRunProjection, event: StoredPipelineEv
   if (event.name === "pipeline.log") {
     projection.logCount += 1;
     if (!projection.retainLogs) return;
-    const level = stringAttribute(event.attributes, "level");
     const log: StoredPipelineLog = {
       id: event.id,
-      level: level === "error" || level === "warn" ? level : "log",
-      message: stringAttribute(event.attributes, "message") ?? "",
+      level: event.payload.level,
+      message: event.payload.message,
       timestampMs: event.timestampMs,
     };
     if (event.attemptId) log.attemptId = event.attemptId;
@@ -385,12 +220,15 @@ function applyRunEvent(projection: MutableRunProjection, event: StoredPipelineEv
     projection.stepOrder.push(event.stepId);
   }
   if (event.name === "step.planned") {
-    step.name = stringAttribute(event.attributes, "name");
-    step.description = stringAttribute(event.attributes, "description");
-    const nestedPipeline = parseNestedPipeline(event.attributes);
-    if (nestedPipeline) step.nestedPipeline = nestedPipeline;
-    const remote = parseRemote(event.attributes);
-    if (remote) step.remote = remote;
+    step.name = event.payload.name;
+    step.description = event.payload.description;
+    if (event.payload.nestedPipeline) {
+      step.nestedPipeline = {
+        ...event.payload.nestedPipeline,
+        stepIds: [...event.payload.nestedPipeline.stepIds],
+      };
+    }
+    if (event.payload.remote) step.remote = { ...event.payload.remote };
     return;
   }
   if (event.attemptId) {
@@ -405,8 +243,7 @@ function applyRunEvent(projection: MutableRunProjection, event: StoredPipelineEv
       step.attempt = attempt;
     }
     if (event.name === "step.attempted") {
-      const retry = numberAttribute(event.attributes, "attempt");
-      if (retry !== undefined) attempt.retries.push(retry);
+      attempt.retries.push(event.payload.attempt);
     }
     const terminal = terminalStepStatus(event);
     if (terminal) {
@@ -418,18 +255,11 @@ function applyRunEvent(projection: MutableRunProjection, event: StoredPipelineEv
   if (event.name === "step.running") {
     step.status = "running";
     step.startedAtMs ??= event.timestampMs;
-    const completedUnits = numberAttribute(event.attributes, "completed");
-    if (completedUnits !== undefined) {
-      const progress: StoredPipelineStep["progress"] = { completed: completedUnits };
-      const message = stringAttribute(event.attributes, "message");
-      if (message) progress.message = message;
-      const total = numberAttribute(event.attributes, "total");
-      if (total !== undefined) progress.total = total;
-      const details = parseProgressDetails(event.attributes);
-      if (details) progress.details = details;
-      const detailCount = numberAttribute(event.attributes, "detail_count");
-      if (detailCount !== undefined) progress.detailCount = detailCount;
-      else if (details) progress.detailCount = details.length;
+    if (event.payload.progress) {
+      const progress: StoredPipelineStep["progress"] = {
+        ...event.payload.progress,
+        details: event.payload.progress.details?.map((detail) => ({ ...detail })),
+      };
       if (!step.progress || hasVisibleStepProgress(progress)) step.progress = progress;
     }
     return;
@@ -461,14 +291,15 @@ function createRunProjection(event: StoredPipelineEvent, retainLogs = true): Mut
 
 function materializeRun(projection: MutableRunProjection): StoredPipelineRun {
   const { completed, eventCount, first, logs, started, stepOrder, steps } = projection;
-  const statusValue = completed && stringAttribute(completed.attributes, "status");
+  const statusValue =
+    completed?.name === "pipeline.completed" ? completed.payload.status : undefined;
   const status: StoredPipelineRunStatus =
     statusValue === "cancelled" || statusValue === "completed" || statusValue === "failed"
       ? statusValue
       : "running";
 
   const run: StoredPipelineRun = {
-    dryRun: booleanAttribute(started.attributes, "dry_run") ?? false,
+    dryRun: started.name === "pipeline.started" ? started.payload.dryRun : false,
     eventCount,
     logCount: projection.logCount,
     logs: projection.retainLogs ? logs.map((log) => ({ ...log })) : [],
@@ -496,23 +327,28 @@ export function projectPipelineRun(events: readonly StoredPipelineEvent[]): Stor
   return materializeRun(projection);
 }
 
-function definitionStep(event: StoredPipelineEvent): StoredPipelineDefinitionStep {
+function definitionStep(
+  event: Extract<StoredPipelineEvent, { name: "step.planned" }>
+): StoredPipelineDefinitionStep {
   const step: StoredPipelineDefinitionStep = {
-    dependencies: stringArrayAttribute(event.attributes, "dependencies"),
-    dryRun: stringAttribute(event.attributes, "dry_run") ?? "run",
-    id: event.stepId!,
-    optionalDependencies: stringArrayAttribute(event.attributes, "optional_dependencies"),
-    runtimeSkipPossible: booleanAttribute(event.attributes, "runtime_skip_possible") ?? false,
-    skipAfterFailureOf: stringArrayAttribute(event.attributes, "skip_after_failure_of"),
+    dependencies: [...event.payload.dependencies],
+    dryRun: event.payload.dryRun,
+    id: event.stepId,
+    optionalDependencies: [...event.payload.optionalDependencies],
+    runtimeSkipPossible: event.payload.runtimeSkipPossible,
+    skipAfterFailureOf: [...event.payload.skipAfterFailureOf],
   };
-  const description = stringAttribute(event.attributes, "description");
+  const description = event.payload.description;
   if (description) step.description = description;
-  const name = stringAttribute(event.attributes, "name");
+  const name = event.payload.name;
   if (name) step.name = name;
-  const nestedPipeline = parseNestedPipeline(event.attributes);
-  if (nestedPipeline) step.nestedPipeline = nestedPipeline;
-  const remote = parseRemote(event.attributes);
-  if (remote) step.remote = remote;
+  if (event.payload.nestedPipeline) {
+    step.nestedPipeline = {
+      ...event.payload.nestedPipeline,
+      stepIds: [...event.payload.nestedPipeline.stepIds],
+    };
+  }
+  if (event.payload.remote) step.remote = { ...event.payload.remote };
   return step;
 }
 
@@ -552,7 +388,7 @@ function applyPipelineEvent(
   if (event.name === "pipeline.started") {
     projection.runStartedAtMs.set(event.runId, event.timestampMs);
     projection.runStartedEventIds.set(event.runId, event.id);
-    projection.runTargetIds.set(event.runId, stringArrayAttribute(event.attributes, "target_ids"));
+    projection.runTargetIds.set(event.runId, [...event.payload.targetIds]);
   }
   if (event.name !== "step.planned" || !event.stepId) return;
   const runStartedEventId = projection.runStartedEventIds.get(event.runId);

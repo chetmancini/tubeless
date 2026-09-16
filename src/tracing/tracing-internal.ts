@@ -13,10 +13,19 @@ import type {
   PipelineTraceAttributes,
   PipelineTraceContext,
   PipelineTraceEvent,
-  PipelineTraceEventName,
   PipelineTraceError,
+  PipelineTraceNestedPipeline,
+  PipelineTraceProgress,
+  PipelineTraceRemote,
   PipelineTracingOptions,
 } from "./tracing.js";
+import {
+  PIPELINE_TRACE_DETAIL_BYTE_LIMIT,
+  PIPELINE_TRACE_LIST_LIMIT,
+  PIPELINE_TRACE_STRING_LIMIT,
+  PIPELINE_TRACE_VERSION,
+} from "./tracing-constants.js";
+import { decodePipelineTraceEvent } from "./tracing-codec.js";
 import { PARTIAL_PIPELINE_TRACE_EXPORTER_ERROR } from "./trace-exporter-error.js";
 
 /** Runtime trace writer used internally by the pipeline executor. */
@@ -54,10 +63,6 @@ function compactAttributes(
   );
 }
 
-const TRACE_LIST_LIMIT = 128;
-const TRACE_STRING_LIMIT = 4_096;
-// Leave room for the rest of a trace event below the default 1 MiB NDJSON limit.
-const TRACE_DETAIL_BYTE_LIMIT = 256 * 1_024;
 const traceEncoder = new TextEncoder();
 const DETAIL_STATUSES = new Set([
   "cancelled",
@@ -69,16 +74,17 @@ const DETAIL_STATUSES = new Set([
 ]);
 
 function boundTraceString(value: string): string {
-  return value.length > TRACE_STRING_LIMIT ? value.slice(0, TRACE_STRING_LIMIT) : value;
+  return value.length > PIPELINE_TRACE_STRING_LIMIT
+    ? value.slice(0, PIPELINE_TRACE_STRING_LIMIT)
+    : value;
 }
 
-function serializeProgressDetails(
+function traceProgress(
   details: PipelineStepProgress["details"]
-): { detail_count: number; details: string } | undefined {
+): Pick<PipelineTraceProgress, "detailCount" | "details"> | undefined {
   if (!details || details.length === 0) return undefined;
-  const serialized: string[] = [];
-  let bytes = 4; // Quotes and brackets of the details string in the enclosing event.
-  for (const detail of details.slice(0, TRACE_LIST_LIMIT)) {
+  const retained: PipelineStepProgressDetail[] = [];
+  for (const detail of details.slice(0, PIPELINE_TRACE_LIST_LIMIT)) {
     const row: PipelineStepProgressDetail = { id: boundTraceString(detail.id) };
     if (detail.name) row.name = boundTraceString(detail.name);
     for (const key of ["depth", "completed", "total"] as const) {
@@ -86,40 +92,39 @@ function serializeProgressDetails(
     }
     if (detail.label) row.label = boundTraceString(detail.label);
     if (detail.status && DETAIL_STATUSES.has(detail.status)) row.status = detail.status;
-    const json = JSON.stringify(row);
-    // `details` is itself JSON inside an event string: count its second escaping
-    // layer as UTF-8, not just the row's characters or its first serialization.
-    const rowBytes = traceEncoder.encode(JSON.stringify(json)).byteLength - 2;
-    const nextBytes = bytes + rowBytes + (serialized.length > 0 ? 1 : 0);
-    if (nextBytes > TRACE_DETAIL_BYTE_LIMIT) break;
-    serialized.push(json);
-    bytes = nextBytes;
+    const next = [...retained, row];
+    if (traceEncoder.encode(JSON.stringify(next)).byteLength > PIPELINE_TRACE_DETAIL_BYTE_LIMIT) {
+      break;
+    }
+    retained.push(row);
   }
   return {
-    detail_count: details.length,
-    details: `[${serialized.join(",")}]`,
+    detailCount: details.length,
+    details: retained,
   };
 }
 
-function serializeNestedPipeline(nested: PipelinePlanStep["nestedPipeline"]): string | undefined {
+function traceNestedPipeline(
+  nested: PipelinePlanStep["nestedPipeline"]
+): PipelineTraceNestedPipeline | undefined {
   if (!nested) return undefined;
-  return JSON.stringify({
+  return {
     mode: nested.mode,
     pipelineId: nested.pipelineId,
-    step_count: nested.stepIds.length,
-    stepIds: nested.stepIds.slice(0, TRACE_LIST_LIMIT),
-  });
+    stepCount: nested.stepIds.length,
+    stepIds: nested.stepIds.slice(0, PIPELINE_TRACE_LIST_LIMIT),
+  };
 }
 
-function serializeRemote(remote: PipelinePlanStep["remote"]): string | undefined {
+function traceRemote(remote: PipelinePlanStep["remote"]): PipelineTraceRemote | undefined {
   if (!remote) return undefined;
   if (remote.target) {
-    return JSON.stringify({
+    return {
       engine: boundTraceString(remote.engine),
       target: boundTraceString(remote.target),
-    });
+    };
   }
-  return JSON.stringify({ engine: boundTraceString(remote.engine) });
+  return { engine: boundTraceString(remote.engine) };
 }
 
 function toTraceError(error: PipelineError | undefined): PipelineTraceError | undefined {
@@ -201,25 +206,23 @@ export function createPipelineTraceEmitter(
     }
   };
 
-  const emit = (
-    name: PipelineTraceEventName,
-    fields: Omit<
-      PipelineTraceEvent,
-      "name" | "timestampMs" | "version" | keyof PipelineTraceContext
-    >
-  ): void => {
-    const event: PipelineTraceEvent = {
+  type PipelineTraceEmission = PipelineTraceEvent extends infer TEvent
+    ? TEvent extends PipelineTraceEvent
+      ? Omit<TEvent, "timestampMs" | "version" | keyof PipelineTraceContext>
+      : never
+    : never;
+
+  const emit = (fields: PipelineTraceEmission): void => {
+    const encoded = {
       ...context,
       ...fields,
-      attributes: compactAttributes(fields.attributes),
-      name,
       timestampMs: now(),
-      version: 1,
+      version: PIPELINE_TRACE_VERSION,
     };
     queue = queue
       .then(() => {
         if (stopExporting) return;
-        return options.exporter.export(event);
+        return options.exporter.export(decodePipelineTraceEvent(encoded));
       })
       .catch((error) => {
         const partial = isPartialExporterError(error);
@@ -234,40 +237,38 @@ export function createPipelineTraceEmitter(
       });
   };
 
-  type EmitFields = Parameters<typeof emit>[1];
-
   return {
     context,
     pipelineStart: (plan, targetIds = []) =>
-      emit("pipeline.started", {
-        attributes: {
-          dry_run: plan.dryRun,
-          plan_ok: plan.ok,
-          step_count: plan.steps.length,
-          target_ids: JSON.stringify(targetIds),
+      emit({
+        name: "pipeline.started",
+        payload: {
+          dryRun: plan.dryRun,
+          planOk: plan.ok,
+          stepCount: plan.steps.length,
+          targetIds: targetIds.slice(0, PIPELINE_TRACE_LIST_LIMIT),
         },
         pipelineId,
       }),
     log: (level, message, params = [], stepId, attemptId) => {
-      const fields: EmitFields = {
-        attributes: {
-          level,
-          message: [message, ...params].map(formatLogValue).join(" "),
-        },
+      const fields: Extract<PipelineTraceEmission, { name: "pipeline.log" }> = {
+        name: "pipeline.log",
+        payload: { level, message: [message, ...params].map(formatLogValue).join(" ") },
         pipelineId,
       };
       if (attemptId) fields.attemptId = attemptId;
       if (stepId) fields.stepId = stepId;
-      emit("pipeline.log", fields);
+      emit(fields);
     },
     pipelineComplete: (result) =>
-      emit("pipeline.completed", {
-        attributes: {
-          dry_run: result.dryRun,
-          error_count: result.errors.length,
+      emit({
+        name: "pipeline.completed",
+        payload: {
+          dryRun: result.dryRun,
+          errorCount: result.errors.length,
           finalized: result.finalized,
           status: result.status,
-          step_count: result.steps.length,
+          stepCount: result.steps.length,
         },
         durationMs: elapsedMs(result),
         error: toTraceError(result.errors[0]),
@@ -275,19 +276,23 @@ export function createPipelineTraceEmitter(
       }),
     stepStatus: (event) => {
       if (event.status === "planned") {
-        emit("step.planned", {
-          attributes: {
-            dependencies: JSON.stringify(event.step.dependencies),
+        emit({
+          name: "step.planned",
+          payload: {
+            dependencies: event.step.dependencies.slice(0, PIPELINE_TRACE_LIST_LIMIT),
             description: event.step.description,
-            dry_run: event.step.dryRun,
+            dryRun: event.step.dryRun,
             name: event.step.name,
-            nested_pipeline: serializeNestedPipeline(event.step.nestedPipeline),
-            remote: serializeRemote(event.step.remote),
-            optional_dependencies: JSON.stringify(event.step.optionalDependencies),
-            runtime_skip_possible: event.step.runtimeSkipPossible,
+            nestedPipeline: traceNestedPipeline(event.step.nestedPipeline),
+            remote: traceRemote(event.step.remote),
+            optionalDependencies: event.step.optionalDependencies.slice(
+              0,
+              PIPELINE_TRACE_LIST_LIMIT
+            ),
+            runtimeSkipPossible: event.step.runtimeSkipPossible,
             selected: event.step.selected,
-            selection_reasons: JSON.stringify(event.step.selectionReasons),
-            skip_after_failure_of: JSON.stringify(event.step.skipAfterFailureOf),
+            selectionReasons: event.step.selectionReasons.slice(0, PIPELINE_TRACE_LIST_LIMIT),
+            skipAfterFailureOf: event.step.skipAfterFailureOf.slice(0, PIPELINE_TRACE_LIST_LIMIT),
           },
           pipelineId,
           stepId: event.step.id,
@@ -295,13 +300,16 @@ export function createPipelineTraceEmitter(
         return;
       }
       if (event.status === "running") {
-        emit("step.running", {
-          attributes: event.progress
+        emit({
+          name: "step.running",
+          payload: event.progress
             ? {
-                completed: event.progress.completed,
-                ...(serializeProgressDetails(event.progress.details) ?? {}),
-                message: event.progress.message,
-                total: event.progress.total,
+                progress: {
+                  completed: event.progress.completed,
+                  ...(traceProgress(event.progress.details) ?? {}),
+                  message: event.progress.message,
+                  total: event.progress.total,
+                },
               }
             : {},
           attemptId: event.attemptId,
@@ -311,20 +319,22 @@ export function createPipelineTraceEmitter(
         return;
       }
       if (event.status === "completed") {
-        const fields: EmitFields = {
-          attributes: { status: event.status },
+        const fields: Extract<PipelineTraceEmission, { name: "step.complete" }> = {
+          name: "step.complete",
+          payload: { status: event.status },
           durationMs: elapsedMs(event),
           pipelineId,
           stepId: event.id,
         };
         if (event.attemptId) fields.attemptId = event.attemptId;
-        emit("step.complete", fields);
+        emit(fields);
         return;
       }
       if (event.status === "skipped") {
-        const fields: EmitFields = {
-          attributes: {
-            dependency_id: event.dependencyId,
+        const fields: Extract<PipelineTraceEmission, { name: "step.skipped" }> = {
+          name: "step.skipped",
+          payload: {
+            dependencyId: event.dependencyId,
             message: event.message,
             reason: event.reason,
             status: event.status,
@@ -334,36 +344,59 @@ export function createPipelineTraceEmitter(
           stepId: event.id,
         };
         if (event.attemptId) fields.attemptId = event.attemptId;
-        emit("step.skipped", fields);
+        emit(fields);
         return;
       }
-      const fields: EmitFields = {
-        attributes: { status: event.status },
+      const error = toTraceError(event.error);
+      if (!error) throw new Error("A failed or cancelled step trace requires an error.");
+      if (event.status === "cancelled") {
+        const fields: Extract<PipelineTraceEmission, { name: "step.cancelled" }> = {
+          name: "step.cancelled",
+          payload: { status: "cancelled" },
+          durationMs: elapsedMs(event),
+          error,
+          pipelineId,
+          stepId: event.id,
+        };
+        if (event.attemptId) fields.attemptId = event.attemptId;
+        emit(fields);
+        return;
+      }
+      const fields: Extract<PipelineTraceEmission, { name: "step.failed" }> = {
+        name: "step.failed",
+        payload: { status: "failed" },
         durationMs: elapsedMs(event),
-        error: toTraceError(event.error),
+        error,
         pipelineId,
         stepId: event.id,
       };
       if (event.attemptId) fields.attemptId = event.attemptId;
-      emit(event.status === "cancelled" ? "step.cancelled" : "step.failed", fields);
+      emit(fields);
     },
     reportAttempt: (stepId, attempt, attributes = {}, attemptId) => {
-      const fields: EmitFields = {
-        attributes: { ...attributes, attempt },
+      const fields: Extract<PipelineTraceEmission, { name: "step.attempted" }> = {
+        name: "step.attempted",
+        payload: { attempt, attributes: compactAttributes(attributes) },
         pipelineId,
         stepId,
       };
       if (attemptId) fields.attemptId = attemptId;
-      emit("step.attempted", fields);
+      emit(fields);
     },
-    finalizeStart: () => emit("pipeline.finalize.started", { attributes: {}, pipelineId }),
+    finalizeStart: () => emit({ name: "pipeline.finalize.started", payload: {}, pipelineId }),
     finalizeComplete: (durationMs) =>
-      emit("pipeline.finalize.completed", { attributes: {}, durationMs, pipelineId }),
-    finalizeError: (error, durationMs) =>
-      emit("pipeline.finalize.failed", {
-        attributes: {},
+      emit({
         durationMs,
-        error: toTraceError(error),
+        name: "pipeline.finalize.completed",
+        payload: {},
+        pipelineId,
+      }),
+    finalizeError: (error, durationMs) =>
+      emit({
+        durationMs,
+        error: toTraceError(error)!,
+        name: "pipeline.finalize.failed",
+        payload: {},
         pipelineId,
       }),
     flush: async () => {

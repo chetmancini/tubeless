@@ -1,6 +1,7 @@
 import { lstat, mkdir, realpath, stat } from "node:fs/promises";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
+import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import type {
   PipelineRunEventQuery,
@@ -38,7 +39,7 @@ interface StoredEventRow {
   correlation_id?: string | null;
   duration_ms: number | null;
   error_json: string | null;
-  event_name: PipelineTraceEvent["name"];
+  event_name: string;
   id: number | bigint;
   item_key: string | null;
   parent_run_id: string | null;
@@ -46,7 +47,7 @@ interface StoredEventRow {
   run_id: string;
   step_id: string | null;
   timestamp_ms: number | bigint;
-  version: 1;
+  version: number;
 }
 
 const RUN_EVENT_STORE_VERSION = 2;
@@ -55,7 +56,7 @@ const LEGACY_RUN_EVENT_STORE_VERSION = 1;
 const EXPORT_BATCH_SIZE = 64;
 
 type EventRow = readonly [
-  version: PipelineTraceEvent["version"],
+  version: number,
   runId: string,
   correlationId: string | null,
   parentRunId: string | null,
@@ -63,7 +64,7 @@ type EventRow = readonly [
   stepId: string | null,
   attemptId: string | null,
   itemKey: string | null,
-  name: PipelineTraceEvent["name"],
+  name: string,
   timestampMs: number,
   durationMs: number | null,
   attributesJson: string,
@@ -71,20 +72,21 @@ type EventRow = readonly [
 ];
 
 function eventRow(event: PipelineTraceEvent): EventRow {
+  const canonical = decodePipelineTraceEvent(event);
   return [
-    event.version,
-    event.runId,
-    event.correlationId ?? null,
-    event.parentRunId ?? null,
-    event.pipelineId,
-    event.stepId ?? null,
-    event.attemptId ?? null,
-    event.itemKey ?? null,
-    event.name,
-    event.timestampMs,
-    event.durationMs ?? null,
-    JSON.stringify(event.attributes),
-    event.error ? JSON.stringify(event.error) : null,
+    canonical.version,
+    canonical.runId,
+    canonical.correlationId ?? null,
+    canonical.parentRunId ?? null,
+    canonical.pipelineId,
+    "stepId" in canonical ? (canonical.stepId ?? null) : null,
+    "attemptId" in canonical ? (canonical.attemptId ?? null) : null,
+    canonical.itemKey ?? null,
+    canonical.name,
+    canonical.timestampMs,
+    "durationMs" in canonical ? (canonical.durationMs ?? null) : null,
+    JSON.stringify(canonical.payload),
+    "error" in canonical && canonical.error ? JSON.stringify(canonical.error) : null,
   ];
 }
 
@@ -286,29 +288,22 @@ function openReadableDatabase(
 }
 
 function mapRow(row: StoredEventRow): StoredPipelineEvent {
-  const event: StoredPipelineEvent = {
-    // SAFETY: attributes_json was written by this store via JSON.stringify of a
-    // PipelineTraceEvent["attributes"] value, so parsing yields the same shape.
-    attributes: JSON.parse(row.attributes_json) as PipelineTraceEvent["attributes"],
-    id: Number(row.id),
+  const encoded: Record<string, unknown> = {
     name: row.event_name,
     pipelineId: row.pipeline_id,
     runId: row.run_id,
     timestampMs: Number(row.timestamp_ms),
     version: row.version,
   };
-  if (row.attempt_id) event.attemptId = row.attempt_id;
-  if (row.duration_ms !== null) event.durationMs = Number(row.duration_ms);
-  if (row.error_json) {
-    // SAFETY: error_json was written by this store via JSON.stringify of a
-    // NonNullable<PipelineTraceEvent["error"]> value, so parsing yields the same shape.
-    event.error = JSON.parse(row.error_json) as NonNullable<PipelineTraceEvent["error"]>;
-  }
-  if (row.item_key) event.itemKey = row.item_key;
-  if (row.correlation_id != null) event.correlationId = row.correlation_id;
-  if (row.parent_run_id) event.parentRunId = row.parent_run_id;
-  if (row.step_id) event.stepId = row.step_id;
-  return event;
+  encoded[row.version === 1 ? "attributes" : "payload"] = JSON.parse(row.attributes_json);
+  if (row.attempt_id) encoded.attemptId = row.attempt_id;
+  if (row.correlation_id != null) encoded.correlationId = row.correlation_id;
+  if (row.duration_ms !== null) encoded.durationMs = Number(row.duration_ms);
+  if (row.error_json) encoded.error = JSON.parse(row.error_json);
+  if (row.item_key) encoded.itemKey = row.item_key;
+  if (row.parent_run_id) encoded.parentRunId = row.parent_run_id;
+  if (row.step_id) encoded.stepId = row.step_id;
+  return { ...decodePipelineTraceEvent(encoded), id: Number(row.id) };
 }
 
 /** Options for `openSqlitePipelineRunStore`. */
