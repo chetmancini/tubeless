@@ -7,6 +7,7 @@ describe("createAbortError", () => {
     // DOMException, never `undefined` — so this branch only fires for a hand-built
     // AbortSignal-like object, not real-world abort() calls. Still worth covering since
     // callers may construct signals another way.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions
     const signal = { aborted: true, reason: undefined } as unknown as AbortSignal;
     const error = createAbortError(signal, "Retry");
     expect(error.message).toBe("Retry aborted");

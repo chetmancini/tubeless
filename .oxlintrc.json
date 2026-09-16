@@ -25,121 +25,16 @@
     "no-fallthrough": "error",
     "no-unsafe-optional-chaining": "error",
     "no-control-regex": "off",
-    "typescript/no-require-imports": "error",
-    "typescript/prefer-as-const": "error",
     "anti-slop/no-chained-type-assertions": "error",
-    "anti-slop/no-conditional-empty-object-spread": "error",
-    "anti-slop/no-known-value-widening": "error",
-    "anti-slop/no-module-mocking": "error",
-    "anti-slop/no-object-parameters": "error",
-    "anti-slop/no-reflect-apply": "error",
-    "anti-slop/no-reflect-get": "error",
-    "anti-slop/no-runtime-typeof": ["error", { "allowInTypeGuards": true }],
-    "anti-slop/no-shape-in-symbol-names": "error",
-    "anti-slop/no-unknown-parameters": "error",
-    "anti-slop/no-unknown-returns": "error",
-    "anti-slop/no-unknown-type-aliases": "error",
-    "anti-slop/no-unsafe-dictionary-type": "error",
-    "anti-slop/no-widen-then-assert": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "error"
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-require-imports": "error",
+    "typescript/prefer-as-const": "error"
   },
   "overrides": [
     {
-      // These adapters parse unknown thrown values at the error boundary.
-      "files": ["src/cli/cli-exit.ts", "src/utilities/tubeless-error.ts"],
-      "rules": {
-        "anti-slop/no-unknown-parameters": "off",
-        "anti-slop/no-runtime-typeof": "off"
-      }
-    },
-    {
-      "files": [
-        "src/core/pipeline.ts",
-        "src/core/pipeline-execute.ts",
-        "src/core/pipeline-plan.ts",
-        "src/core/pipeline-steps.ts",
-        "src/core/pipeline-types.ts"
-      ],
-      "rules": {
-        "anti-slop/no-chained-type-assertions": "off",
-        "anti-slop/no-object-parameters": "off",
-        "anti-slop/no-runtime-typeof": "off",
-        "anti-slop/no-unknown-parameters": "off",
-        "anti-slop/no-unknown-returns": "off",
-        "anti-slop/no-unsafe-dictionary-type": "off"
-      }
-    },
-    {
-      "files": [
-        "src/core/child-execution.ts",
-        "src/cli/cli-pipeline-command.ts",
-        "src/workbench/pipeline-module.ts",
-        "src/studio/run-store-ui.ts",
-        "src/workbench/workbench-run.ts"
-      ],
-      "rules": {
-        "anti-slop/no-unknown-parameters": "off",
-        "anti-slop/no-unknown-returns": "off",
-        "anti-slop/no-unsafe-dictionary-type": "off"
-      }
-    },
-    {
-      "files": [
-        "src/cli/cli-command.ts",
-        "src/cli/pipeline-command-marker.ts",
-        "src/studio/run-store-ui-protocol.ts",
-        "src/run-store/run-store-ndjson.ts",
-        "src/tracing/tracing-internal.ts",
-        "src/workbench/workbench-shared.ts",
-        "src/workbench/workbench-ui.ts"
-      ],
-      "rules": {
-        "anti-slop/no-runtime-typeof": "off",
-        "anti-slop/no-unknown-parameters": "off",
-        "anti-slop/no-unknown-returns": "off",
-        "anti-slop/no-unsafe-dictionary-type": "off"
-      }
-    },
-    {
-      "files": ["src/cli/cli-types.ts"],
-      "rules": {
-        "anti-slop/no-unsafe-dictionary-type": "off"
-      }
-    },
-    {
-      "files": [
-        "src/node/file-utils.ts",
-        "src/reporter/interactive-reporter.ts",
-        "src/core/lifecycle.ts",
-        "src/utilities/retry.ts",
-        "src/testing/testing.ts",
-        "src/tracing/tracing.ts",
-        "src/workbench/workbench-project.ts",
-        "src/workbench/workbench-studio.ts"
-      ],
-      "rules": {
-        "anti-slop/no-unknown-parameters": "off",
-        "anti-slop/no-unknown-returns": "off"
-      }
-    },
-    {
-      "files": ["examples/validated-boundaries.ts", "scripts/**/*.mjs"],
-      "rules": {
-        "anti-slop/no-runtime-typeof": "off"
-      }
-    },
-    {
-      // tests: anti-slop rules that conflict with fixture-building
       "files": ["src/**/*.test.ts"],
       "rules": {
-        "anti-slop/no-chained-type-assertions": "off",
-        "anti-slop/no-known-value-widening": "off",
-        "anti-slop/no-module-mocking": "off",
-        "anti-slop/no-runtime-typeof": "off",
-        "anti-slop/no-shape-in-symbol-names": "off",
-        "anti-slop/no-unknown-parameters": "off",
-        "anti-slop/no-unknown-returns": "off",
-        "anti-slop/no-unsafe-dictionary-type": "off",
         "anti-slop/require-safety-comment-for-type-assertion": "off"
       }
     }

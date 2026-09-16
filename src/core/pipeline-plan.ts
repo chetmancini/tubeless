@@ -993,6 +993,7 @@ export function requireOutputs<const TRequiredSteps extends readonly AnyStep[], 
     }
     // SAFETY: every required step id was verified present above, so the partial
     // outputs contain all required keys and are a complete required-outputs map.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions
     return finalize(outputs as unknown as RequiredPipelineOutputs<TRequiredSteps>, context);
   };
   Object.defineProperty(requiredFinalizer, REQUIRED_FINALIZER_OUTPUTS, {

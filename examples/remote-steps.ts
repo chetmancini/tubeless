@@ -17,7 +17,6 @@ interface EnrichResult {
 }
 
 // This schema is the I/O boundary: inspect untrusted JSON before returning a domain value.
-/* oxlint-disable anti-slop/no-runtime-typeof, anti-slop/no-unknown-parameters */
 const enrichSchema: StandardSchemaV1<unknown, EnrichResult> = {
   "~standard": {
     vendor: "example",
@@ -38,8 +37,6 @@ const enrichSchema: StandardSchemaV1<unknown, EnrichResult> = {
     },
   },
 };
-
-/* oxlint-enable anti-slop/no-runtime-typeof, anti-slop/no-unknown-parameters */
 
 interface RemotePayload {
   dryRun: boolean;

@@ -9,9 +9,7 @@ function isTypeAssertionExpression(node: ESTree.Node): node is TypeAssertionExpr
 
 function unwrapParenthesizedExpression(expression: ESTree.Expression): ESTree.Expression {
   let current = expression;
-  while (current.type === "ParenthesizedExpression") {
-    current = current.expression;
-  }
+  while (current.type === "ParenthesizedExpression") current = current.expression;
   return current;
 }
 
@@ -50,17 +48,17 @@ function isForbiddenAssertionChain(node: TypeAssertionExpression): boolean {
   return assertionCount > 1 && hasNonConstAssertion;
 }
 
-/** Disallow nested TypeScript type assertions, while permitting chains made only of const assertions. */
+/** Prevent unrelated types from being made assignable by routing through unknown or object. */
 export const noChainedTypeAssertionsRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Disallow chained TypeScript as and angle-bracket assertions, including parenthesized chains.",
+        "Disallow chained TypeScript assertions that bypass assignability checks, including parenthesized chains.",
     },
     messages: {
       chained:
-        "This assertion chain discards type evidence. Keep the original precise type, or parse untrusted input at its boundary before narrowing it.",
+        "This assertion chain bypasses TypeScript assignability checks. Preserve type evidence or validate the value before narrowing it.",
     },
   },
   createOnce(context) {
