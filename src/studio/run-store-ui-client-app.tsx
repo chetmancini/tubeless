@@ -55,6 +55,16 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
   const [launchCommandId, setLaunchCommandId] = useState<string | null>(null);
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
   const [toast, setToast] = useState("");
+  const detailMounted = useRef(true);
+  const detailRequest = useRef<{ runId: string; selectionVersion: number } | null>(null);
+  const detailRetryTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const detailSelection = useRef({ runId: selectedRunId, version: 0 });
+  if (detailSelection.current.runId !== selectedRunId) {
+    detailSelection.current = {
+      runId: selectedRunId,
+      version: detailSelection.current.version + 1,
+    };
+  }
   const loading = useRef(false);
   const pendingRunId = useRef<string | null>(null);
   const runIndex = useMemo(() => createStudioRunIndex(snapshot?.runs ?? []), [snapshot]);
@@ -103,6 +113,22 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     return () => clearTimeout(timeout);
   }, [toast]);
 
+  useEffect(
+    () => () => {
+      detailMounted.current = false;
+      if (detailRetryTimeout.current) clearTimeout(detailRetryTimeout.current);
+    },
+    []
+  );
+
+  useEffect(
+    () => () => {
+      if (detailRetryTimeout.current) clearTimeout(detailRetryTimeout.current);
+      detailRetryTimeout.current = undefined;
+    },
+    [selectedRunId]
+  );
+
   const matchedRoots = query ? runIndex.matchingRootIds(query) : null;
   const roots = runIndex.roots
     .filter((run) => !matchedRoots || matchedRoots.has(run.runId))
@@ -130,23 +156,43 @@ export function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
       return;
     }
     if (selectedFingerprint === detailFingerprint && detail) return;
-    let current = true;
-    let retryTimeout: ReturnType<typeof setTimeout> | undefined;
+    const requestedRunId = selectedRunId;
+    const selectionVersion = detailSelection.current.version;
+    if (
+      detailRequest.current?.runId === requestedRunId &&
+      detailRequest.current.selectionVersion === selectionVersion
+    ) {
+      return;
+    }
+    const request = { runId: requestedRunId, selectionVersion };
+    const isCurrentSelection = () =>
+      detailMounted.current &&
+      detailSelection.current.runId === requestedRunId &&
+      detailSelection.current.version === selectionVersion;
+    const scheduleRetry = () => {
+      if (!isCurrentSelection()) return;
+      if (detailRetryTimeout.current) clearTimeout(detailRetryTimeout.current);
+      detailRetryTimeout.current = setTimeout(() => {
+        detailRetryTimeout.current = undefined;
+        setDetailRetry((attempt) => attempt + 1);
+      }, DETAIL_RETRY_MS);
+    };
+    if (detailRetryTimeout.current) clearTimeout(detailRetryTimeout.current);
+    detailRetryTimeout.current = undefined;
+    detailRequest.current = request;
     void api
-      .loadRunDetail(selectedRunId)
+      .loadRunDetail(requestedRunId)
       .then((loaded) => {
-        if (!current) return;
+        if (detailRequest.current === request) detailRequest.current = null;
+        if (!isCurrentSelection()) return;
         setDetail(loaded);
         setDetailFingerprint(loaded ? selectedFingerprint : null);
+        if (!loaded) scheduleRetry();
       })
       .catch(() => {
-        if (!current) return;
-        retryTimeout = setTimeout(() => setDetailRetry((attempt) => attempt + 1), DETAIL_RETRY_MS);
+        if (detailRequest.current === request) detailRequest.current = null;
+        scheduleRetry();
       });
-    return () => {
-      current = false;
-      if (retryTimeout) clearTimeout(retryTimeout);
-    };
   }, [api, detail, detailFingerprint, detailRetry, selectedFingerprint, selectedRunId]);
 
   const showToast = (message: string) => setToast(message);
