@@ -7,6 +7,7 @@ import {
   type StandardSchemaV1,
   type Step,
 } from "./pipeline.js";
+import { STEP_REMOTE } from "./pipeline-plan.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
 function standardSchema<TInput, TOutput>(
@@ -55,6 +56,29 @@ describe("fromRemote", () => {
     expect(plan.steps[0]?.remote).toEqual({ engine: "test", target: "enrich-v2" });
     expect(plan.steps[0]?.nestedPipeline).toBeUndefined();
     expect(plan.steps[0]?.dryRun).toBe("run");
+  });
+
+  it("snapshots remote metadata when the pipeline is defined", () => {
+    const step = createSteps();
+    const enrich = step.fromRemote("enrich", {
+      adapter: testAdapter(async () => ({ ok: true as const })),
+      mapInput: () => ({ rows: [] }),
+      outputSchema: resultSchema,
+    });
+    const pipeline = definePipeline({
+      id: "remote-metadata",
+      steps: [enrich],
+      finalize: () => undefined,
+    });
+
+    const metadata = enrich[STEP_REMOTE]!;
+    Reflect.set(metadata, "engine", "mutated");
+    Reflect.set(metadata, "target", "mutated-target");
+
+    expect(pipeline.plan().steps[0]?.remote).toEqual({
+      engine: "test",
+      target: "enrich-v2",
+    });
   });
 
   it("contacts the adapter during a pipeline dry run when dryRun is omitted", async () => {

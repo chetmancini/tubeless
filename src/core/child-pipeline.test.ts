@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { PipelineChildError } from "./child-execution.js";
+import { STEP_NESTED_PIPELINE } from "./pipeline-plan.js";
 import { createPipelineReporter, type ReporterOutput } from "../reporter/interactive-reporter.js";
 import {
   createSteps,
@@ -1264,6 +1265,37 @@ describe("child-pipeline composition", () => {
           },
         },
       ]);
+    });
+
+    it("snapshots nested-pipeline metadata when the parent is defined", () => {
+      const childStep = createSteps();
+      const inside = childStep("inside", { run: () => "done" });
+      const child = definePipeline({
+        id: "metadata-child",
+        steps: [inside],
+        finalize: () => true,
+      });
+      const parentStep = createSteps();
+      const childStage = parentStep.fromPipeline("child-stage", {
+        pipeline: child,
+        mapOptions: () => ({}),
+      });
+      const parent = definePipeline({
+        id: "metadata-parent",
+        steps: [childStage],
+        finalize: () => true,
+      });
+
+      const metadata = childStage[STEP_NESTED_PIPELINE]!;
+      Reflect.set(metadata, "pipelineId", "mutated-child");
+      Reflect.set(metadata, "mode", "for-each");
+      Reflect.set(metadata, "stepIds", ["mutated-step"]);
+
+      expect(parent.plan().steps[0]?.nestedPipeline).toEqual({
+        mode: "single",
+        pipelineId: "metadata-child",
+        stepIds: ["inside"],
+      });
     });
 
     it("applies parent dry-run last and lets the child skip side effects", async () => {

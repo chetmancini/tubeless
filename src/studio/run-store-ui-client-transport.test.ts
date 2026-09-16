@@ -97,17 +97,15 @@ describe("Studio API response parsing", () => {
   });
 
   it("rejects invalid successful payloads instead of exposing them to client state", async () => {
-    const fetcher = vi.fn(async () =>
-      jsonResponse({ runs: "not-an-array" })
-    ) as unknown as typeof fetch;
+    const fetcher: typeof fetch = vi.fn(async () => jsonResponse({ runs: "not-an-array" }));
     const api = createStudioApi(fetcher);
     await expect(api.loadSnapshot()).rejects.toThrow(/invalid response for snapshot/);
   });
 
   it("keeps launch requests same-origin guarded and returns only a validated run id", async () => {
-    const fetcher = vi.fn(async () =>
+    const fetcher: typeof fetch = vi.fn(async () =>
       jsonResponse({ accepted: true, runId: "run-accepted" }, { status: 202 })
-    ) as unknown as typeof fetch;
+    );
     const api = createStudioApi(fetcher);
     await expect(api.launch("fixture/id", { name: "Ada" })).resolves.toBe("run-accepted");
     expect(fetcher).toHaveBeenCalledWith(

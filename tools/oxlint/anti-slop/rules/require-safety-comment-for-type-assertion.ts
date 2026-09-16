@@ -30,22 +30,32 @@ function hasSafetyComment(sourceCode: SourceCode, node: TypeAssertion): boolean 
     ) {
       return true;
     }
-    if (commentOwnerKinds.has(current.type) || current.parent.type === "Program") return false;
+    if (commentOwnerKinds.has(current.type)) {
+      if (
+        current.parent.type === "ExportNamedDeclaration" ||
+        current.parent.type === "ExportDefaultDeclaration"
+      ) {
+        current = current.parent;
+        continue;
+      }
+      return false;
+    }
+    if (current.parent.type === "Program") return false;
     current = current.parent;
   }
 }
 
-/** Require every non-const type assertion to state the invariant TypeScript cannot express. */
+/** Keep the unchecked invariant behind every non-const assertion visible to reviewers. */
 export const requireSafetyCommentForTypeAssertionRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Require a nearby SAFETY comment for every TypeScript type assertion except const assertions.",
+        "Require non-const type assertions to document the invariant TypeScript cannot verify.",
     },
     messages: {
       missingSafetyComment:
-        "This type assertion has no `SAFETY:` justification. State the checked invariant immediately before the assertion or its containing statement.",
+        "This assertion suppresses an assignability check without a `SAFETY:` justification. Document the verified invariant immediately before it.",
     },
   },
   createOnce(context) {
