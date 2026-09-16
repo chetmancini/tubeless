@@ -146,6 +146,15 @@ function statement(database: SqliteDatabase, sql: string): SqliteStatement {
   return prepared;
 }
 
+function readStoreVersion(database: SqliteDatabase): number {
+  // SAFETY: `PRAGMA user_version` always returns a single row with a
+  // `user_version` column, so the first result row matches this shape.
+  const versionRow = statement(database, "PRAGMA user_version").all()[0] as
+    | { user_version?: number | bigint }
+    | undefined;
+  return Number(versionRow?.user_version ?? 0);
+}
+
 async function loadSqliteModule(): Promise<SqliteModule> {
   const specifier = "Bun" in globalThis ? "bun:sqlite" : "node:sqlite";
   // SAFETY: The dynamic import resolves to the built-in sqlite module whose
@@ -350,12 +359,7 @@ export async function openSqlitePipelineRunStore(
   const database = await openDatabase(resolvedFilename, { create: initialize, readOnly });
   let storeVersion = 0;
   try {
-    // SAFETY: `PRAGMA user_version` always returns a single row with a
-    // `user_version` column, so the first result row matches this shape.
-    const versionRow = statement(database, "PRAGMA user_version").all()[0] as
-      | { user_version?: number | bigint }
-      | undefined;
-    const version = Number(versionRow?.user_version ?? 0);
+    const version = readStoreVersion(database);
     storeVersion = version;
     if (
       version !== 0 &&
@@ -370,13 +374,30 @@ export async function openSqlitePipelineRunStore(
       throw new Error(`${resolvedFilename} is not a pipeline run store.`);
     }
     if (!readOnly && version === LEGACY_RUN_EVENT_STORE_VERSION) {
-      database.exec(`
-        BEGIN IMMEDIATE;
-        ALTER TABLE pipeline_run_events ADD COLUMN correlation_id TEXT;
-        PRAGMA user_version = ${RUN_EVENT_STORE_VERSION};
-        COMMIT;
-      `);
-      storeVersion = RUN_EVENT_STORE_VERSION;
+      database.exec("PRAGMA busy_timeout = 5000");
+      database.exec("BEGIN IMMEDIATE");
+      try {
+        const lockedVersion = readStoreVersion(database);
+        if (lockedVersion === LEGACY_RUN_EVENT_STORE_VERSION) {
+          database.exec("ALTER TABLE pipeline_run_events ADD COLUMN correlation_id TEXT");
+          database.exec(`PRAGMA user_version = ${RUN_EVENT_STORE_VERSION}`);
+          storeVersion = RUN_EVENT_STORE_VERSION;
+        } else if (lockedVersion === RUN_EVENT_STORE_VERSION) {
+          storeVersion = lockedVersion;
+        } else {
+          throw new Error(
+            `Unsupported pipeline run store schema version ${lockedVersion}; expected ${RUN_EVENT_STORE_VERSION}.`
+          );
+        }
+        database.exec("COMMIT");
+      } catch (error) {
+        try {
+          database.exec("ROLLBACK");
+        } catch {
+          // Preserve the migration failure when SQLite already ended the transaction.
+        }
+        throw error;
+      }
     } else if (initialize) {
       database.exec(RUN_EVENT_STORE_SCHEMA);
       database.exec(`PRAGMA user_version = ${RUN_EVENT_STORE_VERSION}`);

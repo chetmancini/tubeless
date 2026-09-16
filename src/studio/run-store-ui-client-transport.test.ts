@@ -46,6 +46,7 @@ function jsonResponse(value: unknown, init?: ResponseInit) {
 describe("Studio API response parsing", () => {
   it("accepts a complete snapshot and rejects malformed nested run data", () => {
     expect(parseStudioSnapshot(snapshot())?.runs[0]?.runId).toBe("run-1");
+    expect(parseStudioSnapshot(snapshot([run({ correlationId: 42 as never })]))).toBeUndefined();
     expect(
       parseStudioSnapshot(
         snapshot([
