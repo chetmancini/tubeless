@@ -3,10 +3,10 @@ import { test } from "node:test";
 import { endpointFiles, responseProblems } from "./check-public-endpoints.mjs";
 
 test("inventory covers every page and machine file, excluding assets and the 404 file", () => {
-  assert.deepEqual(endpointFiles(["index.html", "docs/a/index.html", "docs/a.md", "llms.txt", "api-report.json", "openapi.json", "sitemap.xml", "404.md", "404.html", "logo.svg"]), [
+  assert.deepEqual(endpointFiles(["index.html", "docs/a/index.html", "docs/a.md", "llms.txt", "api-report.json", "sitemap.xml", "404.md", "404.html", "logo.svg"]), [
     { file: "index.html", path: "" }, { file: "docs/a/index.html", path: "docs/a" },
     { file: "docs/a.md", path: "docs/a.md" }, { file: "llms.txt", path: "llms.txt" },
-    { file: "api-report.json", path: "api-report.json" }, { file: "openapi.json", path: "openapi.json" },
+    { file: "api-report.json", path: "api-report.json" },
     { file: "sitemap.xml", path: "sitemap.xml" },
     { file: "404.md", path: "404.md" },
   ]);

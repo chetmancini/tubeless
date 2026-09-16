@@ -35,7 +35,7 @@ Agent instructions:
 - Use context.log, context.signal, context.sleep, and progress APIs.
 - Use createPipelineTestRuntime from tubeless/testing for deterministic tests with captured logs, statuses, progress, clock, and cancellation.
 - Compile generated agent submissions with bun run eval:agent --; runtime tests, provider invocation, and semantic assessment remain externally controlled.
-- Use definePipelineCommand for pipeline-backed scripts.
+- Import definePipelineCommand and definePipelineProject from tubeless/workbench.
 - Omit mapOptions only when validated CLI flags already satisfy same-name pipeline options; map renamed, loaded, or derived values explicitly. --step and --target are argv flags; mapOptions and hooks receive stepIds and targets.
 - Declare public goals with targets: [step] on definePipeline, then select their
   IDs to include required inputs and failure gates. stepIds is an exact filter
@@ -56,7 +56,6 @@ Advanced:
 - Remote steps: ./remote-step-composition.md
 - Public exports: ./api-reference.md
 - Machine-readable surface: ./api-report.json
-- Local Studio OpenAPI: https://tubeless.io/openapi.json
 - Agent evaluation cases: https://github.com/chetmancini/tubeless/blob/main/docs/agent-evaluations.md
 
 Executable examples:
@@ -72,9 +71,7 @@ Executable examples:
 - ../examples/fan-out-progress.ts
 - ../examples/resumable-enrichment.ts
 - ../examples/cli-job.ts
-- ../examples/rendering.ts
 - ../examples/cancellation-and-testing.ts
 - ../examples/live-tui.ts
 - ../examples/peloton.ts
 - ../examples/tracing.ts
-- ../examples/local-observability.ts

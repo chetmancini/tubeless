@@ -90,11 +90,6 @@
       "import": "./dist/utilities/batch.js",
       "default": "./dist/utilities/batch.js"
     },
-    "./cli": {
-      "types": "./dist/cli/cli.d.ts",
-      "import": "./dist/cli/cli.js",
-      "default": "./dist/cli/cli.js"
-    },
     "./node": {
       "types": "./dist/node/node.d.ts",
       "import": "./dist/node/node.js",
@@ -105,45 +100,15 @@
       "import": "./dist/utilities/rate-limit.js",
       "default": "./dist/utilities/rate-limit.js"
     },
-    "./render": {
-      "types": "./dist/render/render.d.ts",
-      "import": "./dist/render/render.js",
-      "default": "./dist/render/render.js"
-    },
-    "./reporter": {
-      "types": "./dist/reporter/reporter-entry.d.ts",
-      "import": "./dist/reporter/reporter-entry.js",
-      "default": "./dist/reporter/reporter-entry.js"
-    },
     "./retry": {
       "types": "./dist/utilities/retry.d.ts",
       "import": "./dist/utilities/retry.js",
       "default": "./dist/utilities/retry.js"
     },
-    "./run-store": {
-      "types": "./dist/run-store/run-store.d.ts",
-      "import": "./dist/run-store/run-store.js",
-      "default": "./dist/run-store/run-store.js"
-    },
-    "./run-store/sqlite": {
-      "types": "./dist/run-store/run-store-sqlite.d.ts",
-      "import": "./dist/run-store/run-store-sqlite.js",
-      "default": "./dist/run-store/run-store-sqlite.js"
-    },
-    "./run-store/ndjson": {
-      "types": "./dist/run-store/run-store-ndjson.d.ts",
-      "import": "./dist/run-store/run-store-ndjson.js",
-      "default": "./dist/run-store/run-store-ndjson.js"
-    },
-    "./workbench/project": {
-      "types": "./dist/workbench/workbench-project.d.ts",
-      "import": "./dist/workbench/workbench-project.js",
-      "default": "./dist/workbench/workbench-project.js"
-    },
-    "./run-store/ui": {
-      "types": "./dist/studio/run-store-ui.d.ts",
-      "import": "./dist/studio/run-store-ui.js",
-      "default": "./dist/studio/run-store-ui.js"
+    "./workbench": {
+      "types": "./dist/workbench/workbench-entry.d.ts",
+      "import": "./dist/workbench/workbench-entry.js",
+      "default": "./dist/workbench/workbench-entry.js"
     },
     "./testing": {
       "types": "./dist/testing/testing.d.ts",

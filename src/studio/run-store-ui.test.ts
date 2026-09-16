@@ -264,7 +264,7 @@ describe("local pipeline run studio", () => {
       studioError(
         "endpoint_not_found",
         "Not found.",
-        "Read https://tubeless.io/openapi.json and choose a documented Studio endpoint."
+        "Read the Studio guide at https://tubeless.io/docs/studio and choose a supported endpoint."
       )
     );
 
@@ -274,7 +274,7 @@ describe("local pipeline run studio", () => {
       studioError(
         "method_not_allowed",
         "Method not allowed.",
-        "Use an HTTP method documented at https://tubeless.io/openapi.json."
+        "Read the Studio guide at https://tubeless.io/docs/studio."
       )
     );
   });

@@ -153,9 +153,9 @@
     },
     {
       "id": "local-studio",
-      "prompt": "Persist pipeline runs in a local SQLite store and expose a checked-in project manifest of explicit definePipelineCommand modules.",
+      "prompt": "Record pipeline runs through the workbench SQLite option and expose a checked-in project manifest of explicit definePipelineCommand modules.",
       "mustDemonstrate": [
-        "SQLite run store",
+        "tubeless run --store",
         "definePipelineProject",
         "explicit command registration"
       ],

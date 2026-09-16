@@ -30,11 +30,9 @@ import {
 } from "./run-store-ui-state.js";
 
 export type {
-  PipelineRunStudioCancelResult,
   PipelineRunStudioCommand,
   PipelineRunStudioLauncher,
   PipelineRunStudioLaunchResult,
-  PipelineRunStudioLaunchRequest,
 } from "./run-store-ui-protocol.js";
 export type { PipelineRunStudioHistoryMaintenance } from "./run-store-ui-state.js";
 
@@ -422,7 +420,7 @@ export async function startPipelineRunStudio(
           405,
           "method_not_allowed",
           "Method not allowed.",
-          "Use an HTTP method documented at https://tubeless.io/openapi.json."
+          "Read the Studio guide at https://tubeless.io/docs/studio."
         );
         return;
       }
@@ -431,7 +429,7 @@ export async function startPipelineRunStudio(
         404,
         "endpoint_not_found",
         "Not found.",
-        "Read https://tubeless.io/openapi.json and choose a documented Studio endpoint."
+        "Read the Studio guide at https://tubeless.io/docs/studio and choose a supported endpoint."
       );
     } catch (error) {
       if (error instanceof StudioRequestError) {

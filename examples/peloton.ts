@@ -1,6 +1,6 @@
 import { createSteps, definePipeline } from "tubeless";
 import { runConcurrent } from "tubeless/batch";
-import { definePipelineCommand } from "tubeless/cli";
+import { definePipelineCommand } from "tubeless/workbench";
 import { RateLimiter } from "tubeless/rate-limit";
 import { withRetry } from "tubeless/retry";
 

@@ -33,7 +33,6 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     {noindex && <meta name="robots" content="noindex" />}
     <link rel="describedby" href={href("llms.txt")} />
     <link rel="sitemap" type="application/xml" href={href("sitemap.xml")} />
-    <link rel="service-desc" type="application/vnd.oai.openapi+json;version=3.1" href={href("openapi.json")} />
     {markdown && <link rel="alternate" type="text/markdown" href={href(markdown)} />}
     {structuredData && <script type="application/ld+json" is:inline set:html={JSON.stringify(structuredData).replace(/</g, "\\u003c")} />}
     <link rel="canonical" href={canonical} />

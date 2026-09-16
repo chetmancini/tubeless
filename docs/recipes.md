@@ -8,30 +8,28 @@ For an existing script or workflow, use `tubeless-make-pipeline` from the
 [agent skill pack](./agent-skills.md) to choose step boundaries before adapting
 one of these recipes.
 
-| Intent                                         | Executable recipe                                                        | Main primitives                                                              |
-| ---------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| Sequential import or ETL                       | [`typed-import.ts`](../examples/typed-import.ts)                         | `createSteps`, `dependsOn`, `requireOutputs`, `targets`                      |
-| Validate options, outputs, and results         | [`validated-boundaries.ts`](../examples/validated-boundaries.ts)         | Standard Schema, `outputSchema`, `resultSchema`                              |
-| Inspect, plan, or graph a pipeline or command  | [`typed-import.ts`](../examples/typed-import.ts)                         | `tubeless inspect`, `tubeless plan`, `tubeless graph`, `toMermaid`           |
-| Safe write/publish preview                     | [`publish-with-gates.ts`](../examples/publish-with-gates.ts)             | `dryRun`, `optionalDependsOn`, `skipAfterFailureOf`                          |
-| Deliberately omit unnecessary work             | [`conditional-step.ts`](../examples/conditional-step.ts)                 | `step.skippable`, valued skip, skip-aware output typing                      |
-| Preserve independent work after failure        | [`best-effort.ts`](../examples/best-effort.ts)                           | `continueOnError`, structured `run` result                                   |
-| Compose one reusable workflow                  | [`child-pipeline.ts`](../examples/child-pipeline.ts)                     | `fromPipeline`, `mapOptions`, resolved async `mapResult`                     |
-| Call a real HTTP service                       | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `fromRemote`, fetch cancellation, validated HTTP output                      |
-| Host a pipeline in a durable engine            | [`host-embedding.ts`](../examples/host-embedding.ts)                     | `runOrThrow`, pass `correlationId` / `parentRunId`                           |
-| Fan out over runtime items                     | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline.skippable`, stable keys, concurrency, progress              |
-| Inspect keyed fan-out failures                 | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `error.fanOut`, bounded diagnostics, caller-directed reruns                  |
-| Show determinate progress                      | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `reportProgress`, bounded live CLI rows, complete final trees                |
-| Watch the live TTY reporter                    | [`live-tui.ts`](../examples/live-tui.ts)                                 | named steps, nested `details`; persist with `--store`                        |
-| Retry and rate-limit remote calls              | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `withRetry`, `RateLimiter`, injected sleep and signal                        |
-| Resume durable long-running work               | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `dryRun`, `openCheckpoint`, `withCheckpointedBatch`                          |
-| Expose and run a typed command-line program    | [`cli-job.ts`](../examples/cli-job.ts)                                   | `definePipelineCommand`, conditional `mapOptions`, `tubeless run`            |
-| Render plans and diagnostics                   | [`rendering.ts`](../examples/rendering.ts)                               | `renderPipelinePlan`, `renderPipelineError`                                  |
-| Handle cancellation and deterministic testing  | [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts) | `createPipelineTestRuntime`, captured status/progress                        |
-| Export JSON or OpenTelemetry lifecycle events  | [`tracing.ts`](../examples/tracing.ts)                                   | trace context, exporter composition, JSON / OTel, `onExporterError`          |
-| Persist, port, inspect, launch, or cancel runs | [`local-observability.ts`](../examples/local-observability.ts)           | SQLite / NDJSON stores, `tubeless history --pipeline <id>`, studio projector |
-| Watch many primitives in one run               | [`peloton.ts`](../examples/peloton.ts)                                   | delays, logs, children, fan-out, retry, gates, test runtime                  |
-| Project layout, IDs, and command manifest      | [`tubeless.project.ts`](../examples/catalog/tubeless.project.ts)         | `pipelines/`, `scripts/`, `definePipelineProject`, `tubeless list`           |
+| Intent                                        | Executable recipe                                                        | Main primitives                                                     |
+| --------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| Sequential import or ETL                      | [`typed-import.ts`](../examples/typed-import.ts)                         | `createSteps`, `dependsOn`, `requireOutputs`, `targets`             |
+| Validate options, outputs, and results        | [`validated-boundaries.ts`](../examples/validated-boundaries.ts)         | Standard Schema, `outputSchema`, `resultSchema`                     |
+| Inspect, plan, or graph a pipeline or command | [`typed-import.ts`](../examples/typed-import.ts)                         | `tubeless inspect`, `tubeless plan`, `tubeless graph`, `toMermaid`  |
+| Safe write/publish preview                    | [`publish-with-gates.ts`](../examples/publish-with-gates.ts)             | `dryRun`, `optionalDependsOn`, `skipAfterFailureOf`                 |
+| Deliberately omit unnecessary work            | [`conditional-step.ts`](../examples/conditional-step.ts)                 | `step.skippable`, valued skip, skip-aware output typing             |
+| Preserve independent work after failure       | [`best-effort.ts`](../examples/best-effort.ts)                           | `continueOnError`, structured `run` result                          |
+| Compose one reusable workflow                 | [`child-pipeline.ts`](../examples/child-pipeline.ts)                     | `fromPipeline`, `mapOptions`, resolved async `mapResult`            |
+| Call a real HTTP service                      | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `fromRemote`, fetch cancellation, validated HTTP output             |
+| Host a pipeline in a durable engine           | [`host-embedding.ts`](../examples/host-embedding.ts)                     | `runOrThrow`, pass `correlationId` / `parentRunId`                  |
+| Fan out over runtime items                    | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline.skippable`, stable keys, concurrency, progress     |
+| Inspect keyed fan-out failures                | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `error.fanOut`, bounded diagnostics, caller-directed reruns         |
+| Show determinate progress                     | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `reportProgress`, bounded live CLI rows, complete final trees       |
+| Watch the live TTY reporter                   | [`live-tui.ts`](../examples/live-tui.ts)                                 | named steps, nested `details`; persist with `--store`               |
+| Retry and rate-limit remote calls             | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `withRetry`, `RateLimiter`, injected sleep and signal               |
+| Resume durable long-running work              | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `dryRun`, `openCheckpoint`, `withCheckpointedBatch`                 |
+| Expose and run a typed command-line program   | [`cli-job.ts`](../examples/cli-job.ts)                                   | `definePipelineCommand`, conditional `mapOptions`, `tubeless run`   |
+| Handle cancellation and deterministic testing | [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts) | `createPipelineTestRuntime`, captured status/progress               |
+| Export JSON or OpenTelemetry lifecycle events | [`tracing.ts`](../examples/tracing.ts)                                   | trace context, exporter composition, JSON / OTel, `onExporterError` |
+| Watch many primitives in one run              | [`peloton.ts`](../examples/peloton.ts)                                   | delays, logs, children, fan-out, retry, gates, test runtime         |
+| Project layout, IDs, and command manifest     | [`tubeless.project.ts`](../examples/catalog/tubeless.project.ts)         | `pipelines/`, `scripts/`, `definePipelineProject`, `tubeless list`  |
 
 ## Choose a pattern
 
@@ -48,8 +46,8 @@ one of these recipes.
    throw on the first failure. Use `runConcurrentSettled` when the caller needs
    completed results plus that failure without throwing.
 
-6. Use `definePipelineCommand` for pipeline scripts; use `defineCommand` only
-   when the script is not centered on a pipeline. Preview selection with
+6. Use `definePipelineCommand` from `tubeless/workbench` for pipeline scripts.
+   Preview selection with
    `command.plan()` or `tubeless plan`; do not simulate planning with `--plan`.
    `--step` and `--target` are argv flags; `mapOptions` and hooks read `stepIds`
    and `targets`.
@@ -58,11 +56,7 @@ one of these recipes.
    `requireOutputs` when the final domain result is not meaningful without
    specific step outputs. Read plan `selectionReasons` instead of recreating
    target-closure logic in a CLI or application.
-8. Use `tubeless/render` to format plans and errors as text or JSON. It includes
-   formatting for selection reasons and error details.
-   Use `tubeless/reporter` for optional TTY run reporters; do not import them
-   from `tubeless`.
-9. Use the file layout and export conventions in the
+8. Use the file layout and export conventions in the
    [project manifest](../examples/catalog/tubeless.project.ts), adapting IDs to
    your own commands. Register project commands explicitly; do not infer executable modules from run
    history or the filesystem.

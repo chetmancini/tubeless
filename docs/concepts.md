@@ -115,18 +115,8 @@ load?.selectionReasons;
 `selected` tells you whether selection includes the step. `skipReason` explains
 why it will not run, such as `filtered`, `dry-run`, or `unmet-dependency`.
 
-Use `renderPipelinePlan` to display a plan in a terminal or return it as JSON:
-
-```ts
-import { renderPipelinePlan } from "tubeless/render";
-
-const plan = pipeline.plan({ targets: ["publish"] });
-const terminalText = renderPipelinePlan(plan);
-const machineJson = renderPipelinePlan(plan, { format: "json" });
-```
-
-Text output includes selection reasons by default. Pass `{ explain: false }`
-for a shorter view. JSON output retains all structured plan fields.
+Use the structured plan directly in applications. For terminal or JSON output,
+the workbench already renders the same data through `tubeless plan`.
 
 ### Required final outputs
 
@@ -206,8 +196,8 @@ if (first?.code === "TUBELESS_STEP_FAILED" && first.sourceCode === "ENOENT") {
 `result` and the original thrown value on native `cause`. Its default message
 identifies the pipeline, phase, package code, step, and deepest normalized cause.
 `PipelineDefinitionError` uses the same diagnostic summary for every rejected
-definition issue. `renderPipelineError` from `tubeless/render` exposes that
-same diagnostic formatting directly and can emit the structured error as JSON.
+definition issue. Applications should branch on the structured fields and own
+any domain-specific presentation.
 
 `PipelineStepReport` describes a step's final status. Successful reports carry
 timing, skipped reports carry `reason` plus optional `message` and
@@ -267,9 +257,9 @@ both. NDJSON stores one JSON event per line. Use `tubeless history` to inspect
 recordings in the terminal or `tubeless ui` to open them in a browser.
 
 Recording is optional. Importing `tubeless` does not load SQLite or the UI.
-For programmatic recording, use `tubeless/run-store/sqlite`; to read a finished
-trace, use `tubeless/run-store/ndjson`. See [the studio guide](./studio.md) for
-recording, storage limits, browser controls, and custom readers.
+Storage readers and projections belong to the workbench rather than the runtime
+API. See [the studio guide](./studio.md) for recording, storage limits, and
+browser controls.
 
 Cancellation is determined from an abort error or a cancelled child run. If an
 unrelated error occurs at the same time as an abort, it remains a failure.

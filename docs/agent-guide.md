@@ -71,9 +71,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Use `runConcurrent` for bounded lightweight functions that do not need child
   lifecycle events. Use `runConcurrentSettled` when the caller needs completed
   results and the first failure instead of a throw.
-- Use `definePipelineCommand` for scripts centered on a pipeline. Do not parse
-  `process.argv` manually or redeclare built-in dry-run, `--step`, or `--target`
-  flags. `mapOptions`, validation, and hooks receive `stepIds` and `targets`,
+- Use `definePipelineCommand` from `tubeless/workbench` for scripts centered on
+  a pipeline. Do not parse `process.argv` manually or redeclare built-in dry-run,
+  `--step`, or `--target` flags. `mapOptions`, validation, and hooks receive `stepIds` and `targets`,
   not `step` or `target`. Omit `mapOptions` when validated flags already satisfy
   same-name pipeline options; provide it when names, types, defaults, or derived
   values differ.
@@ -129,11 +129,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   exact low-level filtering of any step is intentional; never combine the two.
 - Read `PipelinePlanStep.selectionReasons` when explaining selection. It already
   includes originating targets and immediate dependents; do not reconstruct
-  selection reasons by walking dependency arrays in application or CLI code. Use
-  `renderPipelinePlan` from `tubeless/render` for shared human or JSON output
-  instead of maintaining another selection-reason formatter. Use
-  `createPipelineReporter` / `createRunReporter` from `tubeless/reporter` for
-  TTY presentation; do not import reporters from the root kernel.
+  selection reasons by walking dependency arrays in application code. The
+  workbench owns terminal plan formatting and reporting.
 - Use focused hooks for ordinary observation: `onStepStart`,
   `onStepProgress`, `onStepComplete`, `onStepSkip`, `onStepCancel`, and
   `onStepFail`. Their event metadata is already narrowed. Use additive
@@ -147,8 +144,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   expose the structured error under `error`; skipped reports expose `reason`,
   optional `message`, and optional `dependencyId`. `PipelineError.cause` is a
   bounded JSON-safe snapshot; a thrown `PipelineExecutionError` retains the
-  original value through native `Error.cause`. Use `renderPipelineError` when
-  displaying an error as text or JSON.
+  original value through native `Error.cause`.
 - Inspect `error.fanOut` in reports or recorded trace history for bounded keyed failures from `forEachPipeline`. Check
   `omittedFailureCount` and `keyTruncated` before selecting rerun inputs; unstarted
   items are not failures. The caller starts a new run for any retry.
@@ -164,18 +160,14 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   one run must fan out to multiple destinations; `onExporterError` reports the
   first partial drop, the failed destination is retired, and healthy exporters
   keep receiving events.
-- Keep durable local observation opt-in. Use the append-only adapter from
-  `tubeless/run-store/sqlite` or `tubeless run --store`; inspect recorded runs
-  with `tubeless history`. Use the strictly read-only adapter from
-  `tubeless/run-store/ndjson`, `tubeless history --trace`, or the `--trace`
-  option to `tubeless ui` for a finished portable trace. Treat trace files as sensitive: logs,
+- Keep durable local observation opt-in. Use `tubeless run --store` for SQLite
+  history and `tubeless run --trace` for portable NDJSON traces. Inspect them
+  with `tubeless history` or `tubeless ui`. Treat trace files as sensitive: logs,
   errors, and event payloads are displayed as recorded, and malformed or oversized
   artifacts are rejected. `tubeless history` inspects a finished artifact and
-  refuses a store with a live writer or multiple hard links. SQLite `export()`
-  may return before the row is on disk. Other connections cannot see that tail
-  until a batch of 64, `flush()`, same-instance `listEvents`/`clearHistory`, or
-  `close()`. A crash can lose up to 63 buffered events; `tubeless run --store`
-  flushes at completion so finished runs are durable. Do not make pipeline
+  refuses a store with a live writer or multiple hard links. A crash can lose
+  buffered events from a live writer; `tubeless run --store` flushes at
+  completion so finished runs are durable. Do not make pipeline
   definitions depend on storage or the studio. Version 2 trace events are a
   discriminated union keyed by `name`; use their typed `payload` rather than
   parsing scalar attributes. Recorded history keeps the last `reportProgress` `details`
@@ -183,15 +175,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   original `stepCount`. Studio renders those
   snapshots; it does not flatten child DAGs into the parent step.
   Observed definitions pick the latest `pipeline.started` by `timestampMs`, then
-  store-local id.
-- Use `createPipelineRunProjector` from `tubeless/run-store` when a custom
-  reader pages `listEvents({ afterId })`. Append each newer page and call
-  `snapshot()`; a refresh with no new ids returns the cached view. Duplicate
-  and out-of-order ids are ignored; `0` is a valid first id. Pass
-  `{ retainLogs: false }` only when the snapshot should keep `logCount`
-  without log bodies. Use `projectPipelineRunStore` only for a one-shot fold
-  of a complete list. See
-  [`local-observability.ts`](../examples/local-observability.ts).
+  store-local id. Storage readers, projections, and Studio embedding are
+  workbench internals rather than application extension points.
 - Pass caller-owned `correlationId` through `PipelineContext` when joining an
   external job or workflow. `runId` is package-generated for every execution;
   pass a known execution `runId` as `parentRunId` only to link that parent.
@@ -200,13 +185,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   stable registered IDs, and register only explicit `definePipelineCommand`
   modules; never make execution require the studio server or infer executable
   modules from observed history.
-  Every studio request, including reads, must send a `Host` that matches the
-  bound authority, or, on a wildcard bind, `localhost` or a literal IP on the
-  same port. Browser plan, launch, cancel, and clear-history also send
-  `x-tubeless-studio-*` headers; those are same-origin guards, not
-  authentication. Studio HTTP errors contain stable `code`, `message`, and
-  `hint`; the local API is documented at `https://tubeless.io/openapi.json`.
-  Cancel a live top-level launch from the running detail pane;
+  Keep the default loopback binding; Studio's internal HTTP protocol is not an
+  application API. Cancel a live top-level launch from the running detail pane;
   that abort is process-local, leaves sibling launches running, and is not
   crash-resume.
 

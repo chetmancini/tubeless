@@ -258,15 +258,6 @@ const runners = {
   "cli-job.ts": async (mod) => {
     defined(mod.ImportCommand, "cli-job.ts");
   },
-  "rendering.ts": async (mod) => {
-    if (typeof mod.humanPlan !== "string") fail("rendering.ts", "humanPlan is not a string");
-    if (typeof mod.jsonPlan !== "string" || mod.jsonPlan.length === 0) {
-      fail("rendering.ts", "jsonPlan is empty");
-    }
-    if (!mod.humanPlan.includes("publish") && !mod.humanPlan.includes("release")) {
-      fail("rendering.ts", "humanPlan omitted publish or release");
-    }
-  },
   "cancellation-and-testing.ts": async (mod) => {
     defined(await mod.runWithTestRuntime(), "cancellation-and-testing.ts");
   },
@@ -274,12 +265,6 @@ const runners = {
     const value = await mod.runTracingExample([" Alpha "]);
     if (!Array.isArray(value) || value.some((row) => row !== row.toLowerCase())) {
       fail("tracing.ts", "expected a lowercased array");
-    }
-  },
-  "local-observability.ts": async (mod) => {
-    const snapshot = mod.snapshotFromPages([[]]);
-    if (!snapshot || !Array.isArray(snapshot.runs)) {
-      fail("local-observability.ts", "snapshotFromPages omitted a runs array");
     }
   },
 };
@@ -365,11 +350,24 @@ try {
     .join("\n");
   run("node", ["--input-type=module", "--eval", smokeProgram], consumerRoot);
 
+  const workbenchSurface = run(
+    "node",
+    [
+      "--input-type=module",
+      "--eval",
+      'console.log(JSON.stringify(Object.keys(await import("tubeless/workbench")).sort()))',
+    ],
+    consumerRoot
+  );
+  if (workbenchSurface.trim() !== '["definePipelineCommand","definePipelineProject"]') {
+    throw new Error(`Packed workbench exposes more than command registration: ${workbenchSurface}`);
+  }
+
   const pipelineFixture = join(consumerRoot, "pipeline.mjs");
   writeFileSync(
     pipelineFixture,
     `import { createSteps, definePipeline } from "tubeless";
-import { definePipelineCommand } from "tubeless/cli";
+import { definePipelineCommand } from "tubeless/workbench";
 const step = createSteps();
 const load = step("load", {
   description: "Load input",
@@ -410,7 +408,7 @@ export const FixtureCommand = definePipelineCommand(FixturePipeline, {
   const projectFixture = join(consumerRoot, "tubeless.project.mjs");
   writeFileSync(
     projectFixture,
-    `import { definePipelineProject } from "tubeless/workbench/project";
+    `import { definePipelineProject } from "tubeless/workbench";
 export default definePipelineProject({
   commands: [{ id: "fixture-command", file: "./pipeline.mjs", export: "FixtureCommand" }],
 });

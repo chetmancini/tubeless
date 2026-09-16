@@ -106,7 +106,7 @@ and more. For help authoring pipelines with a coding agent, install the
 [Website](https://tubeless.io/) · [Getting started](./docs/getting-started.md) · [CLI](./docs/cli.md) ·
 [Studio](./docs/studio.md) · [Concepts](./docs/concepts.md) ·
 [Comparison](./docs/comparison.md) · [API](./docs/api-reference.md) ·
-[Agents](./docs/agent-guide.md) · [Studio OpenAPI](https://tubeless.io/openapi.json)
+[Agents](./docs/agent-guide.md)
 
 ## Contributing
 
