@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { openSqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
+import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { runHistory } from "./workbench-history.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "./workbench-shared.js";
@@ -43,9 +44,9 @@ async function tempDir(): Promise<string> {
 
 function event(
   name: PipelineTraceEvent["name"],
-  overrides: Partial<PipelineTraceEvent> = {}
+  overrides: Record<string, unknown> = {}
 ): PipelineTraceEvent {
-  return {
+  return decodePipelineTraceEvent({
     attributes: {},
     name,
     pipelineId: "import",
@@ -53,7 +54,7 @@ function event(
     timestampMs: 1_700_000_000_000,
     version: 1,
     ...overrides,
-  };
+  });
 }
 
 async function seedStore(filename: string, events: readonly PipelineTraceEvent[]): Promise<void> {
@@ -243,7 +244,7 @@ describe("runHistory", () => {
     const tracePath = path.join(directory, "run.ndjson");
     const portableEvents = failedRunEvents.map((next) =>
       next.name === "pipeline.log"
-        ? { ...next, attributes: { ...next.attributes, message: "source\u001b[31m slowed" } }
+        ? { ...next, payload: { ...next.payload, message: "source\u001b[31m slowed" } }
         : next
     );
     await writeFile(

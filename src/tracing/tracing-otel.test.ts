@@ -36,17 +36,26 @@ describe("createOpenTelemetryTraceExporter", () => {
     const exporter = createOpenTelemetryTraceExporter({ tracer });
 
     exporter.export({
-      attributes: { dry_run: false },
       correlationId: "job-1",
       name: "pipeline.started",
+      payload: { dryRun: false, planOk: true, stepCount: 1, targetIds: [] },
       pipelineId: "import",
       runId: "run-1",
       timestampMs: 10,
-      version: 1,
+      version: 2,
     });
     exporter.export({
       attemptId: "run-1:attempt:1",
-      attributes: {},
+      name: "step.attempted",
+      payload: { attempt: 2, attributes: { attempt: "custom", provider: "test" } },
+      pipelineId: "import",
+      runId: "run-1",
+      stepId: "fetch",
+      timestampMs: 11,
+      version: 2,
+    });
+    exporter.export({
+      attemptId: "run-1:attempt:1",
       error: {
         // SAFETY: fixture uses a non-kernel code the exporter should copy onto
         // the OTEL event; PipelineTraceError.code is the closed union.
@@ -56,20 +65,27 @@ describe("createOpenTelemetryTraceExporter", () => {
         phase: "execution",
       },
       name: "step.failed",
+      payload: { status: "failed" },
       pipelineId: "import",
       runId: "run-1",
       stepId: "fetch",
       timestampMs: 12,
-      version: 1,
+      version: 2,
     });
     exporter.export({
-      attributes: { ok: false },
       durationMs: 5,
       name: "pipeline.completed",
+      payload: {
+        dryRun: false,
+        errorCount: 1,
+        finalized: false,
+        status: "failed",
+        stepCount: 1,
+      },
       pipelineId: "import",
       runId: "run-1",
       timestampMs: 15,
-      version: 1,
+      version: 2,
     });
 
     expect(tracer.startSpan).toHaveBeenCalledWith("pipeline import", {
@@ -79,6 +95,11 @@ describe("createOpenTelemetryTraceExporter", () => {
       }),
       startTime: 10,
     });
+    expect(span.addEvent).toHaveBeenCalledWith(
+      "step.attempted",
+      expect.objectContaining({ attempt: 2, provider: "test" }),
+      11
+    );
     expect(span.addEvent).toHaveBeenCalledWith(
       "step.failed",
       expect.objectContaining({

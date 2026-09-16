@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   createSteps,
   defaultPipelineContext,
@@ -18,14 +18,30 @@ function createLogger(): PipelineLogger & { warnings: string[] } {
 }
 
 describe("pipeline tracing", () => {
+  it("exposes event-specific payload contracts through the name discriminant", () => {
+    expectTypeOf<
+      Extract<PipelineTraceEvent, { name: "pipeline.started" }>["payload"]["targetIds"]
+    >().toEqualTypeOf<readonly string[]>();
+    expectTypeOf<
+      NonNullable<
+        Extract<PipelineTraceEvent, { name: "step.planned" }>["payload"]["nestedPipeline"]
+      >["stepIds"]
+    >().toEqualTypeOf<readonly string[]>();
+    expectTypeOf<
+      NonNullable<
+        Extract<PipelineTraceEvent, { name: "step.running" }>["payload"]["progress"]
+      >["details"]
+    >().toMatchTypeOf<readonly { id: string }[] | undefined>();
+  });
+
   it("composes exporters while retiring failed destinations", async () => {
     const event = {
-      attributes: {},
       name: "pipeline.started",
+      payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
       pipelineId: "composed",
       runId: "run-1",
       timestampMs: 1,
-      version: 1,
+      version: 2,
     } satisfies PipelineTraceEvent;
     const first = { export: vi.fn(), flush: vi.fn() };
     const failed = {
@@ -88,12 +104,12 @@ describe("pipeline tracing", () => {
       { export: vi.fn().mockRejectedValue(new Error("also failed")) },
     ]);
     const event = {
-      attributes: {},
       name: "pipeline.started",
+      payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
       pipelineId: "composed",
       runId: "run-1",
       timestampMs: 1,
-      version: 1,
+      version: 2,
     } satisfies PipelineTraceEvent;
 
     await expect(composite.export(event)).rejects.toBe(failure);
@@ -170,31 +186,34 @@ describe("pipeline tracing", () => {
     expect(events.every((event) => event.parentRunId === "parent-1")).toBe(true);
     expect(events.every((event) => event.itemKey === "chapter-3")).toBe(true);
     expect(events.find((event) => event.name === "step.attempted")).toMatchObject({
-      attributes: { attempt: 2, provider: "test" },
       attemptId: result.steps.find(({ id }) => id === "succeed")?.attemptId,
+      payload: { attempt: 2, attributes: { provider: "test" } },
       stepId: "succeed",
     });
     const runningEvents = events.filter((event) => event.name === "step.running");
-    expect(runningEvents[0]?.attributes).not.toHaveProperty("detail_count");
-    expect(runningEvents[0]?.attributes).not.toHaveProperty("details");
-    expect(runningEvents.find((event) => event.attributes.completed === 1)?.attributes).toEqual({
-      completed: 1,
-      detail_count: 1,
-      details: JSON.stringify([{ id: "source", label: "prepared", status: "running" }]),
-      message: "prepared",
-      total: 2,
-    });
+    expect(runningEvents[0]?.payload).not.toHaveProperty("progress.details");
+    expect(runningEvents.find((event) => event.payload.progress?.completed === 1)?.payload).toEqual(
+      {
+        progress: {
+          completed: 1,
+          detailCount: 1,
+          details: [{ id: "source", label: "prepared", status: "running" }],
+          message: "prepared",
+          total: 2,
+        },
+      }
+    );
     expect(events.find((event) => event.name === "pipeline.log")).toMatchObject({
-      attributes: { level: "log", message: "normalized 12" },
       attemptId: result.steps.find(({ id }) => id === "succeed")?.attemptId,
+      payload: { level: "log", message: "normalized 12" },
       stepId: "succeed",
     });
     expect(events.find((event) => event.name === "step.planned")).toMatchObject({
-      attributes: {
-        dependencies: "[]",
-        dry_run: "run",
-        optional_dependencies: "[]",
-        runtime_skip_possible: false,
+      payload: {
+        dependencies: [],
+        dryRun: "run",
+        optionalDependencies: [],
+        runtimeSkipPossible: false,
       },
       stepId: "succeed",
     });
@@ -215,8 +234,8 @@ describe("pipeline tracing", () => {
       stepId: "fail",
     });
     expect(events.find((event) => event.name === "step.skipped")).toMatchObject({
-      attributes: {
-        dependency_id: "fail",
+      payload: {
+        dependencyId: "fail",
         reason: "fail-fast",
         status: "skipped",
       },
@@ -488,13 +507,13 @@ describe("pipeline tracing", () => {
     expect(
       events.find((event) => event.name === "step.planned" && event.pipelineId === "trace-parent")
     ).toMatchObject({
-      attributes: {
-        nested_pipeline: JSON.stringify({
+      payload: {
+        nestedPipeline: {
           mode: "single",
           pipelineId: "trace-child",
-          step_count: 1,
+          stepCount: 1,
           stepIds: ["inside"],
-        }),
+        },
       },
       stepId: "child-stage",
     });
@@ -533,9 +552,7 @@ describe("pipeline tracing", () => {
     expect(
       events.find((event) => event.name === "step.planned" && event.stepId === "enrich")
     ).toMatchObject({
-      attributes: {
-        remote: JSON.stringify({ engine: "test", target: "enrich-v2" }),
-      },
+      payload: { remote: { engine: "test", target: "enrich-v2" } },
       stepId: "enrich",
     });
   });
@@ -620,13 +637,17 @@ describe("pipeline tracing", () => {
     });
 
     const progress = events.find(
-      (event) => event.name === "step.running" && event.attributes.completed === 1
+      (event) => event.name === "step.running" && event.payload.progress?.completed === 1
     );
-    expect(progress?.attributes.detail_count).toBe(130);
-    const details = JSON.parse(String(progress?.attributes.details)) as Array<{
-      id: string;
-      label?: string;
-    }>;
+    if (progress?.name !== "step.running") throw new Error("missing progress trace");
+    expect(progress?.payload.progress?.detailCount).toBe(130);
+    const details = progress?.payload.progress?.details as
+      | Array<{
+          id: string;
+          label?: string;
+        }>
+      | undefined;
+    if (!details) throw new Error("missing progress details");
     expect(details).toHaveLength(128);
     expect(details[0]?.id).toHaveLength(4_096);
     expect(details[0]?.label).toHaveLength(4_096);
@@ -637,6 +658,74 @@ describe("pipeline tracing", () => {
       total: 5,
       status: "cancelled",
     });
+  });
+
+  it("keeps tracing enabled for valid identifiers longer than metadata bounds", async () => {
+    const pipelineId = `pipeline-${"p".repeat(5_000)}`;
+    const stepId = `step-${"s".repeat(5_000)}`;
+    const step = createSteps();
+    const work = step(stepId, { run: () => "ok" });
+    const pipeline = definePipeline({
+      id: pipelineId,
+      steps: [work],
+      targets: [work],
+      finalize: () => "ok",
+    });
+    const events: PipelineTraceEvent[] = [];
+    const log = createLogger();
+
+    await pipeline.run(
+      {},
+      { targets: [stepId] },
+      {
+        ...defaultPipelineContext(),
+        log,
+        tracing: { exporter: { export: (event) => void events.push(event) } },
+      }
+    );
+
+    expect(log.warnings).toEqual([]);
+    expect(events.find((event) => event.name === "pipeline.started")).toMatchObject({
+      payload: { targetIds: [stepId] },
+      pipelineId,
+    });
+    expect(events.at(-1)?.name).toBe("pipeline.completed");
+  });
+
+  it("bounds validation issues before codec validation without failing the run trace", async () => {
+    const optionsSchema = {
+      "~standard": {
+        validate: () => ({
+          issues: Array.from({ length: 130 }, () => ({
+            message: "m".repeat(5_000),
+            path: ["p".repeat(5_000)],
+          })),
+        }),
+        vendor: "test",
+        version: 1 as const,
+      },
+    };
+    const step = createSteps(optionsSchema);
+    const pipeline = definePipeline({
+      id: "bounded-validation-issues",
+      steps: [step("work", { run: () => "never" })],
+      finalize: () => undefined,
+    });
+    const events: PipelineTraceEvent[] = [];
+    const log = createLogger();
+
+    await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log,
+      tracing: { exporter: { export: (event) => void events.push(event) } },
+    });
+
+    expect(log.warnings).toEqual([]);
+    const completed = events.find((event) => event.name === "pipeline.completed");
+    expect(completed?.error?.issues).toHaveLength(128);
+    expect(completed?.error?.issues?.[0]?.message).toHaveLength(4_096);
+    expect(completed?.error?.issues?.[0]?.path?.[0]).toHaveLength(4_096);
+    expect(events.at(-1)?.name).toBe("pipeline.completed");
   });
 
   it("omits detail attributes when progress has no detail rows", async () => {
@@ -661,8 +750,9 @@ describe("pipeline tracing", () => {
     });
 
     expect(
-      events.find((event) => event.name === "step.running" && event.attributes.completed === 1)
-        ?.attributes
-    ).toEqual({ completed: 1, message: "batches", total: 2 });
+      events.find(
+        (event) => event.name === "step.running" && event.payload.progress?.completed === 1
+      )?.payload
+    ).toEqual({ progress: { completed: 1, message: "batches", total: 2 } });
   });
 });

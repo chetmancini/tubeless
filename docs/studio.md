@@ -156,8 +156,8 @@ without importing the application. It uses the latest run by
 `pipeline.started` timestamp, with store-local ID as a tie-breaker. A newer
 planned definition replaces the older steps and targets. A run that fails
 validation before planning does not erase the last recorded definition.
-Nested metadata includes the declared `step_count`; truncated progress includes
-its original `detail_count`.
+Nested metadata includes the declared `stepCount`; truncated progress includes
+its original `detailCount`.
 
 ## Embed Studio or build a reader
 
@@ -181,7 +181,7 @@ when commands are registered.
 
 Without registered commands, a non-loopback `--host` is allowed but remains
 read-only and has no clear-history control. Anyone who can reach that port can
-read the store. Logs, errors, and attributes are displayed without redaction.
+read the store. Logs, errors, and event payloads are displayed without redaction.
 Keep the default loopback binding unless you intend to share that data. See
 [SECURITY.md](https://github.com/chetmancini/tubeless/blob/main/SECURITY.md).
 
