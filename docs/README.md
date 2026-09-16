@@ -1,7 +1,9 @@
 # Tubeless documentation
 
-Start with a small pipeline, then choose the controls and integrations your
-workflow needs. The guides link to examples you can adapt in your project.
+Tubeless provides typed execution pipelines for data processing, application
+workflows, and AI workloads. Start with a small pipeline, then choose the
+controls and integrations your work needs. The guides link to examples you can
+adapt in your project.
 
 ## Start here
 

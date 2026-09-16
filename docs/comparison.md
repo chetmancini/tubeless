@@ -1,6 +1,7 @@
 # Choosing an execution approach
 
-Tubeless runs typed, dependency-ordered workflows inside a Node.js process.
+Tubeless runs typed, dependency-ordered work inside a Node.js process. That work
+might be a data pipeline, a multi-step application workflow, or an AI workload.
 Use it when you need to pass results between steps, preview execution, control
 side effects during dry runs, or inspect step-level failures and progress.
 
