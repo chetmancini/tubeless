@@ -1,5 +1,6 @@
 ---
 import Rainbow from "../components/Rainbow.astro";
+import PostHog from "../components/PostHog.astro";
 import SiteFooter from "../components/SiteFooter.astro";
 import SiteHeader from "../components/SiteHeader.astro";
 import { absUrl, href } from "../lib/paths";
@@ -56,6 +57,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta name="twitter:image" content={absUrl("og.png")} />
     <meta name="theme-color" content="#e6e4de" />
     <meta name="color-scheme" content="light" />
+    <PostHog />
   </head>
   <body>
     <a class="skip" href="#content">Skip to content</a>

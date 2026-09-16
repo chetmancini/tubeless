@@ -38,6 +38,9 @@ jobs:
         run: bun ci
       - name: Build
         working-directory: website
+        env:
+          PUBLIC_POSTHOG_HOST: ${{ vars.PUBLIC_POSTHOG_HOST }}
+          PUBLIC_POSTHOG_KEY: ${{ vars.PUBLIC_POSTHOG_KEY }}
         run: bun run build
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
