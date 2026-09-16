@@ -299,7 +299,7 @@ export function renderPipelinesView(commands: readonly PipelineRunStudioCommand[
     );
   }
   return (
-    '<section class="sheet"><div class="sheet-head"><div><div class="sheet-title">Available pipelines</div><div class="sheet-subtitle">Declared by the local studio manifest</div></div><span class="sheet-subtitle">' +
+    '<section class="sheet"><div class="sheet-head"><div><div class="sheet-title">Available pipelines</div><div class="sheet-subtitle">Declared by the local project manifest</div></div><span class="sheet-subtitle">' +
     commands.length +
     ' shown</span></div><div class="catalog">' +
     commands

@@ -57,7 +57,7 @@ export interface CliBooleanParam extends CliParamBase {
 
 export interface CliPathParam extends CliParamBase {
   type: "path";
-  /** Relative defaults and values are resolved against `context.cwd`, like `definePaths`. */
+  /** Relative defaults and values are resolved against `context.cwd`. */
   default?: string;
   optional?: boolean;
   /** Validates the resolved path exists before `run` is called. */

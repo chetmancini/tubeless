@@ -2,7 +2,7 @@
 
 .PHONY: help list verify inspect plan graph run ui require-file install build lint format \
 	format-check typecheck knip test docs-check api-check api-generate eval-verify pack \
-	pack-verify tubeless check release release-notes website website-build
+	pack-verify tubeless check release website website-build
 
 export_arg = $(if $(strip $(EXPORT)),--export "$(EXPORT)",)
 project_arg = $(if $(strip $(PROJECT)),--project "$(PROJECT)",)
@@ -39,7 +39,6 @@ help:
 	@echo "  make format        Format package sources and documentation"
 	@echo "  make api-generate  Regenerate checked public API documentation"
 	@echo "  make pack          Inspect and verify the publishable artifact"
-	@echo "  make release-notes Print generated notes, labeled patch/minor/major"
 	@echo "  make release       Bump patch, check, commit, tag, and push (BUMP=/VERSION=)"
 	@echo
 	@echo "Fast loops"
@@ -141,12 +140,7 @@ website-build:
 check:
 	bun run check
 
-release-notes:
-	@bash scripts/generate-release-notes.sh
-
 release:
-	@NOTES="$(NOTES)" NOTES_FILE="$(NOTES_FILE)" DRY="$(DRY)" PUSH="$(PUSH)" \
-		WATCH="$(WATCH)" SKIP_CHECK="$(SKIP_CHECK)" EDIT="$(EDIT)" \
-		$(if $(strip $(BUMP)),BUMP="$(BUMP)",) \
+	@$(if $(strip $(BUMP)),BUMP="$(BUMP)",) \
 		$(if $(strip $(VERSION)),VERSION="$(VERSION)",) \
 		bash scripts/cut-release.sh

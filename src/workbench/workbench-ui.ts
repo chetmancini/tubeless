@@ -1,16 +1,10 @@
-import { stat } from "node:fs/promises";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import {
-  importModuleNamespace,
-  selectUniqueExport,
-  type WorkbenchPipelineCommand,
-} from "./pipeline-module.js";
+import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import { createRunId } from "../core/pipeline.js";
 import { observePipelineRunId } from "../core/pipeline-execute.js";
 import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
-import type { PipelineStudioConfig } from "./workbench-studio.js";
-import { isPipelineProjectManifest, type PipelineProjectManifest } from "./workbench-project.js";
+import { loadPipelineProjectManifest } from "./workbench-project-loader.js";
 import type { PipelineRunEventReader } from "../run-store/run-store.js";
 import type {
   PipelineRunStudioCommand,
@@ -30,11 +24,11 @@ import {
 } from "./workbench-shared.js";
 import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
-const UI_USAGE = `Usage: tubeless ui [options] [studio-file]
+const UI_USAGE = `Usage: tubeless ui [options] [project-file]
 
 Serve the local pipeline studio from an append-only SQLite run store or a
 finished NDJSON trace. Register definePipelineCommand modules directly or through
-a project or studio manifest, and only with a writable SQLite store.
+a project manifest, and only with a writable SQLite store.
 
 Options:
       --command <path> Register a launchable pipeline command (repeatable)
@@ -112,38 +106,6 @@ interface StudioCommandSpec {
   name?: string;
 }
 
-async function loadPipelineUiManifest(
-  fileArgument: string,
-  io: WorkbenchCliIo
-): Promise<
-  | { config: PipelineProjectManifest | PipelineStudioConfig; filePath: string }
-  | { exitCode: typeof TUBELESS_WORKBENCH_EXIT_CODE.load }
-> {
-  const filePath = path.resolve(io.cwd, fileArgument);
-  try {
-    const fileStat = await stat(filePath);
-    if (!fileStat.isFile()) throw new Error(`${filePath} is not a file.`);
-    const [{ isPipelineStudioConfig }, moduleExports] = await Promise.all([
-      import("./workbench-studio.js"),
-      importModuleNamespace(filePath),
-    ]);
-    return {
-      config: selectUniqueExport(
-        moduleExports,
-        undefined,
-        (value): value is PipelineProjectManifest | PipelineStudioConfig =>
-          isPipelineProjectManifest(value) || isPipelineStudioConfig(value),
-        "project or studio manifest",
-        { hintExport: false }
-      ).value,
-      filePath,
-    };
-  } catch (error) {
-    io.stderr.write(`Error: ${errorMessage(error)}\n`);
-    return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load };
-  }
-}
-
 export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
@@ -151,21 +113,21 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
       parse: parseUiArgs,
       async run(parsed, commandIo) {
         if (parsed.positionals.length > 1) {
-          return writeUsageError(commandIo, "Pass at most one studio config file.", UI_USAGE);
+          return writeUsageError(commandIo, "Pass at most one project manifest.", UI_USAGE);
         }
         const directCommandFiles = parsed.values.command ?? [];
-        const studioFile = parsed.positionals[0];
+        const projectFile = parsed.positionals[0];
         if (parsed.values.store && parsed.values.trace) {
           return writeUsageError(io, "Use --store or --trace, not both.", UI_USAGE);
         }
-        if (parsed.values.trace && (directCommandFiles.length > 0 || studioFile)) {
+        if (parsed.values.trace && (directCommandFiles.length > 0 || projectFile)) {
           return writeUsageError(
             io,
             "An NDJSON trace is read-only and cannot register launchable commands.",
             UI_USAGE
           );
         }
-        if (parsed.values.export && (directCommandFiles.length !== 1 || studioFile)) {
+        if (parsed.values.export && (directCommandFiles.length !== 1 || projectFile)) {
           return writeUsageError(
             io,
             "--export requires exactly one registered --command.",
@@ -187,13 +149,13 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           }
           return spec;
         });
-        if (studioFile) {
-          const loadedConfig = await loadPipelineUiManifest(studioFile, io);
+        if (projectFile) {
+          const loadedConfig = await loadPipelineProjectManifest(projectFile, io);
           if ("exitCode" in loadedConfig) return loadedConfig.exitCode;
           const configDirectory = path.dirname(loadedConfig.filePath);
-          const configCwd = path.resolve(configDirectory, loadedConfig.config.cwd ?? ".");
+          const configCwd = path.resolve(configDirectory, loadedConfig.manifest.cwd ?? ".");
           specs.push(
-            ...loadedConfig.config.commands.map((command) => {
+            ...loadedConfig.manifest.commands.map((command) => {
               const spec: StudioCommandSpec = {
                 cwd: configCwd,
                 filePath: path.resolve(configDirectory, command.file),
@@ -201,9 +163,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
               if (command.export !== undefined) {
                 spec.exportName = command.export;
               }
-              if ("id" in command) {
-                spec.id = command.id;
-              }
+              spec.id = command.id;
               if (command.name !== undefined) {
                 spec.name = command.name;
               }

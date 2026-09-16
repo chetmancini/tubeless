@@ -112,8 +112,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   long waits. Use `context.sleep` for retry-aware or testable delays.
 - Call `context.reportProgress` for long loops and `context.reportAttempt` for
   retries that operators should see.
-- Resolve relative files from `context.cwd`; prefer helpers from
-  `tubeless/node`.
+- Resolve relative files from `context.cwd` with `node:path`.
 - Use `runOrThrow` when every step must succeed and the caller expects a value.
   It always throws for an unsuccessful run, including `continueOnError` runs.
   Use `run` when the caller must inspect failures, skips, timings, or best-effort
@@ -205,9 +204,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   bound authority, or, on a wildcard bind, `localhost` or a literal IP on the
   same port. Browser plan, launch, cancel, and clear-history also send
   `x-tubeless-studio-*` headers; those are same-origin guards, not
-  authentication. Studio HTTP errors contain stable `code`, `message`, `hint`,
-  and a backward-compatible `error` alias; the local API is documented
-  at `https://tubeless.io/openapi.json`. Cancel a live top-level launch from the running detail pane;
+  authentication. Studio HTTP errors contain stable `code`, `message`, and
+  `hint`; the local API is documented at `https://tubeless.io/openapi.json`.
+  Cancel a live top-level launch from the running detail pane;
   that abort is process-local, leaves sibling launches running, and is not
   crash-resume.
 
@@ -229,8 +228,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 - Read [core concepts](./concepts.md) for skip, failure, or selection changes.
 - Read [the CLI](./cli.md) for list, inspect, plan, graph, run, history, and exit codes.
-- Read [the studio](./studio.md) before changing `tubeless ui`,
-  `definePipelineProject`, or `definePipelineStudio` compatibility.
+- Read [the studio](./studio.md) before changing `tubeless ui` or
+  `definePipelineProject`.
 - Read [child composition](./child-pipeline-composition.md) before changing child
   propagation, progress, or parent/child selection.
 - Read the relevant executable example linked from the

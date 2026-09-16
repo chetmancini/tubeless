@@ -133,11 +133,6 @@
       "import": "./dist/run-store/run-store-ndjson.js",
       "default": "./dist/run-store/run-store-ndjson.js"
     },
-    "./workbench/studio": {
-      "types": "./dist/workbench/workbench-studio.d.ts",
-      "import": "./dist/workbench/workbench-studio.js",
-      "default": "./dist/workbench/workbench-studio.js"
-    },
     "./workbench/project": {
       "types": "./dist/workbench/workbench-project.d.ts",
       "import": "./dist/workbench/workbench-project.js",

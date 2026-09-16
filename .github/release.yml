@@ -1,6 +1,4 @@
-# Categories for GitHub's generated release notes (merged pull requests).
-# The tag annotation is still the human changelog; this only sorts the
-# generated "What's Changed" section. See CONTRIBUTING.md.
+# Categories for GitHub's generated release notes. See CONTRIBUTING.md.
 
 changelog:
   exclude:

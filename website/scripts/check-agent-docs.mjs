@@ -26,7 +26,6 @@ assert.deepEqual(Object.keys(openapi.paths).sort(), [
 ]);
 assert.deepEqual(openapi.components.schemas.ErrorResponse.required.sort(), [
   "code",
-  "error",
   "hint",
   "message",
 ]);

@@ -176,16 +176,17 @@ async function writeStudioConfig(
 ): Promise<void> {
   const exportName = command.exportName ?? "FixtureCommand";
   const name = command.name ?? "Studio fixture";
-  const studioModuleUrl = pathToFileURL(path.resolve("dist/workbench/workbench-studio.js")).href;
+  const projectModuleUrl = pathToFileURL(path.resolve("dist/workbench/workbench-project.js")).href;
   const configDirectory = path.join(directory, "config");
   await mkdir(configDirectory);
   await writeFile(
-    path.join(configDirectory, "tubeless.studio.mjs"),
+    path.join(configDirectory, "tubeless.project.mjs"),
     `
-      import { definePipelineStudio } from ${JSON.stringify(studioModuleUrl)};
-      export default definePipelineStudio({
+      import { definePipelineProject } from ${JSON.stringify(projectModuleUrl)};
+      export default definePipelineProject({
         cwd: "..",
         commands: [{
+          id: "fixture",
           file: "../pipeline.mjs",
           export: ${JSON.stringify(exportName)},
           name: ${JSON.stringify(name)},
@@ -1494,7 +1495,7 @@ describe("tubeless workbench", () => {
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
   });
 
-  it("loads and launches explicitly registered commands from a studio config", async () => {
+  it("loads and launches explicitly registered commands from a project manifest", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     await writeStudioConfig(directory);
     const controller = new AbortController();
@@ -1506,7 +1507,7 @@ describe("tubeless workbench", () => {
         path.join(directory, "runs.sqlite"),
         "--port",
         "0",
-        "config/tubeless.studio.mjs",
+        "config/tubeless.project.mjs",
       ],
       io
     );
@@ -1520,7 +1521,7 @@ describe("tubeless workbench", () => {
     expect(commands).toEqual({
       commands: [
         expect.objectContaining({
-          id: `${path.join(directory, "pipeline.mjs")}#FixtureCommand`,
+          id: "fixture",
           name: "Studio fixture",
         }),
       ],
@@ -1612,7 +1613,7 @@ describe("tubeless workbench", () => {
         path.join(directory, "runs.sqlite"),
         "--port",
         "0",
-        "config/tubeless.studio.mjs",
+        "config/tubeless.project.mjs",
       ],
       io
     );
@@ -1671,7 +1672,7 @@ describe("tubeless workbench", () => {
         path.join(directory, "runs.sqlite"),
         "--port",
         "0",
-        "config/tubeless.studio.mjs",
+        "config/tubeless.project.mjs",
       ],
       io
     );
@@ -1694,7 +1695,6 @@ describe("tubeless workbench", () => {
     await expect(failed.json()).resolves.toEqual({
       accepted: false,
       code: "launch_rejected",
-      error: "Pipeline launch was rejected.",
       errors: [
         `Pipeline command exited (${TUBELESS_WORKBENCH_EXIT_CODE.execution}) before recording a run.`,
       ],
@@ -1732,7 +1732,7 @@ describe("tubeless workbench", () => {
         path.join(directory, "runs.sqlite"),
         "--port",
         "0",
-        "config/tubeless.studio.mjs",
+        "config/tubeless.project.mjs",
       ],
       io
     );
@@ -1768,7 +1768,6 @@ describe("tubeless workbench", () => {
     await expect(failed.json()).resolves.toEqual({
       accepted: false,
       code: "launch_rejected",
-      error: "Pipeline launch was rejected.",
       errors: ["The local studio is stopping."],
       hint: "Review errors and retry only after resolving the reported cause.",
       message: "Pipeline launch was rejected.",
@@ -1788,7 +1787,7 @@ describe("tubeless workbench", () => {
         path.join(directory, "runs.sqlite"),
         "--port",
         "0",
-        "config/tubeless.studio.mjs",
+        "config/tubeless.project.mjs",
       ],
       io
     );
@@ -1892,7 +1891,7 @@ describe("tubeless workbench", () => {
     const catalogIo = captureIo(directory);
     await expect(
       runWorkbenchCli(
-        ["ui", "--host", "0.0.0.0", "--port", "0", "config/tubeless.studio.mjs"],
+        ["ui", "--host", "0.0.0.0", "--port", "0", "config/tubeless.project.mjs"],
         catalogIo
       )
     ).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);

@@ -9,6 +9,5 @@
   "ignoreExportsUsedInFile": {
     "interface": true,
     "type": true
-  },
-  "ignoreBinaries": ["fzf"]
+  }
 }

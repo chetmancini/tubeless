@@ -81,7 +81,7 @@ function writeError(
   message: string,
   hint: string
 ): void {
-  writeJson(response, { code, error: message, hint, message }, status);
+  writeJson(response, { code, hint, message }, status);
 }
 
 function isAddressInfo(
@@ -408,7 +408,6 @@ export async function startPipelineRunStudio(
             {
               ...result,
               code: "launch_rejected",
-              error: "Pipeline launch was rejected.",
               hint: "Review errors and retry only after resolving the reported cause.",
               message: "Pipeline launch was rejected.",
             },

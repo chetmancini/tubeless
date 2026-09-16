@@ -222,8 +222,7 @@ structured errors, and one terminal report per planned step. Pass
 `context.correlationId` when an external orchestrator owns a reusable job or
 workflow identifier. Pass `context.parentRunId` only when linking to another
 Tubeless execution ID. The same identities are available in step contexts and
-optional trace exports. The deprecated caller input `context.runId` is treated
-as a correlation ID; it no longer controls execution identity.
+optional trace exports.
 
 An actual step execution receives one `attemptId`. It appears on the
 `PipelineStepContext`, its terminal `PipelineStepReport`, and trace lifecycle

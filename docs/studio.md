@@ -110,10 +110,6 @@ IDs and duplicate module registrations fail when the manifest loads. The
 optional `name` changes a display label, not the registered command ID or the
 pipeline's own ID.
 
-Older `definePipelineStudio` catalogs still work with `tubeless ui` and keep
-their `file#export` identities. Use `definePipelineProject` when the same catalog
-should support `list`, `inspect`, `plan`, `graph`, and `run`.
-
 ## Storage behavior
 
 SQLite stores an append-only stream of events. Studio builds run summaries,
@@ -193,6 +189,5 @@ Studio API, including the exact headers for each operation. `tubeless.io`
 hosts that specification; pipeline execution takes place on your machine.
 A launch response with HTTP 202 means its run ID is already queryable.
 
-Error responses use JSON with a stable `code`, a readable `message`, a `hint`,
-and an `error` alias that currently contains the same text as `message`.
-Branch on `code` when handling errors in application code.
+Error responses use JSON with a stable `code`, a readable `message`, and a
+`hint`. Branch on `code` when handling errors in application code.
