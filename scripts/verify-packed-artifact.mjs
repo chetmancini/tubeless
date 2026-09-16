@@ -336,7 +336,6 @@ try {
     "docs/studio.md",
     "examples/typed-import.ts",
     "examples/catalog/tubeless.project.ts",
-    "examples/catalog/tubeless.studio.ts",
     "examples/catalog/pipelines/import.ts",
     "examples/catalog/pipelines/enrich.ts",
     "examples/catalog/scripts/import.ts",

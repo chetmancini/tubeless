@@ -74,17 +74,18 @@ async function writeCommandFixture(): Promise<{ directory: string; filePath: str
 }
 
 async function writeStudioConfig(directory: string): Promise<string> {
-  const studioModuleUrl = pathToFileURL(path.resolve("dist/workbench/workbench-studio.js")).href;
+  const projectModuleUrl = pathToFileURL(path.resolve("dist/workbench/workbench-project.js")).href;
   const configDirectory = path.join(directory, "config");
   await mkdir(configDirectory);
-  const filePath = path.join(configDirectory, "tubeless.studio.mjs");
+  const filePath = path.join(configDirectory, "tubeless.project.mjs");
   await writeFile(
     filePath,
     `
-      import { definePipelineStudio } from ${JSON.stringify(studioModuleUrl)};
-      export default definePipelineStudio({
+      import { definePipelineProject } from ${JSON.stringify(projectModuleUrl)};
+      export default definePipelineProject({
         cwd: "..",
         commands: [{
+          id: "fixture",
           file: "../pipeline.mjs",
           export: "FixtureCommand",
           name: "Studio fixture",
@@ -108,7 +109,7 @@ describe("runUi", () => {
     const exitCode = await runUi(["--help"], io);
 
     expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
-    expect(io.output.join("")).toContain("Usage: tubeless ui [options] [studio-file]");
+    expect(io.output.join("")).toContain("Usage: tubeless ui [options] [project-file]");
     expect(io.output.join("")).toContain("--command <path>");
     expect(io.output.join("")).toContain("--port <number>");
     expect(io.errors).toEqual([]);
@@ -149,7 +150,7 @@ describe("runUi", () => {
     expect(await runUi(["first.mjs", "second.mjs"], twoStudios)).toBe(
       TUBELESS_WORKBENCH_EXIT_CODE.usage
     );
-    expect(twoStudios.errors.join("")).toContain("Error: Pass at most one studio config file.");
+    expect(twoStudios.errors.join("")).toContain("Error: Pass at most one project manifest.");
 
     const duplicate = captureIo(directory);
     expect(await runUi(["--command", "pipeline.mjs", "--command", "pipeline.mjs"], duplicate)).toBe(
@@ -242,12 +243,18 @@ describe("runUi", () => {
   });
 
   it("registers studio commands and clears launch bookkeeping after the run settles", async () => {
-    const { directory, filePath } = await writeCommandFixture();
+    const { directory } = await writeCommandFixture();
     await writeStudioConfig(directory);
     const controller = new AbortController();
     const io = { ...captureIo(directory), signal: controller.signal };
     const pending = runUi(
-      ["--store", path.join(directory, "runs.sqlite"), "--port", "0", "config/tubeless.studio.mjs"],
+      [
+        "--store",
+        path.join(directory, "runs.sqlite"),
+        "--port",
+        "0",
+        "config/tubeless.project.mjs",
+      ],
       io
     );
     try {
@@ -268,7 +275,7 @@ describe("runUi", () => {
         commands: [
           expect.objectContaining({
             canPlan: true,
-            id: `${filePath}#FixtureCommand`,
+            id: "fixture",
             name: "Studio fixture",
           }),
         ],
@@ -358,7 +365,13 @@ describe("runUi", () => {
       },
     };
     const pending = runUi(
-      ["--store", path.join(directory, "runs.sqlite"), "--port", "0", "config/tubeless.studio.mjs"],
+      [
+        "--store",
+        path.join(directory, "runs.sqlite"),
+        "--port",
+        "0",
+        "config/tubeless.project.mjs",
+      ],
       io
     );
 
@@ -372,7 +385,7 @@ describe("runUi", () => {
         const payload = (await response.json()) as { commands: { id: string }[] };
         return payload.commands[0]?.id;
       });
-      expect(commandId).toBe(`${filePath}#FixtureCommand`);
+      expect(commandId).toBe("fixture");
       const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
         body: JSON.stringify({ values: { message: "boom" } }),
         headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },

@@ -8,7 +8,7 @@ import { PIPELINE_RUN_STUDIO_SCRIPT, PIPELINE_RUN_STUDIO_STYLE } from "./run-sto
 import { startPipelineRunStudio, type PipelineRunStudioServer } from "./run-store-ui.js";
 
 function studioError(code: string, message: string, hint: string) {
-  return { code, error: message, hint, message };
+  return { code, hint, message };
 }
 
 const untrustedHostError = studioError(

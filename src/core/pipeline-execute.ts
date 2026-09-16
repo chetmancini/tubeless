@@ -252,7 +252,7 @@ export async function executePlannedRun<
   } catch {
     // Ignore observation failures; execution identity remains package-owned.
   }
-  const correlationId = runtime.correlationId ?? runtime.runId;
+  const correlationId = runtime.correlationId;
   const identity: PipelineRunIdentity = { runId };
   if (correlationId !== undefined) identity.correlationId = correlationId;
   if (runtime.parentRunId) identity.parentRunId = runtime.parentRunId;

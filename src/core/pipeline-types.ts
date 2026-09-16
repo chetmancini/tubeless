@@ -22,11 +22,6 @@ export interface PipelineContext {
   now?: () => number;
   /** Optional package-generated execution identity of this run's parent. */
   parentRunId?: string;
-  /**
-   * @deprecated Use `correlationId`. This value is treated as reusable external
-   * correlation and never as the execution's unique `runId`.
-   */
-  runId?: string;
   signal?: AbortSignal;
   sleep?: (durationMs: number, signal?: AbortSignal) => Promise<void>;
   /** Optional structured lifecycle tracing configuration for this run. */

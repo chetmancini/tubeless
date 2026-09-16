@@ -5,11 +5,6 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      notes:
-        description: "Optional. Override generated release notes. Leave empty to auto-generate from commits and GitHub notes (or to retry when the tag already exists)."
-        required: false
-        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -30,10 +25,9 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      - name: Cut version tag and GitHub Release
+      - name: Cut version tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NOTES: ${{ inputs.notes }}
         run: |
           set -euo pipefail
           if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
@@ -42,40 +36,21 @@ jobs:
           fi
           version="$(node -p 'require("./package.json").version')"
           tag="v${version}"
-          last="$(git tag -l 'v*' --sort=-version:refname | awk '{ print; exit }')"
-          if [[ -n "${last}" && ! "${last}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
-            echo "refusing to classify against non-semver tag ${last}" >&2
-            exit 1
-          fi
-          eval "$(node scripts/semver-bump.mjs --from "${last}" --to "${version}" --sh)"
-          echo "cut ${tag} — ${summary}"
           if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
             echo "${tag} already exists; skipping tag"
-            if ! gh release view "${tag}" >/dev/null 2>&1; then
-              git fetch origin "refs/tags/${tag}:refs/tags/${tag}"
-              bash scripts/publish-github-release.sh "${tag}"
-            fi
-            exit 0
-          fi
-          if [[ "${kind}" == "same" || "${kind}" == "downgrade" || "${kind}" == "invalid" ]]; then
-            echo "refusing ${summary}" >&2
-            exit 1
-          fi
-          notes_path="$(mktemp)"
-          if [[ -n "${NOTES}" ]]; then
-            printf '%s\n' "${NOTES}" > "${notes_path}"
           else
-            bash scripts/generate-release-notes.sh "${tag}" > "${notes_path}"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "${tag}" -m "tubeless ${version}"
+            git push origin "${tag}"
           fi
-          if ! grep -q '[^[:space:]]' "${notes_path}"; then
-            echo "release notes are empty" >&2
-            exit 1
+          if ! gh release view "${tag}" >/dev/null 2>&1; then
+            args=(--verify-tag --generate-notes)
+            if [[ "${tag}" == *-* ]]; then
+              args+=(--prerelease --latest=false)
+            fi
+            gh release create "${tag}" "${args[@]}"
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "${tag}" -F "${notes_path}"
-          git push origin "${tag}"
-          bash scripts/publish-github-release.sh "${tag}"
 
   publish:
     needs: [cut]

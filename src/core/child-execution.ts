@@ -90,7 +90,6 @@ function publicChildRuntime(context: PipelineContext): PipelineRuntime {
   if (context.correlationId !== undefined) runtime.correlationId = context.correlationId;
   if (context.hooks) runtime.hooks = context.hooks;
   if (context.parentRunId) runtime.parentRunId = context.parentRunId;
-  if (context.runId) runtime.runId = context.runId;
   if (context.signal) runtime.signal = context.signal;
   if (context.tracing) runtime.tracing = context.tracing;
   return runtime;
@@ -116,7 +115,7 @@ async function failedPublicChildPlanRun(
     steps: [],
     version: RUN_MODEL_VERSION,
   };
-  const correlationId = context.correlationId ?? context.runId;
+  const correlationId = context.correlationId;
   if (correlationId !== undefined) result.correlationId = correlationId;
   if (context.parentRunId) result.parentRunId = context.parentRunId;
   await emitRejectedPlanLifecycle(pipeline.id, pipeline.targetIds, plan, runtime, result);

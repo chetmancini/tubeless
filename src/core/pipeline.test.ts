@@ -125,22 +125,6 @@ describe("definePipeline", () => {
     expect(log.log).toHaveBeenCalledWith("loading", "rows.json");
   });
 
-  it("treats the deprecated caller runId as reusable correlation", async () => {
-    const step = createSteps();
-    const pipeline = definePipeline({
-      id: "legacy-correlation",
-      steps: [step("work", { run: () => "ok" })],
-      finalize: () => "ok",
-    });
-
-    const first = await pipeline.run({}, undefined, { runId: "reused" });
-    const second = await pipeline.run({}, undefined, { runId: "reused" });
-
-    expect(first.correlationId).toBe("reused");
-    expect(second.correlationId).toBe("reused");
-    expect(first.runId).not.toBe(second.runId);
-  });
-
   it("ignores forged Studio preallocation symbols", async () => {
     const step = createSteps();
     const pipeline = definePipeline({

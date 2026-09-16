@@ -8,8 +8,7 @@ import {
 } from "tubeless";
 import { createPipelineReporter, createRunReporter } from "tubeless/reporter";
 import { chunk, runConcurrent } from "tubeless/batch";
-import { parseMultiSelectInput, TUBELESS_WORKBENCH_EXIT_CODE } from "tubeless/cli";
-import { definePaths, requireEnv } from "tubeless/node";
+import { TUBELESS_WORKBENCH_EXIT_CODE } from "tubeless/cli";
 import { RateLimiter } from "tubeless/rate-limit";
 import { withRetry } from "tubeless/retry";
 import type { PipelineTraceEvent } from "tubeless/tracing";
@@ -183,11 +182,7 @@ describe("public API example", () => {
     ).resolves.toEqual([2, 4]);
   });
 
-  it("parses multi-select input through tubeless/cli", () => {
-    expect(parseMultiSelectInput("1 2", ["a", "b"])).toEqual({
-      kind: "values",
-      values: ["a", "b"],
-    });
+  it("exports workbench exit codes through tubeless/cli", () => {
     expect(TUBELESS_WORKBENCH_EXIT_CODE).toMatchObject({
       success: 0,
       usage: 1,
@@ -198,25 +193,6 @@ describe("public API example", () => {
       execution: 6,
       cancellation: 7,
     });
-  });
-
-  it("resolves paths and env through tubeless/node", () => {
-    const paths = definePaths({ tmp: "tmp" })("/workspace");
-    expect(paths.tmp).toMatch(/[/\\]workspace[/\\]tmp$/);
-
-    const previous = process.env.TUBELESS_CORE_PUBLIC_API_SMOKE_ENV;
-    process.env.TUBELESS_CORE_PUBLIC_API_SMOKE_ENV = "smoke-value";
-    try {
-      expect(requireEnv("TUBELESS_CORE_PUBLIC_API_SMOKE_ENV", "public-api-smoke")).toBe(
-        "smoke-value"
-      );
-    } finally {
-      if (previous === undefined) {
-        delete process.env.TUBELESS_CORE_PUBLIC_API_SMOKE_ENV;
-      } else {
-        process.env.TUBELESS_CORE_PUBLIC_API_SMOKE_ENV = previous;
-      }
-    }
   });
 
   it("schedules once through tubeless/rate-limit", async () => {

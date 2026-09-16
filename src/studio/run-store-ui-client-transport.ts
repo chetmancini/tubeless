@@ -267,13 +267,7 @@ function responseError(value: unknown, fallback: string): Error {
   if (Array.isArray(value.errors) && value.errors.every((item) => typeof item === "string")) {
     return new Error(value.errors.join("\n"));
   }
-  return new Error(
-    typeof value.message === "string"
-      ? value.message
-      : typeof value.error === "string"
-        ? value.error
-        : fallback
-  );
+  return new Error(typeof value.message === "string" ? value.message : fallback);
 }
 
 async function readJson(response: Response): Promise<unknown> {

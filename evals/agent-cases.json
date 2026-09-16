@@ -153,10 +153,10 @@
     },
     {
       "id": "local-studio",
-      "prompt": "Persist pipeline runs in a local SQLite store and expose a checked-in studio catalog of explicit definePipelineCommand modules.",
+      "prompt": "Persist pipeline runs in a local SQLite store and expose a checked-in project manifest of explicit definePipelineCommand modules.",
       "mustDemonstrate": [
         "SQLite run store",
-        "definePipelineStudio",
+        "definePipelineProject",
         "explicit command registration"
       ],
       "mustAvoid": [

@@ -1,201 +1,41 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
-import { afterEach, describe, expect, it } from "vitest";
+import { join } from "node:path";
+import { afterEach, expect, it } from "vitest";
 
-const scriptsDir = dirname(fileURLToPath(import.meta.url));
-const cutRelease = join(scriptsDir, "cut-release.sh");
+const temporaryDirectories: string[] = [];
 
-const temps: string[] = [];
-
-afterEach(() => {
-  for (const dir of temps.splice(0)) {
-    rmSync(dir, { recursive: true, force: true });
-  }
+afterEach(async () => {
+  await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true })));
 });
 
-function run(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv = {}) {
-  return spawnSync(command, args, {
-    cwd,
-    encoding: "utf8",
-    env: { ...process.env, ...env },
-    timeout: 10_000,
-  });
-}
-
-function git(cwd: string, args: string[]) {
-  const result = run("git", args, cwd);
-  if (result.status !== 0) {
-    throw new Error(`git ${args.join(" ")} failed:\n${result.stdout}\n${result.stderr}`);
-  }
-  return result.stdout.trim();
-}
-
-function writePackage(cwd: string, version: string) {
-  writeFileSync(
-    join(cwd, "package.json"),
-    `${JSON.stringify({ name: "tubeless", private: true, version }, null, 2)}\n`
+it("rejects simultaneous BUMP and VERSION requests", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "tubeless-release-"));
+  const remote = await mkdtemp(join(tmpdir(), "tubeless-release-remote-"));
+  temporaryDirectories.push(directory, remote);
+  await mkdir(join(directory, "scripts"));
+  await copyFile(
+    new URL("./cut-release.sh", import.meta.url),
+    join(directory, "scripts/cut-release.sh")
   );
-}
+  await writeFile(join(directory, "package.json"), '{"version":"1.0.0"}\n');
 
-function packageVersion(cwd: string) {
-  return JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")).version;
-}
+  execFileSync("git", ["init", "--initial-branch=main"], { cwd: directory });
+  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: directory });
+  execFileSync("git", ["config", "user.name", "Test"], { cwd: directory });
+  execFileSync("git", ["add", "."], { cwd: directory });
+  execFileSync("git", ["commit", "-m", "Initial"], { cwd: directory });
+  execFileSync("git", ["init", "--bare"], { cwd: remote });
+  execFileSync("git", ["remote", "add", "origin", remote], { cwd: directory });
+  execFileSync("git", ["push", "-u", "origin", "main"], { cwd: directory });
 
-function setupRepo(version = "0.1.0", tag = "v0.1.0") {
-  const dir = mkdtempSync(join(tmpdir(), "cut-release-"));
-  const remote = mkdtempSync(join(tmpdir(), "cut-release-remote-"));
-  temps.push(dir, remote);
-
-  run("git", ["init", "--bare"], remote);
-  git(dir, ["init", "-b", "main"]);
-  git(dir, ["config", "user.name", "Release Test"]);
-  git(dir, ["config", "user.email", "release@example.com"]);
-  writePackage(dir, version);
-  git(dir, ["add", "package.json"]);
-  git(dir, ["commit", "-m", "Initial version"]);
-  if (tag) {
-    git(dir, ["tag", "-a", tag, "-m", tag]);
-  }
-  git(dir, ["remote", "add", "origin", remote]);
-  git(dir, ["push", "-u", "origin", "main"]);
-  if (tag) {
-    git(dir, ["push", "origin", tag]);
-  }
-  return dir;
-}
-
-function commitVersion(dir: string, version: string) {
-  writePackage(dir, version);
-  git(dir, ["add", "package.json"]);
-  git(dir, ["commit", "-m", `Prepare ${version}`]);
-  git(dir, ["push", "origin", "main"]);
-}
-
-function release(cwd: string, env: NodeJS.ProcessEnv = {}) {
-  return run("bash", [cutRelease], cwd, {
-    RELEASE_ROOT: cwd,
-    SKIP_CHECK: "1",
-    EDIT: "0",
-    WATCH: "0",
-    NOTES: "test notes",
-    PUSH: "0",
-    BUMP: "",
-    VERSION: "",
-    ...env,
-  });
-}
-
-describe("cut-release version bump", { timeout: 15_000 }, () => {
-  it("bumps package.json, commits, and tags without pushing when PUSH=0", () => {
-    const dir = setupRepo();
-    const before = git(dir, ["rev-parse", "HEAD"]);
-
-    const result = release(dir);
-    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(packageVersion(dir)).toBe("0.1.1");
-    expect(git(dir, ["log", "-1", "--pretty=%s"])).toBe("Bump version to 0.1.1.");
-    expect(git(dir, ["rev-parse", "HEAD"])).not.toBe(before);
-    expect(git(dir, ["tag", "-l", "v0.1.1"])).toBe("v0.1.1");
-    expect(git(dir, ["rev-parse", "origin/main"])).toBe(before);
-    expect(result.stdout).toContain("git push origin main");
-    expect(result.stdout).toContain("git push origin v0.1.1");
+  const result = spawnSync("bash", ["scripts/cut-release.sh"], {
+    cwd: directory,
+    encoding: "utf8",
+    env: { ...process.env, BUMP: "minor", VERSION: "2.0.0" },
   });
 
-  it("tags an already-bumped package.json without committing", () => {
-    const dir = setupRepo();
-    commitVersion(dir, "0.1.1");
-    const before = git(dir, ["rev-parse", "HEAD"]);
-
-    const result = release(dir);
-    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(packageVersion(dir)).toBe("0.1.1");
-    expect(git(dir, ["rev-parse", "HEAD"])).toBe(before);
-    expect(git(dir, ["log", "-1", "--pretty=%s"])).toBe("Prepare 0.1.1");
-    expect(git(dir, ["tag", "-l", "v0.1.1"])).toBe("v0.1.1");
-    expect(result.stdout).not.toContain("git push origin main");
-    expect(result.stdout).toContain("git push origin v0.1.1");
-  });
-
-  it("refuses BUMP when it disagrees with an already-bumped package.json", () => {
-    const dir = setupRepo();
-    commitVersion(dir, "0.1.1");
-
-    const result = release(dir, { BUMP: "minor" });
-    expect(result.status).not.toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toMatch(/refusing BUMP=minor/);
-    expect(packageVersion(dir)).toBe("0.1.1");
-    expect(git(dir, ["tag", "-l", "v0.1.1"])).toBe("");
-    expect(git(dir, ["tag", "-l", "v0.2.0"])).toBe("");
-  });
-
-  it("warns when BUMP matches an already-bumped package.json", () => {
-    const dir = setupRepo();
-    commitVersion(dir, "0.1.1");
-
-    const result = release(dir, { BUMP: "patch" });
-    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(packageVersion(dir)).toBe("0.1.1");
-    expect(git(dir, ["log", "-1", "--pretty=%s"])).toBe("Prepare 0.1.1");
-    expect(git(dir, ["tag", "-l", "v0.1.1"])).toBe("v0.1.1");
-    expect(`${result.stdout}\n${result.stderr}`).toMatch(/ignoring BUMP=patch/);
-  });
-
-  it("stops before writing when DRY=1", () => {
-    const dir = setupRepo();
-    const before = git(dir, ["rev-parse", "HEAD"]);
-
-    const result = release(dir, { DRY: "1" });
-    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(packageVersion(dir)).toBe("0.1.0");
-    expect(git(dir, ["rev-parse", "HEAD"])).toBe(before);
-    expect(git(dir, ["tag", "-l", "v0.1.1"])).toBe("");
-    expect(result.stdout).toMatch(/0\.1\.1/);
-  });
-
-  it("honors BUMP=minor", () => {
-    const dir = setupRepo();
-    const result = release(dir, { BUMP: "minor" });
-    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(packageVersion(dir)).toBe("0.2.0");
-  });
-
-  it("honors BUMP=prerelease", () => {
-    const dir = setupRepo();
-    const result = release(dir, { BUMP: "prerelease" });
-    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(packageVersion(dir)).toBe("0.1.1-rc.0");
-  });
-
-  it("honors an explicit VERSION", () => {
-    const dir = setupRepo();
-    const previousBump = process.env.BUMP;
-    process.env.BUMP = "minor";
-    try {
-      const result = release(dir, { VERSION: "0.2.0-rc.1" });
-      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-      expect(packageVersion(dir)).toBe("0.2.0-rc.1");
-    } finally {
-      if (previousBump === undefined) delete process.env.BUMP;
-      else process.env.BUMP = previousBump;
-    }
-  });
-
-  it("writes the version and leaves it uncommitted when check fails", () => {
-    const dir = setupRepo();
-    writeFileSync(join(dir, "Makefile"), "check:\n\t@echo failing check >&2; exit 1\n");
-    git(dir, ["add", "Makefile"]);
-    git(dir, ["commit", "-m", "Failing check"]);
-    git(dir, ["push", "origin", "main"]);
-    const before = git(dir, ["rev-parse", "HEAD"]);
-
-    const result = release(dir, { SKIP_CHECK: "" });
-    expect(result.status).not.toBe(0);
-    expect(packageVersion(dir)).toBe("0.1.1");
-    expect(git(dir, ["rev-parse", "HEAD"])).toBe(before);
-    expect(git(dir, ["tag", "-l", "v0.1.1"])).toBe("");
-    expect(`${result.stdout}\n${result.stderr}`).toMatch(/git checkout -- package\.json/);
-  });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("use BUMP or VERSION, not both");
 });

@@ -214,7 +214,6 @@ const requiredDocuments = [
   "skills/tubeless/SKILL.md",
   "skills/tubeless-make-pipeline/SKILL.md",
   "examples/catalog/tubeless.project.ts",
-  "examples/catalog/tubeless.studio.ts",
   "examples/catalog/pipelines/import.ts",
   "examples/catalog/pipelines/normalize.ts",
   "examples/catalog/pipelines/publish.ts",

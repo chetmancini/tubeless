@@ -240,7 +240,7 @@ const spec = {
       ErrorResponse: {
         type: "object",
         additionalProperties: false,
-        required: ["code", "error", "hint", "message"],
+        required: ["code", "hint", "message"],
         properties: {
           accepted: {
             const: false,
@@ -248,10 +248,6 @@ const spec = {
             description: "Present when command validation rejected a launch.",
           },
           code: { type: "string", description: "Stable machine-readable error code." },
-          error: {
-            type: "string",
-            description: "Backward-compatible alias of message.",
-          },
           errors: {
             type: "array",
             description: "Validation failures present when code is launch_rejected.",
