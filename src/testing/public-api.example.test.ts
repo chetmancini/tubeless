@@ -9,9 +9,11 @@ import {
 import { chunk, runConcurrent } from "tubeless/batch";
 import { RateLimiter } from "tubeless/rate-limit";
 import { withRetry } from "tubeless/retry";
-import type { PipelineTraceEvent } from "tubeless/tracing";
-import { createJsonTraceExporter } from "tubeless/tracing/json";
-import { createOpenTelemetryTraceExporter } from "tubeless/tracing/otel";
+import {
+  composeTraceExporters,
+  type PipelineTraceEvent,
+  type PipelineTraceExporter,
+} from "tubeless/tracing";
 import { definePipelineCommand, definePipelineProject } from "tubeless/workbench";
 
 interface ImportOptions {
@@ -180,8 +182,8 @@ describe("public API example", () => {
     await limiter.wait();
   });
 
-  it("exports structured traces through the documented public subpaths", () => {
-    const lines: string[] = [];
+  it("exports structured traces through the small observability boundary", async () => {
+    const events: PipelineTraceEvent[] = [];
     const event: PipelineTraceEvent = {
       name: "pipeline.completed",
       payload: {
@@ -196,15 +198,10 @@ describe("public API example", () => {
       timestampMs: 1,
       version: 2,
     };
-    createJsonTraceExporter({ write: (line) => lines.push(line) }).export(event);
+    const exporter: PipelineTraceExporter = { export: (next) => void events.push(next) };
+    await composeTraceExporters([exporter, { export: () => undefined }]).export(event);
 
-    const span = { addEvent: () => undefined, end: () => undefined };
-    const exporter = createOpenTelemetryTraceExporter({
-      tracer: { startSpan: () => span },
-    });
-    exporter.export(event);
-
-    expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({ pipelineId: "import" });
+    expect(events).toEqual([event]);
   });
 
   it("registers commands and project catalogs through the workbench entrypoint", () => {

@@ -8,7 +8,7 @@ import type {
   PipelineTraceAttributes,
   PipelineTraceContext,
   PipelineTracingOptions,
-} from "../tracing/tracing.js";
+} from "../tracing/tracing-contracts.js";
 
 export interface PipelineLogger {
   error(message?: unknown, ...optionalParams: unknown[]): void;

@@ -1,39 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import { createOpenTelemetryTraceExporter } from "./tracing-otel.js";
+import { createOpenTelemetryExporter } from "../../examples/tracing.js";
 
-// Mirrors the numeric enum shape of `@opentelemetry/api` without making this
-// dependency-free package test suite install OpenTelemetry itself.
-enum SpanStatusCode {
-  UNSET,
-  OK,
-  ERROR,
-}
-
-describe("createOpenTelemetryTraceExporter", () => {
-  it("creates a pipeline span, records lifecycle events, and ends it", () => {
+describe("OpenTelemetry tracing recipe", () => {
+  it("keeps trace identities and attempt attributes queryable", () => {
     const span = {
       addEvent: vi.fn(),
       end: vi.fn(),
       recordException: vi.fn(),
       setStatus: vi.fn(),
     };
-    const tracer: {
-      startSpan: (
-        name: string,
-        options?: {
-          attributes?: Readonly<Record<string, boolean | number | string>>;
-          startTime?: number;
-        }
-      ) => {
-        addEvent: typeof span.addEvent;
-        end: typeof span.end;
-        recordException: typeof span.recordException;
-        setStatus: (status: { code: SpanStatusCode; message?: string }) => unknown;
-      };
-    } = {
-      startSpan: vi.fn(() => span),
-    };
-    const exporter = createOpenTelemetryTraceExporter({ tracer });
+    const tracer = { startSpan: vi.fn(() => span) };
+    const exporter = createOpenTelemetryExporter(tracer);
 
     exporter.export({
       correlationId: "job-1",
@@ -45,9 +22,13 @@ describe("createOpenTelemetryTraceExporter", () => {
       version: 2,
     });
     exporter.export({
-      attemptId: "run-1:attempt:1",
+      attemptId: "attempt-1",
+      correlationId: "job-1",
+      durationMs: 3,
+      itemKey: "item-1",
       name: "step.attempted",
-      payload: { attempt: 2, attributes: { attempt: "custom", provider: "test" } },
+      parentRunId: "parent-1",
+      payload: { attempt: 2, attributes: { operation: "normalize", retryable: true } },
       pipelineId: "import",
       runId: "run-1",
       stepId: "fetch",
@@ -55,11 +36,9 @@ describe("createOpenTelemetryTraceExporter", () => {
       version: 2,
     });
     exporter.export({
-      attemptId: "run-1:attempt:1",
+      attemptId: "attempt-1",
       error: {
-        // SAFETY: fixture uses a non-kernel code the exporter should copy onto
-        // the OTEL event; PipelineTraceError.code is the closed union.
-        code: "NETWORK" as import("../core/pipeline.js").PipelineErrorCode,
+        code: "TUBELESS_STEP_FAILED",
         kind: "step",
         message: "network unavailable",
         phase: "execution",
@@ -97,15 +76,24 @@ describe("createOpenTelemetryTraceExporter", () => {
     });
     expect(span.addEvent).toHaveBeenCalledWith(
       "step.attempted",
-      expect.objectContaining({ attempt: 2, provider: "test" }),
+      expect.objectContaining({
+        attempt: 2,
+        operation: "normalize",
+        retryable: true,
+        "pipeline.attempt_id": "attempt-1",
+        "pipeline.correlation_id": "job-1",
+        "pipeline.duration_ms": 3,
+        "pipeline.item_key": "item-1",
+        "pipeline.parent_run_id": "parent-1",
+        "pipeline.step_id": "fetch",
+      }),
       11
     );
     expect(span.addEvent).toHaveBeenCalledWith(
       "step.failed",
       expect.objectContaining({
-        "error.code": "NETWORK",
-        "pipeline.attempt_id": "run-1:attempt:1",
-        "pipeline.step_id": "fetch",
+        "error.code": "TUBELESS_STEP_FAILED",
+        "error.message": "network unavailable",
       }),
       12
     );
@@ -113,7 +101,7 @@ describe("createOpenTelemetryTraceExporter", () => {
       expect.objectContaining({ message: "network unavailable" })
     );
     expect(span.setStatus).toHaveBeenCalledWith({
-      code: SpanStatusCode.ERROR,
+      code: 2,
       message: "network unavailable",
     });
     expect(span.end).toHaveBeenCalledWith(15);

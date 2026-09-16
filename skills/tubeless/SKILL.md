@@ -66,7 +66,9 @@ Read the corresponding package recipe before using these features:
   unrelated example IDs. Preserve existing consumer conventions.
 - Keep storage and Studio optional. Read `docs/studio.md` before adding them;
   read the composition guides before adding child or remote execution.
-- Use `composeTraceExporters` for multiple trace destinations. Finished traces
+- Implement concrete JSON or telemetry adapters in the application against
+  `PipelineTraceExporter`; adapt the package's `examples/tracing.ts`. Use
+  `composeTraceExporters` for multiple trace destinations. Finished traces
   can be read with `tubeless history --trace` or `tubeless ui --trace`; recorded
   contents are not redacted.
 

@@ -21,6 +21,7 @@ import { definePipelineProject } from "tubeless/workbench";
 // ../remote-steps.ts exports RemoteStepsPipeline (id: remote-steps).
 // ../host-embedding.ts exports HostedPipeline (id: hosted-import) and handleHostJob.
 // Register a command wrapper here only when the application owns its endpoint/config.
+// Application telemetry adapters implement PipelineTraceExporter; see ../tracing.ts.
 
 /** Checked-in project command catalog with stable registered identities. */
 export default definePipelineProject({

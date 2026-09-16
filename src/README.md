@@ -9,7 +9,7 @@ their source files.
 | Directory    | Responsibility                                                                                |
 | ------------ | --------------------------------------------------------------------------------------------- |
 | `core/`      | Pipeline definitions, graph planning, execution, lifecycle and progress                       |
-| `tracing/`   | Trace contracts, internal emission and optional exporters                                     |
+| `tracing/`   | Trace contracts, internal emission and exporter composition                                   |
 | `utilities/` | Domain-independent cancellation, collections, batching, retry, rate limits and error branding |
 | `cli/`       | Argument parsing, command declarations and pipeline command adaptation                        |
 | `reporter/`  | Terminal reporting, prompts and ticker workers                                                |

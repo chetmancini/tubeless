@@ -9,7 +9,7 @@ import type {
   PipelineTraceError,
   PipelineTraceEvent,
   PipelineTraceExporter,
-} from "../tracing/tracing.js";
+} from "../tracing/tracing-contracts.js";
 
 /** One trace event after it has been appended to a durable local store. */
 export type StoredPipelineEvent = PipelineTraceEvent & {

@@ -95,7 +95,7 @@
       "mustDemonstrate": [
         "reportProgress",
         "reportAttempt",
-        "JSON trace exporter",
+        "application-owned JSON trace exporter",
         "application-owned runtime context"
       ],
       "mustAvoid": ["console logging inside steps", "telemetry SDK imported into the core executor"]

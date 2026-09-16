@@ -25,7 +25,7 @@ import type {
   PipelineStepContext,
   PipelineStepProgressDetail,
 } from "./pipeline-types.js";
-import type { PipelineTracingOptions } from "../tracing/tracing.js";
+import type { PipelineTracingOptions } from "../tracing/tracing-contracts.js";
 
 export class PipelineChildError extends Error {
   constructor(
