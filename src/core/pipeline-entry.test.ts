@@ -60,7 +60,9 @@ describe("module runtime boundaries", () => {
       "tracing/tracing-codec.js",
       "tracing/tracing-constants.js",
       "tracing/tracing-internal.js",
+      "tracing/tracing-schema.js",
       "tracing/trace-exporter-error.js",
+      "tracing/wire-schema.js",
     ]);
     while (pending.length > 0) {
       const file = pending.pop()!;

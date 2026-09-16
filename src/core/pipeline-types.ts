@@ -1,4 +1,9 @@
 import type { RUN_MODEL_VERSION } from "./pipeline-ids.js";
+import { PIPELINE_ERROR_CODES as PIPELINE_ERROR_CODE_VALUES } from "../tracing/tracing-schema.js";
+import type {
+  PipelineErrorKindContract,
+  PipelineErrorPhaseContract,
+} from "../tracing/tracing-schema.js";
 import type {
   PipelineTraceAttributes,
   PipelineTraceContext,
@@ -134,50 +139,22 @@ export interface RemoteStepAdapter<TOptions extends object, TPayload, TResult> {
   invoke(payload: TPayload, context: PipelineStepContext<TOptions>): Promise<TResult>;
 }
 
-export type PipelineErrorPhase = "definition" | "execution" | "finalization" | "planning";
+export type PipelineErrorPhase = PipelineErrorPhaseContract;
 
-export type PipelineErrorKind =
-  | "cancellation"
-  | "child"
-  | "definition"
-  | "finalization"
-  | "selection"
-  | "step"
-  | "validation";
+export type PipelineErrorKind = PipelineErrorKindContract;
 
-/** Stable package-owned codes for pipeline errors. */
-export type PipelineErrorCode =
-  | "TUBELESS_CHILD_FAILED"
-  | "TUBELESS_DEFINITION_DEPENDENCY_CONTRADICTORY"
-  | "TUBELESS_DEFINITION_DEPENDENCY_CYCLE"
-  | "TUBELESS_DEFINITION_DEPENDENCY_DUPLICATE"
-  | "TUBELESS_DEFINITION_DEPENDENCY_NOT_IN_STEPS"
-  | "TUBELESS_DEFINITION_DEPENDENCY_SELF_REFERENCE"
-  | "TUBELESS_DEFINITION_FINALIZER_STEP_NOT_IN_STEPS"
-  | "TUBELESS_DEFINITION_PIPELINE_ID_BLANK"
-  | "TUBELESS_DEFINITION_OPTIONS_SCHEMA_CONFLICT"
-  | "TUBELESS_DEFINITION_STEP_ID_BLANK"
-  | "TUBELESS_DEFINITION_STEP_ID_RESERVED"
-  | "TUBELESS_DEFINITION_STEP_IDS_DUPLICATE"
-  | "TUBELESS_DEFINITION_STEP_NAME_BLANK"
-  | "TUBELESS_DEFINITION_TARGET_FINALIZER_MISMATCH"
-  | "TUBELESS_DEFINITION_TARGET_NOT_IN_STEPS"
-  | "TUBELESS_DEFINITION_TARGETS_DUPLICATE"
-  | "TUBELESS_FINALIZATION_CANCELLED"
-  | "TUBELESS_FINALIZATION_FAILED"
-  | "TUBELESS_FINAL_RESULT_VALIDATION_FAILED"
-  | "TUBELESS_OPTIONS_VALIDATION_FAILED"
-  | "TUBELESS_PLANNING_SELECTION_CONFLICT"
-  | "TUBELESS_PLANNING_STEP_SELECTION_DUPLICATE"
-  | "TUBELESS_PLANNING_STEP_SELECTION_EMPTY"
-  | "TUBELESS_PLANNING_STEP_UNKNOWN"
-  | "TUBELESS_PLANNING_TARGET_SELECTION_DUPLICATE"
-  | "TUBELESS_PLANNING_TARGET_SELECTION_EMPTY"
-  | "TUBELESS_PLANNING_TARGET_UNDECLARED"
-  | "TUBELESS_PLANNING_TARGET_UNKNOWN"
-  | "TUBELESS_RUN_CANCELLED"
-  | "TUBELESS_STEP_OUTPUT_VALIDATION_FAILED"
-  | "TUBELESS_STEP_FAILED";
+/** Ordered catalog of every stable package-owned pipeline error code. */
+export const PIPELINE_ERROR_CODES = Object.freeze(PIPELINE_ERROR_CODE_VALUES);
+
+/** Stable package-owned code for a pipeline error. */
+export type PipelineErrorCode = (typeof PIPELINE_ERROR_CODES)[number];
+
+const pipelineErrorCodeSet: ReadonlySet<string> = new Set(PIPELINE_ERROR_CODES);
+
+/** Return whether an unknown value is a stable package-owned pipeline error code. */
+export function isPipelineErrorCode(value: unknown): value is PipelineErrorCode {
+  return typeof value === "string" && pipelineErrorCodeSet.has(value);
+}
 
 /** One dependency-free Standard Schema issue normalized for reports and traces. */
 export interface PipelineValidationIssue {

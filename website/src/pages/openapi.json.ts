@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { pipelineTraceOpenApiSchemas } from "../../../src/tracing/tracing-schema";
 import { PACKAGE } from "../lib/package";
 import { GITHUB_REPO, absUrl } from "../lib/paths";
 
@@ -451,23 +452,6 @@ const spec = {
           total: { type: "number" },
         },
       },
-      PipelineProgressDetail: {
-        type: "object",
-        additionalProperties: false,
-        required: ["id"],
-        properties: {
-          completed: { type: "number" },
-          depth: { type: "number" },
-          id: { type: "string" },
-          label: { type: "string" },
-          name: { type: "string" },
-          status: {
-            type: "string",
-            enum: ["cancelled", "completed", "failed", "pending", "running", "skipped"],
-          },
-          total: { type: "number" },
-        },
-      },
       StoredPipelineLog: {
         type: "object",
         additionalProperties: false,
@@ -511,135 +495,7 @@ const spec = {
           target: { type: "string" },
         },
       },
-      StoredPipelineEvent: {
-        type: "object",
-        additionalProperties: false,
-        required: [
-          "id",
-          "name",
-          "payload",
-          "pipelineId",
-          "runId",
-          "timestampMs",
-          "version",
-        ],
-        properties: {
-          attemptId: { type: "string" },
-          correlationId: { type: "string" },
-          durationMs: { type: "number" },
-          error: { $ref: "#/components/schemas/PipelineError" },
-          id: { type: "integer", minimum: 0 },
-          itemKey: { type: "string" },
-          name: {
-            type: "string",
-            enum: [
-              "pipeline.completed",
-              "pipeline.finalize.completed",
-              "pipeline.finalize.failed",
-              "pipeline.finalize.started",
-              "pipeline.log",
-              "pipeline.started",
-              "step.attempted",
-              "step.cancelled",
-              "step.complete",
-              "step.failed",
-              "step.planned",
-              "step.running",
-              "step.skipped",
-            ],
-          },
-          parentRunId: { type: "string" },
-          payload: { type: "object", additionalProperties: true },
-          pipelineId: { type: "string" },
-          runId: { type: "string" },
-          stepId: { type: "string" },
-          timestampMs: { type: "number" },
-          version: { type: "integer", const: 2 },
-        },
-      },
-      PipelineError: {
-        type: "object",
-        additionalProperties: false,
-        required: ["code", "kind", "message", "phase"],
-        properties: {
-          cause: { $ref: "#/components/schemas/PipelineErrorCause" },
-          code: { type: "string" },
-          fanOut: { $ref: "#/components/schemas/PipelineFanOutDiagnostics" },
-          issues: {
-            type: "array",
-            items: { $ref: "#/components/schemas/PipelineValidationIssue" },
-          },
-          kind: {
-            type: "string",
-            enum: [
-              "cancellation",
-              "child",
-              "definition",
-              "finalization",
-              "selection",
-              "step",
-              "validation",
-            ],
-          },
-          message: { type: "string" },
-          phase: {
-            type: "string",
-            enum: ["definition", "execution", "finalization", "planning"],
-          },
-          sourceCode: { type: "string" },
-          stack: { type: "string" },
-          stepId: { type: "string" },
-        },
-      },
-      PipelineErrorCause: {
-        type: "object",
-        additionalProperties: false,
-        required: ["message"],
-        properties: {
-          cause: { $ref: "#/components/schemas/PipelineErrorCause" },
-          message: { type: "string" },
-          name: { type: "string" },
-          sourceCode: { type: "string" },
-        },
-      },
-      PipelineValidationIssue: {
-        type: "object",
-        additionalProperties: false,
-        required: ["message"],
-        properties: {
-          message: { type: "string" },
-          path: {
-            type: "array",
-            items: { oneOf: [{ type: "integer" }, { type: "string" }] },
-          },
-        },
-      },
-      PipelineFanOutDiagnostics: {
-        type: "object",
-        additionalProperties: false,
-        required: ["failureCount", "failures", "omittedFailureCount"],
-        properties: {
-          failureCount: { type: "integer", minimum: 0 },
-          failures: {
-            type: "array",
-            items: { $ref: "#/components/schemas/PipelineFanOutFailure" },
-          },
-          omittedFailureCount: { type: "integer", minimum: 0 },
-          schedulerError: { $ref: "#/components/schemas/PipelineErrorCause" },
-        },
-      },
-      PipelineFanOutFailure: {
-        type: "object",
-        additionalProperties: false,
-        required: ["cancelled", "error", "index", "key", "keyTruncated"],
-        properties: {
-          cancelled: { type: "boolean" },
-          error: { $ref: "#/components/schemas/PipelineErrorCause" },
-          index: { type: "integer", minimum: 0 },
-          key: { type: "string" },
-          keyTruncated: { type: "boolean" },
-        },
-      },
+      ...pipelineTraceOpenApiSchemas,
       CommandList: {
         type: "object",
         additionalProperties: false,
