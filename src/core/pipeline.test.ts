@@ -932,6 +932,20 @@ describe("definePipeline", () => {
     });
   });
 
+  it("snapshots required finalizer output ids when the pipeline is defined", async () => {
+    const step = createSteps();
+    const value = step("value", { run: () => 1 });
+    const pipeline = definePipeline({
+      id: "required-finalizer-id-snapshot",
+      steps: [value],
+      finalize: requireOutputs([value], ({ value }) => value),
+    });
+
+    Reflect.set(value, "id", "renamed");
+
+    await expect(pipeline.runOrThrow({})).resolves.toBe(1);
+  });
+
   it("rejects required finalizer steps that are not in the pipeline", () => {
     const step = createSteps();
     const included = step("included", { run: () => true });

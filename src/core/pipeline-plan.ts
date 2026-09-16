@@ -29,6 +29,11 @@ export const STEP_REMOTE: unique symbol = Symbol("tubeless.stepRemote");
 const REQUIRED_FINALIZER_OUTPUTS: unique symbol = Symbol("tubeless.requiredFinalizerOutputs");
 export const EXECUTE_COMPILED_RUN: unique symbol = Symbol("tubeless.executeCompiledRun");
 
+interface RequiredFinalizerMetadata<TOptions extends object> {
+  readonly steps: readonly AnyStep<TOptions>[];
+  compile(requiredStepIds: readonly string[]): (...args: never[]) => unknown;
+}
+
 const compiledPipelines = new WeakSet<object>();
 
 /** Marks the exact object returned by `definePipeline` as a compiled pipeline. */
@@ -654,14 +659,14 @@ function validatePipelineDefinition<
     );
   }
 
-  // SAFETY: `requireOutputs` stamps the required step ids onto the finalizer
-  // function under `REQUIRED_FINALIZER_OUTPUTS`; the intersection only widens
-  // the function type to expose that optional property.
-  const requiredFinalizerSteps = (
+  // SAFETY: `requireOutputs` stamps internal compilation metadata onto the
+  // finalizer; the intersection only exposes that optional property.
+  const requiredFinalizerMetadata = (
     definition.finalize as typeof definition.finalize & {
-      [REQUIRED_FINALIZER_OUTPUTS]?: readonly AnyStep<TOptions>[];
+      [REQUIRED_FINALIZER_OUTPUTS]?: RequiredFinalizerMetadata<TOptions>;
     }
   )[REQUIRED_FINALIZER_OUTPUTS];
+  const requiredFinalizerSteps = requiredFinalizerMetadata?.steps;
   const missingFinalizerSteps = (requiredFinalizerSteps ?? []).filter(
     (step) => !knownSteps.has(step)
   );
@@ -981,26 +986,33 @@ export function compilePipeline<
       return [compiled, snapshotCompiledStepGraph(step, compiledByAuthorStep)];
     })
   );
-  // SAFETY: `requireOutputs` stamps the required step ids onto the finalizer
-  // function under `REQUIRED_FINALIZER_OUTPUTS`; the intersection only widens
-  // the function type to expose that optional property.
-  const requiredFinalizerSteps = (
+  // SAFETY: `requireOutputs` stamps internal compilation metadata onto the
+  // finalizer; the intersection only exposes that optional property.
+  const requiredFinalizerMetadata = (
     definition.finalize as typeof definition.finalize & {
-      [REQUIRED_FINALIZER_OUTPUTS]?: readonly AnyStep<TOptions>[];
+      [REQUIRED_FINALIZER_OUTPUTS]?: RequiredFinalizerMetadata<TOptions>;
     }
   )[REQUIRED_FINALIZER_OUTPUTS];
+  const requiredFinalizerSteps = requiredFinalizerMetadata?.steps;
   // SAFETY: targets are a subset of `TSteps[number]`, each an `AnyStep<TOptions>`.
   const declaredTargets = (definition.targets ?? []) as readonly AnyStep<TOptions>[];
   const compiledTargets = declaredTargets.map((target) => compiledByAuthorStep.get(target)!);
   const compiledRequiredFinalizerSteps = requiredFinalizerSteps?.map((step) =>
     compiledByAuthorStep.get(step)!
   );
+  const compiledFinalize = requiredFinalizerMetadata
+    ? requiredFinalizerMetadata.compile(compiledRequiredFinalizerSteps!.map((step) => step.id))
+    : (
+        outputs: Parameters<typeof definition.finalize>[0],
+        context: Parameters<typeof definition.finalize>[1]
+      ) => definition.finalize(outputs, context);
   return Object.freeze({
     declaredTargets: Object.freeze(compiledTargets),
-    // Invoke on the author's definition so method-style finalizers keep `this`.
-    // SAFETY: the wrapper only forwards to `definition.finalize`.
-    finalize: ((outputs, context) =>
-      definition.finalize(outputs, context)) as typeof definition.finalize,
+    // Invoke ordinary finalizers on the author's definition so method-style
+    // implementations keep `this`. Required finalizers compile the same input
+    // and context contract with stable required ids.
+    // SAFETY: both branches preserve `definition.finalize`'s call signature.
+    finalize: compiledFinalize as typeof definition.finalize,
     id: definition.id,
     optionsSchema:
       definition.steps.length === 0
@@ -1041,13 +1053,14 @@ export function requireOutputs<const TRequiredSteps extends readonly AnyStep[], 
   context: PipelineExecutionContext<StepsOptions<TRequiredSteps>>
 ) => TResult | Promise<TResult> {
   const uniqueRequiredSteps = [...new Set(requiredSteps)];
-  const requiredFinalizer = (
+  const invoke = (
+    requiredStepIds: readonly string[],
     outputs: Partial<RequiredPipelineOutputs<TRequiredSteps>>,
     context: PipelineExecutionContext<StepsOptions<TRequiredSteps>>
   ) => {
-    const missingStepIds = uniqueRequiredSteps
-      .filter((step) => !Object.prototype.hasOwnProperty.call(outputs, step.id))
-      .map((step) => step.id);
+    const missingStepIds = requiredStepIds.filter(
+      (stepId) => !Object.prototype.hasOwnProperty.call(outputs, stepId)
+    );
     if (missingStepIds.length > 0) {
       throw new Error(`Required pipeline outputs missing: ${missingStepIds.join(", ")}`);
     }
@@ -1055,8 +1068,27 @@ export function requireOutputs<const TRequiredSteps extends readonly AnyStep[], 
     // outputs contain all required keys and are a complete required-outputs map.
     return finalize(outputs as unknown as RequiredPipelineOutputs<TRequiredSteps>, context);
   };
+  const requiredFinalizer = (
+    outputs: Partial<RequiredPipelineOutputs<TRequiredSteps>>,
+    context: PipelineExecutionContext<StepsOptions<TRequiredSteps>>
+  ) =>
+    invoke(
+      uniqueRequiredSteps.map((step) => step.id),
+      outputs,
+      context
+    );
+  const metadata: RequiredFinalizerMetadata<StepsOptions<TRequiredSteps>> = Object.freeze({
+    compile: (requiredStepIds: readonly string[]) => {
+      const snapshot = Object.freeze([...requiredStepIds]);
+      return (
+        outputs: Partial<RequiredPipelineOutputs<TRequiredSteps>>,
+        context: PipelineExecutionContext<StepsOptions<TRequiredSteps>>
+      ) => invoke(snapshot, outputs, context);
+    },
+    steps: Object.freeze([...uniqueRequiredSteps]),
+  });
   Object.defineProperty(requiredFinalizer, REQUIRED_FINALIZER_OUTPUTS, {
-    value: uniqueRequiredSteps,
+    value: metadata,
   });
   return requiredFinalizer;
 }
