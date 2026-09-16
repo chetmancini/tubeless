@@ -272,7 +272,18 @@ export function wireDiscriminatedUnion<
   const TVariants extends Readonly<Record<string, WireSchema<unknown>>>,
 >(key: TKey, variants: TVariants): WireSchema<InferWireSchema<TVariants[keyof TVariants]>> {
   return schema(
-    { oneOf: Object.values(variants).map((variant) => variant.jsonSchema) },
+    {
+      oneOf: Object.entries(variants).map(([discriminator, variant]) => ({
+        allOf: [
+          variant.jsonSchema,
+          {
+            properties: { [key]: { const: discriminator, type: "string" } },
+            required: [key],
+            type: "object",
+          },
+        ],
+      })),
+    },
     (value, path) => {
       if (value === null || typeof value !== "object" || Array.isArray(value)) {
         throw new Error(`${path} must be an object`);
