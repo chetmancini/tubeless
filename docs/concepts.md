@@ -217,11 +217,13 @@ Hooks and trace events use these same reports.
 ## Versioned run records
 
 `run()` returns one versioned `PipelineRun<TResult>`. Every execution has a
-`runId`, terminal `status`, start and finish timestamps, structured errors, and
-one terminal report per planned step. Pass `context.runId` and
-`context.parentRunId` when an external orchestrator owns correlation; otherwise
-Tubeless generates a run ID. The same IDs are available in step contexts
-and optional trace exports.
+package-generated `runId`, terminal `status`, start and finish timestamps,
+structured errors, and one terminal report per planned step. Pass
+`context.correlationId` when an external orchestrator owns a reusable job or
+workflow identifier. Pass `context.parentRunId` only when linking to another
+Tubeless execution ID. The same identities are available in step contexts and
+optional trace exports. The deprecated caller input `context.runId` is treated
+as a correlation ID; it no longer controls execution identity.
 
 An actual step execution receives one `attemptId`. It appears on the
 `PipelineStepContext`, its terminal `PipelineStepReport`, and trace lifecycle
@@ -246,14 +248,21 @@ Durations are derived by subtracting the relevant timestamps.
 ```ts
 const result = await pipeline.run(options, undefined, {
   ...defaultPipelineContext(),
-  runId: externalJobId,
+  correlationId: externalJobId,
 });
 
 result.runId;
+result.correlationId;
 result.status;
 result.steps.find((step) => step.attemptId)?.attemptId;
 result.finishedAtMs - result.startedAtMs;
 ```
+
+Trace envelope version 1 remains readable. Older version 1 artifacts do not
+have `correlationId`, and traces produced before execution IDs became
+package-owned may still collapse reused legacy `runId` values during projection.
+New events keep version 1 for envelope compatibility, always use a unique
+execution `runId`, and carry reusable external correlation separately.
 
 ### Local event store and studio
 

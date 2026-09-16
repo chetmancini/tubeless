@@ -18,7 +18,7 @@ one of these recipes.
 | Preserve independent work after failure        | [`best-effort.ts`](../examples/best-effort.ts)                           | `continueOnError`, structured `run` result                                   |
 | Compose one reusable workflow                  | [`child-pipeline.ts`](../examples/child-pipeline.ts)                     | `fromPipeline`, `mapOptions`, resolved async `mapResult`                     |
 | Call a real HTTP service                       | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `fromRemote`, fetch cancellation, validated HTTP output                      |
-| Host a pipeline in a durable engine            | [`host-embedding.ts`](../examples/host-embedding.ts)                     | `runOrThrow`, pass `runId` / `parentRunId`                                   |
+| Host a pipeline in a durable engine            | [`host-embedding.ts`](../examples/host-embedding.ts)                     | `runOrThrow`, pass `correlationId` / `parentRunId`                           |
 | Fan out over runtime items                     | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline.skippable`, stable keys, concurrency, progress              |
 | Inspect keyed fan-out failures                 | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `error.fanOut`, bounded diagnostics, caller-directed reruns                  |
 | Show determinate progress                      | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `reportProgress`, bounded live CLI rows, complete final trees                |

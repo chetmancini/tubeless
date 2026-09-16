@@ -7,6 +7,7 @@ import {
   type WorkbenchPipelineCommand,
 } from "./pipeline-module.js";
 import { createRunId } from "../core/pipeline.js";
+import { PIPELINE_PREALLOCATED_RUN_ID } from "../core/pipeline-execute.js";
 import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import type { PipelineStudioConfig } from "./workbench-studio.js";
 import { isPipelineProjectManifest, type PipelineProjectManifest } from "./workbench-project.js";
@@ -321,7 +322,10 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
                     if (!registration)
                       return { accepted: false, errors: ["Pipeline command not found."] };
                     const runId = createRunId(registration.runIdPrefix);
-                    const pipelineContext = { runId, tracing: { exporter: writableStore! } };
+                    const pipelineContext = {
+                      [PIPELINE_PREALLOCATED_RUN_ID]: runId,
+                      tracing: { exporter: writableStore! },
+                    };
                     const runController = new AbortController();
                     const signal = AbortSignal.any([
                       studioStopController.signal,

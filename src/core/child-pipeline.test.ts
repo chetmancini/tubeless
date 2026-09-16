@@ -1682,7 +1682,7 @@ describe("child-pipeline composition", () => {
       const events: PipelineTraceEvent[] = [];
       const result = await parent.run({}, undefined, {
         ...defaultPipelineContext(),
-        runId: "parent-run",
+        correlationId: "parent-job",
         tracing: { exporter: { export: (event) => void events.push(event) } },
       });
 
@@ -1692,13 +1692,13 @@ describe("child-pipeline composition", () => {
         events.find(
           (event) => event.name === "pipeline.started" && event.pipelineId === "invalid-trace-child"
         )
-      ).toMatchObject({ parentRunId: "parent-run", attributes: { plan_ok: false } });
+      ).toMatchObject({ parentRunId: result.runId, attributes: { plan_ok: false } });
       expect(
         events.find(
           (event) =>
             event.name === "pipeline.completed" && event.pipelineId === "invalid-trace-child"
         )
-      ).toMatchObject({ parentRunId: "parent-run" });
+      ).toMatchObject({ correlationId: "parent-job", parentRunId: result.runId });
     });
 
     it("applies a child pipeline's declared target closure through mapOptions", async () => {

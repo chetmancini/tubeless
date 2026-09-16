@@ -12,15 +12,20 @@ export interface PipelineLogger {
 }
 
 export interface PipelineContext {
+  /** Optional caller-owned identifier used to correlate separate executions. */
+  correlationId?: string;
   cwd: string;
   /** Hook sets run in order and failures are isolated per set. */
   hooks?: PipelineHooks | readonly PipelineHooks[];
   log: PipelineLogger;
   /** Timestamp source for persisted run records. Defaults to `Date.now`. */
   now?: () => number;
-  /** Optional caller-owned parent run identity for nested or resumed orchestration. */
+  /** Optional package-generated execution identity of this run's parent. */
   parentRunId?: string;
-  /** Optional caller-owned run identity. A unique ID is generated when omitted. */
+  /**
+   * @deprecated Use `correlationId`. This value is treated as reusable external
+   * correlation and never as the execution's unique `runId`.
+   */
   runId?: string;
   signal?: AbortSignal;
   sleep?: (durationMs: number, signal?: AbortSignal) => Promise<void>;
@@ -60,6 +65,8 @@ export interface PipelineRuntime extends PipelineContext {
 }
 
 export interface PipelineExecutionContext<TOptions extends object> extends PipelineRuntime {
+  /** Caller-owned identifier shared by related executions, when supplied. */
+  correlationId?: string;
   dryRun: boolean;
   options: TOptions;
   /** Stable identity for this execution, whether or not tracing is configured. */
@@ -317,6 +324,8 @@ export type PipelineRunStatus = "cancelled" | "completed" | "failed";
 
 /** Versioned public record returned for one pipeline execution. */
 export interface PipelineRun<TResult = unknown> {
+  /** Caller-owned identifier shared by related executions, when supplied. */
+  correlationId?: string;
   pipelineId: string;
   dryRun: boolean;
   errors: PipelineError[];

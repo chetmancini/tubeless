@@ -103,7 +103,7 @@ export class PipelineRunState<TResult> {
     readonly pipelineId: string,
     readonly dryRun: boolean,
     readonly startedAtMs: number,
-    readonly identity: { parentRunId?: string; runId: string },
+    readonly identity: { correlationId?: string; parentRunId?: string; runId: string },
     readonly now: () => number,
     readonly lifecycle: PipelineLifecycleObserver
   ) {}
@@ -292,6 +292,9 @@ export class PipelineRunState<TResult> {
       value: this.#value,
       version: RUN_MODEL_VERSION,
     };
+    if (this.identity.correlationId !== undefined) {
+      result.correlationId = this.identity.correlationId;
+    }
     if (this.identity.parentRunId) result.parentRunId = this.identity.parentRunId;
     this.lifecycle.pipelineComplete(result);
     await this.lifecycle.flush();

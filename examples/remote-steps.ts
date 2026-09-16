@@ -39,9 +39,10 @@ const enrichSchema: StandardSchemaV1<unknown, EnrichResult> = {
 };
 
 interface RemotePayload {
+  correlationId?: string;
   dryRun: boolean;
+  parentRunId: string;
   rows: readonly string[];
-  runId: string;
 }
 
 // Application-owned HTTP protocol, using native fetch. No provider SDK is needed.
@@ -84,7 +85,12 @@ const enrich = step.fromRemote("enrich", {
   description: "Validate the HTTP service result before local consumption",
   dependsOn: [parse],
   adapter: enrichAdapter,
-  mapInput: ({ parse }, ctx) => ({ rows: parse, runId: ctx.runId, dryRun: ctx.dryRun }),
+  mapInput: ({ parse }, ctx) => ({
+    correlationId: ctx.correlationId,
+    rows: parse,
+    parentRunId: ctx.runId,
+    dryRun: ctx.dryRun,
+  }),
   outputSchema: enrichSchema,
   // Omitted intentionally: the service must honor dryRun without side effects.
 });

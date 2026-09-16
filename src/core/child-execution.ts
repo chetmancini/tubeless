@@ -87,6 +87,7 @@ function publicChildRuntime(context: PipelineContext): PipelineRuntime {
     now: context.now ?? Date.now,
     sleep: context.sleep ?? (async () => undefined),
   };
+  if (context.correlationId !== undefined) runtime.correlationId = context.correlationId;
   if (context.hooks) runtime.hooks = context.hooks;
   if (context.parentRunId) runtime.parentRunId = context.parentRunId;
   if (context.runId) runtime.runId = context.runId;
@@ -109,12 +110,14 @@ async function failedPublicChildPlanRun(
     errors: [...plan.errors],
     finalized: false,
     finishedAtMs: runtime.now(),
-    runId: context.runId ?? createRunId(pipeline.id),
+    runId: createRunId(pipeline.id),
     startedAtMs,
     status: "failed",
     steps: [],
     version: RUN_MODEL_VERSION,
   };
+  const correlationId = context.correlationId ?? context.runId;
+  if (correlationId !== undefined) result.correlationId = correlationId;
   if (context.parentRunId) result.parentRunId = context.parentRunId;
   await emitRejectedPlanLifecycle(pipeline.id, pipeline.targetIds, plan, runtime, result);
   return result;
@@ -336,6 +339,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
       context.dryRun
     );
     const baseChildContext: PipelineContext = {
+      correlationId: context.correlationId,
       cwd: context.cwd,
       log: context.log,
       now: context.now,
@@ -551,6 +555,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
             domainOptions,
             controls,
             {
+              correlationId: context.correlationId,
               cwd: context.cwd,
               log: context.log,
               now: context.now,

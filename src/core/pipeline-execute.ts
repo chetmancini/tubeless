@@ -45,6 +45,13 @@ import type {
 import { PipelineBoundaryValidationError, validateStandardSchema } from "./pipeline-validation.js";
 import { createPipelineTraceEmitter } from "../tracing/tracing-internal.js";
 
+/** Internal-only escape hatch for a host that must announce an execution ID before it starts. */
+export const PIPELINE_PREALLOCATED_RUN_ID = Symbol.for("tubeless.pipeline.preallocatedRunId");
+
+interface PreallocatedPipelineRuntime {
+  [PIPELINE_PREALLOCATED_RUN_ID]?: string;
+}
+
 const PIPELINE_LOGGER_BASE = Symbol("pipelineLoggerBase");
 
 type TracedPipelineLogger = PipelineLogger & { [PIPELINE_LOGGER_BASE]?: PipelineLogger };
@@ -202,7 +209,7 @@ function isCancelledResult(result: PipelineRun<unknown>): boolean {
   return result.status === "cancelled";
 }
 
-type PipelineRunIdentity = { parentRunId?: string; runId: string };
+type PipelineRunIdentity = { correlationId?: string; parentRunId?: string; runId: string };
 
 function throwIfAborted(runtime: PipelineRuntime): void {
   throwIfSignalAborted(runtime.signal, "Pipeline run");
@@ -228,8 +235,15 @@ export async function executePlannedRun<
   type TOptions = StepsOptions<TSteps>;
   const { compiled, controls, runtime } = input;
   const startedAtMs = runtime.now();
-  const runId = runtime.runId ?? createRunId(compiled.id);
+  // SAFETY: only the package-owned Studio launcher attaches this internal symbol;
+  // ordinary PipelineRuntime values simply read as undefined.
+  const preallocatedRunId = (runtime as PipelineRuntime & PreallocatedPipelineRuntime)[
+    PIPELINE_PREALLOCATED_RUN_ID
+  ];
+  const runId = preallocatedRunId ?? createRunId(compiled.id);
+  const correlationId = runtime.correlationId ?? runtime.runId;
   const identity: PipelineRunIdentity = { runId };
+  if (correlationId !== undefined) identity.correlationId = correlationId;
   if (runtime.parentRunId) identity.parentRunId = runtime.parentRunId;
   const dryRun = controls.dryRun === true;
   const trace = createPipelineTraceEmitter(
@@ -316,6 +330,7 @@ export async function executePlannedRun<
     runId,
     trace: trace?.context,
   };
+  if (correlationId !== undefined) executionContext.correlationId = correlationId;
   if (runtime.parentRunId) executionContext.parentRunId = runtime.parentRunId;
 
   const plannedSteps = planStepById(input.plan);
