@@ -5,7 +5,7 @@
 </p>
 <h1 align="center">Tubeless</h1>
 <p align="center">
-  Define a typed graph. Plan a target. Run it from Node.
+  Typed data pipelines. Keep your workflow rolling.
 </p>
 <p align="center">
   <a href="https://www.npmjs.com/package/tubeless"><img alt="npm" src="https://img.shields.io/npm/v/tubeless?style=flat-square&labelColor=121212&color=c4a046"></a>
@@ -13,21 +13,31 @@
   <a href="./LICENSE"><img alt="MIT" src="https://img.shields.io/npm/l/tubeless?style=flat-square&labelColor=121212&color=c4c0b4"></a>
 </p>
 
-Typed, observable data pipelines you import from TypeScript or run from a Bun
-CLI. It is a library, not a hosted workflow engine or a Make/npm-scripts
-replacement. Tubeless is pre-1.0; its public API may change.
+Tubeless is a TypeScript library for data pipelines. Define steps and their
+dependencies, pass typed results between them, and inspect what happened at each
+stage. Use it for imports, batch jobs, and scripts that need more structure as they grow.
+
+Pipelines run in your process with no runtime dependencies. You can preview
+execution, select a target and its dependencies, compose child pipelines, and
+track progress. An optional CLI and local studio help you run and inspect jobs.
+For scheduling or crash recovery, pair it with a [queue or workflow engine](./docs/comparison.md).
+
+## Installation
 
 ```sh
 npm install tubeless
 ```
 
-Also `pnpm add tubeless`, `yarn add tubeless`, or `bun add tubeless`. Library
-imports are ESM-only on Node.js 22+. The `tubeless` CLI requires Bun 1.3.14+;
-`npx tubeless` works anywhere with Bun installed and otherwise prints Bun
-install instructions. Linux and macOS are supported; Windows is untested. See
-[install and runtime](./docs/getting-started.md#install).
+The library uses ESM and requires Node.js 22 or later. The CLI also requires
+Bun 1.3.14 or later. Linux and macOS are supported; Windows is untested.
+See [installation and runtime support](./docs/getting-started.md#install).
+
+Tubeless is pre-1.0, so the public API may change between releases.
 
 ## Quick start
+
+This pipeline loads a list of strings, normalizes them, and returns the result.
+Declaring `load` as a dependency gives `normalize` a typed input.
 
 ```ts
 import { createSteps, definePipeline, requireOutputs } from "tubeless";
@@ -58,12 +68,15 @@ const rows = await ImportPipeline.runOrThrow({ lines: [" Alpha ", "", "Beta"] })
 // ["alpha", "beta"]
 ```
 
-`createSteps` types domain options only. Runs accept built-in controls beside
-them. Use `runOrThrow` when failure should throw, `run` for the structured
-report, `plan` when nothing should execute, and `toMermaid` for the static
-graph.
+`runOrThrow` returns the result or throws if the run fails. Use `run` for a
+report with step statuses, errors, and timings; `plan` to preview execution; or
+`toMermaid` to draw the graph. See the [getting started guide](./docs/getting-started.md).
 
-## Inspect, plan, or run
+## Use the CLI
+
+For command-line workflows, register commands in `tubeless.project.ts`.
+The [CLI guide](./docs/cli.md) explains how to set up the manifest and commands.
+With an `import-rows` command registered, you can run:
 
 ```sh
 bunx tubeless list # reads ./tubeless.project.ts
@@ -71,49 +84,36 @@ bunx tubeless inspect import-rows
 bunx tubeless run import-rows -- --source input.json
 ```
 
-The project manifest explicitly registers stable command IDs, module paths, and
-execution cwd without scanning the filesystem. The CLI loads TypeScript modules
-with Bun; existing file-oriented commands remain available. Application flags
-go after `--`. `history` lists recorded
-`--store` runs or reads a finished `--trace` artifact without opening the studio. See
-[the CLI](./docs/cli.md) and [the local studio](./docs/studio.md).
+The CLI loads TypeScript modules with Bun. Pass application flags after `--`.
+Record runs with `--store` or save a portable trace with `--trace`, then inspect
+them with `tubeless history` or the [local studio](./docs/studio.md).
 
-## Choose the right pattern
+## Find your route
 
-| You need to…                                 | Start with                                                                |
-| -------------------------------------------- | ------------------------------------------------------------------------- |
-| Run typed steps in dependency order          | [Sequential pipeline](./examples/typed-import.ts)                         |
-| Validate external boundary values            | [Validated boundaries](./examples/validated-boundaries.ts)                |
-| Preview writes safely                        | [Dry runs and write gates](./examples/publish-with-gates.ts)              |
-| Skip work intentionally at runtime           | [Conditional step](./examples/conditional-step.ts)                        |
-| Continue independent work after a failure    | [Best-effort execution](./examples/best-effort.ts)                        |
-| Reuse a pipeline inside another              | [Child pipeline](./examples/child-pipeline.ts)                            |
-| Run a step on another engine                 | [Remote steps](./examples/remote-steps.ts)                                |
-| Run one child pipeline for many items        | [Fan-out and progress](./examples/fan-out-progress.ts)                    |
-| Resume long API work safely                  | [Retry, rate limit, and checkpoint](./examples/resumable-enrichment.ts)   |
-| Watch the live TTY reporter                  | [Live TUI](./examples/live-tui.ts)                                        |
-| Watch many primitives on a road-race weekend | [Peloton pipeline](./examples/peloton.ts)                                 |
-| Turn a pipeline into a typed script          | [Pipeline CLI](./examples/cli-job.ts)                                     |
-| Render plans and errors consistently         | [Human and JSON rendering](./examples/rendering.ts)                       |
-| Test deterministic execution                 | [Cancellation and test injection](./examples/cancellation-and-testing.ts) |
-| Export lifecycle telemetry                   | [Structured tracing](./examples/tracing.ts)                               |
-| Persist and inspect local runs               | [Local observability](./examples/local-observability.ts)                  |
+- Start with a [typed import](./examples/typed-import.ts) or add
+  [dry runs and write gates](./examples/publish-with-gates.ts) to a publishing job.
+- Build a larger workflow with [child pipelines](./examples/child-pipeline.ts)
+  and [fan-out](./examples/fan-out-progress.ts).
+- Take the [peloton example](./examples/peloton.ts) for a spin: a road-race weekend
+  workflow that brings several pipeline features together.
 
-Install the [agent skill pack](./docs/agent-skills.md) with `npx skills add chetmancini/tubeless` to convert existing code using `tubeless-make-pipeline`. The [recipe index](./docs/recipes.md) explains each pattern.
+The [recipe index](./docs/recipes.md) covers validation, retries, tracing, testing,
+and more. For help authoring pipelines with a coding agent, install the
+[agent skill pack](./docs/agent-skills.md) with `npx skills add chetmancini/tubeless`.
 
-## Docs
+## Documentation
 
-[Website](https://tubeless.io/) ·
-[Getting started](./docs/getting-started.md) · [CLI](./docs/cli.md) ·
+[Website](https://tubeless.io/) · [Getting started](./docs/getting-started.md) · [CLI](./docs/cli.md) ·
 [Studio](./docs/studio.md) · [Concepts](./docs/concepts.md) ·
 [Comparison](./docs/comparison.md) · [API](./docs/api-reference.md) ·
 [Agents](./docs/agent-guide.md) · [Studio OpenAPI](https://tubeless.io/openapi.json)
 
 ## Contributing
 
-Pull requests are accepted for now; the maintainer set stays small. See
-[CONTRIBUTING.md](./CONTRIBUTING.md). Report vulnerabilities privately
-through [SECURITY.md](./SECURITY.md).
+Bug reports, documentation improvements, and focused pull requests are welcome.
+Open an [issue](https://github.com/chetmancini/tubeless/issues) before starting a
+large change or changing the public API. See [CONTRIBUTING.md](./CONTRIBUTING.md)
+for local setup and checks, and [SECURITY.md](./SECURITY.md) to report a vulnerability privately.
 
 ## License
 
