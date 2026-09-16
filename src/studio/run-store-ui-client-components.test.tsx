@@ -1,15 +1,12 @@
+import { renderToString } from "preact-render-to-string";
 import { describe, expect, it } from "vitest";
-import { RUN_MODEL_VERSION } from "../core/pipeline.js";
-import type { PipelinePlan } from "../core/pipeline.js";
+import { RUN_MODEL_VERSION, type PipelinePlan } from "../core/pipeline.js";
 import type { StoredPipelineRun } from "../run-store/run-store.js";
+import { CommandFields, PipelinesView, PlanView } from "./run-store-ui-client-commands.js";
 import { createStudioRunIndex } from "./run-store-ui-client-model.js";
+import { RunsView } from "./run-store-ui-client-runs.js";
+import { isoTime, Status } from "./run-store-ui-client-shared.js";
 import type { PipelineRunStudioCommand } from "./run-store-ui-protocol.js";
-import {
-  renderCommandFormFields,
-  renderPipelinesView,
-  renderPlanView,
-  renderRunsView,
-} from "./run-store-ui-client-views.js";
 
 const command: PipelineRunStudioCommand = {
   canPlan: true,
@@ -45,38 +42,46 @@ function run(overrides: Partial<StoredPipelineRun> = {}): StoredPipelineRun {
   };
 }
 
-describe("Studio views", () => {
-  it("renders form markup from descriptors without a DOM", () => {
-    const markup = renderCommandFormFields(command);
+describe("Studio components", () => {
+  it("renders form controls from descriptors", () => {
+    const markup = renderToString(
+      <CommandFields command={command} values={[[""]]} onChange={() => {}} />
+    );
     expect(markup).toContain("Display Name");
     expect(markup).toContain("A &quot;name&quot;");
     expect(markup).toContain("required");
   });
 
-  it("escapes command data in catalog markup", () => {
-    expect(renderPipelinesView([command])).toContain("A &lt;checked&gt; pipeline");
+  it("escapes command data in the catalog", () => {
+    const markup = renderToString(<PipelinesView commands={[command]} onConfigure={() => {}} />);
+    expect(markup).toContain("A &lt;checked> pipeline");
+    expect(markup).not.toContain("<checked>");
   });
 
   it("renders run hierarchy from explicit data only", () => {
     const root = run();
     const index = createStudioRunIndex([root]);
-    const markup = renderRunsView({
-      canCancel: true,
-      cancelling: false,
-      liveRunIds: [root.runId],
-      nowMs: 2_000,
-      roots: index.roots,
-      runIndex: index,
-      selectedRun: root,
-      selectedRunId: root.runId,
-      totalRunCount: 1,
-    });
+    const markup = renderToString(
+      <RunsView
+        canCancel
+        cancelling={false}
+        liveRunIds={[root.runId]}
+        nowMs={2_000}
+        onCancel={() => {}}
+        onSelect={() => {}}
+        roots={index.roots}
+        runIndex={index}
+        selectedRun={root}
+        selectedRunId={root.runId}
+        totalRunCount={1}
+      />
+    );
     expect(markup).toContain("Pipeline runs");
     expect(markup).toContain("Cancel run");
     expect(markup).toContain("1s ago");
   });
 
-  it("renders plan markup without reading controller state", () => {
+  it("renders plan data without controller state", () => {
     const plan: PipelinePlan = {
       dryRun: true,
       errors: [],
@@ -95,7 +100,15 @@ describe("Studio views", () => {
         },
       ],
     };
-    expect(renderPlanView(plan)).toContain("1 of 1 steps will run · dry run");
-    expect(renderPlanView(plan)).toContain("</small>");
+    const markup = renderToString(<PlanView plan={plan} />);
+    expect(markup).toContain("1 of 1 steps will run · dry run");
+    expect(markup).toContain("</small>");
+  });
+
+  it("escapes status labels and rejects invalid dates", () => {
+    const markup = renderToString(<Status value={'failed"><script>'} />);
+    expect(markup).toContain("&lt;script>");
+    expect(markup).not.toContain("<script>");
+    expect(isoTime(Number.POSITIVE_INFINITY)).toBe("");
   });
 });

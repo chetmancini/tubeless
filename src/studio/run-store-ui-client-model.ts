@@ -1,4 +1,3 @@
-import type { PipelineRunStudioCommand } from "./run-store-ui-protocol.js";
 import type { PipelineRunStoreSnapshot, StoredPipelineRun } from "../run-store/run-store.js";
 
 export interface StudioSnapshot extends PipelineRunStoreSnapshot {
@@ -7,25 +6,6 @@ export interface StudioSnapshot extends PipelineRunStoreSnapshot {
 
 export interface StudioRunDetail {
   run: StoredPipelineRun;
-}
-
-export interface StudioState {
-  canCancel: boolean;
-  canClearHistory: boolean;
-  cancelling: boolean;
-  clearing: boolean;
-  commands: PipelineRunStudioCommand[];
-  detail: StudioRunDetail | null;
-  detailFingerprint: string | null;
-  launching: boolean;
-  loading: boolean;
-  planning: boolean;
-  planVersion: number;
-  query: string;
-  runIndex: StudioRunIndex;
-  selectedRunId: string | null;
-  snapshot: StudioSnapshot | null;
-  view: string;
 }
 
 const EMPTY_STUDIO_RUNS: readonly StoredPipelineRun[] = [];
@@ -39,28 +19,6 @@ export interface StudioRunIndex {
   rootRunId(runId: string | null | undefined): string | null | undefined;
   runById(runId: string | null | undefined): StoredPipelineRun | undefined;
   subtreeIsRunning(runId: string): boolean;
-}
-
-/** Initial mutable state for one Studio browser client. */
-export function createStudioState(): StudioState {
-  return {
-    snapshot: null,
-    runIndex: createStudioRunIndex([]),
-    detail: null,
-    detailFingerprint: null,
-    commands: [],
-    view: "runs",
-    selectedRunId: null,
-    query: "",
-    loading: false,
-    launching: false,
-    planning: false,
-    clearing: false,
-    cancelling: false,
-    canCancel: false,
-    canClearHistory: false,
-    planVersion: 0,
-  };
 }
 
 /** Derived run hierarchy for one studio snapshot. Rebuild when the snapshot is replaced. */

@@ -3,9 +3,10 @@
   "entry": [
     "src/reporter/live-ticker-worker.ts",
     "src/reporter/live-ticker-supervisor.ts",
-    "src/studio/run-store-ui-client.ts"
+    "src/studio/run-store-ui-client-browser.ts",
+    "src/**/*.test.tsx"
   ],
-  "project": ["src/**/*.ts", "scripts/**/*.{js,mjs,ts}", "!scripts/fixtures/**"],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{js,mjs,ts}", "!scripts/fixtures/**"],
   "ignoreExportsUsedInFile": {
     "interface": true,
     "type": true

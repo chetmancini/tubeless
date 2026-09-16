@@ -10,5 +10,5 @@
     "rootDir": null
   },
   "exclude": [],
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

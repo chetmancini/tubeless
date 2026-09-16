@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { compiledClientSource } from "./generate-studio-client.mjs";
 
 describe("compiledClientSource", () => {
-  it("preserves ESM exports, removes the source map, and invokes initStudio", async () => {
+  it("preserves ESM exports, removes the source map, and keeps entrypoint side effects", async () => {
     const compiled = [
       "export let initialized = 0;",
       "export function initStudio() { initialized += 1; }",
       "function createStudioRunIndex(runs) { return runs; }",
       "export { createStudioRunIndex };",
+      "initStudio();",
       `//# sourceMappingURL=${"studio-client.example.map"}`,
       "",
     ].join("\n");
@@ -21,8 +22,8 @@ describe("compiledClientSource", () => {
     expect(client.createStudioRunIndex(["run-1"])).toEqual(["run-1"]);
   });
 
-  it("does not append a second initialization call", () => {
-    const compiled = "export function initStudio() {}\ninitStudio();\n";
+  it("does not invent an initialization call", () => {
+    const compiled = "export function initStudio() {}\n";
     expect(compiledClientSource(compiled)).toBe(compiled);
   });
 
