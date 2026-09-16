@@ -489,6 +489,10 @@ describe("PipelineErrorCode", () => {
     expect([...PIPELINE_ERROR_CODES].sort()).toEqual(
       Object.keys(PIPELINE_ERROR_CODE_CONTRACTS).sort()
     );
+    expect(Object.isFrozen(PIPELINE_ERROR_CODES)).toBe(true);
+    expect(() =>
+      Reflect.apply(Array.prototype.push, PIPELINE_ERROR_CODES, ["TUBELESS_UNKNOWN"])
+    ).toThrow(TypeError);
     expect(isPipelineErrorCode("TUBELESS_STEP_FAILED")).toBe(true);
     expect(isPipelineErrorCode("TUBELESS_UNKNOWN")).toBe(false);
     expect(isPipelineErrorCode(undefined)).toBe(false);

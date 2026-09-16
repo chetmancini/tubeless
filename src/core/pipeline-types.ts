@@ -144,7 +144,7 @@ export type PipelineErrorPhase = PipelineErrorPhaseContract;
 export type PipelineErrorKind = PipelineErrorKindContract;
 
 /** Ordered catalog of every stable package-owned pipeline error code. */
-export const PIPELINE_ERROR_CODES = PIPELINE_ERROR_CODE_VALUES;
+export const PIPELINE_ERROR_CODES = Object.freeze(PIPELINE_ERROR_CODE_VALUES);
 
 /** Stable package-owned code for a pipeline error. */
 export type PipelineErrorCode = (typeof PIPELINE_ERROR_CODES)[number];
