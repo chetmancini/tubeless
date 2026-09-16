@@ -1,7 +1,85 @@
 import { createSteps, definePipeline } from "tubeless";
 import { withRetry } from "tubeless/retry";
-import { composeTraceExporters, type PipelineTraceExporter } from "tubeless/tracing";
-import { createJsonTraceExporter } from "tubeless/tracing/json";
+import {
+  composeTraceExporters,
+  type PipelineTraceEvent,
+  type PipelineTraceExporter,
+} from "tubeless/tracing";
+
+/** Application-owned JSON adapter; `tubeless run --trace` owns file output. */
+export function createJsonExporter(write: (line: string) => void): PipelineTraceExporter {
+  return { export: (event) => write(JSON.stringify(event)) };
+}
+
+interface OpenTelemetrySpan {
+  addEvent(
+    name: string,
+    attributes: Record<string, boolean | number | string>,
+    timestampMs?: number
+  ): void;
+  end(timestampMs?: number): void;
+  recordException?(exception: { message: string; name: string; stack?: string }): void;
+  setStatus?(status: { code: number; message?: string }): void;
+}
+
+interface OpenTelemetryTracer {
+  startSpan(
+    name: string,
+    options: { attributes: Record<string, boolean | number | string>; startTime: number }
+  ): OpenTelemetrySpan;
+}
+
+// `SpanStatusCode.ERROR` from `@opentelemetry/api` without adding the SDK here.
+const OPEN_TELEMETRY_ERROR_STATUS_CODE = 2;
+
+/** Application-edge OpenTelemetry adapter without coupling Tubeless to its SDK. */
+export function createOpenTelemetryExporter(tracer: OpenTelemetryTracer): PipelineTraceExporter {
+  const spans = new Map<string, OpenTelemetrySpan>();
+  const attributes = (event: PipelineTraceEvent): Record<string, boolean | number | string> => {
+    const values: Record<string, boolean | number | string> = {
+      "pipeline.id": event.pipelineId,
+      "pipeline.run_id": event.runId,
+      "pipeline.trace_version": event.version,
+    };
+    for (const [key, value] of Object.entries(event.payload)) {
+      if (value !== undefined) {
+        values[key] =
+          typeof value === "boolean" || typeof value === "number" || typeof value === "string"
+            ? value
+            : JSON.stringify(value);
+      }
+    }
+    return values;
+  };
+  return {
+    export(event) {
+      let span = spans.get(event.runId);
+      if (!span) {
+        span = tracer.startSpan(`pipeline ${event.pipelineId}`, {
+          attributes: attributes(event),
+          startTime: event.timestampMs,
+        });
+        spans.set(event.runId, span);
+      }
+      span.addEvent(event.name, attributes(event), event.timestampMs);
+      if (event.error) {
+        span.recordException?.({
+          message: event.error.message,
+          name: "PipelineTraceError",
+          stack: event.error.stack,
+        });
+        span.setStatus?.({
+          code: OPEN_TELEMETRY_ERROR_STATUS_CODE,
+          message: event.error.message,
+        });
+      }
+      if (event.name === "pipeline.completed") {
+        span.end(event.timestampMs);
+        spans.delete(event.runId);
+      }
+    },
+  };
+}
 
 interface TracingExampleOptions {
   rows: readonly string[];
@@ -32,7 +110,7 @@ export async function runTracingExample(
   return TracingExamplePipeline.runOrThrow({ rows }, undefined, {
     tracing: {
       exporter: composeTraceExporters([
-        createJsonTraceExporter({ log: console }),
+        createJsonExporter((line) => console.log(line)),
         ...additionalExporters,
       ]),
       onExporterError: (error) => {

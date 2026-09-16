@@ -19,7 +19,7 @@ import type {
   PipelineTraceProgress,
   PipelineTraceRemote,
   PipelineTracingOptions,
-} from "./tracing.js";
+} from "./tracing-contracts.js";
 import {
   PIPELINE_TRACE_DETAIL_BYTE_LIMIT,
   PIPELINE_TRACE_LIST_LIMIT,

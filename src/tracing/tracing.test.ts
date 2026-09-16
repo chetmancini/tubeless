@@ -1,12 +1,7 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { createSteps, definePipeline, type PipelineLogger } from "../core/pipeline.js";
 import { defaultPipelineContext } from "../core/pipeline-execute.js";
-import {
-  composeTraceExporters,
-  type PipelineTraceAttributes,
-  type PipelineTraceAttributeValue,
-  type PipelineTraceEvent,
-} from "./tracing.js";
+import { composeTraceExporters, type PipelineTraceEvent } from "./tracing.js";
 
 function createLogger(): PipelineLogger & { warnings: string[] } {
   const warnings: string[] = [];
@@ -19,13 +14,6 @@ function createLogger(): PipelineLogger & { warnings: string[] } {
 }
 
 describe("pipeline tracing", () => {
-  it("keeps attribute values serializable while accepting omitted entries", () => {
-    expectTypeOf<PipelineTraceAttributeValue>().toEqualTypeOf<boolean | number | string>();
-    expectTypeOf<PipelineTraceAttributes[string]>().toEqualTypeOf<
-      boolean | number | string | undefined
-    >();
-  });
-
   it("exposes event-specific payload contracts through the name discriminant", () => {
     expectTypeOf<
       Extract<PipelineTraceEvent, { name: "pipeline.started" }>["payload"]["targetIds"]

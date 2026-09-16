@@ -155,8 +155,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Wrap normal finalizers in `requireOutputs` when a valid result requires
   specific step outputs. Use a plain finalizer only when partial output is a
   valid domain result.
-- Preserve the dependency-free runtime. Connect application telemetry SDKs through
-  exporters. Use `composeTraceExporters` from `tubeless/tracing` when
+- Preserve the dependency-free runtime. Implement concrete JSON or telemetry SDK
+  adapters at the application edge against `PipelineTraceExporter`; see the
+  [tracing recipe](../examples/tracing.ts). Use `composeTraceExporters` from `tubeless/tracing` when
   one run must fan out to multiple destinations; `onExporterError` reports the
   first partial drop, the failed destination is retired, and healthy exporters
   keep receiving events.
@@ -177,6 +178,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Observed definitions pick the latest `pipeline.started` by `timestampMs`, then
   store-local id. Storage readers, projections, and Studio embedding are
   workbench internals rather than application extension points.
+  The version 2 event and NDJSON formats remain compatible with saved recordings;
+  concrete exporter entrypoints are not part of that durability contract.
 - Pass caller-owned `correlationId` through `PipelineContext` when joining an
   external job or workflow. `runId` is package-generated for every execution;
   pass a known execution `runId` as `parentRunId` only to link that parent.

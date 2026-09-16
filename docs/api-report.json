@@ -69,7 +69,7 @@
         "StepFactory",
         "StepSkipDecision"
       ],
-      "sha256": "4aa6f7a98d8da2e447fcdb10ed0ce464b437d07e8b4b210cab36874a91aa409f",
+      "sha256": "abb2f1fca6d2e21eda1bc1cf72921fee3110f474660834202d223f805300c8d9",
       "specifier": "tubeless"
     },
     {
@@ -107,7 +107,7 @@
     {
       "declaration": "./dist/workbench/workbench-entry.d.ts",
       "exports": ["definePipelineCommand", "definePipelineProject"],
-      "sha256": "9712ef77fb78259261f0bfff0443b2f489bf0d6d47fa48e1d996eefce8a08ff6",
+      "sha256": "494aa61a6345d9a798f2e1f084a69cc7859439237c6614280a96421eb0f17ffd",
       "specifier": "tubeless/workbench"
     },
     {
@@ -121,57 +121,14 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "b4422e19dd0761e2bc39fb64332809c3f7e0098d6439423b4ce8009ccc582843",
+      "sha256": "9510932b8aec600ecf2bcfdb1a188257dad48a3108087c974689c6e6ec3ad5c9",
       "specifier": "tubeless/testing"
     },
     {
       "declaration": "./dist/tracing/tracing.d.ts",
-      "exports": [
-        "composeTraceExporters",
-        "PipelineCompletedTraceEvent",
-        "PipelineFinalizeCompletedTraceEvent",
-        "PipelineFinalizeFailedTraceEvent",
-        "PipelineFinalizeStartedTraceEvent",
-        "PipelineLogTraceEvent",
-        "PipelineStartedTraceEvent",
-        "PipelineTraceAttributes",
-        "PipelineTraceAttributeValue",
-        "PipelineTraceContext",
-        "PipelineTraceError",
-        "PipelineTraceEvent",
-        "PipelineTraceEventName",
-        "PipelineTraceExporter",
-        "PipelineTraceNestedPipeline",
-        "PipelineTraceProgress",
-        "PipelineTraceRemote",
-        "PipelineTracingOptions",
-        "StepAttemptedTraceEvent",
-        "StepCancelledTraceEvent",
-        "StepCompletedTraceEvent",
-        "StepFailedTraceEvent",
-        "StepPlannedTraceEvent",
-        "StepRunningTraceEvent",
-        "StepSkippedTraceEvent"
-      ],
-      "sha256": "ce64111cd6b3798c358cb608a7c376dfe1561a3dbe9c0155dda14c63a8efbb5e",
+      "exports": ["composeTraceExporters", "PipelineTraceEvent", "PipelineTraceExporter"],
+      "sha256": "c272c955aab09dcd8cc334ffcea3af5cfda420cecc2881a01e3316e3a38801dd",
       "specifier": "tubeless/tracing"
-    },
-    {
-      "declaration": "./dist/tracing/tracing-json.d.ts",
-      "exports": ["createJsonTraceExporter", "JsonTraceExporterOptions"],
-      "sha256": "6f737d6faff6b3c0ea3fdf720d7eb7337f8e2d3cded6abb444f62ec9d0e72bb9",
-      "specifier": "tubeless/tracing/json"
-    },
-    {
-      "declaration": "./dist/tracing/tracing-otel.d.ts",
-      "exports": [
-        "createOpenTelemetryTraceExporter",
-        "OpenTelemetryLikeSpan",
-        "OpenTelemetryLikeTracer",
-        "OpenTelemetryTraceExporterOptions"
-      ],
-      "sha256": "53fb9c215a171da414a32ba7b5b0fea99a2db412f6adebffc7807cd37d90e218",
-      "specifier": "tubeless/tracing/otel"
     }
   ],
   "packageName": "tubeless",

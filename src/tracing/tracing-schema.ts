@@ -553,8 +553,6 @@ export type PipelineTraceEventContract =
       ? PublicPipelineTraceEvent<TEvent & PipelineTraceEventOptionalFields>
       : never
     : never;
-export type PipelineTraceEventNameContract = keyof typeof pipelineTraceEventSchemas;
-
 /** @public Shared with the separately built documentation website. */
 export const pipelineTraceOpenApiSchemas = {
   PipelineError: pipelineTraceErrorSchema.jsonSchema,

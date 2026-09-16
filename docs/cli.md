@@ -143,8 +143,9 @@ tubeless run [options] <command-id-or-file> [-- <command-args...>]
 
 `--store` and `--trace` can be combined. Traces stay off stdout unless `--trace -`
 is set. When `--trace -` is set, the TTY reporter and command result go to
-stderr so stdout stays valid NDJSON. To send events to OpenTelemetry or another service, configure an exporter in
-your application. Use `composeTraceExporters` from `tubeless/tracing` for multiple
+stderr so stdout stays valid NDJSON. To send events to OpenTelemetry or another service, implement a
+`PipelineTraceExporter` in your application; the [tracing recipe](../examples/tracing.ts)
+shows JSON and OpenTelemetry adapters. Use `composeTraceExporters` from `tubeless/tracing` for multiple
 destinations; a failed exporter does not stop the others or fail the pipeline.
 
 `run` accepts only a `definePipelineCommand` export. That export owns parsing,

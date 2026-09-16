@@ -10,7 +10,10 @@ import {
   createPipelineTraceEmitter,
   type PipelineTraceEmitter,
 } from "../tracing/tracing-internal.js";
-import type { PipelineTraceAttributes, PipelineTraceContext } from "../tracing/tracing.js";
+import type {
+  PipelineTraceAttributes,
+  PipelineTraceContext,
+} from "../tracing/tracing-contracts.js";
 
 /** Internal canonical lifecycle stream. Hooks and tracing are projections of it. */
 export interface PipelineLifecycleObserver {

@@ -5,7 +5,7 @@ import type {
   PipelineStepProgress,
   StepSkipDecision,
 } from "./pipeline-types.js";
-import type { PipelineTraceAttributes } from "../tracing/tracing.js";
+import type { PipelineTraceAttributes } from "../tracing/tracing-contracts.js";
 import { validateStandardSchema } from "./pipeline-validation.js";
 
 export interface NormalizedStepSkipDecision {

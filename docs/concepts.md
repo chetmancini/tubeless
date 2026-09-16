@@ -248,6 +248,12 @@ result.finishedAtMs - result.startedAtMs;
 
 Trace events use the version 2 discriminated payload model. Every event carries
 a unique execution `runId` and keeps reusable external correlation separate.
+`tubeless/tracing` intentionally exposes only that typed event union, the exporter
+interface, and exporter composition. Concrete JSON and telemetry SDK adapters
+belong in the workbench or application integration; see the
+[tracing recipe](../examples/tracing.ts). This narrow API does not weaken the
+recording contract: existing version 2 NDJSON traces remain readable by
+`tubeless history` and `tubeless ui`.
 
 ### Local event store and studio
 

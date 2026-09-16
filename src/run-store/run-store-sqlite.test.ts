@@ -414,7 +414,7 @@ describe("SQLite pipeline run store", () => {
           attempt: 1,
           // SAFETY: malformed runtime input proves the SQLite adapter invokes
           // the same codec as the NDJSON reader.
-          attributes: cycle as import("../tracing/tracing.js").PipelineTraceAttributes,
+          attributes: cycle as import("../tracing/tracing-contracts.js").PipelineTraceAttributes,
         },
         pipelineId: "import",
         runId: "run-1",

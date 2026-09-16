@@ -4,10 +4,9 @@ import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { openNdjsonPipelineRunStore } from "./run-store-ndjson.js";
 import { createSteps, definePipeline } from "tubeless";
-import { createJsonTraceExporter } from "../tracing/tracing-json.js";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite.js";
 import { projectPipelineRunStore } from "./run-store.js";
-import type { PipelineTraceEvent } from "../tracing/tracing.js";
+import type { PipelineTraceEvent, PipelineTraceExporter } from "../tracing/tracing.js";
 
 const directories: string[] = [];
 
@@ -36,6 +35,10 @@ function event(runId: string, pipelineId = "import"): Record<string, unknown> {
   };
 }
 
+function captureJson(lines: string[]): PipelineTraceExporter {
+  return { export: (value) => void lines.push(JSON.stringify(value)) };
+}
+
 describe("openNdjsonPipelineRunStore", () => {
   it.each(["a", "界", '\u0000"\\'])(
     "reopens large detail payloads containing %j with default byte limits",
@@ -60,7 +63,7 @@ describe("openNdjsonPipelineRunStore", () => {
       });
       const lines: string[] = [];
       await pipeline.run({}, undefined, {
-        tracing: { exporter: createJsonTraceExporter({ write: (line) => lines.push(line) }) },
+        tracing: { exporter: captureJson(lines) },
       });
       expect(Math.max(...lines.map((line) => Buffer.byteLength(line, "utf8")))).toBeLessThan(
         1024 * 1024
@@ -86,7 +89,7 @@ describe("openNdjsonPipelineRunStore", () => {
     }
   );
 
-  it("assigns zero-based ids and supports store-compatible filters and pagination", async () => {
+  it("reads durable version 2 recordings with store-compatible filters", async () => {
     const correlated = { ...event("run-1"), correlationId: "job-1" };
     const filename = await tempFile(
       `${JSON.stringify(correlated)}\n\n${JSON.stringify(event("run-2", "publish"))}\n`
@@ -265,11 +268,7 @@ describe("openNdjsonPipelineRunStore", () => {
     });
     const lines: string[] = [];
 
-    const run = await pipeline.run(
-      {},
-      {},
-      { tracing: { exporter: createJsonTraceExporter({ write: (line) => lines.push(line) }) } }
-    );
+    const run = await pipeline.run({}, {}, { tracing: { exporter: captureJson(lines) } });
     expect(run.errors[0]).toMatchObject({ message: "", cause: { message: "" } });
 
     const filename = await tempFile(`${lines.join("\n")}\n`);
@@ -309,11 +308,7 @@ describe("recorded fan-out diagnostics", () => {
     });
     const pipeline = definePipeline({ id: "parent", steps: [fan], finalize: () => true });
     const lines: string[] = [];
-    const run = await pipeline.run(
-      {},
-      {},
-      { tracing: { exporter: createJsonTraceExporter({ write: (line) => lines.push(line) }) } }
-    );
+    const run = await pipeline.run({}, {}, { tracing: { exporter: captureJson(lines) } });
     const expected = run.errors[0]!.fanOut;
     expect(expected).toMatchObject({ failureCount: 40, omittedFailureCount: 8 });
     const filename = await tempFile(`${lines.join("\n")}\n`);

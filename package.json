@@ -119,16 +119,6 @@
       "types": "./dist/tracing/tracing.d.ts",
       "import": "./dist/tracing/tracing.js",
       "default": "./dist/tracing/tracing.js"
-    },
-    "./tracing/json": {
-      "types": "./dist/tracing/tracing-json.d.ts",
-      "import": "./dist/tracing/tracing-json.js",
-      "default": "./dist/tracing/tracing-json.js"
-    },
-    "./tracing/otel": {
-      "types": "./dist/tracing/tracing-otel.d.ts",
-      "import": "./dist/tracing/tracing-otel.js",
-      "default": "./dist/tracing/tracing-otel.js"
     }
   }
 }

@@ -1,4 +1,4 @@
-import type { PipelineTraceError, PipelineTraceEvent } from "./tracing.js";
+import type { PipelineTraceError, PipelineTraceEvent } from "./tracing-contracts.js";
 import { pipelineTraceErrorSchema, pipelineTraceEventSchema } from "./tracing-schema.js";
 
 /** Decode and validate a structured pipeline error from an untrusted wire value. */
