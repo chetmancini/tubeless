@@ -85,6 +85,11 @@
       "import": "./dist/core/pipeline.js",
       "default": "./dist/core/pipeline.js"
     },
+    "./cli": {
+      "types": "./dist/cli/cli.d.ts",
+      "import": "./dist/cli/cli.js",
+      "default": "./dist/cli/cli.js"
+    },
     "./batch": {
       "types": "./dist/utilities/batch.d.ts",
       "import": "./dist/utilities/batch.js",

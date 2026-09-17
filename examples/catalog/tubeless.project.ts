@@ -1,6 +1,8 @@
-import { definePipelineProject } from "tubeless/workbench";
+import { definePipelineProject } from "tubeless/cli";
 
-// Register commands here so the CLI, Studio, and coding agents can find them.
+// CLI-owned catalog; commands use definePipelineCommand from tubeless/cli.
+// Register commands here so the CLI and coding agents can find them;
+// Studio can consume the same catalog later without changing the pipelines.
 // Module paths resolve from this file; cwd controls command
 // execution. Command argv flags stay --step/--target, while mapOptions and hooks
 // receive stepIds and targets.

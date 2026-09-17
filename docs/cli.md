@@ -17,6 +17,40 @@ can run on Node.js 22 or later without Bun.
 
 ## Commands
 
+### Authoring API
+
+Import command and project declarations from `tubeless/cli`:
+
+```ts
+import { defineCommand, definePipelineCommand, definePipelineProject } from "tubeless/cli";
+```
+
+Use `defineCommand` for a standalone script and `definePipelineCommand` for a
+pipeline-backed command with built-in selection, dry runs and terminal reporting.
+Both expose typed parsing, validation, descriptors and execution. Their public
+configuration, parameter, result and hook types live on this same subpath.
+
+Use `definePipelineProject` to register command modules with stable IDs. A project
+catalog is a CLI contract: listing commands does not require Studio or load the
+registered modules. The same catalog can later be passed to `tubeless ui`.
+
+| Layer                | Public entry                                            | Responsibility                                                                           |
+| -------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Core                 | `tubeless`                                              | Typed graphs, planning, execution, hooks and run reports                                 |
+| CLI                  | `tubeless/cli`                                          | Standalone and pipeline commands, typed flags and project catalogs                       |
+| Optional observation | `tubeless/tracing`, bundled `history` and `ui` commands | Export events or inspect recorded runs; Studio can launch explicitly registered commands |
+
+The CLI import graph includes neither storage nor Studio. The executable supplies
+those integrations only when requested. `tubeless/workbench` keeps
+`definePipelineCommand` and `definePipelineProject` as compatibility aliases;
+new code should use `tubeless/cli`. Storage readers, Studio's server/protocol,
+terminal renderer internals and argument-parser internals remain private.
+
+General filesystem/env helpers and application-specific selection prompts belong
+in the application. `tubeless/node` supplies the pipeline checkpoint helpers.
+
+### Executable commands
+
 | Command            | Accepts                             | Does                                                                  |
 | ------------------ | ----------------------------------- | --------------------------------------------------------------------- |
 | `tubeless list`    | A project manifest                  | Lists explicitly registered command IDs without loading their modules |

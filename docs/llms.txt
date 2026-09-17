@@ -35,7 +35,7 @@ Agent instructions:
 - Use context.log, context.signal, context.sleep, and progress APIs.
 - Use createPipelineTestRuntime from tubeless/testing for deterministic tests with captured logs, statuses, progress, clock, and cancellation.
 - Compile generated agent submissions with bun run eval:agent --; runtime tests, provider invocation, and semantic assessment remain externally controlled.
-- Import definePipelineCommand and definePipelineProject from tubeless/workbench.
+- Import definePipelineCommand and definePipelineProject from tubeless/cli.
 - Omit mapOptions only when validated CLI flags already satisfy same-name pipeline options; map renamed, loaded, or derived values explicitly. --step and --target are argv flags; mapOptions and hooks receive stepIds and targets.
 - Declare public goals with targets: [step] on definePipeline, then select their
   IDs to include required inputs and failure gates. stepIds is an exact filter

@@ -367,7 +367,7 @@ try {
   writeFileSync(
     pipelineFixture,
     `import { createSteps, definePipeline } from "tubeless";
-import { definePipelineCommand } from "tubeless/workbench";
+import { definePipelineCommand } from "tubeless/cli";
 const step = createSteps();
 const load = step("load", {
   description: "Load input",
@@ -408,7 +408,7 @@ export const FixtureCommand = definePipelineCommand(FixturePipeline, {
   const projectFixture = join(consumerRoot, "tubeless.project.mjs");
   writeFileSync(
     projectFixture,
-    `import { definePipelineProject } from "tubeless/workbench";
+    `import { definePipelineProject } from "tubeless/cli";
 export default definePipelineProject({
   commands: [{ id: "fixture-command", file: "./pipeline.mjs", export: "FixtureCommand" }],
 });

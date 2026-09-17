@@ -74,7 +74,7 @@ report with step statuses, errors, and timings; `plan` to preview execution; or
 
 ## Use the CLI
 
-For command-line workflows, register commands in `tubeless.project.ts`.
+Use `tubeless/cli` to define commands and catalogs; add Studio when needed.
 The [CLI guide](./docs/cli.md) explains how to set up the manifest and commands.
 With an `import-rows` command registered, you can run:
 

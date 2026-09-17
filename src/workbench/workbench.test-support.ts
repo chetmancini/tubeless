@@ -161,7 +161,7 @@ export async function writeStudioConfig(
 ): Promise<void> {
   const exportName = command.exportName ?? "FixtureCommand";
   const name = command.name ?? "Studio fixture";
-  const projectModuleUrl = pathToFileURL(path.resolve("dist/workbench/workbench-project.js")).href;
+  const projectModuleUrl = pathToFileURL(path.resolve("dist/cli/pipeline-project.js")).href;
   const configDirectory = path.join(directory, "config");
   await mkdir(configDirectory);
   await writeFile(

@@ -1,8 +1,10 @@
 # Source modules
 
-Keep one dependency-free runtime with focused public entrypoints. Operational
-tools are optional behind the `tubeless/workbench` registration entry and the
-bundled executable; their implementation modules are not public subpaths.
+Keep one dependency-free runtime with focused public entrypoints. `tubeless`
+owns pipeline execution; `tubeless/cli` adds command and project declarations.
+Studio and storage are optional integrations behind the bundled executable;
+their implementation modules are not public subpaths. `tubeless/workbench`
+retains its command and project registration aliases for existing consumers.
 Directory names describe internal ownership. Keep implementation tests beside
 their source files.
 
@@ -11,12 +13,12 @@ their source files.
 | `core/`      | Pipeline definitions, graph planning, execution, lifecycle and progress                       |
 | `tracing/`   | Trace contracts, internal emission and exporter composition                                   |
 | `utilities/` | Domain-independent cancellation, collections, batching, retry, rate limits and error branding |
-| `cli/`       | Argument parsing, command declarations and pipeline command adaptation                        |
+| `cli/`       | Argument parsing, command declarations, pipeline adaptation and project catalog contracts     |
 | `reporter/`  | Terminal reporting, prompts and ticker workers                                                |
 | `render/`    | Plan and error formatting                                                                     |
 | `run-store/` | Event reader/store contracts, projection, SQLite and NDJSON adapters                          |
 | `studio/`    | HTTP server, browser client, page, state and UI protocol                                      |
-| `workbench/` | Executable commands, module loading, project catalogs and integration wiring                  |
+| `workbench/` | Executable commands, module and catalog loading, and integration wiring                       |
 | `node/`      | Filesystem, paths, environment and checkpoints                                                |
 | `testing/`   | Test runtime and executable-example integration tests                                         |
 
@@ -31,7 +33,9 @@ their source files.
 - Studio consumes storage and accepts optional launcher/history capabilities.
   It shares type-only pipeline and CLI descriptors; it does not load command
   execution or a concrete storage adapter itself.
-- CLI adapts pipelines with Node helpers and terminal reporters. Workbench owns
+- CLI adapts pipelines with Node helpers and terminal reporters, and declares
+  project catalogs without loading their command modules. It must not load
+  workbench, storage or Studio, including through lazy imports. Workbench owns
   integration wiring, including selecting storage adapters and supplying studio
   launch capabilities.
 - Type-only imports can share contracts without loading their implementation.

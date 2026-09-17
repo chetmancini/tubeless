@@ -14,7 +14,15 @@ import {
   type PipelineTraceEvent,
   type PipelineTraceExporter,
 } from "tubeless/tracing";
-import { definePipelineCommand, definePipelineProject } from "tubeless/workbench";
+import {
+  CliValidationError,
+  defineCommand,
+  definePipelineCommand,
+  definePipelineProject,
+  type CliParamsSchema,
+  type PipelineProjectManifestInput,
+} from "tubeless/cli";
+import * as workbench from "tubeless/workbench";
 
 interface ImportOptions {
   lines: readonly string[];
@@ -204,16 +212,37 @@ describe("public API example", () => {
     expect(events).toEqual([event]);
   });
 
-  it("registers commands and project catalogs through the workbench entrypoint", () => {
+  it("runs standalone typed commands through tubeless/cli", async () => {
+    const params = { count: { type: "number" } } satisfies CliParamsSchema;
+    const command = defineCommand({
+      name: "count",
+      params,
+      run: (values) => ({ count: values.count, dryRun: values.dryRun }),
+    });
+
+    await expect(command.run(["--count", "3", "--dry-run"])).resolves.toEqual({
+      count: 3,
+      dryRun: true,
+    });
+    await expect(command.run(["--count", "invalid"])).rejects.toBeInstanceOf(CliValidationError);
+  });
+
+  it("preserves workbench registration aliases", () => {
+    expect(workbench.definePipelineCommand).toBe(definePipelineCommand);
+    expect(workbench.definePipelineProject).toBe(definePipelineProject);
+  });
+
+  it("registers commands and project catalogs through the CLI entrypoint", () => {
     const command = definePipelineCommand(ImportPipeline, {
       params: {
         lines: { type: "string", multiple: true },
       },
       reporter: false,
     });
-    const project = definePipelineProject({
+    const catalog = {
       commands: [{ id: "import", file: "./import.ts", export: "ImportCommand" }],
-    });
+    } satisfies PipelineProjectManifestInput;
+    const project = definePipelineProject(catalog);
 
     expect(command.descriptor.name).toBe("import");
     expect(project.commands[0]?.id).toBe("import");
