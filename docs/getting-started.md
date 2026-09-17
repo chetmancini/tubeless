@@ -29,9 +29,8 @@ Command-by-command usage is in [the CLI](./cli.md).
 Library imports (`tubeless` and every subpath) are ESM-only and require
 Node.js 22 or later. They are dependency-free compiled JavaScript.
 
-`npx tubeless` starts the CLI through Node and then runs it with Bun. If Bun is
-missing, the CLI prints installation instructions. On a machine with Bun but no
-Node, use `bunx --bun tubeless`.
+The executable uses `#!/usr/bin/env bun`, so Bun must be installed and available
+on `PATH` even when npm or `npx` installs the package.
 
 Supported operating systems are Linux and macOS. Windows is untested.
 

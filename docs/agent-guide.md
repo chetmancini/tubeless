@@ -125,9 +125,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 ## Runtime rules
 
 - Library entrypoints are ESM-only and require Node.js 22 or later. The
-  `tubeless` CLI requires Bun 1.3.14 or later; its `#!/usr/bin/env node`
-  trampoline relaunches the binary with Bun under Node and reports an
-  actionable install message when Bun is missing.
+  `tubeless` CLI uses a `#!/usr/bin/env bun` entrypoint and requires Bun 1.3.14
+  or later on `PATH`.
 - Use `context.log`, never direct `console` calls inside steps.
 - Pass `context.signal` into network calls, batching, retry, rate limiting, and
   long waits. Use `context.sleep` for retry-aware or testable delays.

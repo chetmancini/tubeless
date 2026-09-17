@@ -416,9 +416,6 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
               io.signal.addEventListener("abort", stop, { once: true });
               return;
             }
-            // Same de-dup pattern as `manageWorkbenchSignal`: the trampoline's
-            // forwarded copy of a terminal Ctrl-C must not fall through to
-            // default termination while the server, launches, and store close.
             disposeProcessSignals = onFirstProcessSignal(["SIGINT", "SIGTERM"], () => stop());
           });
           return TUBELESS_WORKBENCH_EXIT_CODE.success;
