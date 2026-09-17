@@ -30,6 +30,24 @@ export default definePipelineProject({
   cwd: ".",
   commands: [
     {
+      id: "yaml-peloton",
+      file: "../yaml-peloton.ts",
+      export: "YamlPelotonCommand",
+      name: "Peloton from YAML",
+    },
+    {
+      id: "yaml-import",
+      file: "../yaml-pipelines.ts",
+      export: "YamlImportCommand",
+      name: "Import rows from YAML",
+    },
+    {
+      id: "yaml-preview",
+      file: "../yaml-pipelines.ts",
+      export: "YamlPreviewCommand",
+      name: "Preview rows from YAML",
+    },
+    {
       id: "import-rows",
       file: "./scripts/import.ts",
       export: "ImportCommand",

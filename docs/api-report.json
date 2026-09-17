@@ -147,12 +147,22 @@
     {
       "declaration": "./dist/project/project.d.ts",
       "exports": [
+        "compilePipelineDocument",
         "definePipelineProject",
+        "PipelineDocument",
+        "PipelineDocumentDefinition",
+        "PipelineDocumentError",
+        "PipelineDocumentFinalizer",
+        "PipelineDocumentHandler",
+        "PipelineDocumentMetadata",
+        "PipelineDocumentRegistry",
+        "PipelineDocumentStep",
         "PipelineProjectCommandModule",
         "PipelineProjectManifest",
-        "PipelineProjectManifestInput"
+        "PipelineProjectManifestInput",
+        "validatePipelineDocument"
       ],
-      "sha256": "c6a5ebb3f4a6fdfe83af766947ff0be005f370f044b588572ac2357481d0bd19",
+      "sha256": "464f5d94a3533c4050c32d902badafa4fabfdec176152bb36bb738cf52ce6e81",
       "specifier": "tubeless/project"
     },
     {

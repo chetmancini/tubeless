@@ -229,7 +229,12 @@ describe("public API example", () => {
 
   it("keeps terminal commands and project catalogs on distinct public entrypoints", () => {
     expect(cli).not.toHaveProperty("definePipelineProject");
-    expect(Object.keys(project)).toEqual(["definePipelineProject"]);
+    expect(Object.keys(project).sort()).toEqual([
+      "PipelineDocumentError",
+      "compilePipelineDocument",
+      "definePipelineProject",
+      "validatePipelineDocument",
+    ]);
   });
 
   it("registers CLI commands in a project catalog", () => {

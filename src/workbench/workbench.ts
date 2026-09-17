@@ -10,6 +10,7 @@ import {
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
 import { runUi } from "./workbench-ui.js";
+import { runValidate } from "./workbench-validate.js";
 
 export { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "./workbench-shared.js";
 
@@ -19,6 +20,7 @@ Inspect, plan, visualize, or safely run exported tubeless workflows.
 
 Commands:
   tubeless list      List commands explicitly registered in the project manifest
+  tubeless validate  Check a YAML or JSON pipeline document without loading handlers
   tubeless inspect   Show pipeline identity and the default structural plan
   tubeless plan      Preview step selection without executing the pipeline
   tubeless graph     Generate Mermaid flowchart source
@@ -43,6 +45,7 @@ export async function runWorkbenchCli(
     return writeUsageError(io, "Pass a command.", WORKBENCH_USAGE);
   }
   if (command === "list") return runList(commandArgs, io);
+  if (command === "validate") return runValidate(commandArgs, io);
   if (command === "inspect") return runInspect(commandArgs, io);
   if (command === "plan") return runPlan(commandArgs, io);
   if (command === "graph") return runGraph(commandArgs, io);

@@ -43,6 +43,7 @@ ${DOC_NAV.map(({ slug, label, blurb }) => `- [${label}](${absUrl(`docs/${slug}.m
 - [Code conversion skill](${GITHUB_BLOB}/skills/tubeless-make-pipeline/SKILL.md): Preserve behavior while extracting a structured, typed pipeline.
 - [Project manifest](${GITHUB_BLOB}/examples/catalog/tubeless.project.ts): File layout, stable registered IDs, and exports.
 - [API report](${absUrl("api-report.json")}): Machine-readable public declarations.
+- [Pipeline document JSON Schema v1](${absUrl("schemas/pipeline-document-v1.schema.json")}): Validate YAML or JSON document structure and metadata without importing handlers.
 
 ## Optional
 

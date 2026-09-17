@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://tubeless.io/schemas/pipeline-document-v1.schema.json
+$schema: https://tubeless.io/schemas/pipeline-document-v1.schema.json
+version: 1
+metadata:
+  name: Peloton from YAML
+  description: A simulated race-day workflow with retries, progress, and publication gates.
+  authors: [Tubeless maintainers]
+  date: "2026-09-17"
+
+pipelines:
+  yaml-peloton:
+    optionsSchema: raceOptions
+    targets: [validate-tech, publish-start-list]
+    steps:
+      - id: discover-peloton
+        name: Discover Peloton
+        description: Sign on three riders with visible progress.
+        run: discoverRiders
+        outputSchema: riders
+
+      - id: resolve-weather
+        name: Resolve Weather
+        description: Read the simulated weather station, or use a dry-run forecast.
+        run: resolveWeather
+        dryRun:
+          run: previewWeather
+
+      - id: normalize-bikes
+        name: Normalize Bikes
+        description: Trim and lowercase rider kit lists.
+        run: normalizeBikes
+        dependsOn: [discover-peloton]
+        outputSchema: riders
+
+      - id: inspect-bikes
+        name: Inspect Bikes
+        description: Inspect riders concurrently, retrying a simulated radio drop.
+        run: inspectBikes
+        dependsOn: [normalize-bikes]
+        outputSchema: riders
+
+      - id: audit-cars
+        name: Audit Team Cars
+        description: Audit the cars independently of the publication path.
+        run: auditCars
+        dependsOn: [discover-peloton]
+
+      - id: validate-tech
+        name: Validate Tech
+        description: Check equipment before allowing the start list to be posted.
+        run: validateTech
+        dependsOn: [inspect-bikes, resolve-weather]
+
+      - id: publish-start-list
+        name: Publish Start List
+        description: Simulate publication only after tech validation succeeds.
+        run: publishStartList
+        dependsOn: [inspect-bikes]
+        optionalDependsOn: [validate-tech]
+        skipAfterFailureOf: [validate-tech]
+        dryRun: skip
+
+    # A partial summary is intentional for dry runs, selected targets, and failures.
+    finalize:
+      run: raceSummary

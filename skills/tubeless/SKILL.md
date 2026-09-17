@@ -50,6 +50,18 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 
 Read the corresponding package recipe before using these features:
 
+- For YAML or JSON authoring, read `docs/declarative-pipelines.md` and
+  `examples/yaml-pipelines.ts`. Use `compilePipelineDocument` from
+  `tubeless/project` on parsed data with explicitly registered handlers and
+  schemas. Keep parsing at the application edge and command registration
+  explicit. Handler inputs and pipeline results are unknown; validate or narrow
+  them. Plans still do not validate business inputs.
+  Use `tubeless validate --json <document.yaml>` for a structure-only check
+  without handlers. Fetch `https://tubeless.io/schemas/pipeline-document-v1.schema.json`
+  for editor and agent validation, or use packaged `docs/pipeline-document.schema.json`.
+  Optional metadata (`name`, `description`, `authors`, `date`) does not affect
+  execution; compile and plan to check handler references and graph semantics.
+
 - `fromPipeline` for an independently useful child workflow;
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
   Use ordinary helpers or `runConcurrent` for lightweight work without child

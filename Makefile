@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help list verify inspect plan graph run ui require-file install build lint format \
+.PHONY: help list verify validate inspect plan graph run ui require-file install build lint format \
 	format-check typecheck knip test docs-check api-check api-generate eval-verify pack \
 	pack-verify tubeless check release website website-build
 
@@ -22,6 +22,8 @@ help:
 	@echo "      List explicitly registered project commands"
 	@echo "  make verify FILE=path/to/module.ts [EXPORT=Name] [PROJECT=manifest]"
 	@echo "      Load and verify a pipeline or command module; alias: make inspect"
+	@echo "  make validate FILE=path/to/pipelines.yaml [ARGS=--json]"
+	@echo "      Check YAML or JSON document structure without importing handlers"
 	@echo "  make plan FILE=path/to/module.ts ARGS=\"--target publish --explain\""
 	@echo "      Preview selected work without executing steps"
 	@echo "  make graph FILE=path/to/module.ts ARGS=\"--markdown\""
@@ -60,6 +62,9 @@ require-file:
 	fi
 
 verify: inspect
+
+validate: require-file
+	bun run tubeless -- validate $(ARGS) "$(FILE)"
 
 list:
 	bun run tubeless -- list $(project_arg) $(ARGS)

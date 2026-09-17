@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tubeless.io/schemas/pipeline-document-v1.schema.json",
+  "title": "Tubeless pipeline document v1",
+  "description": "Structural schema for parsed YAML or JSON. Compilation separately checks registered handlers, schemas, dependencies, cycles, and target/finalizer compatibility. Metadata has no execution semantics.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "pipelines"],
+  "properties": {
+    "$schema": {
+      "$ref": "#/$defs/text",
+      "description": "Optional editor schema association; Tubeless never fetches it during validation."
+    },
+    "version": { "const": 1 },
+    "metadata": { "$ref": "#/$defs/metadata" },
+    "pipelines": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/text" },
+      "additionalProperties": { "$ref": "#/$defs/pipeline" }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "pattern": "\\S" },
+    "names": { "type": "array", "items": { "$ref": "#/$defs/text" } },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/text",
+          "description": "Display name for this document or project."
+        },
+        "description": { "$ref": "#/$defs/text" },
+        "authors": {
+          "$ref": "#/$defs/names",
+          "description": "Optional author-maintained names or organizations."
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "Author-maintained document date (YYYY-MM-DD), not a schedule or run timestamp."
+        }
+      }
+    },
+    "handler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run"],
+      "properties": { "run": { "$ref": "#/$defs/text" } }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "run"],
+      "properties": {
+        "id": { "$ref": "#/$defs/text" },
+        "run": { "$ref": "#/$defs/text", "description": "Name in registry.steps." },
+        "name": { "$ref": "#/$defs/text" },
+        "description": { "$ref": "#/$defs/text" },
+        "dependsOn": { "$ref": "#/$defs/names" },
+        "optionalDependsOn": { "$ref": "#/$defs/names" },
+        "skipAfterFailureOf": { "$ref": "#/$defs/names" },
+        "dryRun": { "oneOf": [{ "const": "skip" }, { "$ref": "#/$defs/handler" }] },
+        "outputSchema": { "$ref": "#/$defs/text", "description": "Name in registry.schemas." }
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["steps", "finalize"],
+      "properties": {
+        "optionsSchema": {
+          "$ref": "#/$defs/text",
+          "description": "Name in registry.optionsSchemas."
+        },
+        "resultSchema": { "$ref": "#/$defs/text", "description": "Name in registry.schemas." },
+        "targets": { "$ref": "#/$defs/names" },
+        "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } },
+        "finalize": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["run"],
+          "properties": {
+            "run": { "$ref": "#/$defs/text", "description": "Name in registry.finalizers." },
+            "requireOutputs": { "$ref": "#/$defs/names" }
+          }
+        }
+      }
+    }
+  }
+}
