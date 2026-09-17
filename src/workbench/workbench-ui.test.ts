@@ -74,7 +74,7 @@ async function writeCommandFixture(): Promise<{ directory: string; filePath: str
 }
 
 async function writeStudioConfig(directory: string): Promise<string> {
-  const projectModuleUrl = pathToFileURL(path.resolve("dist/workbench/workbench-project.js")).href;
+  const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project-manifest.js")).href;
   const configDirectory = path.join(directory, "config");
   await mkdir(configDirectory);
   const filePath = path.join(configDirectory, "tubeless.project.mjs");

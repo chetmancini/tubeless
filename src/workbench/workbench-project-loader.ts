@@ -10,7 +10,7 @@ import {
   isPipelineProjectManifest,
   type PipelineProjectCommandModule,
   type PipelineProjectManifest,
-} from "./workbench-project.js";
+} from "../project/project-manifest.js";
 import {
   errorMessage,
   loadPipelineCommand,

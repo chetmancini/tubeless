@@ -161,7 +161,7 @@ export type CliParams<TSchema extends CliParamsSchema> = {
 export interface CliContext {
   cwd: string;
   /** Environment used for `param.env` fallbacks. Defaults to `process.env`. */
-  env?: NodeJS.ProcessEnv;
+  env?: Record<string, string | undefined>;
   log: PipelineLogger;
   /** Optional executor-only context used when this command runs a pipeline. */
   pipelineContext?: Omit<PipelineContext, "cwd" | "log" | "signal">;

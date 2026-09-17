@@ -57,9 +57,12 @@ Read the corresponding package recipe before using these features:
 - `createSteps(optionsSchema)`, `outputSchema`, or `resultSchema` for runtime
   validation at untrusted boundaries. Reuse the project's Standard Schema
   implementation; core needs no schema dependency.
-- `definePipelineCommand` from `tubeless/workbench` for pipeline-backed scripts.
+- `definePipelineCommand` from `tubeless/cli` for pipeline-backed scripts.
   Built-in `--step` / `--target` flags map to `stepIds` / `targets`. Do not
   redeclare built-in flags. Read `docs/cli.md` for option mapping.
+  Use `defineCommand` from `tubeless/cli` for standalone scripts and
+  `definePipelineProject` from `tubeless/project` for project catalogs shared
+  by the CLI and optional Studio.
 - Use `pipelines/<name>.ts` for definitions and `scripts/<name>.ts` for command
   wrappers when introducing a layout. Register commands explicitly in
   `tubeless.project.ts`; adapt the package's `examples/catalog/` without copying

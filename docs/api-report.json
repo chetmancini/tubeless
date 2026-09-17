@@ -73,6 +73,46 @@
       "specifier": "tubeless"
     },
     {
+      "declaration": "./dist/cli/cli.d.ts",
+      "exports": [
+        "CliBooleanParam",
+        "CliCheckpointConfig",
+        "CliCommand",
+        "CliCommandConfig",
+        "CliCommandDescriptor",
+        "CliContext",
+        "CliHelpRequested",
+        "CliNumberParam",
+        "CliParam",
+        "CliParameterDescriptor",
+        "CliParams",
+        "CliParamsSchema",
+        "CliParamType",
+        "CliParseResult",
+        "CliPathParam",
+        "CliStringParam",
+        "CliValidationError",
+        "defineCommand",
+        "definePipelineCommand",
+        "DefinePipelineCommandConfig",
+        "PipelineCliParseResult",
+        "PipelineCliValues",
+        "PipelineCommand",
+        "PipelineCommandHookConfig",
+        "PipelineCommandHookContext",
+        "PipelineCommandHookSets",
+        "PipelineReporterConfig",
+        "PipelineReporterMode",
+        "ReporterColorMode",
+        "ReporterOutput",
+        "ReporterSymbolMode",
+        "ReporterTerminalCapabilities",
+        "RunReporterConfig"
+      ],
+      "sha256": "996eeba686bb2a3124c21f30e4c5b5d36873c1a30cbba89ef2b9629206feef48",
+      "specifier": "tubeless/cli"
+    },
+    {
       "declaration": "./dist/utilities/batch.d.ts",
       "exports": [
         "chunk",
@@ -105,10 +145,15 @@
       "specifier": "tubeless/retry"
     },
     {
-      "declaration": "./dist/workbench/workbench-entry.d.ts",
-      "exports": ["definePipelineCommand", "definePipelineProject"],
-      "sha256": "494aa61a6345d9a798f2e1f084a69cc7859439237c6614280a96421eb0f17ffd",
-      "specifier": "tubeless/workbench"
+      "declaration": "./dist/project/project.d.ts",
+      "exports": [
+        "definePipelineProject",
+        "PipelineProjectCommandModule",
+        "PipelineProjectManifest",
+        "PipelineProjectManifestInput"
+      ],
+      "sha256": "c6a5ebb3f4a6fdfe83af766947ff0be005f370f044b588572ac2357481d0bd19",
+      "specifier": "tubeless/project"
     },
     {
       "declaration": "./dist/testing/testing.d.ts",

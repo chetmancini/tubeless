@@ -6,16 +6,17 @@ Package: `tubeless`
 
 ## Public entrypoints
 
-| Entrypoint            | Declaration                             | Surface hash                                                       | Exported symbols |
-| --------------------- | --------------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless`            | `./dist/core/pipeline.d.ts`             | `abb2f1fca6d2e21eda1bc1cf72921fee3110f474660834202d223f805300c8d9` |               65 |
-| `tubeless/batch`      | `./dist/utilities/batch.d.ts`           | `6b7fe7d6eec6532cc835505517c3481e4290a2a606c2fddf6c80367f5c76c5f5` |                7 |
-| `tubeless/node`       | `./dist/node/node.d.ts`                 | `1bf8549ca953a11e7202dbda8013db2a8f1d56286f1618bad929efbbb2efd302` |                3 |
-| `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts`      | `5cd093bb780a19e44b087b01e2b38e06f07e7233c9920988ba399036e319c368` |                1 |
-| `tubeless/retry`      | `./dist/utilities/retry.d.ts`           | `f91f83f8e31e3e629ed90d1b04656110572ea970187a92369f0908cd75ae8f00` |                4 |
-| `tubeless/workbench`  | `./dist/workbench/workbench-entry.d.ts` | `494aa61a6345d9a798f2e1f084a69cc7859439237c6614280a96421eb0f17ffd` |                2 |
-| `tubeless/testing`    | `./dist/testing/testing.d.ts`           | `9510932b8aec600ecf2bcfdb1a188257dad48a3108087c974689c6e6ec3ad5c9` |                7 |
-| `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`           | `c272c955aab09dcd8cc334ffcea3af5cfda420cecc2881a01e3316e3a38801dd` |                3 |
+| Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
+| --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
+| `tubeless`            | `./dist/core/pipeline.d.ts`        | `abb2f1fca6d2e21eda1bc1cf72921fee3110f474660834202d223f805300c8d9` |               65 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `996eeba686bb2a3124c21f30e4c5b5d36873c1a30cbba89ef2b9629206feef48` |               33 |
+| `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `6b7fe7d6eec6532cc835505517c3481e4290a2a606c2fddf6c80367f5c76c5f5` |                7 |
+| `tubeless/node`       | `./dist/node/node.d.ts`            | `1bf8549ca953a11e7202dbda8013db2a8f1d56286f1618bad929efbbb2efd302` |                3 |
+| `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `5cd093bb780a19e44b087b01e2b38e06f07e7233c9920988ba399036e319c368` |                1 |
+| `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `f91f83f8e31e3e629ed90d1b04656110572ea970187a92369f0908cd75ae8f00` |                4 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `c6a5ebb3f4a6fdfe83af766947ff0be005f370f044b588572ac2357481d0bd19` |                4 |
+| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `9510932b8aec600ecf2bcfdb1a188257dad48a3108087c974689c6e6ec3ad5c9` |                7 |
+| `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `c272c955aab09dcd8cc334ffcea3af5cfda420cecc2881a01e3316e3a38801dd` |                3 |
 
 ## Symbols
 
@@ -87,6 +88,42 @@ Package: `tubeless`
 - `StepFactory`
 - `StepSkipDecision`
 
+### `tubeless/cli`
+
+- `CliBooleanParam`
+- `CliCheckpointConfig`
+- `CliCommand`
+- `CliCommandConfig`
+- `CliCommandDescriptor`
+- `CliContext`
+- `CliHelpRequested`
+- `CliNumberParam`
+- `CliParam`
+- `CliParameterDescriptor`
+- `CliParams`
+- `CliParamsSchema`
+- `CliParamType`
+- `CliParseResult`
+- `CliPathParam`
+- `CliStringParam`
+- `CliValidationError`
+- `defineCommand`
+- `definePipelineCommand`
+- `DefinePipelineCommandConfig`
+- `PipelineCliParseResult`
+- `PipelineCliValues`
+- `PipelineCommand`
+- `PipelineCommandHookConfig`
+- `PipelineCommandHookContext`
+- `PipelineCommandHookSets`
+- `PipelineReporterConfig`
+- `PipelineReporterMode`
+- `ReporterColorMode`
+- `ReporterOutput`
+- `ReporterSymbolMode`
+- `ReporterTerminalCapabilities`
+- `RunReporterConfig`
+
 ### `tubeless/batch`
 
 - `chunk`
@@ -114,10 +151,12 @@ Package: `tubeless`
 - `RetryOptions`
 - `withRetry`
 
-### `tubeless/workbench`
+### `tubeless/project`
 
-- `definePipelineCommand`
 - `definePipelineProject`
+- `PipelineProjectCommandModule`
+- `PipelineProjectManifest`
+- `PipelineProjectManifestInput`
 
 ### `tubeless/testing`
 

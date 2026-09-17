@@ -37,7 +37,7 @@ async function writeProjectFixture(): Promise<{
   await mkdir(workDirectory, { recursive: true });
   const cliModuleUrl = pathToFileURL(path.resolve("dist/cli/cli.js")).href;
   const pipelineModuleUrl = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
-  const projectModuleUrl = pathToFileURL(path.resolve("dist/workbench/workbench-project.js")).href;
+  const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project-manifest.js")).href;
   await writeFile(
     path.join(directory, "pipeline.mjs"),
     `
@@ -210,9 +210,7 @@ describe("project manifest workbench", () => {
 
   it("rejects module aliases that resolve to the same registration", async () => {
     const { directory } = await writeProjectFixture();
-    const projectModuleUrl = pathToFileURL(
-      path.resolve("dist/workbench/workbench-project.js")
-    ).href;
+    const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project-manifest.js")).href;
     const manifest = path.join(directory, "config", "duplicate.mjs");
     await writeFile(
       manifest,

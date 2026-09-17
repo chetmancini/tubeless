@@ -342,6 +342,28 @@ try {
   assertPackedSourceMaps(installedPackage);
   assertPackedDocumentationLinks(installedPackage);
 
+  // Consumer declarations must compile without ambient Node typings or skipLibCheck.
+  writeFileSync(
+    join(consumerRoot, "cli.ts"),
+    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cli.ts"))
+  );
+  writeFileSync(
+    join(consumerRoot, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        lib: ["ES2022", "DOM"],
+        module: "NodeNext",
+        noEmit: true,
+        skipLibCheck: false,
+        strict: true,
+        target: "ES2022",
+        types: [],
+      },
+      files: ["cli.ts"],
+    })
+  );
+  run(join(packageRoot, "node_modules/.bin/tsc"), ["-p", "tsconfig.json"], consumerRoot);
+
   const smokeProgram = Object.keys(packageJson.exports)
     .map((subpath) =>
       JSON.stringify(subpath === "." ? packageJson.name : `${packageJson.name}/${subpath.slice(2)}`)
@@ -350,24 +372,26 @@ try {
     .join("\n");
   run("node", ["--input-type=module", "--eval", smokeProgram], consumerRoot);
 
-  const workbenchSurface = run(
+  const projectSurface = run(
     "node",
     [
       "--input-type=module",
       "--eval",
-      'console.log(JSON.stringify(Object.keys(await import("tubeless/workbench")).sort()))',
+      'console.log(JSON.stringify(Object.keys(await import("tubeless/project")).sort()))',
     ],
     consumerRoot
   );
-  if (workbenchSurface.trim() !== '["definePipelineCommand","definePipelineProject"]') {
-    throw new Error(`Packed workbench exposes more than command registration: ${workbenchSurface}`);
+  if (projectSurface.trim() !== '["definePipelineProject"]') {
+    throw new Error(
+      `Packed project entrypoint exposes more than project registration: ${projectSurface}`
+    );
   }
 
   const pipelineFixture = join(consumerRoot, "pipeline.mjs");
   writeFileSync(
     pipelineFixture,
     `import { createSteps, definePipeline } from "tubeless";
-import { definePipelineCommand } from "tubeless/workbench";
+import { definePipelineCommand } from "tubeless/cli";
 const step = createSteps();
 const load = step("load", {
   description: "Load input",
@@ -408,7 +432,7 @@ export const FixtureCommand = definePipelineCommand(FixturePipeline, {
   const projectFixture = join(consumerRoot, "tubeless.project.mjs");
   writeFileSync(
     projectFixture,
-    `import { definePipelineProject } from "tubeless/workbench";
+    `import { definePipelineProject } from "tubeless/project";
 export default definePipelineProject({
   commands: [{ id: "fixture-command", file: "./pipeline.mjs", export: "FixtureCommand" }],
 });

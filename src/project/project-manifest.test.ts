@@ -3,7 +3,7 @@ import {
   definePipelineProject,
   isPipelineProjectManifest,
   PIPELINE_PROJECT_MANIFEST_VERSION,
-} from "./workbench-project.js";
+} from "./project-manifest.js";
 
 describe("pipeline project manifest", () => {
   it("defines an immutable, versioned command manifest with stable ids", () => {

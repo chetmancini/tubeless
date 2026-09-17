@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import { createSteps, definePipeline, requireOutputs } from "tubeless";
-import { definePipelineCommand } from "tubeless/workbench";
+import { definePipelineCommand } from "tubeless/cli";
 
 interface ImportOptions {
   lines: readonly string[];

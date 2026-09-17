@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import { definePipelineCommand } from "tubeless/workbench";
+import { definePipelineCommand } from "tubeless/cli";
 import { ImportPipeline } from "../pipelines/import.ts";
 
 export const ImportCommand = definePipelineCommand(ImportPipeline, {

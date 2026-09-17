@@ -26,7 +26,8 @@ const allowedDependencies: Record<string, readonly string[]> = {
   studio: ["run-store"],
   cli: ["core", "node", "reporter", "utilities"],
   testing: ["core", "utilities"],
-  workbench: ["cli", "core", "render", "run-store", "studio", "tracing", "utilities"],
+  project: [],
+  workbench: ["cli", "core", "project", "render", "run-store", "studio", "tracing", "utilities"],
 };
 
 function moduleName(file: string): string {
@@ -34,6 +35,35 @@ function moduleName(file: string): string {
 }
 
 describe("module runtime boundaries", () => {
+  it("keeps project declarations independent of executable integrations", () => {
+    const pending = [resolve(dist, "project/project.js")];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      expect(moduleName(file)).toBe("project");
+      pending.push(...dependencies(file));
+    }
+    expect(visited.size).toBeGreaterThan(1);
+  });
+
+  it("keeps CLI authoring independent of workbench, storage and Studio", () => {
+    const pending = [resolve(dist, "cli/cli.js")];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      expect(
+        ["cli", "core", "node", "reporter", "tracing", "utilities"].includes(moduleName(file)),
+        `CLI entrypoint reaches operational module: ${relative(dist, file)}`
+      ).toBe(true);
+      pending.push(...dependencies(file));
+    }
+    expect(visited.size).toBeGreaterThan(1);
+  });
+
   it("keeps cross-module imports within the declared dependency direction", () => {
     const violations: string[] = [];
     for (const name of readdirSync(dist, { recursive: true, encoding: "utf8" })) {

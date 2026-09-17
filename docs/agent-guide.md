@@ -71,7 +71,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Use `runConcurrent` for bounded lightweight functions that do not need child
   lifecycle events. Use `runConcurrentSettled` when the caller needs completed
   results and the first failure instead of a throw.
-- Use `definePipelineCommand` from `tubeless/workbench` for scripts centered on
+- Use `definePipelineCommand` from `tubeless/cli` for scripts centered on
   a pipeline. Do not parse `process.argv` manually or redeclare built-in dry-run,
   `--step`, or `--target` flags. `mapOptions`, validation, and hooks receive `stepIds` and `targets`,
   not `step` or `target`. Omit `mapOptions` when validated flags already satisfy
@@ -81,6 +81,10 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   render those parameter definitions instead of parsing help text.
   Use `command.plan()` or `tubeless plan` for a selection-only preview. Do not
   simulate planning with `--plan`.
+- Use `defineCommand` from `tubeless/cli` for standalone scripts. Declare command
+  catalogs with `definePipelineProject` from `tubeless/project`; the catalog
+  works with the CLI before Studio is added. Keep general filesystem/env helpers
+  and application-specific prompts in the consumer.
 - Use `pipeline.toMermaid()` or `command.toMermaid()` when documentation needs
   the static graph; do not duplicate dependency edges by hand.
 - Use `tubeless list` for the explicit project command inventory. Use

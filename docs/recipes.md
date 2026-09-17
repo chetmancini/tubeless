@@ -46,7 +46,10 @@ one of these recipes.
    throw on the first failure. Use `runConcurrentSettled` when the caller needs
    completed results plus that failure without throwing.
 
-6. Use `definePipelineCommand` from `tubeless/workbench` for pipeline scripts.
+6. Use `definePipelineCommand` from `tubeless/cli` for pipeline scripts.
+   Use `defineCommand` from the same entrypoint for standalone scripts and
+   `definePipelineProject` from `tubeless/project` for project catalogs shared
+   by terminal commands and Studio.
    Preview selection with
    `command.plan()` or `tubeless plan`; do not simulate planning with `--plan`.
    `--step` and `--target` are argv flags; `mapOptions` and hooks read `stepIds`

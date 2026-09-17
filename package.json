@@ -85,6 +85,11 @@
       "import": "./dist/core/pipeline.js",
       "default": "./dist/core/pipeline.js"
     },
+    "./cli": {
+      "types": "./dist/cli/cli.d.ts",
+      "import": "./dist/cli/cli.js",
+      "default": "./dist/cli/cli.js"
+    },
     "./batch": {
       "types": "./dist/utilities/batch.d.ts",
       "import": "./dist/utilities/batch.js",
@@ -105,10 +110,10 @@
       "import": "./dist/utilities/retry.js",
       "default": "./dist/utilities/retry.js"
     },
-    "./workbench": {
-      "types": "./dist/workbench/workbench-entry.d.ts",
-      "import": "./dist/workbench/workbench-entry.js",
-      "default": "./dist/workbench/workbench-entry.js"
+    "./project": {
+      "types": "./dist/project/project.d.ts",
+      "import": "./dist/project/project.js",
+      "default": "./dist/project/project.js"
     },
     "./testing": {
       "types": "./dist/testing/testing.d.ts",
