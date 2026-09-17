@@ -30,6 +30,8 @@ Install the [agent skill pack](./agent-skills.md) to author pipelines or convert
 
 ## Deeper reference
 
+For agent or editor validation, use the [pipeline document JSON Schema](./pipeline-document.schema.json).
+
 | Document                                                                                         | Use it for                                         |
 | ------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
 | [Child-pipeline composition](./child-pipeline-composition.md)                                    | Running a reusable pipeline once or for many items |

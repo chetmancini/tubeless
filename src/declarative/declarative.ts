@@ -8,14 +8,14 @@ import {
   type PipelineStepContext,
   type StandardSchemaV1,
 } from "../core/pipeline.js";
-import { parsePipelineDocument, PipelineDocumentError } from "./document.js";
+import { validatePipelineDocument, PipelineDocumentError } from "./project-document.js";
 
 export { PipelineDocumentError };
 export type {
   PipelineDocument,
   PipelineDocumentDefinition,
   PipelineDocumentStep,
-} from "./document.js";
+} from "./project-document.js";
 
 /** Dependency values are checked at runtime rather than inferred from a document. */
 export type PipelineDocumentHandler = (
@@ -83,7 +83,7 @@ export function compilePipelineDocument(
   document: unknown,
   registry: PipelineDocumentRegistry
 ): ReadonlyMap<string, Pipeline<object, unknown>> {
-  const parsed = parsePipelineDocument(document);
+  const parsed = validatePipelineDocument(document);
   const pipelines = new Map<string, Pipeline<object, unknown>>();
   for (const [id, definition] of Object.entries(parsed.pipelines)) {
     const path = `$.pipelines[${JSON.stringify(id)}]`;

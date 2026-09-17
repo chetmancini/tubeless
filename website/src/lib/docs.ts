@@ -57,6 +57,9 @@ function rewriteDocLinks(markdown: string): string {
     if (path === "./api-report.json" || path === "api-report.json") {
       return `](${href("api-report.json")}${suffix})`;
     }
+    if (path === "./pipeline-document.schema.json" || path === "pipeline-document.schema.json") {
+      return `](${href("schemas/pipeline-document-v1.schema.json")}${suffix})`;
+    }
     if (path.startsWith("../")) {
       return `](${GITHUB_BLOB}/${path.slice(3)}${suffix})`;
     }

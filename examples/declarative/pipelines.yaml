@@ -1,4 +1,9 @@
+# yaml-language-server: $schema=https://tubeless.io/schemas/pipeline-document-v1.schema.json
+$schema: https://tubeless.io/schemas/pipeline-document-v1.schema.json
 version: 1
+metadata:
+  name: Row import examples
+  description: Two pipelines that share application handlers.
 
 pipelines:
   yaml-import:

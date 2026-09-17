@@ -30,6 +30,12 @@ export default definePipelineProject({
   cwd: ".",
   commands: [
     {
+      id: "yaml-peloton",
+      file: "../yaml-peloton.ts",
+      export: "YamlPelotonCommand",
+      name: "Peloton from YAML",
+    },
+    {
       id: "yaml-import",
       file: "../yaml-pipelines.ts",
       export: "YamlImportCommand",

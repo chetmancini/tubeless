@@ -13,6 +13,7 @@ Start:
 - CLI: ./cli.md
 - Local studio: ./studio.md
 - YAML and JSON pipelines: ./declarative-pipelines.md
+- Pipeline document JSON Schema v1: ./pipeline-document.schema.json
 - Choose a pattern: ./recipes.md
 - Execution semantics: ./concepts.md
 - Comparison: ./comparison.md
@@ -64,6 +65,7 @@ Executable examples:
 - ../examples/catalog/tubeless.project.ts
 - ../examples/typed-import.ts
 - ../examples/yaml-pipelines.ts
+- ../examples/yaml-peloton.ts
 - ../examples/validated-boundaries.ts
 - ../examples/publish-with-gates.ts
 - ../examples/conditional-step.ts

@@ -171,6 +171,7 @@ function assertPackedExampleModules(consumerRoot, installedPackage) {
       "--eval",
       `
     import { pipelines, YamlImportCommand } from ${JSON.stringify(join(examplesDirectory, "yaml-pipelines.ts"))};
+    import { YamlPelotonPipeline } from ${JSON.stringify(join(examplesDirectory, "yaml-peloton.ts"))};
     const lines = [" Alpha ", "Beta", ""];
     const normalized = await pipelines.get("yaml-import").runOrThrow({ lines });
     const preview = await pipelines.get("yaml-preview").runOrThrow({ lines });
@@ -182,6 +183,10 @@ function assertPackedExampleModules(consumerRoot, installedPackage) {
     }
     if (!YamlImportCommand.plan({ targets: ["normalize"] }).ok) {
       throw new Error("Packed YAML command could not plan");
+    }
+    const race = await YamlPelotonPipeline.runOrThrow({ delay: 0 });
+    if (race.inspected !== 3 || race.publishedId !== "start-list-3") {
+      throw new Error("Packed YAML Peloton returned unexpected results");
     }
   `,
     ],
@@ -296,7 +301,7 @@ const linked = [
 ];
 for (const file of linked) {
   // Already executed with its native YAML loader above.
-  if (file === "yaml-pipelines.ts") continue;
+  if (file === "yaml-pipelines.ts" || file === "yaml-peloton.ts") continue;
   const runner = runners[file];
   if (!runner) fail(file, "no packed-example runner");
   await runner(await loadExample(file));
@@ -334,6 +339,7 @@ try {
     "skills/tubeless-make-pipeline/SKILL.md",
     "docs/api-reference.md",
     "docs/api-report.json",
+    "docs/pipeline-document.schema.json",
     "docs/child-pipeline-composition.md",
     "docs/remote-step-composition.md",
     "docs/cli.md",
@@ -404,9 +410,17 @@ try {
     ],
     consumerRoot
   );
-  if (projectSurface.trim() !== '["definePipelineProject"]') {
+  if (
+    projectSurface.trim() !==
+    JSON.stringify([
+      "PipelineDocumentError",
+      "compilePipelineDocument",
+      "definePipelineProject",
+      "validatePipelineDocument",
+    ])
+  ) {
     throw new Error(
-      `Packed project entrypoint exposes more than project registration: ${projectSurface}`
+      `Packed project entrypoint differs from the supported project API: ${projectSurface}`
     );
   }
 
@@ -566,6 +580,16 @@ export default definePipelineProject({
   }
 
   assertPackedExampleCli(tubelessBin, installedPackage, consumerRoot);
+  const documentValidation = JSON.parse(
+    run(
+      tubelessBin,
+      ["validate", "--json", join(installedPackage, "examples/declarative/peloton.yaml")],
+      consumerRoot
+    )
+  );
+  if (!documentValidation.ok || documentValidation.metadata?.name !== "Peloton from YAML") {
+    throw new Error("Packed YAML document validation lost metadata");
+  }
   assertPackedExampleModules(consumerRoot, installedPackage);
 
   process.stdout.write(

@@ -62,15 +62,21 @@ in the application. `tubeless/node` supplies the pipeline checkpoint helpers.
 
 ### Executable commands
 
-| Command            | Accepts                             | Does                                                                  |
-| ------------------ | ----------------------------------- | --------------------------------------------------------------------- |
-| `tubeless list`    | A project manifest                  | Lists explicitly registered command IDs without loading their modules |
-| `tubeless inspect` | A pipeline or command export        | Shows the pipeline ID, available targets, steps, and default plan     |
-| `tubeless plan`    | A pipeline or command export        | Previews selection without executing or requiring domain options      |
-| `tubeless graph`   | A pipeline or command export        | Writes Mermaid flowchart source                                       |
-| `tubeless run`     | A `definePipelineCommand` export    | Validates command arguments and runs the pipeline                     |
-| `tubeless history` | An optional run id                  | Lists or shows recorded runs from SQLite or a finished NDJSON trace   |
-| `tubeless ui`      | An optional project/Studio manifest | Serves the local run studio; see [studio](./studio.md)                |
+| Command             | Accepts                             | Does                                                                  |
+| ------------------- | ----------------------------------- | --------------------------------------------------------------------- |
+| `tubeless list`     | A project manifest                  | Lists explicitly registered command IDs without loading their modules |
+| `tubeless validate` | A YAML or JSON pipeline document    | Checks document structure and metadata without loading handlers       |
+| `tubeless inspect`  | A pipeline or command export        | Shows the pipeline ID, available targets, steps, and default plan     |
+| `tubeless plan`     | A pipeline or command export        | Previews selection without executing or requiring domain options      |
+| `tubeless graph`    | A pipeline or command export        | Writes Mermaid flowchart source                                       |
+| `tubeless run`      | A `definePipelineCommand` export    | Validates command arguments and runs the pipeline                     |
+| `tubeless history`  | An optional run id                  | Lists or shows recorded runs from SQLite or a finished NDJSON trace   |
+| `tubeless ui`       | An optional project/Studio manifest | Serves the local run studio; see [studio](./studio.md)                |
+
+Use `tubeless validate [--json] pipelines.yaml` for a fast document-only check.
+It supports `.yaml`, `.yml`, and `.json`; it does not resolve handlers, check the
+graph, or run domain schemas. See [declarative pipelines](./declarative-pipelines.md)
+for the downloadable JSON Schema and validation levels.
 
 Use a checked-in `tubeless.project.ts` to address commands by stable project ID:
 

@@ -30,6 +30,7 @@ one of these recipes.
 | Handle cancellation and deterministic testing | [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts) | `createPipelineTestRuntime`, captured status/progress                      |
 | Export lifecycle events                       | [`tracing.ts`](../examples/tracing.ts)                                   | app-owned JSON / OTel adapters, composition, `onExporterError`             |
 | Watch many primitives in one run              | [`peloton.ts`](../examples/peloton.ts)                                   | delays, logs, children, fan-out, retry, gates, test runtime                |
+| Watch an advanced YAML pipeline               | [`yaml-peloton.ts`](../examples/yaml-peloton.ts)                         | declarative graph, concurrent handlers, retries, progress, dry runs, gates |
 | Project layout, IDs, and command manifest     | [`tubeless.project.ts`](../examples/catalog/tubeless.project.ts)         | `pipelines/`, `scripts/`, `definePipelineProject`, `tubeless list`         |
 
 ## Choose a pattern

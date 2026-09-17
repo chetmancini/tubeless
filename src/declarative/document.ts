@@ -1,7 +1,19 @@
 /** The serializable version 1 pipeline authoring format. */
 export interface PipelineDocument {
+  /** Optional editor schema association; never fetched during validation. */
+  $schema?: string;
   version: 1;
+  metadata?: PipelineDocumentMetadata;
   pipelines: Record<string, PipelineDocumentDefinition>;
+}
+
+/** Optional human-facing document information, never execution policy. */
+export interface PipelineDocumentMetadata {
+  name?: string;
+  description?: string;
+  authors?: readonly string[];
+  /** Author-maintained date in YYYY-MM-DD format. */
+  date?: string;
 }
 
 export interface PipelineDocumentDefinition {
@@ -103,8 +115,29 @@ function parseStep(value: unknown, path: string): PipelineDocumentStep {
   };
 }
 
-export function parsePipelineDocument(value: unknown): PipelineDocument {
-  const document = fields(value, "$", ["version", "pipelines"]);
+function metadata(value: unknown): PipelineDocumentMetadata | undefined {
+  if (value === undefined) return undefined;
+  const entry = fields(value, "$.metadata", ["name", "description", "authors", "date"]);
+  const date = optionalText(entry.date, "$.metadata.date");
+  if (
+    date !== undefined &&
+    (!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !Number.isFinite(Date.parse(date)) ||
+      new Date(date).toISOString().slice(0, 10) !== date)
+  ) {
+    throw new PipelineDocumentError("$.metadata.date", "Expected a valid YYYY-MM-DD date");
+  }
+  return {
+    name: optionalText(entry.name, "$.metadata.name"),
+    description: optionalText(entry.description, "$.metadata.description"),
+    authors: references(entry.authors, "$.metadata.authors"),
+    date,
+  };
+}
+
+/** Validate and copy a parsed document without resolving handlers or executing code. */
+export function validatePipelineDocument(value: unknown): PipelineDocument {
+  const document = fields(value, "$", ["$schema", "version", "metadata", "pipelines"]);
   if (document.version !== 1) {
     throw new PipelineDocumentError("$.version", "Expected document version 1");
   }
@@ -113,7 +146,9 @@ export function parsePipelineDocument(value: unknown): PipelineDocument {
     throw new PipelineDocumentError("$.pipelines", "Expected at least one pipeline");
   }
   return {
+    $schema: optionalText(document.$schema, "$.$schema"),
     version: 1,
+    metadata: metadata(document.metadata),
     pipelines: Object.fromEntries(
       Object.entries(pipelines).map(([id, value]) => {
         const path = `$.pipelines[${JSON.stringify(id)}]`;

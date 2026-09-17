@@ -7,6 +7,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "../dist");
 const read = (path) => readFileSync(join(root, path), "utf8");
 const index = read("llms.txt");
 const bundle = read("llms-full.txt");
+const documentSchema = JSON.parse(read("schemas/pipeline-document-v1.schema.json"));
+assert.equal(documentSchema.$id, "https://tubeless.io/schemas/pipeline-document-v1.schema.json");
+assert.equal(read("pipeline-document.schema.json"), read("schemas/pipeline-document-v1.schema.json"));
+assert.ok(index.includes(documentSchema.$id), "Agents must be able to discover the document schema");
+assert.deepEqual(documentSchema, JSON.parse(readFileSync(join(root, "../../docs/pipeline-document.schema.json"), "utf8")), "Website schema must match the packaged source");
 assert.equal(read("CNAME").trim(), "tubeless.io", "Pages artifact must preserve the custom domain");
 assert.ok(index.includes("https://tubeless.io/developers.md"));
 const pages = readdirSync(join(root, "docs"))
