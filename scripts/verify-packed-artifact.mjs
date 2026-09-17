@@ -1,4 +1,5 @@
 import {
+  cpSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -161,11 +162,31 @@ function assertPackedExampleCli(tubelessBin, installedPackage, consumerRoot) {
 function assertPackedExampleModules(consumerRoot, installedPackage) {
   const packedExamples = join(installedPackage, "examples");
   const examplesDirectory = join(consumerRoot, "packed-examples");
-  mkdirSync(examplesDirectory);
-  for (const name of readdirSync(packedExamples)) {
-    if (!name.endsWith(".ts")) continue;
-    writeFileSync(join(examplesDirectory, name), readFileSync(join(packedExamples, name)));
-  }
+  cpSync(packedExamples, examplesDirectory, { recursive: true });
+  // The YAML recipe deliberately uses Bun's native loader. Exercise both
+  // pipelines from the installed artifact; keep the other recipes on Node.
+  run(
+    "bun",
+    [
+      "--eval",
+      `
+    import { pipelines, YamlImportCommand } from ${JSON.stringify(join(examplesDirectory, "yaml-pipelines.ts"))};
+    const lines = [" Alpha ", "Beta", ""];
+    const normalized = await pipelines.get("yaml-import").runOrThrow({ lines });
+    const preview = await pipelines.get("yaml-preview").runOrThrow({ lines });
+    if (JSON.stringify(normalized) !== JSON.stringify(["alpha", "beta"])) {
+      throw new Error("Packed YAML import returned unexpected rows");
+    }
+    if (JSON.stringify(preview) !== JSON.stringify(lines)) {
+      throw new Error("Packed YAML preview returned unexpected rows");
+    }
+    if (!YamlImportCommand.plan({ targets: ["normalize"] }).ok) {
+      throw new Error("Packed YAML command could not plan");
+    }
+  `,
+    ],
+    consumerRoot
+  );
   const recipesPath = join(installedPackage, "docs", "recipes.md");
   const checkpointPath = join(consumerRoot, "enrichment-checkpoint.json");
   const program = `
@@ -274,6 +295,8 @@ const linked = [
   ...new Set([...recipes.matchAll(/\\.\\.\\/examples\\/([a-z0-9-]+\\.ts)/g)].map((match) => match[1])),
 ];
 for (const file of linked) {
+  // Already executed with its native YAML loader above.
+  if (file === "yaml-pipelines.ts") continue;
   const runner = runners[file];
   if (!runner) fail(file, "no packed-example runner");
   await runner(await loadExample(file));

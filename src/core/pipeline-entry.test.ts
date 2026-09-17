@@ -17,6 +17,7 @@ function dependencies(file: string): string[] {
 
 const allowedDependencies: Record<string, readonly string[]> = {
   core: ["tracing", "utilities"],
+  declarative: ["core"],
   tracing: [],
   utilities: [],
   node: [],

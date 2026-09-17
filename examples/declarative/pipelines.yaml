@@ -1,0 +1,28 @@
+version: 1
+
+pipelines:
+  yaml-import:
+    optionsSchema: lines
+    targets: [normalize]
+    steps:
+      - id: load
+        description: Read the caller's input lines.
+        run: loadRows
+      - id: normalize
+        description: Trim, lowercase, and remove empty rows.
+        run: normalizeRows
+        dependsOn: [load]
+    finalize:
+      run: normalizedRows
+      requireOutputs: [normalize]
+
+  yaml-preview:
+    optionsSchema: lines
+    targets: [load]
+    steps:
+      - id: load
+        description: Preview the original input lines.
+        run: loadRows
+    finalize:
+      run: originalRows
+      requireOutputs: [load]

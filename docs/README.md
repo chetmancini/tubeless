@@ -22,10 +22,11 @@ adapt in your project.
 
 Install the [agent skill pack](./agent-skills.md) to author pipelines or convert existing code.
 
-| Document                    | Use it for                                                           |
-| --------------------------- | -------------------------------------------------------------------- |
-| [CLI](./cli.md)             | `list`, `inspect`, `plan`, `graph`, `run`, `history`, and exit codes |
-| [Local studio](./studio.md) | Optional run history, `tubeless ui`, and catalogs                    |
+| Document                                              | Use it for                                                           |
+| ----------------------------------------------------- | -------------------------------------------------------------------- |
+| [CLI](./cli.md)                                       | `list`, `inspect`, `plan`, `graph`, `run`, `history`, and exit codes |
+| [Local studio](./studio.md)                           | Optional run history, `tubeless ui`, and catalogs                    |
+| [YAML and JSON pipelines](./declarative-pipelines.md) | Compile documents with registered application functions              |
 
 ## Deeper reference
 
