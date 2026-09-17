@@ -45,7 +45,7 @@ describe("definePipeline lifecycle and scheduling", () => {
   });
 
   it("emits step-scoped progress snapshots from the running step", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", {
       description: "Process records",
       run: (_inputs, context) => {
@@ -93,7 +93,7 @@ describe("definePipeline lifecycle and scheduling", () => {
       releaseWork = resolve;
     });
     let started = false;
-    const step = createSteps();
+    const { step } = createSteps();
     const slow = step("slow", {
       run: async () => {
         await workGate;
@@ -135,7 +135,7 @@ describe("definePipeline lifecycle and scheduling", () => {
   });
 
   it("ignores progress published after its step has finished", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     let reportLater: (() => void) | undefined;
     const work = step("work", {
       run: (_inputs, context) => {
@@ -184,7 +184,7 @@ describe("definePipeline lifecycle and scheduling", () => {
 
   it("uses injected runtime timing for reports and results", async () => {
     let currentTime = 0;
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", {
       run: () => {
         currentTime += 7;
@@ -212,7 +212,7 @@ describe("definePipeline lifecycle and scheduling", () => {
 
   it("uses an abort-aware default sleep, rejecting once the signal it was given aborts mid-wait", async () => {
     vi.useFakeTimers();
-    const step = createSteps();
+    const { step } = createSteps();
     const sleepController = new AbortController();
     const work = step("work", {
       run: async (_inputs, context) => {
@@ -281,7 +281,7 @@ describe("definePipeline lifecycle and scheduling", () => {
   });
 
   it("executes steps in dependency order even when the steps array lists them out of order", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const order: string[] = [];
     const build = step("build", {
       run: () => {
@@ -313,7 +313,7 @@ describe("definePipeline lifecycle and scheduling", () => {
   });
 
   it("rejects a missing dependency when the pipeline is defined", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const build = step("build", { run: () => "built" });
     const write = step("write", {
       dependsOn: [build],
@@ -366,7 +366,7 @@ describe("definePipeline lifecycle and scheduling", () => {
   });
 
   it("rejects a self-referential dependency when the pipeline is defined", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const loop = step("loop", { run: () => "loop" });
     (loop as { dependsOn?: readonly AnyStep[] }).dependsOn = [loop];
 

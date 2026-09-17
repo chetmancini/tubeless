@@ -15,7 +15,7 @@ interface EnrichedItem {
   summary: string;
 }
 
-const step = createSteps<EnrichmentOptions>();
+const { step } = createSteps<EnrichmentOptions>();
 
 const loadPendingItems = step("load-pending-items", {
   description: "Skip work that was already checkpointed by a previous run.",

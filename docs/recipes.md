@@ -15,12 +15,12 @@ one of these recipes.
 | Validate options, outputs, and results        | [`validated-boundaries.ts`](../examples/validated-boundaries.ts)         | Standard Schema, `outputSchema`, `resultSchema`                            |
 | Inspect, plan, or graph a pipeline or command | [`typed-import.ts`](../examples/typed-import.ts)                         | `tubeless inspect`, `tubeless plan`, `tubeless graph`, `toMermaid`         |
 | Safe write/publish preview                    | [`publish-with-gates.ts`](../examples/publish-with-gates.ts)             | `dryRun`, `optionalDependsOn`, `skipAfterFailureOf`                        |
-| Deliberately omit unnecessary work            | [`conditional-step.ts`](../examples/conditional-step.ts)                 | `step.skippable`, valued skip, skip-aware output typing                    |
+| Deliberately omit unnecessary work            | [`conditional-step.ts`](../examples/conditional-step.ts)                 | `step` with `skip`, valued skip, skip-aware output typing                  |
 | Preserve independent work after failure       | [`best-effort.ts`](../examples/best-effort.ts)                           | `continueOnError`, structured `run` result                                 |
 | Compose one reusable workflow                 | [`child-pipeline.ts`](../examples/child-pipeline.ts)                     | `fromPipeline`, `mapOptions`, resolved async `mapResult`                   |
 | Call a real HTTP service                      | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `fromRemote`, fetch cancellation, validated HTTP output                    |
 | Host a pipeline in a durable engine           | [`host-embedding.ts`](../examples/host-embedding.ts)                     | `runOrThrow`, pass `correlationId` / `parentRunId`                         |
-| Fan out over runtime items                    | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline.skippable`, stable keys, concurrency, progress            |
+| Fan out over runtime items                    | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline` with `skip`, stable keys, concurrency, progress          |
 | Inspect keyed fan-out failures                | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `error.fanOut`, bounded diagnostics, caller-directed reruns                |
 | Show determinate progress                     | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `reportProgress`, bounded live CLI rows, complete final trees              |
 | Watch the live TTY reporter                   | [`live-tui.ts`](../examples/live-tui.ts)                                 | named steps, nested `details`; persist with `--store`                      |
@@ -68,12 +68,12 @@ pipeline does not require credentials.
 1. Use an ordinary step for one unit of domain work.
 2. Set `dryRun: "skip"` or provide a side-effect-free `dryRun` handler before
    exposing side-effecting work through CLI dry-run support.
-3. Use `step.skippable` only for a successful policy decision, never to hide an error.
+3. Add `skip` only for a successful policy decision, never to hide an error.
 4. Use a child pipeline when the child has value independently; use a normal
    helper function when it does not.
 5. Use `forEachPipeline` when every item needs child-pipeline lifecycle and
-   reporting. Opt into `forEachPipeline.skippable` when policy may omit the
-   whole fan-out and a skip should appear in reports. Use `runConcurrent`
+   reporting. Add `skip` to `forEachPipeline` when policy may omit the whole
+   fan-out and a skip should appear in reports. Use `runConcurrent`
    for lightweight worker functions that should
    throw on the first failure. Use `runConcurrentSettled` when the caller needs
    completed results plus that failure without throwing.

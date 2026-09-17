@@ -28,7 +28,7 @@ interface ImportOptions {
   lines: readonly string[];
 }
 
-const step = createSteps<ImportOptions>();
+const { step } = createSteps<ImportOptions>();
 
 const loadRows = step("load-rows", {
   run: (_inputs, context) => context.options.lines,
@@ -54,7 +54,7 @@ interface ChildOptions {
   rows: readonly string[];
 }
 
-const childStep = createSteps<ChildOptions>();
+const { step: childStep } = createSteps<ChildOptions>();
 const childNormalize = childStep("child-normalize", {
   run: (_inputs, context) => context.options.rows.map((row) => row.trim()),
 });
@@ -64,8 +64,8 @@ const ChildPipeline = definePipeline({
   finalize: (outputs) => outputs["child-normalize"] ?? [],
 });
 
-const parentStep = createSteps<ImportOptions>();
-const childStage = parentStep.fromPipeline("child-stage", {
+const { fromPipeline } = createSteps<ImportOptions>();
+const childStage = fromPipeline("child-stage", {
   pipeline: ChildPipeline,
   mapOptions: (_inputs, context) => ({ rows: context.options.lines }),
 });
@@ -83,7 +83,7 @@ interface ForEachChildOptions {
   value: string;
 }
 
-const forEachChildStep = createSteps<ForEachChildOptions>();
+const { step: forEachChildStep } = createSteps<ForEachChildOptions>();
 const upper = forEachChildStep("upper", {
   run: (_inputs, context) => context.options.value.toUpperCase(),
 });
@@ -93,8 +93,8 @@ const ForEachChildPipeline = definePipeline({
   finalize: (outputs) => outputs.upper ?? "",
 });
 
-const forEachParentStep = createSteps<ForEachParentOptions>();
-const forEachChildren = forEachParentStep.forEachPipeline("children", {
+const { forEachPipeline } = createSteps<ForEachParentOptions>();
+const forEachChildren = forEachPipeline("children", {
   pipeline: ForEachChildPipeline,
   items: (_inputs, context) => context.options.items,
   key: (item) => item,
@@ -117,14 +117,14 @@ const enrichSchema = {
   },
 };
 
-const remoteStep = createSteps<ImportOptions>();
+const { fromRemote: remoteFromRemote } = createSteps<ImportOptions>();
 const remoteAdapter: RemoteStepAdapter<ImportOptions, { lines: readonly string[] }, { ok: true }> =
   {
     engine: "test",
     target: "enrich-v2",
     invoke: async () => ({ ok: true as const }),
   };
-const remoteEnrich = remoteStep.fromRemote("remote-enrich", {
+const remoteEnrich = remoteFromRemote("remote-enrich", {
   adapter: remoteAdapter,
   mapInput: (_inputs, context) => ({ lines: context.options.lines, dryRun: context.dryRun }),
   outputSchema: enrichSchema,

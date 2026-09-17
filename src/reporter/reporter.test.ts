@@ -13,7 +13,7 @@ function capturingLogger() {
 }
 
 function makeReporterPipeline(options: { fail?: boolean; skipWrite?: boolean } = {}) {
-  const step = createSteps();
+  const { step } = createSteps();
   const build = step("build", {
     name: "Build Artifact",
     description: "Build the artifact",

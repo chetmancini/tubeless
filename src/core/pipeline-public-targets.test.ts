@@ -12,14 +12,14 @@ import { makePipeline, thrownDefinitionErrors } from "./pipeline.test-support.js
 describe("definePipeline targets and definitions", () => {
   it("supports shared target inputs, policy skips, and dry-run target omission", async () => {
     let sourceRuns = 0;
-    const step = createSteps();
+    const { step } = createSteps();
     const source = step("source", { run: () => (sourceRuns += 1) });
-    const valuedSkip = step.skippable("valued-skip", {
+    const valuedSkip = step("valued-skip", {
       dependsOn: [source],
       skip: () => ({ reason: "cached", value: "cached-value" }),
       run: () => "fresh-value",
     });
-    const emptySkip = step.skippable("empty-skip", {
+    const emptySkip = step("empty-skip", {
       dependsOn: [source],
       skip: () => "not needed",
       run: () => "unexpected",
@@ -101,7 +101,7 @@ describe("definePipeline targets and definitions", () => {
   });
 
   it("exposes only declared targets and rejects internal steps as targets", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const load = step("load", { run: () => "loaded" });
     const publish = step("publish", {
       dependsOn: [load],
@@ -128,7 +128,7 @@ describe("definePipeline targets and definitions", () => {
   });
 
   it("rejects declared targets that cannot satisfy required finalizer outputs", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const load = step("load", { run: () => "loaded" });
     const normalize = step("normalize", {
       dependsOn: [load],
@@ -153,7 +153,7 @@ describe("definePipeline targets and definitions", () => {
   });
 
   it("rejects duplicate and foreign target declarations", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const included = step("included", { run: () => true });
     const foreign = step("foreign", { run: () => true });
 
@@ -184,7 +184,7 @@ describe("definePipeline targets and definitions", () => {
   });
 
   it("rejects required finalizer steps that are not in the pipeline", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const included = step("included", { run: () => true });
     const foreign = step("foreign", { run: () => true });
 
@@ -205,7 +205,7 @@ describe("definePipeline targets and definitions", () => {
   });
 
   it("rejects duplicate step ids when the pipeline is defined", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const duplicate = step("build", { run: () => "a" });
     let thrown: unknown;
     try {
@@ -233,7 +233,7 @@ describe("definePipeline targets and definitions", () => {
   });
 
   it("rejects blank, reserved, repeated, and contradictory graph declarations", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const source = step("source", { run: () => "source" });
     const contradictory = step("contradictory", {
       dependsOn: [source, source],

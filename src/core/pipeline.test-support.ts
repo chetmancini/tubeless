@@ -13,7 +13,7 @@ export interface TestOptions {
 }
 
 export function makePipeline(id: string, finalizeValue?: unknown, useFinalizeValue = false) {
-  const step = createSteps<TestOptions>();
+  const { step } = createSteps<TestOptions>();
 
   const build = step("build", {
     run: (_inputs, context) => {

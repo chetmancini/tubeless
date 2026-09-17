@@ -23,7 +23,7 @@ function captureLog(): PipelineLogger & { messages: string[] } {
 }
 
 function progressivePipeline() {
-  const step = createSteps();
+  const { step } = createSteps();
   const load = step("load", {
     run: (_inputs, context) => {
       context.reportProgress({ completed: 4, total: 10, message: "records" });
@@ -44,7 +44,7 @@ function progressivePipeline() {
 }
 
 function detailedPipeline() {
-  const step = createSteps();
+  const { step } = createSteps();
   const fanOut = step("fan-out", {
     run: (_inputs, context) => {
       context.reportProgress({
@@ -147,7 +147,7 @@ describe("createPipelineReporter", () => {
       color: "never",
       symbols: "ascii",
     });
-    const step = createSteps();
+    const { step } = createSteps();
     const pipeline = definePipeline({
       id: "cancelled-details",
       steps: [
@@ -254,7 +254,7 @@ describe("createPipelineReporter", () => {
       refreshIntervalMs: 10_000,
       symbols: "ascii",
     });
-    const step = createSteps();
+    const { step } = createSteps();
     const fail = step("fail", {
       run: () => {
         throw new Error("first line\nsecond line");
@@ -279,7 +279,7 @@ describe("createPipelineReporter", () => {
       refreshIntervalMs: 10_000,
       symbols: "ascii",
     });
-    const step = createSteps();
+    const { step } = createSteps();
     const normalize = step("normalize-data", {
       name: "Normalize Data",
       run: () => "done",
@@ -307,7 +307,7 @@ describe("createPipelineReporter", () => {
       refreshIntervalMs: 10_000,
       symbols: "ascii",
     });
-    const step = createSteps();
+    const { step } = createSteps();
     const fail = step("fail", {
       run: (_inputs, context) => {
         context.reportProgress({
@@ -339,7 +339,7 @@ describe("createPipelineReporter", () => {
       refreshIntervalMs: 10_000,
       symbols: "ascii",
     });
-    const step = createSteps();
+    const { step } = createSteps();
     const log = step("log", {
       run: (_inputs, context) => {
         context.log.log("entry\u001B]2;pwned\u0007 \u001B[31mred\u001B[0m");
@@ -381,7 +381,7 @@ describe("createPipelineReporter", () => {
       symbols: "ascii",
       terminal: { color: false, isTTY: true, unicode: false },
     });
-    const step = createSteps();
+    const { step } = createSteps();
     const slow = step("slow", {
       run: async () => {
         await workGate;
@@ -443,7 +443,7 @@ describe("createPipelineReporter", () => {
         symbols: "ascii",
         terminal: { color: false, isTTY: true, unicode: false },
       });
-      const step = createSteps();
+      const { step } = createSteps();
       const busy = step("busy", {
         run: () => {
           const deadline = Date.now() + 2_000;
@@ -504,7 +504,7 @@ describe("createPipelineReporter", () => {
         symbols: "ascii",
         terminal: { color: true, isTTY: true, unicode: false },
       });
-      const step = createSteps();
+      const { step } = createSteps();
       const busy = step("busy", {
         run: () => {
           const end = Date.now() + 220;
@@ -547,7 +547,7 @@ describe("createPipelineReporter", () => {
       symbols: "ascii",
       terminal: { color: false, isTTY: true, unicode: false },
     });
-    const step = createSteps();
+    const { step } = createSteps();
     const load = step("load", {
       run: async (_inputs, context) => {
         context.reportProgress({
@@ -590,7 +590,7 @@ describe("createPipelineReporter", () => {
       symbols: "ascii",
       terminal: { color: true, isTTY: true, unicode: false },
     });
-    const step = createSteps();
+    const { step } = createSteps();
     const load = step("load", {
       name: "Load Data",
       run: async (_inputs, context) => {

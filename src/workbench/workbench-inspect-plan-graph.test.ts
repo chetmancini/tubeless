@@ -166,7 +166,7 @@ describe("workbench inspect, plan, and graph", () => {
     const { directory } = await writeModule(`
       import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
       import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
-      const step = createSteps();
+      const { step } = createSteps();
       const work = step("work", {
         run: () => { throw new Error("plan must not execute work"); },
       });
@@ -244,7 +244,7 @@ describe("workbench inspect, plan, and graph", () => {
     const { directory } = await writeModule(`
       import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
       import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
-      const step = createSteps();
+      const { step } = createSteps();
       const work = step("work", {
         run: () => { throw new Error("inspect must not execute work"); },
       });
@@ -283,7 +283,7 @@ describe("workbench inspect, plan, and graph", () => {
     const { directory } = await writeModule(`
       import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
       import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
-      const step = createSteps();
+      const { step } = createSteps();
       const work = step("work", {
         name: "Do Work",
         run: () => { throw new Error("graph must not execute work"); },

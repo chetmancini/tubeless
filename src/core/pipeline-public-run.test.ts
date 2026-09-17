@@ -6,7 +6,7 @@ describe("definePipeline run and selection", () => {
   it("returns one versioned run with public identities and timestamps", async () => {
     const log = { error: vi.fn(), log: vi.fn(), warn: vi.fn() };
     let timestampMs = 100;
-    const step = createSteps<{ source: string }>();
+    const { step } = createSteps<{ source: string }>();
     let executionRunId = "";
     const load = step("load", {
       run: (_inputs, context) => {
@@ -55,7 +55,7 @@ describe("definePipeline run and selection", () => {
   });
 
   it("ignores forged Studio preallocation symbols", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const pipeline = definePipeline({
       id: "private-run-identity",
       steps: [step("work", { run: () => "ok" })],
@@ -96,7 +96,7 @@ describe("definePipeline run and selection", () => {
 
   it("does not observe continueOnError mutations after run starts", async () => {
     const controls = { continueOnError: true };
-    const step = createSteps();
+    const { step } = createSteps();
     const fail = step("fail", {
       run: async () => {
         controls.continueOnError = false;
@@ -128,7 +128,7 @@ describe("definePipeline run and selection", () => {
       }
     }
     const sideEffect = vi.fn();
-    const step = createSteps();
+    const { step } = createSteps();
     const write = step("write", { dryRun: "skip", run: sideEffect });
     const pipeline = definePipeline({
       id: "class-dry-run-controls",
@@ -143,8 +143,10 @@ describe("definePipeline run and selection", () => {
   it("rejects steps mixed across options-schema scopes", () => {
     const schemaA = standardSchema<object, object>((value) => ({ value: value as object }), "a");
     const schemaB = standardSchema<object, object>((value) => ({ value: value as object }), "b");
-    const first = createSteps(schemaA)("first", { run: () => 1 });
-    const second = createSteps(schemaB)("second", { run: () => 2 });
+    const { step: firstStep } = createSteps(schemaA);
+    const { step: secondStep } = createSteps(schemaB);
+    const first = firstStep("first", { run: () => 1 });
+    const second = secondStep("second", { run: () => 2 });
 
     expect(
       thrownDefinitionErrors(() =>
@@ -162,7 +164,7 @@ describe("definePipeline run and selection", () => {
   });
 
   it("carries an optional display name through plans and reports", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const normalize = step("normalize-data", {
       name: "Normalize Data",
       run: () => "normalized",
@@ -184,7 +186,7 @@ describe("definePipeline run and selection", () => {
   });
 
   it("rejects a blank display name when the pipeline is defined", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const invalid = step("normalize-data", { name: "  ", run: () => undefined });
 
     expect(
@@ -282,7 +284,7 @@ describe("definePipeline run and selection", () => {
   it("runs targets with required inputs and failure gates but not optional-only inputs", async () => {
     const ran: string[] = [];
     let failValidation = false;
-    const step = createSteps();
+    const { step } = createSteps();
     const source = step("source", { run: () => (ran.push("source"), "source") });
     const optional = step("optional", { run: () => (ran.push("optional"), "optional") });
     const validate = step("validate", {

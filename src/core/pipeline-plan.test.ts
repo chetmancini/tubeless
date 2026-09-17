@@ -3,7 +3,7 @@ import { createSteps, definePipeline } from "./pipeline.js";
 
 describe("pipeline planning", () => {
   it("exposes a static execution plan without running steps", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     let ran = false;
     const build = step("build", {
       run: () => {

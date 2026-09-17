@@ -43,7 +43,7 @@ describe("openNdjsonPipelineRunStore", () => {
   it.each(["a", "界", '\u0000"\\'])(
     "reopens large detail payloads containing %j with default byte limits",
     async (text) => {
-      const step = createSteps();
+      const { step } = createSteps();
       const details = Array.from({ length: 128 }, (_, index) => ({
         id: `${index}${text.repeat(2048)}`.slice(0, 2048),
         label: text.repeat(2048).slice(0, 2048),
@@ -253,8 +253,8 @@ describe("openNdjsonPipelineRunStore", () => {
   });
 
   it("round-trips empty error messages and nested cause messages", async () => {
-    const steps = createSteps();
-    const failing = steps("failing", {
+    const { step } = createSteps();
+    const failing = step("failing", {
       run: () => {
         const error = new Error() as Error & { cause?: unknown };
         error.cause = new Error();
@@ -291,15 +291,15 @@ describe("openNdjsonPipelineRunStore", () => {
 
 describe("recorded fan-out diagnostics", () => {
   it("round-trips real failures through JSON, SQLite, and history projection", async () => {
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const work = childStep("work", {
       run: () => {
         throw Object.assign(new Error("failed"), { code: "RETRY" });
       },
     });
     const child = definePipeline({ id: "child", steps: [work], finalize: () => true });
-    const step = createSteps();
-    const fan = step.forEachPipeline("fan", {
+    const { forEachPipeline } = createSteps();
+    const fan = forEachPipeline("fan", {
       pipeline: child,
       items: () => Array.from({ length: 40 }, (_, index) => index),
       key: (index) => `${index}-${"k".repeat(1024)}`,

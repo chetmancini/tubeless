@@ -39,13 +39,16 @@ const START_LIST_FILES = ["start-list.json", "timing.log", "weather.txt"] as con
 
 type DetailStatus = "completed" | "pending" | "running";
 
-const normalizeStep = createSteps<{ delay: number; riders: readonly PelotonRider[] }>();
-const inspectStep = createSteps<{
+const { step: normalizeStep } = createSteps<{
+  delay: number;
+  riders: readonly PelotonRider[];
+}>();
+const { step: inspectStep } = createSteps<{
   delay: number;
   kit: readonly string[];
   riderId: string;
 }>();
-const step = createSteps<PelotonOptions>();
+const { step, fromPipeline, forEachPipeline } = createSteps<PelotonOptions>();
 
 function sequentialStatus(index: number, current: number): DetailStatus {
   if (index < current) return "completed";
@@ -176,7 +179,7 @@ const discoverPeloton = step("discover-peloton", {
   },
 });
 
-const resolveWeather = step.skippable("resolve-weather", {
+const resolveWeather = step("resolve-weather", {
   name: "Resolve Weather",
   description: "Reuse a posted forecast unless the race asks for a refresh.",
   skip: (_inputs, context) =>
@@ -192,7 +195,7 @@ const resolveWeather = step.skippable("resolve-weather", {
   },
 });
 
-const normalizedBikes = step.fromPipeline("normalize-bikes", {
+const normalizedBikes = fromPipeline("normalize-bikes", {
   name: "Normalize Bikes",
   dependsOn: [discoverPeloton],
   description: "Normalize kit lists through the independently useful child pipeline.",
@@ -203,7 +206,7 @@ const normalizedBikes = step.fromPipeline("normalize-bikes", {
   }),
 });
 
-const inspectBikes = step.forEachPipeline("inspect-bikes", {
+const inspectBikes = forEachPipeline("inspect-bikes", {
   name: "Inspect Bikes",
   dependsOn: [normalizedBikes],
   description: "Fan out bike inspections with bounded concurrency and stable rider keys.",

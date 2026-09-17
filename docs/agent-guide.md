@@ -37,8 +37,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   editor or agent validation. Optional document metadata is descriptive only.
   `inspect` or `plan` on a compiled command still checks graph semantics.
 
-- Use `createSteps<TDomainOptions>()` once per pipeline and `definePipeline` once
-  after declaring its steps. Domain option types contain domain input only;
+- Use `createSteps<TDomainOptions>()` once per pipeline, take its step
+  constructors, and use `definePipeline` once after declaring the steps. Domain
+  option types contain domain input only;
   callers pass those options and optional built-in controls to
   `run(options, controls?)`, while `plan(controls)` accepts controls alone.
 - Treat a `PipelineDefinitionError` during module loading as an authoring bug;
@@ -53,12 +54,12 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Set `dryRun: "skip"` on filesystem writes, database mutations, publication,
   email, and other steps whose normal `run` must not execute in a dry run. Use a
   typed `dryRun` handler when the step should produce a preview value instead.
-- Use `step.skippable` only for an intentional successful outcome. Handle its
-  resulting `T | undefined` output type explicitly.
+- Add `skip` to a step definition only for an intentional successful outcome.
+  Handle its resulting `T | undefined` output type explicitly.
 - Use `fromPipeline` for one independently useful child workflow and
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
-  Use `forEachPipeline.skippable` only when the whole fan-out may be intentionally
-  omitted; handle its `readonly T[] | undefined` output explicitly.
+  Add `skip` only when the whole fan-out may be intentionally omitted; handle
+  its `readonly T[] | undefined` output explicitly.
   Async `fromPipeline` result mappings publish resolved values; use that resolved
   shape for dependent inputs and policy-skip values.
   Parent plans show one wrapper step and expose `nestedPipeline` with the child
@@ -221,7 +222,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 ## Failure and safety rules
 
-- Do not use `step.skippable` to swallow an exception.
+- Do not use `skip` to swallow an exception.
 - Do not treat dry run as rollback; external side effects require
   `dryRun: "skip"` or a side-effect-free custom `dryRun` handler.
 - Do not publish after a failed or cancelled validation step. Make validation

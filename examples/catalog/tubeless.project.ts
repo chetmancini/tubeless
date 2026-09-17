@@ -7,6 +7,8 @@ import { definePipelineProject } from "tubeless/project";
 // execution. Command argv flags stay --step/--target, while mapOptions and hooks
 // receive stepIds and targets.
 // When converting existing code, use the tubeless-make-pipeline agent skill.
+// Pipeline files destructure the constructors they need from createSteps.
+// Adding skip to any definition marks that step as intentionally omittable.
 // Adapt this layout to the consumer; retain its established IDs and caller contracts.
 // For caller-directed fan-out reruns, see ../fan-out-progress.ts: inspect
 // error.fanOut and check omitted entries and truncated keys before selecting inputs.

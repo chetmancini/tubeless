@@ -3,7 +3,7 @@ import { createSteps, definePipeline } from "./pipeline.js";
 
 describe("pipeline Mermaid rendering", () => {
   it("renders every dependency policy without running the pipeline", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const runSource = vi.fn(() => "source");
     const source = step("source", {
       name: 'Load "Rows" #1 & <raw>',
@@ -42,7 +42,7 @@ describe("pipeline Mermaid rendering", () => {
   });
 
   it("uses top-down layout and concise display labels by default", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const normalize = step("normalize-data", {
       name: "Normalize Data",
       description: "Not included by default.",

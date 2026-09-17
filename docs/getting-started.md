@@ -51,15 +51,15 @@ const lines = ["  First row  ", "", "Second row"];
 
 ## 2. Create typed steps
 
-Call `createSteps` once to create a step builder for these options. The `load`
-step returns the input lines. The `normalize` step declares `dependsOn: [load]`,
+Call `createSteps` once and take its `step` constructor for these options. The
+`load` step returns the input lines. The `normalize` step declares `dependsOn: [load]`,
 so it receives the output of `load` as a typed input. TypeScript infers that
 `rows` is a read-only array of strings.
 
 ```ts
 import { createSteps } from "tubeless";
 
-const step = createSteps<ImportOptions>();
+const { step } = createSteps<ImportOptions>();
 
 const load = step("load", {
   description: "Read source rows",

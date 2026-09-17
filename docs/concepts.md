@@ -6,8 +6,9 @@ A pipeline describes a series of steps and the values passed between them.
 Each step has an ID, a function to run, and any dependencies. A finalizer
 combines step outputs into the value returned to the caller.
 
-Create steps with one `createSteps<TOptions>()` builder per pipeline. Pass a
-step object to another step's `dependsOn` array to require its output;
+Create steps with one `createSteps<TOptions>()` factory per pipeline. Take its
+`step` constructor, then pass a step object to another step's
+`dependsOn` array to require its output;
 TypeScript then infers that input's type.
 
 `definePipeline` checks the graph immediately. Duplicate or reserved IDs,
@@ -45,15 +46,16 @@ or fail while running. These cases have different effects on dependent steps.
 | Outcome         | What happened                                                                             | What dependents receive                              |
 | --------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | Structural skip | A filter, dry-run rule, missing dependency, abort, or earlier failure prevented execution | No output; required dependents cannot run            |
-| Policy skip     | A `step.skippable` predicate decided that work was unnecessary                            | The supplied skip value, or `undefined`              |
+| Policy skip     | A step's `skip` predicate decided that work was unnecessary                               | The supplied skip value, or `undefined`              |
 | Failure         | The step's work failed                                                                    | No successful output; required dependents cannot run |
 
 Fail-fast is the default: a failure stops new work. Set `continueOnError` to
 allow independent steps to proceed. The run still reports failure, and
 `runOrThrow` still throws. Use `run` to inspect any partial result.
 
-A `step.skippable` output is always typed as `T | undefined`, even if all current
-skip paths return a value. Dependent steps must handle that possible absence.
+Adding `skip` to a step definition makes it skippable. Its output is always
+typed as `T | undefined`, even if all current skip paths return a value.
+Dependent steps must handle that possible absence.
 
 ## Execution controls
 
@@ -302,7 +304,7 @@ Schema V1. Tubeless accepts these schemas without importing a validation library
 `resultSchema` to `definePipeline`:
 
 ```ts
-const step = createSteps(optionsSchema);
+const { step } = createSteps(optionsSchema);
 
 const parse = step("parse", {
   outputSchema: parsedRowsSchema,
@@ -349,18 +351,18 @@ options-schema factory scopes.
 
 ## Child pipelines
 
-Use `step.fromPipeline` to run one reusable child pipeline. Use
-`step.forEachPipeline` to run that child for each item in a list. The parent
+Use `fromPipeline` to run one reusable child pipeline. Use `forEachPipeline` to
+run that child for each item in a list. The parent
 plan contains one wrapper step; child activity appears as progress beneath it.
 Read [child-pipeline composition](./child-pipeline-composition.md) for option
 mapping, selection, failures, and progress controls.
 
-Use `step.forEachPipeline.skippable` when the entire batch may be intentionally
-omitted. Its output can be `undefined`, which dependent code must handle.
+Add `skip` to either child-step definition when the entire child step may be
+intentionally omitted. Its output can be `undefined`, which dependent code must handle.
 
 ## Remote steps
 
-Use `step.fromRemote` to call a service or execution engine from one step.
+Use `fromRemote` to call a service or execution engine from one step.
 The parent pipeline still runs locally. The step's `remote.engine` and optional
 `remote.target` describe the destination for display and inspection.
 

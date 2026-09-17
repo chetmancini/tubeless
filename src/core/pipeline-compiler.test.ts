@@ -16,7 +16,7 @@ function standardSchema<TInput, TOutput>(
 
 describe("pipeline compilation", () => {
   it("plans from the compiled graph after define, ignoring later definition mutations", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const build = step("build", { run: () => "built" });
     const definition = {
       id: "sealed",
@@ -38,7 +38,7 @@ describe("pipeline compilation", () => {
   });
 
   it("plans from snapshotted dependency arrays after define", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const build = step("build", { run: () => "built" });
     const extra = step("extra", { run: () => "extra" });
     const dependsOn = [build];
@@ -66,7 +66,7 @@ describe("pipeline compilation", () => {
   });
 
   it("defines a pipeline from frozen steps with dependencies", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const build = step("build", { run: () => "built" });
     const write = step("write", {
       dependsOn: [build],
@@ -89,7 +89,7 @@ describe("pipeline compilation", () => {
   });
 
   it("plans from snapshotted absent dependency fields after define", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const later = step("later", { run: () => "later" });
     const earlier = step("earlier", { run: () => "earlier" });
     const pipeline = definePipeline({
@@ -119,7 +119,7 @@ describe("pipeline compilation", () => {
     }));
     const originalValidate = vi.spyOn(originalSchema["~standard"], "validate");
     const replacementValidate = vi.spyOn(replacementSchema["~standard"], "validate");
-    const step = createSteps();
+    const { step } = createSteps();
     const required = step("required", { run: () => "required" });
     const optional = step("optional", { run: () => "optional" });
     const gate = step("gate", { run: () => "gate" });
@@ -267,7 +267,7 @@ describe("pipeline compilation", () => {
   });
 
   it("invokes a method-style finalizer with the original definition as this", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", { run: () => "ok" });
     const definition = {
       id: "finalize-this",

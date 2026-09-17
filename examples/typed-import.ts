@@ -4,7 +4,7 @@ interface ImportOptions {
   lines: readonly string[];
 }
 
-const step = createSteps<ImportOptions>();
+const { step } = createSteps<ImportOptions>();
 
 const loadRows = step("load-rows", {
   description: "Read raw input records from the caller.",

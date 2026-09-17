@@ -31,7 +31,7 @@ describe("opaque child adapter: composition", () => {
       signalMatches: boolean;
       sleepMatches: boolean;
     }> = [];
-    const childStep = createSteps<ChildOptions>();
+    const { step: childStep } = createSteps<ChildOptions>();
     const childLoad = childStep("load", {
       run: async (_inputs, context) => {
         context.log.log("child log");
@@ -56,24 +56,26 @@ describe("opaque child adapter: composition", () => {
       finalize: (outputs): ChildResult => ({ written: outputs.write ?? 0 }),
     });
 
-    const parentStep = createSteps<ParentOptions>();
+    const { step: parentStep, fromPipeline: parentFromPipeline } = createSteps<ParentOptions>();
     const prepare = parentStep("prepare", { run: () => ({ records: 3 }) });
     const optionalHint = parentStep("optional-hint", { run: () => "hint" as const });
-    const rawChild = parentStep.fromPipeline("raw-child", {
+    const rawChild = parentFromPipeline("raw-child", {
       pipeline: child,
       mapOptions: (_inputs, context) => ({ input: context.options.source, recordCount: 1 }),
     });
     expectTypeOf(rawChild).toEqualTypeOf<Step<"raw-child", ChildResult, ParentOptions>>();
 
-    parentStep.fromPipeline("skip-requires-skippable", {
+    const policySkippedChild = parentFromPipeline("policy-skipped-child", {
       pipeline: child,
-      // @ts-expect-error Policy skip belongs on fromPipeline.skippable.
       skip: () => "child not requested",
       mapOptions: (_inputs, context) => ({
         input: context.options.source,
         recordCount: 1,
       }),
     });
+    expectTypeOf(policySkippedChild).toEqualTypeOf<
+      Step<"policy-skipped-child", ChildResult | undefined, ParentOptions>
+    >();
 
     const reusableSkippingChildDefinition = {
       pipeline: child,
@@ -86,10 +88,15 @@ describe("opaque child adapter: composition", () => {
         recordCount: 1,
       }),
     };
-    // @ts-expect-error Reusable definitions cannot bypass fromPipeline.skippable.
-    parentStep.fromPipeline("reusable-skip-requires-skippable", reusableSkippingChildDefinition);
+    const reusableSkippingChild = parentFromPipeline(
+      "reusable-skipping-child",
+      reusableSkippingChildDefinition
+    );
+    expectTypeOf(reusableSkippingChild).toEqualTypeOf<
+      Step<"reusable-skipping-child", ChildResult | undefined, ParentOptions>
+    >();
 
-    const mappedChild = parentStep.fromPipeline("mapped-child", {
+    const mappedChild = parentFromPipeline("mapped-child", {
       pipeline: child,
       dependsOn: [prepare],
       optionalDependsOn: [optionalHint],
@@ -112,7 +119,7 @@ describe("opaque child adapter: composition", () => {
       Step<"mapped-child", { count: number; ran: true }, ParentOptions>
     >();
 
-    const skippedChild = parentStep.fromPipeline.skippable("skipped-child", {
+    const skippedChild = parentFromPipeline("skipped-child", {
       pipeline: child,
       skip: () => "child not requested",
       mapOptions: (_inputs, context) => ({
@@ -125,7 +132,7 @@ describe("opaque child adapter: composition", () => {
     >();
 
     const enableChildSkip = false as boolean;
-    const gatedSkipChild = parentStep.fromPipeline.skippable("gated-skip-child", {
+    const gatedSkipChild = parentFromPipeline("gated-skip-child", {
       pipeline: child,
       skip: enableChildSkip ? () => "child not requested" : undefined,
       mapOptions: (_inputs, context) => ({
@@ -137,7 +144,7 @@ describe("opaque child adapter: composition", () => {
       Step<"gated-skip-child", ChildResult | undefined, ParentOptions>
     >();
 
-    const skippedMappedChild = parentStep.fromPipeline.skippable("skipped-mapped-child", {
+    const skippedMappedChild = parentFromPipeline("skipped-mapped-child", {
       pipeline: child,
       // Skip value is parent-facing TOut (mapResult is not applied on the skip path).
       skip: () => ({
@@ -153,7 +160,7 @@ describe("opaque child adapter: composition", () => {
     expectTypeOf(skippedMappedChild).toEqualTypeOf<
       Step<"skipped-mapped-child", { count: number; ran: false } | undefined, ParentOptions>
     >();
-    parentStep.fromPipeline.skippable("invalid-skip-value-shape", {
+    parentFromPipeline("invalid-skip-value-shape", {
       pipeline: child,
       // @ts-expect-error skip value must be mapped TOut, not raw child result.
       skip: () => ({ reason: "wrong shape", value: { written: 0 } }),
@@ -164,7 +171,7 @@ describe("opaque child adapter: composition", () => {
       mapResult: (value) => ({ count: value.written, ran: false as const }),
     });
 
-    parentStep.fromPipeline("invalid-child-options", {
+    parentFromPipeline("invalid-child-options", {
       pipeline: child,
       // @ts-expect-error ChildOptions requires input and recordCount.
       mapOptions: () => ({}),
@@ -250,7 +257,7 @@ describe("opaque child adapter: composition", () => {
     const workGate = new Promise<void>((resolve) => {
       releaseWork = resolve;
     });
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const work = childStep("work", {
       run: async (_inputs, context) => {
         context.reportProgress({ completed: 3, total: 10, message: "batch" });
@@ -263,8 +270,8 @@ describe("opaque child adapter: composition", () => {
       steps: [work],
       finalize: (outputs) => outputs.work,
     });
-    const parentStep = createSteps();
-    const stage = parentStep.fromPipeline("stage", {
+    const { fromPipeline: parentFromPipeline } = createSteps();
+    const stage = parentFromPipeline("stage", {
       pipeline: child,
       mapOptions: () => ({}),
     });
@@ -303,7 +310,7 @@ describe("opaque child adapter: composition", () => {
     interface ChildOptions {
       n: number;
     }
-    const childStep = createSteps<ChildOptions>();
+    const { step: childStep } = createSteps<ChildOptions>();
     const write = childStep("write", {
       run: () => {
         throw new Error("child should not run when parent step is policy-skipped");
@@ -315,9 +322,9 @@ describe("opaque child adapter: composition", () => {
       finalize: (outputs): { written: number } => ({ written: outputs.write ?? -1 }),
     });
 
-    const parentStep = createSteps();
+    const { step: parentStep, fromPipeline: parentFromPipeline } = createSteps();
     let mapResultCalls = 0;
-    const stage = parentStep.fromPipeline.skippable("stage", {
+    const stage = parentFromPipeline("stage", {
       pipeline: child,
       skip: () => ({
         reason: "stage disabled",
@@ -357,11 +364,11 @@ describe("opaque child adapter: composition", () => {
   });
 
   it("keeps the child opaque when it is the only parent step", () => {
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const inside = childStep("inside", { run: () => "done" });
     const child = definePipeline({ id: "opaque-child", steps: [inside], finalize: () => true });
-    const parentStep = createSteps();
-    const childStage = parentStep.fromPipeline("child-stage", {
+    const { fromPipeline: parentFromPipeline } = createSteps();
+    const childStage = parentFromPipeline("child-stage", {
       pipeline: child,
       mapOptions: () => ({}),
     });
@@ -384,15 +391,15 @@ describe("opaque child adapter: composition", () => {
   });
 
   it("snapshots nested-pipeline metadata when the parent is defined", () => {
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const inside = childStep("inside", { run: () => "done" });
     const child = definePipeline({
       id: "metadata-child",
       steps: [inside],
       finalize: () => true,
     });
-    const parentStep = createSteps();
-    const childStage = parentStep.fromPipeline("child-stage", {
+    const { fromPipeline: parentFromPipeline } = createSteps();
+    const childStage = parentFromPipeline("child-stage", {
       pipeline: child,
       mapOptions: () => ({}),
     });
@@ -417,7 +424,7 @@ describe("opaque child adapter: composition", () => {
   it("applies parent dry-run last and lets the child skip side effects", async () => {
     const sideEffect = vi.fn();
     const observedDryRuns: boolean[] = [];
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const write = childStep("write", { dryRun: "skip", run: sideEffect });
     const inspect = childStep("inspect", {
       run: (_inputs, context) => observedDryRuns.push(context.dryRun),
@@ -427,8 +434,8 @@ describe("opaque child adapter: composition", () => {
       steps: [write, inspect],
       finalize: () => "dry-result",
     });
-    const parentStep = createSteps();
-    const stage = parentStep.fromPipeline("dry-stage", {
+    const { fromPipeline: parentFromPipeline } = createSteps();
+    const stage = parentFromPipeline("dry-stage", {
       pipeline: child,
       mapOptions: () => ({ dryRun: false }),
     });
@@ -460,7 +467,7 @@ describe("opaque child adapter: composition", () => {
       }
     }
 
-    const childStep = createSteps<{ label: string } & { read(): string }>();
+    const { step: childStep } = createSteps<{ label: string } & { read(): string }>();
     const inspect = childStep("inspect", {
       run: (_inputs, context) => {
         expect(context.options).toBeInstanceOf(MixedChildOptions);
@@ -473,8 +480,8 @@ describe("opaque child adapter: composition", () => {
       steps: [inspect],
       finalize: (outputs) => outputs.inspect,
     });
-    const parentStep = createSteps();
-    const stage = parentStep.fromPipeline("accessor-stage", {
+    const { fromPipeline: parentFromPipeline } = createSteps();
+    const stage = parentFromPipeline("accessor-stage", {
       pipeline: child,
       mapOptions: () => new MixedChildOptions(),
     });
@@ -489,7 +496,7 @@ describe("opaque child adapter: composition", () => {
 
   it("hides control keys on a frozen mixed mapOptions bag", async () => {
     const mixed = Object.freeze({ continueOnError: true, label: "frozen" });
-    const childStep = createSteps<{ label: string }>();
+    const { step: childStep } = createSteps<{ label: string }>();
     const inspect = childStep("inspect", {
       run: (_inputs, context) => {
         expect("continueOnError" in context.options).toBe(false);
@@ -502,8 +509,8 @@ describe("opaque child adapter: composition", () => {
       steps: [inspect],
       finalize: (outputs) => outputs.inspect,
     });
-    const parentStep = createSteps();
-    const stage = parentStep.fromPipeline("frozen-stage", {
+    const { fromPipeline: parentFromPipeline } = createSteps();
+    const stage = parentFromPipeline("frozen-stage", {
       pipeline: child,
       mapOptions: () => mixed,
     });

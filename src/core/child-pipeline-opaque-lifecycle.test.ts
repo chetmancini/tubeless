@@ -6,7 +6,7 @@ import { captureOutput } from "./child-pipeline.test-support.js";
 describe("opaque child adapter: lifecycle", () => {
   it("applies a child pipeline's declared target closure through mapOptions", async () => {
     const ran: string[] = [];
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const load = childStep("load", { run: () => (ran.push("load"), "loaded") });
     const publish = childStep("publish", {
       dependsOn: [load],
@@ -18,8 +18,8 @@ describe("opaque child adapter: lifecycle", () => {
       targets: [publish],
       finalize: (outputs) => outputs.publish,
     });
-    const parentStep = createSteps();
-    const stage = parentStep.fromPipeline("targeted-stage", {
+    const { fromPipeline: parentFromPipeline } = createSteps();
+    const stage = parentFromPipeline("targeted-stage", {
       pipeline: child,
       mapOptions: () => ({ targets: ["publish"] as const }),
     });
@@ -44,15 +44,15 @@ describe("opaque child adapter: lifecycle", () => {
       symbols: "ascii",
       terminal: { color: false, isTTY: true, unicode: false },
     });
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const inside = childStep("inside", { run: () => "child result" });
     const child = definePipeline({
       id: "reporter-child",
       steps: [inside],
       finalize: (outputs) => outputs.inside,
     });
-    const parentStep = createSteps();
-    const childStage = parentStep.fromPipeline("child-stage", {
+    const { step: parentStep, fromPipeline: parentFromPipeline } = createSteps();
+    const childStage = parentFromPipeline("child-stage", {
       pipeline: child,
       mapOptions: () => ({}),
     });
@@ -96,15 +96,15 @@ describe("opaque child adapter: lifecycle", () => {
     const controller = new AbortController();
     controller.abort();
     const runChild = vi.fn();
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const inside = childStep("inside", { run: runChild });
     const child = definePipeline({
       id: "already-aborted-child",
       steps: [inside],
       finalize: () => true,
     });
-    const parentStep = createSteps();
-    const childStage = parentStep.fromPipeline("child-stage", {
+    const { fromPipeline: parentFromPipeline } = createSteps();
+    const childStage = parentFromPipeline("child-stage", {
       pipeline: child,
       mapOptions: () => ({}),
     });
@@ -145,7 +145,7 @@ describe("opaque child adapter: lifecycle", () => {
           });
         })
     );
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const wait = childStep("wait", {
       run: async (_inputs, context) => {
         expect(context.signal).toBe(controller.signal);
@@ -154,8 +154,8 @@ describe("opaque child adapter: lifecycle", () => {
       },
     });
     const child = definePipeline({ id: "abort-child", steps: [wait], finalize: () => true });
-    const parentStep = createSteps();
-    const stage = parentStep.fromPipeline("abort-stage", {
+    const { fromPipeline: parentFromPipeline } = createSteps();
+    const stage = parentFromPipeline("abort-stage", {
       pipeline: child,
       mapOptions: () => ({}),
     });

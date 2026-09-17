@@ -36,7 +36,8 @@ import { href } from "../lib/paths";
     <section class="section">
       <h2>Define a pipeline</h2>
       <p class="lede">
-        Create steps with <code>createSteps</code>, then connect them with <code>dependsOn</code>.
+        Create constructors with <code>createSteps</code>, define steps with <code>step</code>,
+        then connect them with <code>dependsOn</code>.
         The normalize step receives the load step’s output, with its type inferred automatically.
       </p>
       <CodeBlock code={FIRST_PIPELINE_SAMPLE} lang="ts" />

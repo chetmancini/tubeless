@@ -3,7 +3,7 @@ import { createSteps, definePipeline, type PipelineError } from "../core/pipelin
 import { renderPipelineError, renderPipelinePlan } from "./render.js";
 
 function makeTargetPlan() {
-  const step = createSteps();
+  const { step } = createSteps();
   const source = step("source", {
     name: "Load Source",
     description: "Read source records.",
@@ -61,12 +61,12 @@ describe("pipeline rendering", () => {
   });
 
   it("identifies opaque child-pipeline steps without flattening their plan", () => {
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const read = childStep("read", { run: () => "read" });
     const write = childStep("write", { dependsOn: [read], run: () => "written" });
     const child = definePipeline({ id: "child", steps: [read, write], finalize: () => true });
-    const parentStep = createSteps();
-    const nested = parentStep.fromPipeline("nested", {
+    const { fromPipeline } = createSteps();
+    const nested = fromPipeline("nested", {
       pipeline: child,
       mapOptions: () => ({}),
     });
@@ -90,8 +90,8 @@ describe("pipeline rendering", () => {
         version: 1 as const,
       },
     };
-    const step = createSteps();
-    const enrich = step.fromRemote("enrich", {
+    const { fromRemote } = createSteps();
+    const enrich = fromRemote("enrich", {
       adapter: {
         engine: "lambda",
         target: "enrich-v2",
@@ -100,7 +100,7 @@ describe("pipeline rendering", () => {
       mapInput: () => ({}),
       outputSchema: schema,
     });
-    const charge = step.fromRemote("charge", {
+    const charge = fromRemote("charge", {
       adapter: {
         engine: "temporal",
         target: "chargeOrder",

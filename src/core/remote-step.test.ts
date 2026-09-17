@@ -40,8 +40,8 @@ function testAdapter<TPayload, TResult>(
 
 describe("fromRemote", () => {
   it("copies adapter engine and target onto the parent plan without flattening", () => {
-    const step = createSteps();
-    const enrich = step.fromRemote("enrich", {
+    const { fromRemote } = createSteps();
+    const enrich = fromRemote("enrich", {
       adapter: testAdapter(async () => ({ ok: true as const })),
       mapInput: () => ({ rows: [] }),
       outputSchema: resultSchema,
@@ -59,8 +59,8 @@ describe("fromRemote", () => {
   });
 
   it("snapshots remote metadata when the pipeline is defined", () => {
-    const step = createSteps();
-    const enrich = step.fromRemote("enrich", {
+    const { fromRemote } = createSteps();
+    const enrich = fromRemote("enrich", {
       adapter: testAdapter(async () => ({ ok: true as const })),
       mapInput: () => ({ rows: [] }),
       outputSchema: resultSchema,
@@ -86,8 +86,8 @@ describe("fromRemote", () => {
       expect(context.dryRun).toBe(true);
       return { ok: true as const };
     });
-    const step = createSteps();
-    const enrich = step.fromRemote("enrich", {
+    const { fromRemote } = createSteps();
+    const enrich = fromRemote("enrich", {
       adapter: testAdapter(invoke),
       mapInput: (_inputs, ctx) => ({ dryRun: ctx.dryRun }),
       outputSchema: resultSchema,
@@ -106,8 +106,8 @@ describe("fromRemote", () => {
 
   it("does not call invoke when dryRun is skip", async () => {
     const invoke = vi.fn(async () => ({ ok: true as const }));
-    const step = createSteps();
-    const charge = step.fromRemote("charge", {
+    const { fromRemote } = createSteps();
+    const charge = fromRemote("charge", {
       adapter: testAdapter(invoke, "chargeOrder"),
       mapInput: () => ({ orderId: "1" }),
       outputSchema: resultSchema,
@@ -130,8 +130,8 @@ describe("fromRemote", () => {
 
   it("does not call invoke when a preview handler is present", async () => {
     const invoke = vi.fn(async () => ({ ok: true as const }));
-    const step = createSteps();
-    const enrich = step.fromRemote("enrich", {
+    const { fromRemote } = createSteps();
+    const enrich = fromRemote("enrich", {
       adapter: testAdapter(invoke),
       mapInput: () => ({ rows: [] }),
       outputSchema: resultSchema,
@@ -150,8 +150,8 @@ describe("fromRemote", () => {
   });
 
   it("classifies adapter throws as ordinary step failures", async () => {
-    const step = createSteps();
-    const enrich = step.fromRemote("enrich", {
+    const { fromRemote } = createSteps();
+    const enrich = fromRemote("enrich", {
       adapter: testAdapter(async () => {
         throw new Error("lambda timeout");
       }),
@@ -176,8 +176,8 @@ describe("fromRemote", () => {
 
   it("keeps a thrown cause and code on TUBELESS_STEP_FAILED", async () => {
     const remote = Object.assign(new Error("activity failed"), { code: "ACTIVITY_FAILED" });
-    const step = createSteps();
-    const enrich = step.fromRemote("enrich", {
+    const { fromRemote } = createSteps();
+    const enrich = fromRemote("enrich", {
       adapter: testAdapter(async () => {
         throw Object.assign(new Error("workflow failed"), {
           cause: remote,
@@ -208,8 +208,8 @@ describe("fromRemote", () => {
   it("forwards context.log from invoke to the injected logger and pipeline.log", async () => {
     const log = { error: vi.fn(), log: vi.fn(), warn: vi.fn() };
     const events: PipelineTraceEvent[] = [];
-    const step = createSteps();
-    const enrich = step.fromRemote("enrich", {
+    const { fromRemote } = createSteps();
+    const enrich = fromRemote("enrich", {
       adapter: testAdapter(async (_payload, context) => {
         context.log.log("remote line", 12);
         return { ok: true as const };
@@ -239,8 +239,8 @@ describe("fromRemote", () => {
 
   it("classifies abort during invoke as cancellation", async () => {
     const controller = new AbortController();
-    const step = createSteps();
-    const enrich = step.fromRemote("enrich", {
+    const { fromRemote } = createSteps();
+    const enrich = fromRemote("enrich", {
       adapter: testAdapter<Record<string, never>, { ok: true }>(
         (_payload, context) =>
           new Promise((_resolve, reject) => {
@@ -273,13 +273,13 @@ describe("fromRemote", () => {
   });
 
   it("requires outputSchema and keeps skip / dryRun tokens off the authoring surface", () => {
-    const step = createSteps();
+    const { step, fromRemote } = createSteps();
     const adapter = testAdapter(async (payload: { n: number }) => payload);
     const schema = standardSchema<{ n: number }, { n: number }>((value) => ({
       value: value as { n: number },
     }));
 
-    const remote = step.fromRemote("enrich", {
+    const remote = fromRemote("enrich", {
       adapter,
       mapInput: () => ({ n: 1 }),
       outputSchema: schema,
@@ -288,7 +288,7 @@ describe("fromRemote", () => {
       Step<"enrich", { n: number }, DefaultOptions, DefaultOptions, { n: number }>
     >();
 
-    const skippable = step.fromRemote.skippable("maybe-enrich", {
+    const skippable = fromRemote("maybe-enrich", {
       adapter,
       mapInput: () => ({ n: 1 }),
       outputSchema: schema,
@@ -308,20 +308,28 @@ describe("fromRemote", () => {
     expectTypeOf(dependent).toEqualTypeOf<Step<"after", number, DefaultOptions>>();
 
     // @ts-expect-error outputSchema is required
-    step.fromRemote("missing-schema", {
+    fromRemote("missing-schema", {
       adapter,
       mapInput: () => ({ n: 1 }),
     });
 
-    step.fromRemote("skip-requires-skippable", {
+    const explicitlySkipped = fromRemote("explicitly-skipped", {
       adapter,
       mapInput: () => ({ n: 1 }),
       outputSchema: schema,
-      // @ts-expect-error Policy skip belongs on fromRemote.skippable.
       skip: () => "disabled",
     });
+    expectTypeOf(explicitlySkipped).toEqualTypeOf<
+      Step<
+        "explicitly-skipped",
+        { n: number } | undefined,
+        DefaultOptions,
+        DefaultOptions,
+        { n: number }
+      >
+    >();
 
-    step.fromRemote("dry-run-run-is-invalid", {
+    fromRemote("dry-run-run-is-invalid", {
       adapter,
       mapInput: () => ({ n: 1 }),
       outputSchema: schema,
@@ -331,7 +339,7 @@ describe("fromRemote", () => {
   });
 
   it("types adapter invoke and skip values as schema input, not output", () => {
-    const step = createSteps();
+    const { fromRemote } = createSteps();
     const transformingSchema = standardSchema<{ n: number }, { n: string }>((value) => {
       if (value && typeof value === "object" && "n" in value) {
         const n = (value as { n: unknown }).n;
@@ -343,13 +351,13 @@ describe("fromRemote", () => {
     });
 
     const inputAdapter = testAdapter(async () => ({ n: 1 }));
-    step.fromRemote("typed-remote", {
+    fromRemote("typed-remote", {
       adapter: inputAdapter,
       mapInput: () => ({}),
       outputSchema: transformingSchema,
     });
 
-    step.fromRemote.skippable("typed-skippable", {
+    fromRemote("typed-skippable", {
       adapter: inputAdapter,
       mapInput: () => ({}),
       outputSchema: transformingSchema,
@@ -359,14 +367,14 @@ describe("fromRemote", () => {
       }),
     });
 
-    step.fromRemote("output-shaped-adapter", {
+    fromRemote("output-shaped-adapter", {
       // @ts-expect-error adapter results are validated as schema input, not output
       adapter: testAdapter(async () => ({ n: "1" })),
       mapInput: () => ({}),
       outputSchema: transformingSchema,
     });
 
-    step.fromRemote.skippable("output-shaped-skip", {
+    fromRemote("output-shaped-skip", {
       adapter: inputAdapter,
       mapInput: () => ({}),
       outputSchema: transformingSchema,

@@ -57,9 +57,10 @@ has a coherent output and a reason to appear in a plan or failure report.
 
 ## Keep the graph typed
 
-Use one `createSteps<TDomainOptions>()` builder and one `definePipeline` per
-pipeline. Import from `tubeless` and its public subpaths. Keep business inputs
-in domain options; built-in run controls belong in the separate controls argument.
+Use one `createSteps<TDomainOptions>()` factory and one `definePipeline` per
+pipeline. Define ordinary steps with the returned `step` constructor. Import from `tubeless` and
+its public subpaths. Keep business inputs in domain options; built-in run
+controls belong in the separate controls argument.
 
 Give each step a stable literal kebab-case ID and an operational description.
 Let `dependsOn: [step]` infer input types from returned outputs. Preserve
@@ -88,7 +89,7 @@ a missing required output to an empty array, `false`, or a fake success value.
   write to make dry runs pass.
 - Keep validation required for publication. Test this even with
   `continueOnError` if the caller enables best-effort execution.
-- Use `step.skippable` only for a successful policy decision. Preserve thrown
+- Add `skip` only for a successful policy decision. Preserve thrown
   failures and their causes; branch on structured Tubeless error fields.
   Map pipeline errors at the caller boundary if existing callers require a
   specific error contract.

@@ -13,7 +13,7 @@ describe("mapped child adapter: execution", () => {
 
     let active = 0;
     let maxActive = 0;
-    const childStep = createSteps<ChildOptions>();
+    const { step: childStep } = createSteps<ChildOptions>();
     const process = childStep("process", {
       run: async (_inputs, context) => {
         active += 1;
@@ -29,7 +29,8 @@ describe("mapped child adapter: execution", () => {
       finalize: (outputs) => ({ workerId: outputs.process ?? "missing" }),
     });
 
-    const parentStep = createSteps<ParentOptions>();
+    const { step: parentStep, forEachPipeline: parentForEachPipeline } =
+      createSteps<ParentOptions>();
     const select = parentStep("select", {
       run: () => [
         { delayMs: 20, id: "first" },
@@ -37,7 +38,7 @@ describe("mapped child adapter: execution", () => {
         { delayMs: 1, id: "third" },
       ],
     });
-    const children = parentStep.forEachPipeline("children", {
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       dependsOn: [select],
       items: ({ select }) => select,
@@ -49,14 +50,16 @@ describe("mapped child adapter: execution", () => {
     expectTypeOf(children).toEqualTypeOf<
       Step<"children", readonly { workerId: string }[], ParentOptions>
     >();
-    parentStep.forEachPipeline("skip-requires-skippable", {
+    const skippedChildren = parentForEachPipeline("skipped-children", {
       pipeline: child,
-      // @ts-expect-error Policy skip belongs on forEachPipeline.skippable.
       skip: () => "fan-out not requested",
       items: (): readonly { delayMs: number; id: string }[] => [],
       key: (item) => item.id,
       mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
     });
+    expectTypeOf(skippedChildren).toEqualTypeOf<
+      Step<"skipped-children", readonly { workerId: string }[] | undefined, ParentOptions>
+    >();
     const reusableSkippingFanOutDefinition = {
       pipeline: child,
       skip: () => "fan-out not requested",
@@ -67,12 +70,14 @@ describe("mapped child adapter: execution", () => {
         itemId: item.id,
       }),
     };
-    parentStep.forEachPipeline(
-      "reusable-skip-requires-skippable",
-      // @ts-expect-error Reusable definitions cannot bypass forEachPipeline.skippable.
+    const reusableSkippingFanOut = parentForEachPipeline(
+      "reusable-skipping-fan-out",
       reusableSkippingFanOutDefinition
     );
-    const skippableChildren = parentStep.forEachPipeline.skippable("skippable-children", {
+    expectTypeOf(reusableSkippingFanOut).toEqualTypeOf<
+      Step<"reusable-skipping-fan-out", readonly { workerId: string }[] | undefined, ParentOptions>
+    >();
+    const skippableChildren = parentForEachPipeline("skippable-children", {
       pipeline: child,
       dependsOn: [select],
       skip: ({ select }) => (select.length === 0 ? { reason: "no children", value: [] } : false),
@@ -83,21 +88,18 @@ describe("mapped child adapter: execution", () => {
     expectTypeOf(skippableChildren).toEqualTypeOf<
       Step<"skippable-children", readonly { workerId: string }[] | undefined, ParentOptions>
     >();
-    const skippableMappedChildren = parentStep.forEachPipeline.skippable(
-      "skippable-mapped-children",
-      {
-        pipeline: child,
-        skip: () => ({ reason: "fan-out disabled", value: [{ id: "disabled" }] }),
-        items: (): readonly { delayMs: number; id: string }[] => [],
-        key: (item) => item.id,
-        mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
-        mapResult: (value) => ({ id: value.workerId }),
-      }
-    );
+    const skippableMappedChildren = parentForEachPipeline("skippable-mapped-children", {
+      pipeline: child,
+      skip: () => ({ reason: "fan-out disabled", value: [{ id: "disabled" }] }),
+      items: (): readonly { delayMs: number; id: string }[] => [],
+      key: (item) => item.id,
+      mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
+      mapResult: (value) => ({ id: value.workerId }),
+    });
     expectTypeOf(skippableMappedChildren).toEqualTypeOf<
       Step<"skippable-mapped-children", readonly { id: string }[] | undefined, ParentOptions>
     >();
-    parentStep.forEachPipeline.skippable("invalid-mapped-skip-value", {
+    parentForEachPipeline("invalid-mapped-skip-value", {
       pipeline: child,
       // @ts-expect-error skip value must be the complete mapped output array.
       skip: () => ({ reason: "fan-out disabled", value: [{ workerId: "wrong" }] }),
@@ -160,7 +162,7 @@ describe("mapped child adapter: execution", () => {
 
   it("policy-skips mapped children with the parent-facing result array", async () => {
     const runChild = vi.fn(() => "child-result");
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const process = childStep("process", { run: runChild });
     const child = definePipeline({
       id: "skipped-fan-out-child",
@@ -168,10 +170,10 @@ describe("mapped child adapter: execution", () => {
       finalize: (outputs) => ({ value: outputs.process ?? "missing" }),
     });
 
-    const parentStep = createSteps();
+    const { step: parentStep, forEachPipeline: parentForEachPipeline } = createSteps();
     const items = vi.fn(() => [{ id: "child" }]);
     const mapResult = vi.fn((value: { value: string }) => ({ id: value.value }));
-    const children = parentStep.forEachPipeline.skippable("children", {
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       skip: () => ({
         reason: "fan-out disabled",

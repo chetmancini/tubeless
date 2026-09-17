@@ -4,7 +4,7 @@ interface NormalizeOptions {
   rows: readonly string[];
 }
 
-const step = createSteps<NormalizeOptions>();
+const { step } = createSteps<NormalizeOptions>();
 
 const normalizeRows = step("normalize-rows", {
   description: "Trim, lowercase, and drop blank rows.",

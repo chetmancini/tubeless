@@ -9,7 +9,7 @@ interface Artifact {
   size: number;
 }
 
-const step = createSteps<PublishOptions>();
+const { step } = createSteps<PublishOptions>();
 
 const buildArtifact = step("build-artifact", {
   description: "Build an artifact that can be validated and published.",

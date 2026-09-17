@@ -99,7 +99,7 @@ interface TracingExampleOptions {
   rows: readonly string[];
 }
 
-const step = createSteps<TracingExampleOptions>();
+const { step } = createSteps<TracingExampleOptions>();
 const normalize = step("normalize", {
   run: async (_inputs, context) =>
     withRetry(

@@ -72,7 +72,7 @@ describe("pipeline boundary validation", () => {
     const resultSchema = standardSchema<{ total: number }, string>((value) => ({
       value: `total:${(value as { total: number }).total}`,
     }));
-    const step = createSteps(optionsSchema);
+    const { step } = createSteps(optionsSchema);
     const load = step("load", {
       outputSchema,
       run: (_inputs, context) => {
@@ -116,7 +116,7 @@ describe("pipeline boundary validation", () => {
   it("keeps reusable validated domain options separate from run controls", async () => {
     const reusable = { count: 3 };
     const optionsSchema = standardSchema<object, typeof reusable>(() => ({ value: reusable }));
-    const step = createSteps(optionsSchema);
+    const { step } = createSteps(optionsSchema);
     const read = step("read", {
       run: (_inputs, context) => ({ count: context.options.count, dryRun: context.dryRun }),
     });
@@ -140,7 +140,7 @@ describe("pipeline boundary validation", () => {
       // needs the value echoed as the declared options object.
       value: value as { label: string },
     }));
-    const step = createSteps(optionsSchema);
+    const { step } = createSteps(optionsSchema);
     const fail = step("fail", {
       run: () => {
         throw new Error("expected failure");
@@ -177,7 +177,7 @@ describe("pipeline boundary validation", () => {
     const frozen = new FrozenOptions();
     Object.freeze(frozen);
     const optionsSchema = standardSchema<object, FrozenOptions>(() => ({ value: frozen }));
-    const step = createSteps(optionsSchema);
+    const { step } = createSteps(optionsSchema);
     const read = step("read", {
       run: (_inputs, context) => {
         expect(context.options).toBeInstanceOf(FrozenOptions);
@@ -207,7 +207,7 @@ describe("pipeline boundary validation", () => {
       };
     });
     const optionsSchema = standardSchema<{ source: string }, { source: string }>(validate);
-    const step = createSteps(optionsSchema);
+    const { step } = createSteps(optionsSchema);
     const load = step("load", { run: () => "never" });
     const pipeline = definePipeline({
       id: "invalid-options",
@@ -238,7 +238,7 @@ describe("pipeline boundary validation", () => {
     const rejectedOutput = standardSchema<string, string>(() => ({
       issues: [{ message: "Not publishable", path: ["slug"] }],
     }));
-    const step = createSteps();
+    const { step } = createSteps();
     const publish = step("publish", { outputSchema: rejectedOutput, run: () => "draft" });
     const outputPipeline = definePipeline({
       id: "invalid-output",

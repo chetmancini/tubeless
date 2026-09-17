@@ -57,7 +57,7 @@ describe("pipeline tracing", () => {
   });
 
   it("reports a partial composition failure while continuing healthy destinations", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const pipeline = definePipeline({
       id: "trace-partial-composition",
       steps: [step("work", { run: () => "ok" })],
@@ -113,7 +113,7 @@ describe("pipeline tracing", () => {
   });
 
   it("exports ordered lifecycle events with correlation, attempt, duration, and error data", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const succeed = step("succeed", {
       run: (_inputs, context) => {
         context.reportAttempt(2, { provider: "test" });
@@ -244,7 +244,7 @@ describe("pipeline tracing", () => {
   });
 
   it("isolates exporter failures and still completes the pipeline", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const pipeline = definePipeline({
       id: "trace-isolation",
       steps: [step("work", { run: () => "ok" })],
@@ -272,7 +272,7 @@ describe("pipeline tracing", () => {
   });
 
   it("calls onExporterError once when export rejects for every event", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const first = step("first", { run: () => "a" });
     const second = step("second", { dependsOn: [first], run: () => "b" });
     const third = step("third", { dependsOn: [second], run: () => "c" });
@@ -304,7 +304,7 @@ describe("pipeline tracing", () => {
   });
 
   it("does not call export after the first exporter failure", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const first = step("first", { run: () => "a" });
     const second = step("second", { dependsOn: [first], run: () => "b" });
     const pipeline = definePipeline({
@@ -333,7 +333,7 @@ describe("pipeline tracing", () => {
   });
 
   it("does not call onExporterError when the exporter succeeds", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const pipeline = definePipeline({
       id: "trace-export-ok",
       steps: [step("work", { run: () => "ok" })],
@@ -356,7 +356,7 @@ describe("pipeline tracing", () => {
   });
 
   it("calls onExporterError once when flush rejects after successful export", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const pipeline = definePipeline({
       id: "trace-flush-once",
       steps: [step("work", { run: () => "ok" })],
@@ -386,7 +386,7 @@ describe("pipeline tracing", () => {
   });
 
   it("completes the run when onExporterError throws", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const pipeline = definePipeline({
       id: "trace-callback-throw",
       steps: [step("work", { run: () => "ok" })],
@@ -411,7 +411,7 @@ describe("pipeline tracing", () => {
   });
 
   it("completes the run when onExporterError returns a rejected promise", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const pipeline = definePipeline({
       id: "trace-callback-reject",
       steps: [step("work", { run: () => "ok" })],
@@ -434,7 +434,7 @@ describe("pipeline tracing", () => {
   });
 
   it("does not wait for a slow onExporterError before completing the run", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const pipeline = definePipeline({
       id: "trace-callback-slow",
       steps: [step("work", { run: () => "ok" })],
@@ -468,14 +468,14 @@ describe("pipeline tracing", () => {
   });
 
   it("links child runs to the parent trace identity", async () => {
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const child = definePipeline({
       id: "trace-child",
       steps: [childStep("inside", { run: () => "child" })],
       finalize: (outputs) => outputs.inside,
     });
-    const parentStep = createSteps();
-    const childStage = parentStep.fromPipeline("child-stage", {
+    const { fromPipeline } = createSteps();
+    const childStage = fromPipeline("child-stage", {
       mapOptions: () => ({}),
       pipeline: child,
     });
@@ -523,8 +523,8 @@ describe("pipeline tracing", () => {
         version: 1 as const,
       },
     };
-    const step = createSteps();
-    const enrich = step.fromRemote("enrich", {
+    const { fromRemote } = createSteps();
+    const enrich = fromRemote("enrich", {
       adapter: { engine: "test", target: "enrich-v2", invoke: async () => ({ ok: true as const }) },
       mapInput: () => ({}),
       outputSchema: schema,
@@ -561,14 +561,14 @@ describe("pipeline tracing", () => {
       values: readonly string[];
     }
 
-    const childStep = createSteps<ChildOptions>();
+    const { step: childStep } = createSteps<ChildOptions>();
     const child = definePipeline({
       id: "trace-mapped-child",
       steps: [childStep("inside", { run: (_inputs, context) => context.options.value })],
       finalize: (outputs) => outputs.inside ?? "",
     });
-    const parentStep = createSteps<ParentOptions>();
-    const children = parentStep.forEachPipeline("children", {
+    const { forEachPipeline } = createSteps<ParentOptions>();
+    const children = forEachPipeline("children", {
       items: (_inputs, context) => context.options.values,
       key: (value) => value,
       mapOptions: (value) => ({ value }),
@@ -599,7 +599,7 @@ describe("pipeline tracing", () => {
   });
 
   it("bounds progress details and records the original detail count", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", {
       run: (_inputs, context) => {
         context.reportProgress({
@@ -659,7 +659,7 @@ describe("pipeline tracing", () => {
   it("keeps tracing enabled for valid identifiers longer than metadata bounds", async () => {
     const pipelineId = `pipeline-${"p".repeat(5_000)}`;
     const stepId = `step-${"s".repeat(5_000)}`;
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step(stepId, { run: () => "ok" });
     const pipeline = definePipeline({
       id: pipelineId,
@@ -701,7 +701,7 @@ describe("pipeline tracing", () => {
         version: 1 as const,
       },
     };
-    const step = createSteps(optionsSchema);
+    const { step } = createSteps(optionsSchema);
     const pipeline = definePipeline({
       id: "bounded-validation-issues",
       steps: [step("work", { run: () => "never" })],
@@ -725,7 +725,7 @@ describe("pipeline tracing", () => {
   });
 
   it("omits detail attributes when progress has no detail rows", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", {
       run: (_inputs, context) => {
         context.reportProgress({ completed: 1, message: "batches", total: 2 });

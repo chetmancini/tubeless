@@ -61,7 +61,7 @@ describe("definePipeline dependencies and dry runs", () => {
   });
 
   it("optionalDependsOn passes the output through when the dependency ran", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const a = step("a", { run: () => "a-value" });
     const b = step("b", {
       optionalDependsOn: [a],
@@ -77,7 +77,7 @@ describe("definePipeline dependencies and dry runs", () => {
   });
 
   it("optionalDependsOn does not auto-skip when the dependency was filtered out", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const a = step("a", { run: () => "a-value" });
     const b = step("b", {
       optionalDependsOn: [a],
@@ -101,7 +101,7 @@ describe("definePipeline dependencies and dry runs", () => {
     { name: "object", value: { marker: true } },
     { name: "undefined", value: undefined },
   ])("preserves required __proto__ $name output as an own data property", async ({ value }) => {
-    const step = createSteps();
+    const { step } = createSteps();
     const upstream = step("__proto__", { run: () => value });
     const inspect = step("inspect", {
       dependsOn: [upstream],
@@ -124,7 +124,7 @@ describe("definePipeline dependencies and dry runs", () => {
     "preserves required %s dependency values as own data properties",
     async (id) => {
       const objectValue = { marker: id };
-      const step = createSteps();
+      const { step } = createSteps();
       const upstream = step(id, { run: () => objectValue });
       const inspect = step("inspect", {
         dependsOn: [upstream],
@@ -145,7 +145,7 @@ describe("definePipeline dependencies and dry runs", () => {
   );
 
   it("keeps present optional special-key values, including published undefined", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const proto = step("__proto__", { run: () => undefined });
     const ctor = step("constructor", { run: () => "ctor-value" });
     const inspect = step("inspect", {
@@ -176,7 +176,7 @@ describe("definePipeline dependencies and dry runs", () => {
   });
 
   it("omits absent optional dependencies, including filtered special-key producers", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const proto = step("__proto__", { run: () => 1 });
     const ordinary = step("hint", { run: () => "hint" });
     const inspect = step("inspect", {
@@ -208,10 +208,10 @@ describe("definePipeline dependencies and dry runs", () => {
 
   it("feeds skippable predicates the same own-property-safe inputs", async () => {
     const objectValue = { marker: "skip-input" };
-    const step = createSteps();
+    const { step } = createSteps();
     const upstream = step("__proto__", { run: () => objectValue });
     let skipSnapshot: ReturnType<typeof inspectDependencyInputs> | undefined;
-    const gated = step.skippable("gated", {
+    const gated = step("gated", {
       dependsOn: [upstream],
       skip: (inputs) => {
         skipSnapshot = inspectDependencyInputs(inputs, "__proto__");
@@ -238,7 +238,7 @@ describe("definePipeline dependencies and dry runs", () => {
   });
 
   it("skipAfterFailureOf skips a step when the referenced step failed, even without a data dependency", async () => {
-    const step = createSteps<TestOptions>();
+    const { step } = createSteps<TestOptions>();
     const a = step("a", {
       run: (_inputs, context) => {
         if (context.options.failStep === "a") {
@@ -265,7 +265,7 @@ describe("definePipeline dependencies and dry runs", () => {
   });
 
   it("skipAfterFailureOf skips a step when the referenced step was cancelled", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const cancelled = step("cancelled", {
       run: async (_inputs, context) => {
         const localController = new AbortController();
@@ -297,7 +297,7 @@ describe("definePipeline dependencies and dry runs", () => {
   });
 
   it('dryRun: "skip" prevents the normal handler from running', async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const writeRan = vi.fn();
     const write = step("write", {
       description: "Persist output",
@@ -322,7 +322,7 @@ describe("definePipeline dependencies and dry runs", () => {
   });
 
   it("uses a custom dry-run handler in place of run and publishes its typed output", async () => {
-    const step = createSteps<{ source: string }>();
+    const { step } = createSteps<{ source: string }>();
     const runWrite = vi.fn(() => ({ id: "live" }));
     const prepare = step("prepare", {
       run: (_inputs, context) => context.options.source.trim(),
