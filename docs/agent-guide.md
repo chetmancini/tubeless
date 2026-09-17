@@ -24,7 +24,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 - For YAML or JSON authoring, read [declarative pipelines](./declarative-pipelines.md)
   and adapt [the YAML recipe](../examples/yaml-pipelines.ts). Parse at the
-  application edge, then use `compilePipelineDocument` from `tubeless/declarative`
+  application edge, then use `compilePipelineDocument` from `tubeless/project`
   with explicitly registered handlers and schemas. Keep command registration
   explicit for CLI and Studio. Unknown fields and references fail compilation;
   plans still do not validate domain inputs. Dynamic wiring does not infer

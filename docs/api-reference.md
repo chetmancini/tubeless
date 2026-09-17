@@ -14,7 +14,7 @@ Package: `tubeless`
 | `tubeless/node`       | `./dist/node/node.d.ts`            | `1bf8549ca953a11e7202dbda8013db2a8f1d56286f1618bad929efbbb2efd302` |                3 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `5cd093bb780a19e44b087b01e2b38e06f07e7233c9920988ba399036e319c368` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `f91f83f8e31e3e629ed90d1b04656110572ea970187a92369f0908cd75ae8f00` |                4 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `391a72f86e72a7f866332a8e725225b33f4608314c076ab8bdb127fa8d5cd64c` |               14 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `464f5d94a3533c4050c32d902badafa4fabfdec176152bb36bb738cf52ce6e81` |               14 |
 | `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `9510932b8aec600ecf2bcfdb1a188257dad48a3108087c974689c6e6ec3ad5c9` |                7 |
 | `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `c272c955aab09dcd8cc334ffcea3af5cfda420cecc2881a01e3316e3a38801dd` |                3 |
 

@@ -6,7 +6,7 @@ import {
   PipelineDocumentError,
   type PipelineDocument,
   type PipelineDocumentRegistry,
-} from "./declarative.js";
+} from "./project.js";
 
 function document(): PipelineDocument {
   return {

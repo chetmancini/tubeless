@@ -1,6 +1,6 @@
 # YAML and JSON pipelines
 
-Use `compilePipelineDocument` from `tubeless/declarative` to turn a parsed YAML
+Use `compilePipelineDocument` from `tubeless/project` to turn a parsed YAML
 or JSON document and a registry of functions into ordinary pipelines. The
 document owns step identities, dependencies, targets, and policies; application
 code owns the handlers, schemas, and command parameters.
@@ -193,7 +193,7 @@ semantics. See [core concepts](./concepts.md).
 ## Registry and programmatic use
 
 ```ts
-import { compilePipelineDocument } from "tubeless/declarative";
+import { compilePipelineDocument } from "tubeless/project";
 
 // `document` is the unknown result of your YAML or JSON parser.
 // `registry` explicitly imports and registers your application functions.

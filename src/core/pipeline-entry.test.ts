@@ -17,7 +17,6 @@ function dependencies(file: string): string[] {
 
 const allowedDependencies: Record<string, readonly string[]> = {
   core: ["tracing", "utilities"],
-  declarative: ["core"],
   tracing: [],
   utilities: [],
   node: [],
@@ -27,7 +26,7 @@ const allowedDependencies: Record<string, readonly string[]> = {
   studio: ["run-store"],
   cli: ["core", "node", "reporter", "utilities"],
   testing: ["core", "utilities"],
-  project: [],
+  project: ["core"],
   workbench: ["cli", "core", "project", "render", "run-store", "studio", "tracing", "utilities"],
 };
 
@@ -43,7 +42,10 @@ describe("module runtime boundaries", () => {
       const file = pending.pop()!;
       if (visited.has(file)) continue;
       visited.add(file);
-      expect(moduleName(file)).toBe("project");
+      expect(
+        ["project", "core", "tracing", "utilities"].includes(moduleName(file)),
+        `Project entrypoint reaches executable integration: ${relative(dist, file)}`
+      ).toBe(true);
       pending.push(...dependencies(file));
     }
     expect(visited.size).toBeGreaterThan(1);

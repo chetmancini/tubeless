@@ -1,4 +1,4 @@
-import type { PipelineDocumentRegistry } from "tubeless/declarative";
+import type { PipelineDocumentRegistry } from "tubeless/project";
 
 function rows(value: unknown): string[] {
   if (!Array.isArray(value) || !value.every((row: unknown) => typeof row === "string")) {

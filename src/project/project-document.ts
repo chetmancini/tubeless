@@ -1,4 +1,4 @@
-/** The serializable version 1 pipeline authoring format. */
+/** The serializable version 1 pipeline authoring format for project documents. */
 export interface PipelineDocument {
   /** Optional editor schema association; never fetched during validation. */
   $schema?: string;

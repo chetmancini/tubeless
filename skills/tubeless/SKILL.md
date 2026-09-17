@@ -52,7 +52,7 @@ Read the corresponding package recipe before using these features:
 
 - For YAML or JSON authoring, read `docs/declarative-pipelines.md` and
   `examples/yaml-pipelines.ts`. Use `compilePipelineDocument` from
-  `tubeless/declarative` on parsed data with explicitly registered handlers and
+  `tubeless/project` on parsed data with explicitly registered handlers and
   schemas. Keep parsing at the application edge and command registration
   explicit. Handler inputs and pipeline results are unknown; validate or narrow
   them. Plans still do not validate business inputs.

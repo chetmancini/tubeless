@@ -1,5 +1,5 @@
-import { compilePipelineDocument } from "tubeless/declarative";
-import { definePipelineCommand } from "tubeless/workbench";
+import { compilePipelineDocument } from "tubeless/project";
+import { definePipelineCommand } from "tubeless/cli";
 import document from "./declarative/pipelines.yaml";
 import { registry } from "./declarative/handlers.ts";
 

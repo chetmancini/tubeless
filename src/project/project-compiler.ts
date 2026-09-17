@@ -17,7 +17,7 @@ export type {
   PipelineDocumentStep,
 } from "./project-document.js";
 
-/** Dependency values are checked at runtime rather than inferred from a document. */
+/** Dependency values are checked at runtime rather than inferred from a project document. */
 export type PipelineDocumentHandler = (
   inputs: Record<string, unknown>,
   context: PipelineStepContext<object>

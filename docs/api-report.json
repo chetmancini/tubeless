@@ -162,7 +162,7 @@
         "PipelineProjectManifestInput",
         "validatePipelineDocument"
       ],
-      "sha256": "391a72f86e72a7f866332a8e725225b33f4608314c076ab8bdb127fa8d5cd64c",
+      "sha256": "464f5d94a3533c4050c32d902badafa4fabfdec176152bb36bb738cf52ce6e81",
       "specifier": "tubeless/project"
     },
     {
