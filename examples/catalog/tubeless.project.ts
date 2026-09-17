@@ -20,6 +20,8 @@ import { definePipelineProject } from "tubeless/project";
 
 // ../child-pipeline.ts demonstrates fromPipeline result mapping; async mappings
 // publish resolved values to parent dependents and use resolved skip values.
+// ../yaml-pipelines.ts demonstrates the declarative equivalents with explicit
+// fromPipelineAdapters, forEachPipelineAdapters, and skipPredicates registries.
 
 // Remote integration recipes are library handlers rather than CLI commands:
 // ../remote-steps.ts exports RemoteStepsPipeline (id: remote-steps).

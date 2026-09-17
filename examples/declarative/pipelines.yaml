@@ -3,20 +3,19 @@ $schema: https://tubeless.io/schemas/pipeline-document-v1.schema.json
 version: 1
 metadata:
   name: Row import examples
-  description: Two pipelines that share application handlers.
+  description: Ordinary, composed, and fan-out pipelines that share application handlers.
 
 pipelines:
   yaml-import:
     optionsSchema: lines
     targets: [normalize]
     steps:
-      - id: load
-        description: Read the caller's input lines.
-        run: loadRows
       - id: normalize
-        description: Trim, lowercase, and remove empty rows.
-        run: normalizeRows
-        dependsOn: [load]
+        description: Normalize all caller-provided lines through the reusable child workflow.
+        fromPipeline:
+          pipeline: normalize-all
+          adapter: allRows
+        skip: noRows
     finalize:
       run: normalizedRows
       requireOutputs: [normalize]
@@ -31,3 +30,26 @@ pipelines:
     finalize:
       run: originalRows
       requireOutputs: [load]
+
+  normalize-all:
+    optionsSchema: lines
+    steps:
+      - id: normalize
+        description: Normalize each non-empty line through its own child run.
+        forEachPipeline:
+          pipeline: normalize-one
+          adapter: eachRow
+        skip: noRows
+    finalize:
+      run: normalizedRows
+      requireOutputs: [normalize]
+
+  normalize-one:
+    optionsSchema: line
+    steps:
+      - id: normalize
+        description: Trim and lowercase one line.
+        run: normalizeLine
+    finalize:
+      run: normalizedLine
+      requireOutputs: [normalize]

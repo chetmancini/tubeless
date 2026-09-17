@@ -158,20 +158,14 @@
       "exports": [
         "compilePipelineDocument",
         "definePipelineProject",
-        "PipelineDocument",
-        "PipelineDocumentDefinition",
         "PipelineDocumentError",
-        "PipelineDocumentFinalizer",
-        "PipelineDocumentHandler",
-        "PipelineDocumentMetadata",
         "PipelineDocumentRegistry",
-        "PipelineDocumentStep",
         "PipelineProjectCommandModule",
         "PipelineProjectManifest",
         "PipelineProjectManifestInput",
         "validatePipelineDocument"
       ],
-      "sha256": "316af8da2ed6a5708004ed3d52fb2311a81e19789796bdc926a5902764472a72",
+      "sha256": "bfd7bc065fe859ba1deb5b2a68027f7a845fb946777e768296f6b68bc177575e",
       "specifier": "tubeless/project"
     },
     {

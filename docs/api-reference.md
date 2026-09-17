@@ -14,7 +14,7 @@ Package: `tubeless`
 | `tubeless/node`       | `./dist/node/node.d.ts`            | `06411eb43b8d1b5aca5d51d70e68553cb9065447b250c29382e6036ad9eac52c` |                8 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `5cd093bb780a19e44b087b01e2b38e06f07e7233c9920988ba399036e319c368` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `f91f83f8e31e3e629ed90d1b04656110572ea970187a92369f0908cd75ae8f00` |                4 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `316af8da2ed6a5708004ed3d52fb2311a81e19789796bdc926a5902764472a72` |               14 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `bfd7bc065fe859ba1deb5b2a68027f7a845fb946777e768296f6b68bc177575e` |                8 |
 | `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `6eb6f55eaa2bb1b75a1085dafd5e136dc5d76566dfe405a60b40942a5e40b958` |                7 |
 | `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `c272c955aab09dcd8cc334ffcea3af5cfda420cecc2881a01e3316e3a38801dd` |                3 |
 
@@ -160,14 +160,8 @@ Package: `tubeless`
 
 - `compilePipelineDocument`
 - `definePipelineProject`
-- `PipelineDocument`
-- `PipelineDocumentDefinition`
 - `PipelineDocumentError`
-- `PipelineDocumentFinalizer`
-- `PipelineDocumentHandler`
-- `PipelineDocumentMetadata`
 - `PipelineDocumentRegistry`
-- `PipelineDocumentStep`
 - `PipelineProjectCommandModule`
 - `PipelineProjectManifest`
 - `PipelineProjectManifestInput`

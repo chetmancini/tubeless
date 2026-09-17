@@ -54,8 +54,11 @@ Read the corresponding package recipe before using these features:
 
 - For YAML or JSON authoring, read `docs/declarative-pipelines.md` and
   `examples/yaml-pipelines.ts`. Use `compilePipelineDocument` from
-  `tubeless/project` on parsed data with explicitly registered handlers and
-  schemas. Keep parsing at the application edge and command registration
+  `tubeless/project` on parsed data with explicitly registered handlers,
+  adapters, skip predicates, and schemas. Each document step declares `run`,
+  `fromPipeline`, or `forEachPipeline`; composed pipeline IDs resolve inside
+  the document and use the matching adapter registry for application-owned
+  option, item, and result mapping. Keep parsing at the application edge and command registration
   explicit. Handler inputs and pipeline results are unknown; validate or narrow
   them. Plans still do not validate business inputs.
   Use `tubeless validate --json <document.yaml>` for a structure-only check
