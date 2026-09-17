@@ -20,7 +20,7 @@ const output: ReporterOutput = { write: (_chunk) => undefined };
 const base: RunReporterConfig = { color, symbols, terminal, logPlan: false };
 const reporter: PipelineReporterConfig = { ...base, mode, output, progressBarWidth: 12 };
 
-const step = createSteps<{ message: string }>();
+const { step } = createSteps<{ message: string }>();
 const echo = step("echo", { run: (_inputs, context) => context.options.message });
 const pipeline = definePipeline({
   id: "packed-cli-types",

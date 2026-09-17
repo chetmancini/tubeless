@@ -4,7 +4,7 @@ interface NormalizeOptions {
   rows: readonly string[];
 }
 
-const normalizeStep = createSteps<NormalizeOptions>();
+const { step: normalizeStep } = createSteps<NormalizeOptions>();
 
 const normalizeRows = normalizeStep("normalize-rows", {
   run: (_inputs, context) =>
@@ -22,9 +22,9 @@ interface ImportOptions {
   lines: readonly string[];
 }
 
-const importStep = createSteps<ImportOptions>();
+const { fromPipeline } = createSteps<ImportOptions>();
 
-const normalizedImport = importStep.fromPipeline("normalized-import", {
+const normalizedImport = fromPipeline("normalized-import", {
   pipeline: NormalizePipeline,
   mapOptions: (_inputs, context) => ({ rows: context.options.lines }),
   mapResult: (rows) => ({ count: rows.length, rows }),
@@ -44,7 +44,7 @@ export async function runChildPipelineExample() {
 
 // oxlint-disable-next-line no-constant-condition -- typecheck-only compile probe
 if (false) {
-  importStep.fromPipeline("invalid-child-selection", {
+  fromPipeline("invalid-child-selection", {
     pipeline: NormalizePipeline,
     // @ts-expect-error Child run options are checked against its declared target IDs.
     mapOptions: () => ({ rows: [], targets: ["normalise-rows"] }),

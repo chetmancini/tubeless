@@ -25,16 +25,18 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 
 ## Authoring decisions
 
-- Use `createSteps<TDomainOptions>()` per pipeline. Domain options contain
-  business inputs; pass built-in controls separately to `run(options, controls?)`.
+- Use `createSteps<TDomainOptions>()` per pipeline and destructure every
+  constructor it needs: `step`, `fromPipeline`, `fromRemote`, and/or
+  `forEachPipeline`. Domain options contain business inputs; pass built-in
+  controls separately to `run(options, controls?)`.
 - Give steps stable kebab-case IDs and descriptions of their domain work.
   `name` is an optional display label. Return values from steps and consume
   inferred dependency outputs instead of sharing mutable state.
 - Use `dependsOn` for required outputs, `optionalDependsOn` for expected
   absence, and `skipAfterFailureOf` for a failure gate without a required value.
   Keep publication dependent on successful validation.
-- Use `step.skippable` for an intentional successful omission. Handle its
-  `T | undefined` output explicitly; do not turn exceptions into skips.
+- Add `skip` to a step definition for an intentional successful omission. Handle
+  its `T | undefined` output explicitly; do not turn exceptions into skips.
 - Set `dryRun: "skip"` on writes and other external side effects, or supply a
   side-effect-free typed preview handler. Unmarked steps still run in dry runs.
 - Use `requireOutputs` when the final result requires specific outputs. A plain

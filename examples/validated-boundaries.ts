@@ -42,7 +42,7 @@ const resultSchema = standardSchema<
   return { value: { ...result, validated: true } };
 });
 
-const step = createSteps(optionsSchema);
+const { step } = createSteps(optionsSchema);
 
 const load = step("load", {
   outputSchema: rowsSchema,

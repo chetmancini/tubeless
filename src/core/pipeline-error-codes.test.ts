@@ -39,7 +39,7 @@ function definitionError(define: () => unknown): PipelineError {
 }
 
 function selectionPipeline() {
-  const step = createSteps();
+  const { step } = createSteps();
   const build = step("build", { run: () => "built" });
   const write = step("write", { dependsOn: [build], run: () => "written" });
   return definePipeline({
@@ -61,7 +61,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "execution",
     kind: "child",
     emit: async () => {
-      const childStep = createSteps();
+      const { step: childStep } = createSteps();
       const explode = childStep("explode", {
         run: () => {
           throw new Error("database unavailable");
@@ -72,8 +72,8 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
         steps: [explode],
         finalize: () => "unreachable",
       });
-      const parentStep = createSteps();
-      const stage = parentStep.fromPipeline("child-stage", {
+      const { fromPipeline } = createSteps();
+      const stage = fromPipeline("child-stage", {
         pipeline: child,
         mapOptions: () => ({}),
       });
@@ -89,7 +89,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "definition",
     kind: "definition",
     emit: () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const source = step("source", { run: () => "source" });
       const contradictory = step("contradictory", {
         dependsOn: [source],
@@ -121,7 +121,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "definition",
     kind: "definition",
     emit: () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const source = step("source", { run: () => "source" });
       const repeated = step("repeated", {
         dependsOn: [source, source],
@@ -140,7 +140,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "definition",
     kind: "definition",
     emit: () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const build = step("build", { run: () => "built" });
       const write = step("write", { dependsOn: [build], run: () => "written" });
       return definitionError(() =>
@@ -152,7 +152,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "definition",
     kind: "definition",
     emit: () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const loop = step("loop", { run: () => "loop" });
       (loop as { dependsOn?: readonly AnyStep[] }).dependsOn = [loop];
       return definitionError(() =>
@@ -164,7 +164,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "definition",
     kind: "definition",
     emit: () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const included = step("included", { run: () => true });
       const foreign = step("foreign", { run: () => true });
       return definitionError(() =>
@@ -183,8 +183,10 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     emit: () => {
       const schemaA = standardSchema<object, object>((value) => ({ value: value as object }), "a");
       const schemaB = standardSchema<object, object>((value) => ({ value: value as object }), "b");
-      const first = createSteps(schemaA)("first", { run: () => 1 });
-      const second = createSteps(schemaB)("second", { run: () => 2 });
+      const { step: firstStep } = createSteps(schemaA);
+      const { step: secondStep } = createSteps(schemaB);
+      const first = firstStep("first", { run: () => 1 });
+      const second = secondStep("second", { run: () => 2 });
       return definitionError(() =>
         definePipeline({
           id: "mixed-options-schemas",
@@ -198,7 +200,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "definition",
     kind: "definition",
     emit: () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const only = step("only", { run: () => true });
       return definitionError(() =>
         definePipeline({ id: " ", steps: [only], finalize: () => undefined })
@@ -219,7 +221,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "definition",
     kind: "definition",
     emit: () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const reserved = step(PIPELINE_FINALIZE_STEP_ID, { run: () => undefined });
       return definitionError(() =>
         definePipeline({ id: "reserved", steps: [reserved], finalize: () => undefined })
@@ -230,7 +232,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "definition",
     kind: "definition",
     emit: () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const duplicate = step("build", { run: () => "a" });
       const dynamicSteps: readonly AnyStep<object>[] = [duplicate, duplicate];
       return definitionError(() =>
@@ -242,7 +244,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "definition",
     kind: "definition",
     emit: () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const invalid = step("normalize-data", { name: "  ", run: () => undefined });
       return definitionError(() =>
         definePipeline({ id: "named", steps: [invalid], finalize: () => undefined })
@@ -253,7 +255,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "definition",
     kind: "definition",
     emit: () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const load = step("load", { run: () => "loaded" });
       const normalize = step("normalize", {
         dependsOn: [load],
@@ -273,7 +275,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "definition",
     kind: "definition",
     emit: () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const included = step("included", { run: () => true });
       const foreign = step("foreign", { run: () => true });
       return definitionError(() =>
@@ -291,7 +293,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "definition",
     kind: "definition",
     emit: () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const included = step("included", { run: () => true });
       return definitionError(() =>
         definePipeline({
@@ -308,7 +310,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     kind: "cancellation",
     emit: async () => {
       const controller = new AbortController();
-      const step = createSteps();
+      const { step } = createSteps();
       const work = step("work", {
         run: () => {
           controller.abort("stop");
@@ -335,7 +337,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "finalization",
     kind: "finalization",
     emit: async () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const work = step("work", { run: () => true });
       const pipeline = definePipeline({
         id: "finalize-failed",
@@ -354,7 +356,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
       const rejectedResult = standardSchema<number, number>(() => ({
         issues: [{ message: "Must be positive" }],
       }));
-      const step = createSteps();
+      const { step } = createSteps();
       const value = step("value", { run: () => -1 });
       const pipeline = definePipeline({
         id: "invalid-result",
@@ -372,7 +374,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
       const optionsSchema = standardSchema<{ source: string }, { source: string }>(() => ({
         issues: [{ message: "Required", path: ["source"] }],
       }));
-      const step = createSteps(optionsSchema);
+      const { step } = createSteps(optionsSchema);
       const load = step("load", { run: () => "never" });
       const pipeline = definePipeline({
         id: "invalid-options",
@@ -429,7 +431,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     emit: async () => {
       const controller = new AbortController();
       controller.abort("stop");
-      const step = createSteps();
+      const { step } = createSteps();
       const work = step("work", { run: () => true });
       const pipeline = definePipeline({
         id: "run-cancelled",
@@ -451,7 +453,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "execution",
     kind: "step",
     emit: async () => {
-      const step = createSteps();
+      const { step } = createSteps();
       const failing = step("failing", {
         run: () => {
           throw new Error("step failed");
@@ -472,7 +474,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
       const rejectedOutput = standardSchema<string, string>(() => ({
         issues: [{ message: "Not publishable", path: ["slug"] }],
       }));
-      const step = createSteps();
+      const { step } = createSteps();
       const publish = step("publish", { outputSchema: rejectedOutput, run: () => "draft" });
       const pipeline = definePipeline({
         id: "invalid-output",

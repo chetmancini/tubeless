@@ -50,7 +50,7 @@ async function writeCommandFixture(): Promise<{ directory: string; filePath: str
     `
       import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
       import { createSteps, definePipeline, requireOutputs } from ${JSON.stringify(pipelineModuleUrl)};
-      const step = createSteps();
+      const { step } = createSteps();
       const work = step("work", {
         run: (_inputs, context) => context.options.message,
       });
@@ -325,7 +325,7 @@ describe("runUi", () => {
       `
       import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
       import { createSteps, definePipeline, requireOutputs } from ${JSON.stringify(pipelineModuleUrl)};
-      const step = createSteps();
+      const { step } = createSteps();
       const work = step("work", {
         run: () => {
           throw new Error("intentional launch failure");

@@ -7,7 +7,7 @@ interface WorkOptions {
 }
 
 function makePipeline() {
-  const step = createSteps<WorkOptions>();
+  const { step } = createSteps<WorkOptions>();
   const work = step("work", {
     run: async (_inputs, context) => {
       context.log.log("starting", context.options.count);
@@ -63,7 +63,7 @@ describe("createPipelineTestRuntime", () => {
   });
 
   it("retains visible progress across empty non-visible progress events", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", {
       run: (_inputs, context) => {
         context.reportProgress({ completed: 1, message: "loaded", total: 2 });

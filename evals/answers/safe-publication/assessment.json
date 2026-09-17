@@ -30,7 +30,7 @@
       "category": "mustAvoid",
       "expectation": "policy skip swallowing validation failure",
       "status": "pass",
-      "evidence": "Validation failure is a thrown error gated by skipAfterFailureOf, not step.skippable."
+      "evidence": "Validation failure is a thrown error gated by skipAfterFailureOf, not a skip predicate."
     }
   ]
 }

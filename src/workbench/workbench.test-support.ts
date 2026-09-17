@@ -73,7 +73,7 @@ export async function writeActualPipelineModule(): Promise<{
   const pipelineModuleUrl = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
   return writeModule(`
     import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
-    const step = createSteps();
+    const { step } = createSteps();
     const load = step("load", {
       description: "Load source data.",
       run: () => { throw new Error("plan must not execute load"); },
@@ -108,7 +108,7 @@ export async function writeActualPipelineCommandModule(): Promise<{
     import { createSteps, definePipeline, requireOutputs } from ${JSON.stringify(pipelineModuleUrl)};
     let markStarted;
     export const started = new Promise((resolve) => { markStarted = resolve; });
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", {
       description: "Exercise workbench execution.",
       run: async (_inputs, context) => {
@@ -190,7 +190,7 @@ export async function writeGatedPipelineCommandModule(options: {
     import { existsSync } from "node:fs";
     import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
     import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", {
       description: "No-op gated command.",
       run: () => undefined,

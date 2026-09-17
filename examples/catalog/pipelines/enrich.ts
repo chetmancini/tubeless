@@ -43,7 +43,7 @@ interface EnrichOptions {
   lines: readonly string[];
 }
 
-const step = createSteps<EnrichOptions>();
+const { step, fromRemote } = createSteps<EnrichOptions>();
 
 const parseRows = step("parse-rows", {
   description: "Trim and drop blank rows from caller input.",
@@ -66,7 +66,7 @@ const enrichAdapter: RemoteStepAdapter<
   },
 };
 
-const enrichRows = step.fromRemote("enrich-rows", {
+const enrichRows = fromRemote("enrich-rows", {
   dependsOn: [parseRows],
   description: "Rehearse a remote enrich during dry-run.",
   adapter: enrichAdapter,
@@ -84,7 +84,7 @@ const chargeAdapter: RemoteStepAdapter<EnrichOptions, { orderId: string }, Charg
   invoke: async (payload) => ({ charged: true, orderId: payload.orderId }),
 };
 
-const chargeOrder = step.fromRemote("charge-order", {
+const chargeOrder = fromRemote("charge-order", {
   dependsOn: [enrichRows],
   description: "Skip remote charge during dry-run.",
   adapter: chargeAdapter,

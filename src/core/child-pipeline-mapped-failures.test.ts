@@ -11,7 +11,7 @@ describe("mapped child adapter: failures", () => {
     }
 
     let successfulChildFinished = false;
-    const childStep = createSteps<ChildOptions>();
+    const { step: childStep } = createSteps<ChildOptions>();
     const process = childStep("process", {
       run: async (_inputs, context) => {
         if (context.options.fail) {
@@ -27,8 +27,8 @@ describe("mapped child adapter: failures", () => {
       steps: [process],
       finalize: (outputs) => outputs.process,
     });
-    const parentStep = createSteps();
-    const children = parentStep.forEachPipeline("children", {
+    const { forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       items: () => [
         { fail: true, id: "broken" },
@@ -58,7 +58,7 @@ describe("mapped child adapter: failures", () => {
       outcome: "cancel" | "fail";
     }
 
-    const childStep = createSteps<ChildOptions>();
+    const { step: childStep } = createSteps<ChildOptions>();
     const process = childStep("process", {
       run: async (_inputs, context) => {
         if (context.options.outcome === "fail") {
@@ -74,8 +74,8 @@ describe("mapped child adapter: failures", () => {
       steps: [process],
       finalize: () => true,
     });
-    const parentStep = createSteps();
-    const children = parentStep.forEachPipeline("children", {
+    const { step: parentStep, forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       items: () => [
         { id: "cancelled", outcome: "cancel" as const },
@@ -112,15 +112,15 @@ describe("mapped child adapter: failures", () => {
 
   it("classifies a raw mapped-child abort as cancellation", async () => {
     const runChild = vi.fn(() => "done");
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const process = childStep("process", { run: runChild });
     const child = definePipeline({
       id: "raw-abort-child",
       steps: [process],
       finalize: (outputs) => outputs.process,
     });
-    const parentStep = createSteps();
-    const children = parentStep.forEachPipeline("children", {
+    const { forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       items: () => [{ id: "first" }],
       key: (item) => item.id,
@@ -151,7 +151,7 @@ describe("mapped child adapter: failures", () => {
     const controller = new AbortController();
     const firstStarted = defer();
     const secondStarted = defer();
-    const childStep = createSteps<{ itemId: string }>();
+    const { step: childStep } = createSteps<{ itemId: string }>();
     const process = childStep("process", {
       run: async (_inputs, context) => {
         if (context.options.itemId === "first") firstStarted.resolve();
@@ -164,8 +164,8 @@ describe("mapped child adapter: failures", () => {
       steps: [process],
       finalize: () => true,
     });
-    const parentStep = createSteps();
-    const children = parentStep.forEachPipeline("children", {
+    const { forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       items: () => [{ id: "first" }, { id: "second" }],
       key: (item) => item.id,
@@ -197,7 +197,7 @@ describe("mapped child adapter: failures", () => {
   });
 
   it("reports a mapped child failure without abort as failed", async () => {
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const process = childStep("process", {
       run: () => {
         throw new Error("shard exploded");
@@ -208,8 +208,8 @@ describe("mapped child adapter: failures", () => {
       steps: [process],
       finalize: () => true,
     });
-    const parentStep = createSteps();
-    const children = parentStep.forEachPipeline("children", {
+    const { forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       items: () => [{ id: "broken" }],
       key: (item) => item.id,
@@ -241,7 +241,7 @@ describe("mapped child adapter: failures", () => {
     const controller = new AbortController();
     const failStarted = defer();
     const hangStarted = defer();
-    const childStep = createSteps<{ outcome: "fail" | "hang" }>();
+    const { step: childStep } = createSteps<{ outcome: "fail" | "hang" }>();
     const process = childStep("process", {
       run: async (_inputs, context) => {
         if (context.options.outcome === "fail") {
@@ -257,8 +257,8 @@ describe("mapped child adapter: failures", () => {
       steps: [process],
       finalize: () => true,
     });
-    const parentStep = createSteps();
-    const children = parentStep.forEachPipeline("children", {
+    const { forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       items: () => [
         { id: "broken", outcome: "fail" as const },
@@ -304,7 +304,7 @@ describe("mapped child adapter: failures", () => {
 
   it("rejects an invalid mapped child plan with structured plan errors before child execution", async () => {
     const runChild = vi.fn();
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const known = childStep("known", { run: runChild });
     const child = definePipeline({
       id: "mapped-planned-child",
@@ -312,8 +312,8 @@ describe("mapped child adapter: failures", () => {
       finalize: () => true,
     });
     const runSpy = vi.spyOn(child, "run");
-    const parentStep = createSteps();
-    const children = parentStep.forEachPipeline("children", {
+    const { forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       items: () => [{ id: "only" }],
       key: (item) => item.id,

@@ -11,7 +11,7 @@ const SOURCES = ["west", "east", "north", "south"] as const;
 const ARTIFACTS = ["index.json", "manifest.json", "checksums.txt"] as const;
 const DEFAULT_DELAY_MS = 450;
 
-const step = createSteps<LiveTuiOptions>();
+const { step } = createSteps<LiveTuiOptions>();
 
 function sequentialStatus(index: number, current: number): DetailStatus {
   if (index < current) return "completed";

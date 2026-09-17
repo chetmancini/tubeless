@@ -2,7 +2,7 @@ import { createSteps, definePipeline } from "tubeless";
 import { definePaths, writeJson } from "tubeless/node";
 
 const paths = definePaths({ artifact: "build/artifacts/rows.json" });
-const step = createSteps<{ rows: readonly string[] }>();
+const { step } = createSteps<{ rows: readonly string[] }>();
 
 const normalize = step("normalize", {
   description: "Normalize the caller's rows before writing an artifact.",

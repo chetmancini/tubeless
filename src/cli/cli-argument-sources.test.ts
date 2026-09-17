@@ -140,8 +140,8 @@ describe("defineCommand: aliases, positionals, and environment fallbacks", () =>
   });
 
   it("marks runtime policy skips as conditional in a pipeline plan", async () => {
-    const step = createSteps();
-    const conditional = step.skippable("conditional", {
+    const { step } = createSteps();
+    const conditional = step("conditional", {
       skip: () => "disabled by configuration",
       run: () => undefined,
     });

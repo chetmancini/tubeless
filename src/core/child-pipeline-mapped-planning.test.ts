@@ -3,7 +3,7 @@ import { createSteps, definePipeline, type PipelineStepProgress } from "./pipeli
 
 describe("mapped child adapter: planning and progress", () => {
   it("plans each mapped child once per item", async () => {
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const work = childStep("work", { run: () => "done" });
     const child = definePipeline({
       id: "mapped-once-child",
@@ -12,8 +12,8 @@ describe("mapped child adapter: planning and progress", () => {
     });
     const planSpy = vi.spyOn(child, "plan");
     const runSpy = vi.spyOn(child, "run");
-    const parentStep = createSteps();
-    const children = parentStep.forEachPipeline("children", {
+    const { forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       items: () => [{ id: "a" }, { id: "b" }],
       key: (item) => item.id,
@@ -37,7 +37,7 @@ describe("mapped child adapter: planning and progress", () => {
       itemId: string;
     }
 
-    const childStep = createSteps<ChildOptions>();
+    const { step: childStep } = createSteps<ChildOptions>();
     let processStarted = false;
     // Independent steps so filtering "setup" does not unmet-dependency "process".
     const setup = childStep("setup", {
@@ -56,8 +56,8 @@ describe("mapped child adapter: planning and progress", () => {
       finalize: (outputs) => outputs.process ?? outputs.setup,
     });
 
-    const parentStep = createSteps();
-    const children = parentStep.forEachPipeline("children", {
+    const { forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       items: () => [{ id: "only" }],
       key: (item) => item.id,
@@ -103,7 +103,7 @@ describe("mapped child adapter: planning and progress", () => {
     interface ChildOptions {
       itemId: string;
     }
-    const childStep = createSteps<ChildOptions>();
+    const { step: childStep } = createSteps<ChildOptions>();
     const prepare = childStep("prepare", {
       run: (_inputs, context) => `prepared:${context.options.itemId}`,
     });
@@ -117,8 +117,8 @@ describe("mapped child adapter: planning and progress", () => {
       finalize: (outputs) => outputs.process ?? outputs.prepare,
     });
 
-    const parentStep = createSteps();
-    const children = parentStep.forEachPipeline("children", {
+    const { forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       items: () => [
         { id: "prepare-only", stepIds: ["prepare"] as const },
@@ -163,7 +163,7 @@ describe("mapped child adapter: planning and progress", () => {
     const workGate = new Promise<void>((resolve) => {
       releaseWork = resolve;
     });
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const work = childStep("work", {
       run: async (_inputs, context) => {
         context.reportProgress({ completed: 1, total: 2, message: "chunk" });
@@ -176,8 +176,8 @@ describe("mapped child adapter: planning and progress", () => {
       steps: [work],
       finalize: (outputs) => outputs.work,
     });
-    const parentStep = createSteps();
-    const children = parentStep.forEachPipeline("children", {
+    const { forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       items: () => [{ id: "only" }],
       key: (item) => item.id,
@@ -227,15 +227,15 @@ describe("mapped child adapter: planning and progress", () => {
 
   it("rejects duplicate item keys before starting children", async () => {
     const runChild = vi.fn();
-    const childStep = createSteps();
+    const { step: childStep } = createSteps();
     const process = childStep("process", { run: runChild });
     const child = definePipeline({
       id: "keyed-child",
       steps: [process],
       finalize: () => true,
     });
-    const parentStep = createSteps();
-    const children = parentStep.forEachPipeline("children", {
+    const { forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
       pipeline: child,
       items: () => [{ id: "same" }, { id: "same" }],
       key: (item) => item.id,

@@ -4,7 +4,7 @@ interface AuditOptions {
   failLinks?: boolean;
 }
 
-const step = createSteps<AuditOptions>();
+const { step } = createSteps<AuditOptions>();
 
 const checkLinks = step("check-links", {
   description: "Validate links independently",

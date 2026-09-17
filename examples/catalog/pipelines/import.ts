@@ -5,14 +5,14 @@ interface ImportOptions {
   lines: readonly string[];
 }
 
-const step = createSteps<ImportOptions>();
+const { step, forEachPipeline } = createSteps<ImportOptions>();
 
 const loadRows = step("load-rows", {
   description: "Read raw input records from the caller.",
   run: (_inputs, context) => context.options.lines,
 });
 
-const normalizedImport = step.forEachPipeline.skippable("normalized-import", {
+const normalizedImport = forEachPipeline("normalized-import", {
   dependsOn: [loadRows],
   description: "Normalize rows through mapped child pipelines when input is present.",
   pipeline: NormalizePipeline,

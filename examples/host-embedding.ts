@@ -1,6 +1,6 @@
 import { createSteps, definePipeline, requireOutputs } from "tubeless";
 
-const step = createSteps<{ lines: readonly string[] }>();
+const { step } = createSteps<{ lines: readonly string[] }>();
 const normalize = step("normalize", {
   description: "Normalize rows within one host-owned invocation",
   run: (_inputs, context) => context.options.lines.map((line) => line.trim()),

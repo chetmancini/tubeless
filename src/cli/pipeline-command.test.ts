@@ -23,7 +23,7 @@ function testLog(): CliContext["log"] & { lines: { level: string; message: strin
 }
 
 function makeMiniPipeline(onRun: (options: MiniOptions, dryRun: boolean) => void = () => {}) {
-  const step = createSteps<MiniOptions>();
+  const { step } = createSteps<MiniOptions>();
   const first = step("first", {
     name: "First Step",
     description: "Run first",
@@ -76,7 +76,7 @@ describe("definePipelineCommand", () => {
       label: string;
     }
     let seen: DirectOptions | undefined;
-    const step = createSteps<DirectOptions>();
+    const { step } = createSteps<DirectOptions>();
     const work = step("work", {
       run: (_inputs, context) => {
         seen = context.options;
@@ -192,7 +192,7 @@ describe("definePipelineCommand", () => {
   });
 
   it("omits --target when a pipeline declares no public targets", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const internal = step("internal", { run: () => true });
     const pipeline = definePipeline({
       id: "no-targets",
@@ -211,7 +211,7 @@ describe("definePipelineCommand", () => {
   });
 
   it("offers only declared targets while retaining every exact step choice", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const internal = step("internal", { run: () => true });
     const release = step("release", {
       dependsOn: [internal],
@@ -281,7 +281,7 @@ describe("definePipelineCommand", () => {
   it("forwards an explicit CLI signal into pipeline step contexts", async () => {
     const controller = new AbortController();
     let seenSignal: AbortSignal | undefined;
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", {
       run: (_inputs, context) => {
         seenSignal = context.signal;
@@ -302,7 +302,7 @@ describe("definePipelineCommand", () => {
 
   it("creates and cleans up a SIGINT signal for main entrypoints", async () => {
     let seenSignal: AbortSignal | undefined;
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", {
       run: (_inputs, context) => {
         seenSignal = context.signal;
@@ -341,7 +341,7 @@ describe("definePipelineCommand", () => {
     });
     let seenSignal: AbortSignal | undefined;
     let ranAfterCancellation = false;
-    const step = createSteps();
+    const { step } = createSteps();
     const wait = step("wait", {
       run: async (_inputs, context) => {
         if (!context.signal) throw new Error("expected a managed CLI signal");
@@ -395,7 +395,7 @@ describe("definePipelineCommand", () => {
     const started = new Promise<void>((resolve) => {
       resolveStarted = resolve;
     });
-    const step = createSteps();
+    const { step } = createSteps();
     const cleanup = step("cleanup", {
       run: async (_inputs, context) => {
         if (!context.signal) throw new Error("expected a managed CLI signal");
@@ -478,7 +478,7 @@ describe("definePipelineCommand", () => {
   });
 
   it("explains target closure selection in plan output", () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const source = step("source", { run: () => "source" });
     const hint = step("hint", { run: () => "hint" });
     const publish = step("publish", {
@@ -579,7 +579,7 @@ describe("definePipelineCommand", () => {
       write: (chunk) => chunks.push(chunk),
     };
     const cliLog = testLog();
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", {
       run: (_inputs, context) => {
         context.reportProgress({ completed: 3, total: 4, message: "items" });
@@ -696,7 +696,7 @@ describe("definePipelineCommand", () => {
       await command.main(["--target", "first", "--target", "first"], { log });
       expect(process.exitCode).toBe(5);
 
-      const failingStep = createSteps();
+      const { step: failingStep } = createSteps();
       const fail = failingStep("fail", {
         run: () => {
           throw new Error("intentional command failure");
@@ -714,7 +714,7 @@ describe("definePipelineCommand", () => {
       await failingCommand.main([], { log });
       expect(process.exitCode).toBe(6);
 
-      const cancellingStep = createSteps();
+      const { step: cancellingStep } = createSteps();
       const cancel = cancellingStep("cancel", {
         run: () => {
           throw new DOMException("intentional command cancellation", "AbortError");

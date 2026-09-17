@@ -4,7 +4,7 @@ interface ImportOptions {
   lines: readonly string[];
 }
 
-const step = createSteps<ImportOptions>();
+const { step } = createSteps<ImportOptions>();
 
 const load = step("load", {
   run: (_inputs, context) => context.options.lines,

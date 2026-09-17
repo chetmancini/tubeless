@@ -51,7 +51,7 @@ describe("definePipeline failures and cancellation", () => {
   });
 
   it("retains the dependency id for a planned unmet-dependency skip after fail-fast", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const failing = step("failing", {
       run: () => {
         throw new Error("failed");
@@ -102,7 +102,7 @@ describe("definePipeline failures and cancellation", () => {
   });
 
   it("preserves a planned dry-run skip after fail-fast even when skipAfterFailureOf matches the failed step", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const failing = step("failing", {
       run: () => {
         throw new Error("failed");
@@ -164,7 +164,7 @@ describe("definePipeline failures and cancellation", () => {
   });
 
   it("preserves a thrown error code in the step report and run result", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const failing = step("failing", {
       run: () => {
         throw Object.assign(new Error("request rejected"), { code: "REQUEST_REJECTED" });
@@ -202,7 +202,7 @@ describe("definePipeline failures and cancellation", () => {
   it("preserves JSON-safe cause chains and the original runOrThrow cause", async () => {
     const rootCause = Object.assign(new Error("connection refused"), { code: "ECONNREFUSED" });
     const thrownError = new Error("query failed", { cause: rootCause });
-    const step = createSteps();
+    const { step } = createSteps();
     const query = step("query", {
       run: () => {
         throw thrownError;
@@ -254,7 +254,7 @@ describe("definePipeline failures and cancellation", () => {
     const circular = new Error("circular wrapper") as Error & { cause?: unknown };
     circular.cause = circular;
     const primitiveCause = new Error("primitive wrapper", { cause: "socket closed" });
-    const step = createSteps();
+    const { step } = createSteps();
     const circularStep = step("circular", {
       run: () => {
         throw circular;
@@ -286,7 +286,7 @@ describe("definePipeline failures and cancellation", () => {
       cause = new Error(`cause ${index}`, { cause });
     }
     const thrownError = new Error("top-level failure", { cause });
-    const step = createSteps();
+    const { step } = createSteps();
     const fail = step("fail", {
       run: () => {
         throw thrownError;
@@ -309,7 +309,7 @@ describe("definePipeline failures and cancellation", () => {
   it("retains cancellation as the native cause of runOrThrow", async () => {
     const cancellation = new Error("operator stopped");
     cancellation.name = "AbortError";
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", {
       run: () => {
         throw cancellation;
@@ -342,7 +342,7 @@ describe("definePipeline failures and cancellation", () => {
 
   it("does not misclassify an unrelated step failure when its signal is also aborted", async () => {
     const controller = new AbortController();
-    const step = createSteps();
+    const { step } = createSteps();
     const failing = step("failing", {
       run: () => {
         controller.abort("stop");
@@ -415,7 +415,7 @@ describe("definePipeline failures and cancellation", () => {
 
   it("does not misclassify an unrelated finalizer failure when its signal is also aborted", async () => {
     const controller = new AbortController();
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", { run: () => true });
     const pipeline = definePipeline({
       id: "finalizer-failure-during-abort",
@@ -441,7 +441,7 @@ describe("definePipeline failures and cancellation", () => {
 
   it("cancels finalization when the runtime signal is aborted after steps complete", async () => {
     const controller = new AbortController();
-    const step = createSteps();
+    const { step } = createSteps();
     const work = step("work", {
       run: () => {
         controller.abort("stop");

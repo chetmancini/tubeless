@@ -5,9 +5,9 @@ interface CacheOptions {
   refresh: boolean;
 }
 
-const step = createSteps<CacheOptions>();
+const { step } = createSteps<CacheOptions>();
 
-const resolveValue = step.skippable("resolve-value", {
+const resolveValue = step("resolve-value", {
   description: "Reuse a cached value unless a refresh is required",
   skip: (_inputs, context) =>
     !context.options.refresh && context.options.cachedValue !== undefined

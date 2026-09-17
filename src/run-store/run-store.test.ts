@@ -172,13 +172,13 @@ function snapshotFromChunks(events: readonly StoredPipelineEvent[], generatedAtM
 
 describe("pipeline run store projections", () => {
   it("keeps executions distinct when external correlation is reused", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const firstPipeline = definePipeline({
       id: "first-correlated",
       steps: [step("work", { run: () => "first" })],
       finalize: () => "first",
     });
-    const secondStep = createSteps();
+    const { step: secondStep } = createSteps();
     const secondPipeline = definePipeline({
       id: "second-correlated",
       steps: [secondStep("work", { run: () => "second" })],

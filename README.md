@@ -36,8 +36,8 @@ Tubeless is pre-1.0, so the public API may change between releases.
 
 ## Quick start
 
-This pipeline loads a list of strings, normalizes them, and returns the result.
-Declaring `load` as a dependency gives `normalize` a typed input.
+This pipeline loads and normalizes strings. `step` creates a step; dependencies give typed
+inputs. Adding `skip` makes it skippable and widens its output to include `undefined`.
 
 ```ts
 import { createSteps, definePipeline, requireOutputs } from "tubeless";
@@ -46,7 +46,7 @@ interface ImportOptions {
   lines: readonly string[];
 }
 
-const step = createSteps<ImportOptions>();
+const { step } = createSteps<ImportOptions>();
 
 const load = step("load", {
   run: (_inputs, context) => context.options.lines,

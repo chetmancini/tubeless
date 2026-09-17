@@ -441,7 +441,7 @@ try {
     pipelineFixture,
     `import { createSteps, definePipeline } from "tubeless";
 import { definePipelineCommand } from "tubeless/cli";
-const step = createSteps();
+const { step } = createSteps();
 const load = step("load", {
   description: "Load input",
   run: (_inputs, context) => {

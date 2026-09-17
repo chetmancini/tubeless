@@ -5,7 +5,7 @@ interface PollOptions {
   attempts: number;
 }
 
-const step = createSteps<PollOptions>();
+const { step } = createSteps<PollOptions>();
 
 const poll = step("poll", {
   description: "Poll cooperatively with an injected, cancellation-aware sleep",

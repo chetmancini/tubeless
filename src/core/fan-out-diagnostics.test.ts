@@ -7,7 +7,7 @@ function fixture(
   key = (index: number) => `item-${index}`,
   phase: "options" | "child" | "result" = "options"
 ) {
-  const childStep = createSteps<{ index: number }>();
+  const { step: childStep } = createSteps<{ index: number }>();
   const work = childStep("work", {
     run: (_inputs, context) => {
       if (phase === "child") fail(context.options.index);
@@ -15,8 +15,8 @@ function fixture(
     },
   });
   const child = definePipeline({ id: "child", steps: [work], finalize: (outputs) => outputs.work });
-  const step = createSteps();
-  const children = step.forEachPipeline("children", {
+  const { step, forEachPipeline } = createSteps();
+  const children = forEachPipeline("children", {
     pipeline: child,
     items: () => Array.from({ length: count }, (_, index) => index),
     key,

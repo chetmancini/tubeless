@@ -3,10 +3,10 @@
 Use a child pipeline when part of a workflow is useful on its own and should
 also run inside a larger pipeline. Tubeless provides two step builders:
 
-| Builder                | Use it to                                       | Step output                              |
-| ---------------------- | ----------------------------------------------- | ---------------------------------------- |
-| `step.fromPipeline`    | Run one child pipeline                          | The child's final result                 |
-| `step.forEachPipeline` | Run the same child pipeline for a list of items | An array of child results in input order |
+| Builder           | Use it to                                       | Step output                              |
+| ----------------- | ----------------------------------------------- | ---------------------------------------- |
+| `fromPipeline`    | Run one child pipeline                          | The child's final result                 |
+| `forEachPipeline` | Run the same child pipeline for a list of items | An array of child results in input order |
 
 Both builders infer the child options and result types. They forward the
 parent's runtime context and report child progress through the parent step.
@@ -20,7 +20,9 @@ parent step's dependency outputs and context, and returns the inputs the child
 needs. Add `mapResult` if the parent needs a different result shape.
 
 ```ts
-const seedIndexStage = step.fromPipeline("seed-index", {
+const { fromPipeline } = createSteps<ParentOptions>();
+
+const seedIndexStage = fromPipeline("seed-index", {
   pipeline: IndexSeedPipeline,
   dependsOn: [seedCatalogStage],
   description: "Seed a precomputed search index",
@@ -38,7 +40,9 @@ Use `items` to return the list to process, `key` for stable item IDs, and
 `concurrency` to limit simultaneous child runs:
 
 ```ts
-const processShards = step.forEachPipeline("process-shards", {
+const { forEachPipeline } = createSteps<ParentOptions>();
+
+const processShards = forEachPipeline("process-shards", {
   pipeline: ShardPipeline,
   dependsOn: [resolveShards],
   items: ({ "resolve-shards": shards }) => shards,
@@ -53,10 +57,12 @@ const processShards = step.forEachPipeline("process-shards", {
 });
 ```
 
-To skip the whole step when there are no items, use the skippable builder:
+To skip the whole step when there are no items, add `skip` to its definition:
 
 ```ts
-const processShards = step.forEachPipeline.skippable("process-shards", {
+const { forEachPipeline } = createSteps<ParentOptions>();
+
+const processShards = forEachPipeline("process-shards", {
   pipeline: ShardPipeline,
   dependsOn: [resolveShards],
   skip: ({ "resolve-shards": shards }) =>
@@ -80,17 +86,16 @@ Keys must be stable and unique; duplicate keys fail before any child starts.
 All running children finish or cancel before the parent step returns a failure.
 The parent therefore cannot finalize while those children are still running.
 
-Use `.skippable` when the entire child step may be intentionally omitted.
-Its `skip` callback returns `false` to proceed, a non-empty reason string to
-skip, or `{ reason, value }` to skip with an output. A skip without a value
-publishes `undefined`. Policy skips allow required dependents to run, so those
-dependents must handle `undefined` explicitly.
+Add `skip` to a `fromPipeline` or `forEachPipeline` definition when the entire
+child step may be intentionally omitted. The callback returns `false` to proceed,
+a non-empty reason string to skip, or `{ reason, value }` to skip with an output.
+A skip without a value publishes `undefined`. Policy skips allow required
+dependents to run, so those dependents must handle `undefined` explicitly.
 
-The ordinary builders reject `skip` and keep non-optional output types.
-`fromPipeline.skippable` returns `T | undefined`, and
-`forEachPipeline.skippable` returns `readonly T[] | undefined`. For fan-out,
-the skip value is the complete result array. Skipping does not call `items`,
-run children, or apply `mapResult`.
+Without `skip`, `fromPipeline` returns `T` and `forEachPipeline` returns
+`readonly T[]`. Adding `skip` widens those types to `T | undefined` and
+`readonly T[] | undefined`. For fan-out, the skip value is the complete result
+array. Skipping does not call `items`, run children, or apply `mapResult`.
 
 ## Planning and execution controls
 

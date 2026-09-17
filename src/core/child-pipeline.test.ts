@@ -3,19 +3,19 @@ import { createSteps, definePipeline, type Step } from "./pipeline.js";
 
 describe("child-pipeline composition", () => {
   it("publishes resolved async child mappings to dependents and accepts resolved skip values", async () => {
-    const step = createSteps<{ skipChild: boolean }>();
+    const { step, fromPipeline } = createSteps<{ skipChild: boolean }>();
     const source = step("source", { run: () => 3 });
     const child = definePipeline({
       id: "async-mapping-child",
       steps: [source],
       finalize: () => 3,
     });
-    const mapped = step.fromPipeline("mapped", {
+    const mapped = fromPipeline("mapped", {
       pipeline: child,
       mapOptions: (_inputs, context) => context.options,
       mapResult: async (value) => ({ count: value }),
     });
-    const skippable = step.fromPipeline.skippable("skippable", {
+    const skippable = fromPipeline("skippable", {
       pipeline: child,
       mapOptions: (_inputs, context) => context.options,
       mapResult: async (value) => ({ count: value }),

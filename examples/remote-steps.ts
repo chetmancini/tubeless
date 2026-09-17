@@ -75,13 +75,13 @@ const enrichAdapter: RemoteStepAdapter<RemoteStepsOptions, RemotePayload, unknow
   },
 };
 
-const step = createSteps<RemoteStepsOptions>();
+const { step, fromRemote } = createSteps<RemoteStepsOptions>();
 const parse = step("parse", {
   description: "Trim input rows before sending them to the remote service",
   run: (_inputs, context) =>
     context.options.lines.map((line) => line.trim()).filter((line) => line.length > 0),
 });
-const enrich = step.fromRemote("enrich", {
+const enrich = fromRemote("enrich", {
   description: "Validate the HTTP service result before local consumption",
   dependsOn: [parse],
   adapter: enrichAdapter,

@@ -4,7 +4,7 @@ import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 
 describe("pipeline finalizers", () => {
   it("requires declared finalizer outputs without rejecting a published undefined", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const build = step("build", { run: () => "built" });
     const write = step("write", {
       dependsOn: [build],
@@ -32,7 +32,7 @@ describe("pipeline finalizers", () => {
   });
 
   it("snapshots required finalizer output ids when the pipeline is defined", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     const value = step("value", { run: () => 1 });
     const pipeline = definePipeline({
       id: "required-finalizer-id-snapshot",

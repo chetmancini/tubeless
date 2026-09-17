@@ -1,6 +1,6 @@
 # Remote-step composition
 
-Use `step.fromRemote` when a pipeline step needs to call a service or execution
+Use `fromRemote` when a pipeline step needs to call a service or execution
 engine outside the current process. The step sends input through an adapter,
 waits for the result, and validates it before dependent steps run.
 
@@ -10,8 +10,9 @@ The required fields are `adapter`, `mapInput`, and `outputSchema`:
 - `mapInput` builds the request from local step inputs and context.
 - `outputSchema` checks the returned value and provides its type to dependents.
 
-Use `fromRemote.skippable` when the request may be intentionally omitted. As
-with other skippable steps, dependent code must handle a possible `undefined`.
+Add `skip` to the `fromRemote` definition when the request may be intentionally
+omitted. As with other skippable steps, dependent code must handle a possible
+`undefined`.
 See the [HTTP example](../examples/remote-steps.ts) for a complete implementation.
 
 ## Choose where the pipeline runs

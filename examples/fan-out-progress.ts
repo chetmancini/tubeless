@@ -5,7 +5,7 @@ interface ShardOptions {
   shardId: string;
 }
 
-const shardStep = createSteps<ShardOptions>();
+const { step: shardStep } = createSteps<ShardOptions>();
 
 const processRecords = shardStep("process-records", {
   name: "Process records",
@@ -46,9 +46,9 @@ interface FanOutOptions {
   shards: readonly { id: string; records: readonly string[] }[];
 }
 
-const fanOutStep = createSteps<FanOutOptions>();
+const { forEachPipeline } = createSteps<FanOutOptions>();
 
-const processShards = fanOutStep.forEachPipeline.skippable("process-shards", {
+const processShards = forEachPipeline("process-shards", {
   pipeline: ShardPipeline,
   description: "Process shards with bounded concurrency and stable identities",
   skip: (_inputs, context) =>

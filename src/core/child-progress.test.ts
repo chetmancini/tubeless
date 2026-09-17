@@ -22,7 +22,7 @@ describe("nested child progress", () => {
           },
           status: "completed" as const,
         };
-        const step = createSteps();
+        const { step, fromPipeline, forEachPipeline } = createSteps();
         const leaf = definePipeline({
           id: "leaf",
           steps: Array.from({ length: 16 }, (_, index) =>
@@ -39,13 +39,13 @@ describe("nested child progress", () => {
         });
         const middle = definePipeline({
           id: "middle",
-          steps: [step.fromPipeline("nested", { pipeline: leaf, mapOptions: () => ({}) })],
+          steps: [fromPipeline("nested", { pipeline: leaf, mapOptions: () => ({}) })],
           finalize: () => 1,
         });
         const work =
           kind === "single"
-            ? step.fromPipeline("work", { pipeline: middle, mapOptions: () => ({}) })
-            : step.forEachPipeline("work", {
+            ? fromPipeline("work", { pipeline: middle, mapOptions: () => ({}) })
+            : forEachPipeline("work", {
                 pipeline: middle,
                 items: () => ["a"],
                 key: (key) => key,
@@ -99,7 +99,7 @@ describe("nested child progress", () => {
     "bounds live fan-out materialization with detailLimit %s",
     async (detailLimit) => {
       const count = 512;
-      const step = createSteps();
+      const { step, forEachPipeline } = createSteps();
       const child = definePipeline({
         id: "child",
         steps: [
@@ -115,7 +115,7 @@ describe("nested child progress", () => {
       const parent = definePipeline({
         id: "parent",
         steps: [
-          step.forEachPipeline("items", {
+          forEachPipeline("items", {
             pipeline: child,
             items: () => Array.from({ length: count }, (_, index) => index),
             key: String,
@@ -156,7 +156,7 @@ describe("nested child progress", () => {
   );
 
   it("does not construct fan-out progress payloads when nothing observes progress", async () => {
-    const step = createSteps();
+    const { step, forEachPipeline } = createSteps();
     const child = definePipeline({
       id: "child",
       steps: [step("work", { run: () => 1 })],
@@ -166,7 +166,7 @@ describe("nested child progress", () => {
     const parent = definePipeline({
       id: "parent",
       steps: [
-        step.forEachPipeline("items", {
+        forEachPipeline("items", {
           pipeline: child,
           items: () => ["a", "b"],
           key: (key) => key,
@@ -185,7 +185,7 @@ describe("nested child progress", () => {
   it.each([undefined, 8, 3])(
     "keeps a three-level tree and completed rows with terminal height %s",
     async (rows) => {
-      const step = createSteps();
+      const { step, fromPipeline, forEachPipeline } = createSteps();
       const read = step("read", {
         name: "Read records",
         run: (_inputs, context) => {
@@ -197,13 +197,13 @@ describe("nested child progress", () => {
       const leaf = definePipeline({ id: "leaf", steps: [read, write], finalize: () => 1 });
       const middle = definePipeline({
         id: "middle",
-        steps: [step.fromPipeline("build", { pipeline: leaf, mapOptions: () => ({}) })],
+        steps: [fromPipeline("build", { pipeline: leaf, mapOptions: () => ({}) })],
         finalize: () => 1,
       });
       const batch = definePipeline({
         id: "batch",
         steps: [
-          step.forEachPipeline("editions", {
+          forEachPipeline("editions", {
             pipeline: middle,
             items: () => ["a", "b"],
             key: (key) => key,
@@ -215,7 +215,7 @@ describe("nested child progress", () => {
       });
       const root = definePipeline({
         id: "root",
-        steps: [step.fromPipeline("library", { pipeline: batch, mapOptions: () => ({}) })],
+        steps: [fromPipeline("library", { pipeline: batch, mapOptions: () => ({}) })],
         finalize: () => 1,
       });
       const chunks: string[] = [];
@@ -291,7 +291,7 @@ describe("nested child progress", () => {
   it.each(["failed", "cancelled", "skipped"] as const)(
     "retains %s children and excludes filtered steps",
     async (status) => {
-      const step = createSteps();
+      const { step, fromPipeline } = createSteps();
       const controller = new AbortController();
       const work = step("work", {
         dryRun: "skip",
@@ -310,7 +310,7 @@ describe("nested child progress", () => {
       const root = definePipeline({
         id: "root",
         steps: [
-          step.fromPipeline("child", {
+          fromPipeline("child", {
             pipeline: child,
             mapOptions: () => ({ stepIds: ["work"] as const }),
           }),
@@ -333,7 +333,7 @@ describe("nested child progress", () => {
   );
 
   it("prioritizes active item groups under a detail limit and keeps failures after settlement", async () => {
-    const step = createSteps<{ key: string }>();
+    const { step } = createSteps<{ key: string }>();
     const child = definePipeline({
       id: "child",
       steps: [
@@ -346,11 +346,11 @@ describe("nested child progress", () => {
       ],
       finalize: () => 1,
     });
-    const parentStep = createSteps();
+    const { forEachPipeline } = createSteps();
     const parent = definePipeline({
       id: "parent",
       steps: [
-        parentStep.forEachPipeline("editions", {
+        forEachPipeline("editions", {
           pipeline: child,
           items: () => ["a", "b"],
           key: (key) => key,

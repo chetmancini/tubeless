@@ -7,10 +7,10 @@ describe("definePipeline runtime policies", () => {
     interface Options {
       enableWrite: boolean;
     }
-    const step = createSteps<Options>();
+    const { step } = createSteps<Options>();
     let writeRan = false;
     const build = step("build", { run: () => "built" });
-    const write = step.skippable("write", {
+    const write = step("write", {
       dependsOn: [build],
       skip: (_inputs, context) =>
         context.options.enableWrite
@@ -71,9 +71,9 @@ describe("definePipeline runtime policies", () => {
   });
 
   it("policy-skips with a bare string publish undefined and still unlock dependents", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     let writeRan = false;
-    const write = step.skippable("write", {
+    const write = step("write", {
       skip: () => "write disabled",
       run: () => {
         writeRan = true;
@@ -112,11 +112,11 @@ describe("definePipeline runtime policies", () => {
   });
 
   it("records a skip-predicate throw as a failed PipelineRun instead of rejecting", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     let ran = false;
     const skipEvents: string[] = [];
     const failEvents: string[] = [];
-    const gate = step.skippable("gate", {
+    const gate = step("gate", {
       skip: () => {
         throw new Error("skip exploded");
       },
@@ -181,9 +181,9 @@ describe("definePipeline runtime policies", () => {
 
   it("records a skip-predicate abort as a cancelled PipelineRun and runOrThrow wraps it", async () => {
     vi.useFakeTimers();
-    const step = createSteps();
+    const { step } = createSteps();
     let ran = false;
-    const gate = step.skippable("gate", {
+    const gate = step("gate", {
       skip: async (_inputs, context): Promise<false> => {
         await context.sleep(100, context.signal);
         return false;
@@ -280,8 +280,8 @@ describe("definePipeline runtime policies", () => {
         const filteredHandler = vi.fn(() => "filtered");
         const finalize = vi.fn(() => "finalized");
         const statuses: Array<[string, string]> = [];
-        const step = createSteps();
-        const gate = step.skippable("gate", {
+        const { step } = createSteps();
+        const gate = step("gate", {
           skip: () => {
             enterSkip();
             return skipDecision;
@@ -365,9 +365,9 @@ describe("definePipeline runtime policies", () => {
   );
 
   it("continues independent later work when a skip predicate throws with continueOnError", async () => {
-    const step = createSteps();
+    const { step } = createSteps();
     let laterRan = false;
-    const gate = step.skippable("gate", {
+    const gate = step("gate", {
       skip: () => {
         throw new Error("skip exploded");
       },
@@ -399,8 +399,8 @@ describe("definePipeline runtime policies", () => {
     const rejectedOutput = standardSchema<string, string>(() => ({
       issues: [{ message: "Not publishable", path: ["slug"] }],
     }));
-    const step = createSteps();
-    const publish = step.skippable("publish", {
+    const { step } = createSteps();
+    const publish = step("publish", {
       outputSchema: rejectedOutput,
       skip: () => ({ reason: "preview only", value: "draft" }),
       run: () => "live",
@@ -442,12 +442,12 @@ describe("definePipeline runtime policies", () => {
   });
 
   it("types skippable steps as TOut | undefined for dependents", () => {
-    const step = createSteps();
+    const { step } = createSteps();
 
     const plain = step("plain", { run: () => "ok" as const });
     expectTypeOf(plain).toEqualTypeOf<Step<"plain", "ok", {}>>();
 
-    const withSkip = step.skippable("with-skip", {
+    const withSkip = step("with-skip", {
       skip: () => "disabled",
       run: () => "ok" as const,
     });
@@ -464,13 +464,13 @@ describe("definePipeline runtime policies", () => {
 
     // Config-gated: `skip: predicate | undefined` stays explicit and widens.
     const enableSkip = false as boolean;
-    const gated = step.skippable("gated-skip", {
+    const gated = step("gated-skip", {
       skip: enableSkip ? () => "disabled" : undefined,
       run: () => "ok" as const,
     });
     expectTypeOf(gated).toEqualTypeOf<Step<"gated-skip", "ok" | undefined, {}>>();
 
-    const explicitUndefined = step.skippable("explicit-undefined-skip", {
+    const explicitUndefined = step("explicit-undefined-skip", {
       skip: undefined,
       run: () => "ok" as const,
     });
@@ -478,17 +478,32 @@ describe("definePipeline runtime policies", () => {
       Step<"explicit-undefined-skip", "ok" | undefined, {}>
     >();
 
-    step("skip-requires-skippable", {
-      // @ts-expect-error Policy skip belongs on step.skippable.
-      skip: () => "disabled",
-      run: () => "ok" as const,
-    });
-
     const reusableSkippingDefinition = {
       skip: () => "disabled",
       run: () => "ok" as const,
     };
-    // @ts-expect-error Reusable definitions cannot bypass step.skippable.
-    step("reusable-skip-requires-skippable", reusableSkippingDefinition);
+    const reusable = step("reusable-skip", reusableSkippingDefinition);
+    expectTypeOf(reusable).toEqualTypeOf<Step<"reusable-skip", "ok" | undefined, {}>>();
+
+    const transformingSchema = standardSchema<string, { length: number }>((value) => ({
+      value: { length: (value as string).length },
+    }));
+    const transformed = step("transformed-skip", {
+      outputSchema: transformingSchema,
+      skip: () => "disabled",
+      run: () => "value",
+    });
+    expectTypeOf(transformed).toEqualTypeOf<
+      Step<"transformed-skip", { length: number } | undefined, {}, {}, string>
+    >();
+
+    const transformedDependent = step("transformed-dependent", {
+      dependsOn: [transformed],
+      run: (inputs) => {
+        expectTypeOf(inputs["transformed-skip"]).toEqualTypeOf<{ length: number } | undefined>();
+        return inputs["transformed-skip"]?.length ?? 0;
+      },
+    });
+    expectTypeOf(transformedDependent).toEqualTypeOf<Step<"transformed-dependent", number, {}>>();
   });
 });

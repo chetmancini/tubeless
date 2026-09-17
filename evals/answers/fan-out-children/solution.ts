@@ -5,7 +5,7 @@ interface ShardOptions {
   shardId: string;
 }
 
-const shardStep = createSteps<ShardOptions>();
+const { step: shardStep } = createSteps<ShardOptions>();
 
 const processRecords = shardStep("process-records", {
   description: "Process every record in one shard.",
@@ -33,9 +33,9 @@ interface FanOutOptions {
   shards: readonly { id: string; records: readonly string[] }[];
 }
 
-const fanOutStep = createSteps<FanOutOptions>();
+const { forEachPipeline: fanOutForEachPipeline } = createSteps<FanOutOptions>();
 
-const processShards = fanOutStep.forEachPipeline("process-shards", {
+const processShards = fanOutForEachPipeline("process-shards", {
   pipeline: ShardPipeline,
   description: "Process shards four at a time with stable identities.",
   items: (_inputs, context) => context.options.shards,

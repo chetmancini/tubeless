@@ -43,7 +43,7 @@ async function writeProjectFixture(): Promise<{
     `
       import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
       import { createSteps, definePipeline, requireOutputs } from ${JSON.stringify(pipelineModuleUrl)};
-      const step = createSteps();
+      const { step } = createSteps();
       const work = step("work", {
         run: (_inputs, context) => {
           context.log.log(\`cwd:\${context.cwd}\`);
