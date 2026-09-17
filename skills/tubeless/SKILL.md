@@ -25,9 +25,10 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 
 ## Authoring decisions
 
-- Use `createSteps<TDomainOptions>()` per pipeline and take its `step`
-  constructor. Domain options contain business inputs; pass built-in controls
-  separately to `run(options, controls?)`.
+- Use `createSteps<TDomainOptions>()` per pipeline and destructure every
+  constructor it needs: `step`, `fromPipeline`, `fromRemote`, and/or
+  `forEachPipeline`. Domain options contain business inputs; pass built-in
+  controls separately to `run(options, controls?)`.
 - Give steps stable kebab-case IDs and descriptions of their domain work.
   `name` is an optional display label. Return values from steps and consume
   inferred dependency outputs instead of sharing mutable state.

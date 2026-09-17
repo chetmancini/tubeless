@@ -20,6 +20,8 @@ parent step's dependency outputs and context, and returns the inputs the child
 needs. Add `mapResult` if the parent needs a different result shape.
 
 ```ts
+const { fromPipeline } = createSteps<ParentOptions>();
+
 const seedIndexStage = fromPipeline("seed-index", {
   pipeline: IndexSeedPipeline,
   dependsOn: [seedCatalogStage],
@@ -38,6 +40,8 @@ Use `items` to return the list to process, `key` for stable item IDs, and
 `concurrency` to limit simultaneous child runs:
 
 ```ts
+const { forEachPipeline } = createSteps<ParentOptions>();
+
 const processShards = forEachPipeline("process-shards", {
   pipeline: ShardPipeline,
   dependsOn: [resolveShards],
@@ -56,6 +60,8 @@ const processShards = forEachPipeline("process-shards", {
 To skip the whole step when there are no items, add `skip` to its definition:
 
 ```ts
+const { forEachPipeline } = createSteps<ParentOptions>();
+
 const processShards = forEachPipeline("process-shards", {
   pipeline: ShardPipeline,
   dependsOn: [resolveShards],

@@ -484,5 +484,26 @@ describe("definePipeline runtime policies", () => {
     };
     const reusable = step("reusable-skip", reusableSkippingDefinition);
     expectTypeOf(reusable).toEqualTypeOf<Step<"reusable-skip", "ok" | undefined, {}>>();
+
+    const transformingSchema = standardSchema<string, { length: number }>((value) => ({
+      value: { length: (value as string).length },
+    }));
+    const transformed = step("transformed-skip", {
+      outputSchema: transformingSchema,
+      skip: () => "disabled",
+      run: () => "value",
+    });
+    expectTypeOf(transformed).toEqualTypeOf<
+      Step<"transformed-skip", { length: number } | undefined, {}, {}, string>
+    >();
+
+    const transformedDependent = step("transformed-dependent", {
+      dependsOn: [transformed],
+      run: (inputs) => {
+        expectTypeOf(inputs["transformed-skip"]).toEqualTypeOf<{ length: number } | undefined>();
+        return inputs["transformed-skip"]?.length ?? 0;
+      },
+    });
+    expectTypeOf(transformedDependent).toEqualTypeOf<Step<"transformed-dependent", number, {}>>();
   });
 });

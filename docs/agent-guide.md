@@ -37,8 +37,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   editor or agent validation. Optional document metadata is descriptive only.
   `inspect` or `plan` on a compiled command still checks graph semantics.
 
-- Use `createSteps<TDomainOptions>()` once per pipeline, take its step
-  constructors, and use `definePipeline` once after declaring the steps. Domain
+- Use `createSteps<TDomainOptions>()` once per pipeline and destructure every
+  constructor that pipeline uses: `step`, `fromPipeline`, `fromRemote`, and/or
+  `forEachPipeline`. Use `definePipeline` once after declaring the steps. Domain
   option types contain domain input only;
   callers pass those options and optional built-in controls to
   `run(options, controls?)`, while `plan(controls)` accepts controls alone.
