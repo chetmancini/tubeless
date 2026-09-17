@@ -81,6 +81,10 @@ Read the corresponding package recipe before using these features:
   unrelated example IDs. Preserve existing consumer conventions.
 - Keep storage and Studio optional. Read `docs/studio.md` before adding them;
   read the composition guides before adding child or remote execution.
+- Use `tubeless/node` for cwd-relative path factories, JSON artifacts, required
+  environment values and checkpoints. Call `definePaths` factories with
+  `context.cwd`; keep `writeJson` and `resetDir` inside dry-run-safe steps.
+  `readJson<T>` parses but does not validate untrusted data. See `docs/recipes.md`.
 - Implement concrete JSON or telemetry adapters in the application against
   `PipelineTraceExporter`; adapt the package's `examples/tracing.ts`. Use
   `composeTraceExporters` for multiple trace destinations. Finished traces

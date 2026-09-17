@@ -21,7 +21,7 @@ their source files.
 | `studio/`    | HTTP server, browser client, page, state and UI protocol                                      |
 | `project/`   | Project catalogs, command registration contracts and parsed pipeline document compilation     |
 | `workbench/` | Module loading, executable integration and adapter wiring                                     |
-| `node/`      | Checkpoints and their filesystem persistence                                                  |
+| `node/`      | Optional filesystem, path, environment and checkpoint helpers                                 |
 | `testing/`   | Test runtime and executable-example integration tests                                         |
 
 ## Dependency direction

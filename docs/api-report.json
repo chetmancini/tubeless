@@ -128,8 +128,17 @@
     },
     {
       "declaration": "./dist/node/node.d.ts",
-      "exports": ["CheckpointStore", "openCheckpoint", "withCheckpointedBatch"],
-      "sha256": "1bf8549ca953a11e7202dbda8013db2a8f1d56286f1618bad929efbbb2efd302",
+      "exports": [
+        "CheckpointStore",
+        "definePaths",
+        "openCheckpoint",
+        "readJson",
+        "requireEnv",
+        "resetDir",
+        "withCheckpointedBatch",
+        "writeJson"
+      ],
+      "sha256": "06411eb43b8d1b5aca5d51d70e68553cb9065447b250c29382e6036ad9eac52c",
       "specifier": "tubeless/node"
     },
     {
