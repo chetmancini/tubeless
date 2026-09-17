@@ -60,8 +60,9 @@ Read the corresponding package recipe before using these features:
 - `definePipelineCommand` from `tubeless/cli` for pipeline-backed scripts.
   Built-in `--step` / `--target` flags map to `stepIds` / `targets`. Do not
   redeclare built-in flags. Read `docs/cli.md` for option mapping.
-  Use `defineCommand` for standalone scripts and `definePipelineProject` from
-  the same entrypoint for catalogs. Studio is an optional consumer of that catalog.
+  Use `defineCommand` from `tubeless/cli` for standalone scripts and
+  `definePipelineProject` from `tubeless/project` for project catalogs shared
+  by the CLI and optional Studio.
 - Use `pipelines/<name>.ts` for definitions and `scripts/<name>.ts` for command
   wrappers when introducing a layout. Register commands explicitly in
   `tubeless.project.ts`; adapt the package's `examples/catalog/` without copying

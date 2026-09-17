@@ -82,7 +82,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Use `command.plan()` or `tubeless plan` for a selection-only preview. Do not
   simulate planning with `--plan`.
 - Use `defineCommand` from `tubeless/cli` for standalone scripts. Declare command
-  catalogs with `definePipelineProject` from that same entrypoint; the catalog
+  catalogs with `definePipelineProject` from `tubeless/project`; the catalog
   works with the CLI before Studio is added. Keep general filesystem/env helpers
   and application-specific prompts in the consumer.
 - Use `pipeline.toMermaid()` or `command.toMermaid()` when documentation needs

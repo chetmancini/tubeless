@@ -95,18 +95,14 @@
         "defineCommand",
         "definePipelineCommand",
         "DefinePipelineCommandConfig",
-        "definePipelineProject",
         "PipelineCliParseResult",
         "PipelineCliValues",
         "PipelineCommand",
         "PipelineCommandHookConfig",
         "PipelineCommandHookContext",
-        "PipelineCommandHookSets",
-        "PipelineProjectCommandModule",
-        "PipelineProjectManifest",
-        "PipelineProjectManifestInput"
+        "PipelineCommandHookSets"
       ],
-      "sha256": "c904267a7bc318d2026c4d88b6755f838b3f1eb6eb8146ececd94358aa9f4216",
+      "sha256": "b907e77702982f86197c843a2a97e351874789c8333ccf3ac06cfcd03258d6ed",
       "specifier": "tubeless/cli"
     },
     {
@@ -142,10 +138,15 @@
       "specifier": "tubeless/retry"
     },
     {
-      "declaration": "./dist/workbench/workbench-entry.d.ts",
-      "exports": ["definePipelineCommand", "definePipelineProject"],
-      "sha256": "29e23dc55f6e058f15bdbf7e25e165ae8895a1ab643c4ecfcdb7e06c44ecb549",
-      "specifier": "tubeless/workbench"
+      "declaration": "./dist/project/project.d.ts",
+      "exports": [
+        "definePipelineProject",
+        "PipelineProjectCommandModule",
+        "PipelineProjectManifest",
+        "PipelineProjectManifestInput"
+      ],
+      "sha256": "c6a5ebb3f4a6fdfe83af766947ff0be005f370f044b588572ac2357481d0bd19",
+      "specifier": "tubeless/project"
     },
     {
       "declaration": "./dist/testing/testing.d.ts",

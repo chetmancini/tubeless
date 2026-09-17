@@ -19,32 +19,39 @@ can run on Node.js 22 or later without Bun.
 
 ### Authoring API
 
-Import command and project declarations from `tubeless/cli`:
+Import terminal commands from `tubeless/cli` and project declarations from
+`tubeless/project`:
 
 ```ts
-import { defineCommand, definePipelineCommand, definePipelineProject } from "tubeless/cli";
+import { defineCommand, definePipelineCommand } from "tubeless/cli";
+import { definePipelineProject } from "tubeless/project";
 ```
 
 Use `defineCommand` for a standalone script and `definePipelineCommand` for a
 pipeline-backed command with built-in selection, dry runs and terminal reporting.
 Both expose typed parsing, validation, descriptors and execution. Their public
-configuration, parameter, result and hook types live on this same subpath.
+configuration, parameter, result and hook types live on the CLI subpath.
 
-Use `definePipelineProject` to register command modules with stable IDs. A project
-catalog is a CLI contract: listing commands does not require Studio or load the
-registered modules. The same catalog can later be passed to `tubeless ui`.
+Use `definePipelineProject` in `tubeless.project.ts` to register command modules
+with stable IDs. A project catalog is shared by the terminal and Studio; declaring
+one does not load its command modules or start either interface.
 
-| Layer                | Public entry                                            | Responsibility                                                                           |
-| -------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Core                 | `tubeless`                                              | Typed graphs, planning, execution, hooks and run reports                                 |
-| CLI                  | `tubeless/cli`                                          | Standalone and pipeline commands, typed flags and project catalogs                       |
-| Optional observation | `tubeless/tracing`, bundled `history` and `ui` commands | Export events or inspect recorded runs; Studio can launch explicitly registered commands |
+| Layer   | Public entry       | Responsibility                                                       |
+| ------- | ------------------ | -------------------------------------------------------------------- |
+| Core    | `tubeless`         | Typed graphs, planning, execution, hooks and run reports             |
+| CLI     | `tubeless/cli`     | Standalone and pipeline commands, typed flags and terminal execution |
+| Project | `tubeless/project` | Project catalogs, command IDs and module registrations               |
+| Studio  | `tubeless ui`      | Optional browser interface for recorded runs and registered commands |
 
-The CLI import graph includes neither storage nor Studio. The executable supplies
-those integrations only when requested. `tubeless/workbench` keeps
-`definePipelineCommand` and `definePipelineProject` as compatibility aliases;
-new code should use `tubeless/cli`. Storage readers, Studio's server/protocol,
-terminal renderer internals and argument-parser internals remain private.
+Users interact with a project through the `tubeless` executable: `list` shows its
+commands, `plan` previews work, and `run` executes a command. `ui` opens Studio
+against the same catalog. There is no separate workbench application to start.
+Core pipelines and standalone CLI commands do not need a project catalog.
+
+Each authoring API has one public entrypoint. Neither the CLI nor the project
+catalog import loads storage or Studio. The executable supplies those optional
+integrations. Storage readers, Studio's server/protocol, terminal renderer
+internals and argument-parser internals remain private.
 
 General filesystem/env helpers and application-specific selection prompts belong
 in the application. `tubeless/node` supplies the pipeline checkpoint helpers.

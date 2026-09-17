@@ -14,8 +14,8 @@ npm install tubeless
 The same package works with `pnpm add tubeless`, `yarn add tubeless`, and
 `bun add tubeless`. The README quick start is a complete first program.
 
-Add `tubeless/cli` for command definitions and project catalogs. Its imports do
-not load storage or Studio; the bundled executable supplies those optional tools.
+Add `tubeless/cli` for terminal commands and `tubeless/project` for project
+catalogs. Neither import loads storage or Studio; the executable supplies those optional tools.
 The executable requires Bun 1.3.14 or later:
 
 ```sh

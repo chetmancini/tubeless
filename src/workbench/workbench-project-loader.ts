@@ -10,7 +10,7 @@ import {
   isPipelineProjectManifest,
   type PipelineProjectCommandModule,
   type PipelineProjectManifest,
-} from "../cli/pipeline-project.js";
+} from "../project/project-manifest.js";
 import {
   errorMessage,
   loadPipelineCommand,

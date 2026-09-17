@@ -350,17 +350,19 @@ try {
     .join("\n");
   run("node", ["--input-type=module", "--eval", smokeProgram], consumerRoot);
 
-  const workbenchSurface = run(
+  const projectSurface = run(
     "node",
     [
       "--input-type=module",
       "--eval",
-      'console.log(JSON.stringify(Object.keys(await import("tubeless/workbench")).sort()))',
+      'console.log(JSON.stringify(Object.keys(await import("tubeless/project")).sort()))',
     ],
     consumerRoot
   );
-  if (workbenchSurface.trim() !== '["definePipelineCommand","definePipelineProject"]') {
-    throw new Error(`Packed workbench exposes more than command registration: ${workbenchSurface}`);
+  if (projectSurface.trim() !== '["definePipelineProject"]') {
+    throw new Error(
+      `Packed project entrypoint exposes more than project registration: ${projectSurface}`
+    );
   }
 
   const pipelineFixture = join(consumerRoot, "pipeline.mjs");
@@ -408,7 +410,7 @@ export const FixtureCommand = definePipelineCommand(FixturePipeline, {
   const projectFixture = join(consumerRoot, "tubeless.project.mjs");
   writeFileSync(
     projectFixture,
-    `import { definePipelineProject } from "tubeless/cli";
+    `import { definePipelineProject } from "tubeless/project";
 export default definePipelineProject({
   commands: [{ id: "fixture-command", file: "./pipeline.mjs", export: "FixtureCommand" }],
 });

@@ -18,11 +18,11 @@ import {
   CliValidationError,
   defineCommand,
   definePipelineCommand,
-  definePipelineProject,
   type CliParamsSchema,
-  type PipelineProjectManifestInput,
 } from "tubeless/cli";
-import * as workbench from "tubeless/workbench";
+import * as cli from "tubeless/cli";
+import * as project from "tubeless/project";
+import { definePipelineProject, type PipelineProjectManifestInput } from "tubeless/project";
 
 interface ImportOptions {
   lines: readonly string[];
@@ -227,12 +227,12 @@ describe("public API example", () => {
     await expect(command.run(["--count", "invalid"])).rejects.toBeInstanceOf(CliValidationError);
   });
 
-  it("preserves workbench registration aliases", () => {
-    expect(workbench.definePipelineCommand).toBe(definePipelineCommand);
-    expect(workbench.definePipelineProject).toBe(definePipelineProject);
+  it("keeps terminal commands and project catalogs on distinct public entrypoints", () => {
+    expect(cli).not.toHaveProperty("definePipelineProject");
+    expect(Object.keys(project)).toEqual(["definePipelineProject"]);
   });
 
-  it("registers commands and project catalogs through the CLI entrypoint", () => {
+  it("registers CLI commands in a project catalog", () => {
     const command = definePipelineCommand(ImportPipeline, {
       params: {
         lines: { type: "string", multiple: true },

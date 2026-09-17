@@ -48,7 +48,8 @@ one of these recipes.
 
 6. Use `definePipelineCommand` from `tubeless/cli` for pipeline scripts.
    Use `defineCommand` from the same entrypoint for standalone scripts and
-   `definePipelineProject` for CLI catalogs that Studio can consume later.
+   `definePipelineProject` from `tubeless/project` for project catalogs shared
+   by terminal commands and Studio.
    Preview selection with
    `command.plan()` or `tubeless plan`; do not simulate planning with `--plan`.
    `--step` and `--target` are argv flags; `mapOptions` and hooks read `stepIds`

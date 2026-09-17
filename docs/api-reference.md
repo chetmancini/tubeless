@@ -6,17 +6,17 @@ Package: `tubeless`
 
 ## Public entrypoints
 
-| Entrypoint            | Declaration                             | Surface hash                                                       | Exported symbols |
-| --------------------- | --------------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless`            | `./dist/core/pipeline.d.ts`             | `abb2f1fca6d2e21eda1bc1cf72921fee3110f474660834202d223f805300c8d9` |               65 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`                   | `c904267a7bc318d2026c4d88b6755f838b3f1eb6eb8146ececd94358aa9f4216` |               30 |
-| `tubeless/batch`      | `./dist/utilities/batch.d.ts`           | `6b7fe7d6eec6532cc835505517c3481e4290a2a606c2fddf6c80367f5c76c5f5` |                7 |
-| `tubeless/node`       | `./dist/node/node.d.ts`                 | `1bf8549ca953a11e7202dbda8013db2a8f1d56286f1618bad929efbbb2efd302` |                3 |
-| `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts`      | `5cd093bb780a19e44b087b01e2b38e06f07e7233c9920988ba399036e319c368` |                1 |
-| `tubeless/retry`      | `./dist/utilities/retry.d.ts`           | `f91f83f8e31e3e629ed90d1b04656110572ea970187a92369f0908cd75ae8f00` |                4 |
-| `tubeless/workbench`  | `./dist/workbench/workbench-entry.d.ts` | `29e23dc55f6e058f15bdbf7e25e165ae8895a1ab643c4ecfcdb7e06c44ecb549` |                2 |
-| `tubeless/testing`    | `./dist/testing/testing.d.ts`           | `9510932b8aec600ecf2bcfdb1a188257dad48a3108087c974689c6e6ec3ad5c9` |                7 |
-| `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`           | `c272c955aab09dcd8cc334ffcea3af5cfda420cecc2881a01e3316e3a38801dd` |                3 |
+| Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
+| --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
+| `tubeless`            | `./dist/core/pipeline.d.ts`        | `abb2f1fca6d2e21eda1bc1cf72921fee3110f474660834202d223f805300c8d9` |               65 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `b907e77702982f86197c843a2a97e351874789c8333ccf3ac06cfcd03258d6ed` |               26 |
+| `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `6b7fe7d6eec6532cc835505517c3481e4290a2a606c2fddf6c80367f5c76c5f5` |                7 |
+| `tubeless/node`       | `./dist/node/node.d.ts`            | `1bf8549ca953a11e7202dbda8013db2a8f1d56286f1618bad929efbbb2efd302` |                3 |
+| `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `5cd093bb780a19e44b087b01e2b38e06f07e7233c9920988ba399036e319c368` |                1 |
+| `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `f91f83f8e31e3e629ed90d1b04656110572ea970187a92369f0908cd75ae8f00` |                4 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `c6a5ebb3f4a6fdfe83af766947ff0be005f370f044b588572ac2357481d0bd19` |                4 |
+| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `9510932b8aec600ecf2bcfdb1a188257dad48a3108087c974689c6e6ec3ad5c9` |                7 |
+| `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `c272c955aab09dcd8cc334ffcea3af5cfda420cecc2881a01e3316e3a38801dd` |                3 |
 
 ## Symbols
 
@@ -110,16 +110,12 @@ Package: `tubeless`
 - `defineCommand`
 - `definePipelineCommand`
 - `DefinePipelineCommandConfig`
-- `definePipelineProject`
 - `PipelineCliParseResult`
 - `PipelineCliValues`
 - `PipelineCommand`
 - `PipelineCommandHookConfig`
 - `PipelineCommandHookContext`
 - `PipelineCommandHookSets`
-- `PipelineProjectCommandModule`
-- `PipelineProjectManifest`
-- `PipelineProjectManifestInput`
 
 ### `tubeless/batch`
 
@@ -148,10 +144,12 @@ Package: `tubeless`
 - `RetryOptions`
 - `withRetry`
 
-### `tubeless/workbench`
+### `tubeless/project`
 
-- `definePipelineCommand`
 - `definePipelineProject`
+- `PipelineProjectCommandModule`
+- `PipelineProjectManifest`
+- `PipelineProjectManifestInput`
 
 ### `tubeless/testing`
 

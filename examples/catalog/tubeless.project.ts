@@ -1,6 +1,6 @@
-import { definePipelineProject } from "tubeless/cli";
+import { definePipelineProject } from "tubeless/project";
 
-// CLI-owned catalog; commands use definePipelineCommand from tubeless/cli.
+// Project catalog; commands use definePipelineCommand from tubeless/cli.
 // Register commands here so the CLI and coding agents can find them;
 // Studio can consume the same catalog later without changing the pipelines.
 // Module paths resolve from this file; cwd controls command

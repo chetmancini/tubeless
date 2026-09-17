@@ -82,7 +82,7 @@ Use a project manifest to register commands once for both the CLI and Studio:
 
 ```ts
 // tubeless.project.ts
-import { definePipelineProject } from "tubeless/cli";
+import { definePipelineProject } from "tubeless/project";
 
 export default definePipelineProject({
   cwd: ".",

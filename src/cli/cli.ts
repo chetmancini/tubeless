@@ -28,9 +28,3 @@ export {
   type PipelineCommandHookContext,
   type PipelineCommandHookSets,
 } from "./cli-pipeline-command.js";
-export {
-  definePipelineProject,
-  type PipelineProjectCommandModule,
-  type PipelineProjectManifest,
-  type PipelineProjectManifestInput,
-} from "./pipeline-project.js";
