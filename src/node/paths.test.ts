@@ -1,8 +1,16 @@
 import * as path from "path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { definePaths } from "tubeless/node";
 
 describe("definePaths", () => {
+  it("preserves const map keys while widening resolved values to strings", () => {
+    const paths = definePaths({ artifact: "out.json" } as const);
+    const resolved = paths("/tmp/workspace");
+
+    expectTypeOf(resolved).toEqualTypeOf<{ readonly artifact: string }>();
+    expect(resolved.artifact).toBe(path.join("/tmp/workspace", "out.json"));
+  });
+
   it("joins each relative path against the given cwd", () => {
     const paths = definePaths({
       entitiesDir: "public/data/entity-index/entities",

@@ -40,14 +40,21 @@ one of these recipes.
 filesystem and environment. It uses Node built-ins and adds no runtime package
 dependencies. Importing core does not load these helpers.
 
-| Helper                                    | Behavior                                                                                                                            |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `definePaths({ name: "relative/path" })`  | Returns a factory; pass `context.cwd` on each run to resolve its named paths.                                                       |
-| `readJson<T>(path)`                       | Synchronously parses JSON; missing files and malformed JSON throw. The type parameter does not validate data.                       |
-| `writeJson(path, value)`                  | Writes pretty JSON with a trailing newline, creates parent directories, and replaces the file by renaming a sibling temporary file. |
-| `resetDir(path)`                          | Recursively deletes the directory and recreates it empty. Use for generated output only.                                            |
-| `requireEnv(name, usedBy)`                | Reads the environment when called and throws a descriptive error for missing or empty values.                                       |
-| `openCheckpoint`, `withCheckpointedBatch` | Track completed work for resumable pipelines.                                                                                       |
+| Helper                                    | Behavior                                                                                                                                                                            |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `definePaths({ name: "relative/path" })`  | Returns a factory; pass `context.cwd` on each run. Keys are preserved and resolved values have type `string`.                                                                       |
+| `readJson<T>(path)`                       | Synchronously parses JSON; missing files and malformed JSON throw. The type parameter does not validate data.                                                                       |
+| `writeJson(path, value)`                  | Writes pretty JSON with a trailing newline, creates parent directories, and replaces the file by renaming a sibling temporary file. Serialization must succeed before disk changes. |
+| `resetDir(path)`                          | Recursively deletes the directory and recreates it empty. Use for generated output only.                                                                                            |
+| `requireEnv(name, usedBy)`                | Reads the environment when called and throws a descriptive error for missing or empty values.                                                                                       |
+| `openCheckpoint`, `withCheckpointedBatch` | Track completed work for resumable pipelines.                                                                                                                                       |
+
+`writeJson` throws when the value has no JSON representation, including top-level
+`undefined`, functions, symbols, and values whose `toJSON` returns `undefined`.
+Serialization failures leave existing files and directories untouched.
+Each write uses its own temporary file, including across worker threads. Concurrent
+writes replace complete files; the last rename wins. This does not merge checkpoint
+updates or provide a lock for read-modify-write operations.
 
 These helpers do not know whether a pipeline is in dry-run mode. Put writes and
 directory resets in steps marked `dryRun: "skip"`, as in

@@ -2,7 +2,11 @@ import * as fs from "fs";
 import { writeAtomicText } from "./atomic-text.js";
 
 export function writeJson(filePath: string, value: unknown): void {
-  writeAtomicText(filePath, `${JSON.stringify(value, null, 2)}\n`);
+  const serialized = JSON.stringify(value, null, 2);
+  if (serialized === undefined) {
+    throw new TypeError("Value cannot be serialized as JSON");
+  }
+  writeAtomicText(filePath, `${serialized}\n`);
 }
 
 export function readJson<T>(filePath: string): T {

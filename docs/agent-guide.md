@@ -134,7 +134,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Resolve relative files from `context.cwd` with `node:path`.
 - Import optional Node helpers from `tubeless/node`: `definePaths` resolves named
   paths against each run's `context.cwd`; `writeJson` creates parents and atomically
-  replaces JSON files; `readJson<T>` parses trusted JSON without schema validation;
+  replaces JSON files, rejecting unserializable top-level values before touching
+  disk; `readJson<T>` parses trusted JSON without schema validation;
   `resetDir` deletes and recreates generated output directories; `requireEnv`
   checks required environment values when called. Mark writes and resets with
   `dryRun: "skip"`; these helpers do not inspect pipeline controls themselves.

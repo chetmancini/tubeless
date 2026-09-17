@@ -138,7 +138,7 @@
         "withCheckpointedBatch",
         "writeJson"
       ],
-      "sha256": "2ded0b2084ecf401c09b414d3af7108daf149192f0cbd7efc03f1ca7020b320f",
+      "sha256": "06411eb43b8d1b5aca5d51d70e68553cb9065447b250c29382e6036ad9eac52c",
       "specifier": "tubeless/node"
     },
     {

@@ -9,15 +9,15 @@ import * as path from "path";
  */
 export function definePaths<T extends Record<string, string>>(
   relativePaths: T
-): (cwd: string) => T {
+): (cwd: string) => { [K in keyof T]: string } {
   return (cwd: string) =>
     // SAFETY: Object.entries(relativePaths) yields exactly T's keys, and every
-    // value is path.join(cwd, relativePath), a string — so the result satisfies
-    // T's Record<string, string> constraint.
+    // value is a resolved string, so the result preserves T's keys while widening
+    // relative path literals to string.
     Object.fromEntries(
       Object.entries(relativePaths).map(([key, relativePath]) => [
         key,
         path.join(cwd, relativePath),
       ])
-    ) as T;
+    ) as { [K in keyof T]: string };
 }

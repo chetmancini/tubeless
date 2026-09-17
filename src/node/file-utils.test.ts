@@ -75,6 +75,23 @@ describe("writeJson", () => {
     expect(readJson(filePath)).toEqual({ count: 2 });
   });
 
+  it.each([
+    ["undefined", undefined],
+    ["function", () => undefined],
+    ["symbol", Symbol("not-json")],
+    ["toJSON returning undefined", { toJSON: () => undefined }],
+  ])("rejects %s before changing the filesystem", (_label, value) => {
+    const existing = path.join(dir, "data.json");
+    const nested = path.join(dir, "nested", "data.json");
+    writeJson(existing, { preserved: true });
+    const original = fs.readFileSync(existing, "utf8");
+
+    expect(() => writeJson(existing, value)).toThrow(TypeError);
+    expect(fs.readFileSync(existing, "utf8")).toBe(original);
+    expect(() => writeJson(nested, value)).toThrow(TypeError);
+    expect(fs.readdirSync(dir)).toEqual(["data.json"]);
+  });
+
   it("does not leave a .tmp sibling after a successful write", () => {
     const filePath = path.join(dir, "data.json");
     writeJson(filePath, { ok: true });
