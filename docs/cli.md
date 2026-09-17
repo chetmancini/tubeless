@@ -57,8 +57,9 @@ catalog import loads storage or Studio. The executable supplies those optional
 integrations. Storage readers, Studio's server/protocol, terminal renderer
 internals and argument-parser internals remain private.
 
-General filesystem/env helpers and application-specific selection prompts belong
-in the application. `tubeless/node` supplies the pipeline checkpoint helpers.
+Import optional filesystem, environment and checkpoint helpers from `tubeless/node`;
+see the [Node helpers recipe](./recipes.md#node-helpers). Application-specific
+selection prompts belong in the application.
 
 ### Executable commands
 

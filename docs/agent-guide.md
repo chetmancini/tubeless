@@ -98,8 +98,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   simulate planning with `--plan`.
 - Use `defineCommand` from `tubeless/cli` for standalone scripts. Declare command
   catalogs with `definePipelineProject` from `tubeless/project`; the catalog
-  works with the CLI before Studio is added. Keep general filesystem/env helpers
-  and application-specific prompts in the consumer.
+  works with the CLI before Studio is added. Keep application-specific prompts
+  in the consumer.
 - Use `pipeline.toMermaid()` or `command.toMermaid()` when documentation needs
   the static graph; do not duplicate dependency edges by hand.
 - Use `tubeless list` for the explicit project command inventory. Use
@@ -132,6 +132,12 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Call `context.reportProgress` for long loops and `context.reportAttempt` for
   retries that operators should see.
 - Resolve relative files from `context.cwd` with `node:path`.
+- Import optional Node helpers from `tubeless/node`: `definePaths` resolves named
+  paths against each run's `context.cwd`; `writeJson` creates parents and atomically
+  replaces JSON files; `readJson<T>` parses trusted JSON without schema validation;
+  `resetDir` deletes and recreates generated output directories; `requireEnv`
+  checks required environment values when called. Mark writes and resets with
+  `dryRun: "skip"`; these helpers do not inspect pipeline controls themselves.
 - Use `runOrThrow` when every step must succeed and the caller expects a value.
   It always throws for an unsuccessful run, including `continueOnError` runs.
   Use `run` when the caller must inspect failures, skips, timings, or best-effort

@@ -217,6 +217,18 @@ async function loadExample(file) {
 }
 
 const runners = {
+  "node-artifacts.ts": async (mod) => {
+    const { definePaths, readJson } = await import("tubeless/node");
+    const cwd = join(examplesDirectory, "artifact-workspace");
+    const { artifact } = definePaths({ artifact: "build/artifacts/rows.json" })(cwd);
+    const options = { rows: [" Alpha "] };
+    await mod.NodeArtifactsPipeline.runOrThrow(options, { dryRun: true }, { cwd });
+    if (existsSync(cwd)) fail("node-artifacts.ts", "dry-run wrote to disk");
+    const result = await mod.NodeArtifactsPipeline.runOrThrow(options, {}, { cwd });
+    if (result.artifact !== artifact || JSON.stringify(readJson(artifact)) !== '["alpha"]') {
+      fail("node-artifacts.ts", "expected normalized JSON in the supplied cwd");
+    }
+  },
   "typed-import.ts": async (mod) => {
     defined(await mod.runImportExample(), "typed-import.ts");
   },

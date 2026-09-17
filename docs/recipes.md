@@ -26,12 +26,35 @@ one of these recipes.
 | Watch the live TTY reporter                   | [`live-tui.ts`](../examples/live-tui.ts)                                 | named steps, nested `details`; persist with `--store`                      |
 | Retry and rate-limit remote calls             | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `withRetry`, `RateLimiter`, injected sleep and signal                      |
 | Resume durable long-running work              | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `dryRun`, `openCheckpoint`, `withCheckpointedBatch`                        |
+| Write local pipeline artifacts                | [`node-artifacts.ts`](../examples/node-artifacts.ts)                     | `definePaths`, atomic `writeJson`, `context.cwd`, `dryRun`                 |
 | Expose and run a typed command-line program   | [`cli-job.ts`](../examples/cli-job.ts)                                   | `definePipelineCommand`, conditional `mapOptions`, `tubeless run`          |
 | Handle cancellation and deterministic testing | [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts) | `createPipelineTestRuntime`, captured status/progress                      |
 | Export lifecycle events                       | [`tracing.ts`](../examples/tracing.ts)                                   | app-owned JSON / OTel adapters, composition, `onExporterError`             |
 | Watch many primitives in one run              | [`peloton.ts`](../examples/peloton.ts)                                   | delays, logs, children, fan-out, retry, gates, test runtime                |
 | Watch an advanced YAML pipeline               | [`yaml-peloton.ts`](../examples/yaml-peloton.ts)                         | declarative graph, concurrent handlers, retries, progress, dry runs, gates |
 | Project layout, IDs, and command manifest     | [`tubeless.project.ts`](../examples/catalog/tubeless.project.ts)         | `pipelines/`, `scripts/`, `definePipelineProject`, `tubeless list`         |
+
+## Node helpers
+
+`tubeless/node` provides optional helpers for pipelines that use the local
+filesystem and environment. It uses Node built-ins and adds no runtime package
+dependencies. Importing core does not load these helpers.
+
+| Helper                                    | Behavior                                                                                                                            |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `definePaths({ name: "relative/path" })`  | Returns a factory; pass `context.cwd` on each run to resolve its named paths.                                                       |
+| `readJson<T>(path)`                       | Synchronously parses JSON; missing files and malformed JSON throw. The type parameter does not validate data.                       |
+| `writeJson(path, value)`                  | Writes pretty JSON with a trailing newline, creates parent directories, and replaces the file by renaming a sibling temporary file. |
+| `resetDir(path)`                          | Recursively deletes the directory and recreates it empty. Use for generated output only.                                            |
+| `requireEnv(name, usedBy)`                | Reads the environment when called and throws a descriptive error for missing or empty values.                                       |
+| `openCheckpoint`, `withCheckpointedBatch` | Track completed work for resumable pipelines.                                                                                       |
+
+These helpers do not know whether a pipeline is in dry-run mode. Put writes and
+directory resets in steps marked `dryRun: "skip"`, as in
+[`node-artifacts.ts`](../examples/node-artifacts.ts). Validate untrusted JSON at
+the boundary with a schema; `readJson<T>` alone is not validation. Read required
+environment values during execution so importing, inspecting and planning a
+pipeline does not require credentials.
 
 ## Choose a pattern
 
