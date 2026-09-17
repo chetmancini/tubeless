@@ -145,7 +145,7 @@ website-build:
 check:
 	bun run check
 
-release:
+release: install
 	@$(if $(strip $(BUMP)),BUMP="$(BUMP)",) \
 		$(if $(strip $(VERSION)),VERSION="$(VERSION)",) \
 		bash scripts/cut-release.sh
