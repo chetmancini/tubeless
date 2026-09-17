@@ -28,3 +28,14 @@ export {
   type PipelineCommandHookContext,
   type PipelineCommandHookSets,
 } from "./cli-pipeline-command.js";
+export type {
+  PipelineReporterConfig,
+  PipelineReporterMode,
+  ReporterOutput,
+} from "../reporter/interactive-reporter.js";
+export type {
+  ReporterColorMode,
+  ReporterSymbolMode,
+  ReporterTerminalCapabilities,
+  RunReporterConfig,
+} from "../reporter/reporter.js";

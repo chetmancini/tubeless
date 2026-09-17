@@ -31,6 +31,10 @@ Use `defineCommand` for a standalone script and `definePipelineCommand` for a
 pipeline-backed command with built-in selection, dry runs and terminal reporting.
 Both expose typed parsing, validation, descriptors and execution. Their public
 configuration, parameter, result and hook types live on the CLI subpath.
+Import `PipelineReporterConfig` from `tubeless/cli` to share reporter settings
+between commands. Its mode, output stream, color, symbols and terminal-capability
+types are exported there too. CLI declarations do not require `@types/node`;
+`CliContext.env` accepts a record of string or undefined values.
 
 Use `definePipelineProject` in `tubeless.project.ts` to register command modules
 with stable IDs. A project catalog is shared by the terminal and Studio; declaring

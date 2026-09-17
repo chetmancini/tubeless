@@ -100,9 +100,16 @@
         "PipelineCommand",
         "PipelineCommandHookConfig",
         "PipelineCommandHookContext",
-        "PipelineCommandHookSets"
+        "PipelineCommandHookSets",
+        "PipelineReporterConfig",
+        "PipelineReporterMode",
+        "ReporterColorMode",
+        "ReporterOutput",
+        "ReporterSymbolMode",
+        "ReporterTerminalCapabilities",
+        "RunReporterConfig"
       ],
-      "sha256": "b907e77702982f86197c843a2a97e351874789c8333ccf3ac06cfcd03258d6ed",
+      "sha256": "996eeba686bb2a3124c21f30e4c5b5d36873c1a30cbba89ef2b9629206feef48",
       "specifier": "tubeless/cli"
     },
     {

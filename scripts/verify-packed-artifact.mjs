@@ -342,6 +342,28 @@ try {
   assertPackedSourceMaps(installedPackage);
   assertPackedDocumentationLinks(installedPackage);
 
+  // Consumer declarations must compile without ambient Node typings or skipLibCheck.
+  writeFileSync(
+    join(consumerRoot, "cli.ts"),
+    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cli.ts"))
+  );
+  writeFileSync(
+    join(consumerRoot, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        lib: ["ES2022", "DOM"],
+        module: "NodeNext",
+        noEmit: true,
+        skipLibCheck: false,
+        strict: true,
+        target: "ES2022",
+        types: [],
+      },
+      files: ["cli.ts"],
+    })
+  );
+  run(join(packageRoot, "node_modules/.bin/tsc"), ["-p", "tsconfig.json"], consumerRoot);
+
   const smokeProgram = Object.keys(packageJson.exports)
     .map((subpath) =>
       JSON.stringify(subpath === "." ? packageJson.name : `${packageJson.name}/${subpath.slice(2)}`)

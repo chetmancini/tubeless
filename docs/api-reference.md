@@ -9,7 +9,7 @@ Package: `tubeless`
 | Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
 | `tubeless`            | `./dist/core/pipeline.d.ts`        | `abb2f1fca6d2e21eda1bc1cf72921fee3110f474660834202d223f805300c8d9` |               65 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `b907e77702982f86197c843a2a97e351874789c8333ccf3ac06cfcd03258d6ed` |               26 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `996eeba686bb2a3124c21f30e4c5b5d36873c1a30cbba89ef2b9629206feef48` |               33 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `6b7fe7d6eec6532cc835505517c3481e4290a2a606c2fddf6c80367f5c76c5f5` |                7 |
 | `tubeless/node`       | `./dist/node/node.d.ts`            | `1bf8549ca953a11e7202dbda8013db2a8f1d56286f1618bad929efbbb2efd302` |                3 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `5cd093bb780a19e44b087b01e2b38e06f07e7233c9920988ba399036e319c368` |                1 |
@@ -116,6 +116,13 @@ Package: `tubeless`
 - `PipelineCommandHookConfig`
 - `PipelineCommandHookContext`
 - `PipelineCommandHookSets`
+- `PipelineReporterConfig`
+- `PipelineReporterMode`
+- `ReporterColorMode`
+- `ReporterOutput`
+- `ReporterSymbolMode`
+- `ReporterTerminalCapabilities`
+- `RunReporterConfig`
 
 ### `tubeless/batch`
 
