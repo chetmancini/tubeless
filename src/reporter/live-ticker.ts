@@ -151,6 +151,7 @@ export interface LiveTickerOptions {
   unicode: boolean;
   color?: boolean;
   write(chunk: string): void;
+  workerUrl?: URL;
 }
 
 type TickerWorkerMessage =
@@ -159,10 +160,14 @@ type TickerWorkerMessage =
   | { columns?: number; lines: string[]; type: "stop" };
 
 export class TickerFrame {
-  private cursorHidden = false;
-  private frameLineCount = 0;
+  private cursorHidden: boolean;
 
-  constructor(private readonly write: (chunk: string) => void) {}
+  constructor(
+    private readonly write: (chunk: string) => void,
+    public frameLineCount = 0
+  ) {
+    this.cursorHidden = frameLineCount > 0;
+  }
 
   showCursor(): void {
     if (!this.cursorHidden) return;
@@ -197,10 +202,10 @@ export function currentSpinner(unicode: boolean, refreshIntervalMs: number): str
   return frames[Math.floor(Date.now() / refreshIntervalMs) % frames.length] ?? frames[0]!;
 }
 
-function createInlineTicker(options: LiveTickerOptions): LiveTicker {
+function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 0): LiveTicker {
   let disposed = false;
   let lines: readonly string[] = [];
-  const frame = new TickerFrame((chunk) => options.write(chunk));
+  const frame = new TickerFrame((chunk) => options.write(chunk), adoptedFrameLineCount);
   const redraw = (): void => {
     if (disposed) return;
     frame.redraw(
@@ -267,31 +272,64 @@ function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[
 }
 
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
-  const stopBuffer = new SharedArrayBuffer(4);
-  const stopped = new Int32Array(stopBuffer);
-  const worker = new Worker(resolveLiveTickerWorkerUrl(), {
+  // [0] stopped, [1] painted rows, [2] accepted logs, [3] inline owns output
+  const stateBuffer = new SharedArrayBuffer(16);
+  const state = new Int32Array(stateBuffer);
+  const worker = new Worker(options.workerUrl ?? resolveLiveTickerWorkerUrl(), {
     execArgv: fileWorkerExecArgv(),
     workerData: {
       color: options.color === true,
       columns: resolveColumns(options),
       fd: options.fd,
       refreshIntervalMs: options.refreshIntervalMs,
-      stopBuffer,
+      stateBuffer,
       unicode: options.unicode,
     },
   });
   let disposed = false;
+  let inlineFallback: LiveTicker | undefined;
   let lines: readonly string[] = [];
+  const pendingLogs: string[] = [];
+  let acknowledgedLogs = 0;
 
-  worker.on("error", () => {
-    if (!disposed) options.write(ANSI.showCursor);
-  });
+  const dropAcknowledgedLogs = (): void => {
+    const accepted = Atomics.load(state, 2);
+    pendingLogs.splice(0, accepted - acknowledgedLogs);
+    acknowledgedLogs = accepted;
+  };
+
+  const replayThrough = (ticker: LiveTicker): void => {
+    dropAcknowledgedLogs();
+    for (const text of pendingLogs) ticker.writeLog(text);
+    pendingLogs.length = 0;
+    ticker.setLines([...lines]);
+  };
+
+  const createFallback = (): LiveTicker => {
+    Atomics.store(state, 3, 1);
+    const ticker = createInlineTicker(options, Atomics.load(state, 1));
+    replayThrough(ticker);
+    return ticker;
+  };
+
+  const failToInline = (): void => {
+    if (disposed || inlineFallback) return;
+    inlineFallback = createFallback();
+    void worker.terminate();
+  };
+
+  worker.on("error", failToInline);
+  worker.on("exit", () => failToInline());
   worker.unref();
 
   return {
     setLines(nextLines) {
       if (disposed) return;
       lines = nextLines;
+      if (inlineFallback) {
+        inlineFallback.setLines(nextLines);
+        return;
+      }
       worker.postMessage({
         columns: resolveColumns(options),
         lines: [...nextLines],
@@ -299,26 +337,39 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
       } satisfies TickerWorkerMessage);
     },
     writeLog(text) {
+      if (inlineFallback) {
+        inlineFallback.writeLog(text);
+        return;
+      }
       if (disposed) {
         options.write(text);
         return;
       }
+      dropAcknowledgedLogs();
+      pendingLogs.push(text);
       worker.postMessage({ text, type: "log" } satisfies TickerWorkerMessage);
     },
     dispose() {
       if (disposed) return;
       disposed = true;
+      if (inlineFallback) {
+        inlineFallback.dispose();
+        void worker.terminate();
+        return;
+      }
       try {
         worker.postMessage({
           columns: resolveColumns(options),
           lines: [...lines],
           type: "stop",
         } satisfies TickerWorkerMessage);
-        if (Atomics.wait(stopped, 0, 0, 500) === "timed-out") {
-          options.write(ANSI.showCursor);
+        if (Atomics.wait(state, 0, 0, 500) === "timed-out") {
+          const ticker = createFallback();
+          ticker.dispose();
         }
       } catch {
-        options.write(ANSI.showCursor);
+        const ticker = createFallback();
+        ticker.dispose();
       } finally {
         void worker.terminate();
       }

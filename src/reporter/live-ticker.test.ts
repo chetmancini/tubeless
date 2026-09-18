@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { elapsedToken, paintLiveLines, shimmerToken, SPINNER_TOKEN } from "./live-ticker.js";
+import { closeSync, openSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createLiveTicker,
+  elapsedToken,
+  paintLiveLines,
+  shimmerToken,
+  SPINNER_TOKEN,
+} from "./live-ticker.js";
 
 const RESET = "\u001B[0m";
 const SHIMMER_BRIGHT = "\u001B[0;1;36m";
@@ -59,5 +68,68 @@ describe("paintLiveLines", () => {
     expect(painted?.endsWith("\u001B[0m…")).toBe(true);
     expect(painted).not.toContain("\u0004");
     expect(stripAnsi(painted ?? "").endsWith("…")).toBe(true);
+  });
+});
+
+function dataWorker(source: string): URL {
+  return new URL(`data:text/javascript,${encodeURIComponent(source)}`);
+}
+
+function workerTicker(source: string): {
+  chunks: string[];
+  close(): void;
+  ticker: ReturnType<typeof createLiveTicker>;
+} {
+  const path = join(tmpdir(), `tubeless-ticker-fallback-${process.pid}-${Date.now()}.log`);
+  const fd = openSync(path, "w");
+  const chunks: string[] = [];
+  return {
+    chunks,
+    close: () => {
+      closeSync(fd);
+      unlinkSync(path);
+    },
+    ticker: createLiveTicker({
+      fd,
+      refreshIntervalMs: 40,
+      unicode: false,
+      workerUrl: dataWorker(source),
+      write: (chunk) => chunks.push(chunk),
+    }),
+  };
+}
+
+describe("createLiveTicker worker fallback", () => {
+  it("keeps logs and frames after an asynchronous worker failure", async () => {
+    const { chunks, close, ticker } = workerTicker('throw new Error("boot failure")');
+    try {
+      ticker.setLines(["running"]);
+      ticker.writeLog("before failure\n");
+      await vi.waitFor(() => expect(chunks.join("")).toContain("before failure"));
+
+      ticker.writeLog("after failure\n");
+      ticker.setLines(["final status"]);
+      ticker.dispose();
+
+      expect(chunks.join("")).toContain("after failure");
+      expect(chunks.join("")).toContain("final status");
+    } finally {
+      ticker.dispose();
+      close();
+    }
+  });
+
+  it("paints the retained final frame when worker shutdown times out", () => {
+    const { chunks, close, ticker } = workerTicker("setInterval(() => {}, 1000)");
+    try {
+      ticker.setLines(["final status"]);
+      ticker.dispose();
+
+      expect(chunks.join("")).toContain("final status");
+      expect(chunks.join("")).toContain("\u001B[?25h");
+    } finally {
+      ticker.dispose();
+      close();
+    }
   });
 });

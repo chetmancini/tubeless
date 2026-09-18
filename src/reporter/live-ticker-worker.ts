@@ -13,7 +13,7 @@ interface LiveTickerWorkerData {
   columns?: number;
   fd: number;
   refreshIntervalMs: number;
-  stopBuffer: SharedArrayBuffer;
+  stateBuffer: SharedArrayBuffer;
   unicode: boolean;
 }
 
@@ -27,12 +27,14 @@ if (port === null) throw new Error("live-ticker-worker must run in a worker thre
 
 // SAFETY: createWorkerTicker owns the workerData shape.
 const data = workerData as LiveTickerWorkerData;
-const stopped = new Int32Array(data.stopBuffer);
+// [0] stopped, [1] painted rows, [2] accepted logs, [3] inline owns output
+const state = new Int32Array(data.stateBuffer);
 const frame = new TickerFrame((chunk) => writeSync(data.fd, chunk));
 let columns = data.columns;
 let lines: string[] = [];
 
 function redraw(): void {
+  if (Atomics.load(state, 3) === 1) return;
   frame.redraw(
     paintLiveLines(
       lines,
@@ -42,18 +44,31 @@ function redraw(): void {
       data.color
     )
   );
+  Atomics.store(state, 1, frame.frameLineCount);
 }
 
 const timer = setInterval(() => {
+  if (Atomics.load(state, 3) === 1) {
+    clearInterval(timer);
+    port.close();
+    return;
+  }
   if (lines.some((line) => line.includes(SPINNER_TOKEN) || line.includes(SHIMMER_TOKEN_START))) {
     redraw();
   }
 }, data.refreshIntervalMs);
 
 port.on("message", (message: TickerWorkerMessage) => {
+  if (Atomics.load(state, 3) === 1) {
+    clearInterval(timer);
+    port.close();
+    return;
+  }
   if (message.type === "log") {
     frame.clear();
+    Atomics.store(state, 1, 0);
     writeSync(data.fd, message.text);
+    Atomics.add(state, 2, 1);
     return;
   }
   columns = message.columns ?? columns;
@@ -67,8 +82,8 @@ port.on("message", (message: TickerWorkerMessage) => {
     redraw();
     frame.showCursor();
   } finally {
-    Atomics.store(stopped, 0, 1);
-    Atomics.notify(stopped, 0);
+    Atomics.store(state, 0, 1);
+    Atomics.notify(state, 0);
     port.close();
   }
 });
