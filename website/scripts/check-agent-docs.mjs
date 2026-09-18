@@ -111,6 +111,13 @@ for (const path of humanPages) {
 }
 for (const slug of pages) {
   const html = read(`docs/${slug}/index.html`);
+  assert.equal((html.match(/<h1\b/g) ?? []).length, 1, `${slug} must render exactly one H1`);
+  const headingIds = new Set([...html.matchAll(/<h[23]\b[^>]*\bid="([^"]+)"/g)].map((match) => match[1]));
+  for (const [target] of html.matchAll(/<nav class="toc"[\s\S]*?<\/nav>/g)) {
+    for (const [, id] of target.matchAll(/href="#([^"]+)"/g)) {
+      assert.ok(headingIds.has(id), `${slug} TOC target is missing a heading: #${id}`);
+    }
+  }
   assert.ok(html.includes(`<link rel="alternate" type="text/markdown" href="/docs/${slug}.md"`));
 }
 const recovery = read("404.md");

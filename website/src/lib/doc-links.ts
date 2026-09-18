@@ -12,35 +12,35 @@ type SiteHref = (path: string) => string;
 const rootHref: SiteHref = (path) => `/${path.replace(/^\/+/, "")}`;
 
 function rewriteDocTarget(target: string, siteHref: SiteHref): string {
-  const [path, hash] = target.split("#");
+  const angle = target.match(/^<(.*)>$/);
+  const value = angle?.[1] ?? target;
+  const [path, hash] = value.split("#");
   const suffix = hash ? `#${hash}` : "";
   if (!path || /^(?:https?:|mailto:)/.test(path)) return target;
+  let rewritten: string | undefined;
   if (path === "./llms.txt" || path === "llms.txt") {
-    return `${siteHref("llms.txt")}${suffix}`;
-  }
-  if (path === "./api-report.json" || path === "api-report.json") {
-    return `${siteHref("api-report.json")}${suffix}`;
-  }
-  if (path === "./pipeline-document.schema.json" || path === "pipeline-document.schema.json") {
-    return `${siteHref("schemas/pipeline-document-v1.schema.json")}${suffix}`;
-  }
-  if (path.startsWith("../")) {
-    return `${GITHUB_BLOB}/${path.slice(3)}${suffix}`;
-  }
-  if (path.endsWith(".md")) {
+    rewritten = `${siteHref("llms.txt")}${suffix}`;
+  } else if (path === "./api-report.json" || path === "api-report.json") {
+    rewritten = `${siteHref("api-report.json")}${suffix}`;
+  } else if (path === "./pipeline-document.schema.json" || path === "pipeline-document.schema.json") {
+    rewritten = `${siteHref("schemas/pipeline-document-v1.schema.json")}${suffix}`;
+  } else if (path.startsWith("../")) {
+    rewritten = `${GITHUB_BLOB}/${path.slice(3)}${suffix}`;
+  } else if (path.endsWith(".md")) {
     const slug = path.replace(/^\.\//, "").replace(/\.md$/, "");
-    if (slug === "README") {
-      return `${GITHUB_BLOB}/README.md${suffix}`;
-    }
-    return `${siteHref(`docs/${slug}`)}${suffix}`;
+    rewritten = slug === "README" ? `${GITHUB_BLOB}/README.md${suffix}` : `${siteHref(`docs/${slug}`)}${suffix}`;
   }
-  return target;
+  if (!rewritten) return target;
+  return angle ? `<${rewritten}>` : rewritten;
 }
 
 export function rewriteDocLinks(markdown: string, siteHref: SiteHref): string {
-  return markdown.replace(/\]\(([^)]+)\)/g, (full, target: string) => {
+  const inline = markdown.replace(/\]\(([^)]+)\)/g, (full, target: string) => {
     const rewritten = rewriteDocTarget(target, siteHref);
     return rewritten === target ? full : `](${rewritten})`;
+  });
+  return inline.replace(/^(\s*\[[^\]\n]+\]:\s*)(<[^>\n]+>|[^\s\n]+)(.*)$/gm, (_full, prefix, target, suffix) => {
+    return `${prefix}${rewriteDocTarget(target, siteHref)}${suffix}`;
   });
 }
 
