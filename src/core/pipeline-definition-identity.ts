@@ -6,7 +6,7 @@ import {
   STEP_OPTIONS_SCHEMA,
   STEP_REMOTE,
 } from "./pipeline-step-metadata.js";
-import type { PipelineDefinitionSnapshot } from "./pipeline-types.js";
+import type { PipelineDefinitionIdentity, PipelineDefinitionSnapshot } from "./pipeline-types.js";
 
 function fingerprint(value: unknown): string {
   return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
@@ -71,44 +71,78 @@ export function compileDefinitionSnapshot(input: {
     steps,
     targetIds: [...input.targetIds].sort(),
     ...(input.requiredFinalizerSteps
-      ? { requiredFinalizerStepIds: input.requiredFinalizerSteps.map(({ id }) => id) }
+      ? { requiredFinalizerStepIds: input.requiredFinalizerSteps.map(({ id }) => id).sort() }
       : {}),
     optionsValidated: input.orderedSteps[0]?.[STEP_OPTIONS_SCHEMA] !== undefined,
     resultValidated: input.resultValidated,
   };
+  return freezeSnapshot({
+    identity: createDefinitionIdentity(semantics, input.implementationVersion),
+    ...semantics,
+  });
+}
+
+/** Rebuild v1 hashes from explicit fields, independent of JSON object property order. */
+export function createDefinitionIdentity(
+  input: Omit<PipelineDefinitionSnapshot, "identity">,
+  implementationVersion: string | undefined
+): PipelineDefinitionIdentity {
   // Child handler versions participate in the combined identity, never the graph fingerprint.
   const structuralFingerprint = fingerprint({
     version: 1,
-    ...semantics,
-    steps: steps.map((step) => ({
-      ...step,
+    steps: input.steps.map((step) => ({
+      id: step.id,
+      dependencies: [...step.dependencies].sort(),
+      optionalDependencies: [...step.optionalDependencies].sort(),
+      skipAfterFailureOf: [...step.skipAfterFailureOf].sort(),
+      dryRun: step.dryRun,
+      runtimeSkipPossible: step.runtimeSkipPossible,
+      outputValidated: step.outputValidated,
       ...(step.nestedPipeline
         ? {
             nestedPipeline: {
-              ...step.nestedPipeline,
-              identity: step.nestedPipeline.identity
+              pipelineId: step.nestedPipeline.pipelineId,
+              mode: step.nestedPipeline.mode,
+              stepIds: [...step.nestedPipeline.stepIds],
+              ...(step.nestedPipeline.identity
                 ? {
-                    version: step.nestedPipeline.identity.version,
-                    structuralFingerprint: step.nestedPipeline.identity.structuralFingerprint,
+                    identity: {
+                      version: step.nestedPipeline.identity.version,
+                      structuralFingerprint: step.nestedPipeline.identity.structuralFingerprint,
+                    },
                   }
-                : undefined,
+                : {}),
+              ...(step.nestedPipeline.concurrency !== undefined
+                ? { concurrency: step.nestedPipeline.concurrency }
+                : {}),
+            },
+          }
+        : {}),
+      ...(step.remote
+        ? {
+            remote: {
+              engine: step.remote.engine,
+              ...(step.remote.target !== undefined ? { target: step.remote.target } : {}),
             },
           }
         : {}),
     })),
-  });
-  const identity = {
-    version: 1 as const,
-    structuralFingerprint,
-    ...(input.implementationVersion !== undefined
-      ? { implementationVersion: input.implementationVersion }
+    targetIds: [...input.targetIds].sort(),
+    ...(input.requiredFinalizerStepIds
+      ? { requiredFinalizerStepIds: [...input.requiredFinalizerStepIds].sort() }
       : {}),
+    optionsValidated: input.optionsValidated,
+    resultValidated: input.resultValidated,
+  });
+  return {
+    version: 1,
+    structuralFingerprint,
+    ...(implementationVersion !== undefined ? { implementationVersion } : {}),
     definitionId: fingerprint({
       version: 1,
       structuralFingerprint,
-      implementationVersion: input.implementationVersion,
-      children: steps.map((step) => step.nestedPipeline?.identity?.definitionId ?? null),
+      implementationVersion,
+      children: input.steps.map((step) => step.nestedPipeline?.identity?.definitionId ?? null),
     }),
   };
-  return freezeSnapshot({ identity, ...semantics });
 }

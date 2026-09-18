@@ -124,6 +124,32 @@ describe("compiled definition identity", () => {
     expect(targets(true).definition).toEqual(targets(false).definition);
   });
 
+  it("canonicalizes required finalizer steps as a set", () => {
+    const { step } = createSteps();
+    const a = step("a", { run: () => 1 });
+    const b = step("b", { dependsOn: [a], run: () => 2 });
+    const forward = definePipeline({
+      id: "finalizer",
+      steps: [a, b],
+      finalize: requireOutputs([a, b], () => 0),
+    });
+    const reverse = definePipeline({
+      id: "finalizer",
+      steps: [a, b],
+      finalize: requireOutputs([b, a], () => 0),
+    });
+    const fewer = definePipeline({
+      id: "finalizer",
+      steps: [a, b],
+      finalize: requireOutputs([a], () => 0),
+    });
+    expect(reverse.definition.requiredFinalizerStepIds).toEqual(["a", "b"]);
+    expect(reverse.definition).toEqual(forward.definition);
+    expect(fewer.definition.identity.structuralFingerprint).not.toBe(
+      forward.definition.identity.structuralFingerprint
+    );
+  });
+
   it("records resolved default targets when targets and finalize are omitted", () => {
     const { step } = createSteps();
     const load = step("load", { run: () => 1 });

@@ -156,7 +156,7 @@ An omitted implementation version means **unknown**, even when fingerprints matc
 The structural fingerprint includes compiled execution order, step IDs, required
 and optional edges, failure gates, targets, dry-run and skip policies, schema
 presence, required finalizer steps, child composition and concurrency, and remote
-engine/target metadata. Dependency and target sets are sorted. Names, descriptions,
+engine/target metadata. Dependency, target, and required-finalizer sets are sorted. Names, descriptions,
 progress presentation, inputs, run controls, and handler code are excluded.
 Changing the implementation version changes the combined definition ID without
 changing the structural fingerprint. Child structural identities propagate into
@@ -190,6 +190,12 @@ The trace version stays at 2; the definition identity's own version fixes finger
 semantics. Unsupported identity versions are rejected by current readers. Older
 Tubeless readers ignore the new optional fields; external strict schema validators
 must update their schema before consuming them.
+
+NDJSON and SQLite readers recompute both hashes from each complete definition
+snapshot and reject mismatches before projecting history. SQLite also checks writes.
+Hash checks establish consistency with the recorded snapshot, not authenticity of
+handler code or the recording's source. Identity-only records cannot be checked
+without their omitted snapshots.
 
 Definitions are projected from the same append-only events as runs, without loading
 application modules. They remain available for as long as their run events remain;

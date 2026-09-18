@@ -111,4 +111,5 @@ For workbench commands, read [the CLI](./cli.md). For the local run UI, read
 [the studio](./studio.md). To connect historical runs to a compiled graph and handler
 release, set `implementationVersion` as shown in [tracing](../examples/tracing.ts).
 Studio's [definition history](./studio.md#definition-history-and-comparison) groups
-runs by definition and compares observed versions.
+runs by definition and compares observed versions. Complete recorded snapshots must
+match their hashes to be accepted by NDJSON or SQLite history.
