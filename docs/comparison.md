@@ -27,38 +27,30 @@ Tubeless becomes useful when those calls need shared execution controls:
 See [core concepts](./concepts.md) for control behavior and the
 [recipe index](./recipes.md) for implementation examples.
 
-## When you need another kind of system
+## Nearby tools
 
-| Requirement                                                            | What must provide it          |
-| ---------------------------------------------------------------------- | ----------------------------- |
-| Resume execution after a process crash or wait across process restarts | A durable workflow engine     |
-| Distribute many independent jobs across workers                        | A job queue and worker system |
-| Schedule and manage shared warehouse or data-platform assets           | A data orchestration platform |
-| Process a continuous stream with backpressure                          | A streaming API or framework  |
+Each of these is strong at its job. Tubeless is the TypeScript in-process
+layer: a library you import, plan, and run, with a CLI and local studio when
+you want them.
 
-Tubeless can run inside a worker or activity handler managed by one of these
-systems. The host owns delivery, persistence, retries, and acknowledgement;
-Tubeless runs the steps inside that invocation.
+| Tool                                                                                  | Use it for                                          | Next to Tubeless                                                                                          |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| [Apache Hamilton](https://hamilton.apache.org/)                                       | Typed Python dataflows from ordinary functions      | Closest analog. Tubeless does that job in TypeScript, with `plan()`, dry-run, a CLI, and a local studio   |
+| [listr2](https://listr2.kilic.dev/)                                                   | Terminal task lists with live progress              | Use listr2 when shared context is enough. Use Tubeless when steps pass typed results and need a plan      |
+| [Prefect](https://www.prefect.io/), [Dagster](https://dagster.io/), [Airflow](https://airflow.apache.org/) | Scheduled data-platform work and shared UI | Run a Tubeless pipeline inside one task, asset, or flow                                                   |
+| [Temporal](https://temporal.io/), [Inngest](https://www.inngest.com/), [Trigger.dev](https://trigger.dev/) | Crash-resume and long-lived app workflows | Run a Tubeless pipeline inside one activity or durable step                                               |
+| [LangGraph](https://www.langchain.com/langgraph)                                      | Dynamic LLM agent loops                             | Use LangGraph for the agent. Use Tubeless for typed retrieval, validation, and publication around it      |
 
-For example, a queue worker can call `pipeline.runOrThrow(...)` to validate and
-process a job. A rejected run tells the worker that processing failed. The
-worker decides whether to retry, and the application must make repeated side
-effects safe.
+## Integrating with those tools
 
-## Remote work and checkpoints
+Tubeless does not replace a scheduler, queue, or durable engine. Pair it with
+one of those tools in either of two ways:
 
-Use `fromRemote` when one part of a local pipeline runs on another service.
-The parent pipeline still runs in the local process. If that process exits,
-a remote job may continue, but Tubeless does not restore the parent run.
-See [remote-step composition](./remote-step-composition.md).
+| Need                                                       | Approach                                                     | Example                                                 |
+| ---------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
+| The host should own delivery, retries, and crash resume    | Call `pipeline.runOrThrow` from a worker or activity handler | [`host-embedding.ts`](../examples/host-embedding.ts)    |
+| One step of a local pipeline should run on another service | Use `fromRemote` for that step                               | [Remote-step composition](./remote-step-composition.md) |
 
-File checkpoints from `tubeless/node` can record completed items in batch work
-so a later run can skip them. They do not persist or replay the full pipeline.
-See [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts).
-
-## Runtime and API stability
-
-Library imports require Node.js 22 or later and use ESM. The CLI requires
-Bun 1.3.14 or later. Linux and macOS are supported; Windows is untested.
-Tubeless is pre-1.0, so its public API may change. Check the installed version
-and release notes when upgrading.
+The host owns persistence and acknowledgement. A rejected run tells it that
+processing failed. The parent Tubeless process does not restore itself after
+exit; if that is required, the host must provide it.

@@ -27,7 +27,7 @@ This static site provides explicit Markdown URLs; Accept negotiation is not avai
 - [Typed imports and ETL](${absUrl("docs/recipes.md")}): Choose the smallest matching executable recipe for ingestion, enrichment, or export jobs.
 - [Validation and publication workflows](${absUrl("docs/agent-guide.md")}): Model required dependencies and failure gates; never publish after unsuccessful validation.
 - [Pipeline-backed CLI programs](${absUrl("docs/cli.md")}): Use definePipelineCommand, tubeless list, tubeless inspect <registered-id>, and tubeless plan <registered-id>. Run with tubeless run <registered-id> -- <command-args> only when execution is intended.
-- [Choosing an execution model](${absUrl("docs/comparison.md")}): Check fit before choosing Tubeless for durable or distributed execution.
+- [Choosing an execution model](${absUrl("docs/comparison.md")}): See how Tubeless fits next to other tools and frameworks.
 
 ## Documentation
 

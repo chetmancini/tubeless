@@ -16,7 +16,7 @@ adapt in your project.
 | [Project manifest](../examples/catalog/tubeless.project.ts) | Registering commands and choosing a file layout       |
 | [Core concepts](./concepts.md)                              | Dependencies, skips, failures, dry runs, and contexts |
 | [Agent guide](./agent-guide.md)                             | Rules for generating and modifying pipeline code      |
-| [Comparison](./comparison.md)                               | When to use tubeless vs other tools                   |
+| [Comparison](./comparison.md)                               | How Tubeless fits next to other job runners           |
 
 ## How to
 

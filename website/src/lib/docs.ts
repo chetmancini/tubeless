@@ -23,7 +23,7 @@ export const DOC_NAV = [
     label: "YAML and JSON",
     blurb: "Compile declarative pipelines with registered handlers, skips, and child adapters.",
   },
-  { slug: "comparison", label: "Comparison", blurb: "Decide when to use pipelines, ordinary functions, or an external worker." },
+  { slug: "comparison", label: "Comparison", blurb: "See how Tubeless fits next to Hamilton, Prefect, Temporal, and other job runners." },
   { slug: "child-pipeline-composition", label: "Child pipelines", blurb: "Reuse a workflow once or run it for a list of items." },
   { slug: "remote-step-composition", label: "Remote steps", blurb: "Call remote services and invoke pipelines from workers." },
   { slug: "agent-guide", label: "Agent guide", blurb: "Rules for generating pipeline code." },
