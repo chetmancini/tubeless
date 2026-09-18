@@ -1,4 +1,4 @@
-import { closeSync, openSync, unlinkSync } from "node:fs";
+import { closeSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -78,6 +78,7 @@ function dataWorker(source: string): URL {
 function workerTicker(source: string): {
   chunks: string[];
   close(): void;
+  path: string;
   ticker: ReturnType<typeof createLiveTicker>;
 } {
   const path = join(tmpdir(), `tubeless-ticker-fallback-${process.pid}-${Date.now()}.log`);
@@ -89,6 +90,7 @@ function workerTicker(source: string): {
       closeSync(fd);
       unlinkSync(path);
     },
+    path,
     ticker: createLiveTicker({
       fd,
       refreshIntervalMs: 40,
@@ -127,6 +129,33 @@ describe("createLiveTicker worker fallback", () => {
 
       expect(chunks.join("")).toContain("final status");
       expect(chunks.join("")).toContain("\u001B[?25h");
+    } finally {
+      ticker.dispose();
+      close();
+    }
+  });
+
+  it("waits for worker output ownership before repainting after a timeout", async () => {
+    const { chunks, close, path, ticker } = workerTicker(`
+      import { writeSync } from "node:fs";
+      import { workerData } from "node:worker_threads";
+      const state = new Int32Array(workerData.stateBuffer);
+      Atomics.store(state, 4, 1);
+      writeSync(workerData.fd, "locked\\n");
+      setTimeout(() => {
+        Atomics.store(state, 4, 0);
+        Atomics.notify(state, 4);
+      }, 800);
+      setInterval(() => {}, 1000);
+    `);
+    try {
+      await vi.waitFor(() => expect(readFileSync(path, "utf8")).toContain("locked"));
+      ticker.setLines(["final status"]);
+      const startedAt = Date.now();
+      ticker.dispose();
+
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(600);
+      expect(chunks.join("")).toContain("final status");
     } finally {
       ticker.dispose();
       close();

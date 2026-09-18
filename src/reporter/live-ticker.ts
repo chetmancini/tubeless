@@ -272,8 +272,8 @@ function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[
 }
 
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
-  // [0] stopped, [1] painted rows, [2] accepted logs, [3] inline owns output
-  const stateBuffer = new SharedArrayBuffer(16);
+  // [0] stopped, [1] painted rows, [2] accepted logs, [3] inline owns output, [4] output lock
+  const stateBuffer = new SharedArrayBuffer(20);
   const state = new Int32Array(stateBuffer);
   const worker = new Worker(options.workerUrl ?? resolveLiveTickerWorkerUrl(), {
     execArgv: fileWorkerExecArgv(),
@@ -305,8 +305,15 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     ticker.setLines([...lines]);
   };
 
-  const createFallback = (): LiveTicker => {
+  const claimOutput = (): void => {
     Atomics.store(state, 3, 1);
+    while (Atomics.compareExchange(state, 4, 0, 1) !== 0) {
+      Atomics.wait(state, 4, 1);
+    }
+  };
+
+  const createFallback = (): LiveTicker => {
+    claimOutput();
     const ticker = createInlineTicker(options, Atomics.load(state, 1));
     replayThrough(ticker);
     return ticker;
