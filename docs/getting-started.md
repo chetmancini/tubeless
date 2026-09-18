@@ -88,12 +88,14 @@ const ImportPipeline = definePipeline({
 });
 ```
 
-Omitted `targets` exposes the last declared step, `normalize`, as a public goal.
+Omitted `targets` exposes the last step in execution order, `normalize`, as a public goal.
 Selecting it also selects `load`, because normalization requires its output.
-Omitted `finalize` returns that last step's output: here, `string[] | undefined`.
+Omitted `finalize` returns that step's output. Its type includes all possible step
+outputs plus `undefined`; here, callers can read it as `readonly string[] | undefined`.
 If a dry run or filter leaves the output absent, the result is `undefined`.
-Declaration order determines these defaults, even when dependencies execute in
-a different order. An unfiltered run still executes all steps.
+The dependency graph determines execution order, with declaration order breaking
+ties between ready steps. These defaults use that full order even when a run
+filters or skips steps. An unfiltered run still executes all steps.
 
 Provide `targets` to expose different goals, or `targets: []` to expose none.
 Provide `finalize` to transform outputs or require them explicitly:

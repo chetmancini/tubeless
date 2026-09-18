@@ -66,8 +66,8 @@ const rows = await ImportPipeline.runOrThrow({ lines: [" Alpha ", "", "Beta"] })
 // ["alpha", "beta"]
 ```
 
-Omitted `targets` exposes `normalize`; omitted `finalize` returns its output or
-`undefined` if absent. Use `requireOutputs` when missing output should fail.
+Omitted `targets` and `finalize` use the last step in execution order: `normalize`.
+Missing output returns `undefined`; use `requireOutputs` when absence should fail.
 
 `runOrThrow` returns the result or throws on failure. Use `run` for reports, `plan`
 for previews, and `toMermaid` for diagrams. See [getting started](./docs/getting-started.md).

@@ -89,7 +89,7 @@ pipeline does not require credentials.
    and `targets`.
 7. Declare public goals with `targets: [step]` on the pipeline, select their IDs
    for goal-oriented execution, and use `stepIds` only for an exact filter. Omitted
-   `targets` exposes the last declared step; `targets: []` opts out. Omitted
+   `targets` exposes the last step in execution order; `targets: []` opts out. Omitted
    `finalize` returns that step's output or `undefined` if absent. Use
    `requireOutputs` when the final domain result is not meaningful without
    specific step outputs. Read plan `selectionReasons` instead of recreating

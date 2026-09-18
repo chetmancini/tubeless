@@ -8,15 +8,15 @@ import {
 import { standardSchema, thrownDefinitionErrors } from "./pipeline.test-support.js";
 
 describe("pipeline defaults", () => {
-  it("infers domain options, the last target, and the last output from just id and steps", async () => {
+  it("infers domain options and possible targets and outputs from just id and steps", async () => {
     const { step } = createSteps<{ text: string }>();
     const load = step("load", { run: (_, context) => context.options.text });
     const length = step("length", { dependsOn: [load], run: ({ load }) => load.length });
     const pipeline = definePipeline({ id: "minimal", steps: [load, length] });
 
-    expectTypeOf(pipeline.targetIds).toEqualTypeOf<readonly "length"[]>();
+    expectTypeOf(pipeline.targetIds).toEqualTypeOf<readonly ("load" | "length")[]>();
     expectTypeOf(pipeline.runOrThrow).parameter(0).toEqualTypeOf<{ text: string }>();
-    expectTypeOf(pipeline.runOrThrow).returns.resolves.toEqualTypeOf<number | undefined>();
+    expectTypeOf(pipeline.runOrThrow).returns.resolves.toEqualTypeOf<string | number | undefined>();
     expect(pipeline.targetIds).toEqual(["length"]);
     expect(Object.isFrozen(pipeline.targetIds)).toBe(true);
     expect(pipeline.plan({ targets: ["length"] }).steps.map(({ selected }) => selected)).toEqual([
@@ -24,13 +24,13 @@ describe("pipeline defaults", () => {
       true,
     ]);
     await expect(pipeline.runOrThrow({ text: "hello" }, { targets: ["length"] })).resolves.toBe(5);
-    // @ts-expect-error Earlier steps are not implicit public targets.
+    // The graph determines the public target at runtime.
     expect(pipeline.plan({ targets: ["load"] }).errors[0]?.code).toBe(
       "TUBELESS_PLANNING_TARGET_UNDECLARED"
     );
   });
 
-  it("uses declaration order rather than topological execution order", async () => {
+  it("uses topological execution order rather than declaration order", async () => {
     const { step } = createSteps();
     const first = step("first", { run: () => 7 });
     const dependent = step("dependent", { dependsOn: [first], run: () => "executed last" });
@@ -38,9 +38,66 @@ describe("pipeline defaults", () => {
 
     const result = await pipeline.run({});
     expect(result.steps.map(({ id }) => id)).toEqual(["first", "dependent"]);
-    expect(result.value).toBe(7);
-    expect(pipeline.targetIds).toEqual(["first"]);
-    expectTypeOf(pipeline.runOrThrow).returns.resolves.toEqualTypeOf<number | undefined>();
+    expect(result.value).toBe("executed last");
+    expect(pipeline.targetIds).toEqual(["dependent"]);
+    await expect(pipeline.runOrThrow({}, { targets: ["dependent"] })).resolves.toBe(
+      "executed last"
+    );
+    await expect(pipeline.runOrThrow({}, { stepIds: ["first"] })).resolves.toBeUndefined();
+    expectTypeOf(pipeline.runOrThrow).returns.resolves.toEqualTypeOf<string | number | undefined>();
+  });
+
+  it("uses the scheduler's stable ordering for multiple terminal steps", async () => {
+    const { step } = createSteps();
+    const source = step("source", { run: () => 1 });
+    const sink = step("sink", { dependsOn: [source], run: () => "sink" });
+    const independent = step("independent", { run: () => "independent" });
+
+    const reordered = definePipeline({ id: "branches", steps: [sink, independent, source] });
+    expect(reordered.targetIds).toEqual(["sink"]);
+    const result = await reordered.run({});
+    expect(result.steps.map(({ id }) => id)).toEqual(["independent", "source", "sink"]);
+    expect(result.value).toBe("sink");
+
+    const independentLast = definePipeline({ id: "tie", steps: [source, sink, independent] });
+    expect(independentLast.targetIds).toEqual(["independent"]);
+    await expect(independentLast.runOrThrow({})).resolves.toBe("independent");
+  });
+
+  it("includes optional inputs and failure gates when ordering the default step", async () => {
+    const { step } = createSteps();
+    const optional = step("optional", { run: () => 1 });
+    const gate = step("gate", { run: () => 2 });
+    const sink = step("sink", {
+      optionalDependsOn: [optional],
+      skipAfterFailureOf: [gate],
+      run: () => "finished",
+    });
+    const pipeline = definePipeline({ id: "ordered-edges", steps: [sink, optional, gate] });
+
+    expect(pipeline.targetIds).toEqual(["sink"]);
+    const result = await pipeline.run({});
+    expect(result.steps.map(({ id }) => id)).toEqual(["optional", "gate", "sink"]);
+    expect(result.value).toBe("finished");
+    const targeted = await pipeline.run({}, { targets: ["sink"] });
+    expect(targeted.value).toBe("finished");
+    expect(targeted.steps.find(({ id }) => id === "optional")?.status).toBe("skipped");
+    expect(targeted.steps.find(({ id }) => id === "gate")?.status).toBe("completed");
+  });
+
+  it("validates required outputs against the execution-order target", async () => {
+    const { step } = createSteps();
+    const source = step("source", { run: () => 1 });
+    const sink = step("sink", { dependsOn: [source], run: () => "sink" });
+    const pipeline = definePipeline({
+      id: "required-sink",
+      steps: [sink, source],
+      finalize: requireOutputs([sink], ({ sink }) => sink),
+    });
+
+    expect(pipeline.targetIds).toEqual(["sink"]);
+    expectTypeOf(pipeline.runOrThrow).returns.resolves.toEqualTypeOf<string>();
+    await expect(pipeline.runOrThrow({}, { targets: ["sink"] })).resolves.toBe("sink");
   });
 
   it("still runs all steps without selection controls", async () => {

@@ -1,9 +1,5 @@
 import { duplicateValues } from "../utilities/collections.js";
-import {
-  pipelineTargets,
-  type PipelineDefinition,
-  type StepsOptions,
-} from "./pipeline-definition.js";
+import type { PipelineDefinition, StepsOptions } from "./pipeline-definition.js";
 import { requiredFinalizerMetadata } from "./pipeline-finalizer.js";
 import { stepEdges, targetClosure, topologicalSort } from "./pipeline-graph.js";
 import { pipelineDiagnostic } from "./pipeline-errors.js";
@@ -139,8 +135,12 @@ export function validatePipelineDefinition<
   // SAFETY: `steps` is `TSteps extends readonly AnyStep[]`; the cast restores
   // the `TOptions` generic that the tuple erased, without changing the values.
   const knownSteps = new Set<AnyStep<TOptions>>(steps as readonly AnyStep<TOptions>[]);
-  // SAFETY: targets are a subset of `TSteps[number]`, each an `AnyStep<TOptions>`.
-  const declaredTargets = pipelineTargets(definition) as readonly AnyStep<TOptions>[];
+  // SAFETY: the tuple contains only steps with the inferred options type.
+  const orderedSteps = topologicalSort(steps as readonly AnyStep<TOptions>[]);
+  // SAFETY: explicit targets are a subset of TSteps; implicit targets come from its graph.
+  const declaredTargets = (definition.targets ??
+    orderedSteps?.slice(-1) ??
+    []) as readonly AnyStep<TOptions>[];
   const duplicateTargetIds = duplicateValues(declaredTargets.map((target) => target.id));
   if (duplicateTargetIds.length > 0) {
     errors.push(
@@ -222,9 +222,7 @@ export function validatePipelineDefinition<
     }
   }
 
-  // SAFETY: `steps` is `TSteps extends readonly AnyStep[]`; the cast restores the
-  // `TOptions` generic that the tuple erased, without changing the values.
-  if (errors.length === 0 && !topologicalSort(steps as readonly AnyStep<TOptions>[])) {
+  if (errors.length === 0 && !orderedSteps) {
     errors.push(
       pipelineDiagnostic(
         "TUBELESS_DEFINITION_DEPENDENCY_CYCLE",

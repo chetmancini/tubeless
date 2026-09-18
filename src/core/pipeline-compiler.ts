@@ -1,8 +1,4 @@
-import {
-  pipelineTargets,
-  type PipelineDefinition,
-  type StepsOptions,
-} from "./pipeline-definition.js";
+import type { PipelineDefinition, StepsOptions } from "./pipeline-definition.js";
 import { validatePipelineDefinition } from "./pipeline-definition-validation.js";
 import { PipelineDefinitionError } from "./pipeline-errors.js";
 import { requiredFinalizerMetadata } from "./pipeline-finalizer.js";
@@ -51,14 +47,13 @@ export function compilePipeline<
   );
   const finalizerMetadata = requiredFinalizerMetadata<TOptions>(definition.finalize);
   const requiredFinalizerSteps = finalizerMetadata?.steps;
-  // SAFETY: targets are a subset of `TSteps[number]`, each an `AnyStep<TOptions>`.
-  const declaredTargets = pipelineTargets(definition) as readonly AnyStep<TOptions>[];
-  const compiledTargets = declaredTargets.map((target) => compiledByAuthorStep.get(target)!);
+  const compiledTargets = definition.targets
+    ? definition.targets.map((target) => compiledByAuthorStep.get(target)!)
+    : orderedSteps.slice(-1);
   const compiledRequiredFinalizerSteps = requiredFinalizerSteps?.map((step) =>
     compiledByAuthorStep.get(step)!
   );
-  const lastStep = definition.steps.at(-1);
-  const lastStepId = lastStep === undefined ? undefined : compiledByAuthorStep.get(lastStep)!.id;
+  const lastStepId = orderedSteps.at(-1)?.id;
   const authoredFinalize = definition.finalize;
   type Finalizer = CompiledPipeline<TSteps, TResult, TTargets, TResultSchema>["finalize"];
   const compiledFinalize = finalizerMetadata
