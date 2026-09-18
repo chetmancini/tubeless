@@ -10,23 +10,6 @@ export type Tape = {
   lines: TapeLine[];
 };
 
-export const inspectTape: Tape = {
-  id: "inspect",
-  title: "inspect",
-  command: "bunx tubeless inspect ./examples/typed-import.ts",
-  lines: [
-    { text: "Pipeline import" },
-    { text: "Targets: normalize-rows" },
-    { text: "Exact steps: load-rows, normalize-rows" },
-    { text: "Pipeline import: plan (ok=true, dryRun=false, steps=2)", kind: "dim" },
-    { text: "  - load-rows: run - Read raw input records from the caller.", kind: "run" },
-    {
-      text: "  - Normalize Rows [normalize-rows]: run - Normalize records after the raw rows are available.",
-      kind: "run",
-    },
-  ],
-};
-
 export const planTape: Tape = {
   id: "plan",
   title: "plan",
@@ -69,21 +52,6 @@ export const runTape: Tape = {
     { text: "  ok finalize (0ms)", kind: "ok" },
     { text: "Pipeline import: done in 1ms (status=completed, steps=2, errors=0)", kind: "ok" },
     { text: "Normalized 2 row(s)." },
-  ],
-};
-
-export const dryRunTape: Tape = {
-  id: "dry-run",
-  title: "dry-run",
-  command: "bunx tubeless plan ./examples/publish-with-gates.ts --dry-run --explain",
-  lines: [
-    { text: "Pipeline publish: plan (ok=true, dryRun=true, steps=3)", kind: "dim" },
-    { text: "  - build-artifact: run - Build an artifact that can be validated and published.", kind: "run" },
-    { text: "  - validate-artifact: run - Fail before publishing if the artifact is empty.", kind: "run" },
-    {
-      text: "  - publish-artifact: skip: dry-run - Publish only on real runs, after validation.",
-      kind: "skip",
-    },
   ],
 };
 

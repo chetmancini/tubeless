@@ -34,6 +34,7 @@ for (const slug of pages) {
   }
 }
 assert.ok(bundle.indexOf("Source: https://tubeless.io/docs/agent-guide.md") < bundle.indexOf("Source: https://tubeless.io/docs/getting-started.md"), "Full documentation must lead with the agent guide");
+assert.equal(existsSync(join(root, "start.md")), false, "Agents must use /docs/getting-started.md rather than a /start.md alias");
 const gettingStarted = read("docs/getting-started/index.html");
 assert.match(gettingStarted, /<pre class="astro-code github-dark"[^>]*data-language="ts">/);
 assert.match(gettingStarted, /<span class="line"><span style="color:/);
@@ -106,7 +107,7 @@ for (const path of humanPages) {
   const html = read(path ? `${path}/index.html` : "index.html");
   assert.match(html, /<link rel="describedby" href="\/llms.txt"/);
   assert.match(html, /<link rel="sitemap" type="application\/xml" href="\/sitemap.xml"/);
-  const markdown = path ? `/${path}.md` : "/index.md";
+  const markdown = path === "start" ? "/docs/getting-started.md" : path ? `/${path}.md` : "/index.md";
   assert.ok(html.includes(`<link rel="alternate" type="text/markdown" href="${markdown}"`), `${path || "homepage"} must advertise Markdown`);
 }
 for (const slug of pages) {

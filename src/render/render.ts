@@ -6,11 +6,6 @@ import type {
 } from "../core/pipeline.js";
 import { formatPipelineError } from "../core/pipeline-diagnostics.js";
 
-export interface PipelineHumanRenderOptions {
-  /** Human-readable output. This is the default format. */
-  format?: "human";
-}
-
 export interface PipelineJsonRenderOptions {
   /** Machine-readable output containing the original structured fields. */
   format: "json";
@@ -18,17 +13,21 @@ export interface PipelineJsonRenderOptions {
   pretty?: boolean;
 }
 
-export type PipelineRenderOptions = PipelineHumanRenderOptions | PipelineJsonRenderOptions;
+export type PipelineRenderOptions = PipelineJsonRenderOptions | Record<string, never>;
 
 export type PipelinePlanRenderOptions =
-  | (PipelineHumanRenderOptions & {
+  | {
       /** Include structured selection provenance and runtime-skip annotations. Defaults to true. */
       explain?: boolean;
-    })
+    }
   | PipelineJsonRenderOptions;
 
 function renderJson<T>(value: T, pretty = false): string {
   return JSON.stringify(value, null, pretty ? 2 : undefined);
+}
+
+function isJsonRenderOptions(options: object): options is PipelineJsonRenderOptions {
+  return (options as { format?: unknown }).format === "json";
 }
 
 /** Render one structured diagnostic for a person or a machine consumer. */
@@ -36,7 +35,7 @@ export function renderPipelineError(
   error: PipelineError,
   options: PipelineRenderOptions = {}
 ): string {
-  if (options.format === "json") return renderJson(error, options.pretty);
+  if (isJsonRenderOptions(options)) return renderJson(error, options.pretty);
   return formatPipelineError(error);
 }
 
@@ -111,6 +110,6 @@ export function renderPipelinePlan(
   plan: PipelinePlan,
   options: PipelinePlanRenderOptions = {}
 ): string {
-  if (options.format === "json") return renderJson(plan, options.pretty);
+  if (isJsonRenderOptions(options)) return renderJson(plan, options.pretty);
   return renderHumanPlan(plan, options);
 }
