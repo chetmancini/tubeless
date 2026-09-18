@@ -338,8 +338,6 @@ export async function executePlannedRun<
     runId,
     trace: trace?.context,
   };
-  if (correlationId !== undefined) executionContext.correlationId = correlationId;
-  if (runtime.parentRunId) executionContext.parentRunId = runtime.parentRunId;
 
   const plannedSteps = planStepById(input.plan);
   const stepsById = new Map(compiled.orderedSteps.map((step) => [step.id, step]));

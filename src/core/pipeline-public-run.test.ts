@@ -92,6 +92,11 @@ describe("definePipeline run and selection", () => {
     expectTypeOf<import("./pipeline.js").MappedChildProgressOptions["itemNoun"]>().toEqualTypeOf<
       string | undefined
     >();
+    expectTypeOf<import("./pipeline.js").PipelineExecutionContext<object>>().toMatchTypeOf<{
+      correlationId?: string;
+      parentRunId?: string;
+      runId: string;
+    }>();
   });
 
   it("does not observe continueOnError mutations after run starts", async () => {

@@ -42,7 +42,6 @@ export type {
   PipelineContext,
   PipelineRunControls,
   PipelineRunOptions,
-  PipelineRuntime,
   PipelineExecutionContext,
   PipelineStepProgressDetailStatus,
   PipelineStepProgressDetail,

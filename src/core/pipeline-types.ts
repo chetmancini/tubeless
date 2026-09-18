@@ -59,20 +59,18 @@ export type PipelineRunOptions<
   TStepId extends string = string,
   TTargetId extends string = string,
 > = TOptions & PipelineRunControls<TStepId, TTargetId>;
+
+/** Resolved caller context. Core fills `now` and `sleep` before execution. */
 export interface PipelineRuntime extends PipelineContext {
   now: () => number;
   sleep: (durationMs: number, signal?: AbortSignal) => Promise<void>;
 }
 
 export interface PipelineExecutionContext<TOptions extends object> extends PipelineRuntime {
-  /** Caller-owned identifier shared by related executions, when supplied. */
-  correlationId?: string;
   dryRun: boolean;
   options: TOptions;
   /** Stable identity for this execution, whether or not tracing is configured. */
   runId: string;
-  /** Parent execution identity when this run was started by another run. */
-  parentRunId?: string;
   /** Stable identities for this traced run; absent unless `context.tracing` is configured. */
   trace?: PipelineTraceContext;
 }

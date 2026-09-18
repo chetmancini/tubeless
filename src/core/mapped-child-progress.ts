@@ -1,8 +1,5 @@
 import type { PipelineStepProgressDetail } from "./pipeline-types.js";
 
-/** Compatibility alias of the shared progress-detail shape. */
-export type MappedChildProgressDetail = PipelineStepProgressDetail;
-
 /**
  * Live state for a `forEachPipeline` fan-out. Domain-agnostic: items can be
  * shards, URLs, files, jobs, or anything else the parent maps over.
@@ -168,7 +165,7 @@ export function formatMappedChildProgressMessage(
 export function mappedChildProgressDetails(
   snapshot: MappedChildProgressSnapshot,
   options: Pick<FormatMappedChildProgressOptions, "detailLimit"> = {}
-): MappedChildProgressDetail[] {
+): PipelineStepProgressDetail[] {
   const entries = [...snapshot.active.entries()].sort(([left], [right]) =>
     left.localeCompare(right)
   );
@@ -177,7 +174,7 @@ export function mappedChildProgressDetails(
       ? entries.length
       : Math.max(0, Math.floor(options.detailLimit));
   const visible = entries.slice(0, limit);
-  const details: MappedChildProgressDetail[] = visible.map(([id, label]) => ({
+  const details: PipelineStepProgressDetail[] = visible.map(([id, label]) => ({
     id,
     label,
     status: "running" as const,
