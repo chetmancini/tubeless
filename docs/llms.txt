@@ -45,6 +45,7 @@ Agent instructions:
   target IDs and immediate dependents, so consumers should not rebuild the graph.
 - Branch on PipelineError code/phase/kind, not message text. Original thrown
   codes use sourceCode; failed and dependency-blocked reports expose diagnostic metadata.
+- A single-goal definePipeline can be { id, steps }: targets defaults to the last declared step (use [] to opt out), and finalize defaults to its output or undefined when absent. Unfiltered runs still execute all steps.
 - Use requireOutputs for finalizers that need specific completed step outputs.
 - Use createSteps(optionsSchema), outputSchema, and resultSchema for optional
   dependency-free Standard Schema validation. run supports async schemas;
@@ -60,6 +61,7 @@ Advanced:
 Executable examples:
 
 - ../examples/catalog/tubeless.project.ts
+- ../examples/minimal-pipeline.ts
 - ../examples/typed-import.ts
 - ../examples/yaml-pipelines.ts
 - ../examples/yaml-peloton.ts

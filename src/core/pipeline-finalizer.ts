@@ -14,13 +14,13 @@ type RequiredPipelineOutputs<TSteps extends readonly AnyStep[]> = {
 };
 
 export function requiredFinalizerMetadata<TOptions extends object>(
-  finalize: object
+  finalize: object | undefined
 ): RequiredFinalizerMetadata<TOptions> | undefined {
   // SAFETY: `requireOutputs` stamps internal compilation metadata onto the
   // finalizer; the intersection only exposes that optional property.
-  return (finalize as { [REQUIRED_FINALIZER_OUTPUTS]?: RequiredFinalizerMetadata<TOptions> })[
-    REQUIRED_FINALIZER_OUTPUTS
-  ];
+  return (
+    finalize as { [REQUIRED_FINALIZER_OUTPUTS]?: RequiredFinalizerMetadata<TOptions> } | undefined
+  )?.[REQUIRED_FINALIZER_OUTPUTS];
 }
 
 /**

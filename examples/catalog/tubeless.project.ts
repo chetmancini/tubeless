@@ -8,6 +8,8 @@ import { definePipelineProject } from "tubeless/project";
 // receive stepIds and targets.
 // When converting existing code, use the tubeless-make-pipeline agent skill.
 // Pipeline files destructure the constructors they need from createSteps.
+// ../minimal-pipeline.ts shows { id, steps }: the last declared step is the default
+// target and result; missing output returns undefined. Use requireOutputs to require it.
 // Adding skip to any definition marks that step as intentionally omittable.
 // Adapt this layout to the consumer; retain its established IDs and caller contracts.
 // For caller-directed fan-out reruns, see ../fan-out-progress.ts: inspect

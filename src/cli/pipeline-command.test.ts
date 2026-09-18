@@ -197,6 +197,7 @@ describe("definePipelineCommand", () => {
     const pipeline = definePipeline({
       id: "no-targets",
       steps: [internal],
+      targets: [],
       finalize: (outputs) => outputs.internal,
     });
     const command = definePipelineCommand(pipeline, { mapOptions: () => ({}) });
@@ -210,7 +211,7 @@ describe("definePipelineCommand", () => {
     expect(undeclared.errors[0]?.code).toBe("TUBELESS_PLANNING_TARGET_UNDECLARED");
   });
 
-  it("offers only declared targets while retaining every exact step choice", () => {
+  it("offers the implicit target while retaining every exact step choice", () => {
     const { step } = createSteps();
     const internal = step("internal", { run: () => true });
     const release = step("release", {
@@ -220,8 +221,6 @@ describe("definePipelineCommand", () => {
     const pipeline = definePipeline({
       id: "public-targets",
       steps: [internal, release],
-      targets: [release],
-      finalize: (outputs) => outputs.release,
     });
     const command = definePipelineCommand(pipeline, { mapOptions: () => ({}) });
 

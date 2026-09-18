@@ -1,5 +1,9 @@
 import { duplicateValues } from "../utilities/collections.js";
-import type { PipelineDefinition, StepsOptions } from "./pipeline-definition.js";
+import {
+  pipelineTargets,
+  type PipelineDefinition,
+  type StepsOptions,
+} from "./pipeline-definition.js";
 import { requiredFinalizerMetadata } from "./pipeline-finalizer.js";
 import { stepEdges, targetClosure, topologicalSort } from "./pipeline-graph.js";
 import { pipelineDiagnostic } from "./pipeline-errors.js";
@@ -136,7 +140,7 @@ export function validatePipelineDefinition<
   // the `TOptions` generic that the tuple erased, without changing the values.
   const knownSteps = new Set<AnyStep<TOptions>>(steps as readonly AnyStep<TOptions>[]);
   // SAFETY: targets are a subset of `TSteps[number]`, each an `AnyStep<TOptions>`.
-  const declaredTargets = (definition.targets ?? []) as readonly AnyStep<TOptions>[];
+  const declaredTargets = pipelineTargets(definition) as readonly AnyStep<TOptions>[];
   const duplicateTargetIds = duplicateValues(declaredTargets.map((target) => target.id));
   if (duplicateTargetIds.length > 0) {
     errors.push(

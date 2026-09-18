@@ -160,7 +160,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   do not fail the run; pass `onExporterError` to observe the first drop. Use
   `plan` when nothing may run.
 - Declare supported downstream goals with `targets: [step]` on
-  `definePipeline`, then select their literal IDs through run controls. Required
+  `definePipeline`, then select their literal IDs through run controls. Omitted
+  `targets` exposes the last declared step; `targets: []` exposes none. Required
   inputs and failure gates are selected recursively. Use `stepIds` only when
   exact low-level filtering of any step is intentional; never combine the two.
 - Read `PipelinePlanStep.selectionReasons` when explaining selection. It already
@@ -188,7 +189,12 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   and have separate codes for options, step outputs, and final results.
   Async schemas run during `run`; synchronous `plan()` previews graph and
   selection only and never invokes schemas.
-- Wrap normal finalizers in `requireOutputs` when a valid result requires
+- A single-goal pipeline can be `{ id, steps }`. Omit `finalize` to return the
+  last declared step's output, or `undefined` if it published none. Defaults use
+  declaration order and do not limit an unfiltered run. `resultSchema` still
+  validates the value, including absent output. See the
+  [minimal recipe](../examples/minimal-pipeline.ts).
+- Wrap explicit finalizers in `requireOutputs` when a valid result requires
   specific step outputs. Use a plain finalizer only when partial output is a
   valid domain result.
 - Preserve the dependency-free runtime. Implement concrete JSON or telemetry SDK

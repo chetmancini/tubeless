@@ -39,6 +39,9 @@ the installed declarations before using them; do not silently upgrade Tubeless.
   its `T | undefined` output explicitly; do not turn exceptions into skips.
 - Set `dryRun: "skip"` on writes and other external side effects, or supply a
   side-effect-free typed preview handler. Unmarked steps still run in dry runs.
+- A single-goal `definePipeline` can be `{ id, steps }`: the last declared step
+  is the default public target and supplies the result, or `undefined` if absent.
+  Use `targets: []` to expose no targets. Unfiltered runs still execute all steps.
 - Use `requireOutputs` when the final result requires specific outputs. A plain
   finalizer is appropriate when partial results are valid domain results.
 - Use `runOrThrow` for callers expecting a successful value, `run` for callers

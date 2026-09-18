@@ -77,13 +77,33 @@ use them.
 
 ## 3. Define the result
 
+A single-goal pipeline needs only its ID and steps:
+
 ```ts
-import { definePipeline, requireOutputs } from "tubeless";
+import { definePipeline } from "tubeless";
 
 const ImportPipeline = definePipeline({
   id: "import",
   steps: [load, normalize],
-  targets: [normalize],
+});
+```
+
+Omitted `targets` exposes the last declared step, `normalize`, as a public goal.
+Selecting it also selects `load`, because normalization requires its output.
+Omitted `finalize` returns that last step's output: here, `string[] | undefined`.
+If a dry run or filter leaves the output absent, the result is `undefined`.
+Declaration order determines these defaults, even when dependencies execute in
+a different order. An unfiltered run still executes all steps.
+
+Provide `targets` to expose different goals, or `targets: []` to expose none.
+Provide `finalize` to transform outputs or require them explicitly:
+
+```ts
+import { requireOutputs } from "tubeless";
+
+const SummaryPipeline = definePipeline({
+  id: "import-summary",
+  steps: [load, normalize],
   finalize: requireOutputs([normalize], ({ normalize }) => ({
     count: normalize.length,
     rows: normalize,
@@ -91,17 +111,10 @@ const ImportPipeline = definePipeline({
 });
 ```
 
-`finalize` turns step outputs into the value returned to the caller. In this
-example, the result needs the normalized rows. `requireOutputs([normalize], ...)`
-checks that the output exists and makes it a required property in the callback.
-If execution skips or fails to produce it, finalization fails instead of
-returning an incomplete result. Use a plain finalizer when your application
-intentionally accepts partial results.
-
-`targets: [normalize]` makes normalization an available execution goal. Selecting
-that target also selects `load`, because normalization requires its output.
-When a finalizer uses `requireOutputs`, Tubeless checks that every declared
-target includes the steps needed to produce the final result.
+`requireOutputs` makes those output properties required in the callback and fails
+finalization if any were not published. Tubeless checks that every public target,
+including an implicit last-step target, includes the required finalizer steps.
+Use a plain finalizer when your application intentionally accepts partial results.
 
 ## 4. Run or preview the pipeline
 
