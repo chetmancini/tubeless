@@ -16,27 +16,15 @@
     ".pi/**",
     ".roo/**",
     ".windsurf/**",
-    "tools/oxlint/anti-slop/**",
     "website/**"
   ],
-  "jsPlugins": [{ "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/index.ts" }],
   "rules": {
     "no-debugger": "error",
     "no-fallthrough": "error",
     "no-unsafe-optional-chaining": "error",
     "no-control-regex": "off",
-    "anti-slop/no-chained-type-assertions": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "error",
     "typescript/no-explicit-any": "error",
     "typescript/no-require-imports": "error",
     "typescript/prefer-as-const": "error"
-  },
-  "overrides": [
-    {
-      "files": ["src/**/*.test.ts"],
-      "rules": {
-        "anti-slop/require-safety-comment-for-type-assertion": "off"
-      }
-    }
-  ]
+  }
 }

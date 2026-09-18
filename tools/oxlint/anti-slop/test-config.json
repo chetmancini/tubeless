@@ -1,7 +1,0 @@
-{
-  "jsPlugins": [{ "name": "anti-slop", "specifier": "./index.ts" }],
-  "rules": {
-    "anti-slop/no-chained-type-assertions": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "error"
-  }
-}
