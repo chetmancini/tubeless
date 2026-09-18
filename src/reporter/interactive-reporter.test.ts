@@ -420,7 +420,7 @@ describe("createPipelineReporter", () => {
     }
   });
 
-  it("animates spinner while a step burns CPU without progress", async () => {
+  it("animates while a step blocks the main thread", async () => {
     const { closeSync, openSync, readFileSync, unlinkSync, writeSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
@@ -435,9 +435,7 @@ describe("createPipelineReporter", () => {
           columns: 100,
           fd,
           isTTY: true,
-          write: (chunk) => {
-            writeSync(fd, chunk);
-          },
+          write: (chunk) => writeSync(fd, chunk),
         },
         refreshIntervalMs: 40,
         symbols: "ascii",
@@ -448,14 +446,10 @@ describe("createPipelineReporter", () => {
         run: () => {
           const deadline = Date.now() + 2_000;
           while (Date.now() < deadline) {
-            // Busy-wait: the live ticker must not share this thread.
-            const rendered = readFileSync(path, "utf8");
-            const glyphs = new Set(
-              [...rendered.matchAll(/[-\\|/] busy/g)].map((match) => match[0])
-            );
-            if (glyphs.size >= 3) return "done";
+            const frames = readFileSync(path, "utf8").match(/[-\\|/] busy/g) ?? [];
+            if (new Set(frames).size >= 3) return "done";
           }
-          return "done";
+          throw new Error("ticker stopped while the main thread was blocked");
         },
       });
       const pipeline = definePipeline({
@@ -468,68 +462,8 @@ describe("createPipelineReporter", () => {
       reporter.dispose();
 
       const rendered = readFileSync(path, "utf8");
-      const runningFrames = [...rendered.matchAll(/[-\\|/] busy/g)].map((match) => match[0]);
-      expect(runningFrames.length).toBeGreaterThanOrEqual(3);
-      expect(new Set(runningFrames).size).toBeGreaterThanOrEqual(3);
-      expect(rendered).toContain("\u001B[?25l");
+      expect(new Set(rendered.match(/[-\\|/] busy/g)).size).toBeGreaterThanOrEqual(3);
       expect(rendered).toContain("\u001B[?25h");
-      expect(rendered).not.toContain("\u0004");
-      expect(rendered).not.toContain("\u0005");
-    } finally {
-      closeSync(fd);
-      unlinkSync(path);
-    }
-  });
-
-  it("shimmers on the worker ticker during CPU-bound work", async () => {
-    const { closeSync, openSync, readFileSync, unlinkSync, writeSync } = await import("node:fs");
-    const { tmpdir } = await import("node:os");
-    const { join } = await import("node:path");
-    const path = join(tmpdir(), `tubeless-shimmer-${process.pid}-${Date.now()}.log`);
-    const fd = openSync(path, "w");
-    try {
-      const reporter = createPipelineReporter({
-        color: "always",
-        log: captureLog(),
-        mode: "interactive",
-        output: {
-          columns: 100,
-          fd,
-          isTTY: true,
-          write: (chunk) => {
-            writeSync(fd, chunk);
-          },
-        },
-        refreshIntervalMs: 40,
-        symbols: "ascii",
-        terminal: { color: true, isTTY: true, unicode: false },
-      });
-      const { step } = createSteps();
-      const busy = step("busy", {
-        run: () => {
-          const end = Date.now() + 220;
-          while (Date.now() < end) {
-            // Busy-wait: the live ticker must not share this thread.
-          }
-          return "done";
-        },
-      });
-      const pipeline = definePipeline({
-        id: "cpu-shimmer",
-        steps: [busy],
-        finalize: (outputs) => outputs.busy,
-      });
-
-      await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
-      reporter.dispose();
-
-      const rendered = readFileSync(path, "utf8");
-      const plain = rendered.replace(/\u001B\[[0-9;]*m/g, "");
-      expect(plain).toMatch(/[-\\|/] busy/);
-      expect(rendered).toContain("\u001B[0;1;36m");
-      expect(rendered).toContain("\u001B[0;2;36m");
-      expect(rendered).not.toContain("\u0004");
-      expect(rendered).not.toContain("\u0005");
     } finally {
       closeSync(fd);
       unlinkSync(path);

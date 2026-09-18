@@ -1,19 +1,19 @@
 import { writeSync } from "node:fs";
 import { parentPort, workerData } from "node:worker_threads";
 import {
-  TickerFrame,
   currentSpinner,
   paintLiveLines,
   SHIMMER_TOKEN_START,
   SPINNER_TOKEN,
+  TickerFrame,
 } from "./live-ticker.js";
 
 interface LiveTickerWorkerData {
   color: boolean;
   columns?: number;
   fd: number;
-  handshakeBuffer: SharedArrayBuffer;
   refreshIntervalMs: number;
+  stateBuffer: SharedArrayBuffer;
   unicode: boolean;
 }
 
@@ -23,31 +23,29 @@ type TickerWorkerMessage =
   | { columns?: number; lines: string[]; type: "stop" };
 
 const port = parentPort;
-if (port === null) {
-  throw new Error("live-ticker-worker must run as a worker thread");
-}
+if (port === null) throw new Error("live-ticker-worker must run in a worker thread");
 
-// SAFETY: createWorkerTicker always posts this exact workerData shape
-// (color, columns, fd, handshakeBuffer, refreshIntervalMs, unicode).
+// SAFETY: createWorkerTicker owns the workerData shape.
 const data = workerData as LiveTickerWorkerData;
-const handshake = new Int32Array(data.handshakeBuffer);
+// [0] stopped, [1] painted rows, [2] accepted logs, [3] inline owns output, [4] output lock
+const state = new Int32Array(data.stateBuffer);
+const frame = new TickerFrame((chunk) => writeSync(data.fd, chunk));
 let columns = data.columns;
 let lines: string[] = [];
-const frame = new TickerFrame((chunk) => writeSync(data.fd, chunk));
-let announcedReady = false;
 
-function publishFrame(): void {
-  Atomics.store(handshake, 1, frame.frameLineCount);
+function withOutputLock(write: () => void): void {
+  while (Atomics.compareExchange(state, 4, 0, 1) !== 0) {
+    Atomics.wait(state, 4, 1);
+  }
+  try {
+    if (Atomics.load(state, 3) === 0) write();
+  } finally {
+    Atomics.store(state, 4, 0);
+    Atomics.notify(state, 4);
+  }
 }
 
-function announceReady(): void {
-  publishFrame();
-  if (announcedReady || port === null) return;
-  announcedReady = true;
-  port.postMessage({ type: "ready", frameLineCount: frame.frameLineCount });
-}
-
-function redraw(): void {
+function paintFrame(): void {
   frame.redraw(
     paintLiveLines(
       lines,
@@ -57,50 +55,54 @@ function redraw(): void {
       data.color
     )
   );
-  publishFrame();
+  Atomics.store(state, 1, frame.frameLineCount);
 }
 
-function done(): void {
-  Atomics.store(handshake, 0, 1);
-  Atomics.notify(handshake, 0);
+function redraw(): void {
+  withOutputLock(paintFrame);
 }
 
-const beat = (): void => {
-  Atomics.add(handshake, 3, 1);
-};
-
-beat();
 const timer = setInterval(() => {
-  beat();
-  if (!lines.some((line) => line.includes(SPINNER_TOKEN) || line.includes(SHIMMER_TOKEN_START))) {
+  if (Atomics.load(state, 3) === 1) {
+    clearInterval(timer);
+    port.close();
     return;
   }
-  redraw();
+  if (lines.some((line) => line.includes(SPINNER_TOKEN) || line.includes(SHIMMER_TOKEN_START))) {
+    redraw();
+  }
 }, data.refreshIntervalMs);
 
-port.on("message", (msg: TickerWorkerMessage) => {
-  if (msg.type === "log") {
-    frame.clear();
-    writeSync(data.fd, msg.text);
-    publishFrame();
-    Atomics.add(handshake, 2, 1);
-    announceReady();
-    port.postMessage({ type: "ack", kind: "log" });
-    return;
-  }
-  if (msg.columns !== undefined) columns = msg.columns;
-  if (msg.type === "lines") {
-    lines = msg.lines;
-    redraw();
-    announceReady();
-    return;
-  }
-  if (msg.type === "stop") {
+port.on("message", (message: TickerWorkerMessage) => {
+  if (Atomics.load(state, 3) === 1) {
     clearInterval(timer);
-    if (msg.lines) lines = msg.lines;
+    port.close();
+    return;
+  }
+  if (message.type === "log") {
+    withOutputLock(() => {
+      frame.clear();
+      Atomics.store(state, 1, 0);
+      writeSync(data.fd, message.text);
+      Atomics.add(state, 2, 1);
+    });
+    return;
+  }
+  columns = message.columns ?? columns;
+  lines = message.lines;
+  if (message.type === "lines") {
     redraw();
-    frame.showCursor();
-    done();
+    return;
+  }
+  clearInterval(timer);
+  try {
+    withOutputLock(() => {
+      paintFrame();
+      frame.showCursor();
+    });
+    Atomics.store(state, 0, 1);
+    Atomics.notify(state, 0);
+  } finally {
     port.close();
   }
 });

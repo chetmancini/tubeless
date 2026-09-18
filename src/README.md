@@ -15,7 +15,7 @@ their source files.
 | `tracing/`   | Trace contracts, internal emission and exporter composition                                   |
 | `utilities/` | Domain-independent cancellation, collections, batching, retry, rate limits and error branding |
 | `cli/`       | Argument parsing, command declarations and pipeline adaptation                                |
-| `reporter/`  | Terminal reporting and ticker workers                                                         |
+| `reporter/`  | Terminal reporting and live ticker rendering                                                  |
 | `render/`    | Plan and error formatting                                                                     |
 | `run-store/` | Event reader/store contracts, projection, SQLite and NDJSON adapters                          |
 | `studio/`    | HTTP server, browser client, page, state and UI protocol                                      |

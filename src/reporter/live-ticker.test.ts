@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { elapsedToken, paintLiveLines, shimmerToken, SPINNER_TOKEN } from "./live-ticker.js";
+import { closeSync, openSync, readFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createLiveTicker,
+  elapsedToken,
+  paintLiveLines,
+  shimmerToken,
+  SPINNER_TOKEN,
+} from "./live-ticker.js";
 
 const RESET = "\u001B[0m";
 const SHIMMER_BRIGHT = "\u001B[0;1;36m";
@@ -59,5 +68,137 @@ describe("paintLiveLines", () => {
     expect(painted?.endsWith("\u001B[0m…")).toBe(true);
     expect(painted).not.toContain("\u0004");
     expect(stripAnsi(painted ?? "").endsWith("…")).toBe(true);
+  });
+});
+
+function dataWorker(source: string): URL {
+  return new URL(`data:text/javascript,${encodeURIComponent(source)}`);
+}
+
+function workerTicker(
+  source?: string,
+  write?: (chunk: string) => void
+): {
+  chunks: string[];
+  close(): void;
+  closeOutput(): void;
+  path: string;
+  ticker: ReturnType<typeof createLiveTicker>;
+} {
+  const path = join(tmpdir(), `tubeless-ticker-fallback-${process.pid}-${Date.now()}.log`);
+  const fd = openSync(path, "w");
+  const chunks: string[] = [];
+  let outputOpen = true;
+  const closeOutput = (): void => {
+    if (!outputOpen) return;
+    outputOpen = false;
+    closeSync(fd);
+  };
+  return {
+    chunks,
+    close: () => {
+      closeOutput();
+      unlinkSync(path);
+    },
+    closeOutput,
+    path,
+    ticker: createLiveTicker({
+      fd,
+      refreshIntervalMs: 40,
+      unicode: false,
+      write: write ?? ((chunk) => chunks.push(chunk)),
+      ...(source === undefined ? {} : { workerUrl: dataWorker(source) }),
+    }),
+  };
+}
+
+describe("createLiveTicker worker fallback", () => {
+  it("keeps logs and frames after an asynchronous worker failure", async () => {
+    const { chunks, close, ticker } = workerTicker('throw new Error("boot failure")');
+    try {
+      ticker.setLines(["running"]);
+      ticker.writeLog("before failure\n");
+      await vi.waitFor(() => expect(chunks.join("")).toContain("before failure"));
+
+      ticker.writeLog("after failure\n");
+      ticker.setLines(["final status"]);
+      ticker.dispose();
+
+      expect(chunks.join("")).toContain("after failure");
+      expect(chunks.join("")).toContain("final status");
+    } finally {
+      ticker.dispose();
+      close();
+    }
+  });
+
+  it("paints the retained final frame when worker shutdown times out", () => {
+    const { chunks, close, ticker } = workerTicker("setInterval(() => {}, 1000)");
+    try {
+      ticker.setLines(["final status"]);
+      ticker.dispose();
+
+      expect(chunks.join("")).toContain("final status");
+      expect(chunks.join("")).toContain("\u001B[?25h");
+    } finally {
+      ticker.dispose();
+      close();
+    }
+  });
+
+  it("bounds fallback takeover when the worker keeps output ownership", async () => {
+    const { chunks, close, path, ticker } = workerTicker(`
+      import { writeSync } from "node:fs";
+      import { workerData } from "node:worker_threads";
+      const state = new Int32Array(workerData.stateBuffer);
+      Atomics.store(state, 4, 1);
+      writeSync(workerData.fd, "locked\\n");
+      setInterval(() => {}, 1000);
+    `);
+    try {
+      await vi.waitFor(() => expect(readFileSync(path, "utf8")).toContain("locked"));
+      ticker.setLines(["final status"]);
+      const startedAt = Date.now();
+      ticker.dispose();
+
+      expect(Date.now() - startedAt).toBeLessThan(1_000);
+      expect(chunks.join("")).not.toContain("final status");
+      expect(chunks.join("")).toContain("\u001B[?25h");
+    } finally {
+      ticker.dispose();
+      close();
+    }
+  });
+
+  it("does not retry fallback when writing its retained frame fails", () => {
+    const write = vi.fn(() => {
+      throw new Error("output closed");
+    });
+    const { close, ticker } = workerTicker("setInterval(() => {}, 1000)", write);
+    try {
+      ticker.setLines(["final status"]);
+
+      expect(() => ticker.dispose()).toThrow("output closed");
+      expect(write).toHaveBeenCalledTimes(1);
+    } finally {
+      ticker.dispose();
+      close();
+    }
+  });
+
+  it("falls back when the worker cannot render its final frame", async () => {
+    const { chunks, close, closeOutput, path, ticker } = workerTicker();
+    try {
+      ticker.setLines(["final status"]);
+      await vi.waitFor(() => expect(readFileSync(path, "utf8")).toContain("final status"));
+      closeOutput();
+
+      ticker.dispose();
+
+      expect(chunks.join("")).toContain("final status");
+    } finally {
+      ticker.dispose();
+      close();
+    }
   });
 });
