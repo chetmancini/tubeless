@@ -370,6 +370,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
         void worker.terminate();
         return;
       }
+      let restoreCursorAfterTerminate = false;
       try {
         let workerStopped = false;
         try {
@@ -384,10 +385,23 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
         }
         if (!workerStopped) {
           const ticker = createFallback();
-          ticker?.dispose();
+          if (ticker) {
+            ticker.dispose();
+          } else {
+            restoreCursorAfterTerminate = true;
+          }
         }
       } finally {
-        void worker.terminate();
+        const terminated = worker.terminate();
+        if (restoreCursorAfterTerminate) {
+          void terminated.then(() => {
+            try {
+              options.write(ANSI.showCursor);
+            } catch {
+              // The output may remain unavailable; cursor restore is best-effort.
+            }
+          });
+        }
       }
     },
   };
