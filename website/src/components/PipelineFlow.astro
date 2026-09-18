@@ -146,6 +146,28 @@ const stages = ["01", "02", "03", "04"];
     padding-top: 6.3rem;
   }
 
+  .pipeline-flow :global(.section),
+  .pipeline-flow :global(.package-strip .pkg) {
+    position: relative;
+    border-top-color: transparent;
+  }
+
+  .pipeline-flow :global(.section)::before,
+  .pipeline-flow :global(.package-strip .pkg)::before {
+    content: "";
+    position: absolute;
+    inset: -1px 0 auto;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      var(--line) calc(var(--pipe-crossing, -100%) - 25%),
+      transparent calc(var(--pipe-crossing, -100%) - 12%),
+      transparent calc(var(--pipe-crossing, -100%) + 12%),
+      var(--line) calc(var(--pipe-crossing, -100%) + 25%)
+    );
+  }
+
   .pipeline-flow :global(.section:last-child) {
     padding-bottom: 7rem;
   }
@@ -216,6 +238,7 @@ const stages = ["01", "02", "03", "04"];
     const headings = Array.from(flow.querySelectorAll<HTMLElement>("[data-pipeline-stage]"));
     const joints = flow.querySelectorAll<SVGGElement>("[data-pipe-joint]");
     const bucket = flow.querySelector<SVGGElement>("[data-pipe-end]")!;
+    const dividers = flow.querySelectorAll<HTMLElement>(".section, .package-strip .pkg");
 
     const draw = () => {
       const bounds = flow.getBoundingClientRect();
@@ -252,8 +275,23 @@ const stages = ["01", "02", "03", "04"];
       svg.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
       path.setAttribute("d", d);
       bucket.setAttribute("transform", `translate(${width * 0.5} ${bounds.height - 47})`);
+      const length = path.getTotalLength();
+      // The path progresses downward, so locate each divider crossing by its height.
+      dividers.forEach((divider) => {
+        const rect = divider.getBoundingClientRect();
+        const y = rect.top - bounds.top;
+        let start = 0;
+        let end = length;
+        for (let iteration = 0; iteration < 18; iteration++) {
+          const middle = (start + end) / 2;
+          if (path.getPointAtLength(middle).y < y) start = middle;
+          else end = middle;
+        }
+        const crossing = path.getPointAtLength((start + end) / 2).x;
+        divider.style.setProperty("--pipe-crossing", `${(crossing + bounds.left - rect.left) / rect.width * 100}%`);
+      });
       // A pulse's leading edge reaches the bucket once per 800px / 9s cycle.
-      const arrival = ((path.getTotalLength() - 18) % 800) / 800 * 9;
+      const arrival = ((length - 18) % 800) / 800 * 9;
       flow.style.setProperty("--completion-delay", `${arrival}s`);
       flow.dataset.ready = "";
     };
