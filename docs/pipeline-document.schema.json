@@ -50,21 +50,72 @@
       "required": ["run"],
       "properties": { "run": { "$ref": "#/$defs/text" } }
     },
+    "composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pipeline", "adapter"],
+      "properties": {
+        "pipeline": {
+          "$ref": "#/$defs/text",
+          "description": "Pipeline ID in this document."
+        },
+        "adapter": {
+          "$ref": "#/$defs/text",
+          "description": "Name in the corresponding adapter registry."
+        }
+      }
+    },
     "step": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "run"],
+      "required": ["id"],
       "properties": {
         "id": { "$ref": "#/$defs/text" },
         "run": { "$ref": "#/$defs/text", "description": "Name in registry.steps." },
+        "fromPipeline": { "$ref": "#/$defs/composition" },
+        "forEachPipeline": { "$ref": "#/$defs/composition" },
         "name": { "$ref": "#/$defs/text" },
         "description": { "$ref": "#/$defs/text" },
         "dependsOn": { "$ref": "#/$defs/names" },
         "optionalDependsOn": { "$ref": "#/$defs/names" },
         "skipAfterFailureOf": { "$ref": "#/$defs/names" },
+        "skip": {
+          "$ref": "#/$defs/text",
+          "description": "Name in registry.skipPredicates."
+        },
         "dryRun": { "oneOf": [{ "const": "skip" }, { "$ref": "#/$defs/handler" }] },
         "outputSchema": { "$ref": "#/$defs/text", "description": "Name in registry.schemas." }
-      }
+      },
+      "oneOf": [
+        {
+          "required": ["run"],
+          "not": {
+            "anyOf": [{ "required": ["fromPipeline"] }, { "required": ["forEachPipeline"] }]
+          }
+        },
+        {
+          "required": ["fromPipeline"],
+          "not": {
+            "anyOf": [
+              { "required": ["run"] },
+              { "required": ["forEachPipeline"] },
+              { "required": ["outputSchema"] }
+            ]
+          },
+          "properties": { "dryRun": { "const": "skip" } }
+        },
+        {
+          "required": ["forEachPipeline"],
+          "not": {
+            "anyOf": [
+              { "required": ["run"] },
+              { "required": ["fromPipeline"] },
+              { "required": ["outputSchema"] }
+            ]
+          },
+          "properties": { "dryRun": { "const": "skip" } }
+        }
+      ]
     },
     "pipeline": {
       "type": "object",

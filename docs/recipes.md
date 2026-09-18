@@ -11,7 +11,7 @@ one of these recipes.
 | Intent                                        | Executable recipe                                                        | Main primitives                                                            |
 | --------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
 | Sequential import or ETL                      | [`typed-import.ts`](../examples/typed-import.ts)                         | `createSteps`, `dependsOn`, `requireOutputs`, `targets`                    |
-| Define multiple pipelines in YAML or JSON     | [`yaml-pipelines.ts`](../examples/yaml-pipelines.ts)                     | `compilePipelineDocument`, handler registry, ordinary command registration |
+| Define and compose pipelines in YAML or JSON  | [`yaml-pipelines.ts`](../examples/yaml-pipelines.ts)                     | `compilePipelineDocument`, adapters, skips, child fan-out                  |
 | Validate options, outputs, and results        | [`validated-boundaries.ts`](../examples/validated-boundaries.ts)         | Standard Schema, `outputSchema`, `resultSchema`                            |
 | Inspect, plan, or graph a pipeline or command | [`typed-import.ts`](../examples/typed-import.ts)                         | `tubeless inspect`, `tubeless plan`, `tubeless graph`, `toMermaid`         |
 | Safe write/publish preview                    | [`publish-with-gates.ts`](../examples/publish-with-gates.ts)             | `dryRun`, `optionalDependsOn`, `skipAfterFailureOf`                        |

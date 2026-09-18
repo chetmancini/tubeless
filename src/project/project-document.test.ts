@@ -72,6 +72,30 @@ describe("pipeline document JSON Schema", () => {
         },
       },
     ],
+    [
+      "runtime skip and child composition",
+      {
+        version: 1,
+        pipelines: {
+          parent: {
+            steps: [
+              {
+                id: "single",
+                fromPipeline: { pipeline: "child", adapter: "single" },
+                skip: "skipSingle",
+                dryRun: "skip",
+              },
+              {
+                id: "many",
+                forEachPipeline: { pipeline: "child", adapter: "many" },
+              },
+            ],
+            finalize: { run: "done" },
+          },
+          child: pipeline,
+        },
+      },
+    ],
   ])("accepts %s in both validators", (_label, value) => {
     expect(validateSchema(value), JSON.stringify(validateSchema.errors)).toBe(true);
     expect(() => validatePipelineDocument(value)).not.toThrow();
@@ -106,6 +130,69 @@ describe("pipeline document JSON Schema", () => {
       version: 1,
       pipelines: {
         example: { ...pipeline, steps: [{ id: "work", run: "work", dependsOn: "other" }] },
+      },
+    },
+    {
+      version: 1,
+      pipelines: { example: { ...pipeline, steps: [{ id: "work" }] } },
+    },
+    {
+      version: 1,
+      pipelines: {
+        example: {
+          ...pipeline,
+          steps: [
+            {
+              id: "work",
+              run: "work",
+              fromPipeline: { pipeline: "child", adapter: "single" },
+            },
+          ],
+        },
+      },
+    },
+    {
+      version: 1,
+      pipelines: {
+        example: {
+          ...pipeline,
+          steps: [
+            {
+              id: "work",
+              fromPipeline: { pipeline: "child", adapter: "single", typo: true },
+            },
+          ],
+        },
+      },
+    },
+    {
+      version: 1,
+      pipelines: {
+        example: {
+          ...pipeline,
+          steps: [
+            {
+              id: "work",
+              forEachPipeline: { pipeline: "child", adapter: "many" },
+              outputSchema: "result",
+            },
+          ],
+        },
+      },
+    },
+    {
+      version: 1,
+      pipelines: {
+        example: {
+          ...pipeline,
+          steps: [
+            {
+              id: "work",
+              fromPipeline: { pipeline: "child", adapter: "single" },
+              dryRun: { run: "preview" },
+            },
+          ],
+        },
       },
     },
     {

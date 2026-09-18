@@ -4,9 +4,9 @@ import { createPipelineTestRuntime } from "../testing/testing.js";
 import {
   compilePipelineDocument,
   PipelineDocumentError,
-  type PipelineDocument,
   type PipelineDocumentRegistry,
 } from "./project.js";
+import type { PipelineDocument } from "./project-document.js";
 
 function document(): PipelineDocument {
   return {
@@ -41,6 +41,262 @@ function standardSchema<TInput, TOutput>(
 }
 
 describe("declarative pipelines", () => {
+  it("composes a forward-referenced pipeline once and maps its result", async () => {
+    const runChild = vi.fn((_inputs, context) =>
+      "value" in context.options ? context.options.value : "missing"
+    );
+    const mapOptions = vi.fn((_inputs, context) => ({
+      value: "value" in context.options ? context.options.value : "missing",
+    }));
+    const mapResult = vi.fn(async (value) => ({ childValue: value }));
+    const skipChild = vi.fn((_inputs, context) =>
+      "cached" in context.options && context.options.cached
+        ? { reason: "already cached", value: { childValue: "cached" } }
+        : false
+    );
+    const source: PipelineDocument = {
+      version: 1,
+      pipelines: {
+        parent: {
+          steps: [
+            {
+              id: "child-stage",
+              fromPipeline: { pipeline: "child", adapter: "single" },
+              skip: "cached",
+            },
+          ],
+          finalize: { run: "parentResult", requireOutputs: ["child-stage"] },
+        },
+        child: {
+          steps: [{ id: "work", run: "work" }],
+          finalize: { run: "childResult", requireOutputs: ["work"] },
+        },
+      },
+    };
+    const pipelines = compilePipelineDocument(source, {
+      steps: { work: runChild },
+      finalizers: {
+        childResult: ({ work }) => work,
+        parentResult: ({ "child-stage": childStage }) => childStage,
+      },
+      skipPredicates: { cached: skipChild },
+      fromPipelineAdapters: { single: { mapOptions, mapResult } },
+    });
+    expect([...pipelines.keys()]).toEqual(["parent", "child"]);
+    expect(pipelines.get("parent")!.plan().steps[0]?.nestedPipeline).toEqual({
+      mode: "single",
+      pipelineId: "child",
+      stepIds: ["work"],
+    });
+    expect(runChild).not.toHaveBeenCalled();
+    expect(mapOptions).not.toHaveBeenCalled();
+    await expect(
+      pipelines
+        .get("parent")!
+        .runOrThrow({ value: "mapped" }, {}, createPipelineTestRuntime().context)
+    ).resolves.toEqual({ childValue: "mapped" });
+    expect(mapResult).toHaveBeenCalledOnce();
+    await expect(
+      pipelines
+        .get("parent")!
+        .runOrThrow({ cached: true, value: "ignored" }, {}, createPipelineTestRuntime().context)
+    ).resolves.toEqual({ childValue: "cached" });
+    expect(runChild).toHaveBeenCalledOnce();
+  });
+
+  it("fans out a child pipeline with registered item wiring and policy skip", async () => {
+    const items = vi.fn(({ source }) => source as readonly { id: string; value: number }[]);
+    const runChild = vi.fn((_inputs, context) =>
+      "value" in context.options ? context.options.value : -1
+    );
+    const source: PipelineDocument = {
+      version: 1,
+      pipelines: {
+        child: {
+          steps: [{ id: "work", run: "work" }],
+          finalize: { run: "childResult", requireOutputs: ["work"] },
+        },
+        parent: {
+          steps: [
+            { id: "source", run: "source" },
+            {
+              id: "children",
+              forEachPipeline: { pipeline: "child", adapter: "many" },
+              dependsOn: ["source"],
+              skip: "skipChildren",
+            },
+          ],
+          finalize: { run: "parentResult", requireOutputs: ["children"] },
+        },
+      },
+    };
+    const pipelines = compilePipelineDocument(source, {
+      steps: {
+        source: (_inputs, context) => ("values" in context.options ? context.options.values : []),
+        work: runChild,
+      },
+      finalizers: {
+        childResult: ({ work }) => ({ value: work }),
+        parentResult: ({ children }) => children,
+      },
+      skipPredicates: {
+        skipChildren: (_inputs, context) =>
+          "skip" in context.options && context.options.skip
+            ? { reason: "no children requested", value: [] }
+            : false,
+      },
+      forEachPipelineAdapters: {
+        many: {
+          items,
+          key: (item) => String((item as { id: string }).id),
+          concurrency: 2,
+          progress: { itemNoun: "records" },
+          mapOptions: (item) => ({ value: (item as { value: number }).value }),
+          mapResult: (value) => (value as { value: number }).value * 2,
+        },
+      },
+    });
+    const parent = pipelines.get("parent")!;
+    expect(parent.plan().steps[1]?.nestedPipeline).toMatchObject({
+      mode: "for-each",
+      pipelineId: "child",
+    });
+    await expect(
+      parent.runOrThrow(
+        {
+          values: [
+            { id: "a", value: 2 },
+            { id: "b", value: 3 },
+          ],
+        },
+        {},
+        createPipelineTestRuntime().context
+      )
+    ).resolves.toEqual([4, 6]);
+    await expect(
+      parent.runOrThrow({ skip: true, values: [] }, {}, createPipelineTestRuntime().context)
+    ).resolves.toEqual([]);
+    expect(items).toHaveBeenCalledOnce();
+    expect(runChild).toHaveBeenCalledTimes(2);
+  });
+
+  it("validates an ordinary valued skip before publishing it to a required dependent", async () => {
+    const runCached = vi.fn(() => "live");
+    const consume = vi.fn(({ cached }) => cached);
+    const validateCached = vi.fn((value: unknown) => ({ value: `${String(value)}-validated` }));
+    const pipeline = compilePipelineDocument(
+      {
+        version: 1,
+        pipelines: {
+          parent: {
+            steps: [
+              {
+                id: "cached",
+                run: "cached",
+                skip: "useCached",
+                outputSchema: "cachedValue",
+              },
+              { id: "consume", run: "consume", dependsOn: ["cached"] },
+            ],
+            finalize: { run: "result", requireOutputs: ["consume"] },
+          },
+        },
+      },
+      {
+        steps: { cached: runCached, consume },
+        finalizers: { result: ({ consume: value }) => value },
+        skipPredicates: {
+          useCached: () => ({ reason: "cache hit", value: "saved" }),
+        },
+        schemas: {
+          cachedValue: standardSchema(validateCached),
+        },
+      }
+    ).get("parent")!;
+
+    const result = await pipeline.run({}, {}, createPipelineTestRuntime().context);
+
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("saved-validated");
+    expect(result.steps).toMatchObject([
+      { id: "cached", status: "skipped", reason: "policy", message: "cache hit" },
+      { id: "consume", status: "completed" },
+    ]);
+    expect(runCached).not.toHaveBeenCalled();
+    expect(validateCached).toHaveBeenCalledWith("saved");
+    expect(consume).toHaveBeenCalledWith(
+      { cached: "saved-validated" },
+      expect.objectContaining({ dryRun: false })
+    );
+  });
+
+  it.each([
+    [
+      "single child pipeline",
+      { id: "child", fromPipeline: { pipeline: "missing", adapter: "single" } },
+      { fromPipelineAdapters: { single: { mapOptions: () => ({}) } } },
+      '.fromPipeline.pipeline: Unknown pipeline "missing"',
+    ],
+    [
+      "single child adapter",
+      { id: "child", fromPipeline: { pipeline: "leaf", adapter: "missing" } },
+      {},
+      '.fromPipeline.adapter: Unknown registered name "missing"',
+    ],
+    [
+      "fan-out adapter",
+      { id: "children", forEachPipeline: { pipeline: "leaf", adapter: "missing" } },
+      {},
+      '.forEachPipeline.adapter: Unknown registered name "missing"',
+    ],
+    [
+      "skip predicate",
+      { id: "work", run: "work", skip: "missing" },
+      {},
+      '.skip: Unknown registered name "missing"',
+    ],
+  ])("rejects an unknown %s reference", (_label, step, additions, message) => {
+    const source = {
+      version: 1,
+      pipelines: {
+        parent: { steps: [step], finalize: { run: "result" } },
+        leaf: { steps: [{ id: "work", run: "work" }], finalize: { run: "result" } },
+      },
+    };
+    expect(() =>
+      compilePipelineDocument(source, {
+        steps: { work: () => undefined },
+        finalizers: { result: () => undefined },
+        ...additions,
+      })
+    ).toThrow(message);
+  });
+
+  it("rejects cross-pipeline composition cycles at the reference path", () => {
+    const source = {
+      version: 1,
+      pipelines: {
+        first: {
+          steps: [{ id: "second", fromPipeline: { pipeline: "second", adapter: "child" } }],
+          finalize: { run: "result" },
+        },
+        second: {
+          steps: [{ id: "first", fromPipeline: { pipeline: "first", adapter: "child" } }],
+          finalize: { run: "result" },
+        },
+      },
+    };
+    expect(() =>
+      compilePipelineDocument(source, {
+        steps: {},
+        finalizers: { result: () => undefined },
+        fromPipelineAdapters: { child: { mapOptions: () => ({}) } },
+      })
+    ).toThrow(
+      '$.pipelines["second"].steps[0].fromPipeline.pipeline: Pipeline composition cycle through "first"'
+    );
+  });
+
   it("compiles multiple pipelines and forward references without invoking application code", async () => {
     const source = document();
     source.pipelines.preview = { ...source.pipelines.import };

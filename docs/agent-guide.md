@@ -25,13 +25,17 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - For YAML or JSON authoring, read [declarative pipelines](./declarative-pipelines.md)
   and adapt [the YAML recipe](../examples/yaml-pipelines.ts). Parse at the
   application edge, then use `compilePipelineDocument` from `tubeless/project`
-  with explicitly registered handlers and schemas. Keep command registration
+  with explicitly registered handlers, adapters, predicates, and schemas. A
+  step declares exactly one of `run`, `fromPipeline`, or `forEachPipeline`;
+  child pipeline IDs resolve within the document, while application code owns
+  option, item, and result mapping through the matching adapter registry. Keep command registration
   explicit for CLI and Studio. Unknown fields and references fail compilation;
   plans still do not validate domain inputs. Dynamic wiring does not infer
   TypeScript output types, so validate or narrow unknown values in handlers.
   Use [YAML Peloton](../examples/yaml-peloton.ts) for a larger example with
   progress, retrying concurrent handlers, dry-run policies, and failure gates.
-  Its per-rider progress is ordinary step detail, not child-pipeline fan-out.
+  Its per-rider progress is ordinary step detail by choice; the smaller YAML
+  recipe demonstrates child-pipeline fan-out.
   Use `tubeless validate --json <document.yaml>` for a handler-free structure
   check, and the [document JSON Schema](./pipeline-document.schema.json) for
   editor or agent validation. Optional document metadata is descriptive only.

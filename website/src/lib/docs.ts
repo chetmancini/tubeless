@@ -24,7 +24,11 @@ export const DOC_NAV = [
   { slug: "concepts", label: "Concepts", blurb: "Understand dependencies, results, failures, and execution controls." },
   { slug: "cli", label: "CLI", blurb: "Select and run commands, record results, and inspect history." },
   { slug: "studio", label: "Studio", blurb: "Inspect runs and use browser controls." },
-  { slug: "declarative-pipelines", label: "YAML and JSON", blurb: "Compile declarative pipelines with registered application functions." },
+  {
+    slug: "declarative-pipelines",
+    label: "YAML and JSON",
+    blurb: "Compile declarative pipelines with registered handlers, skips, and child adapters.",
+  },
   { slug: "comparison", label: "Comparison", blurb: "Decide when to use pipelines, ordinary functions, or an external worker." },
   { slug: "child-pipeline-composition", label: "Child pipelines", blurb: "Reuse a workflow once or run it for a list of items." },
   { slug: "remote-step-composition", label: "Remote steps", blurb: "Call remote services and invoke pipelines from workers." },

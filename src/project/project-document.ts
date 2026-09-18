@@ -24,17 +24,47 @@ export interface PipelineDocumentDefinition {
   finalize: { run: string; requireOutputs?: readonly string[] };
 }
 
-export interface PipelineDocumentStep {
+interface PipelineDocumentStepBase {
   id: string;
-  run: string;
   name?: string;
   description?: string;
   dependsOn?: readonly string[];
   optionalDependsOn?: readonly string[];
   skipAfterFailureOf?: readonly string[];
+  /** Name in `registry.skipPredicates`. */
+  skip?: string;
+}
+
+interface PipelineDocumentRunStep extends PipelineDocumentStepBase {
+  run: string;
+  fromPipeline?: never;
+  forEachPipeline?: never;
   dryRun?: "skip" | { run: string };
   outputSchema?: string;
 }
+
+interface PipelineDocumentFromPipelineStep extends PipelineDocumentStepBase {
+  run?: never;
+  /** Compose one pipeline from this document through a registered adapter. */
+  fromPipeline: { pipeline: string; adapter: string };
+  forEachPipeline?: never;
+  dryRun?: "skip";
+  outputSchema?: never;
+}
+
+interface PipelineDocumentForEachPipelineStep extends PipelineDocumentStepBase {
+  run?: never;
+  fromPipeline?: never;
+  /** Fan out one document pipeline through a registered adapter. */
+  forEachPipeline: { pipeline: string; adapter: string };
+  dryRun?: "skip";
+  outputSchema?: never;
+}
+
+export type PipelineDocumentStep =
+  | PipelineDocumentRunStep
+  | PipelineDocumentFromPipelineStep
+  | PipelineDocumentForEachPipelineStep;
 
 /** A document shape or reference error; graph errors remain PipelineDefinitionError. */
 export class PipelineDocumentError extends Error {
@@ -84,35 +114,81 @@ function references(value: unknown, path: string): readonly string[] | undefined
   return value.map((item: unknown, index) => text(item, `${path}[${index}]`));
 }
 
+function compositionReference(
+  value: unknown,
+  path: string
+): { pipeline: string; adapter: string } | undefined {
+  if (value === undefined) return undefined;
+  const reference = fields(value, path, ["pipeline", "adapter"]);
+  return {
+    pipeline: text(reference.pipeline, `${path}.pipeline`),
+    adapter: text(reference.adapter, `${path}.adapter`),
+  };
+}
+
 function parseStep(value: unknown, path: string): PipelineDocumentStep {
   const step = fields(value, path, [
     "id",
     "run",
+    "fromPipeline",
+    "forEachPipeline",
     "name",
     "description",
     "dependsOn",
     "optionalDependsOn",
     "skipAfterFailureOf",
+    "skip",
     "dryRun",
     "outputSchema",
   ]);
-  let dryRun: PipelineDocumentStep["dryRun"];
+  const run = optionalText(step.run, `${path}.run`);
+  const fromPipeline = compositionReference(step.fromPipeline, `${path}.fromPipeline`);
+  const forEachPipeline = compositionReference(step.forEachPipeline, `${path}.forEachPipeline`);
+  const kinds = [run, fromPipeline, forEachPipeline].filter((kind) => kind !== undefined);
+  if (kinds.length !== 1) {
+    throw new PipelineDocumentError(
+      path,
+      "Expected exactly one of run, fromPipeline, or forEachPipeline"
+    );
+  }
+  let dryRun: PipelineDocumentRunStep["dryRun"];
   if (step.dryRun === "skip") dryRun = "skip";
   else if (step.dryRun !== undefined) {
     const handler = fields(step.dryRun, `${path}.dryRun`, ["run"]);
     dryRun = { run: text(handler.run, `${path}.dryRun.run`) };
   }
-  return {
+  const common = {
     id: text(step.id, `${path}.id`),
-    run: text(step.run, `${path}.run`),
     name: optionalText(step.name, `${path}.name`),
     description: optionalText(step.description, `${path}.description`),
     dependsOn: references(step.dependsOn, `${path}.dependsOn`),
     optionalDependsOn: references(step.optionalDependsOn, `${path}.optionalDependsOn`),
     skipAfterFailureOf: references(step.skipAfterFailureOf, `${path}.skipAfterFailureOf`),
-    outputSchema: optionalText(step.outputSchema, `${path}.outputSchema`),
-    dryRun,
+    skip: optionalText(step.skip, `${path}.skip`),
   };
+  if (run !== undefined) {
+    return {
+      ...common,
+      run,
+      outputSchema: optionalText(step.outputSchema, `${path}.outputSchema`),
+      dryRun,
+    };
+  }
+  if (step.outputSchema !== undefined) {
+    throw new PipelineDocumentError(
+      `${path}.outputSchema`,
+      "Only ordinary run steps support outputSchema"
+    );
+  }
+  if (dryRun !== undefined && dryRun !== "skip") {
+    throw new PipelineDocumentError(
+      `${path}.dryRun`,
+      "Composed pipeline steps only support dryRun: skip"
+    );
+  }
+  if (fromPipeline !== undefined) return { ...common, fromPipeline, dryRun };
+  // The exactly-one check above establishes this final variant.
+  return { ...common, forEachPipeline: forEachPipeline!, dryRun };
 }
 
 function metadata(value: unknown): PipelineDocumentMetadata | undefined {

@@ -15,8 +15,8 @@ describe("public YAML recipe", () => {
 
   it("loads real YAML through public package imports and plans registered targets", () => {
     const output = cli("plan", ...project, "yaml-import", "--target", "normalize", "--explain");
-    expect(output).toContain("required by normalize for target normalize");
     expect(output).toContain("normalize: run");
+    expect(output).toContain("normalize-all");
   });
 
   it("runs two registered pipelines sharing handlers", () => {

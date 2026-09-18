@@ -92,8 +92,11 @@ use the compiled pipelines. Browser launches record the same events as
 TypeScript-authored pipelines.
 
 The [loader and commands](../examples/yaml-pipelines.ts) use Bun's native YAML
-imports. The [document](../examples/declarative/pipelines.yaml) describes two
+imports. The [document](../examples/declarative/pipelines.yaml) describes four
 pipelines sharing an explicit [handler registry](../examples/declarative/handlers.ts).
+Its import command uses `fromPipeline`, whose child uses `forEachPipeline` to
+normalize each row. Both composed steps use registered application adapters,
+and empty input is an intentional policy skip.
 Edit the YAML and restart the command or Studio to load the new definition.
 The CLI accepts the command module or registered ID, not a bare YAML file.
 
@@ -139,10 +142,10 @@ make plan FILE=yaml-peloton PROJECT=examples/catalog/tubeless.project.ts ARGS="-
 
 The publication target selects the tech gate and its prerequisites, but omits
 the independent audit. Per-rider inspection runs through `runConcurrent` inside
-one ordinary step, with explicit progress details and retry events. This is
-not the TypeScript Peloton's child-pipeline fan-out: YAML v1 has no child
-composition or runtime skip predicates. The demo exercises the existing format
-without adding new syntax.
+one ordinary step, with explicit progress details and retry events. This demo
+chooses lightweight in-handler concurrency; the smaller YAML recipe shows
+declarative child-pipeline composition and fan-out when each item needs its own
+child lifecycle.
 
 ## Document format
 
@@ -153,22 +156,42 @@ pipelines:
     optionsSchema: lines
     targets: [normalize]
     steps:
-      - id: load
-        description: Read caller-provided lines.
-        run: loadRows
       - id: normalize
-        description: Normalize the loaded rows.
-        run: normalizeRows
-        dependsOn: [load]
+        fromPipeline:
+          pipeline: normalize-all
+          adapter: allRows
+        skip: noRows
     finalize:
       run: normalizedRows
+      requireOutputs: [normalize]
+
+  normalize-all:
+    optionsSchema: lines
+    steps:
+      - id: normalize
+        forEachPipeline:
+          pipeline: normalize-one
+          adapter: eachRow
+        skip: noRows
+    finalize:
+      run: normalizedRows
+      requireOutputs: [normalize]
+
+  normalize-one:
+    optionsSchema: line
+    steps:
+      - id: normalize
+        run: normalizeLine
+    finalize:
+      run: normalizedLine
       requireOutputs: [normalize]
 ```
 
 Each key in `pipelines` is a pipeline ID. Step IDs are local to that pipeline;
 registry names can be reused across pipelines. Each pipeline requires at least
-one step and a finalizer. Forward references are allowed. Dependencies determine
-execution order using the existing engine, not the order in the file alone.
+one step and a finalizer. Step and pipeline forward references are allowed.
+Dependencies determine execution order using the existing engine, not the
+order in the file alone. Composition cycles are rejected.
 
 | Field                            | Meaning                                                                                |
 | -------------------------------- | -------------------------------------------------------------------------------------- |
@@ -176,19 +199,35 @@ execution order using the existing engine, not the order in the file alone.
 | `resultSchema`                   | Name in `registry.schemas`; validates/transforms the final result                      |
 | `targets`                        | Public target step IDs, using normal dependency closure                                |
 | Step `id`, `name`, `description` | Stable identity and optional presentation text                                         |
-| Step `run`                       | Function name in `registry.steps`                                                      |
+| Step `run`                       | Ordinary function name in `registry.steps`                                             |
+| Step `fromPipeline.pipeline`     | One child pipeline ID in this document                                                 |
+| Step `fromPipeline.adapter`      | Name in `registry.fromPipelineAdapters`                                                |
+| Step `forEachPipeline.pipeline`  | Fan-out child pipeline ID in this document                                             |
+| Step `forEachPipeline.adapter`   | Name in `registry.forEachPipelineAdapters`                                             |
 | Step `dependsOn`                 | Required dependency step IDs                                                           |
 | Step `optionalDependsOn`         | Optional dependency step IDs; optional-only steps are not pulled into target selection |
 | Step `skipAfterFailureOf`        | Failure gates, without providing dependency outputs                                    |
-| Step `dryRun`                    | `skip`, or `{ run: previewHandler }` naming a function in `registry.steps`             |
-| Step `outputSchema`              | Name in `registry.schemas`; validates/transforms the published output                  |
+| Step `skip`                      | Runtime predicate name in `registry.skipPredicates`                                    |
+| Step `dryRun`                    | `skip`, or for ordinary steps `{ run: previewHandler }` from `registry.steps`          |
+| Ordinary step `outputSchema`     | Name in `registry.schemas`; validates/transforms the published output                  |
 | `finalize.run`                   | Function name in `registry.finalizers`                                                 |
 | `finalize.requireOutputs`        | Required output step IDs, compiled through `requireOutputs`                            |
 
-Omitted `dryRun` runs the normal handler during a dry run. Mark writes with
-`dryRun: skip` or supply a side-effect-free preview handler. A skipped required
-output can prevent finalization; the compiler preserves the engine's existing
-semantics. See [core concepts](./concepts.md).
+Every step declares exactly one of `run`, `fromPipeline`, or
+`forEachPipeline`. Child references resolve only pipelines in the same
+document. The adapter is application code: a `fromPipeline` adapter supplies
+`mapOptions` and optional `mapResult`; a `forEachPipeline` adapter supplies
+`items`, `key`, `mapOptions`, and optional `concurrency`, `progress`, and
+`mapResult`. These are the same hooks as the TypeScript builders. Parent plans
+still expose one opaque wrapper with `nestedPipeline` metadata, and execution
+retains the normal nested progress and failure behavior.
+
+Omitted `dryRun` runs the normal handler or child workflow during a dry run.
+Mark writes with `dryRun: skip`; ordinary steps can instead supply a
+side-effect-free preview handler. A skipped required output can prevent
+finalization. A runtime `skip` is a successful policy skip, can publish a value,
+and unlocks dependents. The compiler preserves the engine's existing semantics.
+See [core concepts](./concepts.md).
 
 ## Registry and programmatic use
 
@@ -212,11 +251,19 @@ live in `context.options`. Use the normal `context.log`, `context.signal`,
 without `requireOutputs`, they must handle absent outputs themselves.
 
 The registry has separate `steps` and `finalizers` function maps, plus optional
-`optionsSchemas` and `schemas` maps. Schemas use Standard Schema v1.
+`skipPredicates`, `fromPipelineAdapters`, `forEachPipelineAdapters`,
+`optionsSchemas`, and `schemas` maps. Schemas use Standard Schema v1.
 `optionsSchemas` must accept and produce objects, matching Tubeless domain
 options. `schemas` can validate any step-output or final-result shape. Functions
 are resolved once during compilation; modifying a registry later does not
 replace handlers in an already compiled pipeline.
+
+Skip predicates receive `(inputs, context)` and return the normal
+`StepSkipDecision`. A single-child adapter's `mapOptions` receives the same
+arguments. A fan-out adapter receives the normal `items`, `key`, `mapOptions`,
+and result-mapping arguments documented for `forEachPipeline`. Keep stable and
+unique keys, and return the complete parent-facing result array from a valued
+fan-out skip.
 
 YAML cannot provide TypeScript's inferred graph wiring. Handler inputs and
 pipeline results are `unknown`, and handler options are `object`. Narrow them
@@ -240,8 +287,9 @@ Compilation and `plan()` never invoke handlers or schemas. Business validation
 happens during `run()`. Loading an application registry can still execute module
 initialization code. Registry functions remain trusted application code.
 
-This first version supports ordinary steps. Child pipelines, fan-out, remote
-steps, runtime skip predicates, expressions, and inline code are not document
-features. Use TypeScript authoring for those workflows. CLI and Studio loading
-still use explicit `definePipelineCommand` registration; the YAML file does not
-grant execution access or define a new Studio protocol.
+Version 1 supports ordinary steps, single-child composition, child fan-out, and
+runtime skip predicates. Remote steps, expressions, inline code, and external
+pipeline references are not document features. Use TypeScript authoring for
+those workflows. CLI and Studio loading still use explicit
+`definePipelineCommand` registration; the YAML file does not grant execution
+access or define a new Studio protocol.
