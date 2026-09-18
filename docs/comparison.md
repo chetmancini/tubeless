@@ -33,13 +33,13 @@ Each of these is strong at its job. Tubeless is the TypeScript in-process
 layer: a library you import, plan, and run, with a CLI and local studio when
 you want them.
 
-| Tool                                                                                  | Use it for                                          | Next to Tubeless                                                                                          |
-| ------------------------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| [Apache Hamilton](https://hamilton.apache.org/)                                       | Typed Python dataflows from ordinary functions      | Closest analog. Tubeless does that job in TypeScript, with `plan()`, dry-run, a CLI, and a local studio   |
-| [listr2](https://listr2.kilic.dev/)                                                   | Terminal task lists with live progress              | Use listr2 when shared context is enough. Use Tubeless when steps pass typed results and need a plan      |
-| [Prefect](https://www.prefect.io/), [Dagster](https://dagster.io/), [Airflow](https://airflow.apache.org/) | Scheduled data-platform work and shared UI | Run a Tubeless pipeline inside one task, asset, or flow                                                   |
-| [Temporal](https://temporal.io/), [Inngest](https://www.inngest.com/), [Trigger.dev](https://trigger.dev/) | Crash-resume and long-lived app workflows | Run a Tubeless pipeline inside one activity or durable step                                               |
-| [LangGraph](https://www.langchain.com/langgraph)                                      | Dynamic LLM agent loops                             | Use LangGraph for the agent. Use Tubeless for typed retrieval, validation, and publication around it      |
+| Tool                                                                                                       | Use it for                                     | Next to Tubeless                                                                                        |
+| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| [Apache Hamilton](https://hamilton.apache.org/)                                                            | Typed Python dataflows from ordinary functions | Closest analog. Tubeless does that job in TypeScript, with `plan()`, dry-run, a CLI, and a local studio |
+| [listr2](https://listr2.kilic.dev/)                                                                        | Terminal task lists with live progress         | Use listr2 when shared context is enough. Use Tubeless when steps pass typed results and need a plan    |
+| [Prefect](https://www.prefect.io/), [Dagster](https://dagster.io/), [Airflow](https://airflow.apache.org/) | Scheduled data-platform work and shared UI     | Run a Tubeless pipeline inside one task, asset, or flow                                                 |
+| [Temporal](https://temporal.io/), [Inngest](https://www.inngest.com/), [Trigger.dev](https://trigger.dev/) | Crash-resume and long-lived app workflows      | Run a Tubeless pipeline inside one activity or durable step                                             |
+| [LangGraph](https://www.langchain.com/langgraph)                                                           | Dynamic LLM agent loops                        | Use LangGraph for the agent. Use Tubeless for typed retrieval, validation, and publication around it    |
 
 ## Integrating with those tools
 
