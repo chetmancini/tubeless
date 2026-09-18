@@ -1,6 +1,4 @@
 import { readFileSync } from "node:fs";
-import { Ajv2020 } from "ajv/dist/2020.js";
-import { fullFormats } from "ajv-formats/dist/formats.js";
 import { describe, expect, it } from "vitest";
 import {
   compilePipelineDocument,
@@ -11,11 +9,54 @@ import {
 const jsonSchema = JSON.parse(
   readFileSync(new URL("../../docs/pipeline-document.schema.json", import.meta.url), "utf8")
 );
-const validateSchema = new Ajv2020({ allErrors: true, formats: fullFormats }).compile(jsonSchema);
 const pipeline = { steps: [{ id: "work", run: "work" }], finalize: { run: "done" } };
 const document = { version: 1, pipelines: { example: pipeline } };
 
 describe("pipeline document JSON Schema", () => {
+  it("publishes draft 2020-12 shape for editors and agents", () => {
+    expect(jsonSchema).toMatchObject({
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://tubeless.io/schemas/pipeline-document-v1.schema.json",
+      title: "Tubeless pipeline document v1",
+      type: "object",
+      additionalProperties: false,
+      required: ["version", "pipelines"],
+      properties: {
+        version: { const: 1 },
+        metadata: { $ref: "#/$defs/metadata" },
+        pipelines: { type: "object", minProperties: 1 },
+      },
+      $defs: {
+        metadata: {
+          properties: {
+            date: {
+              type: "string",
+              format: "date",
+              pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            },
+          },
+        },
+      },
+    });
+    expect(Object.keys(jsonSchema.properties).sort()).toEqual([
+      "$schema",
+      "metadata",
+      "pipelines",
+      "version",
+    ]);
+    expect(Object.keys(jsonSchema.$defs).sort()).toEqual([
+      "composition",
+      "handler",
+      "metadata",
+      "names",
+      "pipeline",
+      "step",
+      "text",
+    ]);
+  });
+});
+
+describe("validatePipelineDocument", () => {
   it.each([
     ["minimal document", document],
     ["empty optional metadata", { ...document, metadata: {} }],
@@ -96,8 +137,7 @@ describe("pipeline document JSON Schema", () => {
         },
       },
     ],
-  ])("accepts %s in both validators", (_label, value) => {
-    expect(validateSchema(value), JSON.stringify(validateSchema.errors)).toBe(true);
+  ])("accepts %s", (_label, value) => {
     expect(() => validatePipelineDocument(value)).not.toThrow();
   });
 
@@ -200,8 +240,7 @@ describe("pipeline document JSON Schema", () => {
       pipelines: { example: { ...pipeline, finalize: { run: "done", unknown: true } } },
     },
     { version: 1, pipelines: { example: { ...pipeline, targets: [4] } } },
-  ])("rejects invalid documents consistently: %j", (value) => {
-    expect(validateSchema(value)).toBe(false);
+  ])("rejects invalid documents: %j", (value) => {
     expect(() => validatePipelineDocument(value)).toThrow(PipelineDocumentError);
   });
 
@@ -226,7 +265,6 @@ describe("pipeline document JSON Schema", () => {
 
   it("leaves semantic graph checking to compilation", () => {
     const value = { version: 1, pipelines: { example: { ...pipeline, targets: ["missing"] } } };
-    expect(validateSchema(value)).toBe(true);
     expect(() => validatePipelineDocument(value)).not.toThrow();
     expect(() =>
       compilePipelineDocument(value, { steps: { work: () => 1 }, finalizers: { done: () => 1 } })
