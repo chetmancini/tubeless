@@ -1,0 +1,272 @@
+---
+const stages = ["01", "02", "03", "04"];
+---
+
+<div class="pipeline-flow" data-pipeline-flow>
+  <svg class="pipeline-pipe" aria-hidden="true" focusable="false">
+    <defs>
+      <path id="stage-pipe" />
+      <radialGradient id="pipe-joint">
+        <stop offset="0" stop-color="#fffdf8" />
+        <stop offset="0.65" stop-color="#f4efdf" />
+        <stop offset="0.82" stop-color="#d2c7aa" />
+        <stop offset="1" stop-color="#a99b79" />
+      </radialGradient>
+    </defs>
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <use href="#stage-pipe" class="pipe-shadow" />
+      <use href="#stage-pipe" stroke="#b9b09b" stroke-width="22" />
+      <use href="#stage-pipe" stroke="#d6cdb9" stroke-width="19" />
+      <use href="#stage-pipe" stroke="#e9e1ce" stroke-width="14" />
+      <use href="#stage-pipe" stroke="#faf6e9" stroke-width="8" class="pipe-highlight" />
+      <use href="#stage-pipe" class="pipe-pulse pipe-pulse-halo" />
+      <use href="#stage-pipe" class="pipe-pulse" />
+      <use href="#stage-pipe" class="pipe-seam" />
+    </g>
+    {stages.map((stage) => (
+      <g data-pipe-joint>
+        <circle r="19" fill="url(#pipe-joint)" stroke="#b5a684" stroke-width="1" />
+        <circle r="13" fill="#fffdf8" stroke="#d9cba9" stroke-width="1" />
+        <text text-anchor="middle" dy="0.35em">{stage}</text>
+      </g>
+    ))}
+    <g data-pipe-end>
+      <ellipse class="completion-glow" cy="3" rx="49" ry="37" fill="#92b99c" />
+      <path
+        d="M -33 -18 L -28 15 Q -26 26 -14 26 H 14 Q 26 26 28 15 L 33 -18 Z"
+        fill="url(#pipe-joint)"
+        stroke="#b5a684"
+        stroke-width="1.5"
+      />
+      <ellipse cy="-18" rx="33" ry="7" fill="#e2d7bd" stroke="#b5a684" stroke-width="1.5" />
+      <ellipse cy="-18" rx="25" ry="3" fill="#b5a684" opacity="0.45" />
+      <path class="completion-fill" d="M -27 0 H 27 L 25 15 Q 23 23 14 23 H -14 Q -23 23 -25 15 Z" fill="#d9e8d6" />
+      <path class="completion-check" d="M -10 5 L -3 12 L 12 -3" pathLength="1" fill="none" stroke="#2f6f4a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+  </svg>
+  <slot />
+</div>
+
+<style>
+  .pipeline-flow {
+    position: relative;
+    isolation: isolate;
+    overflow: clip;
+  }
+
+  .pipeline-pipe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .pipeline-flow[data-ready] .pipeline-pipe {
+    opacity: 0.65;
+  }
+
+  .pipe-shadow {
+    stroke: #655a40;
+    stroke-width: 25;
+    opacity: 0.09;
+    transform: translate(3px, 5px);
+  }
+
+  .pipe-highlight {
+    transform: translate(-2px, -2px);
+  }
+
+  .pipe-seam {
+    stroke: #fffdf8;
+    stroke-width: 1.5;
+    opacity: 0.7;
+    transform: translate(-4px, -4px);
+  }
+
+  .pipe-pulse {
+    stroke: #bb9135;
+    stroke-width: 5;
+    stroke-dasharray: 18 782;
+    animation: pipe-flow 9s linear infinite;
+    animation-play-state: paused;
+  }
+
+  .pipe-pulse-halo {
+    stroke: #d9b650;
+    stroke-width: 13;
+    stroke-dasharray: 30 770;
+    opacity: 0.3;
+  }
+
+  .pipeline-flow[data-visible] .pipe-pulse {
+    animation-play-state: running;
+  }
+
+  .completion-glow,
+  .completion-fill,
+  .completion-check {
+    animation-duration: 9s;
+    animation-delay: var(--completion-delay, 9s);
+    animation-iteration-count: infinite;
+    animation-play-state: paused;
+  }
+
+  .completion-glow {
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation-name: bucket-glow;
+  }
+
+  .completion-fill {
+    opacity: 0;
+    animation-name: bucket-fill;
+  }
+
+  .completion-check {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation-name: bucket-check;
+  }
+
+  .pipeline-flow[data-visible] :is(.completion-glow, .completion-fill, .completion-check) {
+    animation-play-state: running;
+  }
+
+  text {
+    fill: #866522;
+    font: 500 10px var(--mono);
+    letter-spacing: 0.03em;
+  }
+
+  .pipeline-flow :global(.section:has([data-pipeline-stage])) {
+    padding-top: 6.3rem;
+  }
+
+  .pipeline-flow :global(.section:last-child) {
+    padding-bottom: 7rem;
+  }
+
+  .pipeline-flow :global(.feature-copy),
+  .pipeline-flow :global(.hero > div),
+  .pipeline-flow :global(.section-head) {
+    background: var(--road);
+    box-shadow: 0 0 24px 16px var(--road);
+    border-radius: 12px;
+  }
+
+  @keyframes pipe-flow {
+    to { stroke-dashoffset: -800; }
+  }
+
+  @keyframes bucket-glow {
+    0% { opacity: 0; transform: scale(0.85); }
+    5% { opacity: 0.28; }
+    18%, 100% { opacity: 0; transform: scale(1.15); }
+  }
+
+  @keyframes bucket-fill {
+    0%, 36%, 100% { opacity: 0; }
+    5%, 25% { opacity: 1; }
+  }
+
+  @keyframes bucket-check {
+    0% { stroke-dashoffset: 1; opacity: 0; }
+    3% { opacity: 1; }
+    8%, 25% { stroke-dashoffset: 0; opacity: 1; }
+    36%, 100% { stroke-dashoffset: 0; opacity: 0; }
+  }
+
+  @media (max-width: 880px) {
+    .pipeline-flow :global(.hero) {
+      padding-top: 4.5rem;
+    }
+
+    .pipeline-flow[data-ready] .pipeline-pipe {
+      opacity: 0.55;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pipe-pulse {
+      animation: none;
+    }
+
+    .completion-glow,
+    .completion-fill,
+    .completion-check {
+      animation: none;
+    }
+
+    .completion-check {
+      stroke-dashoffset: 0;
+    }
+  }
+</style>
+
+<script>
+  const flow = document.querySelector<HTMLElement>("[data-pipeline-flow]");
+  if (flow) {
+    const svg = flow.querySelector<SVGSVGElement>("svg")!;
+    const path = flow.querySelector<SVGPathElement>("#stage-pipe")!;
+    const hero = flow.querySelector<HTMLElement>(".hero")!;
+    const headings = Array.from(flow.querySelectorAll<HTMLElement>("[data-pipeline-stage]"));
+    const joints = flow.querySelectorAll<SVGGElement>("[data-pipe-joint]");
+    const bucket = flow.querySelector<SVGGElement>("[data-pipe-end]")!;
+
+    const draw = () => {
+      const bounds = flow.getBoundingClientRect();
+      const mobile = window.matchMedia("(max-width: 880px)").matches;
+      const points = headings.map((heading) => {
+        const rect = heading.getBoundingClientRect();
+        return { x: rect.left - bounds.left + 19, y: rect.top - bounds.top - 43 };
+      });
+      const first = points[0];
+      const width = bounds.width;
+      const heroExit = hero.getBoundingClientRect().bottom - bounds.top - 20;
+      // Broad curves weave underneath the content; opaque panels hide the pipe naturally.
+      let d = `M ${width * 0.7} -20`
+        + `C ${width * 0.7} 110 ${width * 0.42} 30 ${width * 0.42} 180`
+        + `C ${width * 0.42} ${heroExit - 120} ${width * 0.86} ${heroExit - 120} ${width * 0.64} ${heroExit + 20}`
+        + `C ${width * 0.3} ${heroExit + 180} ${first.x} ${first.y - 120} ${first.x} ${first.y}`;
+
+      points.forEach((point, index) => {
+        joints[index].setAttribute("transform", `translate(${point.x} ${point.y})`);
+        const next = points[index + 1];
+        if (next) {
+          const bend = (next.y - point.y) * 0.35;
+          const middle = (point.y + next.y) / 2;
+          d += mobile
+            ? `C ${point.x} ${point.y + 120} ${width * 0.7} ${point.y + 120} ${width * 0.7} ${middle}`
+              + `C ${width * 0.7} ${next.y - 120} ${next.x} ${next.y - 120} ${next.x} ${next.y}`
+            : `C ${point.x} ${point.y + bend} ${next.x} ${next.y - bend} ${next.x} ${next.y}`;
+        } else {
+          const end = bounds.height - 65;
+          d += `C ${point.x} ${point.y + 160} ${width * 0.5} ${end - 120} ${width * 0.5} ${end}`;
+        }
+      });
+
+      svg.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
+      path.setAttribute("d", d);
+      bucket.setAttribute("transform", `translate(${width * 0.5} ${bounds.height - 47})`);
+      // A pulse's leading edge reaches the bucket once per 800px / 9s cycle.
+      const arrival = ((path.getTotalLength() - 18) % 800) / 800 * 9;
+      flow.style.setProperty("--completion-delay", `${arrival}s`);
+      flow.dataset.ready = "";
+    };
+
+    const resizeObserver = new ResizeObserver(draw);
+    resizeObserver.observe(flow);
+    resizeObserver.observe(hero);
+    headings.forEach((heading) => resizeObserver.observe(heading));
+    void document.fonts.ready.then(draw);
+
+    const visibilityObserver = new IntersectionObserver(([entry]) => {
+      flow.toggleAttribute("data-visible", entry.isIntersecting);
+    });
+    visibilityObserver.observe(flow);
+  }
+</script>

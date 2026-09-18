@@ -4,6 +4,7 @@ import CodeBlock from "../components/CodeBlock.astro";
 import Install from "../components/Install.astro";
 import LiveTerminal from "../components/LiveTerminal.astro";
 import MermaidGraph from "../components/MermaidGraph.astro";
+import PipelineFlow from "../components/PipelineFlow.astro";
 import Terminal from "../components/Terminal.astro";
 import TtyBar from "../components/TtyBar.astro";
 import { FIRST_PIPELINE_SAMPLE } from "../data/code-samples";
@@ -34,174 +35,176 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
   description="Tubeless by Chet Mancini: dependency-free TypeScript primitives for typed data pipelines and multi-step workflow graphs."
 >
   <main>
-    <section class="wrap hero">
-      <svg class="hero-wheel" viewBox="0 0 400 400" aria-hidden="true">
-        <g fill="none" stroke="#121212" stroke-width="1.2">
-          <circle cx="200" cy="200" r="186"></circle>
-          <circle cx="200" cy="200" r="168"></circle>
-          <circle cx="200" cy="200" r="42"></circle>
-          <circle cx="200" cy="200" r="18"></circle>
-        </g>
-        <g fill="none" stroke="#121212" stroke-width="1">
-          <path d="M200 58v114"></path>
-          <path d="M200 228v114"></path>
-          <path d="M58 200h114"></path>
-          <path d="M228 200h114"></path>
-          <path d="M99.7 99.7l80.6 80.6"></path>
-          <path d="M219.7 219.7l80.6 80.6"></path>
-          <path d="M300.3 99.7l-80.6 80.6"></path>
-          <path d="M180.3 219.7l-80.6 80.6"></path>
-        </g>
-        <path d="M200 14v36" stroke="#c4a046" stroke-width="3.2"></path>
-        <circle cx="200" cy="16" r="7" fill="#c4a046"></circle>
-      </svg>
-      <div>
-        <h1>Tubeless</h1>
-        <p class="lede">
-          Typed pipelines for Node.js. Define dependencies, preview execution,
-          and inspect step results.
-        </p>
-        <Install command={`npm install ${PACKAGE.name}`} />
-        <div class="actions">
-          <a class="btn" href={href("start")}>Getting started</a>
-          <a class="btn ghost" href={href("agents")}>Agent documentation</a>
-        </div>
-        <aside class="agent-tip" aria-label="Build with your agent">
-          <p>
-            <a href={href("docs/agent-skills")}>Let your agent build pipelines ↗</a>
-          </p>
-          <Install command="npx skills add chetmancini/tubeless" />
-        </aside>
-      </div>
-      <Terminal tape={planTape} />
-    </section>
-
-    <div class="wrap package-strip">
-        <dl class="pkg" aria-label="Package">
-          <div>
-            <dt>Version</dt>
-            <dd>
-              {PACKAGE.npm ? (
-                <a href={PACKAGE.npm} rel="noreferrer">{PACKAGE.version}</a>
-              ) : (
-                PACKAGE.version
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt>License</dt>
-            <dd>
-              <a href={githubBlob("LICENSE")} rel="noreferrer">{PACKAGE.license}</a>
-            </dd>
-          </div>
-          <div>
-            <dt>Module</dt>
-            <dd>{PACKAGE.module}</dd>
-          </div>
-          <div>
-            <dt>Node</dt>
-            <dd>{PACKAGE.node}</dd>
-          </div>
-          <div>
-            <dt>Deps</dt>
-            <dd>{PACKAGE.runtimeDeps}</dd>
-          </div>
-        </dl>
-    </div>
-
-    <section class="wrap section">
-      <div class="section-head">
+    <PipelineFlow>
+      <section class="wrap hero">
+        <svg class="hero-wheel" viewBox="0 0 400 400" aria-hidden="true">
+          <g fill="none" stroke="#121212" stroke-width="1.2">
+            <circle cx="200" cy="200" r="186"></circle>
+            <circle cx="200" cy="200" r="168"></circle>
+            <circle cx="200" cy="200" r="42"></circle>
+            <circle cx="200" cy="200" r="18"></circle>
+          </g>
+          <g fill="none" stroke="#121212" stroke-width="1">
+            <path d="M200 58v114"></path>
+            <path d="M200 228v114"></path>
+            <path d="M58 200h114"></path>
+            <path d="M228 200h114"></path>
+            <path d="M99.7 99.7l80.6 80.6"></path>
+            <path d="M219.7 219.7l80.6 80.6"></path>
+            <path d="M300.3 99.7l-80.6 80.6"></path>
+            <path d="M180.3 219.7l-80.6 80.6"></path>
+          </g>
+          <path d="M200 14v36" stroke="#c4a046" stroke-width="3.2"></path>
+          <circle cx="200" cy="16" r="7" fill="#c4a046"></circle>
+        </svg>
         <div>
-          <h2>Runtime</h2>
+          <h1>Tubeless</h1>
+          <p class="lede">
+            Typed pipelines for Node.js. Define dependencies, preview execution,
+            and inspect step results.
+          </p>
+          <Install command={`npm install ${PACKAGE.name}`} />
+          <div class="actions">
+            <a class="btn" href={href("start")}>Getting started</a>
+            <a class="btn ghost" href={href("agents")}>Agent documentation</a>
+          </div>
+          <aside class="agent-tip" aria-label="Build with your agent">
+            <p>
+              <a href={href("docs/agent-skills")}>Let your agent build pipelines ↗</a>
+            </p>
+            <Install command="npx skills add chetmancini/tubeless" />
+          </aside>
         </div>
-        <p>
-          Build a pipeline with <code>createSteps</code>, <code>step</code>, and <code>definePipeline</code>.
-          Preview the selected steps with <code>plan()</code>, then execute with
-          <code>run()</code> or <code>runOrThrow()</code>. The CLI uses the same pipeline definitions.
-        </p>
-      </div>
-      <div class="facts">
-        <article>
-          <h3>Library</h3>
-          <p>ESM-only, dependency-free compiled JavaScript. Node.js 22+ on Linux and macOS.</p>
-        </article>
-        <article>
-          <h3>CLI</h3>
-          <p><code>inspect</code>, <code>plan</code>, <code>graph</code>, <code>run</code>, and <code>ui</code>. Bun 1.3.14+. The executable runs directly with Bun.</p>
-        </article>
-        <article>
-          <h3>Execution</h3>
-          <p>Pipelines run in your Node.js process. No separate server is required.</p>
-        </article>
-      </div>
-    </section>
+        <Terminal tape={planTape} />
+      </section>
 
-    <section class="wrap section">
-      <div class="feature">
-        <div class="feature-copy">
-          <h2>Define</h2>
+      <div class="wrap package-strip">
+          <dl class="pkg" aria-label="Package">
+            <div>
+              <dt>Version</dt>
+              <dd>
+                {PACKAGE.npm ? (
+                  <a href={PACKAGE.npm} rel="noreferrer">{PACKAGE.version}</a>
+                ) : (
+                  PACKAGE.version
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>License</dt>
+              <dd>
+                <a href={githubBlob("LICENSE")} rel="noreferrer">{PACKAGE.license}</a>
+              </dd>
+            </div>
+            <div>
+              <dt>Module</dt>
+              <dd>{PACKAGE.module}</dd>
+            </div>
+            <div>
+              <dt>Node</dt>
+              <dd>{PACKAGE.node}</dd>
+            </div>
+            <div>
+              <dt>Deps</dt>
+              <dd>{PACKAGE.runtimeDeps}</dd>
+            </div>
+          </dl>
+      </div>
+
+      <section class="wrap section">
+        <div class="section-head">
+          <div>
+            <h2>Runtime</h2>
+          </div>
           <p>
-            Connect steps through their inputs and outputs. TypeScript checks the values
-            passed between them, and Tubeless checks for missing dependencies,
-            cycles, and duplicate IDs before execution.
+            Build a pipeline with <code>createSteps</code>, <code>step</code>, and <code>definePipeline</code>.
+            Preview the selected steps with <code>plan()</code>, then execute with
+            <code>run()</code> or <code>runOrThrow()</code>. The CLI uses the same pipeline definitions.
           </p>
         </div>
-        <figure class="shot">
-          <TtyBar title="import.ts" host="library" />
-          <CodeBlock code={FIRST_PIPELINE_SAMPLE} lang="ts" />
-        </figure>
-      </div>
-    </section>
-
-    <section class="wrap section">
-      <div class="feature reverse">
-        <div class="feature-copy">
-          <h2>Plan</h2>
-          <p>
-            <code>plan()</code> lists the steps selected for a target without
-            executing them. Export the dependency graph as Mermaid with
-            <code>toMermaid()</code>.
-          </p>
+        <div class="facts">
+          <article>
+            <h3>Library</h3>
+            <p>ESM-only, dependency-free compiled JavaScript. Node.js 22+ on Linux and macOS.</p>
+          </article>
+          <article>
+            <h3>CLI</h3>
+            <p><code>inspect</code>, <code>plan</code>, <code>graph</code>, <code>run</code>, and <code>ui</code>. Bun 1.3.14+. The executable runs directly with Bun.</p>
+          </article>
+          <article>
+            <h3>Execution</h3>
+            <p>Pipelines run in your Node.js process. No separate server is required.</p>
+          </article>
         </div>
-        <MermaidGraph />
-      </div>
-    </section>
+      </section>
 
-    <section class="wrap section">
-      <div class="feature">
-        <div class="feature-copy">
-          <h2>Run</h2>
-          <p>
-            <code>run()</code> returns step results, failures, and timings.
-            The terminal reporter displays progress during execution.
-            Run history can be stored in SQLite or exported as NDJSON.
-          </p>
+      <section class="wrap section">
+        <div class="feature">
+          <div class="feature-copy">
+            <h2 data-pipeline-stage>Define</h2>
+            <p>
+              Connect steps through their inputs and outputs. TypeScript checks the values
+              passed between them, and Tubeless checks for missing dependencies,
+              cycles, and duplicate IDs before execution.
+            </p>
+          </div>
+          <figure class="shot">
+            <TtyBar title="import.ts" host="library" />
+            <CodeBlock code={FIRST_PIPELINE_SAMPLE} lang="ts" />
+          </figure>
         </div>
-        <LiveTerminal />
-      </div>
-    </section>
+      </section>
 
-    <section class="wrap section">
-      <div class="feature reverse">
-        <div class="feature-copy">
-          <h2>Studio</h2>
-          <p>
-            Open recorded runs in your browser to inspect step timelines, logs, errors,
-            and child pipelines. Register commands to preview and launch new runs.
-          </p>
+      <section class="wrap section">
+        <div class="feature reverse">
+          <div class="feature-copy">
+            <h2 data-pipeline-stage>Plan</h2>
+            <p>
+              <code>plan()</code> lists the steps selected for a target without
+              executing them. Export the dependency graph as Mermaid with
+              <code>toMermaid()</code>.
+            </p>
+          </div>
+          <MermaidGraph />
         </div>
-        <figure class="shot">
-          <TtyBar title="tubeless ui" host="studio" />
-          <img
-            src={href("studio.png")}
-            width="1440"
-            height="813"
-            loading="lazy"
-            alt="Local studio listing completed import and publish runs, with the import step timeline and a nested normalize run selected."
-          />
-        </figure>
-      </div>
-    </section>
+      </section>
+
+      <section class="wrap section">
+        <div class="feature">
+          <div class="feature-copy">
+            <h2 data-pipeline-stage>Run</h2>
+            <p>
+              <code>run()</code> returns step results, failures, and timings.
+              The terminal reporter displays progress during execution.
+              Run history can be stored in SQLite or exported as NDJSON.
+            </p>
+          </div>
+          <LiveTerminal />
+        </div>
+      </section>
+
+      <section class="wrap section">
+        <div class="feature reverse">
+          <div class="feature-copy">
+            <h2 data-pipeline-stage>Studio</h2>
+            <p>
+              Open recorded runs in your browser to inspect step timelines, logs, errors,
+              and child pipelines. Register commands to preview and launch new runs.
+            </p>
+          </div>
+          <figure class="shot">
+            <TtyBar title="tubeless ui" host="studio" />
+            <img
+              src={href("studio.png")}
+              width="1440"
+              height="813"
+              loading="lazy"
+              alt="Local studio listing completed import and publish runs, with the import step timeline and a nested normalize run selected."
+            />
+          </figure>
+        </div>
+      </section>
+    </PipelineFlow>
     <section class="wrap section next-steps" aria-labelledby="next-heading">
       <h2 id="next-heading">Documentation</h2>
       <div class="agent-grid">
