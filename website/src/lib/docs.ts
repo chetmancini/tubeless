@@ -1,21 +1,15 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { marked } from "marked";
-import { highlightCode } from "./highlight";
+import { rewriteDocLinks } from "./doc-links";
 import { GITHUB_BLOB, absUrl, href } from "./paths";
 
 const docsDir = join(dirname(fileURLToPath(import.meta.url)), "../../../docs");
-const renderer = new marked.Renderer();
-
-renderer.code = ({ text, lang }) => highlightCode(text, lang);
 
 export type DocPage = {
   slug: string;
   title: string;
   description: string;
-  html: string;
-  headings: { id: string; text: string; level: number }[];
 };
 
 export const DOC_NAV = [
@@ -39,55 +33,6 @@ export const DOC_NAV = [
 
 export const DOC_SLUGS = new Set(DOC_NAV.map((item) => item.slug));
 
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/<[^>]+>/g, "")
-    .replace(/[`*_]/g, "")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-");
-}
-
-function rewriteDocLinks(markdown: string): string {
-  return markdown.replace(/\]\(([^)]+)\)/g, (full, target: string) => {
-    const [path, hash] = target.split("#");
-    const suffix = hash ? `#${hash}` : "";
-    if (!path || /^(?:https?:|mailto:)/.test(path)) return full;
-    if (path === "./llms.txt" || path === "llms.txt") {
-      return `](${href("llms.txt")}${suffix})`;
-    }
-    if (path === "./api-report.json" || path === "api-report.json") {
-      return `](${href("api-report.json")}${suffix})`;
-    }
-    if (path === "./pipeline-document.schema.json" || path === "pipeline-document.schema.json") {
-      return `](${href("schemas/pipeline-document-v1.schema.json")}${suffix})`;
-    }
-    if (path.startsWith("../")) {
-      return `](${GITHUB_BLOB}/${path.slice(3)}${suffix})`;
-    }
-    if (path.endsWith(".md")) {
-      const slug = path.replace(/^\.\//, "").replace(/\.md$/, "");
-      if (slug === "README") {
-        return `](${GITHUB_BLOB}/README.md${suffix})`;
-      }
-      return `](${href(`docs/${slug}`)}${suffix})`;
-    }
-    return full;
-  });
-}
-
-function addHeadingIds(html: string): { html: string; headings: DocPage["headings"] } {
-  const headings: DocPage["headings"] = [];
-  const next = html.replace(/<h([2-3])>([\s\S]*?)<\/h\1>/g, (_match, level, inner) => {
-    const text = String(inner).replace(/<[^>]+>/g, "").trim();
-    const id = slugify(text);
-    headings.push({ id, text, level: Number(level) });
-    return `<h${level} id="${id}">${inner}</h${level}>`;
-  });
-  return { html: next, headings };
-}
-
 export function loadDoc(slug: string): DocPage {
   const source = readFileSync(join(docsDir, `${slug}.md`), "utf8");
   const title = source.match(/^#\s+(.+)$/m)?.[1]?.replace(/`/g, "") ?? slug;
@@ -96,14 +41,7 @@ export function loadDoc(slug: string): DocPage {
       .split("\n")
       .map((line) => line.trim())
       .find((line) => line.length > 0 && !line.startsWith("#") && !line.startsWith("|")) ?? title;
-  const html = marked.parse(rewriteDocLinks(source), { async: false, gfm: true, renderer }) as string;
-  const rendered = addHeadingIds(html);
-  const body = rendered.html.replace(/^\s*<h1\b[^>]*>[\s\S]*?<\/h1>/, "");
-  return { slug, title, description, html: body.replace(/<pre>/g, '<pre tabindex="0">'), headings: rendered.headings };
-}
-
-export function listDocs(): DocPage[] {
-  return DOC_NAV.map((item) => loadDoc(item.slug));
+  return { slug, title, description };
 }
 
 // Keep agent downloads aligned with the exact sources rendered by this build.
@@ -111,7 +49,7 @@ export function loadMarkdown(slug: string): string {
   if (!DOC_SLUGS.has(slug as (typeof DOC_NAV)[number]["slug"])) {
     throw new Error(`Unknown documentation page: ${slug}`);
   }
-  return rewriteDocLinks(readFileSync(join(docsDir, `${slug}.md`), "utf8"))
+  return rewriteDocLinks(readFileSync(join(docsDir, `${slug}.md`), "utf8"), href)
     .replace(/\]\((\/[^)]+)\)/g, (_match, path: string) => {
       const url = new URL(path, absUrl());
       if (url.pathname.startsWith(href("docs/"))) url.pathname += ".md";

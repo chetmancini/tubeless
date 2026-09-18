@@ -10,8 +10,6 @@
     "preview": "astro preview"
   },
   "devDependencies": {
-    "astro": "5.16.6",
-    "marked": "17.0.1",
-    "shiki": "3.23.0"
+    "astro": "5.16.6"
   }
 }

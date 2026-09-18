@@ -34,6 +34,9 @@ for (const slug of pages) {
   }
 }
 assert.ok(bundle.indexOf("Source: https://tubeless.io/docs/agent-guide.md") < bundle.indexOf("Source: https://tubeless.io/docs/getting-started.md"), "Full documentation must lead with the agent guide");
+const gettingStarted = read("docs/getting-started/index.html");
+assert.match(gettingStarted, /<pre class="astro-code github-dark"[^>]*data-language="ts">/);
+assert.match(gettingStarted, /<span class="line"><span style="color:/);
 console.log(`Verified ${pages.length} Markdown documents, discovery links, and full documentation bundle.`);
 
 // Validate the llms.txt file-list grammar, not just the presence of keywords.
