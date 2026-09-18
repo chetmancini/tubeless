@@ -1,3 +1,5 @@
+import { writeSync } from "node:fs";
+import { isatty } from "node:tty";
 import { Worker } from "node:worker_threads";
 import { formatDurationMs } from "./reporter.js";
 
@@ -295,7 +297,11 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
 
   const restoreCursor = (): void => {
     try {
-      options.write(ANSI.showCursor);
+      if (isatty(options.fd)) {
+        writeSync(options.fd, ANSI.showCursor);
+      } else {
+        options.write(ANSI.showCursor);
+      }
     } catch {
       // The output may remain unavailable; cursor restore is best-effort.
     }
