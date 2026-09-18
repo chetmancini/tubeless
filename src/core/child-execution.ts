@@ -1,6 +1,7 @@
 import { throwIfAborted } from "../utilities/abort.js";
 import { emitRejectedPlanLifecycle } from "./lifecycle.js";
 import { runConcurrentSettled } from "../utilities/batch.js";
+import { isPipelineCancellation, PipelineExecutionError } from "./pipeline-execute.js";
 import {
   toMappedChildStepProgress,
   type MappedChildProgressSnapshot,
@@ -137,11 +138,6 @@ async function rejectedChildPlanResult(
 }
 
 type ChildInputs = Record<string, unknown>;
-
-interface ChildExecutionDependencies<TParentOptions extends object> {
-  createExecutionError(result: PipelineRun<unknown>, message: string): Error;
-  isCancellation(cause: unknown, context: PipelineExecutionContext<TParentOptions>): boolean;
-}
 
 export interface SingleChildExecutionConfig<TParentOptions extends object> {
   pipeline: ChildPipeline;
@@ -291,7 +287,6 @@ async function runChildPipeline(
   controls: PipelineRunControls,
   context: PipelineContext,
   hooks: PipelineHooks,
-  dependencies: ChildExecutionDependencies<object>,
   messagePrefix = "",
   plan: PipelinePlan
 ): Promise<PipelineRun<unknown>> {
@@ -301,7 +296,7 @@ async function runChildPipeline(
       ...context,
       hooks,
     });
-    throw dependencies.createExecutionError(
+    throw new PipelineExecutionError(
       result,
       `${messagePrefix}could not start: ${firstError?.message ?? "invalid plan"}`
     );
@@ -313,7 +308,7 @@ async function runChildPipeline(
   });
   if (result.status !== "completed") {
     const { failureLocation, message } = firstChildFailure(result);
-    throw dependencies.createExecutionError(
+    throw new PipelineExecutionError(
       result,
       `${messagePrefix}failed at ${failureLocation}: ${message}`
     );
@@ -329,8 +324,7 @@ function hasProgressObserver(context: PipelineContext): boolean {
 }
 
 export function createSingleChildRunner<TParentOptions extends object>(
-  config: SingleChildExecutionConfig<TParentOptions>,
-  dependencies: ChildExecutionDependencies<TParentOptions>
+  config: SingleChildExecutionConfig<TParentOptions>
 ): (inputs: ChildInputs, context: PipelineStepContext<TParentOptions>) => Promise<unknown> {
   return async (inputs, context) => {
     const { controls, domainOptions } = childRunBags(
@@ -382,7 +376,6 @@ export function createSingleChildRunner<TParentOptions extends object>(
       controls,
       baseChildContext,
       childProgress ? childHooks : {},
-      dependencies,
       `Child pipeline ${config.pipeline.id} `,
       childPlan
     );
@@ -394,8 +387,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
 }
 
 export function createMappedChildRunner<TParentOptions extends object>(
-  config: MappedChildExecutionConfig<TParentOptions>,
-  dependencies: ChildExecutionDependencies<TParentOptions>
+  config: MappedChildExecutionConfig<TParentOptions>
 ): (inputs: ChildInputs, context: PipelineStepContext<TParentOptions>) => Promise<unknown[]> {
   return async (inputs, context) => {
     const items = [...(await config.items(inputs, context))];
@@ -564,7 +556,6 @@ export function createMappedChildRunner<TParentOptions extends object>(
               tracing: childTracingOptions(context, key),
             },
             observesProgress ? childHooks : {},
-            dependencies,
             "",
             childPlan
           );
@@ -592,7 +583,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
           active.delete(key);
           itemRows.set(key, {
             id: key,
-            status: dependencies.isCancellation(cause, context) ? "cancelled" : "failed",
+            status: isPipelineCancellation(cause, context) ? "cancelled" : "failed",
             label: cause.message,
           });
           failedKeys.add(key);
@@ -620,11 +611,11 @@ export function createMappedChildRunner<TParentOptions extends object>(
     if (failures.length > 0 || schedulerFailure !== undefined) {
       const details = failures.map(({ error, key }) => `${key}: ${error.message}`).join("; ");
       const cancelled =
-        failures.every(({ error }) => dependencies.isCancellation(error, context)) &&
-        (schedulerFailure === undefined || dependencies.isCancellation(schedulerFailure, context));
+        failures.every(({ error }) => isPipelineCancellation(error, context)) &&
+        (schedulerFailure === undefined || isPipelineCancellation(schedulerFailure, context));
       const primaryError = cancelled
         ? (failures[0]?.error ?? schedulerFailure)
-        : (failures.find(({ error }) => !dependencies.isCancellation(error, context))?.error ??
+        : (failures.find(({ error }) => !isPipelineCancellation(error, context))?.error ??
           failures[0]?.error ??
           schedulerFailure);
       const message =
@@ -636,7 +627,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
           error,
           key,
           index,
-          cancelled: dependencies.isCancellation(error, context),
+          cancelled: isPipelineCancellation(error, context),
         })),
         failureCount: failures.length,
         schedulerError: schedulerFailure,

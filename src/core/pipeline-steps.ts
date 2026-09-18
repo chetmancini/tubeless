@@ -1,6 +1,5 @@
 import { createMappedChildRunner, createSingleChildRunner } from "./child-execution.js";
 import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.js";
-import { isPipelineCancellation, PipelineExecutionError } from "./pipeline-execute.js";
 import {
   STEP_NESTED_PIPELINE,
   STEP_OPTIONS_SCHEMA,
@@ -381,10 +380,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
       name: config.name,
       description: config.description,
       dryRun: config.dryRun,
-      run: createSingleChildRunner(config, {
-        createExecutionError: (result, message) => new PipelineExecutionError(result, message),
-        isCancellation: (error, childContext) => isPipelineCancellation(error, childContext),
-      }),
+      run: createSingleChildRunner(config),
     };
 
     const skip = config.skip;
@@ -577,10 +573,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
       name: config.name,
       description: config.description,
       dryRun: config.dryRun,
-      run: createMappedChildRunner(config, {
-        createExecutionError: (result, message) => new PipelineExecutionError(result, message),
-        isCancellation: (error, childContext) => isPipelineCancellation(error, childContext),
-      }),
+      run: createMappedChildRunner(config),
     };
 
     const skip = config.skip;
