@@ -195,6 +195,7 @@ export function commandContext(
           ...params.map((param) => String(param ?? ""))
         ),
     },
+    reporterOutput: io.stdout,
     signal,
   };
   if (pipelineContext) context.pipelineContext = pipelineContext;

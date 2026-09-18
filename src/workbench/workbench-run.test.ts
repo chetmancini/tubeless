@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCommand } from "./workbench-run.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "./workbench-shared.js";
 
@@ -35,7 +35,9 @@ function captureIo(cwd: string): WorkbenchCliIo & { errors: string[]; output: st
   };
 }
 
-async function writeCommandFixture(): Promise<{ directory: string; filePath: string }> {
+async function writeCommandFixture(
+  reporterSource = "false"
+): Promise<{ directory: string; filePath: string }> {
   const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-"));
   directories.push(directory);
   const filePath = path.join(directory, "pipeline.mjs");
@@ -66,7 +68,7 @@ async function writeCommandFixture(): Promise<{ directory: string; filePath: str
             message: { type: "string", description: "Message to process." },
             fail: { type: "boolean", default: false },
           },
-          reporter: false,
+          reporter: ${reporterSource},
           summarize: (result) => [\`completed:\${result}\`],
         }
       );
@@ -124,6 +126,34 @@ describe("runCommand", () => {
     expect(events).toHaveLength(lines.length);
     expect(events.map(({ name }) => name)).toContain("pipeline.started");
     expect(events.map(({ name }) => name)).toContain("pipeline.completed");
+  });
+
+  it("keeps an interactive reporter off stdout for --trace -", async () => {
+    const { directory } = await writeCommandFixture(
+      '{ mode: "interactive", color: "never", symbols: "ascii" }'
+    );
+    const io = captureIo(directory);
+    const processStdoutWrite = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((() => true) as typeof process.stdout.write);
+
+    try {
+      const exitCode = await runCommand(
+        ["--trace", "-", "pipeline.mjs", "--", "--message", "hello"],
+        io
+      );
+
+      expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+      expect(processStdoutWrite).not.toHaveBeenCalled();
+      const stdout = io.output.join("");
+      expect(() => parseNdjson(stdout)).not.toThrow();
+      expect(parseNdjson(stdout).at(-1)?.name).toBe("pipeline.completed");
+      expect(stdout).not.toContain("\u001B[");
+      expect(io.errors.join("")).toContain("Pipeline command-fixture");
+      expect(io.errors.join("")).toContain("completed:hello");
+    } finally {
+      processStdoutWrite.mockRestore();
+    }
   });
 
   it("maps validation and pipeline failures to workbench exit codes", async () => {

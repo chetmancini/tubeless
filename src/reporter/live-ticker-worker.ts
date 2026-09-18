@@ -52,7 +52,8 @@ function paintFrame(): void {
       currentSpinner(data.unicode, data.refreshIntervalMs),
       Date.now(),
       columns,
-      data.color
+      data.color,
+      data.unicode
     )
   );
   Atomics.store(state, 1, frame.frameLineCount);

@@ -196,7 +196,7 @@ describe("createPipelineReporter", () => {
   });
 
   it("uses ASCII bars and keeps live rows inside narrow terminals", async () => {
-    const output = captureOutput(true, 25);
+    const output = captureOutput(true, 30);
     const reporter = createPipelineReporter({
       color: "never",
       log: captureLog(),
@@ -205,7 +205,7 @@ describe("createPipelineReporter", () => {
       progressBarWidth: 8,
       refreshIntervalMs: 10_000,
       symbols: "ascii",
-      terminal: { color: false, isTTY: true, unicode: false },
+      terminal: { color: false, isTTY: true, unicode: true },
     });
 
     await progressivePipeline().run({}, undefined, {
@@ -219,8 +219,9 @@ describe("createPipelineReporter", () => {
       .filter((chunk) => chunk.endsWith("\n"))
       .flatMap((chunk) => chunk.trimEnd().split("\n"));
     expect(rendered).toContain("[===-----] 40%");
-    expect(frameLines.some((line) => line.endsWith("…"))).toBe(true);
-    expect(frameLines.every((line) => [...line].length <= 24)).toBe(true);
+    expect(frameLines.some((line) => line.endsWith("..."))).toBe(true);
+    expect(frameLines.every((line) => !line.includes("…"))).toBe(true);
+    expect(frameLines.every((line) => [...line].length <= 29)).toBe(true);
   });
 
   it("preserves ANSI styling when a live row is truncated", async () => {
@@ -353,6 +354,38 @@ describe("createPipelineReporter", () => {
     expect(rendered).toContain("entry red\n");
     expect(rendered).not.toContain("pwned");
     expect(rendered).not.toContain("\u001B[31m");
+  });
+
+  it("sanitizes pipeline ids and policy-skip messages", async () => {
+    const output = captureOutput();
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      mode: "interactive",
+      output,
+      refreshIntervalMs: 10_000,
+      symbols: "ascii",
+      terminal: { color: false, isTTY: true, unicode: false },
+    });
+    const { step } = createSteps();
+    const skipped = step("skip", {
+      skip: () => "cached\u001B]2;owned\u0007 safely\u001B[?2004h",
+      run: () => undefined,
+    });
+    const pipeline = definePipeline({
+      id: "interactive\u001B]2;pipeline-title\u0007-safe",
+      steps: [skipped],
+      finalize: () => undefined,
+    });
+
+    await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+
+    const rendered = output.chunks.join("");
+    expect(rendered).toContain("Pipeline interactive-safe");
+    expect(rendered).toContain("skip (cached safely)");
+    expect(rendered).not.toContain("owned");
+    expect(rendered).not.toContain("pipeline-title");
+    expect(rendered).not.toContain("\u001B[?2004h");
   });
 
   it("avoids interactive auto mode in CI even when the output is a TTY", () => {

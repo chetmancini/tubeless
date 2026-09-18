@@ -55,12 +55,13 @@ function visibleWidth(value: string): number {
   return [...value].reduce((width, character) => width + characterWidth(character), 0);
 }
 
-function fitLine(value: string, columns: number | undefined): string {
+function fitLine(value: string, columns: number | undefined, unicode: boolean): string {
   if (!columns || columns <= 1) return value;
   const maxWidth = columns - 1;
   const plain = value.replace(ANSI_STYLE, "");
   if (visibleWidth(plain) <= maxWidth) return value;
-  const targetWidth = Math.max(0, maxWidth - 1);
+  const ellipsis = unicode ? "…" : ".".repeat(Math.min(3, maxWidth));
+  const targetWidth = Math.max(0, maxWidth - visibleWidth(ellipsis));
   let width = 0;
   let truncated = "";
   let index = 0;
@@ -80,7 +81,7 @@ function fitLine(value: string, columns: number | undefined): string {
     width = nextWidth;
     index += character.length;
   }
-  return `${truncated}${hasStyle ? ANSI.reset : ""}…`;
+  return `${truncated}${hasStyle ? ANSI.reset : ""}${ellipsis}`;
 }
 
 export function elapsedToken(startedAtMs: number): string {
@@ -135,9 +136,12 @@ export function paintLiveLines(
   spinner: string,
   nowMs: number,
   columns?: number,
-  color = false
+  color = false,
+  unicode = true
 ): string[] {
-  return lines.map((line) => fitLine(replaceLiveTokens(line, spinner, nowMs, color), columns));
+  return lines.map((line) =>
+    fitLine(replaceLiveTokens(line, spinner, nowMs, color), columns, unicode)
+  );
 }
 
 export interface LiveTicker {
@@ -217,7 +221,8 @@ function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 
         currentSpinner(options.unicode, options.refreshIntervalMs),
         Date.now(),
         resolveColumns(options),
-        options.color === true
+        options.color === true,
+        options.unicode
       )
     );
   };

@@ -9,7 +9,7 @@ Package: `tubeless`
 | Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
 | `tubeless`            | `./dist/core/pipeline.d.ts`        | `bb8c585e8149cc24a9b8279a3753f4de2fc9f5b995035fbb334ce71354096f93` |               64 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `41bfe46e45ffe6796dc06141490f58de1e01043b7e836dc5642abfa5d5c4be75` |               33 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `f6a9317722c1ebe9ed301d39b9e482950d685808bc00eda3f05698c74bee1762` |               33 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `6b7fe7d6eec6532cc835505517c3481e4290a2a606c2fddf6c80367f5c76c5f5` |                7 |
 | `tubeless/node`       | `./dist/node/node.d.ts`            | `06411eb43b8d1b5aca5d51d70e68553cb9065447b250c29382e6036ad9eac52c` |                8 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `5cd093bb780a19e44b087b01e2b38e06f07e7233c9920988ba399036e319c368` |                1 |

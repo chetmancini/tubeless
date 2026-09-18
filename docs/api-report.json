@@ -108,7 +108,7 @@
         "ReporterTerminalCapabilities",
         "RunReporterConfig"
       ],
-      "sha256": "41bfe46e45ffe6796dc06141490f58de1e01043b7e836dc5642abfa5d5c4be75",
+      "sha256": "f6a9317722c1ebe9ed301d39b9e482950d685808bc00eda3f05698c74bee1762",
       "specifier": "tubeless/cli"
     },
     {

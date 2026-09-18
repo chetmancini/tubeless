@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSteps, definePipeline, type PipelineLogger } from "../core/pipeline.js";
-import { createRunReporter } from "./reporter.js";
+import { createRunReporter, formatDurationMs } from "./reporter.js";
 
 function capturingLogger() {
   const messages = { error: [] as string[], log: [] as string[], warn: [] as string[] };
@@ -136,6 +136,35 @@ describe("createRunReporter", () => {
     );
   });
 
+  it("honors an explicit Unicode mode when terminal detection disables Unicode", async () => {
+    const { logger, messages } = capturingLogger();
+    const { step } = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        context.reportProgress({ completed: 1, total: 2, message: "items" });
+      },
+    });
+    const pipeline = definePipeline({
+      id: "explicit-unicode",
+      steps: [work],
+      finalize: () => true,
+    });
+
+    await pipeline.run({}, undefined, {
+      cwd: "/tmp",
+      hooks: createRunReporter({
+        color: "never",
+        log: logger,
+        symbols: "unicode",
+        terminal: { unicode: false },
+      }),
+      log: logger,
+    });
+
+    expect(messages.log).toContain("  … work 1/2 items");
+    expect(messages.log).not.toContain("  ... work 1/2 items");
+  });
+
   it("adds ANSI styling only when color is enabled", async () => {
     const colored = capturingLogger();
     await makeReporterPipeline().run({}, undefined, {
@@ -158,5 +187,64 @@ describe("createRunReporter", () => {
     });
     expect(plain.messages.log.every((message) => !message.includes("\u001B["))).toBe(true);
     expect(plain.messages.log).toContain("  -> Build Artifact - Build the artifact");
+  });
+
+  it("sanitizes every plain lifecycle field and uses an ASCII ellipsis", async () => {
+    const { logger, messages } = capturingLogger();
+    const { step } = createSteps();
+    const skipped = step("skip", {
+      name: "Skip\u001B]2;owned\u0007 Step",
+      skip: () => "cached\u001B[?2004h safely",
+      run: () => undefined,
+    });
+    const fail = step("fail", {
+      name: "Fail\u001BPsecret\u001B\\ Step",
+      description: "Read\nrows\u001B[31m now\u001B[0m",
+      run: (_inputs, context) => {
+        context.reportProgress({ completed: 1, message: "one\trow\u009B31m" });
+        throw new Error("bad\nvalue\u001B]2;hidden\u0007");
+      },
+    });
+    const pipeline = definePipeline({
+      id: "plain\u001B]2;pipeline-title\u0007-safe",
+      steps: [skipped, fail],
+      finalize: () => undefined,
+    });
+
+    await pipeline.run(
+      {},
+      { continueOnError: true },
+      {
+        cwd: "/tmp",
+        hooks: createRunReporter({
+          color: "never",
+          log: logger,
+          symbols: "ascii",
+          terminal: { unicode: false },
+        }),
+        log: logger,
+      }
+    );
+
+    const rendered = [...messages.log, ...messages.warn, ...messages.error].join("\n");
+    expect(rendered).toContain("Pipeline plain-safe: starting");
+    expect(rendered).toContain("Skip Step (cached safely)");
+    expect(rendered).toContain("Fail Step - Read rows now");
+    expect(rendered).toContain("... Fail Step 1/? one row");
+    expect(rendered).toContain("Fail Step: bad value");
+    expect(rendered).not.toMatch(/[\u001B\u009B]/);
+    expect(rendered).not.toContain("owned");
+    expect(rendered).not.toContain("secret");
+    expect(rendered).not.toContain("hidden");
+    expect(rendered).not.toContain("pipeline-title");
+  });
+});
+
+describe("formatDurationMs", () => {
+  it("carries rounded seconds into the next minute", () => {
+    expect(formatDurationMs(59_949)).toBe("59.9s");
+    expect(formatDurationMs(59_950)).toBe("1m");
+    expect(formatDurationMs(119_499)).toBe("1m59s");
+    expect(formatDurationMs(119_500)).toBe("2m");
   });
 });

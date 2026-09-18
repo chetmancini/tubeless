@@ -69,6 +69,14 @@ describe("paintLiveLines", () => {
     expect(painted).not.toContain("\u0004");
     expect(stripAnsi(painted ?? "").endsWith("…")).toBe(true);
   });
+
+  it("uses three dots when truncating in ASCII mode", () => {
+    const painted = paintLiveLines(["abcdefghij"], "-", 0, 8, false, false)[0];
+
+    expect(painted).toBe("abcd...");
+    expect(painted).not.toContain("…");
+    expect(paintLiveLines(["abc"], "-", 0, 2, false, false)[0]).toBe(".");
+  });
 });
 
 function dataWorker(source: string): URL {
