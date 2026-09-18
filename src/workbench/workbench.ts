@@ -1,8 +1,5 @@
-import { runGraph } from "./workbench-graph.js";
+import { runGraph, runInspect, runList, runPlan, runValidate } from "./workbench-commands.js";
 import { runHistory } from "./workbench-history.js";
-import { runInspect } from "./workbench-inspect.js";
-import { runList } from "./workbench-list.js";
-import { runPlan } from "./workbench-plan.js";
 import { runCommand } from "./workbench-run.js";
 import {
   TUBELESS_WORKBENCH_EXIT_CODE,
@@ -10,7 +7,6 @@ import {
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
 import { runUi } from "./workbench-ui.js";
-import { runValidate } from "./workbench-validate.js";
 
 export { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "./workbench-shared.js";
 
