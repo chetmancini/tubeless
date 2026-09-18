@@ -46,7 +46,7 @@ if (isMain) {
       : undefined;
     if (actual !== source) {
       throw new Error(
-        `Generated ${relative(packageRoot, browserBundlePath)} is stale. Run: bun run studio:generate`
+        `Generated ${relative(packageRoot, browserBundlePath)} is stale. Run: bun run build`
       );
     }
   } else {

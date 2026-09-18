@@ -56,4 +56,4 @@ keep public subpath names stable. Update lint overrides, Knip entries, worker UR
 and studio generation paths as needed. Regenerate the API inventory with
 `bun run api:generate`: declaration hashes include internal paths even when the
 public symbols and signatures are unchanged. Regenerate the browser client with
-`bun run studio:generate` when its source or generated location changes.
+`bun run build` when its source or generated location changes.

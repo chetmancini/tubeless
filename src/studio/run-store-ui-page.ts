@@ -277,7 +277,7 @@ export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
 
 /**
  * Compiled studio client inlined into the served page. Refresh with
- * `bun run studio:generate` after editing the Studio client components.
+ * `bun run build` after editing the Studio client components.
  */
 export const PIPELINE_RUN_STUDIO_SCRIPT = readFileSync(clientUrl, "utf8");
 

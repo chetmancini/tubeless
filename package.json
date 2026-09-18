@@ -49,7 +49,6 @@
     "api:check": "node scripts/generate-api-reference.mjs --check",
     "api:generate": "bun run build && node scripts/generate-api-reference.mjs",
     "studio:check": "bun scripts/generate-studio-client.mjs --check",
-    "studio:generate": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && bun scripts/generate-studio-client.mjs",
     "check": "bun run build && bun run lint:run && bun run knip && bun run format:check && bun run typecheck:run && bun run docs:check && bun run api:check && bun run studio:check && bun run test:run && bun run pack:verify",
     "docs:check": "node scripts/validate-learning-surface.mjs",
     "format": "oxfmt --write .",
