@@ -32,6 +32,7 @@ This static site provides explicit Markdown URLs; Accept negotiation is not avai
 ## Documentation
 
 - [Product overview](${absUrl("index.md")}): Identity, best-fit use cases, and where to start.
+- [Use cases](${absUrl("use-cases.md")}): CI/CD, ML flows, LLM workflows, data pipelines, and operational workflows, with workflow ideas and executable recipes.
 - [Developer resources](${absUrl("developers.md")}): Package docs, CLI reference, Studio guide, and machine-readable resources.
 ${DOC_NAV.map(({ slug, label, blurb }) => `- [${label}](${absUrl(`docs/${slug}.md`)}): ${blurb}`).join("\n")}
 

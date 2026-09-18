@@ -19,6 +19,7 @@ function current(path: string): boolean {
   </div>
   <nav class="nav" aria-label="Primary">
     <a href={href("start")} aria-current={current("start") ? "page" : undefined}>Start</a>
+    <a href={href("use-cases")} aria-current={current("use-cases") ? "page" : undefined}>Use cases</a>
     <a href={href("docs")} aria-current={current("docs") ? "page" : undefined}>Docs</a>
     <a href={href("developers")} aria-current={current("developers") ? "page" : undefined}>Developers</a>
     <a href={href("agents")} aria-current={current("agents") ? "page" : undefined}>Agents</a>

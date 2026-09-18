@@ -1,0 +1,114 @@
+---
+import Base from "../layouts/Base.astro";
+import { USE_CASES, USE_CASES_INTRO } from "../data/use-cases";
+import { githubBlob, href } from "../lib/paths";
+---
+
+<Base
+  title="Use Cases"
+  markdown="use-cases.md"
+  description="Use Tubeless for CI/CD, ML flows, LLM workflows, data pipelines, and operational workflows. Explore typed steps, execution previews, and recipes to build on."
+>
+  <main class="wrap">
+    <header class="page-lead use-cases-lead">
+      <p class="kicker">One library. Your workflow.</p>
+      <h1 class="page-title">Use cases</h1>
+      <p class="lede">{USE_CASES_INTRO}</p>
+    </header>
+
+    <nav class="case-index" aria-label="Use cases">
+      {USE_CASES.map((useCase, index) => (
+        <a href={`#${useCase.id}`}>
+          <span class="case-number" aria-hidden="true">0{index + 1}</span>
+          <strong>{useCase.label}</strong>
+          <span>{useCase.summary}</span>
+          <span class="case-jump" aria-hidden="true">↘</span>
+        </a>
+      ))}
+    </nav>
+
+    {USE_CASES.map((useCase, index) => (
+      <section class="section case-section" id={useCase.id} aria-labelledby={`${useCase.id}-heading`}>
+        <div class="case-copy">
+          <p class="kicker">0{index + 1} / {useCase.label}</p>
+          <h2 id={`${useCase.id}-heading`}>{useCase.headline}</h2>
+          <p class="case-description">{useCase.description}</p>
+          <div class="case-benefits">
+            {useCase.benefits.map((benefit) => (
+              <div>
+                <h3>{benefit.title}</h3>
+                <p>{benefit.detail}</p>
+              </div>
+            ))}
+          </div>
+          <a class="case-guide" href={href(`docs/${useCase.guide.path}`)}>{useCase.guide.label} <span aria-hidden="true">↗</span></a>
+        </div>
+
+        <aside class="case-example" aria-label={`${useCase.label} workflow idea and recipes`}>
+          <p class="kicker">A workflow you could build</p>
+          <ol class="case-stages">
+            {useCase.stages.map((stage) => <li>{stage}</li>)}
+          </ol>
+          <p class="case-boundary">{useCase.boundary}</p>
+          <div class="case-recipes">
+            <h3>Start with a recipe</h3>
+            {useCase.recipes.map((recipe) => (
+              <a href={githubBlob(`examples/${recipe.file}`)}>{recipe.label} <span aria-hidden="true">↗</span></a>
+            ))}
+          </div>
+        </aside>
+      </section>
+    ))}
+
+    <section class="section" aria-labelledby="build-heading">
+      <h2 id="build-heading">Start with a script you already run.</h2>
+      <p class="lede">Choose its inputs, give each stage a name, and connect the outputs. Keep the domain logic in your own functions.</p>
+      <div class="actions">
+        <a class="btn" href={href("start")}>Build your first pipeline</a>
+        <a class="btn ghost" href={href("docs/agent-skills")}>Build with your agent</a>
+      </div>
+    </section>
+  </main>
+</Base>
+
+<style>
+  .use-cases-lead { padding-block: 4.5rem 2.5rem; }
+  .use-cases-lead .kicker { margin: 0 0 1rem; }
+  .use-cases-lead .lede { max-width: 43rem; }
+  .case-index { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; margin-bottom: 4rem; }
+  .case-index a { position: relative; display: flex; flex-direction: column; align-items: start; padding: 1.4rem; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); text-decoration: none; }
+  .case-index a:hover { border-color: var(--gold); }
+  .case-number { color: var(--gold); font: 0.72rem var(--mono); }
+  .case-index strong { margin: 1.1rem 0 0.5rem; font-size: 1.15rem; }
+  .case-index strong + span { color: var(--muted); font-size: 0.88rem; }
+  .case-jump { position: absolute; top: 1rem; right: 1.25rem; color: var(--gold); font-size: 1.3rem; }
+  .case-section { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); align-items: start; gap: 4rem; }
+  .case-copy h2 { max-width: 12ch; text-wrap: balance; }
+  .case-description { margin: 1.5rem 0 2rem; font-size: 1.08rem; color: var(--muted); }
+  .case-benefits { display: grid; gap: 1.4rem; }
+  .case-benefits h3, .case-recipes h3 { margin: 0 0 0.4rem; font-size: 1rem; font-weight: 500; }
+  .case-benefits p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+  .case-guide { display: inline-block; margin-top: 1.6rem; text-underline-offset: 0.2em; text-decoration-color: var(--gold); }
+  .case-example { padding: 1.8rem; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; }
+  .case-example > .kicker { font-size: 0.65rem; letter-spacing: 0.1em; }
+  .case-stages { list-style: none; padding: 0; margin: 1.5rem 0; counter-reset: stage; }
+  .case-stages li { position: relative; counter-increment: stage; display: flex; align-items: center; gap: 0.8rem; padding-bottom: 1.3rem; font: 0.85rem var(--mono); }
+  .case-stages li:last-child { padding-bottom: 0; }
+  .case-stages li::before { content: counter(stage, decimal-leading-zero); position: relative; z-index: 1; display: grid; place-items: center; flex: none; width: 2rem; height: 2rem; border: 1px solid var(--line); border-radius: 50%; background: var(--paper); color: var(--gold); font-size: 0.65rem; }
+  .case-stages li:not(:last-child)::after { content: ""; position: absolute; top: 2rem; bottom: 0; left: 1rem; border-left: 1px solid var(--line); }
+  .case-boundary { padding-block: 1.2rem; border-block: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
+  .case-recipes { margin-top: 1.3rem; }
+  .case-recipes a { display: block; margin-top: 0.65rem; font-size: 0.85rem; text-decoration-color: var(--gold); text-underline-offset: 0.2em; }
+  @media (max-width: 1000px) {
+    .case-index { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .case-section { gap: 2rem; }
+  }
+  @media (max-width: 700px) {
+    .use-cases-lead { padding-top: 2.8rem; }
+    .case-section { grid-template-columns: 1fr; }
+    .case-copy h2 { max-width: 18ch; }
+    .case-example { padding: 1.4rem; }
+    .case-index { gap: 0.7rem; margin-bottom: 2.5rem; }
+    .case-index a { padding: 1rem; }
+  }
+</style>

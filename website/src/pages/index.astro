@@ -8,6 +8,7 @@ import PipelineFlow from "../components/PipelineFlow.astro";
 import Terminal from "../components/Terminal.astro";
 import TtyBar from "../components/TtyBar.astro";
 import { FIRST_PIPELINE_SAMPLE } from "../data/code-samples";
+import { USE_CASES } from "../data/use-cases";
 import { planTape } from "../data/tapes";
 import { PACKAGE } from "../lib/package";
 import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
@@ -205,6 +206,20 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
         </div>
       </section>
     </PipelineFlow>
+    <section class="wrap section" aria-labelledby="use-cases-heading">
+      <div class="section-head">
+        <h2 id="use-cases-heading">Built for your workflow</h2>
+        <p>Give your scripts typed steps, execution previews, and results you can inspect. Explore what you can build with Tubeless.</p>
+      </div>
+      <div class="agent-grid">
+        {USE_CASES.map((useCase) => (
+          <a href={`${href("use-cases")}#${useCase.id}`}>
+            <h3>{useCase.label}</h3>
+            <p>{useCase.summary}</p>
+          </a>
+        ))}
+      </div>
+    </section>
     <section class="wrap section next-steps" aria-labelledby="next-heading">
       <h2 id="next-heading">Documentation</h2>
       <div class="agent-grid">
