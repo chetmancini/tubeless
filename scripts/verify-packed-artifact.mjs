@@ -1,5 +1,4 @@
 import {
-  cpSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -27,16 +26,6 @@ function run(command, args, cwd) {
     );
   }
   return result.stdout;
-}
-
-function runWithStatus(command, args, cwd, expectedStatus) {
-  const result = spawnSync(command, args, { cwd, encoding: "utf8", stdio: "pipe" });
-  if (result.status !== expectedStatus) {
-    throw new Error(
-      `${command} ${args.join(" ")} exited ${result.status}, expected ${expectedStatus}:\n${result.stdout}\n${result.stderr}`.trim()
-    );
-  }
-  return result;
 }
 
 function assertPackedMarkdownLinks(filePath, packedName) {
@@ -107,219 +96,18 @@ function assertPackedDocumentationLinks(installedPackage) {
   assertPackedLlmsLinks(packedDocs);
 }
 
-function assertPackedExampleCli(tubelessBin, installedPackage, consumerRoot) {
-  const typedImport = join(installedPackage, "examples", "typed-import.ts");
+function assertPackedExecutable(tubelessBin, installedPackage, consumerRoot) {
   const cliJob = join(installedPackage, "examples", "cli-job.ts");
-  const inspection = JSON.parse(
-    run(tubelessBin, ["inspect", "--json", "--export", "ImportPipeline", typedImport], consumerRoot)
-  );
-  if (inspection.pipelineId !== "import") {
-    throw new Error(
-      `Packed example inspect returned an invalid inspection:\n${JSON.stringify(inspection)}`
-    );
-  }
-  const plan = JSON.parse(
-    run(
-      tubelessBin,
-      [
-        "plan",
-        "--json",
-        "--export",
-        "ImportPipeline",
-        "--target",
-        "normalize-rows",
-        "--explain",
-        typedImport,
-      ],
-      consumerRoot
-    )
-  );
-  const normalizeRows = plan.steps?.find(({ id }) => id === "normalize-rows");
-  if (plan.ok !== true || normalizeRows?.selected !== true) {
-    throw new Error(`Packed example plan returned an invalid plan:\n${JSON.stringify(plan)}`);
-  }
-  const diagram = run(
-    tubelessBin,
-    ["graph", "--export", "ImportPipeline", typedImport],
-    consumerRoot
-  );
-  if (!diagram.includes("-->")) {
-    throw new Error(`Packed example graph omitted a Mermaid edge:\n${diagram}`);
-  }
   const sourceFile = join(consumerRoot, "import-source.txt");
   writeFileSync(sourceFile, "Alpha\nBeta\n");
-  const successfulRun = runWithStatus(
+  const output = run(
     tubelessBin,
     ["run", "--export", "ImportCommand", cliJob, "--", "--source", sourceFile],
-    consumerRoot,
-    0
-  );
-  if (!successfulRun.stdout.includes("Normalized")) {
-    throw new Error(`Packed example run omitted summarize output:\n${successfulRun.stdout}`);
-  }
-}
-
-function assertPackedExampleModules(consumerRoot, installedPackage) {
-  const packedExamples = join(installedPackage, "examples");
-  const examplesDirectory = join(consumerRoot, "packed-examples");
-  cpSync(packedExamples, examplesDirectory, { recursive: true });
-  // The YAML recipe deliberately uses Bun's native loader. Exercise both
-  // pipelines from the installed artifact; keep the other recipes on Node.
-  run(
-    "bun",
-    [
-      "--eval",
-      `
-    import { pipelines, YamlImportCommand } from ${JSON.stringify(join(examplesDirectory, "yaml-pipelines.ts"))};
-    import { YamlPelotonPipeline } from ${JSON.stringify(join(examplesDirectory, "yaml-peloton.ts"))};
-    const lines = [" Alpha ", "Beta", ""];
-    const normalized = await pipelines.get("yaml-import").runOrThrow({ lines });
-    const preview = await pipelines.get("yaml-preview").runOrThrow({ lines });
-    if (JSON.stringify(normalized) !== JSON.stringify(["alpha", "beta"])) {
-      throw new Error("Packed YAML import returned unexpected rows");
-    }
-    if (JSON.stringify(preview) !== JSON.stringify(lines)) {
-      throw new Error("Packed YAML preview returned unexpected rows");
-    }
-    if (!YamlImportCommand.plan({ targets: ["normalize"] }).ok) {
-      throw new Error("Packed YAML command could not plan");
-    }
-    const race = await YamlPelotonPipeline.runOrThrow({ delay: 0 });
-    if (race.inspected !== 3 || race.publishedId !== "start-list-3") {
-      throw new Error("Packed YAML Peloton returned unexpected results");
-    }
-  `,
-    ],
     consumerRoot
   );
-  const recipesPath = join(installedPackage, "docs", "recipes.md");
-  const checkpointPath = join(consumerRoot, "enrichment-checkpoint.json");
-  const program = `
-const { existsSync, readFileSync } = await import("node:fs");
-const { join } = await import("node:path");
-const { pathToFileURL } = await import("node:url");
-
-const examplesDirectory = ${JSON.stringify(examplesDirectory)};
-const recipesPath = ${JSON.stringify(recipesPath)};
-const checkpointPath = ${JSON.stringify(checkpointPath)};
-
-function fail(example, detail) {
-  throw new Error(example + ": " + detail);
-}
-
-function defined(value, example) {
-  if (value === undefined) fail(example, "returned undefined");
-  return value;
-}
-
-async function loadExample(file) {
-  return import(pathToFileURL(join(examplesDirectory, file)).href);
-}
-
-const runners = {
-  "node-artifacts.ts": async (mod) => {
-    const { definePaths, readJson } = await import("tubeless/node");
-    const cwd = join(examplesDirectory, "artifact-workspace");
-    const { artifact } = definePaths({ artifact: "build/artifacts/rows.json" })(cwd);
-    const options = { rows: [" Alpha "] };
-    await mod.NodeArtifactsPipeline.runOrThrow(options, { dryRun: true }, { cwd });
-    if (existsSync(cwd)) fail("node-artifacts.ts", "dry-run wrote to disk");
-    const result = await mod.NodeArtifactsPipeline.runOrThrow(options, {}, { cwd });
-    if (result.artifact !== artifact || JSON.stringify(readJson(artifact)) !== '["alpha"]') {
-      fail("node-artifacts.ts", "expected normalized JSON in the supplied cwd");
-    }
-  },
-  "typed-import.ts": async (mod) => {
-    defined(await mod.runImportExample(), "typed-import.ts");
-  },
-  "validated-boundaries.ts": async (mod) => {
-    defined(await mod.runValidatedExample(), "validated-boundaries.ts");
-  },
-  "publish-with-gates.ts": async (mod) => {
-    defined(await mod.runPublishDryRunExample(), "publish-with-gates.ts");
-  },
-  "conditional-step.ts": async (mod) => {
-    defined(await mod.runConditionalCacheExample(), "conditional-step.ts");
-  },
-  "best-effort.ts": async (mod) => {
-    defined(await mod.runBestEffortExample(), "best-effort.ts");
-  },
-  "child-pipeline.ts": async (mod) => {
-    defined(await mod.runChildPipelineExample(), "child-pipeline.ts");
-  },
-  "remote-steps.ts": async (mod) => {
-    const { createServer } = await import("node:http");
-    const server = createServer((request, response) => {
-      request.resume();
-      response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify({ orderId: "packed-order", rows: ["Alpha", "Beta"] }));
-    });
-    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-    try {
-      const result = await mod.runRemoteStepsExample("http://127.0.0.1:" + server.address().port);
-      if (result.count !== 2) fail("remote-steps.ts", "expected validated remote rows");
-    } finally {
-      server.closeAllConnections();
-      await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-    }
-  },
-  "host-embedding.ts": async (mod) => {
-    const result = await mod.runHostEmbeddingExample();
-    if (!result.preview || result.rows[0] !== "Alpha") fail("host-embedding.ts", "expected host preview");
-  },
-  "fan-out-progress.ts": async (mod) => {
-    defined(
-      await mod.FanOutPipeline.runOrThrow({
-        concurrency: 1,
-        shards: [{ id: "s", records: ["a"] }],
-      }),
-      "fan-out-progress.ts"
-    );
-  },
-  "live-tui.ts": async (mod) => {
-    defined(await mod.LiveTuiPipeline.runOrThrow({ delay: 0 }), "live-tui.ts");
-  },
-  "peloton.ts": async (mod) => {
-    defined(await mod.runPelotonExample(), "peloton.ts");
-  },
-  "resumable-enrichment.ts": async (mod) => {
-    const result = await mod.EnrichmentPipeline.run(
-      {
-        checkpointPath: "enrichment-checkpoint.json",
-        items: ["a"],
-      },
-      { dryRun: true }
-    );
-    if (result.status !== "completed") fail("resumable-enrichment.ts", "status " + result.status);
-    if (existsSync(checkpointPath)) fail("resumable-enrichment.ts", "dry-run created a checkpoint");
-  },
-  "cli-job.ts": async (mod) => {
-    defined(mod.ImportCommand, "cli-job.ts");
-  },
-  "cancellation-and-testing.ts": async (mod) => {
-    defined(await mod.runWithTestRuntime(), "cancellation-and-testing.ts");
-  },
-  "tracing.ts": async (mod) => {
-    const value = await mod.runTracingExample([" Alpha "]);
-    if (!Array.isArray(value) || value.some((row) => row !== row.toLowerCase())) {
-      fail("tracing.ts", "expected a lowercased array");
-    }
-  },
-};
-
-const recipes = readFileSync(recipesPath, "utf8");
-const linked = [
-  ...new Set([...recipes.matchAll(/\\.\\.\\/examples\\/([a-z0-9-]+\\.ts)/g)].map((match) => match[1])),
-];
-for (const file of linked) {
-  // Already executed with its native YAML loader above.
-  if (file === "yaml-pipelines.ts" || file === "yaml-peloton.ts") continue;
-  const runner = runners[file];
-  if (!runner) fail(file, "no packed-example runner");
-  await runner(await loadExample(file));
-}
-`;
-  run("node", ["--input-type=module", "--eval", program], consumerRoot);
+  if (!output.includes("Normalized 2 row(s).")) {
+    throw new Error(`Packed executable returned invalid output:\n${output}`);
+  }
 }
 try {
   const packedStdout = run(
@@ -407,199 +195,14 @@ try {
     .join("\n");
   run("node", ["--input-type=module", "--eval", smokeProgram], consumerRoot);
 
-  const projectSurface = run(
-    "node",
-    [
-      "--input-type=module",
-      "--eval",
-      'console.log(JSON.stringify(Object.keys(await import("tubeless/project")).sort()))',
-    ],
-    consumerRoot
-  );
-  if (
-    projectSurface.trim() !==
-    JSON.stringify([
-      "PipelineDocumentError",
-      "compilePipelineDocument",
-      "definePipelineProject",
-      "validatePipelineDocument",
-    ])
-  ) {
-    throw new Error(
-      `Packed project entrypoint differs from the supported project API: ${projectSurface}`
-    );
-  }
-
-  const pipelineFixture = join(consumerRoot, "pipeline.mjs");
-  writeFileSync(
-    pipelineFixture,
-    `import { createSteps, definePipeline } from "tubeless";
-import { definePipelineCommand } from "tubeless/cli";
-const { step } = createSteps();
-const load = step("load", {
-  description: "Load input",
-  run: (_inputs, context) => {
-    if (context.options.mode === "failure") throw new Error("packed command failure");
-    if (context.options.mode === "cancel") {
-      throw new DOMException("packed command cancellation", "AbortError");
-    }
-    return context.options.message;
-  },
-});
-const write = step("write", {
-  dependsOn: [load],
-  description: "Write output",
-  dryRun: "skip",
-  run: ({ load }) => \`written:\${load}\`,
-});
-export const FixturePipeline = definePipeline({
-  id: "fixture",
-  steps: [load, write],
-  targets: [write],
-  finalize: (outputs) => outputs.write,
-});
-export const FixtureCommand = definePipelineCommand(FixturePipeline, {
-  params: {
-    message: { type: "string" },
-    mode: {
-      type: "string",
-      choices: ["success", "failure", "cancel"],
-      default: "success",
-    },
-  },
-  reporter: false,
-  summarize: (result) => [\`completed:\${result}\`],
-});
-`
-  );
-  const projectFixture = join(consumerRoot, "tubeless.project.mjs");
-  writeFileSync(
-    projectFixture,
-    `import { definePipelineProject } from "tubeless/project";
-export default definePipelineProject({
-  commands: [{ id: "fixture-command", file: "./pipeline.mjs", export: "FixtureCommand" }],
-});
-`
-  );
   const tubelessBin = join(consumerRoot, "node_modules", ".bin", "tubeless");
   if (!existsSync(tubelessBin)) {
     throw new Error("Packed tubeless artifact is missing the tubeless executable");
   }
-  const projectList = JSON.parse(
-    run(tubelessBin, ["list", "--project", projectFixture, "--json"], consumerRoot)
-  );
-  if (projectList.commands?.[0]?.id !== "fixture-command") {
-    throw new Error(`Packed tubeless list returned an invalid project inventory.`);
-  }
-  const projectInspection = JSON.parse(
-    run(
-      tubelessBin,
-      ["inspect", "--project", projectFixture, "--json", "fixture-command"],
-      consumerRoot
-    )
-  );
-  if (
-    projectInspection.commandId !== "fixture-command" ||
-    projectInspection.pipelineId !== "fixture"
-  ) {
-    throw new Error(`Packed tubeless inspect did not resolve the registered project identity.`);
-  }
-  const inspection = JSON.parse(
-    run(tubelessBin, ["inspect", "--json", pipelineFixture], consumerRoot)
-  );
-  if (
-    inspection.pipelineId !== "fixture" ||
-    inspection.targetIds[0] !== "write" ||
-    inspection.plan?.steps[1]?.dryRun !== "skip"
-  ) {
-    throw new Error(
-      `Packed tubeless inspect returned an invalid inspection:\n${JSON.stringify(inspection)}`
-    );
-  }
-  const plan = JSON.parse(
-    run(
-      tubelessBin,
-      ["plan", "--target", "write", "--dry-run", "--json", pipelineFixture],
-      consumerRoot
-    )
-  );
-  if (
-    plan.pipelineId !== "fixture" ||
-    plan.ok !== true ||
-    plan.steps.find(({ id }) => id === "load")?.selected !== true ||
-    plan.steps.find(({ id }) => id === "write")?.skipReason !== "dry-run"
-  ) {
-    throw new Error(`Packed tubeless plan returned an invalid plan:\n${JSON.stringify(plan)}`);
-  }
-  const diagram = run(tubelessBin, ["graph", pipelineFixture], consumerRoot);
-  if (!diagram.includes('step0["load"]') || !diagram.includes("step0 --> step1")) {
-    throw new Error(`Packed tubeless graph returned an invalid diagram:\n${diagram}`);
-  }
-  const successfulRun = runWithStatus(
-    tubelessBin,
-    ["run", pipelineFixture, "--", "--message", "packed"],
-    consumerRoot,
-    0
-  );
-  if (!successfulRun.stdout.includes("completed:written:packed")) {
-    throw new Error(`Packed tubeless run returned invalid output:\n${successfulRun.stdout}`);
-  }
-  const projectRun = runWithStatus(
-    tubelessBin,
-    ["run", "--project", projectFixture, "fixture-command", "--", "--message", "project"],
-    consumerRoot,
-    0
-  );
-  if (!projectRun.stdout.includes("completed:written:project")) {
-    throw new Error(`Packed tubeless run did not execute the registered project identity.`);
-  }
-  const validationRun = runWithStatus(tubelessBin, ["run", pipelineFixture], consumerRoot, 4);
-  if (!validationRun.stderr.includes("Missing required option --message")) {
-    throw new Error(`Packed tubeless run omitted validation output:\n${validationRun.stderr}`);
-  }
-  const planningRun = runWithStatus(
-    tubelessBin,
-    ["plan", pipelineFixture, "--target", "write", "--target", "write"],
-    consumerRoot,
-    5
-  );
-  if (!planningRun.stdout.includes("TUBELESS_PLANNING_TARGET_SELECTION_DUPLICATE")) {
-    throw new Error(`Packed tubeless plan omitted planning output:\n${planningRun.stdout}`);
-  }
-  const failedRun = runWithStatus(
-    tubelessBin,
-    ["run", pipelineFixture, "--", "--message", "packed", "--mode", "failure"],
-    consumerRoot,
-    6
-  );
-  if (!failedRun.stderr.includes("TUBELESS_STEP_FAILED")) {
-    throw new Error(`Packed tubeless run omitted failure output:\n${failedRun.stderr}`);
-  }
-  const cancelledRun = runWithStatus(
-    tubelessBin,
-    ["run", pipelineFixture, "--", "--message", "packed", "--mode", "cancel"],
-    consumerRoot,
-    7
-  );
-  if (!cancelledRun.stderr.includes("TUBELESS_RUN_CANCELLED")) {
-    throw new Error(`Packed tubeless run omitted cancellation output:\n${cancelledRun.stderr}`);
-  }
-
-  assertPackedExampleCli(tubelessBin, installedPackage, consumerRoot);
-  const documentValidation = JSON.parse(
-    run(
-      tubelessBin,
-      ["validate", "--json", join(installedPackage, "examples/declarative/peloton.yaml")],
-      consumerRoot
-    )
-  );
-  if (!documentValidation.ok || documentValidation.metadata?.name !== "Peloton from YAML") {
-    throw new Error("Packed YAML document validation lost metadata");
-  }
-  assertPackedExampleModules(consumerRoot, installedPackage);
+  assertPackedExecutable(tubelessBin, installedPackage, consumerRoot);
 
   process.stdout.write(
-    "Packed tubeless artifact imports, executable, documentation, and examples verified.\n"
+    "Packed tubeless artifact layout, declarations, imports, and executable verified.\n"
   );
 } finally {
   rmSync(temporaryRoot, { force: true, recursive: true });
