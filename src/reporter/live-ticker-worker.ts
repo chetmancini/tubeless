@@ -100,9 +100,9 @@ port.on("message", (message: TickerWorkerMessage) => {
       paintFrame();
       frame.showCursor();
     });
-  } finally {
     Atomics.store(state, 0, 1);
     Atomics.notify(state, 0);
+  } finally {
     port.close();
   }
 });

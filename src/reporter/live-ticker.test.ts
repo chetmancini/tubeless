@@ -76,30 +76,38 @@ function dataWorker(source: string): URL {
 }
 
 function workerTicker(
-  source: string,
+  source?: string,
   write?: (chunk: string) => void
 ): {
   chunks: string[];
   close(): void;
+  closeOutput(): void;
   path: string;
   ticker: ReturnType<typeof createLiveTicker>;
 } {
   const path = join(tmpdir(), `tubeless-ticker-fallback-${process.pid}-${Date.now()}.log`);
   const fd = openSync(path, "w");
   const chunks: string[] = [];
+  let outputOpen = true;
+  const closeOutput = (): void => {
+    if (!outputOpen) return;
+    outputOpen = false;
+    closeSync(fd);
+  };
   return {
     chunks,
     close: () => {
-      closeSync(fd);
+      closeOutput();
       unlinkSync(path);
     },
+    closeOutput,
     path,
     ticker: createLiveTicker({
       fd,
       refreshIntervalMs: 40,
       unicode: false,
-      workerUrl: dataWorker(source),
       write: write ?? ((chunk) => chunks.push(chunk)),
+      ...(source === undefined ? {} : { workerUrl: dataWorker(source) }),
     }),
   };
 }
@@ -172,6 +180,22 @@ describe("createLiveTicker worker fallback", () => {
 
       expect(() => ticker.dispose()).toThrow("output closed");
       expect(write).toHaveBeenCalledTimes(1);
+    } finally {
+      ticker.dispose();
+      close();
+    }
+  });
+
+  it("falls back when the worker cannot render its final frame", async () => {
+    const { chunks, close, closeOutput, path, ticker } = workerTicker();
+    try {
+      ticker.setLines(["final status"]);
+      await vi.waitFor(() => expect(readFileSync(path, "utf8")).toContain("final status"));
+      closeOutput();
+
+      ticker.dispose();
+
+      expect(chunks.join("")).toContain("final status");
     } finally {
       ticker.dispose();
       close();
