@@ -1,5 +1,6 @@
 import type { PipelineHooks, PipelineLogger } from "../core/pipeline.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
+import { safeTerminalText } from "./terminal-text.js";
 
 export type ReporterColorMode = "always" | "auto" | "never";
 export type ReporterSymbolMode = "ascii" | "auto" | "emoji" | "unicode";
@@ -93,11 +94,14 @@ export function formatDurationMs(durationMs: number): string {
   const ms = Math.max(0, Math.round(durationMs));
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60_000) {
-    const seconds = ms / 1000;
-    return Number.isInteger(seconds) ? `${seconds}s` : `${seconds.toFixed(1)}s`;
+    const seconds = Math.round(ms / 100) / 10;
+    if (seconds < 60) {
+      return Number.isInteger(seconds) ? `${seconds}s` : `${seconds.toFixed(1)}s`;
+    }
   }
-  const minutes = Math.floor(ms / 60_000);
-  const seconds = Math.round((ms % 60_000) / 1000);
+  const totalSeconds = Math.round(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
   return seconds === 0 ? `${minutes}m` : `${minutes}m${seconds}s`;
 }
 
@@ -143,12 +147,17 @@ export function createRunReporter<TResult = unknown>(
   const { log } = options;
   const logPlan = options.logPlan !== false;
   const logSummary = options.logSummary !== false;
-  const { styled, symbols } = createReporterTheme(options);
+  const { capabilities, styled, symbols } = createReporterTheme(options);
   // Throttle progress lines so concurrent mapped children stay readable.
   const lastProgressLogAt = new Map<string, number>();
   const lastProgressMessage = new Map<string, string>();
   const progressLogIntervalMs = 750;
-  const displayName = (step: { id: string; name?: string }): string => step.name ?? step.id;
+  const ellipsis =
+    options.symbols === "ascii" || (options.symbols !== "emoji" && !capabilities.unicode)
+      ? "..."
+      : "…";
+  const displayName = (step: { id: string; name?: string }): string =>
+    safeTerminalText(step.name ?? step.id);
   const clearProgress = (stepId: string): void => {
     lastProgressLogAt.delete(stepId);
     lastProgressMessage.delete(stepId);
@@ -159,12 +168,14 @@ export function createRunReporter<TResult = unknown>(
       if (!logPlan) return;
       log.log(
         styled.pipeline(
-          `Pipeline ${plan.pipelineId}: starting (${plan.steps.length} steps, dryRun=${plan.dryRun})`
+          `Pipeline ${safeTerminalText(plan.pipelineId)}: starting (${plan.steps.length} steps, dryRun=${plan.dryRun})`
         )
       );
     },
     onStepStart: ({ step }) => {
-      const description = step.description ? ` - ${styled.description(step.description)}` : "";
+      const description = step.description
+        ? ` - ${styled.description(safeTerminalText(step.description))}`
+        : "";
       log.log(`  ${styled.start(symbols.start)} ${displayName(step)}${description}`);
     },
     onStepProgress: ({ progress, step }) => {
@@ -175,7 +186,7 @@ export function createRunReporter<TResult = unknown>(
         progress.total !== undefined && Number.isFinite(progress.total)
           ? String(progress.total)
           : "?";
-      const message = progress.message ? ` ${progress.message}` : "";
+      const message = progress.message ? ` ${safeTerminalText(progress.message)}` : "";
       const line = `${progress.completed}/${total}${message}`;
       const now = Date.now();
       const previousAt = lastProgressLogAt.get(step.id) ?? Number.NEGATIVE_INFINITY;
@@ -192,7 +203,7 @@ export function createRunReporter<TResult = unknown>(
       }
       lastProgressLogAt.set(step.id, now);
       lastProgressMessage.set(step.id, line);
-      log.log(`  ${styled.description("…")} ${displayName(step)} ${styled.description(line)}`);
+      log.log(`  ${styled.description(ellipsis)} ${displayName(step)} ${styled.description(line)}`);
     },
     onStepComplete: (event) => {
       clearProgress(event.id);
@@ -203,9 +214,11 @@ export function createRunReporter<TResult = unknown>(
     },
     onStepSkip: (event) => {
       clearProgress(event.id);
-      const detail = event.dependencyId
-        ? `${event.reason}: ${event.dependencyId}`
-        : (event.message ?? event.reason);
+      const detail = safeTerminalText(
+        event.dependencyId
+          ? `${event.reason}: ${event.dependencyId}`
+          : (event.message ?? event.reason)
+      );
       log.log(
         `  ${styled.skip(symbols.skip)} ${displayName(event.step)} ${styled.duration(`(${detail})`)}`
       );
@@ -213,13 +226,13 @@ export function createRunReporter<TResult = unknown>(
     onStepCancel: (event) => {
       clearProgress(event.id);
       log.warn(
-        `  ${styled.skip(symbols.skip)} ${displayName(event.step)}: cancelled: ${event.error.message}`
+        `  ${styled.skip(symbols.skip)} ${displayName(event.step)}: cancelled: ${safeTerminalText(event.error.message)}`
       );
     },
     onStepFail: (event) => {
       clearProgress(event.id);
       log.error(
-        `  ${styled.fail(symbols.fail)} ${displayName(event.step)}: ${event.error.message}`
+        `  ${styled.fail(symbols.fail)} ${displayName(event.step)}: ${safeTerminalText(event.error.message)}`
       );
     },
     onFinalizeStart: () => {
@@ -231,12 +244,12 @@ export function createRunReporter<TResult = unknown>(
       );
     },
     onFinalizeError: ({ error }) => {
-      log.error(`  ${styled.fail(symbols.fail)} finalize: ${error.message}`);
+      log.error(`  ${styled.fail(symbols.fail)} finalize: ${safeTerminalText(error.message)}`);
     },
     onPipelineComplete: (result) => {
       if (!logSummary) return;
       const durationMs = result.finishedAtMs - result.startedAtMs;
-      const message = `Pipeline ${result.pipelineId}: done in ${formatDurationMs(durationMs)} (status=${result.status}, steps=${result.steps.length}, errors=${result.errors.length})`;
+      const message = `Pipeline ${safeTerminalText(result.pipelineId)}: done in ${formatDurationMs(durationMs)} (status=${result.status}, steps=${result.steps.length}, errors=${result.errors.length})`;
       if (result.status === "completed") {
         log.log(styled.complete(message));
       } else {

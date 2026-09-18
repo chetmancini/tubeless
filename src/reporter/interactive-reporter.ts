@@ -23,6 +23,7 @@ import {
   type ReporterTheme,
   type RunReporterConfig,
 } from "./reporter.js";
+import { safeTerminalLog, safeTerminalText } from "./terminal-text.js";
 
 export type PipelineReporterMode = "auto" | "interactive" | "plain";
 export type ResolvedPipelineReporterMode = Exclude<PipelineReporterMode, "auto">;
@@ -75,12 +76,6 @@ type FinalizeState =
   | { durationMs: number; status: "completed" }
   | { durationMs: number; error: PipelineError; status: "failed" };
 
-const TERMINAL_OSC = /(?:\u001B\]|\u009D)[\s\S]*?(?:\u0007|\u001B\\|\u009C)/g;
-const TERMINAL_STRING = /(?:\u001B[P_X^]|\u0090|\u0098|\u009E|\u009F)[\s\S]*?(?:\u001B\\|\u009C)/g;
-const TERMINAL_CSI = /(?:\u001B\[|\u009B)[0-?]*[ -/]*[@-~]/g;
-const TERMINAL_ESCAPE = /\u001B[@-_]/g;
-const TERMINAL_CONTROL = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/g;
-
 function autoInteractiveAllowed(output: ReporterOutput, config: PipelineReporterConfig): boolean {
   const isTTY = config.terminal?.isTTY ?? output.isTTY === true;
   const ci = process.env.CI;
@@ -99,23 +94,6 @@ function resolveMode(
 
 function safeNumber(value: number): number {
   return Number.isFinite(value) ? value : 0;
-}
-
-function stripTerminalControls(value: string): string {
-  return value
-    .replace(TERMINAL_OSC, "")
-    .replace(TERMINAL_STRING, "")
-    .replace(TERMINAL_CSI, "")
-    .replace(TERMINAL_ESCAPE, "")
-    .replace(TERMINAL_CONTROL, "");
-}
-
-function safeTerminalText(value: string): string {
-  return stripTerminalControls(value.replace(/\s+/g, " ")).trim();
-}
-
-function safeTerminalLog(value: string): string {
-  return stripTerminalControls(value.replace(/\r\n?/g, "\n").replaceAll("\t", " "));
 }
 
 function formatCount(value: number): string {
@@ -224,7 +202,7 @@ function renderStep(
     case "skipped":
       return [
         `  ${theme.styled.skip(theme.symbols.skip)} ${displayName} ${theme.styled.duration(
-          `(${state.message ?? state.reason})`
+          `(${safeTerminalText(state.message ?? state.reason)})`
         )}`,
       ];
     case "planned":
@@ -268,9 +246,9 @@ function createInteractiveReporter<TResult>(
     if (options.logPlan !== false) {
       const header = result
         ? options.logSummary === false
-          ? `Pipeline ${result.pipelineId}`
-          : `Pipeline ${result.pipelineId}: done in ${formatDurationMs(result.finishedAtMs - result.startedAtMs)} (status=${result.status}, steps=${result.steps.length}, errors=${result.errors.length})`
-        : `Pipeline ${plan.pipelineId} (${plan.steps.length} steps, dryRun=${plan.dryRun})`;
+          ? `Pipeline ${safeTerminalText(result.pipelineId)}`
+          : `Pipeline ${safeTerminalText(result.pipelineId)}: done in ${formatDurationMs(result.finishedAtMs - result.startedAtMs)} (status=${result.status}, steps=${result.steps.length}, errors=${result.errors.length})`
+        : `Pipeline ${safeTerminalText(plan.pipelineId)} (${plan.steps.length} steps, dryRun=${plan.dryRun})`;
       lines.push(
         result?.status === "completed"
           ? theme.styled.complete(header)
@@ -417,7 +395,7 @@ function createInteractiveReporter<TResult>(
       for (const step of nextPlan.steps) {
         steps.set(step.id, { pipelineId: nextPlan.pipelineId, status: "planned", step });
       }
-      if (output === process.stdout) {
+      if (output === process.stdout || output === process.stderr) {
         exitListener = dispose;
         process.once("exit", exitListener);
       }

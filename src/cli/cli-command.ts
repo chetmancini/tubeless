@@ -29,6 +29,7 @@ function resolveContext(overrides?: Partial<CliContext>): CliContext {
     cwd: overrides?.cwd ?? process.cwd(),
     env: overrides?.env ?? process.env,
     log: overrides?.log ?? console,
+    reporterOutput: overrides?.reporterOutput,
     pipelineContext: overrides?.pipelineContext,
     signal: overrides?.signal,
     checkpoint: overrides?.checkpoint,

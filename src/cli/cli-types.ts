@@ -1,5 +1,6 @@
 import type { CheckpointStore } from "../node/checkpoint.js";
 import type { PipelineContext, PipelineLogger } from "../core/pipeline.js";
+import type { ReporterOutput } from "../reporter/interactive-reporter.js";
 import { brandTubelessError } from "../utilities/tubeless-error.js";
 
 /**
@@ -163,6 +164,8 @@ export interface CliContext {
   /** Environment used for `param.env` fallbacks. Defaults to `process.env`. */
   env?: Record<string, string | undefined>;
   log: PipelineLogger;
+  /** Executor-selected destination for the pipeline reporter. Overrides command reporter output. */
+  reporterOutput?: ReporterOutput;
   /** Optional executor-only context used when this command runs a pipeline. */
   pipelineContext?: Omit<PipelineContext, "cwd" | "log" | "signal">;
   /** Optional caller-owned cancellation signal forwarded to command work. */

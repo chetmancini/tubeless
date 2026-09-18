@@ -291,7 +291,11 @@ export function definePipelineCommand<
       const reporter =
         config.reporter === false
           ? undefined
-          : createPipelineReporter<TResult>({ log: cliContext.log, ...(config.reporter ?? {}) });
+          : createPipelineReporter<TResult>({
+              log: cliContext.log,
+              ...(config.reporter ?? {}),
+              ...(cliContext.reporterOutput ? { output: cliContext.reporterOutput } : {}),
+            });
       const runtimeContext = reporter ? { ...cliContext, log: reporter.log } : cliContext;
       let result: TResult;
       try {
