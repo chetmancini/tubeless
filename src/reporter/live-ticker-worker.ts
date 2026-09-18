@@ -19,7 +19,7 @@ interface LiveTickerWorkerData {
 
 type TickerWorkerMessage =
   | { columns?: number; lines: string[]; logPane?: readonly string[]; type: "lines" }
-  | { text: string; type: "log" }
+  | { columns?: number; text: string; type: "log" }
   | { columns?: number; lines: string[]; logPane?: readonly string[]; type: "stop" };
 
 const port = parentPort;
@@ -56,7 +56,8 @@ function paintFrame(): void {
       data.color,
       data.unicode,
       logPane
-    )
+    ),
+    columns
   );
   Atomics.store(state, 1, frame.frameLineCount);
 }
@@ -82,16 +83,16 @@ port.on("message", (message: TickerWorkerMessage) => {
     port.close();
     return;
   }
+  columns = message.columns ?? columns;
   if (message.type === "log") {
     withOutputLock(() => {
-      frame.clear();
+      frame.clear(columns);
       Atomics.store(state, 1, 0);
       writeSync(data.fd, message.text);
       Atomics.add(state, 2, 1);
     });
     return;
   }
-  columns = message.columns ?? columns;
   lines = message.lines;
   logPane = message.logPane;
   if (message.type === "lines") {

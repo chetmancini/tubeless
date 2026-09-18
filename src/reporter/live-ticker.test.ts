@@ -8,6 +8,7 @@ import {
   paintLiveLines,
   shimmerToken,
   SPINNER_TOKEN,
+  TickerFrame,
 } from "./live-ticker.js";
 
 const RESET = "\u001B[0m";
@@ -111,6 +112,59 @@ describe("paintLiveLines", () => {
   });
 });
 
+describe("TickerFrame resize clearing", () => {
+  it("clears all reflowed pane rows before painting a narrow frame", () => {
+    const chunks: string[] = [];
+    const frame = new TickerFrame((chunk) => chunks.push(chunk));
+    const wide = paintLiveLines(["running"], "-", 0, 140, false, false, ["latest log"]);
+    frame.redraw(wide, 140);
+    chunks.length = 0;
+
+    // Three 139-column pane rows become six physical rows at 80 columns.
+    frame.redraw(["narrow progress"], 80);
+    expect(chunks).toEqual(["\u001B[6F\u001B[J", "narrow progress\n"]);
+    chunks.length = 0;
+    frame.redraw(wide, 140);
+    expect(chunks[0]).toBe("\u001B[1F\u001B[J");
+  });
+
+  it("counts ANSI, wide characters, combining marks, and exact-width lines", () => {
+    const chunks: string[] = [];
+    const frame = new TickerFrame((chunk) => chunks.push(chunk));
+    frame.redraw(["\u001B[31m界界界界界\u001B[0m", "abcde\u0301", ""], 20);
+    frame.clear(5);
+    // Wide glyphs wrap before the last column; combining marks add no column.
+    expect(chunks.at(-1)).toBe("\u001B[5F\u001B[J");
+    const cleared = chunks.length;
+    frame.clear(5);
+    expect(chunks).toHaveLength(cleared);
+  });
+});
+
+describe("createLiveTicker inline resize", () => {
+  it.each(["redraw", "log"])("clears reflowed rows before %s", (action) => {
+    let columns = 140;
+    const chunks: string[] = [];
+    const ticker = createLiveTicker({
+      getColumns: () => columns,
+      refreshIntervalMs: 10_000,
+      unicode: false,
+      write: (chunk) => chunks.push(chunk),
+    });
+    try {
+      ticker.setLines(["running"], ["latest log"]);
+      chunks.length = 0;
+      columns = 80;
+      if (action === "redraw") ticker.setLines(["narrow progress"]);
+      else ticker.writeLog("narrow log\n");
+      expect(chunks[0]).toBe("\u001B[6F\u001B[J");
+      expect(chunks[1]).toBe(action === "redraw" ? "narrow progress\n" : "narrow log\n");
+    } finally {
+      ticker.dispose();
+    }
+  });
+});
+
 function dataWorker(source: string): URL {
   return new URL(`data:text/javascript,${encodeURIComponent(source)}`);
 }
@@ -118,7 +172,7 @@ function dataWorker(source: string): URL {
 function workerTicker(
   source?: string,
   write?: (chunk: string) => void,
-  columns?: number
+  columns?: number | (() => number)
 ): {
   chunks: string[];
   close(): void;
@@ -144,7 +198,7 @@ function workerTicker(
     closeOutput,
     path,
     ticker: createLiveTicker({
-      columns,
+      ...(typeof columns === "function" ? { getColumns: columns } : { columns }),
       fd,
       refreshIntervalMs: 40,
       unicode: false,
@@ -155,6 +209,25 @@ function workerTicker(
 }
 
 describe("createLiveTicker worker fallback", () => {
+  it.each(["redraw", "log", "stop"])("clears reflowed worker rows before %s", async (action) => {
+    let columns = 140;
+    const { close, path, ticker } = workerTicker(undefined, undefined, () => columns);
+    try {
+      ticker.setLines(["running"], ["latest log"]);
+      await vi.waitFor(() => expect(readFileSync(path, "utf8")).toContain("+- Logs "));
+      columns = 80;
+      if (action === "redraw") ticker.setLines(["narrow progress"]);
+      else if (action === "log") ticker.writeLog("narrow log\n");
+      ticker.dispose();
+      const output = readFileSync(path, "utf8");
+      expect(output).toContain("\u001B[6F\u001B[J");
+      if (action === "log") expect(output).toContain("\u001B[6F\u001B[Jnarrow log\n");
+    } finally {
+      ticker.dispose();
+      close();
+    }
+  });
+
   it("renders the log pane through the worker and its fallback", async () => {
     for (const source of [undefined, 'throw new Error("boot failure")']) {
       const { chunks, close, path, ticker } = workerTicker(source, undefined, 120);

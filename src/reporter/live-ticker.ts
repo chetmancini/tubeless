@@ -183,11 +183,12 @@ export interface LiveTickerOptions {
 
 type TickerWorkerMessage =
   | { columns?: number; lines: string[]; logPane?: readonly string[]; type: "lines" }
-  | { text: string; type: "log" }
+  | { columns?: number; text: string; type: "log" }
   | { columns?: number; lines: string[]; logPane?: readonly string[]; type: "stop" };
 
 export class TickerFrame {
   private cursorHidden: boolean;
+  private paintedLines: readonly string[] = [];
 
   constructor(
     private readonly write: (chunk: string) => void,
@@ -202,21 +203,41 @@ export class TickerFrame {
     this.cursorHidden = false;
   }
 
-  clear(): void {
+  clear(columns?: number): void {
     if (this.frameLineCount === 0) return;
-    this.write(`\u001B[${this.frameLineCount}F${ANSI.clearDown}`);
+    // Resizing can reflow each previously painted line across several rows.
+    // Count those rows at the current width before moving back to the frame start.
+    let rows = this.frameLineCount;
+    if (columns !== undefined && columns > 0 && this.paintedLines.length > 0) {
+      rows = 0;
+      for (const line of this.paintedLines) {
+        rows += 1;
+        let column = 0;
+        for (const character of line.replace(ANSI_STYLE, "")) {
+          const width = characterWidth(character);
+          if (column + width > columns) {
+            rows += 1;
+            column = 0;
+          }
+          column += width;
+        }
+      }
+    }
+    this.write(`\u001B[${rows}F${ANSI.clearDown}`);
     this.frameLineCount = 0;
+    this.paintedLines = [];
   }
 
-  redraw(lines: readonly string[]): void {
+  redraw(lines: readonly string[], columns?: number): void {
     if (!this.cursorHidden) {
       this.write(ANSI.hideCursor);
       this.cursorHidden = true;
     }
-    this.clear();
+    this.clear(columns);
     if (lines.length === 0) return;
     this.write(`${lines.join("\n")}\n`);
     this.frameLineCount = lines.length;
+    this.paintedLines = lines;
   }
 }
 
@@ -236,16 +257,18 @@ function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 
   const frame = new TickerFrame((chunk) => options.write(chunk), adoptedFrameLineCount);
   const redraw = (): void => {
     if (disposed) return;
+    const columns = resolveColumns(options);
     frame.redraw(
       paintLiveLines(
         lines,
         currentSpinner(options.unicode, options.refreshIntervalMs),
         Date.now(),
-        resolveColumns(options),
+        columns,
         options.color === true,
         options.unicode,
         logPane
-      )
+      ),
+      columns
     );
   };
 
@@ -271,7 +294,7 @@ function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 
         options.write(text);
         return;
       }
-      frame.clear();
+      frame.clear(resolveColumns(options));
       options.write(text);
     },
     dispose() {
@@ -405,7 +428,11 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
       }
       dropAcknowledgedLogs();
       pendingLogs.push(text);
-      worker.postMessage({ text, type: "log" } satisfies TickerWorkerMessage);
+      worker.postMessage({
+        columns: resolveColumns(options),
+        text,
+        type: "log",
+      } satisfies TickerWorkerMessage);
     },
     dispose() {
       if (disposed) return;
