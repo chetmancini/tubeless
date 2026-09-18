@@ -205,7 +205,7 @@ describe("createPipelineReporter", () => {
       progressBarWidth: 8,
       refreshIntervalMs: 10_000,
       symbols: "ascii",
-      terminal: { color: false, isTTY: true, unicode: false },
+      terminal: { color: false, isTTY: true, unicode: true },
     });
 
     await progressivePipeline().run({}, undefined, {

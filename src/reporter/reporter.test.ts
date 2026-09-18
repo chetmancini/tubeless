@@ -136,6 +136,35 @@ describe("createRunReporter", () => {
     );
   });
 
+  it("honors an explicit Unicode mode when terminal detection disables Unicode", async () => {
+    const { logger, messages } = capturingLogger();
+    const { step } = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        context.reportProgress({ completed: 1, total: 2, message: "items" });
+      },
+    });
+    const pipeline = definePipeline({
+      id: "explicit-unicode",
+      steps: [work],
+      finalize: () => true,
+    });
+
+    await pipeline.run({}, undefined, {
+      cwd: "/tmp",
+      hooks: createRunReporter({
+        color: "never",
+        log: logger,
+        symbols: "unicode",
+        terminal: { unicode: false },
+      }),
+      log: logger,
+    });
+
+    expect(messages.log).toContain("  … work 1/2 items");
+    expect(messages.log).not.toContain("  ... work 1/2 items");
+  });
+
   it("adds ANSI styling only when color is enabled", async () => {
     const colored = capturingLogger();
     await makeReporterPipeline().run({}, undefined, {

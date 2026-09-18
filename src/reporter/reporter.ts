@@ -118,16 +118,20 @@ export interface ReporterTheme {
     start(value: string): string;
   };
   symbols: ReporterSymbols;
+  unicodeEnabled: boolean;
 }
 
 export function createReporterTheme(config: RunReporterConfig = {}): ReporterTheme {
   const capabilities = detectTerminalCapabilities(config.terminal);
   const colorEnabled = resolveColorEnabled(config.color ?? "auto", capabilities);
-  const symbols = resolveSymbols(config.symbols ?? "auto", capabilities);
+  const symbolMode = config.symbols ?? "auto";
+  const symbols = resolveSymbols(symbolMode, capabilities);
+  const unicodeEnabled = symbolMode === "auto" ? capabilities.unicode : symbolMode !== "ascii";
   return {
     capabilities,
     colorEnabled,
     symbols,
+    unicodeEnabled,
     styled: {
       complete: (value) => paint(colorEnabled, ANSI.green, value),
       description: (value) => paint(colorEnabled, ANSI.dim, value),
@@ -147,15 +151,12 @@ export function createRunReporter<TResult = unknown>(
   const { log } = options;
   const logPlan = options.logPlan !== false;
   const logSummary = options.logSummary !== false;
-  const { capabilities, styled, symbols } = createReporterTheme(options);
+  const { styled, symbols, unicodeEnabled } = createReporterTheme(options);
   // Throttle progress lines so concurrent mapped children stay readable.
   const lastProgressLogAt = new Map<string, number>();
   const lastProgressMessage = new Map<string, string>();
   const progressLogIntervalMs = 750;
-  const ellipsis =
-    options.symbols === "ascii" || (options.symbols !== "emoji" && !capabilities.unicode)
-      ? "..."
-      : "…";
+  const ellipsis = unicodeEnabled ? "…" : "...";
   const displayName = (step: { id: string; name?: string }): string =>
     safeTerminalText(step.name ?? step.id);
   const clearProgress = (stepId: string): void => {

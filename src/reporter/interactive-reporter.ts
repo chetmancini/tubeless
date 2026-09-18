@@ -153,7 +153,7 @@ function renderProgressDetail(
       : ` ${renderProgress(
           { completed: detail.completed, total: detail.total },
           progressBarWidth,
-          theme.capabilities.unicode
+          theme.unicodeEnabled
         )}`;
   return `${"  ".repeat(depth + 2)}${symbol} ${paintedBody}${progress}`;
 }
@@ -170,7 +170,7 @@ function renderStep(
     case "running": {
       const progress =
         state.progress && hasVisibleStepProgress(state.progress)
-          ? ` ${renderProgress(state.progress, progressBarWidth, theme.capabilities.unicode)}`
+          ? ` ${renderProgress(state.progress, progressBarWidth, theme.unicodeEnabled)}`
           : "";
       const elapsed =
         state.startedAtMs !== undefined
@@ -291,7 +291,7 @@ function createInteractiveReporter<TResult>(
         getColumns: () => output.columns,
         fd: reporterOutputFd(output),
         refreshIntervalMs,
-        unicode: theme.capabilities.unicode,
+        unicode: theme.unicodeEnabled,
         write: (chunk) => {
           output.write(chunk);
         },
@@ -315,7 +315,7 @@ function createInteractiveReporter<TResult>(
       ensureTicker().writeLog(`${lines.join("\n")}\n`);
       return;
     }
-    const ellipsis = theme.capabilities.unicode ? "…" : "...";
+    const ellipsis = theme.unicodeEnabled ? "…" : "...";
     if (rows < 5) {
       ensureTicker().setLines(
         [lines[0]!, `  ${ellipsis} ${lines.length - 1} rows omitted`].slice(0, rows - 1)
