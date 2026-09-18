@@ -180,6 +180,56 @@ describe("declarative pipelines", () => {
     expect(runChild).toHaveBeenCalledTimes(2);
   });
 
+  it("validates an ordinary valued skip before publishing it to a required dependent", async () => {
+    const runCached = vi.fn(() => "live");
+    const consume = vi.fn(({ cached }) => cached);
+    const validateCached = vi.fn((value: unknown) => ({ value: `${String(value)}-validated` }));
+    const pipeline = compilePipelineDocument(
+      {
+        version: 1,
+        pipelines: {
+          parent: {
+            steps: [
+              {
+                id: "cached",
+                run: "cached",
+                skip: "useCached",
+                outputSchema: "cachedValue",
+              },
+              { id: "consume", run: "consume", dependsOn: ["cached"] },
+            ],
+            finalize: { run: "result", requireOutputs: ["consume"] },
+          },
+        },
+      },
+      {
+        steps: { cached: runCached, consume },
+        finalizers: { result: ({ consume: value }) => value },
+        skipPredicates: {
+          useCached: () => ({ reason: "cache hit", value: "saved" }),
+        },
+        schemas: {
+          cachedValue: standardSchema(validateCached),
+        },
+      }
+    ).get("parent")!;
+
+    const result = await pipeline.run({}, {}, createPipelineTestRuntime().context);
+
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe("saved-validated");
+    expect(result.steps).toMatchObject([
+      { id: "cached", status: "skipped", reason: "policy", message: "cache hit" },
+      { id: "consume", status: "completed" },
+    ]);
+    expect(runCached).not.toHaveBeenCalled();
+    expect(validateCached).toHaveBeenCalledWith("saved");
+    expect(consume).toHaveBeenCalledWith(
+      { cached: "saved-validated" },
+      expect.objectContaining({ dryRun: false })
+    );
+  });
+
   it.each([
     [
       "single child pipeline",
