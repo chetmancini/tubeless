@@ -371,12 +371,6 @@ try {
       throw new Error(`Packed tubeless artifact is missing ${relativePath}`);
     }
   }
-  if (existsSync(join(installedPackage, "evals"))) {
-    throw new Error("Packed tubeless artifact must not include evals/");
-  }
-  if (existsSync(join(installedPackage, "docs", "agent-evaluations.md"))) {
-    throw new Error("Packed tubeless artifact must not include docs/agent-evaluations.md");
-  }
   if (existsSync(join(installedPackage, "docs", "superpowers"))) {
     throw new Error("Packed tubeless artifact must not include docs/superpowers");
   }

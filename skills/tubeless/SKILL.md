@@ -104,6 +104,4 @@ fake I/O for side effects. Check failure gates, skipped outputs, and dry-run
 behavior. Generate diagrams with `pipeline.toMermaid()` when useful.
 
 Within the Tubeless source repository, also follow its `AGENTS.md` and run
-`make check`. For repository evaluations, write `solution.ts` in a disposable
-directory and compile with `bun run eval:agent --`; do not execute model-written
-submissions in the repository. Follow `docs/agent-evaluations.md` for assessment.
+`make check`.
