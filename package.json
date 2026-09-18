@@ -66,14 +66,14 @@
     "pack:verify": "node scripts/verify-packed-artifact.mjs"
   },
   "devDependencies": {
-    "@types/node": "26.5.1",
-    "knip": "6.35.1",
+    "@types/node": "26.6.1",
+    "knip": "6.37.0",
     "oxfmt": "0.68.0",
     "oxlint": "1.83.0",
     "preact": "10.29.8",
     "preact-render-to-string": "6.7.0",
     "typescript": "7.0.2",
-    "vitest": "5.0.0"
+    "vitest": "5.0.1"
   },
   "exports": {
     ".": {
