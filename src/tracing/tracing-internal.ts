@@ -26,7 +26,6 @@ import {
   PIPELINE_TRACE_STRING_LIMIT,
   PIPELINE_TRACE_VERSION,
 } from "./tracing-constants.js";
-import { decodePipelineTraceEvent } from "./tracing-codec.js";
 import { PARTIAL_PIPELINE_TRACE_EXPORTER_ERROR } from "./trace-exporter-error.js";
 
 /** Runtime trace writer used internally by the pipeline executor. */
@@ -228,16 +227,18 @@ export function createPipelineTraceEmitter(
     : never;
 
   const emit = (fields: PipelineTraceEmission): void => {
-    const encoded = {
+    // SAFETY: each emission is one PipelineTraceEvent variant minus context,
+    // timestamp, and version; reconstituting those fields restores the variant.
+    const event = {
       ...context,
       ...fields,
       timestampMs: now(),
       version: PIPELINE_TRACE_VERSION,
-    };
+    } as PipelineTraceEvent;
     queue = queue
       .then(() => {
         if (stopExporting) return;
-        return options.exporter.export(decodePipelineTraceEvent(encoded));
+        return options.exporter.export(event);
       })
       .catch((error) => {
         const partial = isPartialExporterError(error);
