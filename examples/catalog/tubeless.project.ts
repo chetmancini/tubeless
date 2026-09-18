@@ -15,6 +15,9 @@ import { definePipelineProject } from "tubeless/project";
 // That example also shows automatic nested CLI rows and retained substep completion;
 // fromPipeline and forEachPipeline forward progress without consumer hook wiring.
 // Fan-outs show up to 32 live groups by default, then the full final tree.
+// ../live-tui.ts shows context.log in a right-side pane in wide terminals;
+// Logs appear only in the pane while visible; set reporter.logPane to "off"
+// for logs above progress. Use --trace or --store for complete recordings.
 // History uses recorded pipeline IDs: `tubeless history --pipeline import`
 // selects the pipeline behind the registered command `import-rows`.
 

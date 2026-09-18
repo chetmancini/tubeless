@@ -131,7 +131,12 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Library entrypoints are ESM-only and require Node.js 22 or later. The
   `tubeless` CLI uses a `#!/usr/bin/env bun` entrypoint and requires Bun 1.3.14
   or later on `PATH`.
-- Use `context.log`, never direct `console` calls inside steps.
+- Use `context.log`, never direct `console` calls inside steps. Wide interactive
+  terminals show recent logs beside progress automatically (120 columns by
+  8 rows minimum). Set command `reporter.logPane` to `"off"` to disable the pane;
+  logs appear only in the pane while it is visible. Use `--trace` or `--store`
+  for complete recordings. Forward subprocess output through `context.log`
+  when it should appear there. See [the live TUI recipe](../examples/live-tui.ts).
 - Pass `context.signal` into network calls, batching, retry, rate limiting, and
   long waits. Use `context.sleep` for retry-aware or testable delays.
 - Call `context.reportProgress` for long loops and `context.reportAttempt` for

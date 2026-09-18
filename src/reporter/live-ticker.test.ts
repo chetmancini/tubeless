@@ -19,6 +19,38 @@ function stripAnsi(value: string): string {
 }
 
 describe("paintLiveLines", () => {
+  it("fits animated progress beside a bounded log window", () => {
+    const lines = paintLiveLines(
+      [`${SPINNER_TOKEN} ${shimmerToken("x".repeat(100))} ${elapsedToken(0)}`],
+      "-",
+      25,
+      120,
+      true,
+      true,
+      ["first line", "界".repeat(40)]
+    );
+    expect(lines).toHaveLength(4);
+    expect(stripAnsi(lines[0]!)).toContain("╭─ Logs ");
+    expect(stripAnsi(lines[1]!)).toContain("│ first line");
+    expect(stripAnsi(lines[2]!)).toMatch(/… +│$/);
+    for (const line of lines) {
+      const width = [...stripAnsi(line)].reduce((sum, char) => sum + (char === "界" ? 2 : 1), 0);
+      expect(width).toBe(119);
+      expect(line).not.toMatch(/[\u0001-\u0005]/);
+    }
+  });
+
+  it("omits the pane below 120 columns and uses ASCII borders when requested", () => {
+    expect(paintLiveLines(["progress"], "-", 0, 119, false, true, ["log"])).toEqual(["progress"]);
+    expect(paintLiveLines(["progress"], "-", 0, undefined, false, true, ["log"])).toEqual([
+      "progress",
+    ]);
+    const ascii = paintLiveLines(["progress"], "-", 0, 120, false, false, ["log"]);
+    expect(ascii.join("\n")).toContain("+- Logs ");
+    expect(ascii.join("\n")).toContain("| log");
+    expect(ascii.join("\n")).not.toMatch(/[^\x00-\x7F]/);
+  });
+
   it("sweeps a 3-column bright band across shimmer text", () => {
     const line = `${SPINNER_TOKEN} ${shimmerToken("load")}`;
     const at0 = paintLiveLines([line], "-", 0, undefined, true)[0];
@@ -85,7 +117,8 @@ function dataWorker(source: string): URL {
 
 function workerTicker(
   source?: string,
-  write?: (chunk: string) => void
+  write?: (chunk: string) => void,
+  columns?: number
 ): {
   chunks: string[];
   close(): void;
@@ -111,6 +144,7 @@ function workerTicker(
     closeOutput,
     path,
     ticker: createLiveTicker({
+      columns,
       fd,
       refreshIntervalMs: 40,
       unicode: false,
@@ -121,6 +155,23 @@ function workerTicker(
 }
 
 describe("createLiveTicker worker fallback", () => {
+  it("renders the log pane through the worker and its fallback", async () => {
+    for (const source of [undefined, 'throw new Error("boot failure")']) {
+      const { chunks, close, path, ticker } = workerTicker(source, undefined, 120);
+      try {
+        ticker.setLines([`${SPINNER_TOKEN} running`], ["latest log"]);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        ticker.dispose();
+        const output = readFileSync(path, "utf8") + chunks.join("");
+        expect(output).toContain("+- Logs ");
+        expect(output).toContain("| latest log");
+      } finally {
+        ticker.dispose();
+        close();
+      }
+    }
+  });
+
   it("keeps logs and frames after an asynchronous worker failure", async () => {
     const { chunks, close, ticker } = workerTicker('throw new Error("boot failure")');
     try {

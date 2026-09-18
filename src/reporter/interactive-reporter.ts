@@ -50,6 +50,8 @@ export interface PipelineReporterConfig extends RunReporterConfig {
   refreshIntervalMs?: number;
   /** Filled/empty character width for determinate progress. Defaults to 20. */
   progressBarWidth?: number;
+  /** Show recent logs beside progress in TTYs at least 120 columns by 8 rows. Defaults to auto. */
+  logPane?: "auto" | "off";
 }
 
 export interface PipelineReporterOptions extends PipelineReporterConfig {
@@ -230,6 +232,7 @@ function createInteractiveReporter<TResult>(
   // ~12.5 fps keeps braille spinners smooth without flooding the terminal.
   const refreshIntervalMs = Math.max(16, Math.floor(options.refreshIntervalMs ?? 80));
   const steps = new Map<string, StepState>();
+  const recentLogs: string[] = [];
   let plan: PipelinePlan | undefined;
   let result: PipelineRun<TResult> | undefined;
   let finalize: FinalizeState = { status: "idle" };
@@ -239,6 +242,7 @@ function createInteractiveReporter<TResult>(
   let ticker: LiveTicker | undefined;
   let trailingFlush: ReturnType<typeof setTimeout> | undefined;
   let exitListener: (() => void) | undefined;
+  let resizeOutput: NodeJS.WriteStream | undefined;
 
   const frameLines = (): string[] => {
     if (!plan) return [];
@@ -300,13 +304,25 @@ function createInteractiveReporter<TResult>(
     return ticker;
   };
 
+  const logPaneVisible = (): boolean =>
+    plan !== undefined &&
+    !result &&
+    options.logPane !== "off" &&
+    (output.columns ?? 0) >= 120 &&
+    (output.rows ?? 0) >= 8;
+
   const redraw = (): void => {
     if (disposed) return;
     const lines = frameLines();
-    if (lines.length === 0) return;
+    if (lines.length === 0 && !logPaneVisible()) return;
     const rows = output.rows;
+    const logPane = logPaneVisible()
+      ? recentLogs.length > 0
+        ? recentLogs.slice(-Math.min(8, (rows ?? 0) - 3))
+        : [theme.unicodeEnabled ? "Waiting for logs…" : "Waiting for logs..."]
+      : undefined;
     if (rows === undefined || rows < 2 || lines.length < rows) {
-      ensureTicker().setLines(lines);
+      ensureTicker().setLines(lines, logPane);
       return;
     }
     if (result) {
@@ -336,7 +352,7 @@ function createInteractiveReporter<TResult>(
     if (start > 1) visible.push(`  ${ellipsis} ${start - 1} rows above`);
     visible.push(...lines.slice(start, end));
     if (end < lines.length) visible.push(`  ${ellipsis} ${lines.length - end} rows below`);
-    ensureTicker().setLines(visible);
+    ensureTicker().setLines(visible, logPane);
   };
 
   const flushProgress = (): void => {
@@ -361,6 +377,8 @@ function createInteractiveReporter<TResult>(
     ticker = undefined;
     if (exitListener) process.off("exit", exitListener);
     exitListener = undefined;
+    resizeOutput?.off("resize", redraw);
+    resizeOutput = undefined;
   };
 
   const writeLog = (level: "error" | "log" | "warn", message?: unknown, ...args: unknown[]) => {
@@ -377,7 +395,15 @@ function createInteractiveReporter<TResult>(
       output.write(text);
       return;
     }
-    ensureTicker().writeLog(text);
+    // Retain a bounded tail for the pane, including when the terminal is resized.
+    recentLogs.push(
+      ...`${prefix}${safeRendered}`
+        .split("\n")
+        .slice(-8)
+        .map((line) => line.slice(0, 2048))
+    );
+    recentLogs.splice(0, Math.max(0, recentLogs.length - 8));
+    if (!logPaneVisible()) ensureTicker().writeLog(text);
     progressDirty = false;
     lastProgressRedrawAt = Date.now();
     redraw();
@@ -398,6 +424,8 @@ function createInteractiveReporter<TResult>(
       if (output === process.stdout || output === process.stderr) {
         exitListener = dispose;
         process.once("exit", exitListener);
+        resizeOutput = output === process.stdout ? process.stdout : process.stderr;
+        resizeOutput.on("resize", redraw);
       }
       redraw();
     },

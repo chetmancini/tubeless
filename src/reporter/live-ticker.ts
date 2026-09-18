@@ -137,15 +137,35 @@ export function paintLiveLines(
   nowMs: number,
   columns?: number,
   color = false,
-  unicode = true
+  unicode = true,
+  logPane?: readonly string[]
 ): string[] {
-  return lines.map((line) =>
-    fitLine(replaceLiveTokens(line, spinner, nowMs, color), columns, unicode)
+  const painted = lines.map((line) => replaceLiveTokens(line, spinner, nowMs, color));
+  if (!logPane || !columns || columns < 120) {
+    return painted.map((line) => fitLine(line, columns, unicode));
+  }
+  const paneWidth = Math.min(60, Math.floor(columns * 0.4));
+  const leftWidth = columns - paneWidth - 3;
+  const horizontal = unicode ? "─" : "-";
+  const vertical = unicode ? "│" : "|";
+  const pad = (line: string, width: number): string => {
+    const fitted = fitLine(line, width + 1, unicode);
+    return fitted + " ".repeat(Math.max(0, width - visibleWidth(fitted.replace(ANSI_STYLE, ""))));
+  };
+  const pane = [
+    `${unicode ? "╭" : "+"}${horizontal} Logs ${horizontal.repeat(paneWidth - 9)}${unicode ? "╮" : "+"}`,
+    ...logPane.map((line) => `${vertical} ${pad(line, paneWidth - 4)} ${vertical}`),
+    `${unicode ? "╰" : "+"}${horizontal.repeat(paneWidth - 2)}${unicode ? "╯" : "+"}`,
+  ];
+  return Array.from({ length: Math.max(painted.length, pane.length) }, (_, index) =>
+    pane[index] === undefined
+      ? fitLine(painted[index] ?? "", leftWidth + 1, unicode)
+      : `${pad(painted[index] ?? "", leftWidth)}  ${pane[index]}`
   );
 }
 
 export interface LiveTicker {
-  setLines(lines: readonly string[]): void;
+  setLines(lines: readonly string[], logPane?: readonly string[]): void;
   writeLog(text: string): void;
   dispose(): void;
 }
@@ -162,9 +182,9 @@ export interface LiveTickerOptions {
 }
 
 type TickerWorkerMessage =
-  | { columns?: number; lines: string[]; type: "lines" }
+  | { columns?: number; lines: string[]; logPane?: readonly string[]; type: "lines" }
   | { text: string; type: "log" }
-  | { columns?: number; lines: string[]; type: "stop" };
+  | { columns?: number; lines: string[]; logPane?: readonly string[]; type: "stop" };
 
 export class TickerFrame {
   private cursorHidden: boolean;
@@ -212,6 +232,7 @@ export function currentSpinner(unicode: boolean, refreshIntervalMs: number): str
 function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 0): LiveTicker {
   let disposed = false;
   let lines: readonly string[] = [];
+  let logPane: readonly string[] | undefined;
   const frame = new TickerFrame((chunk) => options.write(chunk), adoptedFrameLineCount);
   const redraw = (): void => {
     if (disposed) return;
@@ -222,7 +243,8 @@ function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 
         Date.now(),
         resolveColumns(options),
         options.color === true,
-        options.unicode
+        options.unicode,
+        logPane
       )
     );
   };
@@ -239,8 +261,9 @@ function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 
   timer.unref();
 
   return {
-    setLines(nextLines) {
+    setLines(nextLines, nextLogPane) {
       lines = nextLines;
+      logPane = nextLogPane;
       redraw();
     },
     writeLog(text) {
@@ -297,6 +320,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   let disposed = false;
   let inlineFallback: LiveTicker | undefined;
   let lines: readonly string[] = [];
+  let logPane: readonly string[] | undefined;
   const pendingLogs: string[] = [];
   let acknowledgedLogs = 0;
 
@@ -322,7 +346,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     dropAcknowledgedLogs();
     for (const text of pendingLogs) ticker.writeLog(text);
     pendingLogs.length = 0;
-    ticker.setLines([...lines]);
+    ticker.setLines([...lines], logPane);
   };
 
   const claimOutput = (): boolean => {
@@ -355,16 +379,18 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   worker.unref();
 
   return {
-    setLines(nextLines) {
+    setLines(nextLines, nextLogPane) {
       if (disposed) return;
       lines = nextLines;
+      logPane = nextLogPane;
       if (inlineFallback) {
-        inlineFallback.setLines(nextLines);
+        inlineFallback.setLines(nextLines, nextLogPane);
         return;
       }
       worker.postMessage({
         columns: resolveColumns(options),
         lines: [...nextLines],
+        logPane,
         type: "lines",
       } satisfies TickerWorkerMessage);
     },
@@ -396,6 +422,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
           worker.postMessage({
             columns: resolveColumns(options),
             lines: [...lines],
+            logPane,
             type: "stop",
           } satisfies TickerWorkerMessage);
           workerStopped = Atomics.wait(state, 0, 0, 500) !== "timed-out";
