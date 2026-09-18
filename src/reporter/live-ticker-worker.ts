@@ -1,19 +1,19 @@
 import { writeSync } from "node:fs";
 import { parentPort, workerData } from "node:worker_threads";
 import {
-  TickerFrame,
   currentSpinner,
   paintLiveLines,
   SHIMMER_TOKEN_START,
   SPINNER_TOKEN,
+  TickerFrame,
 } from "./live-ticker.js";
 
 interface LiveTickerWorkerData {
   color: boolean;
   columns?: number;
   fd: number;
-  handshakeBuffer: SharedArrayBuffer;
   refreshIntervalMs: number;
+  stopBuffer: SharedArrayBuffer;
   unicode: boolean;
 }
 
@@ -23,29 +23,14 @@ type TickerWorkerMessage =
   | { columns?: number; lines: string[]; type: "stop" };
 
 const port = parentPort;
-if (port === null) {
-  throw new Error("live-ticker-worker must run as a worker thread");
-}
+if (port === null) throw new Error("live-ticker-worker must run in a worker thread");
 
-// SAFETY: createWorkerTicker always posts this exact workerData shape
-// (color, columns, fd, handshakeBuffer, refreshIntervalMs, unicode).
+// SAFETY: createWorkerTicker owns the workerData shape.
 const data = workerData as LiveTickerWorkerData;
-const handshake = new Int32Array(data.handshakeBuffer);
+const stopped = new Int32Array(data.stopBuffer);
+const frame = new TickerFrame((chunk) => writeSync(data.fd, chunk));
 let columns = data.columns;
 let lines: string[] = [];
-const frame = new TickerFrame((chunk) => writeSync(data.fd, chunk));
-let announcedReady = false;
-
-function publishFrame(): void {
-  Atomics.store(handshake, 1, frame.frameLineCount);
-}
-
-function announceReady(): void {
-  publishFrame();
-  if (announcedReady || port === null) return;
-  announcedReady = true;
-  port.postMessage({ type: "ready", frameLineCount: frame.frameLineCount });
-}
 
 function redraw(): void {
   frame.redraw(
@@ -57,50 +42,33 @@ function redraw(): void {
       data.color
     )
   );
-  publishFrame();
 }
 
-function done(): void {
-  Atomics.store(handshake, 0, 1);
-  Atomics.notify(handshake, 0);
-}
-
-const beat = (): void => {
-  Atomics.add(handshake, 3, 1);
-};
-
-beat();
 const timer = setInterval(() => {
-  beat();
-  if (!lines.some((line) => line.includes(SPINNER_TOKEN) || line.includes(SHIMMER_TOKEN_START))) {
-    return;
+  if (lines.some((line) => line.includes(SPINNER_TOKEN) || line.includes(SHIMMER_TOKEN_START))) {
+    redraw();
   }
-  redraw();
 }, data.refreshIntervalMs);
 
-port.on("message", (msg: TickerWorkerMessage) => {
-  if (msg.type === "log") {
+port.on("message", (message: TickerWorkerMessage) => {
+  if (message.type === "log") {
     frame.clear();
-    writeSync(data.fd, msg.text);
-    publishFrame();
-    Atomics.add(handshake, 2, 1);
-    announceReady();
-    port.postMessage({ type: "ack", kind: "log" });
+    writeSync(data.fd, message.text);
     return;
   }
-  if (msg.columns !== undefined) columns = msg.columns;
-  if (msg.type === "lines") {
-    lines = msg.lines;
+  columns = message.columns ?? columns;
+  lines = message.lines;
+  if (message.type === "lines") {
     redraw();
-    announceReady();
     return;
   }
-  if (msg.type === "stop") {
-    clearInterval(timer);
-    if (msg.lines) lines = msg.lines;
+  clearInterval(timer);
+  try {
     redraw();
     frame.showCursor();
-    done();
+  } finally {
+    Atomics.store(stopped, 0, 1);
+    Atomics.notify(stopped, 0);
     port.close();
   }
 });

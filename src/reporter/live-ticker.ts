@@ -1,4 +1,3 @@
-import { writeSync } from "node:fs";
 import { Worker } from "node:worker_threads";
 import { formatDurationMs } from "./reporter.js";
 
@@ -152,8 +151,6 @@ export interface LiveTickerOptions {
   unicode: boolean;
   color?: boolean;
   write(chunk: string): void;
-  workerUrl?: URL;
-  supervisorUrl?: URL;
 }
 
 type TickerWorkerMessage =
@@ -161,16 +158,11 @@ type TickerWorkerMessage =
   | { text: string; type: "log" }
   | { columns?: number; lines: string[]; type: "stop" };
 
-/** Cursor and frame ownership shared by inline and worker tickers. */
 export class TickerFrame {
-  private cursorHidden: boolean;
+  private cursorHidden = false;
+  private frameLineCount = 0;
 
-  constructor(
-    private readonly write: (chunk: string) => void,
-    public frameLineCount = 0
-  ) {
-    this.cursorHidden = frameLineCount > 0;
-  }
+  constructor(private readonly write: (chunk: string) => void) {}
 
   showCursor(): void {
     if (!this.cursorHidden) return;
@@ -205,10 +197,10 @@ export function currentSpinner(unicode: boolean, refreshIntervalMs: number): str
   return frames[Math.floor(Date.now() / refreshIntervalMs) % frames.length] ?? frames[0]!;
 }
 
-function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 0): LiveTicker {
+function createInlineTicker(options: LiveTickerOptions): LiveTicker {
   let disposed = false;
   let lines: readonly string[] = [];
-  const frame = new TickerFrame((chunk) => options.write(chunk), adoptedFrameLineCount);
+  const frame = new TickerFrame((chunk) => options.write(chunk));
   const redraw = (): void => {
     if (disposed) return;
     frame.redraw(
@@ -255,252 +247,81 @@ function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 
   };
 }
 
-function resolveCompiledWorkerUrl(filename: string): URL {
-  if (import.meta.url.endsWith(".ts")) {
-    return new URL(`../../dist/reporter/${filename}`, import.meta.url);
-  }
-  return new URL(`./${filename}`, import.meta.url);
-}
-
 function resolveLiveTickerWorkerUrl(): URL {
-  return resolveCompiledWorkerUrl("live-ticker-worker.js");
-}
-
-function resolveLiveTickerSupervisorUrl(): URL {
-  return resolveCompiledWorkerUrl("live-ticker-supervisor.js");
+  return import.meta.url.endsWith(".ts")
+    ? new URL("../../dist/reporter/live-ticker-worker.js", import.meta.url)
+    : new URL("./live-ticker-worker.js", import.meta.url);
 }
 
 function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[] {
   const next: string[] = [];
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
     if (arg === "--input-type") {
-      i += 1;
-      continue;
+      index += 1;
+    } else if (!arg.startsWith("--input-type=")) {
+      next.push(arg);
     }
-    if (arg.startsWith("--input-type=")) continue;
-    next.push(arg);
   }
   return next;
 }
 
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
-  // [0] stop handshake, [1] painted rows, [2] accepted logs, [3] liveness beat
-  const handshakeBuffer = new SharedArrayBuffer(16);
-  const handshake = new Int32Array(handshakeBuffer);
-  // [0] terminate request, [1] ticker isolate exited
-  const controlBuffer = new SharedArrayBuffer(8);
-  const control = new Int32Array(controlBuffer);
-  const worker = new Worker(options.supervisorUrl ?? resolveLiveTickerSupervisorUrl(), {
+  const stopBuffer = new SharedArrayBuffer(4);
+  const stopped = new Int32Array(stopBuffer);
+  const worker = new Worker(resolveLiveTickerWorkerUrl(), {
     execArgv: fileWorkerExecArgv(),
     workerData: {
-      controlBuffer,
-      execArgv: fileWorkerExecArgv(),
-      tickerData: {
-        color: options.color === true,
-        columns: resolveColumns(options),
-        fd: options.fd,
-        handshakeBuffer,
-        refreshIntervalMs: options.refreshIntervalMs,
-        unicode: options.unicode,
-      },
-      tickerUrl: (options.workerUrl ?? resolveLiveTickerWorkerUrl()).href,
+      color: options.color === true,
+      columns: resolveColumns(options),
+      fd: options.fd,
+      refreshIntervalMs: options.refreshIntervalMs,
+      stopBuffer,
+      unicode: options.unicode,
     },
   });
   let disposed = false;
-  let finalFramePainted = false;
-  let inlineFallback: LiveTicker | undefined;
   let lines: readonly string[] = [];
-  const pendingLogs: string[] = [];
-  let ackedLogs = 0;
-
-  const paintedFrameLineCount = (): number => Atomics.load(handshake, 1);
-
-  const dropAcknowledgedLogs = (): void => {
-    const accepted = Atomics.load(handshake, 2);
-    if (accepted <= ackedLogs) return;
-    pendingLogs.splice(0, accepted - ackedLogs);
-    ackedLogs = accepted;
-  };
-
-  const send = (message: TickerWorkerMessage): void => {
-    if (disposed || inlineFallback) return;
-    worker.postMessage(message);
-  };
-
-  let supervisorGone = false;
-
-  const requestTerminate = (): void => {
-    Atomics.store(control, 0, 1);
-    Atomics.notify(control, 0);
-    try {
-      worker.postMessage({ type: "terminate" });
-    } catch {
-      // Supervisor is already gone; isolate exit is best-effort.
-      supervisorGone = true;
-    }
-  };
-
-  // Supervisor stores control[1] on the ticker isolate's exit event.
-  // A stale refresh beat is not isolate death: refreshIntervalMs is
-  // user-configurable, and stop handlers clear the timer before done().
-  const isolateNeverStarted = (): boolean =>
-    Atomics.load(control, 1) === 0 &&
-    Atomics.load(handshake, 1) === 0 &&
-    Atomics.load(handshake, 2) === 0 &&
-    Atomics.load(handshake, 3) === 0;
-
-  const joinTickerIsolate = (ms: number): void => {
-    // Only the supervisor stores control[1]. Once it is gone the join
-    // cannot observe isolate exit, so skip rather than park for 1s.
-    if (supervisorGone || Atomics.load(control, 1) === 1) return;
-    Atomics.wait(control, 1, 0, ms);
-  };
-
-  const drainOwnershipWindow = (): void => {
-    const park = new Int32Array(new SharedArrayBuffer(4));
-    Atomics.wait(park, 0, 0, 160);
-  };
-
-  const stopWorker = (): void => {
-    requestTerminate();
-    try {
-      joinTickerIsolate(1_000);
-      // Exit can land in the same millisecond as the last beat. Wait out
-      // the 80ms ownership window before the parent takes the fd.
-      // supervisorGone is not enough to skip: a mid-flight supervisor
-      // crash can leave the isolate still writing. Skip only when the
-      // isolate never published a frame, log, beat, or exit.
-      if (Atomics.load(handshake, 0) !== 1 && !isolateNeverStarted()) {
-        drainOwnershipWindow();
-      }
-    } finally {
-      void worker.terminate();
-    }
-  };
-
-  const replayThrough = (ticker: LiveTicker): void => {
-    dropAcknowledgedLogs();
-    for (const text of pendingLogs) {
-      ticker.writeLog(text);
-    }
-    pendingLogs.length = 0;
-    ticker.setLines([...lines]);
-  };
-
-  const paintFinalFrame = (): void => {
-    if (finalFramePainted) return;
-    finalFramePainted = true;
-    try {
-      const ticker = createInlineTicker(options, paintedFrameLineCount());
-      replayThrough(ticker);
-      ticker.dispose();
-    } catch {
-      // Stream may already be closed after dispose.
-    }
-  };
-
-  const failToInline = (): void => {
-    if (inlineFallback || finalFramePainted) return;
-    if (disposed) {
-      if (Atomics.load(handshake, 0) !== 1) paintFinalFrame();
-      return;
-    }
-    inlineFallback = createInlineTicker(options, paintedFrameLineCount());
-    replayThrough(inlineFallback);
-  };
-  const requestedTerminate = (): boolean => Atomics.load(control, 0) === 1;
 
   worker.on("error", () => {
-    supervisorGone = true;
-    if (!requestedTerminate()) failToInline();
-  });
-  worker.on("exit", (code) => {
-    supervisorGone = true;
-    if (code !== 0 && !requestedTerminate()) failToInline();
+    if (!disposed) options.write(ANSI.showCursor);
   });
   worker.unref();
-  worker.on(
-    "message",
-    (msg: {
-      code?: number;
-      event?: string;
-      kind?: string;
-      terminated?: boolean;
-      type?: string;
-    }) => {
-      if (msg.type === "supervisor" && msg.event === "error") {
-        if (msg.terminated !== true && !requestedTerminate()) failToInline();
-        return;
-      }
-      if (msg.type === "supervisor" && msg.event === "exit") {
-        if (msg.code !== 0 && msg.terminated !== true && !requestedTerminate()) {
-          failToInline();
-        }
-        return;
-      }
-      if (msg.type === "ack" && msg.kind === "log") dropAcknowledgedLogs();
-    }
-  );
 
   return {
     setLines(nextLines) {
+      if (disposed) return;
       lines = nextLines;
-      if (inlineFallback) {
-        inlineFallback.setLines(nextLines);
-        return;
-      }
-      send({ columns: resolveColumns(options), lines: [...nextLines], type: "lines" });
+      worker.postMessage({
+        columns: resolveColumns(options),
+        lines: [...nextLines],
+        type: "lines",
+      } satisfies TickerWorkerMessage);
     },
     writeLog(text) {
-      if (inlineFallback) {
-        inlineFallback.writeLog(text);
-        return;
-      }
       if (disposed) {
-        writeSync(options.fd, text);
+        options.write(text);
         return;
       }
-      dropAcknowledgedLogs();
-      pendingLogs.push(text);
-      send({ text, type: "log" });
+      worker.postMessage({ text, type: "log" } satisfies TickerWorkerMessage);
     },
     dispose() {
       if (disposed) return;
       disposed = true;
-      if (inlineFallback) {
-        inlineFallback.dispose();
-        stopWorker();
-        return;
-      }
-      Atomics.store(handshake, 0, 0);
       try {
         worker.postMessage({
           columns: resolveColumns(options),
           lines: [...lines],
           type: "stop",
-        });
-      } catch {
-        stopWorker();
-        paintFinalFrame();
-        return;
-      }
-      if (Atomics.wait(handshake, 0, 0, 500) === "timed-out") {
-        stopWorker();
-        if (Atomics.load(handshake, 0) !== 1) paintFinalFrame();
-        try {
-          writeSync(options.fd, ANSI.showCursor);
-        } catch {
-          // Stream may already be closed; cursor restore is best-effort.
+        } satisfies TickerWorkerMessage);
+        if (Atomics.wait(stopped, 0, 0, 500) === "timed-out") {
+          options.write(ANSI.showCursor);
         }
-        return;
-      }
-      try {
-        writeSync(options.fd, ANSI.showCursor);
       } catch {
-        // Stream may already be closed; cursor restore is best-effort.
+        options.write(ANSI.showCursor);
+      } finally {
+        void worker.terminate();
       }
-      stopWorker();
     },
   };
 }
@@ -509,13 +330,12 @@ function outputFd(fd: number | undefined): fd is number {
   return fd !== undefined && Number.isInteger(fd) && fd >= 0;
 }
 
-/** Inline interval for tests; worker thread when `fd` is a real TTY/pipe. */
 export function createLiveTicker(options: LiveTickerOptions): LiveTicker {
   if (outputFd(options.fd)) {
     try {
       return createWorkerTicker({ ...options, fd: options.fd });
     } catch {
-      // Worker threads are unavailable in some embeddings; fall back.
+      // Some embeddings do not provide worker threads.
     }
   }
   return createInlineTicker(options);

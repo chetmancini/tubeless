@@ -235,11 +235,8 @@ function renderStep(
 }
 
 function reporterOutputFd(output: ReporterOutput): number | undefined {
-  const stdoutFd = output === process.stdout ? process.stdout.fd : undefined;
-  for (const fd of [output.fd, stdoutFd]) {
-    if (fd !== undefined && Number.isInteger(fd) && fd >= 0) return fd;
-  }
-  return undefined;
+  const fd = output.fd ?? (output === process.stdout ? process.stdout.fd : undefined);
+  return fd !== undefined && Number.isInteger(fd) && fd >= 0 ? fd : undefined;
 }
 
 function createInteractiveReporter<TResult>(
