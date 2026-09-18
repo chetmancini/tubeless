@@ -71,7 +71,7 @@ name; recheck immediately before the first publish.
 - [ ] Explain why the project is called Tubeless, what problem it solves, its
       maturity level, and how it compares with task runners and workflow
       engines without overpromising stability.
-- [x] Decide whether `docs`, `examples`, and `evals` should all ship in the npm
+- [x] Decide whether `docs` and `examples` should ship in the npm
       tarball. Keep only artifacts that improve the installed-package
       experience, then update the pack verifier to enforce that policy.
 - [x] Add `CONTRIBUTING.md`. Pull requests are accepted for now; the
@@ -94,7 +94,7 @@ name; recheck immediately before the first publish.
 
 ## Extraction follow-through
 
-- [x] Copy the package-owned source, tests, docs, examples, evaluation fixtures,
+- [x] Copy the package-owned source, tests, docs, examples,
       tooling, manifest, lockfile, and license into the standalone repository.
 - [x] Rebrand package imports, CLI commands, local paths, Studio UI, protocol
       headers, runtime markers, tests, fixtures, and public error namespaces to

@@ -77,71 +77,6 @@ for (const example of linkedExamples) {
   );
 }
 
-const evaluationPath = join(packageRoot, "evals", "agent-cases.json");
-const evaluations = JSON.parse(readFileSync(evaluationPath, "utf8"));
-assert(evaluations.schemaVersion === 1, "Agent evaluation schemaVersion must be 1");
-assert(
-  Array.isArray(evaluations.cases) && evaluations.cases.length >= 16,
-  "Need at least sixteen agent cases"
-);
-const evaluationIds = new Set();
-const gatedCaseIds = [];
-for (const evaluation of evaluations.cases) {
-  assert(typeof evaluation.id === "string" && evaluation.id.length > 0, "Agent case needs an id");
-  assert(!evaluationIds.has(evaluation.id), `Duplicate agent case id: ${evaluation.id}`);
-  evaluationIds.add(evaluation.id);
-  assert(
-    typeof evaluation.prompt === "string" && evaluation.prompt.length > 20,
-    `${evaluation.id} needs a prompt`
-  );
-  assert(evaluation.mustDemonstrate?.length > 0, `${evaluation.id} needs mustDemonstrate checks`);
-  assert(evaluation.mustAvoid?.length > 0, `${evaluation.id} needs mustAvoid checks`);
-  if (evaluation.learningSurfaceGate === true) gatedCaseIds.push(evaluation.id);
-}
-for (const requiredId of [
-  "sequential-import",
-  "safe-publication",
-  "fan-out-children",
-  "pipeline-cli",
-  "reusable-child",
-  "validated-boundaries",
-  "local-studio",
-  "deterministic-testing",
-]) {
-  assert(evaluationIds.has(requiredId), `Agent cases must include ${requiredId}`);
-}
-assert(
-  gatedCaseIds.length >= 4,
-  "Need at least four learning-surface gate cases with assessed answers"
-);
-for (const caseId of gatedCaseIds) {
-  const answerRoot = join(packageRoot, "evals", "answers", caseId);
-  assert(
-    existsSync(join(answerRoot, "solution.ts")) &&
-      statSync(join(answerRoot, "solution.ts")).isFile(),
-    `Learning-surface gate ${caseId} is missing evals/answers/${caseId}/solution.ts`
-  );
-  assert(
-    existsSync(join(answerRoot, "assessment.json")) &&
-      statSync(join(answerRoot, "assessment.json")).isFile(),
-    `Learning-surface gate ${caseId} is missing evals/answers/${caseId}/assessment.json`
-  );
-}
-
-const evaluationGuide = readFileSync(join(packageRoot, "docs", "agent-evaluations.md"), "utf8");
-assert(
-  evaluationGuide.includes("bun run eval:agent"),
-  "Agent evaluation guide must document the executable verifier"
-);
-assert(
-  evaluationGuide.includes("skills/tubeless"),
-  "Agent evaluation guide must name the repository-local skill path"
-);
-assert(
-  evaluationGuide.includes("evals/answers"),
-  "Agent evaluation guide must name the assessed answer submissions"
-);
-
 const agentGuide = readFileSync(join(packageRoot, "docs", "agent-guide.md"), "utf8");
 assert(
   !agentGuide.includes("nearby production pipeline"),
@@ -192,13 +127,6 @@ assert(
     catalog.includes('id: "import-rows"'),
   "Project manifest must declare stable IDs and distinguish --step/--target flags from stepIds/targets values"
 );
-for (const script of [
-  "scripts/evaluate-agent-submission.mjs",
-  "scripts/verify-agent-evaluation-runner.mjs",
-]) {
-  assert(existsSync(join(packageRoot, script)), `Agent evaluation tooling is missing ${script}`);
-}
-
 const requiredDocuments = [
   "README.md",
   "docs/README.md",
@@ -210,7 +138,6 @@ const requiredDocuments = [
   "docs/llms.txt",
   "docs/recipes.md",
   "docs/studio.md",
-  "evals/agent-cases.json",
   "skills/tubeless/SKILL.md",
   "skills/tubeless-make-pipeline/SKILL.md",
   "examples/catalog/tubeless.project.ts",

@@ -36,7 +36,6 @@ Agent instructions:
 - Set dryRun: "skip" on external side effects, or provide a side-effect-free dryRun handler.
 - Use context.log, context.signal, context.sleep, and progress APIs.
 - Use createPipelineTestRuntime from tubeless/testing for deterministic tests with captured logs, statuses, progress, clock, and cancellation.
-- Compile generated agent submissions with bun run eval:agent --; runtime tests, provider invocation, and semantic assessment remain externally controlled.
 - Import definePipelineCommand from tubeless/cli and definePipelineProject from tubeless/project.
 - Omit mapOptions only when validated CLI flags already satisfy same-name pipeline options; map renamed, loaded, or derived values explicitly. --step and --target are argv flags; mapOptions and hooks receive stepIds and targets.
 - Declare public goals with targets: [step] on definePipeline, then select their
@@ -58,8 +57,6 @@ Advanced:
 - Remote steps: ./remote-step-composition.md
 - Public exports: ./api-reference.md
 - Machine-readable surface: ./api-report.json
-- Agent evaluation cases: https://github.com/chetmancini/tubeless/blob/main/docs/agent-evaluations.md
-
 Executable examples:
 
 - ../examples/catalog/tubeless.project.ts

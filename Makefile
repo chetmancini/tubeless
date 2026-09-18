@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help list verify validate inspect plan graph run ui require-file install build lint format \
-	format-check typecheck knip test docs-check api-check api-generate eval-verify pack \
+	format-check typecheck knip test docs-check api-check api-generate pack \
 	pack-verify tubeless check release website website-build
 
 export_arg = $(if $(strip $(EXPORT)),--export "$(EXPORT)",)
@@ -52,7 +52,6 @@ help:
 	@echo "  make test          Build once, run the vitest suite"
 	@echo "  make docs-check    Validate the learning-surface docs"
 	@echo "  make api-check     Verify generated public API docs"
-	@echo "  make eval-verify   Verify the agent evaluation runner"
 	@echo "  make pack-verify   Smoke-test the publishable artifact"
 
 require-file:
@@ -117,10 +116,6 @@ api-check:
 
 api-generate:
 	bun run api:generate
-
-eval-verify:
-	bun run --silent build
-	bun run eval:verify
 
 pack:
 	bun run --silent build

@@ -30,7 +30,6 @@ export const DOC_NAV = [
   { slug: "remote-step-composition", label: "Remote steps", blurb: "Call remote services and invoke pipelines from workers." },
   { slug: "agent-guide", label: "Agent guide", blurb: "Rules for generating pipeline code." },
   { slug: "agent-skills", label: "Agent skills", blurb: "Install the skill pack and convert existing code into pipelines." },
-  { slug: "agent-evaluations", label: "Evaluations", blurb: "Check whether agents can apply the documented patterns." },
   { slug: "api-reference", label: "API inventory", blurb: "Generated public surface." },
 ] as const;
 
