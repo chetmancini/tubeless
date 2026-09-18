@@ -365,18 +365,21 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
         return;
       }
       try {
-        worker.postMessage({
-          columns: resolveColumns(options),
-          lines: [...lines],
-          type: "stop",
-        } satisfies TickerWorkerMessage);
-        if (Atomics.wait(state, 0, 0, 500) === "timed-out") {
+        let workerStopped = false;
+        try {
+          worker.postMessage({
+            columns: resolveColumns(options),
+            lines: [...lines],
+            type: "stop",
+          } satisfies TickerWorkerMessage);
+          workerStopped = Atomics.wait(state, 0, 0, 500) !== "timed-out";
+        } catch {
+          // The worker is unavailable; render its retained state below.
+        }
+        if (!workerStopped) {
           const ticker = createFallback();
           ticker.dispose();
         }
-      } catch {
-        const ticker = createFallback();
-        ticker.dispose();
       } finally {
         void worker.terminate();
       }

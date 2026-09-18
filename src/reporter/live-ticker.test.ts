@@ -75,7 +75,10 @@ function dataWorker(source: string): URL {
   return new URL(`data:text/javascript,${encodeURIComponent(source)}`);
 }
 
-function workerTicker(source: string): {
+function workerTicker(
+  source: string,
+  write?: (chunk: string) => void
+): {
   chunks: string[];
   close(): void;
   path: string;
@@ -96,7 +99,7 @@ function workerTicker(source: string): {
       refreshIntervalMs: 40,
       unicode: false,
       workerUrl: dataWorker(source),
-      write: (chunk) => chunks.push(chunk),
+      write: write ?? ((chunk) => chunks.push(chunk)),
     }),
   };
 }
@@ -156,6 +159,22 @@ describe("createLiveTicker worker fallback", () => {
 
       expect(Date.now() - startedAt).toBeGreaterThanOrEqual(600);
       expect(chunks.join("")).toContain("final status");
+    } finally {
+      ticker.dispose();
+      close();
+    }
+  });
+
+  it("does not retry fallback when writing its retained frame fails", () => {
+    const write = vi.fn(() => {
+      throw new Error("output closed");
+    });
+    const { close, ticker } = workerTicker("setInterval(() => {}, 1000)", write);
+    try {
+      ticker.setLines(["final status"]);
+
+      expect(() => ticker.dispose()).toThrow("output closed");
+      expect(write).toHaveBeenCalledTimes(1);
     } finally {
       ticker.dispose();
       close();
