@@ -228,6 +228,29 @@ bunx tubeless run import-rows -- --source rows.txt --dry-run
 A dry run executes safe handlers and custom previews. To inspect selection
 without executing any handlers, use `tubeless plan` instead.
 
+## Live log pane
+
+Interactive terminals at least 120 columns wide and 8 rows tall show a small
+Logs pane to the right of the progress tree. It follows the latest eight lines
+from `context.log`, including warnings and errors, with fewer lines in short
+terminals. While the pane is visible, logs appear only there; long lines are
+clipped. The pane adapts to terminal resizing and disappears at completion.
+When it is hidden, new logs print above progress. Use `--trace` or `--store`
+when you need a complete recording.
+Narrow terminals, redirected output, and plain reporting keep their usual layout.
+
+The pane is enabled automatically. Configure it per command:
+
+```ts
+const command = definePipelineCommand(pipeline, {
+  reporter: { logPane: "off" }, // Default: "auto"
+});
+```
+
+Use `context.log` inside steps, and forward subprocess output to that logger if
+you want it in the pane. Direct `console` calls and inherited subprocess output
+are not captured. Try `bun examples/live-tui.ts` in a wide terminal.
+
 ## Nested progress
 
 In an interactive terminal, child pipelines appear as indented steps:

@@ -40,6 +40,7 @@ const discover = step("discover", {
           status: sequentialStatus(index, current),
         })),
       });
+      context.log.log(`Discovered ${SOURCES[current]} catalog`);
       await context.sleep(context.options.delay, context.signal);
     }
     return [...SOURCES];
@@ -64,6 +65,7 @@ const fetch = step("fetch", {
         })),
       });
       records.set(source, (head + 1) * 40);
+      context.log.log(`Fetched ${(head + 1) * 40} records from ${source}`);
       await context.sleep(context.options.delay, context.signal);
     }
     return records;
@@ -129,7 +131,8 @@ export const LiveTuiPipeline = definePipeline({
  *   bun examples/live-tui.ts --delay 250
  */
 export const LiveTuiCommand = definePipelineCommand(LiveTuiPipeline, {
-  description: "Watch named steps, nested running details, and finalize on the live TUI.",
+  description: "Watch named steps, nested progress, and the live log pane in a wide TTY.",
+  reporter: { logPane: "auto" },
   params: {
     delay: {
       type: "number",

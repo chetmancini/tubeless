@@ -72,6 +72,112 @@ afterEach(() => {
 });
 
 describe("createPipelineReporter", () => {
+  it("shows recent sanitized logs only in the pane while it is visible", async () => {
+    const output = { ...captureOutput(true, 120), rows: 12 };
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      mode: "interactive",
+      output,
+      symbols: "unicode",
+    });
+    const { step } = createSteps();
+    const pipeline = definePipeline({
+      id: "log-pane",
+      finalize: () => undefined,
+      steps: [
+        step("work", {
+          run: (_inputs, context) => {
+            for (let index = 0; index < 10; index += 1) context.log.log(`line ${index}`);
+            context.log.warn("first\nsecond");
+            context.log.error("\u001B[2Jfailure\u0001\tmessage");
+            const frame = output.chunks.at(-1)!;
+            expect(frame).toContain("╭─ Logs ");
+            expect(frame).toContain("│ ! first");
+            expect(frame).toContain("│ second");
+            expect(frame).toContain("│ ✗ failure message");
+            expect(frame).not.toContain("line 0");
+            expect(frame).not.toContain("\u001B[2J");
+            expect(frame.trimEnd().split("\n")).toHaveLength(10);
+          },
+        }),
+      ],
+    });
+    try {
+      await pipeline.runOrThrow({}, undefined, {
+        cwd: "/tmp",
+        hooks: reporter.hooks,
+        log: reporter.log,
+      });
+      expect(output.chunks.join("")).not.toContain("line 0\n");
+      expect(output.chunks).not.toContain("! first\nsecond\n");
+      expect(output.chunks).not.toContain("✗ failure message\n");
+      expect(output.chunks.at(-2)).not.toContain("Logs");
+      expect(output.chunks.at(-1)).toBe("\u001B[?25h");
+    } finally {
+      reporter.dispose();
+    }
+  });
+
+  it.each([
+    { columns: 119, rows: 24, logPane: "auto" as const },
+    { columns: 120, rows: 7, logPane: "auto" as const },
+    { columns: 120, rows: undefined, logPane: "auto" as const },
+    { columns: 120, rows: 24, logPane: "off" as const },
+  ])("keeps the single-column layout for %j", async ({ columns, rows, logPane }) => {
+    const output = { ...captureOutput(true, columns), rows };
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      mode: "interactive",
+      output,
+      logPane,
+    });
+    await progressivePipeline().run({}, undefined, {
+      cwd: "/tmp",
+      hooks: reporter.hooks,
+      log: reporter.log,
+    });
+    expect(output.chunks.join("")).not.toContain(" Logs ");
+    expect(output.chunks.join("")).toContain("loaded a batch\n");
+  });
+
+  it("adapts the pane to changed terminal dimensions without losing recent logs", () => {
+    const output = { ...captureOutput(true, 120), rows: 8 };
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      mode: "interactive",
+      output,
+      symbols: "ascii",
+    });
+    try {
+      reporter.log.log("before start");
+      expect(output.chunks).toContain("before start\n");
+      reporter.hooks.onPipelineStart?.(progressivePipeline().plan());
+      reporter.log.log("before resize");
+      expect(output.chunks.at(-1)).toContain("+- Logs ");
+      expect(output.chunks).not.toContain("before resize\n");
+      output.columns = 100;
+      reporter.log.log("narrow");
+      expect(output.chunks.at(-1)).not.toContain(" Logs ");
+      expect(output.chunks).toContain("narrow\n");
+      output.columns = 120;
+      reporter.log.log("wide again");
+      expect(output.chunks.at(-1)).toContain("| before resize");
+      expect(output.chunks).not.toContain("wide again\n");
+      expect(output.chunks.at(-1)!.trimEnd().split("\n").length).toBeLessThan(8);
+      output.rows = 7;
+      reporter.log.log("short");
+      expect(output.chunks.at(-1)).not.toContain(" Logs ");
+      expect(output.chunks).toContain("short\n");
+    } finally {
+      reporter.dispose();
+    }
+    reporter.log.log("after disposal");
+    expect(output.chunks.at(-1)).toBe("after disposal\n");
+  });
+
   it("redraws progress in place, preserves logs, and restores the cursor", async () => {
     const output = captureOutput();
     const fallbackLog = captureLog();

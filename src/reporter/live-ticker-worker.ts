@@ -18,9 +18,9 @@ interface LiveTickerWorkerData {
 }
 
 type TickerWorkerMessage =
-  | { columns?: number; lines: string[]; type: "lines" }
-  | { text: string; type: "log" }
-  | { columns?: number; lines: string[]; type: "stop" };
+  | { columns?: number; lines: string[]; logPane?: readonly string[]; type: "lines" }
+  | { columns?: number; text: string; type: "log" }
+  | { columns?: number; lines: string[]; logPane?: readonly string[]; type: "stop" };
 
 const port = parentPort;
 if (port === null) throw new Error("live-ticker-worker must run in a worker thread");
@@ -32,6 +32,7 @@ const state = new Int32Array(data.stateBuffer);
 const frame = new TickerFrame((chunk) => writeSync(data.fd, chunk));
 let columns = data.columns;
 let lines: string[] = [];
+let logPane: readonly string[] | undefined;
 
 function withOutputLock(write: () => void): void {
   while (Atomics.compareExchange(state, 4, 0, 1) !== 0) {
@@ -53,8 +54,10 @@ function paintFrame(): void {
       Date.now(),
       columns,
       data.color,
-      data.unicode
-    )
+      data.unicode,
+      logPane
+    ),
+    columns
   );
   Atomics.store(state, 1, frame.frameLineCount);
 }
@@ -80,17 +83,18 @@ port.on("message", (message: TickerWorkerMessage) => {
     port.close();
     return;
   }
+  columns = message.columns ?? columns;
   if (message.type === "log") {
     withOutputLock(() => {
-      frame.clear();
+      frame.clear(columns);
       Atomics.store(state, 1, 0);
       writeSync(data.fd, message.text);
       Atomics.add(state, 2, 1);
     });
     return;
   }
-  columns = message.columns ?? columns;
   lines = message.lines;
+  logPane = message.logPane;
   if (message.type === "lines") {
     redraw();
     return;

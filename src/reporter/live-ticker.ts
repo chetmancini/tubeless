@@ -137,15 +137,35 @@ export function paintLiveLines(
   nowMs: number,
   columns?: number,
   color = false,
-  unicode = true
+  unicode = true,
+  logPane?: readonly string[]
 ): string[] {
-  return lines.map((line) =>
-    fitLine(replaceLiveTokens(line, spinner, nowMs, color), columns, unicode)
+  const painted = lines.map((line) => replaceLiveTokens(line, spinner, nowMs, color));
+  if (!logPane || !columns || columns < 120) {
+    return painted.map((line) => fitLine(line, columns, unicode));
+  }
+  const paneWidth = Math.min(60, Math.floor(columns * 0.4));
+  const leftWidth = columns - paneWidth - 3;
+  const horizontal = unicode ? "─" : "-";
+  const vertical = unicode ? "│" : "|";
+  const pad = (line: string, width: number): string => {
+    const fitted = fitLine(line, width + 1, unicode);
+    return fitted + " ".repeat(Math.max(0, width - visibleWidth(fitted.replace(ANSI_STYLE, ""))));
+  };
+  const pane = [
+    `${unicode ? "╭" : "+"}${horizontal} Logs ${horizontal.repeat(paneWidth - 9)}${unicode ? "╮" : "+"}`,
+    ...logPane.map((line) => `${vertical} ${pad(line, paneWidth - 4)} ${vertical}`),
+    `${unicode ? "╰" : "+"}${horizontal.repeat(paneWidth - 2)}${unicode ? "╯" : "+"}`,
+  ];
+  return Array.from({ length: Math.max(painted.length, pane.length) }, (_, index) =>
+    pane[index] === undefined
+      ? fitLine(painted[index] ?? "", leftWidth + 1, unicode)
+      : `${pad(painted[index] ?? "", leftWidth)}  ${pane[index]}`
   );
 }
 
 export interface LiveTicker {
-  setLines(lines: readonly string[]): void;
+  setLines(lines: readonly string[], logPane?: readonly string[]): void;
   writeLog(text: string): void;
   dispose(): void;
 }
@@ -162,12 +182,13 @@ export interface LiveTickerOptions {
 }
 
 type TickerWorkerMessage =
-  | { columns?: number; lines: string[]; type: "lines" }
-  | { text: string; type: "log" }
-  | { columns?: number; lines: string[]; type: "stop" };
+  | { columns?: number; lines: string[]; logPane?: readonly string[]; type: "lines" }
+  | { columns?: number; text: string; type: "log" }
+  | { columns?: number; lines: string[]; logPane?: readonly string[]; type: "stop" };
 
 export class TickerFrame {
   private cursorHidden: boolean;
+  private paintedLines: readonly string[] = [];
 
   constructor(
     private readonly write: (chunk: string) => void,
@@ -182,21 +203,41 @@ export class TickerFrame {
     this.cursorHidden = false;
   }
 
-  clear(): void {
+  clear(columns?: number): void {
     if (this.frameLineCount === 0) return;
-    this.write(`\u001B[${this.frameLineCount}F${ANSI.clearDown}`);
+    // Resizing can reflow each previously painted line across several rows.
+    // Count those rows at the current width before moving back to the frame start.
+    let rows = this.frameLineCount;
+    if (columns !== undefined && columns > 0 && this.paintedLines.length > 0) {
+      rows = 0;
+      for (const line of this.paintedLines) {
+        rows += 1;
+        let column = 0;
+        for (const character of line.replace(ANSI_STYLE, "")) {
+          const width = characterWidth(character);
+          if (column + width > columns) {
+            rows += 1;
+            column = 0;
+          }
+          column += width;
+        }
+      }
+    }
+    this.write(`\u001B[${rows}F${ANSI.clearDown}`);
     this.frameLineCount = 0;
+    this.paintedLines = [];
   }
 
-  redraw(lines: readonly string[]): void {
+  redraw(lines: readonly string[], columns?: number): void {
     if (!this.cursorHidden) {
       this.write(ANSI.hideCursor);
       this.cursorHidden = true;
     }
-    this.clear();
+    this.clear(columns);
     if (lines.length === 0) return;
     this.write(`${lines.join("\n")}\n`);
     this.frameLineCount = lines.length;
+    this.paintedLines = lines;
   }
 }
 
@@ -212,18 +253,22 @@ export function currentSpinner(unicode: boolean, refreshIntervalMs: number): str
 function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 0): LiveTicker {
   let disposed = false;
   let lines: readonly string[] = [];
+  let logPane: readonly string[] | undefined;
   const frame = new TickerFrame((chunk) => options.write(chunk), adoptedFrameLineCount);
   const redraw = (): void => {
     if (disposed) return;
+    const columns = resolveColumns(options);
     frame.redraw(
       paintLiveLines(
         lines,
         currentSpinner(options.unicode, options.refreshIntervalMs),
         Date.now(),
-        resolveColumns(options),
+        columns,
         options.color === true,
-        options.unicode
-      )
+        options.unicode,
+        logPane
+      ),
+      columns
     );
   };
 
@@ -239,8 +284,9 @@ function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 
   timer.unref();
 
   return {
-    setLines(nextLines) {
+    setLines(nextLines, nextLogPane) {
       lines = nextLines;
+      logPane = nextLogPane;
       redraw();
     },
     writeLog(text) {
@@ -248,7 +294,7 @@ function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 
         options.write(text);
         return;
       }
-      frame.clear();
+      frame.clear(resolveColumns(options));
       options.write(text);
     },
     dispose() {
@@ -297,6 +343,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   let disposed = false;
   let inlineFallback: LiveTicker | undefined;
   let lines: readonly string[] = [];
+  let logPane: readonly string[] | undefined;
   const pendingLogs: string[] = [];
   let acknowledgedLogs = 0;
 
@@ -322,7 +369,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     dropAcknowledgedLogs();
     for (const text of pendingLogs) ticker.writeLog(text);
     pendingLogs.length = 0;
-    ticker.setLines([...lines]);
+    ticker.setLines([...lines], logPane);
   };
 
   const claimOutput = (): boolean => {
@@ -355,16 +402,18 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   worker.unref();
 
   return {
-    setLines(nextLines) {
+    setLines(nextLines, nextLogPane) {
       if (disposed) return;
       lines = nextLines;
+      logPane = nextLogPane;
       if (inlineFallback) {
-        inlineFallback.setLines(nextLines);
+        inlineFallback.setLines(nextLines, nextLogPane);
         return;
       }
       worker.postMessage({
         columns: resolveColumns(options),
         lines: [...nextLines],
+        logPane,
         type: "lines",
       } satisfies TickerWorkerMessage);
     },
@@ -379,7 +428,11 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
       }
       dropAcknowledgedLogs();
       pendingLogs.push(text);
-      worker.postMessage({ text, type: "log" } satisfies TickerWorkerMessage);
+      worker.postMessage({
+        columns: resolveColumns(options),
+        text,
+        type: "log",
+      } satisfies TickerWorkerMessage);
     },
     dispose() {
       if (disposed) return;
@@ -396,6 +449,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
           worker.postMessage({
             columns: resolveColumns(options),
             lines: [...lines],
+            logPane,
             type: "stop",
           } satisfies TickerWorkerMessage);
           workerStopped = Atomics.wait(state, 0, 0, 500) !== "timed-out";
