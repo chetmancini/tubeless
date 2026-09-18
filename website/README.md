@@ -95,19 +95,3 @@ title, canonical URL, sitemap, and structured data use Tubeless as the product n
 and Chet Mancini as its author. Submit `/sitemap.xml` through the domain's search
 console property after deployment; indexing and rank still depend on the search
 engine and inbound links.
-
-Run `bun run check:public` from `website/` after building and publishing. It checks
-every generated HTML and machine-readable endpoint against the local build, using
-both default and Markdown Accept headers, plus a nested nonexistent path. It emits
-a JSON report and exits nonzero for stale content, wrong status/media type,
-missing negotiation headers, missing recovery links, or HTTPS-to-HTTP redirects.
-This is an audit, not a Pages deployment gate: negotiation failures are expected
-on the retained host. Tests for the checker run during `bun run build`.
-An optional base URL argument supports verification against another deployment.
-
-After publishing, check every sitemap URL, `llms.txt`, `llms-full.txt`, `index.md`,
-`api-report.json`, every `docs/*.md`, `404.md`, and an arbitrary nonexistent path.
-Compare response bodies with `dist/` and inspect redirect destinations, status,
-Content-Type, and Vary. Repeat with `Accept: text/markdown`; the Pages limitation
-must remain reported until hosting changes. A local build is not live deployment
-verification.
