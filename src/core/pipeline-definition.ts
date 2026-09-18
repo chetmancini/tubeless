@@ -26,26 +26,54 @@ export type StepIds<TSteps extends readonly AnyStep[]> = TSteps[number]["id"];
 
 export type TargetIds<TTargets extends readonly AnyStep[]> = TTargets[number]["id"];
 
+// Step types retain output and ID types, but erase their dependency graph.
+// Any declared step may therefore be last in the runtime topological order.
+type DefaultStepOutput<TSteps extends readonly AnyStep[]> = TSteps extends readonly []
+  ? undefined
+  : StepOutput<TSteps[number]>;
+
+export type DefaultPipelineResult<TSteps extends readonly AnyStep[]> =
+  | DefaultStepOutput<TSteps>
+  | undefined;
+
+export type DefaultPipelineTargets<TSteps extends readonly AnyStep[]> = readonly TSteps[number][];
+
 type PipelineOutputs<TSteps extends readonly AnyStep[]> = {
   [S in TSteps[number] as S["id"]]: StepOutput<S>;
 };
 
-export interface PipelineDefinition<
+type PipelineFinalizer<
   TSteps extends readonly AnyStep[],
   TResult,
-  TTargets extends readonly TSteps[number][] = readonly [],
+  TResultSchema extends StandardSchemaV1 | undefined,
+> = (
+  outputs: Partial<PipelineOutputs<TSteps>>,
+  context: PipelineExecutionContext<StepsOptions<TSteps>>
+) =>
+  | (TResultSchema extends StandardSchemaV1 ? InferSchemaInput<TResultSchema> : TResult)
+  | Promise<TResultSchema extends StandardSchemaV1 ? InferSchemaInput<TResultSchema> : TResult>;
+
+/**
+ * A pipeline may omit finalize when its final step in execution order supplies the result.
+ * The default emits undefined if that step published no output. If its output cannot
+ * satisfy an explicit result type or schema input, a compatible finalizer is required.
+ */
+export type PipelineDefinition<
+  TSteps extends readonly AnyStep[],
+  TResult = DefaultPipelineResult<TSteps>,
+  TTargets extends readonly TSteps[number][] = DefaultPipelineTargets<TSteps>,
   TResultSchema extends StandardSchemaV1 | undefined = undefined,
-> {
+> = {
   id: string;
   steps: TSteps;
-  /** Public downstream goals that callers may select with `targets`. */
+  /** Public goals; defaults to the last step in execution order. Use `[]` to expose none. */
   targets?: TTargets;
   /** Optional Standard Schema for the finalized result. */
   resultSchema?: TResultSchema;
-  finalize(
-    outputs: Partial<PipelineOutputs<TSteps>>,
-    context: PipelineExecutionContext<StepsOptions<TSteps>>
-  ):
-    | (TResultSchema extends StandardSchemaV1 ? InferSchemaInput<TResultSchema> : TResult)
-    | Promise<TResultSchema extends StandardSchemaV1 ? InferSchemaInput<TResultSchema> : TResult>;
-}
+} & (TResultSchema extends StandardSchemaV1
+  ? [DefaultStepOutput<TSteps>] extends [InferSchemaInput<TResultSchema>]
+    ? { finalize?: PipelineFinalizer<TSteps, TResult, TResultSchema> }
+    : { finalize: PipelineFinalizer<TSteps, TResult, TResultSchema> }
+  : [DefaultPipelineResult<TSteps>] extends [TResult]
+    ? { finalize?: PipelineFinalizer<TSteps, TResult, TResultSchema> }
+    : { finalize: PipelineFinalizer<TSteps, TResult, TResultSchema> });

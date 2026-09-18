@@ -10,6 +10,7 @@ one of these recipes.
 
 | Intent                                        | Executable recipe                                                        | Main primitives                                                            |
 | --------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| Single goal with default target and result    | [`minimal-pipeline.ts`](../examples/minimal-pipeline.ts)                 | `definePipeline({ id, steps })`                                            |
 | Sequential import or ETL                      | [`typed-import.ts`](../examples/typed-import.ts)                         | `createSteps`, `dependsOn`, `requireOutputs`, `targets`                    |
 | Define and compose pipelines in YAML or JSON  | [`yaml-pipelines.ts`](../examples/yaml-pipelines.ts)                     | `compilePipelineDocument`, adapters, skips, child fan-out                  |
 | Validate options, outputs, and results        | [`validated-boundaries.ts`](../examples/validated-boundaries.ts)         | Standard Schema, `outputSchema`, `resultSchema`                            |
@@ -87,7 +88,9 @@ pipeline does not require credentials.
    `--step` and `--target` are argv flags; `mapOptions` and hooks read `stepIds`
    and `targets`.
 7. Declare public goals with `targets: [step]` on the pipeline, select their IDs
-   for goal-oriented execution, and use `stepIds` only for an exact filter. Use
+   for goal-oriented execution, and use `stepIds` only for an exact filter. Omitted
+   `targets` exposes the last step in execution order; `targets: []` opts out. Omitted
+   `finalize` returns that step's output or `undefined` if absent. Use
    `requireOutputs` when the final domain result is not meaningful without
    specific step outputs. Read plan `selectionReasons` instead of recreating
    target-closure logic in a CLI or application.

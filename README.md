@@ -40,7 +40,7 @@ This pipeline loads and normalizes strings. `step` creates a step; dependencies 
 inputs. Adding `skip` makes it skippable and widens its output to include `undefined`.
 
 ```ts
-import { createSteps, definePipeline, requireOutputs } from "tubeless";
+import { createSteps, definePipeline } from "tubeless";
 
 interface ImportOptions {
   lines: readonly string[];
@@ -60,17 +60,17 @@ const normalize = step("normalize", {
 export const ImportPipeline = definePipeline({
   id: "import",
   steps: [load, normalize],
-  targets: [normalize],
-  finalize: requireOutputs([normalize], ({ normalize }) => normalize),
 });
 
 const rows = await ImportPipeline.runOrThrow({ lines: [" Alpha ", "", "Beta"] });
 // ["alpha", "beta"]
 ```
 
-`runOrThrow` returns the result or throws if the run fails. Use `run` for a
-report with step statuses, errors, and timings; `plan` to preview execution; or
-`toMermaid` to draw the graph. See the [getting started guide](./docs/getting-started.md).
+Omitted `targets` and `finalize` use the last step in execution order: `normalize`.
+Missing output returns `undefined`; use `requireOutputs` when absence should fail.
+
+`runOrThrow` returns the result or throws on failure. Use `run` for reports, `plan`
+for previews, and `toMermaid` for diagrams. See [getting started](./docs/getting-started.md).
 
 ## Use the CLI
 

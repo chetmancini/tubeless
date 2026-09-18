@@ -41,6 +41,12 @@ import { href } from "../lib/paths";
         The normalize step receives the load step’s output, with its type inferred automatically.
       </p>
       <CodeBlock code={FIRST_PIPELINE_SAMPLE} lang="ts" />
+      <p class="lede">
+        The last step in execution order is the default target and supplies the result.
+        Here, that is <code>normalize</code>. If it publishes no output, the result is
+        <code>undefined</code>. Add a finalizer with <code>requireOutputs</code> when missing
+        output should fail the run.
+      </p>
     </section>
 
     <section class="section">

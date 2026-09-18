@@ -1,4 +1,4 @@
-export const FIRST_PIPELINE_SAMPLE = `import { createSteps, definePipeline, requireOutputs } from "tubeless";
+export const FIRST_PIPELINE_SAMPLE = `import { createSteps, definePipeline } from "tubeless";
 
 interface ImportOptions {
   lines: readonly string[];
@@ -19,6 +19,4 @@ const normalize = step("normalize", {
 export const ImportPipeline = definePipeline({
   id: "import",
   steps: [load, normalize],
-  targets: [normalize],
-  finalize: requireOutputs([normalize], ({ normalize }) => normalize),
 });`;

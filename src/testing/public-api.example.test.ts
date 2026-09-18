@@ -23,6 +23,7 @@ import {
 import * as cli from "tubeless/cli";
 import * as project from "tubeless/project";
 import { definePipelineProject, type PipelineProjectManifestInput } from "tubeless/project";
+import { MinimalPipeline, runMinimalExample } from "../../examples/minimal-pipeline.js";
 
 interface ImportOptions {
   lines: readonly string[];
@@ -136,6 +137,14 @@ const RemotePipeline = definePipeline({
 });
 
 describe("public API example", () => {
+  it("runs the minimal recipe with an inferred target and result", async () => {
+    await expect(runMinimalExample()).resolves.toEqual(["Alpha", "Beta"]);
+    expect(MinimalPipeline.targetIds).toEqual(["normalize"]);
+    await expect(
+      MinimalPipeline.runOrThrow({ lines: [" Alpha "] }, { stepIds: ["load"] })
+    ).resolves.toBeUndefined();
+  });
+
   it("exposes stable pipeline error codes for discovery and lookup", () => {
     expect(PIPELINE_ERROR_CODES).toContain("TUBELESS_STEP_FAILED");
     expect(isPipelineErrorCode("TUBELESS_STEP_FAILED")).toBe(true);

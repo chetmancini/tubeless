@@ -7,6 +7,8 @@ import {
 import { RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { compilePipeline } from "./pipeline-compiler.js";
 import type {
+  DefaultPipelineResult,
+  DefaultPipelineTargets,
   PipelineDefinition,
   StepIds,
   StepsInputOptions,
@@ -131,8 +133,8 @@ function snapshotRunControls<TStepId extends string, TTargetId extends string>(
 
 export function definePipeline<
   const TSteps extends readonly AnyStep[],
-  TResult = unknown,
-  const TTargets extends readonly TSteps[number][] = readonly [],
+  TResult = DefaultPipelineResult<TSteps>,
+  const TTargets extends readonly TSteps[number][] = DefaultPipelineTargets<TSteps>,
   const TResultSchema extends StandardSchemaV1 | undefined = undefined,
 >(
   definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema> &
@@ -143,7 +145,7 @@ export function definePipeline<
   StepIds<TSteps>,
   TargetIds<TTargets>
 > {
-  const compiled = compilePipeline(definition);
+  const compiled = compilePipeline<TSteps, TResult, TTargets, TResultSchema>(definition);
   type TInputOptions = StepsInputOptions<TSteps>;
   type TPipelineResult = TResultSchema extends StandardSchemaV1
     ? InferSchemaOutput<TResultSchema>

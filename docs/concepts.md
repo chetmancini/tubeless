@@ -79,7 +79,27 @@ not call step handlers or schema validators.
 
 ## Selection and finalization
 
-Pipeline definitions declare supported downstream goals with step references:
+A pipeline with a single goal can be `definePipeline({ id, steps })`. Omitted
+`targets` exposes the last step in execution order; omitted `finalize` emits that step's
+output, or `undefined` when the run did not publish it. These defaults use the complete graph's
+**topological execution order**, so a downstream step remains the goal even if
+listed before its prerequisites. Required dependencies, optional inputs, and
+failure gates all affect that order. When several steps are ready, the scheduler
+uses declaration order to break ties. An empty pipeline has no targets and its
+default result is `undefined`.
+
+Step types do not retain their dependency graph. Implicit target types therefore
+include all declared step IDs, and the default result type includes all step
+output types plus `undefined`. Runtime exposes only the final execution-order
+target and rejects other IDs. Use explicit `targets` or `finalize` when you need
+narrower types.
+
+Neither default limits an unfiltered run: it still selects all declared steps.
+Set `targets: []` to expose no public goals. Existing definitions that omitted
+`targets` now expose their last step, including in CLI `--target` discovery.
+An explicit finalizer retains its own result and can use `requireOutputs`.
+
+Pipeline definitions can declare different downstream goals with step references:
 
 ```ts
 definePipeline({
@@ -130,10 +150,14 @@ callback. If an output is missing, finalization fails and reports its step ID.
 A step that successfully returns `undefined` still produced an output; that
 is different from a step that never supplied one.
 
-Tubeless also checks declared targets against these requirements. Each target
+Tubeless also checks declared targets, including the implicit last-step target,
+against these requirements. Each target
 must include all steps needed by `requireOutputs`, either directly or through
 its dependencies and failure gates. Use a plain finalizer when different
-selected goals are allowed to return partial results.
+selected goals are allowed to return partial results. The default finalizer
+reads only the last step in execution order; it never falls back to an earlier output.
+If independent finalizer inputs are outside the implicit target closure, declare
+a target that includes them or opt out of public targets with `targets: []`.
 
 ## Step statuses and structured errors
 
@@ -334,6 +358,12 @@ object schemas do not need fields for `dryRun` or `targets`. For child
 separates the controls before validation. The options object retains its
 methods, getters, inherited properties, non-enumerable properties, and symbols.
 Steps receive the validated object without added control fields.
+
+With no `finalize`, `resultSchema` validates the output of the last step in
+execution order, including `undefined` when that output is absent. A schema may
+therefore reject a dry run or filtered run. When the inferred union of possible
+outputs cannot satisfy the schema input, supply a compatible finalizer. The successful result type remains the
+schema's output type.
 
 Options are validated once after structural planning and before any step
 starts. Step values are validated before publication, including values from a
