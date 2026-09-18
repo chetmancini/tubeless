@@ -72,6 +72,35 @@ afterEach(() => {
 });
 
 describe("createPipelineReporter", () => {
+  it("clears the log pane when planning fails with no frame rows", async () => {
+    const output = { ...captureOutput(true, 140), rows: 12 };
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      logPlan: false,
+      mode: "interactive",
+      output,
+      symbols: "ascii",
+    });
+    try {
+      const result = await progressivePipeline().run(
+        {},
+        { stepIds: ["unknown" as never] },
+        {
+          cwd: "/tmp",
+          hooks: reporter.hooks,
+          log: reporter.log,
+        }
+      );
+      expect(result.status).toBe("failed");
+      expect(result.steps).toEqual([]);
+      expect(output.chunks.join("")).toContain("+- Logs ");
+      expect(output.chunks.slice(-2)).toEqual(["\u001B[3F\u001B[J", "\u001B[?25h"]);
+    } finally {
+      reporter.dispose();
+    }
+  });
+
   it("shows recent sanitized logs only in the pane while it is visible", async () => {
     const output = { ...captureOutput(true, 120), rows: 12 };
     const reporter = createPipelineReporter({

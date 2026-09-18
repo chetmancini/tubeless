@@ -1,6 +1,6 @@
 import { writeSync } from "node:fs";
 import { isatty } from "node:tty";
-import { Worker } from "node:worker_threads";
+import { MessageChannel, receiveMessageOnPort, Worker } from "node:worker_threads";
 import { formatDurationMs } from "./reporter.js";
 
 export const SPINNER_TOKEN = "\u0001";
@@ -188,13 +188,12 @@ type TickerWorkerMessage =
 
 export class TickerFrame {
   private cursorHidden: boolean;
-  private paintedLines: readonly string[] = [];
 
   constructor(
     private readonly write: (chunk: string) => void,
-    public frameLineCount = 0
+    private paintedLines: readonly string[] = []
   ) {
-    this.cursorHidden = frameLineCount > 0;
+    this.cursorHidden = paintedLines.length > 0;
   }
 
   showCursor(): void {
@@ -204,11 +203,11 @@ export class TickerFrame {
   }
 
   clear(columns?: number): void {
-    if (this.frameLineCount === 0) return;
+    if (this.paintedLines.length === 0) return;
     // Resizing can reflow each previously painted line across several rows.
     // Count those rows at the current width before moving back to the frame start.
-    let rows = this.frameLineCount;
-    if (columns !== undefined && columns > 0 && this.paintedLines.length > 0) {
+    let rows = this.paintedLines.length;
+    if (columns !== undefined && columns > 0) {
       rows = 0;
       for (const line of this.paintedLines) {
         rows += 1;
@@ -224,7 +223,6 @@ export class TickerFrame {
       }
     }
     this.write(`\u001B[${rows}F${ANSI.clearDown}`);
-    this.frameLineCount = 0;
     this.paintedLines = [];
   }
 
@@ -236,7 +234,6 @@ export class TickerFrame {
     this.clear(columns);
     if (lines.length === 0) return;
     this.write(`${lines.join("\n")}\n`);
-    this.frameLineCount = lines.length;
     this.paintedLines = lines;
   }
 }
@@ -250,11 +247,14 @@ export function currentSpinner(unicode: boolean, refreshIntervalMs: number): str
   return frames[Math.floor(Date.now() / refreshIntervalMs) % frames.length] ?? frames[0]!;
 }
 
-function createInlineTicker(options: LiveTickerOptions, adoptedFrameLineCount = 0): LiveTicker {
+function createInlineTicker(
+  options: LiveTickerOptions,
+  adoptedPaintedLines: readonly string[] = []
+): LiveTicker {
   let disposed = false;
   let lines: readonly string[] = [];
   let logPane: readonly string[] | undefined;
-  const frame = new TickerFrame((chunk) => options.write(chunk), adoptedFrameLineCount);
+  const frame = new TickerFrame((chunk) => options.write(chunk), adoptedPaintedLines);
   const redraw = (): void => {
     if (disposed) return;
     const columns = resolveColumns(options);
@@ -326,20 +326,35 @@ function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[
 }
 
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
-  // [0] stopped, [1] painted rows, [2] accepted logs, [3] inline owns output, [4] output lock
-  const stateBuffer = new SharedArrayBuffer(20);
+  // [0] stopped, [1] accepted logs, [2] inline owns output, [3] output lock
+  const stateBuffer = new SharedArrayBuffer(16);
   const state = new Int32Array(stateBuffer);
-  const worker = new Worker(options.workerUrl ?? resolveLiveTickerWorkerUrl(), {
-    execArgv: fileWorkerExecArgv(),
-    workerData: {
-      color: options.color === true,
-      columns: resolveColumns(options),
-      fd: options.fd,
-      refreshIntervalMs: options.refreshIntervalMs,
-      stateBuffer,
-      unicode: options.unicode,
-    },
+  const { port1: framePort, port2: workerFramePort } = new MessageChannel();
+  let worker: Worker;
+  try {
+    worker = new Worker(options.workerUrl ?? resolveLiveTickerWorkerUrl(), {
+      execArgv: fileWorkerExecArgv(),
+      transferList: [workerFramePort],
+      workerData: {
+        color: options.color === true,
+        columns: resolveColumns(options),
+        fd: options.fd,
+        framePort: workerFramePort,
+        refreshIntervalMs: options.refreshIntervalMs,
+        stateBuffer,
+        unicode: options.unicode,
+      },
+    });
+  } catch (error) {
+    framePort.close();
+    workerFramePort.close();
+    throw error;
+  }
+  let paintedLines: readonly string[] = [];
+  framePort.on("message", (nextLines: string[]) => {
+    paintedLines = nextLines;
   });
+  framePort.unref();
   let disposed = false;
   let inlineFallback: LiveTicker | undefined;
   let lines: readonly string[] = [];
@@ -360,7 +375,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   };
 
   const dropAcknowledgedLogs = (): void => {
-    const accepted = Atomics.load(state, 2);
+    const accepted = Atomics.load(state, 1);
     pendingLogs.splice(0, accepted - acknowledgedLogs);
     acknowledgedLogs = accepted;
   };
@@ -373,19 +388,26 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   };
 
   const claimOutput = (): boolean => {
-    Atomics.store(state, 3, 1);
+    Atomics.store(state, 2, 1);
     const deadline = Date.now() + OUTPUT_LOCK_TIMEOUT_MS;
-    while (Atomics.compareExchange(state, 4, 0, 1) !== 0) {
+    while (Atomics.compareExchange(state, 3, 0, 1) !== 0) {
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) return false;
-      Atomics.wait(state, 4, 1, remainingMs);
+      Atomics.wait(state, 3, 1, remainingMs);
     }
     return true;
   };
 
   const createFallback = (): LiveTicker | undefined => {
     if (!claimOutput()) return undefined;
-    const ticker = createInlineTicker(options, Atomics.load(state, 1));
+    // dispose() blocks the event loop. Drain snapshots synchronously after taking
+    // the output lock so adoption includes the worker's last completed paint.
+    let snapshot;
+    while ((snapshot = receiveMessageOnPort(framePort)) !== undefined) {
+      paintedLines = snapshot.message as string[];
+    }
+    framePort.close();
+    const ticker = createInlineTicker(options, paintedLines);
     replayThrough(ticker);
     return ticker;
   };
@@ -393,7 +415,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   const failToInline = (): void => {
     if (disposed || inlineFallback) return;
     // The exit event guarantees that no worker write still owns this lock.
-    Atomics.store(state, 4, 0);
+    Atomics.store(state, 3, 0);
     inlineFallback = createFallback();
   };
 
@@ -465,6 +487,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
           }
         }
       } finally {
+        framePort.close();
         const terminated = worker.terminate();
         if (restoreCursorAfterTerminate) {
           restoreCursor();

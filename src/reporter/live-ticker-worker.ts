@@ -1,5 +1,5 @@
 import { writeSync } from "node:fs";
-import { parentPort, workerData } from "node:worker_threads";
+import { parentPort, workerData, type MessagePort } from "node:worker_threads";
 import {
   currentSpinner,
   paintLiveLines,
@@ -12,6 +12,7 @@ interface LiveTickerWorkerData {
   color: boolean;
   columns?: number;
   fd: number;
+  framePort: MessagePort;
   refreshIntervalMs: number;
   stateBuffer: SharedArrayBuffer;
   unicode: boolean;
@@ -27,7 +28,7 @@ if (port === null) throw new Error("live-ticker-worker must run in a worker thre
 
 // SAFETY: createWorkerTicker owns the workerData shape.
 const data = workerData as LiveTickerWorkerData;
-// [0] stopped, [1] painted rows, [2] accepted logs, [3] inline owns output, [4] output lock
+// [0] stopped, [1] accepted logs, [2] inline owns output, [3] output lock
 const state = new Int32Array(data.stateBuffer);
 const frame = new TickerFrame((chunk) => writeSync(data.fd, chunk));
 let columns = data.columns;
@@ -35,31 +36,29 @@ let lines: string[] = [];
 let logPane: readonly string[] | undefined;
 
 function withOutputLock(write: () => void): void {
-  while (Atomics.compareExchange(state, 4, 0, 1) !== 0) {
-    Atomics.wait(state, 4, 1);
+  while (Atomics.compareExchange(state, 3, 0, 1) !== 0) {
+    Atomics.wait(state, 3, 1);
   }
   try {
-    if (Atomics.load(state, 3) === 0) write();
+    if (Atomics.load(state, 2) === 0) write();
   } finally {
-    Atomics.store(state, 4, 0);
-    Atomics.notify(state, 4);
+    Atomics.store(state, 3, 0);
+    Atomics.notify(state, 3);
   }
 }
 
 function paintFrame(): void {
-  frame.redraw(
-    paintLiveLines(
-      lines,
-      currentSpinner(data.unicode, data.refreshIntervalMs),
-      Date.now(),
-      columns,
-      data.color,
-      data.unicode,
-      logPane
-    ),
-    columns
+  const painted = paintLiveLines(
+    lines,
+    currentSpinner(data.unicode, data.refreshIntervalMs),
+    Date.now(),
+    columns,
+    data.color,
+    data.unicode,
+    logPane
   );
-  Atomics.store(state, 1, frame.frameLineCount);
+  frame.redraw(painted, columns);
+  data.framePort.postMessage(painted);
 }
 
 function redraw(): void {
@@ -67,7 +66,7 @@ function redraw(): void {
 }
 
 const timer = setInterval(() => {
-  if (Atomics.load(state, 3) === 1) {
+  if (Atomics.load(state, 2) === 1) {
     clearInterval(timer);
     port.close();
     return;
@@ -78,7 +77,7 @@ const timer = setInterval(() => {
 }, data.refreshIntervalMs);
 
 port.on("message", (message: TickerWorkerMessage) => {
-  if (Atomics.load(state, 3) === 1) {
+  if (Atomics.load(state, 2) === 1) {
     clearInterval(timer);
     port.close();
     return;
@@ -87,9 +86,9 @@ port.on("message", (message: TickerWorkerMessage) => {
   if (message.type === "log") {
     withOutputLock(() => {
       frame.clear(columns);
-      Atomics.store(state, 1, 0);
+      data.framePort.postMessage([]);
       writeSync(data.fd, message.text);
-      Atomics.add(state, 2, 1);
+      Atomics.add(state, 1, 1);
     });
     return;
   }

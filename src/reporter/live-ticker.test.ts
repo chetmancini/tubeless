@@ -209,6 +209,44 @@ function workerTicker(
 }
 
 describe("createLiveTicker worker fallback", () => {
+  it.each([false, true])("clears reflowed rows on shutdown timeout (pending log: %s)", (log) => {
+    let columns = 140;
+    const workerUrl = new URL("../../dist/reporter/live-ticker-worker.js", import.meta.url);
+    const { chunks, close, path, ticker } = workerTicker(
+      `
+      import { parentPort } from "node:worker_threads";
+      await import(${JSON.stringify(workerUrl.href)});
+      parentPort.on("message", () => {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
+      });
+    `,
+      undefined,
+      () => columns
+    );
+    try {
+      ticker.setLines(["running"], ["latest log"]);
+      // Keep the main event loop blocked so fallback must drain queued snapshots.
+      const waiting = new Int32Array(new SharedArrayBuffer(4));
+      const deadline = Date.now() + 2_000;
+      while (!readFileSync(path, "utf8").includes("+- Logs ") && Date.now() < deadline) {
+        Atomics.wait(waiting, 0, 0, 10);
+      }
+      expect(readFileSync(path, "utf8")).toContain("+- Logs ");
+      columns = 80;
+      if (log) ticker.writeLog("pending log\n");
+      ticker.setLines(["final status"]);
+      ticker.dispose();
+
+      expect(chunks[0]).toBe("\u001B[6F\u001B[J");
+      expect(chunks).toContain("final status\n");
+      if (log) expect(chunks[1]).toBe("pending log\n");
+      expect(chunks.at(-1)).toBe("\u001B[?25h");
+    } finally {
+      ticker.dispose();
+      close();
+    }
+  });
+
   it.each(["redraw", "log", "stop"])("clears reflowed worker rows before %s", async (action) => {
     let columns = 140;
     const { close, path, ticker } = workerTicker(undefined, undefined, () => columns);
@@ -283,7 +321,7 @@ describe("createLiveTicker worker fallback", () => {
       import { writeSync } from "node:fs";
       import { workerData } from "node:worker_threads";
       const state = new Int32Array(workerData.stateBuffer);
-      Atomics.store(state, 4, 1);
+      Atomics.store(state, 3, 1);
       writeSync(workerData.fd, "locked\\n");
       setInterval(() => {}, 1000);
     `);

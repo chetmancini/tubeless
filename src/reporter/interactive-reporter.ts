@@ -314,7 +314,10 @@ function createInteractiveReporter<TResult>(
   const redraw = (): void => {
     if (disposed) return;
     const lines = frameLines();
-    if (lines.length === 0 && !logPaneVisible()) return;
+    if (lines.length === 0 && !logPaneVisible()) {
+      ticker?.setLines([]);
+      return;
+    }
     const rows = output.rows;
     const logPane = logPaneVisible()
       ? recentLogs.length > 0
