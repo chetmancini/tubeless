@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PIPELINE_ERROR_CODES } from "../core/pipeline.js";
+import { createSteps, definePipeline, PIPELINE_ERROR_CODES } from "../core/pipeline.js";
 import { pipelineTraceEventSchemas, pipelineTraceOpenApiSchemas } from "./tracing-schema.js";
 import { wireDiscriminatedUnion, wireEnum, wireObject } from "./wire-schema.js";
 
@@ -57,5 +57,62 @@ describe("pipeline trace schema", () => {
         },
       ],
     });
+  });
+});
+
+describe("definition trace compatibility", () => {
+  const { step } = createSteps();
+  const work = step("work", { run: () => 1 });
+  const definition = definePipeline({ id: "fixture", steps: [work], finalize: () => 0 }).definition;
+  const started = {
+    name: "pipeline.started",
+    version: 2,
+    pipelineId: "fixture",
+    runId: "run",
+    timestampMs: 0,
+    payload: { dryRun: false, planOk: true, stepCount: 1, targetIds: [] },
+  };
+  const decode = (payload: object) =>
+    pipelineTraceEventSchemas["pipeline.started"].decode(
+      { ...started, payload: { ...started.payload, ...payload } },
+      "event"
+    );
+
+  it("accepts legacy starts and identity-only recordings", () => {
+    expect(decode({}).payload.definitionIdentity).toBeUndefined();
+    expect(
+      decode({ definitionIdentity: definition.identity }).payload.definitionSnapshot
+    ).toBeUndefined();
+  });
+
+  it("rejects unsupported versions, invalid fingerprints, and mismatched snapshots", () => {
+    expect(() => decode({ definitionIdentity: { ...definition.identity, version: 2 } })).toThrow(
+      "must be 1"
+    );
+    expect(() =>
+      decode({ definitionIdentity: { ...definition.identity, definitionId: "invalid" } })
+    ).toThrow("SHA-256");
+    expect(() =>
+      decode({
+        definitionIdentity: { ...definition.identity, implementationVersion: "changed" },
+        definitionSnapshot: definition,
+      })
+    ).toThrow("must match");
+  });
+
+  it("bounds the complete snapshot in UTF-8 bytes and list entries", () => {
+    const oversized = {
+      ...definition,
+      targetIds: Array.from({ length: 100 }, () => "界".repeat(1000)),
+    };
+    expect(() =>
+      decode({ definitionIdentity: definition.identity, definitionSnapshot: oversized })
+    ).toThrow("262144-byte");
+    expect(() =>
+      decode({
+        definitionIdentity: definition.identity,
+        definitionSnapshot: { ...definition, targetIds: Array(4097).fill("a") },
+      })
+    ).toThrow("4096");
   });
 });

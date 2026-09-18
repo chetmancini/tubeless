@@ -34,6 +34,7 @@ export const PIPELINE_ERROR_CODES = [
   "TUBELESS_DEFINITION_DEPENDENCY_SELF_REFERENCE",
   "TUBELESS_DEFINITION_FINALIZER_STEP_NOT_IN_STEPS",
   "TUBELESS_DEFINITION_PIPELINE_ID_BLANK",
+  "TUBELESS_DEFINITION_IMPLEMENTATION_VERSION_INVALID",
   "TUBELESS_DEFINITION_OPTIONS_SCHEMA_CONFLICT",
   "TUBELESS_DEFINITION_STEP_ID_BLANK",
   "TUBELESS_DEFINITION_STEP_ID_RESERVED",
@@ -341,6 +342,76 @@ const remoteSchema = wireObject({
   target: wireOptional(boundedString),
 });
 
+/** Additive v2 metadata; its own version fixes the fingerprint semantics. */
+export const pipelineDefinitionIdentitySchema = wireRefine(
+  wireObject({
+    version: wireLiteral(1),
+    definitionId: wireString({ maxLength: 80 }),
+    structuralFingerprint: wireString({ maxLength: 80 }),
+    implementationVersion: wireOptional(wireString({ maxLength: 256 })),
+  }),
+  (identity, path) => {
+    if (
+      ![identity.definitionId, identity.structuralFingerprint].every((value) =>
+        /^sha256:[a-f0-9]{64}$/.test(value)
+      )
+    ) {
+      throw new Error(`${path} must contain SHA-256 fingerprints`);
+    }
+    if (
+      identity.implementationVersion !== undefined &&
+      identity.implementationVersion.trim().length === 0
+    ) {
+      throw new Error(`${path}.implementationVersion must not be blank`);
+    }
+  }
+);
+
+const definitionString = wireString({ maxLength: 4096 });
+const definitionStrings = wireArray(definitionString, { maxItems: 4096 });
+const definitionStepSchema = wireObject({
+  id: definitionString,
+  dependencies: definitionStrings,
+  optionalDependencies: definitionStrings,
+  skipAfterFailureOf: definitionStrings,
+  dryRun: wireEnum(["custom", "run", "skip"] as const),
+  runtimeSkipPossible: wireBoolean(),
+  outputValidated: wireBoolean(),
+  nestedPipeline: wireOptional(
+    wireObject({
+      pipelineId: definitionString,
+      mode: wireEnum(["single", "for-each"] as const),
+      identity: wireOptional(pipelineDefinitionIdentitySchema),
+      stepIds: definitionStrings,
+      concurrency: wireOptional(wireUnion([finiteNumber, wireLiteral("dynamic")])),
+    })
+  ),
+  remote: wireOptional(remoteSchema),
+});
+
+export const pipelineDefinitionSnapshotSchema = wireRefine(
+  wireObject({
+    identity: pipelineDefinitionIdentitySchema,
+    steps: wireArray(definitionStepSchema, { maxItems: 4096 }),
+    targetIds: definitionStrings,
+    requiredFinalizerStepIds: wireOptional(definitionStrings),
+    optionsValidated: wireBoolean(),
+    resultValidated: wireBoolean(),
+  }),
+  (value, path) => {
+    if (new TextEncoder().encode(JSON.stringify(value)).byteLength > 256 * 1024) {
+      throw new Error(`${path} exceeds the 262144-byte definition limit`);
+    }
+  }
+);
+
+export type PipelineDefinitionIdentityContract = InferWireSchema<
+  typeof pipelineDefinitionIdentitySchema
+>;
+export type PipelineDefinitionSnapshotContract = InferWireSchema<
+  typeof pipelineDefinitionSnapshotSchema
+>;
+
 const selectionReasonSimpleSchema = wireObject({
   kind: wireEnum(["all", "exact", "not-selected", "outside-target-closure"] as const),
 });
@@ -440,12 +511,25 @@ export const pipelineTraceEventSchemas = {
   "pipeline.started": wireObject({
     ...traceBaseShape,
     name: wireLiteral("pipeline.started"),
-    payload: wireObject({
-      dryRun: wireBoolean(),
-      planOk: wireBoolean(),
-      stepCount: nonnegativeInteger,
-      targetIds: stringList,
-    }),
+    payload: wireRefine(
+      wireObject({
+        definitionIdentity: wireOptional(pipelineDefinitionIdentitySchema),
+        definitionSnapshot: wireOptional(pipelineDefinitionSnapshotSchema),
+        dryRun: wireBoolean(),
+        planOk: wireBoolean(),
+        stepCount: nonnegativeInteger,
+        targetIds: stringList,
+      }),
+      (payload) => {
+        if (
+          payload.definitionSnapshot &&
+          JSON.stringify(payload.definitionSnapshot.identity) !==
+            JSON.stringify(payload.definitionIdentity)
+        ) {
+          throw new Error("Definition snapshot must match the run definition identity");
+        }
+      }
+    ),
   }),
   "step.attempted": wireObject({
     ...traceBaseShape,

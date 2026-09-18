@@ -415,6 +415,7 @@ describe("opaque child adapter: composition", () => {
     Reflect.set(metadata, "stepIds", ["mutated-step"]);
 
     expect(parent.plan().steps[0]?.nestedPipeline).toEqual({
+      identity: child.definition.identity,
       mode: "single",
       pipelineId: "metadata-child",
       stepIds: ["inside"],

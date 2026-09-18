@@ -372,6 +372,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
       [STEP_NESTED_PIPELINE]: {
         mode: "single" as const,
         pipelineId: config.pipeline.id,
+        identity: config.pipeline.definition?.identity,
         stepIds: config.pipeline.stepIds,
       },
       dependsOn: config.dependsOn,
@@ -564,7 +565,10 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
     const definition: StepDefinitionBody<TOptions> = {
       [STEP_NESTED_PIPELINE]: {
         mode: "for-each" as const,
+        concurrency:
+          typeof config.concurrency === "function" ? "dynamic" : (config.concurrency ?? 1),
         pipelineId: config.pipeline.id,
+        identity: config.pipeline.definition?.identity,
         stepIds: config.pipeline.stepIds,
       },
       dependsOn: config.dependsOn,

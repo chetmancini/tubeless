@@ -84,6 +84,7 @@ describe("declarative pipelines", () => {
     });
     expect([...pipelines.keys()]).toEqual(["parent", "child"]);
     expect(pipelines.get("parent")!.plan().steps[0]?.nestedPipeline).toEqual({
+      identity: pipelines.get("child")!.definition!.identity,
       mode: "single",
       pipelineId: "child",
       stepIds: ["work"],

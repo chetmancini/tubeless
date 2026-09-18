@@ -223,6 +223,7 @@ export function buildPipelinePlan<
       errors,
       ok: false,
       pipelineId: compiled.id,
+      definition: compiled.definition,
       steps: [],
     };
   }
@@ -309,6 +310,7 @@ export function buildPipelinePlan<
     errors,
     ok: errors.length === 0,
     pipelineId: compiled.id,
+    definition: compiled.definition,
     steps: planSteps,
   };
 }

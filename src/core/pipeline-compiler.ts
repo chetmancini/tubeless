@@ -1,3 +1,4 @@
+import { compileDefinitionSnapshot } from "./pipeline-definition-identity.js";
 import type { PipelineDefinition, StepsOptions } from "./pipeline-definition.js";
 import { validatePipelineDefinition } from "./pipeline-definition-validation.js";
 import { PipelineDefinitionError } from "./pipeline-errors.js";
@@ -5,7 +6,7 @@ import { requiredFinalizerMetadata } from "./pipeline-finalizer.js";
 import { compilePipelineGraph, type CompiledStepGraph } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { STEP_OPTIONS_SCHEMA } from "./pipeline-step-metadata.js";
-import type { StandardSchemaV1 } from "./pipeline-types.js";
+import type { PipelineDefinitionSnapshot, StandardSchemaV1 } from "./pipeline-types.js";
 
 export interface CompiledPipeline<
   TSteps extends readonly AnyStep[] = readonly AnyStep[],
@@ -13,6 +14,7 @@ export interface CompiledPipeline<
   TTargets extends readonly TSteps[number][] = readonly [],
   TResultSchema extends StandardSchemaV1 | undefined = undefined,
 > {
+  readonly definition: PipelineDefinitionSnapshot;
   readonly declaredTargets: readonly AnyStep<StepsOptions<TSteps>>[];
   readonly finalize: NonNullable<
     PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>["finalize"]
@@ -65,7 +67,16 @@ export function compilePipeline<
           lastStepId !== undefined && Object.hasOwn(outputs, lastStepId)
             ? outputs[lastStepId]
             : undefined;
+  const snapshot = compileDefinitionSnapshot({
+    orderedSteps,
+    stepGraph,
+    targetIds: compiledTargets.map((step) => step.id),
+    requiredFinalizerSteps: compiledRequiredFinalizerSteps,
+    resultValidated: definition.resultSchema !== undefined,
+    implementationVersion: definition.implementationVersion,
+  });
   return Object.freeze({
+    definition: snapshot,
     declaredTargets: Object.freeze(compiledTargets),
     // Invoke ordinary finalizers on the author's definition so method-style
     // implementations keep `this`. Required finalizers compile the same input

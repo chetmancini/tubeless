@@ -24,6 +24,7 @@ import type {
   InferSchemaOutput,
   Pipeline,
   PipelineContext,
+  PipelineDefinitionSnapshot,
   PipelineMermaidOptions,
   PipelinePlan,
   PipelineRun,
@@ -40,6 +41,8 @@ export {
 export { createSteps } from "./pipeline-steps.js";
 export { PipelineDefinitionError, requireOutputs };
 export type {
+  PipelineDefinitionIdentity,
+  PipelineDefinitionSnapshot,
   PipelineLogger,
   PipelineContext,
   PipelineRunControls,
@@ -144,7 +147,7 @@ export function definePipeline<
   TResultSchema extends StandardSchemaV1 ? InferSchemaOutput<TResultSchema> : TResult,
   StepIds<TSteps>,
   TargetIds<TTargets>
-> {
+> & { readonly definition: PipelineDefinitionSnapshot } {
   const compiled = compilePipeline<TSteps, TResult, TTargets, TResultSchema>(definition);
   type TInputOptions = StepsInputOptions<TSteps>;
   type TPipelineResult = TResultSchema extends StandardSchemaV1
@@ -202,8 +205,9 @@ export function definePipeline<
     return result.value as TPipelineResult;
   }
 
-  const pipeline: Pipeline<TInputOptions, TPipelineResult, TStepId, TTargetId> = {
+  const pipeline = {
     id: compiled.id,
+    definition: compiled.definition,
     stepIds,
     targetIds,
     plan,

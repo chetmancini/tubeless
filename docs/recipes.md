@@ -108,4 +108,7 @@ it needs to own job delivery and retries; see [remote steps](./remote-step-compo
 
 For dependency, failure, and selection behavior, read [core concepts](./concepts.md).
 For workbench commands, read [the CLI](./cli.md). For the local run UI, read
-[the studio](./studio.md).
+[the studio](./studio.md). To connect historical runs to a compiled graph and handler
+release, set `implementationVersion` as shown in [tracing](../examples/tracing.ts).
+Studio's [definition history](./studio.md#definition-history-and-comparison) groups
+runs by definition and compares observed versions.

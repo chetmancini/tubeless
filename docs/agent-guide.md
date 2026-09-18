@@ -217,7 +217,14 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   plus `detailCount`, and child wrapper steps keep `nestedPipeline` with the
   original `stepCount`. Studio renders those
   snapshots; it does not flatten child DAGs into the parent step.
-  Observed definitions pick the latest `pipeline.started` by `timestampMs`, then
+  Compiled pipelines expose immutable `definition` metadata. Set `implementationVersion`
+  on `definePipeline` to a release/source/build identity for handlers, schemas, mappings,
+  and finalizers; a structural fingerprint alone never proves code equality. Version 2
+  `pipeline.started` records carry a version 1 definition identity and a bounded snapshot.
+  Studio retains versions, groups their runs, and compares complete snapshots. Legacy
+  recordings have unknown identity; oversized snapshots retain identity but cannot be
+  compared. Definitions live as long as their run events. See [definition history](./studio.md#definition-history-and-comparison).
+  Legacy observed definitions pick the latest `pipeline.started` by `timestampMs`, then
   store-local id. Storage readers, projections, and Studio embedding are
   workbench internals rather than application extension points.
   The version 2 event and NDJSON formats remain compatible with saved recordings;

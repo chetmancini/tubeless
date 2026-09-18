@@ -40,6 +40,49 @@ function captureJson(lines: string[]): PipelineTraceExporter {
 }
 
 describe("openNdjsonPipelineRunStore", () => {
+  it("retains definition versions after reopening SQLite and NDJSON artifacts", async () => {
+    const lines: string[] = [];
+    const definitions = [];
+    for (const implementationVersion of ["one", "two"]) {
+      const pipeline = definePipeline({
+        id: "versions",
+        implementationVersion,
+        steps: [],
+        finalize: () => true,
+      });
+      definitions.push(pipeline.definition);
+      await pipeline.run({}, {}, { tracing: { exporter: captureJson(lines) } });
+    }
+    const filename = await tempFile(lines.join("\n"));
+    const ndjson = await openNdjsonPipelineRunStore(filename);
+    const sqlitePath = path.join(path.dirname(filename), "versions.sqlite");
+    const writer = await openSqlitePipelineRunStore(sqlitePath);
+    for (const recorded of await ndjson.listEvents()) await writer.export(recorded);
+    await writer.close();
+    const reopened = await openSqlitePipelineRunStore(sqlitePath);
+    try {
+      for (const reader of [ndjson, reopened]) {
+        const snapshot = projectPipelineRunStore(await reader.listEvents());
+        expect(snapshot.definitions).toHaveLength(2);
+        for (const definition of definitions) {
+          expect(
+            snapshot.definitions.find(
+              (item) => item.identity?.definitionId === definition.identity.definitionId
+            )?.snapshot
+          ).toEqual(definition);
+          expect(
+            snapshot.runs.filter(
+              (run) => run.definitionIdentity?.definitionId === definition.identity.definitionId
+            )
+          ).toHaveLength(1);
+        }
+      }
+    } finally {
+      await ndjson.close();
+      await reopened.close();
+    }
+  });
+
   it.each(["a", "界", '\u0000"\\'])(
     "reopens large detail payloads containing %j with default byte limits",
     async (text) => {

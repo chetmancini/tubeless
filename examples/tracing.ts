@@ -112,6 +112,9 @@ const normalize = step("normalize", {
 });
 
 export const TracingExamplePipeline = definePipeline({
+  // A release tag or build-generated digest covers handler code, schemas, and finalizer.
+  // Graph fingerprints are computed separately and do not prove code equality.
+  implementationVersion: "tracing-example-v1",
   id: "tracing-example",
   steps: [normalize],
   finalize: (outputs) => outputs.normalize ?? [],

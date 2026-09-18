@@ -114,6 +114,8 @@ describe("mapped child adapter: execution", () => {
       finalize: (outputs) => outputs.children,
     });
     expect(parent.plan().steps[1]?.nestedPipeline).toEqual({
+      identity: child.definition.identity,
+      concurrency: "dynamic",
       mode: "for-each",
       pipelineId: "worker",
       stepIds: ["process"],
