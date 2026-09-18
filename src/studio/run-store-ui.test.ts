@@ -5,7 +5,7 @@ import type { PipelineRunEventStore, StoredPipelineEvent } from "../run-store/ru
 import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { PIPELINE_RUN_STUDIO_SCRIPT, PIPELINE_RUN_STUDIO_STYLE } from "./run-store-ui-page.js";
-import { connectionPresentation } from "./run-store-ui-client-app.js";
+import { connectionPresentation } from "./run-store-ui-client.js";
 import { startPipelineRunStudio, type PipelineRunStudioServer } from "./run-store-ui.js";
 
 function studioError(code: string, message: string, hint: string) {

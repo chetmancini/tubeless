@@ -2,10 +2,15 @@ import { renderToString } from "preact-render-to-string";
 import { describe, expect, it } from "vitest";
 import { RUN_MODEL_VERSION, type PipelinePlan } from "../core/pipeline.js";
 import type { StoredPipelineRun } from "../run-store/run-store.js";
-import { CommandFields, PipelinesView, PlanView } from "./run-store-ui-client-commands.js";
-import { createStudioRunIndex } from "./run-store-ui-client-model.js";
-import { RunsView } from "./run-store-ui-client-runs.js";
-import { isoTime, Status } from "./run-store-ui-client-shared.js";
+import {
+  CommandFields,
+  createStudioRunIndex,
+  isoTime,
+  PipelinesView,
+  PlanView,
+  RunsView,
+  Status,
+} from "./run-store-ui-client.js";
 import type { PipelineRunStudioCommand } from "./run-store-ui-protocol.js";
 
 const command: PipelineRunStudioCommand = {

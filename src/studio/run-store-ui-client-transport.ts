@@ -1,16 +1,24 @@
 import type { PipelinePlan, PipelineRunControls } from "../core/pipeline.js";
 import type {
+  PipelineRunStoreSnapshot,
   StoredPipelineLog,
   StoredPipelineRun,
   StoredPipelineStep,
 } from "../run-store/run-store.js";
 import { isPipelineTraceError, isStoredPipelineEvent } from "../run-store/run-store-codec.js";
-import type { StudioRunDetail, StudioSnapshot } from "./run-store-ui-client-model.js";
 import {
   isPipelineRunStudioParameter,
   type PipelineRunStudioCommand,
   type PipelineRunStudioLaunchRequest,
 } from "./run-store-ui-protocol.js";
+
+export interface StudioSnapshot extends PipelineRunStoreSnapshot {
+  liveRunIds?: readonly string[];
+}
+
+export interface StudioRunDetail {
+  run: StoredPipelineRun;
+}
 
 interface StudioCapabilities {
   canCancel: boolean;

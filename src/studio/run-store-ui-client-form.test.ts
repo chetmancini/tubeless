@@ -5,7 +5,7 @@ import {
   initialStudioParameterValues,
   serializeLaunchValues,
   serializePlanInput,
-} from "./run-store-ui-client-form.js";
+} from "./run-store-ui-client.js";
 
 function parameter(
   key: string,

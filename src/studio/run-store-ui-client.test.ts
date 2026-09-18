@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RUN_MODEL_VERSION } from "../core/pipeline.js";
-import { resolveSelectedRunId } from "./run-store-ui-client-app.js";
-import { createStudioRunIndex } from "./run-store-ui-client.js";
+import { createStudioRunIndex, resolveSelectedRunId } from "./run-store-ui-client.js";
 import type { StoredPipelineRun, StoredPipelineRunStatus } from "../run-store/run-store.js";
 
 function run(
