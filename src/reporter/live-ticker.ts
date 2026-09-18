@@ -293,6 +293,14 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
   const pendingLogs: string[] = [];
   let acknowledgedLogs = 0;
 
+  const restoreCursor = (): void => {
+    try {
+      options.write(ANSI.showCursor);
+    } catch {
+      // The output may remain unavailable; cursor restore is best-effort.
+    }
+  };
+
   const dropAcknowledgedLogs = (): void => {
     const accepted = Atomics.load(state, 2);
     pendingLogs.splice(0, accepted - acknowledgedLogs);
@@ -394,13 +402,8 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
       } finally {
         const terminated = worker.terminate();
         if (restoreCursorAfterTerminate) {
-          void terminated.then(() => {
-            try {
-              options.write(ANSI.showCursor);
-            } catch {
-              // The output may remain unavailable; cursor restore is best-effort.
-            }
-          });
+          restoreCursor();
+          void terminated.then(restoreCursor);
         }
       }
     },

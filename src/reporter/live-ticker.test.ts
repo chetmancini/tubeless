@@ -155,7 +155,7 @@ describe("createLiveTicker worker fallback", () => {
 
       expect(Date.now() - startedAt).toBeLessThan(1_000);
       expect(chunks.join("")).not.toContain("final status");
-      await vi.waitFor(() => expect(chunks.join("")).toContain("\u001B[?25h"));
+      expect(chunks.join("")).toContain("\u001B[?25h");
     } finally {
       ticker.dispose();
       close();
