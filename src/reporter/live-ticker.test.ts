@@ -138,17 +138,13 @@ describe("createLiveTicker worker fallback", () => {
     }
   });
 
-  it("waits for worker output ownership before repainting after a timeout", async () => {
+  it("bounds fallback takeover when the worker keeps output ownership", async () => {
     const { chunks, close, path, ticker } = workerTicker(`
       import { writeSync } from "node:fs";
       import { workerData } from "node:worker_threads";
       const state = new Int32Array(workerData.stateBuffer);
       Atomics.store(state, 4, 1);
       writeSync(workerData.fd, "locked\\n");
-      setTimeout(() => {
-        Atomics.store(state, 4, 0);
-        Atomics.notify(state, 4);
-      }, 800);
       setInterval(() => {}, 1000);
     `);
     try {
@@ -157,8 +153,8 @@ describe("createLiveTicker worker fallback", () => {
       const startedAt = Date.now();
       ticker.dispose();
 
-      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(600);
-      expect(chunks.join("")).toContain("final status");
+      expect(Date.now() - startedAt).toBeLessThan(1_000);
+      expect(chunks.join("")).not.toContain("final status");
     } finally {
       ticker.dispose();
       close();

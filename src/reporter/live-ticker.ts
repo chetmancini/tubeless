@@ -18,6 +18,7 @@ const SHIMMER_BAND_COLUMNS = 3;
 const SHIMMER_BRIGHT = "\u001B[0;1;36m";
 const SHIMMER_DIM = "\u001B[0;2;36m";
 const SHIMMER_FRAME_MS = 80;
+const OUTPUT_LOCK_TIMEOUT_MS = 50;
 
 const ANSI_STYLE = /\u001B\[[0-9;]*m/g;
 const ANSI_STYLE_PREFIX = /^\u001B\[[0-9;]*m/;
@@ -305,15 +306,19 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     ticker.setLines([...lines]);
   };
 
-  const claimOutput = (): void => {
+  const claimOutput = (): boolean => {
     Atomics.store(state, 3, 1);
+    const deadline = Date.now() + OUTPUT_LOCK_TIMEOUT_MS;
     while (Atomics.compareExchange(state, 4, 0, 1) !== 0) {
-      Atomics.wait(state, 4, 1);
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) return false;
+      Atomics.wait(state, 4, 1, remainingMs);
     }
+    return true;
   };
 
-  const createFallback = (): LiveTicker => {
-    claimOutput();
+  const createFallback = (): LiveTicker | undefined => {
+    if (!claimOutput()) return undefined;
     const ticker = createInlineTicker(options, Atomics.load(state, 1));
     replayThrough(ticker);
     return ticker;
@@ -321,11 +326,12 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
 
   const failToInline = (): void => {
     if (disposed || inlineFallback) return;
+    // The exit event guarantees that no worker write still owns this lock.
+    Atomics.store(state, 4, 0);
     inlineFallback = createFallback();
-    void worker.terminate();
   };
 
-  worker.on("error", failToInline);
+  worker.on("error", () => void worker.terminate());
   worker.on("exit", () => failToInline());
   worker.unref();
 
@@ -378,7 +384,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
         }
         if (!workerStopped) {
           const ticker = createFallback();
-          ticker.dispose();
+          ticker?.dispose();
         }
       } finally {
         void worker.terminate();
