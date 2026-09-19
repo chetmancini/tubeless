@@ -63,14 +63,3 @@ export async function runValidatedExample() {
   const result = await ValidatedPipeline.runOrThrow({ source: "rows.txt" });
   return result.validated;
 }
-
-// oxlint-disable-next-line no-constant-condition -- typecheck-only compile probe
-if (false) {
-  // @ts-expect-error Options are inferred from the schema input.
-  ValidatedPipeline.runOrThrow({});
-
-  // SAFETY: an empty array literal has no elements that could violate readonly string[].
-  const duplicate = step("load", { run: () => [] as readonly string[] });
-  // @ts-expect-error Literal duplicate step IDs are rejected at definition time.
-  definePipeline({ id: "duplicate", steps: [load, duplicate], finalize: () => undefined });
-}

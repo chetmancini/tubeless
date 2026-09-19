@@ -1,46 +1,9 @@
 import { definePipelineProject } from "tubeless/project";
 
-// Project catalog; commands use definePipelineCommand from tubeless/cli.
-// Register commands here so the CLI and coding agents can find them;
-// Studio can consume the same catalog later without changing the pipelines.
-// Module paths resolve from this file; cwd controls command
-// execution. Command argv flags stay --step/--target, while mapOptions and hooks
+// Checked-in command catalog. Module paths resolve from this file; cwd is
+// this directory. Adapt IDs and files to the consumer; keep registrations
+// explicit. CLI argv still uses --step/--target; mapOptions and hooks
 // receive stepIds and targets.
-// When converting existing code, use the tubeless-make-pipeline agent skill.
-// Pipeline files destructure the constructors they need from createSteps.
-// ../minimal-pipeline.ts shows { id, steps }: the last step in execution order is the default
-// target and result; missing output returns undefined. Use requireOutputs to require it.
-// Adding skip to any definition marks that step as intentionally omittable.
-// Adapt this layout to the consumer; retain its established IDs and caller contracts.
-// For caller-directed fan-out reruns, see ../fan-out-progress.ts: inspect
-// error.fanOut and check omitted entries and truncated keys before selecting inputs.
-// That example also shows automatic nested CLI rows and retained substep completion;
-// fromPipeline and forEachPipeline forward progress without consumer hook wiring.
-// Fan-outs show up to 32 live groups by default, then the full final tree.
-// ../live-tui.ts shows context.log in a right-side pane in wide terminals;
-// Logs appear only in the pane while visible; set reporter.logPane to "off"
-// for logs above progress. Use --trace or --store for complete recordings.
-// History uses recorded pipeline IDs: `tubeless history --pipeline import`
-// selects the pipeline behind the registered command `import-rows`.
-
-// ../child-pipeline.ts demonstrates fromPipeline result mapping; async mappings
-// publish resolved values to parent dependents and use resolved skip values.
-// ../yaml-pipelines.ts demonstrates the declarative equivalents with explicit
-// fromPipelineAdapters, forEachPipelineAdapters, and skipPredicates registries.
-
-// Remote integration recipes are library handlers rather than CLI commands:
-// ../remote-steps.ts exports RemoteStepsPipeline (id: remote-steps).
-// ../host-embedding.ts exports HostedPipeline (id: hosted-import) and handleHostJob.
-// Register a command wrapper here only when the application owns its endpoint/config.
-// Application telemetry adapters implement PipelineTraceExporter; see ../tracing.ts.
-// That example supplies implementationVersion to distinguish handler releases from
-// structural fingerprints. Studio groups and compares the recorded definition versions;
-// keep command and pipeline IDs stable across releases. Complete recorded snapshots
-// (including child implementation identities) are checked against their hashes
-// when written to SQLite or read from either store.
-// Optional Node helpers live in tubeless/node; ../node-artifacts.ts demonstrates
-// cwd-relative paths and atomic JSON writes in a step marked dryRun: "skip".
-// writeJson rejects values with no JSON representation before touching disk.
 
 /** Checked-in project command catalog with stable registered identities. */
 export default definePipelineProject({

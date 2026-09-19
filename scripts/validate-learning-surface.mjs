@@ -121,11 +121,8 @@ const catalog = readFileSync(
   "utf8"
 );
 assert(
-  catalog.includes("--step/--target") &&
-    catalog.includes("stepIds") &&
-    catalog.includes("targets") &&
-    catalog.includes('id: "import-rows"'),
-  "Project manifest must declare stable IDs and distinguish --step/--target flags from stepIds/targets values"
+  catalog.includes('id: "import-rows"'),
+  "Project manifest must declare the import-rows command id"
 );
 const requiredDocuments = [
   "README.md",

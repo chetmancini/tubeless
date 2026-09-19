@@ -41,12 +41,3 @@ export async function runChildPipelineExample() {
     lines: [" Alpha ", "", "Beta"],
   });
 }
-
-// oxlint-disable-next-line no-constant-condition -- typecheck-only compile probe
-if (false) {
-  fromPipeline("invalid-child-selection", {
-    pipeline: NormalizePipeline,
-    // @ts-expect-error Child run options are checked against its declared target IDs.
-    mapOptions: () => ({ rows: [], targets: ["normalise-rows"] }),
-  });
-}

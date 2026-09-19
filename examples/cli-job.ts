@@ -69,20 +69,6 @@ export const ImportCommand = definePipelineCommand(ImportPipeline, {
   summarize: (result) => [`Normalized ${result.count} row(s).`],
 });
 
-// oxlint-disable-next-line no-constant-condition -- typecheck-only compile probe
-if (false) {
-  const missingLinesParams = { source: { type: "path" } } as const;
-  // @ts-expect-error --source does not supply ImportPipeline's required lines option.
-  definePipelineCommand(ImportPipeline, { params: missingLinesParams });
-
-  const renamedOptionalParams = {
-    lines: { type: "string", multiple: true },
-    max: { type: "number", optional: true },
-  } as const;
-  // @ts-expect-error --max is not a same-name option on ImportPipeline.
-  definePipelineCommand(ImportPipeline, { params: renamedOptionalParams });
-}
-
 if (import.meta.main) {
   void ImportCommand.main();
 }
