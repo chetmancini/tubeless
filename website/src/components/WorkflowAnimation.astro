@@ -1,0 +1,157 @@
+---
+import WorkflowObject from "./WorkflowObject.astro";
+import { WORKFLOW_SCENES } from "../data/workflow-scenes";
+
+type Props = { id: string; label: string };
+const { id, label } = Astro.props;
+const scene = WORKFLOW_SCENES[id];
+const routes = scene.edges.map((edge) => {
+  const from = scene.nodes.find((node) => node.id === edge.from)!;
+  const to = scene.nodes.find((node) => node.id === edge.to)!;
+  const start = { x: from.x + 48, y: from.y + 19 };
+  const end = { x: to.x - 48, y: to.y + 19 };
+  const bend = (start.x + end.x) / 2;
+  return { ...edge, path: `M${start.x},${start.y} C${bend},${start.y} ${bend},${end.y} ${end.x},${end.y}` };
+});
+---
+
+<figure class="workflow-scene" data-workflow-animation>
+  <figcaption>
+    <div><span class="scene-eyebrow">In the workshop / {label}</span><h3>{scene.title}</h3></div>
+    <button type="button" data-motion-toggle data-label={label} aria-label={`Pause ${label} animation`} hidden>
+      <span aria-hidden="true">Ⅱ</span> Pause
+    </button>
+  </figcaption>
+  <div class="scene-viewport" tabindex="0" role="region" aria-label={`${label} animated diagram. Scroll horizontally on small screens.`}>
+    <svg class="scene" viewBox="0 0 1000 465" role="img" aria-labelledby={`${id}-scene-title ${id}-scene-description`}>
+      <title id={`${id}-scene-title`}>{scene.title}</title>
+      <desc id={`${id}-scene-description`}>{scene.description}</desc>
+      <defs>
+        <pattern id={`${id}-floor`} width="80" height="40" patternUnits="userSpaceOnUse">
+          <path d="M40 0 80 20 40 40 0 20Z" fill="none" stroke="#b5c3b3" stroke-width="0.7" />
+        </pattern>
+        <radialGradient id={`${id}-fade`}><stop stop-color="white" /><stop offset="1" stop-color="black" /></radialGradient>
+        <mask id={`${id}-floor-mask`}><ellipse cx="500" cy="258" rx="500" ry="220" fill={`url(#${id}-fade)`} /></mask>
+      </defs>
+      <ellipse cx="505" cy="274" rx="471" ry="169" fill="#dce5d6" opacity="0.2" />
+      <rect width="1000" height="465" fill={`url(#${id}-floor)`} mask={`url(#${id}-floor-mask)`} opacity="0.65" />
+      <g aria-hidden="true">
+        {routes.map((route) => (
+          <g class="delivery-route">
+            <path d={route.path} fill="none" stroke="#879c8d" stroke-width="15" opacity="0.15" transform="translate(0 5)" />
+            <path d={route.path} fill="none" stroke="#bcc7b9" stroke-width="12" />
+            <path d={route.path} fill="none" stroke="#f9faf0" stroke-width="8" />
+            <path d={route.path} fill="none" stroke="#e2e7d8" stroke-width="1" />
+            <g class="cargo" style={`offset-path: path('${route.path}'); --at: ${route.at}s`}>
+              <ellipse cy="8" rx="10" ry="4" fill="#766a4d" opacity="0.2" />
+              <path d="m0-10 9 5-9 5-9-5z" fill="#ffe4a0" stroke="#b18c42" stroke-width="0.8" />
+              <path d="m-9-5 9 5v10l-9-5z" fill="#dfb55b" />
+              <path d="m0 0 9-5V5l-9 5z" fill="#b38738" />
+            </g>
+          </g>
+        ))}
+        {scene.nodes.map((node) => (
+          <g class:list={["scene-station", node.color ?? "green"]} transform={`translate(${node.x} ${node.y})`} style={`--at: ${node.at}s`}>
+            <ellipse class="station-arrival" cy="24" rx="58" ry="24" fill="none" stroke="var(--object-dark)" stroke-width="2" />
+            <WorkflowObject kind={node.kind} />
+            <text class="station-label" y="65" text-anchor="middle">{node.label}</text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  </div>
+  <div class="scene-footer"><span>{scene.pattern}</span><span class="pan-hint">Scroll to explore ↔</span></div>
+  <p class="sr-only">Illustrative workflow: {scene.description}</p>
+</figure>
+
+<style>
+  .workflow-scene {
+    --cycle: 10s;
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid #d8dece;
+    border-radius: 16px;
+    background: radial-gradient(ellipse at 50% 65%, #eaf0df 0%, #f7f8ed 46%, #fffdf6 85%);
+    box-shadow: 0 4px 0 #e5e7d9, 0 15px 35px rgb(51 65 42 / 5%);
+  }
+  figcaption { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.5rem 1.8rem 0; }
+  .scene-eyebrow { color: var(--gold); font: 0.65rem var(--mono); letter-spacing: 0.09em; text-transform: uppercase; }
+  figcaption h3 { margin: 0.5rem 0 0; font-size: 1.15rem; font-weight: 500; letter-spacing: -0.02em; }
+  button { flex: none; padding: 0.5rem 0.65rem; border: 1px solid #d8dece; border-radius: 6px; background: #fffdf8; color: var(--muted); font: 0.65rem var(--mono); cursor: pointer; }
+  button:hover { border-color: var(--gold); color: var(--ink); }
+  .scene-viewport { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: #c4ccb7 transparent; }
+  .scene-viewport:focus-visible { outline-offset: -4px; }
+  .scene { display: block; width: 100%; max-width: 1080px; min-width: 760px; margin: 0 auto; }
+  .scene-station { --object-light: #c0dbc7; --object-mid: #87b39e; --object-dark: #527d6c; }
+  .scene-station.blue { --object-light: #c1deec; --object-mid: #81afc8; --object-dark: #507d98; }
+  .scene-station.rose { --object-light: #eed0ce; --object-mid: #cf969e; --object-dark: #a96a7d; }
+  .station-label { fill: #42524a; font: 500 14px var(--mono); paint-order: stroke; stroke: #f3f6e9; stroke-width: 5px; stroke-linejoin: round; }
+  .station-arrival { opacity: 0; transform-origin: 0 24px; animation: arrival var(--cycle) var(--at) ease-out infinite; }
+  .cargo { offset-rotate: 0deg; offset-anchor: 0px 0px; opacity: 0; animation: deliver var(--cycle) var(--at) linear infinite; }
+  .scene :global(.working-object) { animation: work var(--cycle) var(--at) ease-in-out infinite; }
+  .scene :global(.hammer-arm) { transform-origin: -15px -10px; animation: hammer var(--cycle) var(--at) ease-in-out infinite; }
+  .scene :global(.assembly) { animation: assemble var(--cycle) var(--at) ease-out infinite; }
+  .scene :global(.impact-sparks) { opacity: 0; animation: sparks var(--cycle) var(--at) linear infinite; }
+  .scene :global(.thinking-brain) { animation: think var(--cycle) var(--at) ease-in-out infinite; }
+  .scene :global(.thought-lights) { opacity: 0.2; animation: thoughts var(--cycle) var(--at) linear infinite; }
+  .scene :global(.floating-chip) { animation: levitate var(--cycle) var(--at) ease-in-out infinite; }
+  .scene :global(.machine-light) { animation: machine-light var(--cycle) var(--at) linear infinite; }
+  .scene :global(.chart-bar) { transform-box: fill-box; transform-origin: center bottom; animation: chart-grow var(--cycle) calc(var(--at) + var(--bar) * 0.1s) ease-in-out infinite; }
+  .scene :global(.sorting-bits) { animation: sorting var(--cycle) var(--at) ease-in infinite; }
+  .scene :global(.terminal-cursor) { animation: cursor var(--cycle) var(--at) steps(1) infinite; }
+  .scene :global(.gate-check) { stroke-dasharray: 65; animation: check var(--cycle) var(--at) ease-out infinite; }
+  .scene-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.6rem; padding: 0.9rem 1.8rem 1.2rem; border-top: 1px solid rgb(177 192 161 / 25%); color: #6a7562; font: 0.58rem/1.7 var(--mono); letter-spacing: 0.05em; }
+  .pan-hint { display: none; }
+  .workflow-scene:not([data-visible]) :global(*), .workflow-scene[data-paused] :global(*) { animation-play-state: paused !important; }
+  @keyframes deliver {
+    0% { offset-distance: 0%; opacity: 0; }
+    1% { opacity: 1; }
+    11% { offset-distance: 100%; opacity: 1; }
+    12%, 100% { offset-distance: 100%; opacity: 0; }
+  }
+  @keyframes arrival { 0% { opacity: 0; transform: scale(0.8); } 3% { opacity: 0.45; } 11%, 100% { opacity: 0; transform: scale(1.2); } }
+  @keyframes work { 0%, 12%, 100% { transform: translateY(0); } 4% { transform: translateY(-5px); } 8% { transform: translateY(0); } }
+  @keyframes hammer { 0%, 12%, 100% { transform: rotate(0); } 2%, 6% { transform: rotate(32deg); } 4%, 8% { transform: rotate(-18deg); } }
+  @keyframes assemble { 0%, 12%, 100% { transform: translateY(0); } 4%, 8% { transform: translateY(3px) scaleY(0.95); } 5%, 9% { transform: translateY(0); } }
+  @keyframes sparks { 0%, 3%, 5%, 7%, 9%, 100% { opacity: 0; } 4%, 8% { opacity: 1; } }
+  @keyframes think { 0%, 14%, 100% { transform: translateY(0) rotate(0); } 4% { transform: translateY(-9px) rotate(-3deg); } 8% { transform: translateY(-9px) rotate(3deg); } }
+  @keyframes thoughts { 0%, 12%, 100% { opacity: 0.2; } 3%, 7% { opacity: 1; } 5%, 9% { opacity: 0.3; } }
+  @keyframes levitate { 0%, 13%, 100% { transform: translateY(0); } 4%, 8% { transform: translateY(-9px); } }
+  @keyframes machine-light { 0%, 12%, 100% { opacity: 0.5; } 3%, 7% { opacity: 1; } 5%, 9% { opacity: 0.2; } }
+  @keyframes chart-grow { 0%, 14%, 100% { transform: scaleY(1); } 2% { transform: scaleY(0.35); } 9% { transform: scaleY(1.1); } }
+  @keyframes sorting { 0%, 14%, 100% { transform: translateY(0); opacity: 1; } 10% { transform: translateY(28px); opacity: 0; } 11% { transform: translateY(-10px); opacity: 0; } }
+  @keyframes cursor { 0%, 4%, 8%, 12%, 100% { opacity: 1; } 2%, 6%, 10% { opacity: 0; } }
+  @keyframes check { 0% { stroke-dashoffset: 65; } 9%, 100% { stroke-dashoffset: 0; } }
+  @media (max-width: 800px) {
+    figcaption { padding: 1.1rem 1rem 0; }
+    figcaption h3 { font-size: 1rem; }
+    .scene-eyebrow { font-size: 0.55rem; }
+    .scene-footer { padding: 0.8rem 1rem; }
+    .pan-hint { display: inline; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .workflow-scene :global(*) { animation: none !important; }
+    button { display: none; }
+  }
+</style>
+
+<script>
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) entry.target.toggleAttribute("data-visible", entry.isIntersecting);
+  }, { threshold: 0.15 });
+
+  for (const animation of document.querySelectorAll<HTMLElement>("[data-workflow-animation]")) {
+    observer.observe(animation);
+    const button = animation.querySelector<HTMLButtonElement>("[data-motion-toggle]");
+    if (!button) continue;
+    button.hidden = false;
+    button.addEventListener("click", () => {
+      const paused = animation.toggleAttribute("data-paused");
+      button.textContent = paused ? "▷ Play" : "Ⅱ Pause";
+      button.setAttribute("aria-label", `${paused ? "Resume" : "Pause"} ${button.dataset.label} animation`);
+    });
+  }
+</script>

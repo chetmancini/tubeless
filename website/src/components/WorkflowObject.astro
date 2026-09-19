@@ -1,0 +1,141 @@
+---
+import type { WorkflowObjectKind } from "../data/workflow-scenes";
+type Props = { kind: WorkflowObjectKind };
+const { kind } = Astro.props;
+---
+
+<g class:list={["scene-object", `object-${kind}`]} stroke-linejoin="round" stroke-linecap="round">
+  <ellipse class="object-shadow" cx="5" cy="23" rx="51" ry="17" fill="#33413b" opacity="0.12" />
+  {kind === "database" && (
+    <g class="working-object">
+      <path d="M-37-51v61c0 25 74 25 74 0v-61" fill="var(--object-mid)" stroke="var(--object-dark)" stroke-width="1.5" />
+      <path d="M0-32v60c21 0 37-8 37-18v-61" fill="var(--object-dark)" opacity="0.3" />
+      <path d="M-37-30c0 25 74 25 74 0M-37-9c0 25 74 25 74 0" fill="none" stroke="var(--object-light)" stroke-width="3" />
+      <ellipse cx="0" cy="-51" rx="37" ry="17" fill="var(--object-light)" stroke="var(--object-dark)" stroke-width="1.5" />
+      <ellipse cx="0" cy="-51" rx="25" ry="10" fill="none" stroke="white" opacity="0.6" />
+      <path d="M-26-24v8m0 13v8" stroke="white" opacity="0.6" stroke-width="4" />
+      <circle class="machine-light" cx="23" cy="8" r="3" fill="#fef9cf" />
+    </g>
+  )}
+  {kind === "server" && (
+    <g class="working-object">
+      <path d="m-35-67 24-13 53 20-24 14z" fill="#71868c" stroke="#354c56" />
+      <path d="m18-46 24-14v76L18 31z" fill="#283f48" stroke="#233942" />
+      <path d="m-35-67 53 21v77l-53-21z" fill="#455e68" stroke="#233942" />
+      {[0, 1, 2].map((i) => <g transform={`translate(0 ${i * 22})`}>
+        <path d="m-29-57 40 16v15l-40-16z" fill="#1f343c" />
+        <path d="m-13-46 17 7" stroke="#9eb4b8" stroke-width="2" />
+        <circle class="machine-light" cx="-23" cy="-47" r="2.7" fill="#a9ebba" />
+      </g>)}
+      <path d="m25-36 9-5m-9 14 9-5m-9 14 9-5" stroke="#6d8a92" stroke-width="2" />
+    </g>
+  )}
+  {kind === "parcel" && (
+    <g class="working-object">
+      <path d="m0-57 41 22L0-12l-41-23z" fill="var(--object-light)" stroke="var(--object-dark)" />
+      <path d="m-41-35 41 23v45l-41-23z" fill="var(--object-mid)" stroke="var(--object-dark)" />
+      <path d="m0-12 41-23v45L0 33z" fill="var(--object-dark)" />
+      <path d="m-12-50 41 22v17l-12 7v-17l-40-22" fill="#fff4cf" opacity="0.8" />
+      <path d="m-31-8 20 11v12l-20-11z" fill="#fff8e4" />
+      <path d="m-26-3 10 6m-10-1 7 4" stroke="#957442" stroke-width="1.5" />
+    </g>
+  )}
+  {kind === "workshop" && (
+    <g>
+      <path d="m-49 9 46-22 51 24-46 24z" fill="#d1d4cb" stroke="#8c958a" />
+      <path d="m-49 9 51 26v12l-51-26z" fill="#abb4a8" />
+      <path d="m2 35 46-24v12L2 47z" fill="#7e8e83" />
+      <g class="assembly">
+        <path d="m-10-27 29 14L-9 2l-28-15z" fill="#f8d47e" stroke="#a58038" />
+        <path d="m-37-13 28 15v23l-28-15z" fill="#d6a847" />
+        <path d="m-9 2 28-15v23L-9 25z" fill="#ad8038" />
+      </g>
+      <g class="hammer-arm">
+        <path d="m6-66 10 5-28 48-10-5z" fill="#ae713f" stroke="#805336" stroke-width="1.5" />
+        <path d="m11-63 3 1-26 45-3-1z" fill="#e5b57d" />
+        <path d="m-4-79 16-9 33 18-16 9z" fill="#dce8e8" stroke="#607a80" stroke-width="1.5" />
+        <path d="m-4-79 33 18v19L-4-60z" fill="#8da9af" stroke="#607a80" />
+        <path d="m29-61 16-9v19l-16 9z" fill="#557981" />
+      </g>
+      <g class="impact-sparks" stroke="#ca9341" stroke-width="3">
+        <path d="m-42-27-8-8m17 0-2-10m16 12 4-10" />
+      </g>
+    </g>
+  )}
+  {kind === "brain" && (
+    <g>
+      <ellipse cy="22" rx="48" ry="20" fill="#bb9d87" />
+      <path d="M-48 14v8c0 27 96 27 96 0v-8" fill="#cebaa1" />
+      <ellipse cy="14" rx="48" ry="20" fill="#f3e4ce" stroke="#d4c0a4" />
+      <g class="thinking-brain">
+        <path d="M4-68c-13-21-36-12-38 2-19-2-29 19-20 33-9 21 9 39 27 34C-12 15 8 4 10-7c17 14 40 2 39-14 20-10 14-37-2-42-5-19-28-23-43-5Z" fill="#b86e79" stroke="#975969" stroke-width="2" transform="translate(5 7)" />
+        <path d="M0-72c-13-21-36-12-38 2-19-2-29 19-20 33-9 21 9 39 27 34C-16 11 4 0 6-11c17 14 40 2 39-14 20-10 14-37-2-42-5-19-28-23-43-5Z" fill="#e9b2b4" stroke="#a96577" stroke-width="2" />
+        <path d="M0-72c-8 17 9 22 2 38S9-14 6-11M-38-70c-5 15 15 14 14 26m-31 7c16-8 30 1 24 17m74-47c-14-3-25 7-22 20m24 22c-14-8-26 0-23 13M-22-69c9-5 15 1 13 9m-30 36c-11 7-7 14-1 18M14-52c4-9 14-7 17-3" fill="none" stroke="#a96577" stroke-width="3" />
+        <path d="M-44-53c-6 0-9 6-8 10m21-32c5-6 10-5 13-3m28 4c6-6 15-6 20-1" fill="none" stroke="#ffe1db" stroke-width="4" />
+        <g class="thought-lights" fill="#fff4bd"><circle cx="-25" cy="-46" r="4" /><circle cx="20" cy="-40" r="4" /><circle cx="-6" cy="-23" r="3" /></g>
+      </g>
+    </g>
+  )}
+  {kind === "chip" && (
+    <g class="working-object">
+      <path d="m0-23 53 28L0 34-53 5z" fill="var(--object-dark)" />
+      <path d="m-53 5 53 29v8L-53 13zm53 29L53 5v8L0 42z" fill="#455d59" />
+      {[-24, -12, 0, 12, 24].map((x) => <path d={`m${x - 16} ${x * 0.52 - 5} -11 6 m${x + 15} ${x * 0.52 + 14} 11 6`} stroke="#c3c8b5" stroke-width="4" />)}
+      <g class="floating-chip">
+        <path d="m0-58 28 15L0-27l-28-16z" fill="var(--object-light)" stroke="var(--object-dark)" />
+        <path d="m-28-43 28 16v24l-28-16z" fill="var(--object-mid)" />
+        <path d="m0-27 28-16v24L0-3z" fill="var(--object-dark)" />
+        <path d="m0-48 12 6L0-35l-12-7z" fill="#fff9dd" opacity="0.8" />
+      </g>
+    </g>
+  )}
+  {kind === "gate" && (
+    <g class="working-object">
+      <path d="m0-76 38 15v36C38 0 9 19 0 25-9 19-38 0-38-25v-36z" fill="#a88c51" transform="translate(7 5)" />
+      <path d="m0-76 38 15v36C38 0 9 19 0 25-9 19-38 0-38-25v-36z" fill="#f8e8b2" stroke="#b29758" stroke-width="1.5" />
+      <path d="m0-66 29 12v29c0 18-21 35-29 40-8-5-29-22-29-40v-29z" fill="#fffae8" />
+      <path class="gate-check" d="m-18-27 13 13 25-29" fill="none" stroke="#54886b" stroke-width="7" />
+      <path d="m-29-54 29-12" fill="none" stroke="white" stroke-width="3" />
+    </g>
+  )}
+  {kind === "document" && (
+    <g class="working-object">
+      <path d="m-28-69 59 10v81l-59-10z" fill="#c7cbbb" stroke="#9ca794" transform="translate(8 -7)" />
+      <path d="m-28-69 59 10v81l-59-10z" fill="#fffdf0" stroke="#b6bbaa" stroke-width="1.5" />
+      <path d="m-17-52 24 4v12l-24-4z" fill="var(--object-mid)" />
+      <g class="document-lines" stroke="#9caeaa" stroke-width="3"><path d="m-17-24 36 6m-36 5 36 6m-36 5 24 4" /></g>
+      <path d="m21-60 10 1v12" fill="none" stroke="#e8e5d6" stroke-width="3" />
+    </g>
+  )}
+  {kind === "funnel" && (
+    <g class="working-object">
+      <path d="M-49-49  -13-2v29l24 12V-2l38-47" fill="#79a49c" stroke="#527b75" stroke-width="1.5" />
+      <path d="M0-29v62l11 6V-2l38-47" fill="#548079" />
+      <ellipse cy="-49" rx="49" ry="21" fill="#c4dfce" stroke="#527b75" stroke-width="1.5" />
+      <ellipse cy="-49" rx="36" ry="13" fill="#426d64" />
+      <g class="sorting-bits"><path d="m-16-75 9-5 9 5-9 5z" fill="#e2b757" /><path d="m8-88 9-5 9 5-9 5z" fill="#83b9cc" /><path d="m4-61 9-5 9 5-9 5z" fill="#e5a3a7" /></g>
+    </g>
+  )}
+  {kind === "chart" && (
+    <g>
+      <path d="m-51 10 34-18 70 37-34 18z" fill="#e0ddcb" stroke="#bcb9a7" />
+      {[{ x: -30, h: 30 }, { x: -3, h: 53 }, { x: 24, h: 77 }].map(({ x, h }, i) => <g class="chart-bar" style={`--bar: ${i}`}>
+        <path d={`m${x} ${12 - h} 13-7 15 8-13 7z`} fill="var(--object-light)" />
+        <path d={`m${x} ${12 - h} 15 8v${h}l-15-8z`} fill="var(--object-mid)" />
+        <path d={`m${x + 15} ${20 - h} 13-7v${h}l-13 7z`} fill="var(--object-dark)" />
+      </g>)}
+    </g>
+  )}
+  {kind === "console" && (
+    <g class="working-object">
+      <path d="m-43-64 17-8 67 18-17 8z" fill="#7c979b" />
+      <path d="m24-46 17-8v58L24 13z" fill="#344e56" />
+      <path d="m-43-64 67 18v59l-67-18z" fill="#52727a" stroke="#324d55" />
+      <path d="m-36-54 52 14V1l-52-14z" fill="#203c43" />
+      <path d="m-27-39 10 11-10 5" stroke="#c4e6ca" stroke-width="3" fill="none" />
+      <path class="terminal-cursor" d="m-9-20 15 4" stroke="#e6c574" stroke-width="3" />
+      <path d="m-4 7 13 4v14l-13-4z" fill="#506b70" />
+      <path d="m-21 22 23-11 31 16-23 12z" fill="#9bb0ad" stroke="#698780" />
+    </g>
+  )}
+</g>

@@ -1,5 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
+import WorkflowAnimation from "../components/WorkflowAnimation.astro";
 import { USE_CASES, USE_CASES_INTRO } from "../data/use-cases";
 import { githubBlob, href } from "../lib/paths";
 ---
@@ -57,6 +58,7 @@ import { githubBlob, href } from "../lib/paths";
             ))}
           </div>
         </aside>
+        <WorkflowAnimation id={useCase.id} label={useCase.label} />
       </section>
     ))}
 
