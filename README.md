@@ -75,18 +75,18 @@ for previews, and `toMermaid` for diagrams. See [getting started](./docs/getting
 ## Use the CLI
 
 Define commands with `tubeless/cli` and catalogs with `tubeless/project`.
-The [CLI guide](./docs/cli.md) explains how to set up the manifest and commands.
-With an `import-rows` command registered, you can run:
+The [CLI guide](./docs/cli.md) covers the manifest. From this repository:
 
 ```sh
-bunx tubeless list # reads ./tubeless.project.ts
-bunx tubeless inspect import-rows
-bunx tubeless run import-rows -- --source input.json
+bunx tubeless list --project examples/catalog/tubeless.project.ts
+bunx tubeless inspect --project examples/catalog/tubeless.project.ts import-rows
+bunx tubeless run --project examples/catalog/tubeless.project.ts import-rows -- --source ../rows.txt
 ```
 
-The CLI loads TypeScript modules with Bun. Pass application flags after `--`.
-Record runs with `--store` or save a portable trace with `--trace`, then inspect
-them with `tubeless history` or the [local studio](./docs/studio.md).
+`import-rows` reads a newline-delimited file (cwd is the catalog directory).
+In your app, add `tubeless.project.ts` and omit `--project`. Pass application
+flags after `--`. Record runs with `--store` or `--trace`, then inspect them with
+`tubeless history` or the [local studio](./docs/studio.md).
 
 ## Find your route
 

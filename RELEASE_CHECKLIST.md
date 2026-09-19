@@ -40,7 +40,7 @@ The studio is a local process, not an authenticated network service.
 - [x] Explain why the project is called Tubeless, what problem it solves,
       its maturity, and how it compares with task runners and workflow
       engines (plan 002).
-- [ ] Make the README/CLI/getting-started on-ramp work from a clone and a
+- [x] Make the README/CLI/getting-started on-ramp work from a clone and a
       fresh app (plan 003).
 - [x] Make examples copy-paste teachers, not compile probes (plan 004).
 - [x] Add issue templates and CONTRIBUTING prerequisites (plan 004).

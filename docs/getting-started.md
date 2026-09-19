@@ -34,6 +34,24 @@ on `PATH` even when npm or `npx` installs the package.
 
 Supported operating systems are Linux and macOS. Windows is untested.
 
+## Try the CLI
+
+From a Tubeless checkout, list and run a registered catalog command:
+
+```sh
+bunx tubeless list --project examples/catalog/tubeless.project.ts
+bunx tubeless inspect --project examples/catalog/tubeless.project.ts import-rows
+bunx tubeless run --project examples/catalog/tubeless.project.ts import-rows -- --source ../rows.txt
+```
+
+`import-rows` reads a newline-delimited file; the catalog sets cwd to its
+directory, so `--source ../rows.txt` resolves to [`examples/rows.txt`](../examples/rows.txt).
+
+In your app, add a `tubeless.project.ts` that registers one
+`definePipelineCommand` module, then run `bunx tubeless list` with no
+`--project`. See [`examples/catalog/tubeless.project.ts`](../examples/catalog/tubeless.project.ts),
+[`examples/cli-job.ts`](../examples/cli-job.ts), and [the CLI](./cli.md).
+
 ## 1. Define domain options
 
 Start with the data your pipeline needs. Here, the caller supplies an array of

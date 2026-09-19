@@ -20,8 +20,9 @@ tubeless validate --json pipelines.yaml
 ```
 
 In this repository, use `make validate FILE=examples/declarative/peloton.yaml`,
-or build once and run `bun dist/workbench/workbench-bin.js validate --json
-examples/declarative/peloton.yaml`. Exit code 0 means valid structure; 4 means a
+or `bunx tubeless validate --json examples/declarative/peloton.yaml`.
+From a Tubeless checkout, `bun run tubeless --` runs the local build.
+Exit code 0 means valid structure; 4 means a
 file, parse, or document validation failure; 1 means invalid command usage.
 JSON output includes `ok`, the file path, pipeline IDs and metadata on success,
 or a diagnostic with a document path when available.
@@ -77,13 +78,12 @@ metadata does not override labels, IDs, options, or run timestamps.
 
 ## Try the example
 
-From the repository root, build once and use the registered examples:
+From the repository root, use the registered examples:
 
 ```sh
-bun run build
-bun dist/workbench/workbench-bin.js plan --project examples/catalog/tubeless.project.ts yaml-import --target normalize --explain
-bun dist/workbench/workbench-bin.js run --project examples/catalog/tubeless.project.ts yaml-import -- --lines " Alpha , Beta , "
-bun dist/workbench/workbench-bin.js ui examples/catalog/tubeless.project.ts
+bunx tubeless plan --project examples/catalog/tubeless.project.ts yaml-import --target normalize --explain
+bunx tubeless run --project examples/catalog/tubeless.project.ts yaml-import -- --lines " Alpha , Beta , "
+bunx tubeless ui examples/catalog/tubeless.project.ts
 ```
 
 Studio lists **Import rows from YAML** and **Preview rows from YAML**. Their
