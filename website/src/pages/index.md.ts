@@ -16,6 +16,8 @@ Use it for data imports, releases that depend on validation checks, and CLI
 programs that need progress reporting. Pipelines run in your process. Crash
 recovery and distributed scheduling require an external execution system.
 
+- [Comparison](${absUrl("docs/comparison.md")}): In-process typed pipelines, not a scheduler. Pair with a host engine for crash recovery.
+
 ## Start here
 
 If you use a coding agent, [install the Tubeless skills](${absUrl("docs/agent-skills.md")})
