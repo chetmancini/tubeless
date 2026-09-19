@@ -59,6 +59,7 @@ assert.match(homepage, /<title>Tubeless — Typed pipelines for Node\.js<\/title
 assert.match(homepage, /name="application-name" content="Tubeless"/);
 assert.match(homepage, /property="og:site_name" content="Tubeless"/);
 assert.ok(existsSync(join(root, "og.jpg")), "Social card JPEG must be in the built artifact");
+assert.ok(existsSync(join(root, "apple-touch-icon.png")), "Apple touch icon PNG must be in the built artifact");
 assert.match(homepage, /property="og:image" content="https:\/\/tubeless.io\/og.jpg"/);
 assert.match(homepage, /property="og:image:type" content="image\/jpeg"/);
 assert.match(homepage, /property="og:image:width" content="1200"/);
@@ -67,6 +68,8 @@ assert.match(homepage, /name="twitter:card" content="summary_large_image"/);
 assert.match(homepage, /name="twitter:title" content="Tubeless — Typed pipelines for Node.js"/);
 assert.match(homepage, /name="twitter:description" content="Tubeless is a TypeScript library/);
 assert.match(homepage, /name="twitter:image" content="https:\/\/tubeless.io\/og.jpg"/);
+assert.match(homepage, /rel="icon" href="\/apple-touch-icon.png" type="image\/png" sizes="180x180"/);
+assert.match(homepage, /rel="apple-touch-icon" href="\/apple-touch-icon.png" sizes="180x180"/);
 assert.match(homepage, /<link rel="alternate" type="text\/markdown" href="\/index.md"/);
 assert.match(read("index.md"), /^# Tubeless\n/);
 assert.match(read("index.md"), /## When to use Tubeless\n/);
@@ -140,6 +143,7 @@ for (const path of humanPages) {
   assert.match(html, /<link rel="sitemap" type="application\/xml" href="\/sitemap.xml"/);
   assert.match(html, /name="twitter:card" content="summary_large_image"/);
   assert.match(html, /name="twitter:image" content="https:\/\/tubeless.io\/og.jpg"/);
+  assert.match(html, /rel="apple-touch-icon" href="\/apple-touch-icon.png" sizes="180x180"/);
   const markdown = path === "start" ? "/docs/getting-started.md" : path ? `/${path}.md` : "/index.md";
   assert.ok(html.includes(`<link rel="alternate" type="text/markdown" href="${markdown}"`), `${path || "homepage"} must advertise Markdown`);
 }
