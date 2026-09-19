@@ -1,0 +1,32 @@
+name: Bug
+description: Something is broken or unexpected
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Steps to reproduce and what you observed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What you expected instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: npm version, git tag, or commit SHA.
+    validations:
+      required: true
+  - type: textarea
+    id: make-check
+    attributes:
+      label: make check result
+      description: If you have a clone, paste the relevant `make check` output.
+    validations:
+      required: false

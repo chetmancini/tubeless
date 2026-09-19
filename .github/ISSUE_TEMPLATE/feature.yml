@@ -1,0 +1,29 @@
+name: Feature
+description: Propose a change or new capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-shape
+    attributes:
+      label: Proposed shape
+      description: Sketch the API, CLI, or docs change you have in mind.
+    validations:
+      required: true
+  - type: dropdown
+    id: public-api
+    attributes:
+      label: Does this change the public API?
+      description: Large or public-API changes should open an issue first (see CONTRIBUTING.md).
+      options:
+        - "No"
+        - "Yes"
+        - "Unsure"
+    validations:
+      required: true

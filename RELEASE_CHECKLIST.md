@@ -42,8 +42,8 @@ The studio is a local process, not an authenticated network service.
       engines (plan 002).
 - [ ] Make the README/CLI/getting-started on-ramp work from a clone and a
       fresh app (plan 003).
-- [ ] Make examples copy-paste teachers, not compile probes (plan 004).
-- [ ] Add issue templates and CONTRIBUTING prerequisites (plan 004).
+- [x] Make examples copy-paste teachers, not compile probes (plan 004).
+- [x] Add issue templates and CONTRIBUTING prerequisites (plan 004).
 - [ ] Add API compatibility review so `docs/api-report.json` diffs are
       explicit on pull requests.
 - [ ] Add dependency and workflow maintenance (Dependabot or Renovate) for
