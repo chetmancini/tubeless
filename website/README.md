@@ -47,7 +47,7 @@ The build fails when only one variable is set.
 | Developer resource hub | `src/pages/developers.astro`, `src/pages/developers.md.ts` |
 | Homepage Markdown overview | `src/pages/index.md.ts`; advertised in the homepage head and `llms.txt` |
 | Visual system | `src/styles/global.css` |
-| Logo and social card | `../docs/assets/logo.svg` and `../docs/assets/social.svg`; rasterize social to `public/og.png` |
+| Logo and social card | `../docs/assets/logo.svg` and `../docs/assets/social.svg`; rasterize the social SVG to `public/og.jpg` at 1200×630 JPEG. `public/og.png` is a historical URL only |
 
 Refresh captured CLI tapes by running the workbench against `examples/` and
 replacing the strings in `src/data/tapes.ts`.

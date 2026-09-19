@@ -1,3 +1,20 @@
+# Preview crawlers share one allow-list so a later * restriction cannot hide cards.
+User-agent: Twitterbot
+User-agent: facebookexternalhit
+User-agent: Facebot
+User-agent: meta-externalagent
+User-agent: LinkedInBot
+User-agent: Slackbot
+User-agent: Slackbot-LinkExpanding
+User-agent: Discordbot
+User-agent: WhatsApp
+User-agent: TelegramBot
+User-agent: Applebot
+User-agent: Pinterest
+User-agent: Pinterestbot
+User-agent: redditbot
+Allow: /
+
 User-agent: *
 Allow: /
 

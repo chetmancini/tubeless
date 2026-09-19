@@ -58,6 +58,15 @@ const homepage = read("index.html");
 assert.match(homepage, /<title>Tubeless — Typed pipelines for Node\.js<\/title>/);
 assert.match(homepage, /name="application-name" content="Tubeless"/);
 assert.match(homepage, /property="og:site_name" content="Tubeless"/);
+assert.ok(existsSync(join(root, "og.jpg")), "Social card JPEG must be in the built artifact");
+assert.match(homepage, /property="og:image" content="https:\/\/tubeless.io\/og.jpg"/);
+assert.match(homepage, /property="og:image:type" content="image\/jpeg"/);
+assert.match(homepage, /property="og:image:width" content="1200"/);
+assert.match(homepage, /property="og:image:height" content="630"/);
+assert.match(homepage, /name="twitter:card" content="summary_large_image"/);
+assert.match(homepage, /name="twitter:title" content="Tubeless — Typed pipelines for Node.js"/);
+assert.match(homepage, /name="twitter:description" content="Tubeless is a TypeScript library/);
+assert.match(homepage, /name="twitter:image" content="https:\/\/tubeless.io\/og.jpg"/);
 assert.match(homepage, /<link rel="alternate" type="text\/markdown" href="\/index.md"/);
 assert.match(read("index.md"), /^# Tubeless\n/);
 assert.match(read("index.md"), /## When to use Tubeless\n/);
@@ -101,12 +110,36 @@ const humanPages = readdirSync(root, { recursive: true })
   .map((file) => file === "index.html" ? "" : file.replace(/\/index\.html$/, ""));
 assert.deepEqual(locations.sort(), humanPages.map((path) => `https://tubeless.io/${path}`).sort());
 assert.equal(new Set(locations).size, locations.length);
-assert.match(read("robots.txt"), /Sitemap: https:\/\/tubeless.io\/sitemap.xml/);
+const robots = read("robots.txt");
+const socialCrawlers = [
+  "Twitterbot",
+  "facebookexternalhit",
+  "Facebot",
+  "meta-externalagent",
+  "LinkedInBot",
+  "Slackbot",
+  "Slackbot-LinkExpanding",
+  "Discordbot",
+  "WhatsApp",
+  "TelegramBot",
+  "Applebot",
+  "Pinterest",
+  "Pinterestbot",
+  "redditbot",
+];
+const socialGroup = robots.split(/\nUser-agent: \*\n/)[0];
+for (const agent of socialCrawlers) {
+  assert.match(socialGroup, new RegExp(`^User-agent: ${agent}$`, "m"), `${agent} must be in the social preview allow-list`);
+}
+assert.match(socialGroup, /^Allow: \/$/m);
+assert.match(robots, /Sitemap: https:\/\/tubeless.io\/sitemap.xml/);
 
 for (const path of humanPages) {
   const html = read(path ? `${path}/index.html` : "index.html");
   assert.match(html, /<link rel="describedby" href="\/llms.txt"/);
   assert.match(html, /<link rel="sitemap" type="application\/xml" href="\/sitemap.xml"/);
+  assert.match(html, /name="twitter:card" content="summary_large_image"/);
+  assert.match(html, /name="twitter:image" content="https:\/\/tubeless.io\/og.jpg"/);
   const markdown = path === "start" ? "/docs/getting-started.md" : path ? `/${path}.md` : "/index.md";
   assert.ok(html.includes(`<link rel="alternate" type="text/markdown" href="${markdown}"`), `${path || "homepage"} must advertise Markdown`);
 }
