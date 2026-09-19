@@ -11,6 +11,7 @@
   <a href="https://www.npmjs.com/package/tubeless"><img alt="npm" src="https://img.shields.io/npm/v/tubeless?style=flat-square&labelColor=121212&color=c4a046"></a>
   <a href="https://github.com/chetmancini/tubeless/actions/workflows/check.yml"><img alt="check" src="https://img.shields.io/github/actions/workflow/status/chetmancini/tubeless/check.yml?style=flat-square&label=check&labelColor=121212&color=2f6f4a"></a>
   <a href="./LICENSE"><img alt="MIT" src="https://img.shields.io/npm/l/tubeless?style=flat-square&labelColor=121212&color=c4c0b4"></a>
+  <a href="./docs/getting-started.md#install"><img alt="Node" src="https://img.shields.io/node/v/tubeless?style=flat-square&labelColor=121212&color=c4c0b4"></a> <a href="https://www.npmjs.com/package/tubeless"><img alt="provenance" src="https://img.shields.io/badge/provenance-npm-2f6f4a?style=flat-square&labelColor=121212"></a>
 </p>
 
 Tubeless is a TypeScript toolkit for work that unfolds in steps. It fits data

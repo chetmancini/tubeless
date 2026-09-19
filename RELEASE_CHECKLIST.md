@@ -46,6 +46,6 @@ The studio is a local process, not an authenticated network service.
 - [x] Add issue templates and CONTRIBUTING prerequisites (plan 004).
 - [x] Add API compatibility review so `docs/api-report.json` diffs are
       explicit on pull requests.
-- [ ] Add dependency and workflow maintenance (Dependabot or Renovate) for
+- [x] Add dependency and workflow maintenance (Dependabot or Renovate) for
       SHA-pinned Actions and pinned devDependencies.
-- [ ] Add npm provenance and runtime badges now that CI and npm exist.
+- [x] Add npm provenance and runtime badges now that CI and npm exist.

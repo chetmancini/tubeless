@@ -88,11 +88,9 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
             <div>
               <dt>Version</dt>
               <dd>
-                {PACKAGE.npm ? (
-                  <a href={PACKAGE.npm} rel="noreferrer">{PACKAGE.version}</a>
-                ) : (
-                  PACKAGE.version
-                )}
+                <a href={`${GITHUB_REPO}/releases/tag/v${PACKAGE.version}`} rel="noreferrer">
+                  {PACKAGE.version}
+                </a>
               </dd>
             </div>
             <div>

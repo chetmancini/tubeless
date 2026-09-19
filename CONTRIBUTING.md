@@ -83,6 +83,9 @@ Prereleases use a semver prerelease version (`0.2.0-rc.1` / tag `v0.2.0-rc.1`).
 GitHub marks them as prerelease; npm publishes to the `next` dist-tag so
 `latest` does not move.
 
+Dependabot opens weekly grouped PRs (label `dependencies`) for GitHub Actions
+and the root and `website/` Bun lockfiles.
+
 Optional pull request labels for the generated "What's Changed" section:
 `breaking`, `enhancement`, `bug`, `documentation`, `dependencies`, and
 `ignore-for-release`.
