@@ -44,7 +44,7 @@ The studio is a local process, not an authenticated network service.
       fresh app (plan 003).
 - [x] Make examples copy-paste teachers, not compile probes (plan 004).
 - [x] Add issue templates and CONTRIBUTING prerequisites (plan 004).
-- [ ] Add API compatibility review so `docs/api-report.json` diffs are
+- [x] Add API compatibility review so `docs/api-report.json` diffs are
       explicit on pull requests.
 - [ ] Add dependency and workflow maintenance (Dependabot or Renovate) for
       SHA-pinned Actions and pinned devDependencies.

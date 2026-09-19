@@ -32,5 +32,11 @@ jobs:
         run: bun ci
       - name: Check
         run: make check
+      - name: Summarize public API report diff
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          node scripts/summarize-api-report-diff.mjs --git-base "origin/${{ github.base_ref }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Confirm Node used for pack smoke
         run: node --version

@@ -27,7 +27,9 @@ Before changing usage or public behavior, read
 [`tubeless` skill](./skills/tubeless/SKILL.md). Do not edit
 `docs/api-reference.md` or `docs/api-report.json` by hand; after an intentional
 public-surface change, run `bun run api:generate`. Keep examples on public
-package imports.
+package imports. Pull requests that change the report get a job summary of
+added and removed entrypoints and symbols; `api:check` only proves the report
+was regenerated.
 
 ### Website
 
