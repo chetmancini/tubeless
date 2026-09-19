@@ -10,7 +10,7 @@ adapt in your project.
 | Document                                                    | Use it for                                            |
 | ----------------------------------------------------------- | ----------------------------------------------------- |
 | [Website](https://tubeless.io/)                             | Guides for developers and coding agents               |
-| [Package README](../README.md)                              | What it is, a first example, and a pattern table      |
+| [Package README](../README.md)                              | What it is, a first example, then the recipe index    |
 | [Getting started](./getting-started.md)                     | Building, running, and testing a first pipeline       |
 | [Recipe index](./recipes.md)                                | Finding a working example for your task               |
 | [Project manifest](../examples/catalog/tubeless.project.ts) | Registering commands and choosing a file layout       |

@@ -20,17 +20,12 @@ parent step's dependency outputs and context, and returns the inputs the child
 needs. Add `mapResult` if the parent needs a different result shape.
 
 ```ts
-const { fromPipeline } = createSteps<ParentOptions>();
+const { fromPipeline } = createSteps<ImportOptions>();
 
-const seedIndexStage = fromPipeline("seed-index", {
-  pipeline: IndexSeedPipeline,
-  dependsOn: [seedCatalogStage],
-  description: "Seed a precomputed search index",
-  mapOptions: (_inputs, context) => ({
-    indexDir: context.options.indexDir,
-    syncSchema: false,
-  }),
-  mapResult: () => ({ ran: true, stageId: "seed-index" }),
+const normalizedImport = fromPipeline("normalized-import", {
+  pipeline: NormalizePipeline,
+  mapOptions: (_inputs, context) => ({ rows: context.options.lines }),
+  mapResult: (rows) => ({ count: rows.length, rows }),
 });
 ```
 

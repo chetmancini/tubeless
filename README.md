@@ -15,7 +15,8 @@
 
 Tubeless is a TypeScript toolkit for work that unfolds in steps. It fits data
 pipelines, multi-step application workflows, and AI workloads—anywhere you want
-explicit dependencies, typed handoffs, and inspectable execution.
+explicit dependencies, typed handoffs, and inspectable execution. The name is the
+cycling kind of tubeless: no inner tube, and no extra runtime to keep the work rolling.
 
 Pipelines run in your process with no runtime dependencies. You can preview
 execution, select a target and its dependencies, compose child pipelines, and
@@ -36,8 +37,7 @@ Tubeless is pre-1.0, so the public API may change between releases.
 
 ## Quick start
 
-This pipeline loads and normalizes strings. `step` creates a step; dependencies give typed
-inputs. Adding `skip` makes it skippable and widens its output to include `undefined`.
+This pipeline loads and normalizes strings. `step` creates a step; dependencies give typed inputs.
 
 ```ts
 import { createSteps, definePipeline } from "tubeless";
@@ -94,8 +94,7 @@ them with `tubeless history` or the [local studio](./docs/studio.md).
   [dry runs and write gates](./examples/publish-with-gates.ts) to a publishing job.
 - Build a larger workflow with [child pipelines](./examples/child-pipeline.ts)
   and [fan-out](./examples/fan-out-progress.ts).
-- Take the [peloton example](./examples/peloton.ts) for a spin: a road-race weekend
-  workflow that brings several pipeline features together.
+- Optional: the [peloton example](./examples/peloton.ts) is a cycling-themed kitchen sink for the live TUI.
 
 The [recipe index](./docs/recipes.md) covers validation, retries, tracing, testing,
 and more. For help authoring pipelines with a coding agent, install the

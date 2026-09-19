@@ -95,8 +95,7 @@ target and rejects other IDs. Use explicit `targets` or `finalize` when you need
 narrower types.
 
 Neither default limits an unfiltered run: it still selects all declared steps.
-Set `targets: []` to expose no public goals. Existing definitions that omitted
-`targets` now expose their last step, including in CLI `--target` discovery.
+Set `targets: []` to expose no public goals.
 An explicit finalizer retains its own result and can use `requireOutputs`.
 
 Pipeline definitions can declare different downstream goals with step references:
