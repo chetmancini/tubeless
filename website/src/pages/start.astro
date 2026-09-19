@@ -73,6 +73,11 @@ import { href } from "../lib/paths";
             running steps. For CLI scripts, <code>definePipelineCommand</code> supplies help,
             selection flags, and dry-run controls.
           </p>
+          <p class="lede">
+            The CLI recipe uses <code>load-rows</code> / <code>normalize-rows</code>
+            (<code>examples/cli-job.ts</code>), while the sample above is the minimal library form
+            (<code>load</code> / <code>normalize</code>).
+          </p>
         </div>
         <Terminal tape={runTape} />
       </div>

@@ -13,26 +13,30 @@ export type Tape = {
 export const planTape: Tape = {
   id: "plan",
   title: "plan",
-  command: "bunx tubeless plan ./examples/typed-import.ts --target normalize-rows --explain",
+  command: "bunx tubeless plan ./examples/minimal-pipeline.ts --target normalize --explain",
   lines: [
-    { text: "Pipeline import: plan (ok=true, dryRun=false, steps=2)", kind: "dim" },
+    { text: "Pipeline minimal: plan (ok=true, dryRun=false, steps=2)", kind: "dim" },
     {
-      text: "  - load-rows: run (required by normalize-rows for target normalize-rows)",
+      text: "  - load: run (required by normalize for target normalize) - Read rows supplied by the caller.",
       kind: "run",
     },
-    { text: "  - Normalize Rows [normalize-rows]: run (target normalize-rows)", kind: "ok" },
+    {
+      text: "  - normalize: run (target normalize) - Trim rows and remove empty entries.",
+      kind: "ok",
+    },
   ],
 };
 
 export const graphTape: Tape = {
   id: "graph",
   title: "graph",
-  command: "bunx tubeless graph ./examples/typed-import.ts --markdown --direction LR",
+  command: "bunx tubeless graph ./examples/minimal-pipeline.ts --markdown --direction LR",
   lines: [
     { text: "```mermaid" },
     { text: "flowchart LR" },
-    { text: '  step0["load-rows"]' },
-    { text: '  step1["Normalize Rows"]' },
+    { text: '  step0["load"]' },
+    { text: '  step1["normalize"]' },
+    { text: "" },
     { text: "  step0 --> step1" },
     { text: "```" },
   ],
