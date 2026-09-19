@@ -161,7 +161,10 @@ progress presentation, inputs, run controls, and handler code are excluded.
 Changing the implementation version changes the combined definition ID without
 changing the structural fingerprint. Child structural identities propagate into
 the parent's fingerprint; child implementation identities propagate only into its
-combined ID. Dynamic policies are represented by their presence, not their code
+combined ID. The combined ID binds every recorded child identity field, including
+its implementation version; changing that metadata while keeping the child's ID
+unchanged invalidates the parent snapshot. Child internals still require the child's
+own snapshot to inspect. Dynamic policies are represented by their presence, not their code
 or runtime return values. Remote handler versions belong in the application-supplied
 implementation version. External pipeline implementations without definition metadata
 contribute only their declared child IDs and composition metadata.

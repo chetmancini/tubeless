@@ -36,7 +36,8 @@ import { definePipelineProject } from "tubeless/project";
 // That example supplies implementationVersion to distinguish handler releases from
 // structural fingerprints. Studio groups and compares the recorded definition versions;
 // keep command and pipeline IDs stable across releases. Complete recorded snapshots
-// are checked against their hashes when written to SQLite or read from either store.
+// (including child implementation identities) are checked against their hashes
+// when written to SQLite or read from either store.
 // Optional Node helpers live in tubeless/node; ../node-artifacts.ts demonstrates
 // cwd-relative paths and atomic JSON writes in a step marked dryRun: "skip".
 // writeJson rejects values with no JSON representation before touching disk.

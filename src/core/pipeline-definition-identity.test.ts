@@ -1,3 +1,4 @@
+import { createDefinitionIdentity } from "./pipeline-definition-identity.js";
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { createSteps, definePipeline, requireOutputs } from "./pipeline.js";
@@ -196,6 +197,34 @@ describe("compiled definition identity", () => {
       fanout(2).identity.structuralFingerprint
     );
   });
+
+  it.each([undefined, "child-release"])(
+    "binds the complete child identity when its implementation version is %s",
+    (version) => {
+      const { fromPipeline } = createSteps();
+      const child = fromPipeline("child", {
+        pipeline: pipeline({ version }),
+        mapOptions: () => ({}),
+      });
+      const parent = definePipeline({ id: "parent", steps: [child] }).definition;
+      const edited = {
+        ...parent,
+        steps: parent.steps.map((step) => ({
+          ...step,
+          nestedPipeline: {
+            ...step.nestedPipeline!,
+            identity: {
+              ...step.nestedPipeline!.identity!,
+              implementationVersion: "different-version",
+            },
+          },
+        })),
+      };
+      const identity = createDefinitionIdentity(edited, parent.identity.implementationVersion);
+      expect(identity.structuralFingerprint).toBe(parent.identity.structuralFingerprint);
+      expect(identity.definitionId).not.toBe(parent.identity.definitionId);
+    }
+  );
 
   it("rejects unbounded or blank implementation versions", () => {
     for (const version of ["", " ", "x".repeat(257)])

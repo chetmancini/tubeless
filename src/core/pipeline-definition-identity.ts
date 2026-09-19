@@ -142,7 +142,19 @@ export function createDefinitionIdentity(
       version: 1,
       structuralFingerprint,
       implementationVersion,
-      children: input.steps.map((step) => step.nestedPipeline?.identity?.definitionId ?? null),
+      children: input.steps.map((step) => {
+        const child = step.nestedPipeline?.identity;
+        if (!child) return null;
+        // Bind every recorded child identity field, not just its opaque definition ID.
+        return {
+          version: child.version,
+          structuralFingerprint: child.structuralFingerprint,
+          ...(child.implementationVersion !== undefined
+            ? { implementationVersion: child.implementationVersion }
+            : {}),
+          definitionId: child.definitionId,
+        };
+      }),
     }),
   };
 }

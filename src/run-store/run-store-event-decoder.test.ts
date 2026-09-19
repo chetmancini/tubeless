@@ -102,6 +102,25 @@ const mutations = [
       event.payload.definitionIdentity = { ...event.payload.definitionSnapshot!.identity };
     },
   },
+  ...[0, 1].flatMap((index) => [
+    {
+      name: `${index === 0 ? "single" : "fan-out"} child implementation version`,
+      error: "definition ID",
+      mutate: (event: ReturnType<typeof started>) => {
+        event.payload.definitionSnapshot!.steps[
+          index
+        ]!.nestedPipeline!.identity!.implementationVersion = "forged";
+      },
+    },
+    {
+      name: `${index === 0 ? "single" : "fan-out"} child implementation version removal`,
+      error: "definition ID",
+      mutate: (event: ReturnType<typeof started>) => {
+        delete event.payload.definitionSnapshot!.steps[index]!.nestedPipeline!.identity!
+          .implementationVersion;
+      },
+    },
+  ]),
   {
     name: "child definition ID",
     error: "definition ID",
@@ -147,33 +166,36 @@ describe("persisted definition verification", () => {
     }
   );
 
-  it("rejects inconsistent snapshots already present in an imported SQLite database", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "tubeless-definition-validation-"));
-    directories.push(directory);
-    const filename = join(directory, "runs.sqlite");
-    const event = started();
-    const writer = await openSqlitePipelineRunStore(filename);
-    await writer.export(event);
-    await writer.close();
-    event.payload.definitionSnapshot!.steps[0]!.dryRun = "skip";
-    const database = new DatabaseSync(filename);
-    try {
-      // Simulate an imported artifact; application writes cannot bypass the trigger.
-      database.exec("DROP TRIGGER pipeline_run_events_no_update");
-      database
-        .prepare("UPDATE pipeline_run_events SET payload_json = ?")
-        .run(JSON.stringify(event.payload));
-    } finally {
-      database.close();
+  it.each(mutations)(
+    "rejects altered $name already present in an imported SQLite database",
+    async ({ mutate, error }) => {
+      const directory = await mkdtemp(join(tmpdir(), "tubeless-definition-validation-"));
+      directories.push(directory);
+      const filename = join(directory, "runs.sqlite");
+      const event = started();
+      const writer = await openSqlitePipelineRunStore(filename);
+      await writer.export(event);
+      await writer.close();
+      mutate(event);
+      const database = new DatabaseSync(filename);
+      try {
+        // Simulate an imported artifact; application writes cannot bypass the trigger.
+        database.exec("DROP TRIGGER pipeline_run_events_no_update");
+        database
+          .prepare("UPDATE pipeline_run_events SET payload_json = ?")
+          .run(JSON.stringify(event.payload));
+      } finally {
+        database.close();
+      }
+      const reader = await openSqlitePipelineRunStore(filename, {
+        initialize: false,
+        readOnly: true,
+      });
+      try {
+        await expect(reader.listEvents()).rejects.toThrow(error);
+      } finally {
+        await reader.close();
+      }
     }
-    const reader = await openSqlitePipelineRunStore(filename, {
-      initialize: false,
-      readOnly: true,
-    });
-    try {
-      await expect(reader.listEvents()).rejects.toThrow("structural fingerprint");
-    } finally {
-      await reader.close();
-    }
-  });
+  );
 });
