@@ -18,7 +18,7 @@ const { title, description, markdown, structuredData, noindex } = Astro.props;
 const pageTitle = title === "Tubeless" ? "Tubeless — Typed pipelines for Node.js" : `${title} · Tubeless`;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const socialImage = absUrl("og.jpg");
-const socialImageAlt = "Tubeless: typed pipelines for Node.js";
+const socialImageAlt = "Tubeless: a typed pipeline graph from load through validate and normalize to publish and deploy";
 ---
 
 <!doctype html>
