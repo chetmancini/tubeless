@@ -93,6 +93,7 @@ export class PipelineRunState<TResult> {
   readonly #outputs = new Map<string, unknown>();
   readonly #reports: PipelineStepReport[] = [];
   readonly #reportsByStepId = new Map<string, PipelineStepReport>();
+  #definitionIdentity: PipelineRun["definitionIdentity"];
   #finalizationAttempted = false;
   #finalized = false;
   #nextAttemptSequence = 0;
@@ -123,6 +124,7 @@ export class PipelineRunState<TResult> {
   start(plan: PipelinePlan, targetIds: readonly string[]): void {
     this.#expectPhase("created");
     this.#phase = "running";
+    this.#definitionIdentity = plan.definition?.identity;
     this.lifecycle.pipelineStart(plan, targetIds);
   }
 
@@ -292,6 +294,7 @@ export class PipelineRunState<TResult> {
       value: this.#value,
       version: RUN_MODEL_VERSION,
     };
+    if (this.#definitionIdentity) result.definitionIdentity = this.#definitionIdentity;
     if (this.identity.correlationId !== undefined) {
       result.correlationId = this.identity.correlationId;
     }

@@ -1,3 +1,16 @@
+import type {
+  PipelineDefinitionIdentityContract,
+  PipelineDefinitionSnapshotContract,
+} from "../tracing/tracing-schema.js";
+
+/** Versioned graph identity, separate from the optional handler implementation version. */
+export type PipelineDefinitionIdentity = Readonly<PipelineDefinitionIdentityContract>;
+/** Serializable compiled semantics; no handlers, inputs, or application imports. */
+type ReadonlyDefinition<T> = T extends object
+  ? { readonly [K in keyof T]: ReadonlyDefinition<T[K]> }
+  : T;
+export type PipelineDefinitionSnapshot = ReadonlyDefinition<PipelineDefinitionSnapshotContract>;
+
 import type { RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { PIPELINE_ERROR_CODES as PIPELINE_ERROR_CODE_VALUES } from "../tracing/tracing-schema.js";
 import type {
@@ -294,6 +307,7 @@ export type PipelineRunStatus = "cancelled" | "completed" | "failed";
 
 /** Versioned public record returned for one pipeline execution. */
 export interface PipelineRun<TResult = unknown> {
+  definitionIdentity?: PipelineDefinitionIdentity;
   /** Caller-owned identifier shared by related executions, when supplied. */
   correlationId?: string;
   pipelineId: string;
@@ -411,6 +425,8 @@ export interface PipelinePlanStep {
   nestedPipeline?: {
     /** One child execution or one child execution per runtime item. */
     mode: "single" | "for-each";
+    identity?: PipelineDefinitionIdentity;
+    concurrency?: number | "dynamic";
     pipelineId: string;
     /** All declared child step ids; runtime selection may execute only a subset. */
     stepIds: readonly string[];
@@ -431,6 +447,7 @@ export interface PipelinePlanStep {
 }
 
 export interface PipelinePlan {
+  definition?: PipelineDefinitionSnapshot;
   dryRun: boolean;
   errors: PipelineError[];
   ok: boolean;
@@ -456,6 +473,8 @@ export interface Pipeline<
   TTargetId extends string = TStepId,
 > {
   readonly id: string;
+  /** Compiled definition metadata. Absent only on externally implemented pipelines. */
+  readonly definition?: PipelineDefinitionSnapshot;
   /** Stable definition-order step ids for discovery surfaces such as CLI help. */
   readonly stepIds: readonly TStepId[];
   /** Stable declared goal ids that support dependency-aware target execution. */

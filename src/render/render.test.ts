@@ -75,6 +75,7 @@ describe("pipeline rendering", () => {
     const plan = parent.plan({});
 
     expect(plan.steps[0]?.nestedPipeline).toEqual({
+      identity: child.definition.identity,
       mode: "single",
       pipelineId: "child",
       stepIds: ["read", "write"],

@@ -1,6 +1,8 @@
 import {
   RUN_MODEL_VERSION,
   type PipelineRunStatus,
+  type PipelineDefinitionIdentity,
+  type PipelineDefinitionSnapshot,
   type PipelineStepLifecycleStatus,
   type PipelineStepProgressDetail,
 } from "../core/pipeline.js";
@@ -95,6 +97,7 @@ export interface StoredPipelineStep {
 }
 
 export interface StoredPipelineRun {
+  definitionIdentity?: PipelineDefinitionIdentity;
   correlationId?: string;
   dryRun: boolean;
   durationMs?: number;
@@ -127,6 +130,8 @@ export interface StoredPipelineDefinitionStep {
 }
 
 export interface StoredPipelineDefinition {
+  identity?: PipelineDefinitionIdentity;
+  snapshot?: PipelineDefinitionSnapshot;
   activeRuns: number;
   firstSeenAtMs: number;
   lastSeenAtMs: number;
@@ -179,6 +184,7 @@ interface MutableRunProjection {
 }
 
 interface MutablePipelineProjection {
+  snapshot?: PipelineDefinitionSnapshot;
   definitionRunId: string | undefined;
   definitionRunStartedAtMs: number;
   definitionRunStartedEventId: number;
@@ -310,6 +316,9 @@ function materializeRun(projection: MutableRunProjection): StoredPipelineRun {
     steps: stepOrder.map((stepId) => structuredClone(steps.get(stepId)!)),
     version: RUN_MODEL_VERSION,
   };
+  if (started.name === "pipeline.started" && started.payload.definitionIdentity) {
+    run.definitionIdentity = { ...started.payload.definitionIdentity };
+  }
   if (first.correlationId !== undefined) run.correlationId = first.correlationId;
   if (completed?.durationMs !== undefined) run.durationMs = completed.durationMs;
   if (completed?.error) run.error = completed.error;
@@ -384,8 +393,11 @@ function applyPipelineEvent(
   projection: MutablePipelineProjection,
   event: StoredPipelineEvent
 ): void {
-  projection.lastSeenAtMs = event.timestampMs;
+  projection.firstSeenAtMs = Math.min(projection.firstSeenAtMs, event.timestampMs);
+  projection.lastSeenAtMs = Math.max(projection.lastSeenAtMs, event.timestampMs);
   if (event.name === "pipeline.started") {
+    if (event.payload.definitionSnapshot)
+      projection.snapshot = structuredClone(event.payload.definitionSnapshot);
     projection.runStartedAtMs.set(event.runId, event.timestampMs);
     projection.runStartedEventIds.set(event.runId, event.id);
     projection.runTargetIds.set(event.runId, [...event.payload.targetIds]);
@@ -430,9 +442,13 @@ export function createPipelineRunProjector(
     if (run) applyRunEvent(run, event);
     else runs.set(event.runId, createRunProjection(event, retainLogs));
 
-    const pipeline = pipelines.get(event.pipelineId);
+    const started = runs.get(event.runId)!.started;
+    const identity =
+      started.name === "pipeline.started" ? started.payload.definitionIdentity : undefined;
+    const key = JSON.stringify([event.pipelineId, identity?.definitionId ?? null]);
+    const pipeline = pipelines.get(key);
     if (pipeline) applyPipelineEvent(pipeline, event);
-    else pipelines.set(event.pipelineId, createPipelineProjection(event));
+    else pipelines.set(key, createPipelineProjection(event));
   }
 
   function materialize(generatedAtMs: number): PipelineRunStoreSnapshot {
@@ -441,21 +457,26 @@ export function createPipelineRunProjector(
       .sort((left, right) => right.startedAtMs - left.startedAtMs);
     const runsByPipeline = new Map<string, StoredPipelineRun[]>();
     for (const run of projectedRuns) {
-      const pipelineRuns = runsByPipeline.get(run.pipelineId) ?? [];
+      const key = JSON.stringify([run.pipelineId, run.definitionIdentity?.definitionId ?? null]);
+      const pipelineRuns = runsByPipeline.get(key) ?? [];
       pipelineRuns.push(run);
-      runsByPipeline.set(run.pipelineId, pipelineRuns);
+      runsByPipeline.set(key, pipelineRuns);
     }
     const definitions = [...runsByPipeline.entries()]
-      .map(([pipelineId, pipelineRuns]): StoredPipelineDefinition => {
-        const pipeline = pipelines.get(pipelineId)!;
+      .map(([key, pipelineRuns]): StoredPipelineDefinition => {
+        const pipeline = pipelines.get(key)!;
+        const identity = pipelineRuns[0]!.definitionIdentity;
+        const snapshot = pipeline.snapshot;
         return {
           activeRuns: pipelineRuns.filter(({ status }) => status === "running").length,
           firstSeenAtMs: pipeline.firstSeenAtMs,
           lastSeenAtMs: pipeline.lastSeenAtMs,
-          pipelineId,
+          pipelineId: pipelineRuns[0]!.pipelineId,
+          ...(identity ? { identity: { ...identity } } : {}),
+          ...(snapshot ? { snapshot: structuredClone(snapshot) } : {}),
           runCount: pipelineRuns.length,
           steps: [...pipeline.latestSteps.values()].map((step) => structuredClone(step)),
-          targetIds: [...pipeline.targetIds],
+          targetIds: [...(snapshot?.targetIds ?? pipeline.targetIds)],
         };
       })
       .sort((left, right) => right.lastSeenAtMs - left.lastSeenAtMs);

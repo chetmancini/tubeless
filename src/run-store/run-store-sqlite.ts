@@ -1,7 +1,7 @@
 import { lstat, mkdir, realpath, stat } from "node:fs/promises";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
-import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
+import { decodeStoredTraceEvent } from "./run-store-event-decoder.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import type {
   PipelineRunEventQuery,
@@ -71,7 +71,7 @@ type EventRow = readonly [
 ];
 
 function eventRow(event: PipelineTraceEvent): EventRow {
-  const canonical = decodePipelineTraceEvent(event);
+  const canonical = decodeStoredTraceEvent(event);
   return [
     canonical.version,
     canonical.runId,
@@ -302,7 +302,7 @@ function mapRow(row: StoredEventRow): StoredPipelineEvent {
   if (row.item_key) encoded.itemKey = row.item_key;
   if (row.parent_run_id) encoded.parentRunId = row.parent_run_id;
   if (row.step_id) encoded.stepId = row.step_id;
-  return { ...decodePipelineTraceEvent(encoded), id: Number(row.id) };
+  return { ...decodeStoredTraceEvent(encoded), id: Number(row.id) };
 }
 
 /** Options for `openSqlitePipelineRunStore`. */

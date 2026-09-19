@@ -27,6 +27,21 @@ export function validatePipelineDefinition<
     );
   }
 
+  if (
+    definition.implementationVersion !== undefined &&
+    (typeof definition.implementationVersion !== "string" ||
+      definition.implementationVersion.trim().length === 0 ||
+      definition.implementationVersion.length > 256)
+  ) {
+    errors.push(
+      pipelineDiagnostic(
+        "TUBELESS_DEFINITION_IMPLEMENTATION_VERSION_INVALID",
+        "definition",
+        "definition",
+        "Implementation version must be a nonblank string of at most 256 characters"
+      )
+    );
+  }
   const stepIds = steps.map((step) => step.id);
   const duplicateStepIds = duplicateValues(stepIds);
   if (duplicateStepIds.length > 0) {

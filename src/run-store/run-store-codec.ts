@@ -1,3 +1,26 @@
+import {
+  pipelineDefinitionIdentitySchema,
+  pipelineDefinitionSnapshotSchema,
+} from "../tracing/tracing-schema.js";
+
+export function isDefinitionIdentity(value: unknown): boolean {
+  try {
+    pipelineDefinitionIdentitySchema.decode(value, "identity");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isDefinitionSnapshot(value: unknown): boolean {
+  try {
+    pipelineDefinitionSnapshotSchema.decode(value, "snapshot");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 import { decodePipelineTraceError, decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,3 +1,4 @@
+import { pipelineDefinitionSnapshotSchema } from "./tracing-schema.js";
 import type {
   PipelineError,
   PipelineLogger,
@@ -27,6 +28,16 @@ import {
   PIPELINE_TRACE_VERSION,
 } from "./tracing-constants.js";
 import { PARTIAL_PIPELINE_TRACE_EXPORTER_ERROR } from "./trace-exporter-error.js";
+
+// Oversized definitions keep their full identity; never fingerprint a truncated graph.
+function traceDefinition(plan: PipelinePlan) {
+  if (!plan.definition) return undefined;
+  try {
+    return pipelineDefinitionSnapshotSchema.decode(plan.definition, "definition");
+  } catch {
+    return undefined;
+  }
+}
 
 /** Runtime trace writer used internally by the pipeline executor. */
 export interface PipelineTraceEmitter {
@@ -261,6 +272,8 @@ export function createPipelineTraceEmitter(
         payload: {
           dryRun: plan.dryRun,
           planOk: plan.ok,
+          definitionIdentity: plan.definition?.identity,
+          definitionSnapshot: traceDefinition(plan),
           stepCount: plan.steps.length,
           targetIds: targetIds.slice(0, PIPELINE_TRACE_LIST_LIMIT),
         },

@@ -5,7 +5,7 @@ import type {
   PipelineRunEventReader,
   StoredPipelineEvent,
 } from "./run-store.js";
-import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
+import { decodeStoredTraceEvent } from "./run-store-event-decoder.js";
 
 const DEFAULT_MAX_BYTES = 64 * 1_024 * 1_024;
 const DEFAULT_MAX_EVENT_BYTES = 1 * 1_024 * 1_024;
@@ -106,7 +106,7 @@ export async function openNdjsonPipelineRunStore(
       throw new Error(`${resolvedFilename} line ${lineNumber} is not valid JSON.`);
     }
     try {
-      const event = decodePipelineTraceEvent(parsed);
+      const event = decodeStoredTraceEvent(parsed);
       events.push({ ...event, id: events.length });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "event is invalid";

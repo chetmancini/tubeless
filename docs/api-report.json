@@ -16,6 +16,8 @@
         "PipelineContext",
         "PipelineDefinition",
         "PipelineDefinitionError",
+        "PipelineDefinitionIdentity",
+        "PipelineDefinitionSnapshot",
         "PipelineError",
         "PipelineErrorCause",
         "PipelineErrorCode",
@@ -68,7 +70,7 @@
         "StepFactory",
         "StepSkipDecision"
       ],
-      "sha256": "ab59692714bcb5626e79a5ece08726d2893b0145ae4e57b073034b449cda054e",
+      "sha256": "dbac01792a1cf84dcf7f4da568dd921618e4527230e72f4bd6f762c22ef5c358",
       "specifier": "tubeless"
     },
     {
@@ -108,7 +110,7 @@
         "ReporterTerminalCapabilities",
         "RunReporterConfig"
       ],
-      "sha256": "9c838d29d7e419c7a80b5792f8a356508e360100750a776e6804c53a8b134b13",
+      "sha256": "526dc774b3d871811d575ce11a9171f5073c1a1709f1886a46785a4dd40c682a",
       "specifier": "tubeless/cli"
     },
     {
@@ -164,7 +166,7 @@
         "PipelineProjectManifestInput",
         "validatePipelineDocument"
       ],
-      "sha256": "04e7ac5772c7180223aa78ee6313c662f46bb9237402fa6de1d80a5307383ac9",
+      "sha256": "73932805bf6b7bf198d3dfb8e8324e2a675e7532d4c5fc98d20121b8d5a30d64",
       "specifier": "tubeless/project"
     },
     {
@@ -178,13 +180,13 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "7b9c5e9f28ea337f6f7d41c760acd3ab78203301dc4ce1b42b332b0ffac3769f",
+      "sha256": "e956f4e7da407b07105d9904bdce62cbc3c97b610a6450a432088707931b455f",
       "specifier": "tubeless/testing"
     },
     {
       "declaration": "./dist/tracing/tracing.d.ts",
       "exports": ["composeTraceExporters", "PipelineTraceEvent", "PipelineTraceExporter"],
-      "sha256": "c272c955aab09dcd8cc334ffcea3af5cfda420cecc2881a01e3316e3a38801dd",
+      "sha256": "43ea6d5ca9dace472d97c013374af35609e68898d5e845685b09c4d9446c481d",
       "specifier": "tubeless/tracing"
     }
   ],

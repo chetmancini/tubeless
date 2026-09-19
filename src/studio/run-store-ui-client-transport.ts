@@ -5,7 +5,12 @@ import type {
   StoredPipelineRun,
   StoredPipelineStep,
 } from "../run-store/run-store.js";
-import { isPipelineTraceError, isStoredPipelineEvent } from "../run-store/run-store-codec.js";
+import {
+  isDefinitionIdentity,
+  isDefinitionSnapshot,
+  isPipelineTraceError,
+  isStoredPipelineEvent,
+} from "../run-store/run-store-codec.js";
 import {
   isPipelineRunStudioParameter,
   type PipelineRunStudioCommand,
@@ -152,6 +157,7 @@ function isStoredStep(value: unknown): value is StoredPipelineStep {
 function isStoredStudioRun(value: unknown): value is StoredPipelineRun {
   if (!isRecord(value)) return false;
   return (
+    (value.definitionIdentity === undefined || isDefinitionIdentity(value.definitionIdentity)) &&
     typeof value.dryRun === "boolean" &&
     isFiniteNumber(value.eventCount) &&
     isFiniteNumber(value.logCount) &&
@@ -178,6 +184,14 @@ function isStudioSnapshot(value: unknown): value is StudioSnapshot {
     !isFiniteNumber(value.activeRunCount) ||
     !isFiniteNumber(value.completedRunCount) ||
     !Array.isArray(value.definitions) ||
+    !value.definitions.every(
+      (definition) =>
+        isRecord(definition) &&
+        typeof definition.pipelineId === "string" &&
+        isFiniteNumber(definition.runCount) &&
+        (definition.identity === undefined || isDefinitionIdentity(definition.identity)) &&
+        (definition.snapshot === undefined || isDefinitionSnapshot(definition.snapshot))
+    ) ||
     !isFiniteNumber(value.failedRunCount) ||
     !isFiniteNumber(value.generatedAtMs) ||
     !isFiniteNumber(value.lastEventId) ||

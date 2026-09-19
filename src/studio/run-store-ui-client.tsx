@@ -1,9 +1,14 @@
+import { DefinitionHistory } from "./run-store-ui-definitions.js";
 import type { ComponentChildren, TargetedEvent } from "preact";
 import { render } from "preact";
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { CliParameterDescriptor } from "../cli/cli.js";
 import type { PipelinePlan, PipelineRunControls } from "../core/pipeline.js";
-import type { StoredPipelineRun, StoredPipelineStep } from "../run-store/run-store.js";
+import type {
+  StoredPipelineDefinition,
+  StoredPipelineRun,
+  StoredPipelineStep,
+} from "../run-store/run-store.js";
 import {
   createStudioApi,
   type StudioApi,
@@ -676,7 +681,8 @@ export function PlanView({ plan }: { plan: PipelinePlan }) {
 function Metrics({ commandCount, snapshot }: { commandCount: number; snapshot: StudioSnapshot }) {
   const terminal = snapshot.completedRunCount + snapshot.failedRunCount;
   const success = terminal ? Math.round((snapshot.completedRunCount / terminal) * 100) : 0;
-  const pipelineCount = commandCount || snapshot.definitions.length;
+  const pipelineCount =
+    commandCount || new Set(snapshot.definitions.map(({ pipelineId }) => pipelineId)).size;
   const metrics = [
     [
       "Active now",
@@ -939,6 +945,12 @@ function RunDetail({
               {relativeTime(run.startedAtMs, nowMs)}
             </div>
             <h2>{run.pipelineId}</h2>
+            <p class="definition-identity">
+              Definition:{" "}
+              <code>{run.definitionIdentity?.definitionId ?? "Not recorded (legacy trace)"}</code>
+              <br />
+              Implementation: {run.definitionIdentity?.implementationVersion ?? "Unknown"}
+            </p>
             <div class="run-id">{run.runId}</div>
             {run.correlationId && <div class="run-id">Correlation: {run.correlationId}</div>}
           </div>
@@ -1066,6 +1078,8 @@ function RunDetail({
 }
 
 interface RunsViewProps extends Omit<RunDetailProps, "run"> {
+  definitions?: readonly StoredPipelineDefinition[];
+  runs?: readonly StoredPipelineRun[];
   roots: readonly StoredPipelineRun[];
   selectedRun: StoredPipelineRun | null;
   selectedRunId: string | null;
@@ -1094,33 +1108,40 @@ export function RunsView(props: RunsViewProps) {
       </>
     ) : null;
   return (
-    <div class="content-grid">
-      <section class="sheet">
-        <div class="sheet-head">
-          <div>
-            <div class="sheet-title">Pipeline runs</div>
-            <div class="sheet-subtitle">Top-level runs · nested work stays with its parent</div>
+    <>
+      <DefinitionHistory
+        definitions={props.definitions ?? []}
+        runs={props.runs ?? []}
+        onSelect={props.onSelect}
+      />
+      <div class="content-grid">
+        <section class="sheet">
+          <div class="sheet-head">
+            <div>
+              <div class="sheet-title">Pipeline runs</div>
+              <div class="sheet-subtitle">Top-level runs · nested work stays with its parent</div>
+            </div>
+            <span class="sheet-subtitle">
+              {props.roots.length} top-level · {props.totalRunCount} total
+            </span>
           </div>
-          <span class="sheet-subtitle">
-            {props.roots.length} top-level · {props.totalRunCount} total
-          </span>
-        </div>
-        <div class="run-list">
-          {props.roots.length ? (
-            <>
-              {list("Running now", activeRuns)}
-              {list("Recent", historicalRuns)}
-            </>
-          ) : (
-            <EmptyView
-              title="No recorded runs"
-              copy="Choose Pipelines to start a run and create local history."
-            />
-          )}
-        </div>
-      </section>
-      <RunDetail {...props} run={props.selectedRun} />
-    </div>
+          <div class="run-list">
+            {props.roots.length ? (
+              <>
+                {list("Running now", activeRuns)}
+                {list("Recent", historicalRuns)}
+              </>
+            ) : (
+              <EmptyView
+                title="No recorded runs"
+                copy="Choose Pipelines to start a run and create local history."
+              />
+            )}
+          </div>
+        </section>
+        <RunDetail {...props} run={props.selectedRun} />
+      </div>
+    </>
   );
 }
 
@@ -1747,6 +1768,8 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
                   <PipelinesView commands={filteredCommands} onConfigure={setLaunchCommandId} />
                 ) : (
                   <RunsView
+                    definitions={snapshot.definitions}
+                    runs={snapshot.runs}
                     canCancel={canCancel}
                     cancelling={cancelling}
                     liveRunIds={snapshot.liveRunIds ?? []}

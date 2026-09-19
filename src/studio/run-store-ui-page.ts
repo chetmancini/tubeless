@@ -270,6 +270,11 @@ export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
       .detail-meta > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
       .parameter-grid { grid-template-columns: 1fr; }
     }
+    .definition-history { margin-bottom: 20px; }
+    .definition-body { padding: 18px; display: grid; gap: 12px; }
+    .definition-body select { max-width: 100%; }
+    .definition-identity,    .definition-changes { overflow-wrap: anywhere; font-size: 12px; }
+    .definition-changes li { margin-bottom: 10px; }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
     }

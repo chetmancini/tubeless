@@ -196,6 +196,19 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
       );
     },
   },
+  TUBELESS_DEFINITION_IMPLEMENTATION_VERSION_INVALID: {
+    phase: "definition",
+    kind: "definition",
+    emit: () =>
+      definitionError(() =>
+        definePipeline({
+          id: "invalid-version",
+          implementationVersion: " ",
+          steps: [],
+          finalize: () => undefined,
+        })
+      ),
+  },
   TUBELESS_DEFINITION_PIPELINE_ID_BLANK: {
     phase: "definition",
     kind: "definition",
