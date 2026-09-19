@@ -6,10 +6,10 @@ import { absUrl, githubBlob, href } from "../lib/paths";
 const resources = [
   { name: "LLM index", url: href("llms.txt"), use: "Documentation index" },
   { name: "Complete documentation", url: href("llms-full.txt"), use: "All documentation in one text response" },
-  { name: "Agent guide", url: href("docs/agent-guide.md"), use: "Primitive, runtime, and safety rules in Markdown" },
+  { name: "Agent guide", url: href("docs/agent-guide.md"), use: "Pipeline authoring and execution rules in Markdown" },
   { name: "Recipes", url: href("docs/recipes.md"), use: "Examples by use case" },
-  { name: "API report", url: href("api-report.json"), use: "Public surface for automated review" },
-  { name: "Skill pack", url: href("docs/agent-skills"), use: "Install authoring and code-conversion skills" },
+  { name: "API report", url: href("api-report.json"), use: "Public TypeScript declarations for automated checks" },
+  { name: "Skill pack", url: href("docs/agent-skills"), use: "Install skills for writing pipelines and converting existing code" },
   { name: "Make pipeline", url: githubBlob("skills/tubeless-make-pipeline/SKILL.md"), label: "tubeless-make-pipeline", use: "Convert existing code into a typed pipeline" },
   { name: "Project manifest", url: githubBlob("examples/catalog/tubeless.project.ts"), label: "examples/catalog/tubeless.project.ts", use: "File layout, registered IDs, exports" },
 ];
@@ -18,7 +18,7 @@ const resources = [
 <Base
   title="Agent Documentation"
   markdown="agents.md"
-  description="Machine-readable entrypoints for coding agents working with tubeless."
+  description="Guides, examples, and installable skills for coding agents working with Tubeless."
 >
   <main class="wrap">
     <header class="page-lead">
@@ -32,8 +32,8 @@ const resources = [
         <a class="btn ghost" href={href("llms-full.txt")}>Full documentation (text)</a>
       </div>
       <div class="agent-handoff">
-        <p id="agent-prompt">Read {absUrl("llms.txt")}, then the agent guide and the smallest matching recipe before writing a Tubeless pipeline.</p>
-        <button class="btn ghost" type="button" data-copy={`Read ${absUrl("llms.txt")}, then the agent guide and the smallest matching recipe before writing a Tubeless pipeline.`}>Copy instructions</button>
+        <p id="agent-prompt">Read {absUrl("llms.txt")}, then the agent guide and the simplest example that fits your task before writing a Tubeless pipeline.</p>
+        <button class="btn ghost" type="button" data-copy={`Read ${absUrl("llms.txt")}, then the agent guide and the simplest example that fits your task before writing a Tubeless pipeline.`}>Copy instructions</button>
       </div>
     </header>
 
@@ -44,7 +44,7 @@ const resources = [
       <CodeBlock code="npx skills add chetmancini/tubeless" lang="sh" />
       <p>
         Use <code>tubeless-make-pipeline</code> to turn existing scripts and workflows
-        into typed pipelines, or <code>tubeless</code> for ongoing authoring.
+        into typed pipelines, or <code>tubeless</code> for writing and editing pipelines.
         See the <a href={href("docs/agent-skills")}>installation guide and example prompt</a>.
       </p>
     </section>
@@ -78,11 +78,11 @@ const resources = [
       <div class="facts">
         <article>
           <h3>IDs</h3>
-          <p>Keep step IDs stable. <code>name</code> is presentation only.</p>
+          <p>Keep step IDs stable. <code>name</code> only changes the display label.</p>
         </article>
         <article>
-          <h3>Dry-run</h3>
-          <p>Side effects use <code>dryRun: "skip"</code> or a side-effect-free handler.</p>
+          <h3>Dry runs</h3>
+          <p>For steps that write data or have other side effects, use <code>dryRun: "skip"</code> or a handler that previews the work without making changes.</p>
         </article>
         <article>
           <h3>Errors</h3>

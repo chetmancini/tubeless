@@ -12,13 +12,13 @@ Studio. API references cover the supported library exports.
 - [Getting started](${absUrl("docs/getting-started.md")})
 - [Executable recipes](${absUrl("docs/recipes.md")})
 - [CLI reference](${absUrl("docs/cli.md")})
-- [TypeScript API inventory](${absUrl("docs/api-reference.md")})
+- [TypeScript API reference](${absUrl("docs/api-reference.md")})
 - [Machine-readable API report](${absUrl("api-report.json")})
 - [Pipeline document JSON Schema v1](${absUrl("schemas/pipeline-document-v1.schema.json")})
 
 ## Local Studio
 
-- [Local Studio API guide](${absUrl("docs/studio.md")})
+- [Studio guide](${absUrl("docs/studio.md")})
 
 ## Agents
 

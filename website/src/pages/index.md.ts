@@ -6,20 +6,20 @@ export const GET: APIRoute = () => new Response(`# Tubeless
 
 > ${PACKAGE.description}
 
-Tubeless by Chet Mancini is a dependency-free TypeScript library for typed data
-pipelines and multi-step CLI workflows. Define dependencies, preview execution,
-and inspect step results. Version: ${PACKAGE.version}.
+Tubeless is a TypeScript library by Chet Mancini for data pipelines and multi-step
+workflows. It has no runtime dependencies. Define steps and their dependencies,
+preview which steps will run, and inspect the results. Version: ${PACKAGE.version}.
 
 ## When to use Tubeless
 
-Use it for typed imports and ETL, dependency-ordered validation and publication,
-and observable CLI programs. It runs in your process; it is not a hosted API or
-a durable execution engine with crash recovery or distributed scheduling.
+Use it for data imports, releases that depend on validation checks, and CLI
+programs that need progress reporting. Pipelines run in your process. Crash
+recovery and distributed scheduling require an external execution system.
 
 ## Start here
 
-Let your agent build your pipelines. [Install the skills](${absUrl("docs/agent-skills.md")}),
-then hand it your next script:
+If you use a coding agent, [install the Tubeless skills](${absUrl("docs/agent-skills.md")})
+for help writing pipelines or adapting an existing script:
 
 \`\`\`sh
 npx skills add chetmancini/tubeless
@@ -35,6 +35,6 @@ npx skills add chetmancini/tubeless
 - [Complete documentation](${absUrl("llms-full.txt")})
 - [Source code](${GITHUB_REPO})
 
-Read the guide and smallest matching recipe before writing a pipeline. Inspect
+Read the guide and simplest example that fits your task before writing a pipeline. Inspect
 or plan before execution, and obtain authorization for external side effects.
 `, { headers: { "content-type": "text/markdown; charset=utf-8" } });

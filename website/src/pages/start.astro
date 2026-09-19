@@ -8,7 +8,7 @@ import { graphTape, runTape } from "../data/tapes";
 import { href } from "../lib/paths";
 ---
 
-<Base markdown="docs/getting-started.md" title="Start" description="Install tubeless, define a first pipeline, and choose how to run it.">
+<Base markdown="docs/getting-started.md" title="Getting started" description="Install Tubeless and write, run, and test a small pipeline.">
   <main class="wrap">
     <header class="page-lead">
       <h1 class="page-title">First pipeline</h1>
@@ -36,14 +36,14 @@ import { href } from "../lib/paths";
     <section class="section">
       <h2>Define a pipeline</h2>
       <p class="lede">
-        Create constructors with <code>createSteps</code>, define steps with <code>step</code>,
-        then connect them with <code>dependsOn</code>.
+        Use <code>createSteps</code> to get a typed <code>step</code> function.
+        Define each step and connect it to its dependencies with <code>dependsOn</code>.
         The normalize step receives the load step’s output, with its type inferred automatically.
       </p>
       <CodeBlock code={FIRST_PIPELINE_SAMPLE} lang="ts" />
       <p class="lede">
         The last step in execution order is the default target and supplies the result.
-        Here, that is <code>normalize</code>. If it publishes no output, the result is
+        Here, that is <code>normalize</code>. If it produces no output, the result is
         <code>undefined</code>. Add a finalizer with <code>requireOutputs</code> when missing
         output should fail the run.
       </p>
@@ -52,7 +52,7 @@ import { href } from "../lib/paths";
     <section class="section">
       <div class="feature">
         <div class="feature-copy">
-          <h3>See the static graph</h3>
+          <h3>View the dependency graph</h3>
           <p>
             <code>toMermaid()</code> returns a Mermaid diagram of the dependencies. Solid arrows
             show required inputs; dotted arrows show optional inputs and failure gates.
@@ -66,10 +66,10 @@ import { href } from "../lib/paths";
     <section class="section">
       <div class="feature reverse">
         <div class="feature-copy">
-          <h3>Pick an execution method</h3>
+          <h3>Run or preview the pipeline</h3>
           <p>
             Use <code>runOrThrow</code> to receive the final value or an exception. Use <code>run</code>
-            to inspect step results and errors. Use <code>plan</code> to preview selection without
+            to inspect step results and errors. Use <code>plan</code> to see which steps would run without
             running steps. For CLI scripts, <code>definePipelineCommand</code> supplies help,
             selection flags, and dry-run controls.
           </p>

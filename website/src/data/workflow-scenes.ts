@@ -21,8 +21,8 @@ type Scene = {
 // Illustrative workflows, not execution plans for the linked recipes.
 export const WORKFLOW_SCENES: Record<string, Scene> = {
   "ci-cd": {
-    title: "A tiny release factory",
-    description: "A build fans out into tests and packaging. Both branches join at a release gate before the artifact travels to a deployment server.",
+    title: "Build, test, and deploy",
+    description: "A build fans out into tests and packaging. Both branches join at a release gate before deployment.",
     pattern: "FAN OUT → CHECK + PACKAGE → JOIN → DEPLOY",
     nodes: [
       { id: "build", label: "Build", kind: "workshop", x: 115, y: 230, at: 0 },
@@ -38,7 +38,7 @@ export const WORKFLOW_SCENES: Record<string, Scene> = {
     ],
   },
   "ml-flows": {
-    title: "One dataset. Three contenders.",
+    title: "Compare three model experiments",
     description: "A dataset fans out to three model experiments. Their results converge for evaluation, and the chosen model is registered.",
     pattern: "DATASET → PARALLEL EXPERIMENTS → EVALUATE → REGISTER",
     nodes: [
@@ -56,9 +56,9 @@ export const WORKFLOW_SCENES: Record<string, Scene> = {
     ],
   },
   "llm-workflows": {
-    title: "A brain with a few helping hands",
+    title: "Answer a question with retrieved context",
     description: "A question starts retrieval and a tool call. Retrieved context, tool results, and the original question all feed a model, which produces an answer.",
-    pattern: "RETRIEVE + CALL TOOLS + KEEP THE PROMPT → GENERATE",
+    pattern: "QUESTION + RETRIEVED CONTEXT + TOOL RESULTS → GENERATE",
     nodes: [
       { id: "question", label: "Question", kind: "document", x: 100, y: 230, at: 0 },
       { id: "retrieve", label: "Knowledge base", kind: "database", x: 340, y: 110, at: 2 },
@@ -74,7 +74,7 @@ export const WORKFLOW_SCENES: Record<string, Scene> = {
     ],
   },
   "data-pipelines": {
-    title: "Many sources. More than one destination.",
+    title: "Combine data from several sources",
     description: "Database rows, API responses, and files merge into a normalization step. The cleaned data branches out to a warehouse and a report.",
     pattern: "MERGE SOURCES → NORMALIZE → FAN OUT TO DESTINATIONS",
     nodes: [
@@ -91,7 +91,7 @@ export const WORKFLOW_SCENES: Record<string, Scene> = {
     ],
   },
   "operational-workflows": {
-    title: "A runbook with checks and balances",
+    title: "Back up, repair, and verify",
     description: "A maintenance request branches into a backup and preflight checks. Both must finish before a repair, which branches into verification and an audit record.",
     pattern: "BACK UP + CHECK → REPAIR → VERIFY + RECORD",
     nodes: [

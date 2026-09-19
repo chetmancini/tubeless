@@ -7,12 +7,12 @@ export const GET: APIRoute = () => new Response([
   ...USE_CASES.map((useCase) => [
     `## ${useCase.label}: ${useCase.headline}`,
     useCase.description,
-    `A workflow you could build: ${useCase.stages.join(" → ")}.`,
+    `Example workflow: ${useCase.stages.join(" → ")}.`,
     ...useCase.benefits.map((benefit) => `### ${benefit.title}\n\n${benefit.detail}`),
     useCase.boundary,
-    "### Start with a recipe",
+    "### Related examples",
     ...useCase.recipes.map((recipe) => `- [${recipe.label}](${githubBlob(`examples/${recipe.file}`)})`),
     `[${useCase.guide.label}](${absUrl(`docs/${useCase.guide.path}.md`)})`,
   ].join("\n\n")),
-  `## Start with a script you already run.\n\nChoose its inputs, give each stage a name, and connect the outputs. Keep the domain logic in your own functions.\n\n[Build your first pipeline](${absUrl("docs/getting-started.md")}) or [build with your agent](${absUrl("docs/agent-skills.md")}).`,
+  `## Getting started\n\nThe getting started guide walks through a small pipeline. If you’re adapting an existing script with a coding agent, install the Tubeless skill pack.\n\n[Getting started guide](${absUrl("docs/getting-started.md")}) or [agent setup](${absUrl("docs/agent-skills.md")}).`,
 ].join("\n\n"), { headers: { "content-type": "text/markdown; charset=utf-8" } });

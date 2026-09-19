@@ -8,11 +8,10 @@ import { githubBlob, href } from "../lib/paths";
 <Base
   title="Use Cases"
   markdown="use-cases.md"
-  description="Use Tubeless for CI/CD, ML flows, LLM workflows, data pipelines, and operational workflows. Explore typed steps, execution previews, and recipes to build on."
+  description="Example Tubeless workflows for software releases, model evaluation, document processing, data imports, and maintenance tasks."
 >
   <main class="wrap">
     <header class="page-lead use-cases-lead">
-      <p class="kicker">One library. Your workflow.</p>
       <h1 class="page-title">Use cases</h1>
       <p class="lede">{USE_CASES_INTRO}</p>
     </header>
@@ -46,13 +45,13 @@ import { githubBlob, href } from "../lib/paths";
         </div>
 
         <aside class="case-example" aria-label={`${useCase.label} workflow idea and recipes`}>
-          <p class="kicker">A workflow you could build</p>
+          <p class="kicker">Example workflow</p>
           <ol class="case-stages">
             {useCase.stages.map((stage) => <li>{stage}</li>)}
           </ol>
           <p class="case-boundary">{useCase.boundary}</p>
           <div class="case-recipes">
-            <h3>Start with a recipe</h3>
+            <h3>Related examples</h3>
             {useCase.recipes.map((recipe) => (
               <a href={githubBlob(`examples/${recipe.file}`)}>{recipe.label} <span aria-hidden="true">↗</span></a>
             ))}
@@ -63,11 +62,11 @@ import { githubBlob, href } from "../lib/paths";
     ))}
 
     <section class="section" aria-labelledby="build-heading">
-      <h2 id="build-heading">Start with a script you already run.</h2>
-      <p class="lede">Choose its inputs, give each stage a name, and connect the outputs. Keep the domain logic in your own functions.</p>
+      <h2 id="build-heading">Getting started</h2>
+      <p class="lede">The getting started guide walks through a small pipeline. If you’re adapting an existing script with a coding agent, install the Tubeless skill pack.</p>
       <div class="actions">
-        <a class="btn" href={href("start")}>Build your first pipeline</a>
-        <a class="btn ghost" href={href("docs/agent-skills")}>Build with your agent</a>
+        <a class="btn" href={href("start")}>Getting started guide</a>
+        <a class="btn ghost" href={href("docs/agent-skills")}>Agent setup</a>
       </div>
     </section>
   </main>
@@ -75,7 +74,6 @@ import { githubBlob, href } from "../lib/paths";
 
 <style>
   .use-cases-lead { padding-block: 4.5rem 2.5rem; }
-  .use-cases-lead .kicker { margin: 0 0 1rem; }
   .use-cases-lead .lede { max-width: 43rem; }
   .case-index { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; margin-bottom: 4rem; }
   .case-index a { position: relative; display: flex; flex-direction: column; align-items: start; padding: 1.4rem; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); text-decoration: none; }

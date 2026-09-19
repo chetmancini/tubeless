@@ -4,8 +4,8 @@ import { absUrl } from "../lib/paths";
 
 export const GET: APIRoute = () => new Response(`# Tubeless documentation
 
-These pages document the Tubeless package. Agents should begin with the agent
-guide and the smallest recipe matching the requested pipeline.
+These pages cover the Tubeless library, CLI, and Studio. Coding agents should
+read the agent guide and the simplest example that fits the task.
 
 ${DOC_NAV.map(({ label, slug, blurb }) => `- [${label}](${absUrl(`docs/${slug}.md`)}): ${blurb}`).join("\n")}
 

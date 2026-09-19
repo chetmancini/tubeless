@@ -17,18 +17,18 @@ export const DOC_NAV = [
   { slug: "recipes", label: "Recipes", blurb: "Examples by use case." },
   { slug: "concepts", label: "Concepts", blurb: "Understand dependencies, results, failures, and execution controls." },
   { slug: "cli", label: "CLI", blurb: "Select and run commands, record results, and inspect history." },
-  { slug: "studio", label: "Studio", blurb: "Inspect runs and use browser controls." },
+  { slug: "studio", label: "Studio", blurb: "Inspect recorded runs and launch commands in your browser." },
   {
     slug: "declarative-pipelines",
     label: "YAML and JSON",
-    blurb: "Compile declarative pipelines with registered handlers, skips, and child adapters.",
+    blurb: "Define pipelines in YAML or JSON and connect them to your application code.",
   },
-  { slug: "comparison", label: "Comparison", blurb: "See how Tubeless fits next to Hamilton, Prefect, Temporal, and other job runners." },
+  { slug: "comparison", label: "Comparison", blurb: "Compare Tubeless with Hamilton, Prefect, Temporal, and other job runners." },
   { slug: "child-pipeline-composition", label: "Child pipelines", blurb: "Reuse a workflow once or run it for a list of items." },
   { slug: "remote-step-composition", label: "Remote steps", blurb: "Call remote services and invoke pipelines from workers." },
   { slug: "agent-guide", label: "Agent guide", blurb: "Rules for generating pipeline code." },
   { slug: "agent-skills", label: "Agent skills", blurb: "Install the skill pack and convert existing code into pipelines." },
-  { slug: "api-reference", label: "API inventory", blurb: "Generated public surface." },
+  { slug: "api-reference", label: "API reference", blurb: "Public exports and TypeScript signatures, generated from the package." },
 ] as const;
 
 export const DOC_SLUGS = new Set(DOC_NAV.map((item) => item.slug));

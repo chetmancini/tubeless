@@ -6,17 +6,17 @@ import { GITHUB_BLOB, absUrl } from "../lib/paths";
 export const GET: APIRoute = () => {
   const body = `# tubeless
 
-> Dependency-free TypeScript primitives for typed, observable data pipelines and their CLI programs.
+> A TypeScript library for data pipelines and multi-step CLI workflows, with no runtime dependencies.
 
 Version: ${PACKAGE.version}
 Full documentation: ${absUrl("llms-full.txt")}
 
-Tubeless is a TypeScript library by Chet Mancini, called from your own code or local CLI; it is not a hosted execution API.
-Use it for typed ETL/import jobs, dependency-ordered validation and publication,
-and observable multi-step CLI workflows. Choose a durable workflow engine instead
+Tubeless is a TypeScript library by Chet Mancini. Run pipelines from your code or
+the CLI for data imports, validation and publication jobs, or scripts that need
+progress reporting. Pipelines run in your process. Use an external workflow engine
 when you need persisted execution, crash recovery, or distributed scheduling.
 
-Read the guide and smallest matching recipe before authoring. Import public package
+Read the guide and simplest example that fits your task before writing a pipeline. Import public package
 entrypoints, preserve stable IDs, and mark external side effects dryRun: "skip".
 Use context.log and context.signal. Inspect or plan before running a registered
 command; execution requires the caller's authorization for its side effects.
@@ -31,17 +31,17 @@ This static site provides explicit Markdown URLs; Accept negotiation is not avai
 
 ## Documentation
 
-- [Product overview](${absUrl("index.md")}): Identity, best-fit use cases, and where to start.
-- [Use cases](${absUrl("use-cases.md")}): CI/CD, ML flows, LLM workflows, data pipelines, and operational workflows, with workflow ideas and executable recipes.
+- [Product overview](${absUrl("index.md")}): What Tubeless does and how to get started.
+- [Use cases](${absUrl("use-cases.md")}): CI/CD, ML flows, LLM workflows, data pipelines, and operational workflows, with example workflows and runnable code.
 - [Developer resources](${absUrl("developers.md")}): Package docs, CLI reference, Studio guide, and machine-readable resources.
 ${DOC_NAV.map(({ slug, label, blurb }) => `- [${label}](${absUrl(`docs/${slug}.md`)}): ${blurb}`).join("\n")}
 
 ## Agent instructions
 
-- [Canonical agent guide](${absUrl("docs/agent-guide.md")}): Primitive selection, runtime contracts, and safety rules.
+- [Agent guide](${absUrl("docs/agent-guide.md")}): How to choose pipeline features and handle execution, failures, and side effects.
 - [Skill pack](${absUrl("docs/agent-skills.md")}): Install with npx skills add chetmancini/tubeless; use tubeless-make-pipeline to convert existing code.
-- [Authoring skill](${GITHUB_BLOB}/skills/tubeless/SKILL.md): Author and review pipelines in consumer projects.
-- [Code conversion skill](${GITHUB_BLOB}/skills/tubeless-make-pipeline/SKILL.md): Preserve behavior while extracting a structured, typed pipeline.
+- [Authoring skill](${GITHUB_BLOB}/skills/tubeless/SKILL.md): Write and review pipelines in your project.
+- [Code conversion skill](${GITHUB_BLOB}/skills/tubeless-make-pipeline/SKILL.md): Convert existing code into a pipeline while preserving its behavior.
 - [Project manifest](${GITHUB_BLOB}/examples/catalog/tubeless.project.ts): File layout, stable registered IDs, and exports.
 - [API report](${absUrl("api-report.json")}): Machine-readable public declarations.
 - [Pipeline document JSON Schema v1](${absUrl("schemas/pipeline-document-v1.schema.json")}): Validate YAML or JSON document structure and metadata without importing handlers.
@@ -51,7 +51,7 @@ ${DOC_NAV.map(({ slug, label, blurb }) => `- [${label}](${absUrl(`docs/${slug}.m
 - [Complete documentation](${absUrl("llms-full.txt")}): All docs from this build, agent guide first.
 - [Human documentation index](${absUrl("docs")}): Browse the same documentation as HTML.
 - [Sitemap](${absUrl("sitemap.xml")}): All indexable human pages.
-- [Source and executable examples](${GITHUB_BLOB}/examples): Public-import examples compiled in CI.
+- [Source and executable examples](${GITHUB_BLOB}/examples): Examples that import the public package and compile in CI.
 `;
 
   return new Response(body, {

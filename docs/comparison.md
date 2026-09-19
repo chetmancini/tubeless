@@ -29,9 +29,9 @@ See [core concepts](./concepts.md) for control behavior and the
 
 ## Nearby tools
 
-Each of these is strong at its job. Tubeless is the TypeScript in-process
-layer: a library you import, plan, and run, with a CLI and local studio when
-you want them.
+These tools differ in where they run work and how they handle persistence.
+Tubeless runs inside your TypeScript application, with an optional CLI and local
+Studio for running commands and inspecting results.
 
 | Tool                                                                                                       | Use it for                                     | Next to Tubeless                                                                                        |
 | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |

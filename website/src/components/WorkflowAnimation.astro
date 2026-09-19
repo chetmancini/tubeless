@@ -17,7 +17,7 @@ const routes = scene.edges.map((edge) => {
 
 <figure class="workflow-scene" data-workflow-animation>
   <figcaption>
-    <div><span class="scene-eyebrow">In the workshop / {label}</span><h3>{scene.title}</h3></div>
+    <div><span class="scene-eyebrow">Example / {label}</span><h3>{scene.title}</h3></div>
     <button type="button" data-motion-toggle data-label={label} aria-label={`Pause ${label} animation`} hidden>
       <span aria-hidden="true">Ⅱ</span> Pause
     </button>
@@ -60,7 +60,7 @@ const routes = scene.edges.map((edge) => {
       </g>
     </svg>
   </div>
-  <div class="scene-footer"><span>{scene.pattern}</span><span class="pan-hint">Scroll to explore ↔</span></div>
+  <div class="scene-footer"><span>{scene.pattern}</span><span class="pan-hint">Scroll horizontally ↔</span></div>
   <p class="sr-only">Illustrative workflow: {scene.description}</p>
 </figure>
 

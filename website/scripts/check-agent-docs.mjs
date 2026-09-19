@@ -43,7 +43,7 @@ console.log(`Verified ${pages.length} Markdown documents, discovery links, and f
 // Validate the llms.txt file-list grammar, not just the presence of keywords.
 assert.match(index, /^# tubeless\n\n> .+\n/);
 assert.match(index, /## When to use Tubeless\n/);
-assert.match(index, /not a hosted execution API/);
+assert.match(index, /Pipelines run in your process/);
 assert.match(index, /tubeless plan <registered-id>/);
 for (const section of index.split(/^## /m).slice(1)) {
   const [heading, ...lines] = section.split("\n");
@@ -83,7 +83,7 @@ assert.ok(software.description.length > 0);
 assert.ok(software.softwareVersion.length > 0);
 assert.deepEqual(software.keywords, ["TypeScript pipelines", "Node.js workflows", "typed ETL"]);
 assert.deepEqual(software.sameAs, ["https://github.com/chetmancini/tubeless"]);
-assert.match(homepage, /name="description" content="Tubeless by Chet Mancini:/);
+assert.match(homepage, /name="description" content="Tubeless is a TypeScript library/);
 
 const developers = read("developers/index.html");
 assert.match(developers, /<title>Developer Resources · Tubeless<\/title>/);
