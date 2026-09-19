@@ -10,7 +10,7 @@ Include the affected version or commit, what you expected, what happened, and
 enough detail to reproduce. Do not include exploits against third-party
 systems.
 
-This is a small-maintainer `0.1.0` project. I will acknowledge reports I can
+This is a small-maintainer pre-1.0 project. I will acknowledge reports I can
 act on, but there is no SLA.
 
 ## Scope
