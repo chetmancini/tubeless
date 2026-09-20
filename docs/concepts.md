@@ -93,13 +93,36 @@ order breaking graph ties. A freed slot can start a dependent immediately, witho
 waiting for unrelated steps. Skip predicates and output schemas, including schemas
 for policy-skip values, occupy the same slot as the step handler.
 
-Fail-fast stops new dispatches after the first observed failure. In-flight steps
-settle and report their own outcomes before the run returns; finalization also waits
-for all in-flight work. With `continueOnError`, eligible steps continue and the
-finalizer receives all available outputs. Cancellation remains cooperative through
-`context.signal`. Concurrent lifecycle events and terminal reports reflect actual
-completion order. The default result still comes from the last step in the graph's
-stable topological order, regardless of which step finishes last.
+Failure and cancellation have separate dispatch policies:
+
+| Condition                          | New work                              | In-flight work                                             | Unstarted steps                                                                                                                        |
+| ---------------------------------- | ------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `continueOnError: false` (default) | Stop after the first observed failure | Let every active step settle; do not abort it              | Report `fail-fast`, retaining already planned structural skip reasons                                                                  |
+| `continueOnError: true`            | Continue eligible branches            | Let every active step settle                               | Required descendants skip for unmet dependencies; failure gates skip after an unsuccessful prerequisite; optional inputs may be absent |
+| External `context.signal` abort    | Stop regardless of `continueOnError`  | Forward the same signal and wait for active work to settle | Cancel unstarted selected steps; filtered steps remain skipped                                                                         |
+
+Fail-fast does not create an abort signal or cancel active work. Cancellation is
+cooperative: a handler that ignores the signal must still settle before the run
+returns, and its actual outcome is retained. An external abort while draining after
+a failure takes precedence for unstarted selected steps, including those with a
+planned dry-run or unmet-dependency skip. Already-terminal steps keep their outcomes.
+
+Every concurrent failure is recorded. Any non-cancellation error makes the run
+`failed`, even when other steps are cancelled. A run containing only cancellation
+errors is `cancelled`. With `continueOnError`, the finalizer receives all available
+outputs once active work has settled; an aborted signal prevents the finalizer's
+handler from running. Without `continueOnError`, any step error prevents finalization.
+
+Live hooks and trace events retain actual event order. Final `result.steps` is in
+stable plan order. Final `result.errors` places run-level errors first, then step
+errors in plan order, then finalization errors; errors with the same position retain
+their observation order. `runOrThrow` retains every error in its result and selects
+its message and original cause from that ordered list. The first reported step error
+therefore need not be the failure that triggered fail-fast; skipped steps retain
+that triggering step's ID in `dependencyId`.
+
+The default result still comes from the last step in the graph's stable topological
+order, regardless of which step finishes last.
 
 The limit applies to one pipeline run. A child wrapper occupies one parent slot;
 child runs retain their own limit, defaulting to `1`. Set `maxConcurrency` in child

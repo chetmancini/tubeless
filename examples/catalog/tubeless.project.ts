@@ -5,7 +5,8 @@ import { definePipelineProject } from "tubeless/project";
 // explicit. CLI argv still uses --step/--target; mapOptions and hooks
 // receive stepIds and targets. Direct pipeline callers can opt in to parallel
 // DAG execution with run(options, { maxConcurrency: 4 }); command runs keep
-// the serial default. See ../parallel-dag.ts for independent branches and a join.
+// the serial default. Fail-fast drains active steps without cancelling them; final
+// reports use plan order. See ../parallel-dag.ts for independent branches and a join.
 
 /** Checked-in project command catalog with stable registered identities. */
 export default definePipelineProject({

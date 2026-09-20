@@ -179,6 +179,41 @@ describe("PipelineRunState", () => {
     ]);
   });
 
+  it("orders final errors by run, plan, and finalization while retaining live event order", async () => {
+    const { state, steps, statuses, lifecycle } = setup(["first", "second", "skipped"]);
+    const firstFailure = testError("step", "TUBELESS_STEP_FAILED", "first");
+    const secondFailure = testError("step", "TUBELESS_STEP_FAILED", "second");
+    const runError: PipelineError = {
+      code: "TUBELESS_RUN_CANCELLED",
+      kind: "cancellation",
+      phase: "execution",
+      message: "run stopped",
+    };
+    const finalError: PipelineError = {
+      code: "TUBELESS_FINALIZATION_FAILED",
+      kind: "finalization",
+      phase: "finalization",
+      stepId: "__finalize",
+      message: "finalization failed",
+    };
+    state.failStep(steps[1]!, state.beginAttempt(steps[1]!), secondFailure);
+    state.skipStep(steps[2]!, { reason: "filtered" });
+    state.failStep(steps[0]!, state.beginAttempt(steps[0]!), firstFailure);
+    state.recordRunErrors([runError]);
+    state.beginFinalization();
+    state.failFinalization(finalError, 1);
+    const result = await state.finish();
+
+    expect(result.steps.map(({ id }) => id)).toEqual(["first", "second", "skipped"]);
+    expect(result.errors).toEqual([runError, firstFailure, secondFailure, finalError]);
+    expect(
+      statuses
+        .filter(({ status }) => status === "failed" || status === "skipped")
+        .map(({ step }) => step.id)
+    ).toEqual(["second", "skipped", "first"]);
+    expect(lifecycle.pipelineComplete).toHaveBeenCalledWith(result);
+  });
+
   it("rejects invalid step and run transitions", async () => {
     const { state, steps } = setup(["work"]);
     expect(() =>

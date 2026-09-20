@@ -368,14 +368,14 @@ export async function executePlannedRun<
 
   const recordUnstartedStep = (step: AnyStep<TOptions>, error: PipelineError): void => {
     const plannedStep = plannedStepFor(step);
-    if (plannedStep.skipReason) {
+    if (plannedStep.selected && error.kind === "cancellation") {
+      state.cancelStep(plannedStep, { ...error, stepId: step.id }, false);
+    } else if (plannedStep.skipReason) {
       const dependencyId =
         plannedStep.skipReason === "unmet-dependency"
           ? plannedStep.dependencies.find((id) => plannedSteps.get(id)?.skipReason !== undefined)
           : undefined;
       state.skipStep(plannedStep, { reason: plannedStep.skipReason, dependencyId });
-    } else if (error.kind === "cancellation") {
-      state.cancelStep(plannedStep, { ...error, stepId: step.id }, false);
     } else {
       state.skipStep(plannedStep, {
         reason: "fail-fast",
@@ -385,22 +385,27 @@ export async function executePlannedRun<
     }
   };
 
-  const cancelBeforeStepStart = (step: AnyStep<TOptions>): boolean => {
+  const cancellationBeforeStart = (stepId: string): PipelineError | undefined => {
     try {
       throwIfAborted(runtime);
-      return false;
+      return undefined;
     } catch (error) {
-      const pipelineError = toPipelineError(error, {
+      return toPipelineError(error, {
         code: "TUBELESS_RUN_CANCELLED",
         kind: "cancellation",
         phase: "execution",
-        stepId: step.id,
+        stepId,
       });
-      state.recordRunErrors([pipelineError]);
-      stopError ??= pipelineError;
-      recordUnstartedStep(step, pipelineError);
-      return true;
     }
+  };
+
+  const cancelBeforeStepStart = (step: AnyStep<TOptions>): boolean => {
+    const pipelineError = cancellationBeforeStart(step.id);
+    if (!pipelineError) return false;
+    state.recordRunErrors([pipelineError]);
+    stopError ??= pipelineError;
+    recordUnstartedStep(step, pipelineError);
+    return true;
   };
 
   const recordStepExecutionFailure = (
@@ -530,8 +535,19 @@ export async function executePlannedRun<
     stepGraph: compiled.stepGraph,
     maxConcurrency,
     executeOneStep,
-    shouldStop: () => stopError !== undefined,
+    shouldStop: () => stopError !== undefined || runtime.signal?.aborted === true,
   });
+  if (unstarted.length > 0 && runtime.signal?.aborted) {
+    // An external abort takes precedence for work that never started, even
+    // when an earlier failure stopped dispatch. Keep every active step's outcome.
+    stopError = state.errors.find(
+      (error) => error.kind === "cancellation" && error.phase === "execution"
+    );
+    if (!stopError) {
+      stopError = cancellationBeforeStart(unstarted[0]!.id)!;
+      state.recordRunErrors([stopError]);
+    }
+  }
   for (const step of unstarted) recordUnstartedStep(step, stopError!);
 
   if (state.errors.length === 0 || controls.continueOnError) {

@@ -50,7 +50,11 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Opt in to parallel independent steps with `run(options, { maxConcurrency: 4 })`.
   The default is `1` to preserve side-effect order. Required inputs, optional inputs,
   and failure gates all wait for terminal prerequisites. Skip predicates and output
-  validation occupy slots; fail-fast stops dispatch and drains in-flight steps.
+  validation occupy slots; fail-fast stops dispatch and drains in-flight steps
+  without cancelling them. `continueOnError` keeps eligible branches running;
+  external cancellation stops dispatch in either mode and cancels unstarted selected
+  steps after active work settles. Final step reports and step errors follow plan
+  order; live hooks and traces follow event order. Every concurrent failure is kept.
   Child runs have separate limits. See [the parallel DAG recipe](../examples/parallel-dag.ts).
 - Treat a `PipelineDefinitionError` during module loading as an authoring bug;
   static graph mistakes are rejected when `definePipeline` is called.
