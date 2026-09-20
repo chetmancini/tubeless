@@ -120,15 +120,19 @@
       "declaration": "./dist/node/node.d.ts",
       "exports": [
         "CheckpointStore",
+        "createWorkerThreadAdapter",
         "definePaths",
         "openCheckpoint",
         "readJson",
         "requireEnv",
         "resetDir",
         "withCheckpointedBatch",
+        "WorkerThreadAdapter",
+        "WorkerThreadAdapterOptions",
+        "WorkerThreadContext",
         "writeJson"
       ],
-      "sha256": "3c25bde7d1342716e4d754cd02fba9c855d1cfd040aad50819c6cb4f7ca1950c",
+      "sha256": "e26301ad37e74634f3de2154bb58725ef0b5d8391facafb6048c53ec9ceb7b79",
       "specifier": "tubeless/node"
     },
     {

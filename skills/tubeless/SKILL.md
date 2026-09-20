@@ -99,6 +99,12 @@ Read the corresponding package recipe before using these features:
   environment values and checkpoints. Call `definePaths` factories with
   `context.cwd`; keep `writeJson` and `resetDir` inside dry-run-safe steps.
   `readJson<T>` parses but does not validate untrusted data. See `docs/recipes.md`.
+- For Node CPU parallelism, use `createWorkerThreadAdapter` from `tubeless/node`
+  through `fromRemote` with an explicit module export and cloneable input.
+  Keep output validation on the parent step. A shared adapter bounds worker threads;
+  the pipeline still needs `maxConcurrency` to admit parallel steps. Call `close()`
+  after all callers finish; cancellation can terminate unresponsive workers.
+  See `examples/worker-threads.ts` and `docs/remote-step-composition.md`.
 - Implement concrete JSON or telemetry adapters in the application against
   `PipelineTraceExporter`; adapt the package's `examples/tracing.ts`. Use
   `composeTraceExporters` for multiple trace destinations. Finished traces

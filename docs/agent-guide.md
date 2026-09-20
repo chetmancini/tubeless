@@ -101,6 +101,14 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   unknown JSON and forwarding the signal. Use
   [`host-embedding.ts`](../examples/host-embedding.ts) for host-owned invocation;
   correlation IDs do not provide persistence or checkpoint/resume.
+- For actual CPU parallelism, use `createWorkerThreadAdapter` from `tubeless/node`
+  through `fromRemote`; never serialize arbitrary handler closures. Supply an explicit
+  module URL/export and cloneable payload, keep `outputSchema` on the parent step,
+  and close the adapter when all callers are done. `poolSize` limits threads shared
+  by that adapter; `maxConcurrency` limits admitted DAG steps. Worker cancellation
+  allows cooperative cleanup then terminates unresponsive threads. Read the
+  [worker protocol and lifecycle](./remote-step-composition.md#cpu-work-in-node-worker-threads)
+  and the [executable recipe](../examples/worker-threads.ts).
 - Use `runConcurrent` for bounded lightweight functions that do not need child
   lifecycle events. Use `runConcurrentSettled` when the caller needs completed
   results and the first failure instead of a throw.

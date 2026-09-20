@@ -195,6 +195,38 @@ try {
     .join("\n");
   run("node", ["--input-type=module", "--eval", smokeProgram], consumerRoot);
 
+  // Exercise the worker bootstrap from the installed tarball, including file-worker
+  // startup when the caller itself was launched with --input-type module.
+  run(
+    "node",
+    [
+      "--input-type",
+      "module",
+      "--eval",
+      `
+    import { createWorkerThreadAdapter } from "tubeless/node";
+    import { createSteps, definePipeline } from "tubeless";
+    const adapter = createWorkerThreadAdapter({
+      module: new URL("data:text/javascript,export function double(value) { return value * 2; }"),
+      exportName: "double",
+      poolSize: 2,
+    });
+    const { fromRemote } = createSteps();
+    const work = fromRemote("work", {
+      adapter, mapInput: () => 21,
+      outputSchema: { "~standard": { vendor: "smoke", version: 1,
+        validate: value => typeof value === "number" ? { value } : { issues: [{ message: "number required" }] },
+      } },
+    });
+    try {
+      const result = await definePipeline({ id: "packed-worker", steps: [work] }).runOrThrow({});
+      if (result !== 42) throw new Error("Invalid worker result");
+    } finally { await adapter.close(); }
+  `,
+    ],
+    consumerRoot
+  );
+
   const tubelessBin = join(consumerRoot, "node_modules", ".bin", "tubeless");
   if (!existsSync(tubelessBin)) {
     throw new Error("Packed tubeless artifact is missing the tubeless executable");
