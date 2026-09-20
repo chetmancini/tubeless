@@ -4,10 +4,153 @@ import {
   definePipeline,
   type PipelineContext,
   type PipelineStepProgress,
+  type PipelineStepStatus,
 } from "./pipeline.js";
 import { createPipelineReporter } from "../reporter/interactive-reporter.js";
+import { createMappedChildProgress, createSingleChildProgress } from "./child-progress.js";
 
 const log = { log() {}, warn() {}, error() {} };
+
+describe("canonical child progress projection", () => {
+  const { step } = createSteps();
+  const child = definePipeline({
+    id: "child",
+    steps: [
+      step("filtered", { run: () => 0 }),
+      step("work", { name: "Work", run: () => 1 }),
+      step("save", { run: () => 2 }),
+    ],
+  });
+  const plan = child.plan({ stepIds: ["work", "save"] });
+  const work = plan.steps.find(({ id }) => id === "work")!;
+  const filtered: PipelineStepStatus = {
+    pipelineId: child.id,
+    step: plan.steps.find(({ id }) => id === "filtered")!,
+    id: "filtered",
+    status: "skipped",
+    reason: "filtered",
+    finishedAtMs: 0,
+  };
+  const running: PipelineStepStatus = {
+    pipelineId: child.id,
+    step: work,
+    status: "running",
+    attemptId: "attempt",
+  };
+  const complete: PipelineStepStatus = {
+    ...running,
+    id: work.id,
+    status: "completed",
+    startedAtMs: 0,
+    finishedAtMs: 1,
+  };
+
+  it.each(["single", "mapped"] as const)(
+    "%s consumes each status once and counts selected terminal steps once",
+    (kind) => {
+      const snapshots: PipelineStepProgress[] = [];
+      const report = (progress: PipelineStepProgress) => snapshots.push(progress);
+      const hooks =
+        kind === "single"
+          ? createSingleChildProgress(plan, report)
+          : createMappedChildProgress(["item"], 1, { sampleLimit: 1 }, report).plan("item", plan);
+      hooks.onStepStatus!({ pipelineId: child.id, step: work, status: "planned" });
+      hooks.onStepStatus!({ ...running, progress: { completed: 0 } });
+      expect(snapshots).toHaveLength(0);
+      hooks.onStepStatus!(filtered);
+      expect(snapshots).toHaveLength(kind === "single" ? 1 : 0);
+      if (kind === "single") expect(snapshots.at(-1)?.completed).toBe(0);
+      snapshots.length = 0;
+
+      hooks.onStepStatus!(running);
+      expect(snapshots).toHaveLength(1);
+      hooks.onStepStatus!({
+        ...running,
+        progress: {
+          completed: 2,
+          total: 3,
+          details: [{ id: "record", status: "running" }],
+        },
+      });
+      expect(snapshots).toHaveLength(2);
+      expect(snapshots.at(-1)?.message).toContain(
+        kind === "single" ? "Work: 2 completed" : "Work:2/3"
+      );
+      hooks.onStepStatus!({ ...running, progress: { completed: 0 } });
+      expect(snapshots).toHaveLength(2);
+      hooks.onStepStatus!(complete);
+      hooks.onStepStatus!(complete);
+      expect(snapshots).toHaveLength(4);
+      expect(snapshots.at(-1)).toMatchObject({ completed: 1, total: 2 });
+      expect(snapshots.at(-1)?.details).toContainEqual(
+        expect.objectContaining({ id: "work", status: "completed", completed: 2, total: 3 })
+      );
+      expect(snapshots.at(-1)?.details).toContainEqual(
+        expect.objectContaining({
+          id: "record",
+          status: "completed",
+          depth: kind === "single" ? 1 : 2,
+        })
+      );
+      expect(snapshots.at(-1)?.details?.some(({ id }) => id === "filtered")).toBe(false);
+      expect(snapshots[1]?.details).toContainEqual(
+        expect.objectContaining({ id: "record", status: "running" })
+      );
+    }
+  );
+
+  it.each(["single", "mapped"] as const)(
+    "%s keeps distinct detail updates when hook families alternate",
+    (kind) => {
+      const snapshots: PipelineStepProgress[] = [];
+      const report = (progress: PipelineStepProgress) => snapshots.push(progress);
+      const hooks =
+        kind === "single"
+          ? createSingleChildProgress(plan, report)
+          : createMappedChildProgress(["item"], 1, undefined, report).plan("item", plan);
+      const progress: PipelineStepProgress = {
+        completed: 1,
+        total: 2,
+        details: [{ id: "record", label: "reading" }],
+      };
+      hooks.onStepStatus!({ ...running, progress });
+      const changed = {
+        ...running,
+        progress: { ...progress, details: [{ id: "record", label: "writing" }] },
+      };
+      hooks.onStepProgress!(changed);
+      expect(snapshots).toHaveLength(2);
+      // Pair the focused update with an equivalent canonical copy.
+      hooks.onStepStatus!(structuredClone(changed));
+      expect(snapshots).toHaveLength(2);
+      expect(snapshots.at(-1)?.details).toContainEqual(
+        expect.objectContaining({ id: "record", label: "writing" })
+      );
+    }
+  );
+
+  it("reconciles missing terminal statuses before an item result mapping fails", () => {
+    const snapshots: PipelineStepProgress[] = [];
+    const progress = createMappedChildProgress(["item"], 1, undefined, (next) =>
+      snapshots.push(next)
+    );
+    progress.start("item");
+    const hooks = progress.plan("item", plan);
+    hooks.onStepStatus!(complete);
+    progress.childCompleted("item");
+    progress.childCompleted("item");
+    // A duplicate terminal event after reconciliation still cannot advance the count.
+    hooks.onStepStatus!(complete);
+    expect(snapshots.at(-1)).toMatchObject({ completed: 2, total: 2 });
+    progress.fail("item", new Error("mapping failed"), false);
+    expect(snapshots.at(-1)).toMatchObject({ completed: 2, total: 2 });
+    expect(snapshots.at(-1)?.details?.[0]).toEqual({
+      id: "item",
+      status: "failed",
+      label: "mapping failed",
+    });
+  });
+});
 
 describe("nested child progress", () => {
   describe.each(["single", "mapped"] as const)("%s wrapper observation", (kind) => {

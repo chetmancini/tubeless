@@ -2,29 +2,22 @@ import { throwIfAborted } from "../utilities/abort.js";
 import { emitRejectedPlanLifecycle } from "./lifecycle.js";
 import { runConcurrentSettled } from "../utilities/batch.js";
 import { isPipelineCancellation, PipelineExecutionError } from "./pipeline-execute.js";
-import {
-  toMappedChildStepProgress,
-  type MappedChildProgressSnapshot,
-  type ToMappedChildStepProgressOptions,
-} from "./mapped-child-progress.js";
+import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { duplicateValues } from "../utilities/collections.js";
 import { EXECUTE_COMPILED_RUN, isCompiledPipeline } from "./pipeline-identity.js";
-import { createChildProgress } from "./child-progress.js";
-import { hasVisibleStepProgress } from "./progress.js";
+import { createMappedChildProgress, createSingleChildProgress } from "./child-progress.js";
 import type {
   Pipeline,
   PipelineContext,
   PipelineExecutionContext,
   PipelineHooks,
   PipelinePlan,
-  PipelinePlanStep,
   PipelineRun,
   PipelineRunControls,
   PipelineRunOptions,
   PipelineRuntime,
   PipelineStepContext,
-  PipelineStepProgressDetail,
 } from "./pipeline-types.js";
 import type { PipelineTracingOptions } from "../tracing/tracing-contracts.js";
 
@@ -43,8 +36,6 @@ export class PipelineChildError extends Error {
     this.name = "PipelineChildError";
   }
 }
-
-const LIVE_FAN_OUT_GROUP_LIMIT = 32;
 
 type ChildPipeline = Pipeline<object, unknown, string, string>;
 
@@ -349,39 +340,15 @@ export function createSingleChildRunner<TParentOptions extends object>(
     };
     // Plan once for progress totals and execution. Invalid plans fail before child.run.
     const childPlan = config.pipeline.plan(controls);
-    const selectedStepCount = childPlan.ok
-      ? childPlan.steps.filter((step) => step.selected).length
-      : 0;
-    const childProgress = hasProgressObserver(context) ? createChildProgress(childPlan) : undefined;
-    const terminalSteps = new Set<string>();
-    const report = (step: PipelinePlanStep, message: string, terminal = false): void => {
-      if (!childProgress) return;
-      if (terminal) terminalSteps.add(step.id);
-      context.reportProgress({
-        details: childProgress.details(),
-        completed: terminalSteps.size,
-        total: Math.max(1, selectedStepCount),
-        message: `${config.pipeline.id}/${step.name ?? step.id}: ${message}`,
-      });
-    };
-    const childHooks: PipelineHooks = {
-      onStepStatus: childProgress?.update,
-      onStepStart: ({ step }) => report(step, "started"),
-      onStepProgress: ({ progress, step }) => {
-        if (!hasVisibleStepProgress(progress)) return;
-        report(step, progress.message ?? `${progress.completed} completed`);
-      },
-      onStepComplete: ({ step }) => report(step, "complete", true),
-      onStepSkip: ({ reason, step }) => report(step, `skipped: ${reason}`, reason !== "filtered"),
-      onStepCancel: ({ error, step }) => report(step, `cancelled: ${error.message}`, true),
-      onStepFail: ({ error, step }) => report(step, `failed: ${error.message}`, true),
-    };
+    const childHooks = hasProgressObserver(context)
+      ? createSingleChildProgress(childPlan, context.reportProgress)
+      : {};
     const childResult = await runChildPipeline(
       config.pipeline,
       domainOptions,
       controls,
       baseChildContext,
-      childProgress ? childHooks : {},
+      childHooks,
       `Child pipeline ${config.pipeline.id} `,
       childPlan
     );
@@ -414,95 +381,18 @@ export function createMappedChildRunner<TParentOptions extends object>(
       | { key: string; ok: true; value: unknown }
       | { error: Error; key: string; index: number; ok: false };
 
-    const active = new Map<string, string>();
-    const failedKeys = new Set<string>();
-    const itemIndexes = new Map(keys.map((key, index) => [key, index]));
-    const observesProgress = hasProgressObserver(context);
-    const itemRows = new Map<string, PipelineStepProgressDetail>(
-      keys.map((id) => [id, { id, status: "pending" }])
-    );
-    const itemProgress = new Map<string, ReturnType<typeof createChildProgress>>();
-    const childTerminalSteps = new Map<string, Set<string>>();
-    let finishedItems = 0;
-    let failedItems = 0;
-    let stepsPerItem = 0;
-    let plannedChildSteps = 0;
-    let plannedItems = 0;
-    let terminalChildSteps = 0;
-
-    const publishProgress = (spotlight?: string, final = false): void => {
-      if (!observesProgress) return;
-      const snapshot: MappedChildProgressSnapshot = {
-        active,
-        concurrency,
-        failedItems,
-        finishedItems,
-        itemCount: items.length,
-        plannedChildSteps,
-        plannedItems,
-        stepsPerItem,
-        terminalChildSteps,
-        spotlight,
-      };
-      // Materialize a bounded live window; expand the default final snapshot once.
-      // Active and failed sets avoid scanning or sorting the full fan-out per event.
-      const limit =
-        Math.max(0, Math.floor(config.progress?.detailLimit ?? LIVE_FAN_OUT_GROUP_LIMIT)) || 0;
-      let visibleKeys: readonly string[];
-      if (final && config.progress?.detailLimit === undefined) {
-        visibleKeys = keys;
-      } else {
-        const visible = new Set<string>();
-        for (const candidates of [active.keys(), failedKeys.keys(), keys.values()]) {
-          for (const key of candidates) {
-            if (visible.size >= limit) break;
-            visible.add(key);
-          }
-        }
-        visibleKeys = [...visible].sort(
-          (left, right) => itemIndexes.get(left)! - itemIndexes.get(right)!
-        );
-      }
-      const details = visibleKeys.flatMap((key) => [
-        { ...itemRows.get(key)! },
-        ...(itemProgress.get(key)?.details() ?? []).map((detail) => ({
-          ...detail,
-          depth: (detail.depth ?? 0) + 1,
-        })),
-      ]);
-      if (visibleKeys.length < keys.length) {
-        details.push({ id: `+${keys.length - visibleKeys.length} more`, status: "pending" });
-      }
-      context.reportProgress({ ...toMappedChildStepProgress(snapshot, config.progress), details });
-    };
-    const markChildTerminal = (itemKey: string, stepId: string, label: string): void => {
-      let seen = childTerminalSteps.get(itemKey);
-      if (!seen) {
-        seen = new Set();
-        childTerminalSteps.set(itemKey, seen);
-      }
-      if (!seen.has(stepId)) {
-        seen.add(stepId);
-        terminalChildSteps += 1;
-      }
-      active.set(itemKey, label);
-      publishProgress();
-    };
-
-    if (items.length === 0) {
-      publishProgress();
-      return [];
-    }
-    publishProgress();
+    const progress = hasProgressObserver(context)
+      ? createMappedChildProgress(keys, concurrency, config.progress, context.reportProgress)
+      : undefined;
+    progress?.publish();
+    if (items.length === 0) return [];
 
     const settled = await runConcurrentSettled(
       items,
       { concurrency, signal: context.signal },
       async (item, itemIndex): Promise<Outcome> => {
         const key = keys[itemIndex]!;
-        active.set(key, "starting");
-        itemRows.set(key, { id: key, status: "running" });
-        publishProgress();
+        progress?.start(key);
         try {
           throwIfAborted(context.signal, `Mapped child pipeline ${config.pipeline.id}`);
           const { controls, domainOptions } = childRunBags(
@@ -511,42 +401,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
           );
           // Plan once per mapped-options bag for progress and execution.
           const childPlan = config.pipeline.plan(controls);
-          if (childPlan.ok) {
-            const plannedSteps = childPlan.steps.filter((step) => step.selected).length;
-            plannedChildSteps += plannedSteps;
-            plannedItems += 1;
-            if (plannedSteps > stepsPerItem) stepsPerItem = plannedSteps;
-          }
-
-          const childProgress = observesProgress ? createChildProgress(childPlan) : undefined;
-          if (childProgress) itemProgress.set(key, childProgress);
-          const childHooks: PipelineHooks = {
-            onStepStatus: childProgress?.update,
-            onStepStart: ({ step }) => {
-              active.set(key, step.name ?? step.id);
-              publishProgress();
-            },
-            onStepProgress: ({ progress, step }) => {
-              if (!hasVisibleStepProgress(progress)) return;
-              const detail =
-                progress.message ??
-                (progress.total !== undefined
-                  ? `${progress.completed}/${progress.total}`
-                  : `${progress.completed}`);
-              active.set(key, `${step.name ?? step.id}:${detail}`);
-              publishProgress();
-            },
-            onStepComplete: ({ step }) =>
-              markChildTerminal(key, step.id, `${step.name ?? step.id}:complete`),
-            onStepSkip: ({ reason, step }) => {
-              if (reason === "filtered") return;
-              markChildTerminal(key, step.id, `${step.name ?? step.id}:skipped:${reason}`);
-            },
-            onStepCancel: ({ step }) =>
-              markChildTerminal(key, step.id, `${step.name ?? step.id}:cancelled`),
-            onStepFail: ({ step }) =>
-              markChildTerminal(key, step.id, `${step.name ?? step.id}:failed`),
-          };
+          const childHooks = progress?.plan(key, childPlan) ?? {};
           const childResult = await runChildPipeline(
             config.pipeline,
             domainOptions,
@@ -561,48 +416,27 @@ export function createMappedChildRunner<TParentOptions extends object>(
               sleep: context.sleep,
               tracing: childTracingOptions(context, key),
             },
-            observesProgress ? childHooks : {},
+            childHooks,
             "",
             childPlan
           );
 
-          const seen = childTerminalSteps.get(key) ?? new Set<string>();
-          if (childPlan.ok) {
-            for (const planStep of childPlan.steps) {
-              if (!planStep.selected || seen.has(planStep.id)) continue;
-              seen.add(planStep.id);
-              terminalChildSteps += 1;
-            }
-          }
-          childTerminalSteps.set(key, seen);
+          progress?.childCompleted(key);
 
           const value = config.mapResult
             ? config.mapResult(childResult.value, childResult, item, itemIndex, context)
             : childResult.value;
-          active.delete(key);
-          itemRows.set(key, { id: key, status: "completed" });
-          finishedItems += 1;
-          publishProgress(`${key}: completed`);
+          progress?.complete(key);
           return { key, ok: true, value };
         } catch (error) {
           const cause = error instanceof Error ? error : new Error(String(error));
-          active.delete(key);
-          itemRows.set(key, {
-            id: key,
-            status: isPipelineCancellation(cause, context) ? "cancelled" : "failed",
-            label: cause.message,
-          });
-          failedKeys.add(key);
-          failedItems += 1;
-          publishProgress(`${key}: failed`);
+          progress?.fail(key, cause, isPipelineCancellation(cause, context));
           return { error: cause, key, index: itemIndex, ok: false };
         }
       }
     );
 
-    if (config.progress?.detailLimit === undefined && keys.length > LIVE_FAN_OUT_GROUP_LIMIT) {
-      publishProgress(undefined, true);
-    }
+    progress?.finish();
     const outcomes = settled.results.filter((outcome): outcome is Outcome => outcome !== undefined);
     const schedulerFailure =
       settled.failure === undefined
