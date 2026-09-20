@@ -207,6 +207,79 @@ describe("parallel failure semantics", () => {
   );
 
   it.each([false, true])(
+    "preserves planned skips after a local cancellation unless the external signal aborts (%s)",
+    async (externalAbort) => {
+      const release = defer();
+      const locallyCancelled = defer();
+      const controller = new AbortController();
+      const localAbort = new Error("operation cancelled itself");
+      localAbort.name = "AbortError";
+      const { step } = createSteps();
+      const local = step("local", {
+        run: () => {
+          throw localAbort;
+        },
+      });
+      const active = step("active", { run: () => release.promise });
+      const unstartedRun = vi.fn();
+      const dry = step("dry", { dependsOn: [active], dryRun: "skip", run: unstartedRun });
+      const filtered = step("filtered", { run: unstartedRun });
+      const unmet = step("unmet", { dependsOn: [filtered], run: unstartedRun });
+      const later = step("later", { run: unstartedRun });
+      const pipeline = definePipeline({
+        id: "planned-skips",
+        steps: [local, active, dry, filtered, unmet, later],
+      });
+      const run = pipeline.run(
+        {},
+        {
+          maxConcurrency: 2,
+          dryRun: true,
+          stepIds: ["local", "active", "dry", "unmet", "later"],
+        },
+        {
+          signal: controller.signal,
+          hooks: {
+            onStepCancel: ({ step }) => {
+              if (step.id === "local") locallyCancelled.resolve();
+            },
+          },
+        }
+      );
+      await locallyCancelled.promise;
+      if (externalAbort) controller.abort("operator stopped");
+      release.resolve();
+      const result = await run;
+      expect(result.status).toBe("cancelled");
+      expect(controller.signal.aborted).toBe(externalAbort);
+      expect(result.steps).toMatchObject([
+        { id: "local", status: "cancelled", error: { message: localAbort.message } },
+        { id: "active", status: "completed" },
+        externalAbort
+          ? { id: "dry", status: "cancelled" }
+          : { id: "dry", status: "skipped", reason: "dry-run" },
+        { id: "filtered", status: "skipped", reason: "filtered" },
+        externalAbort
+          ? { id: "unmet", status: "cancelled" }
+          : {
+              id: "unmet",
+              status: "skipped",
+              reason: "unmet-dependency",
+              dependencyId: "filtered",
+            },
+        {
+          id: "later",
+          status: "cancelled",
+          error: {
+            message: externalAbort ? "Pipeline run aborted: operator stopped" : localAbort.message,
+          },
+        },
+      ]);
+      expect(unstartedRun).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([false, true])(
     "prioritizes run cancellation from a failure hook in runOrThrow (continueOnError=%s)",
     async (continueOnError) => {
       const controller = new AbortController();

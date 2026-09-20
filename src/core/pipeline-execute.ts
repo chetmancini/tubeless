@@ -346,14 +346,15 @@ export async function executePlannedRun<
 
   const recordUnstartedStep = (step: AnyStep<TOptions>, error: PipelineError): void => {
     const plannedStep = plannedStepFor(step);
-    if (plannedStep.selected && error.kind === "cancellation") {
-      state.cancelStep(plannedStep, { ...error, stepId: step.id }, false);
-    } else if (plannedStep.skipReason) {
+    // Only the external signal can override a selected step's planned skip.
+    if (plannedStep.skipReason && (!plannedStep.selected || error !== externalCancellationError)) {
       const dependencyId =
         plannedStep.skipReason === "unmet-dependency"
           ? plannedStep.dependencies.find((id) => plannedSteps.get(id)?.skipReason !== undefined)
           : undefined;
       state.skipStep(plannedStep, { reason: plannedStep.skipReason, dependencyId });
+    } else if (error.kind === "cancellation") {
+      state.cancelStep(plannedStep, { ...error, stepId: step.id }, false);
     } else {
       state.skipStep(plannedStep, {
         reason: "fail-fast",
