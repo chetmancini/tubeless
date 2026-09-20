@@ -109,6 +109,7 @@ not supported.
 | `dryRun`          | Always takes the parent's value, overriding any value in `mapOptions`                         |
 | `stepIds`         | Uses only a child-specific value supplied by `mapOptions`                                     |
 | `targets`         | Uses only a child-specific value supplied by `mapOptions`; IDs must be declared child targets |
+| `maxConcurrency`  | Uses only a value supplied by `mapOptions`; defaults to `1` per child run                     |
 | `continueOnError` | Uses only a value supplied by `mapOptions`                                                    |
 
 Child `mapOptions` returns domain inputs and any child-specific controls in
@@ -122,7 +123,9 @@ whole child workflow.
 
 Composition adds no checkpoints or crash recovery. Fan-out runs children
 concurrently within one parent step; it does not make the parent graph execute
-its steps in parallel.
+its steps in parallel. Opt in to parent DAG parallelism with the parent run's
+`maxConcurrency` control. Each wrapper occupies one parent slot for its full
+lifetime, while child DAG limits and fan-out item concurrency apply independently.
 
 ## Failures and cancellation
 

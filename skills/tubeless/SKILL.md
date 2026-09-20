@@ -29,6 +29,9 @@ the installed declarations before using them; do not silently upgrade Tubeless.
   constructor it needs: `step`, `fromPipeline`, `fromRemote`, and/or
   `forEachPipeline`. Domain options contain business inputs; pass built-in
   controls separately to `run(options, controls?)`.
+- Opt in to independent DAG parallelism with `run(options, { maxConcurrency: 4 })`;
+  the default is `1`. All dependency edge types wait for terminal prerequisites.
+  Declare edges for side-effect ordering; child runs have their own concurrency limit.
 - Give steps stable kebab-case IDs and descriptions of their domain work.
   `name` is an optional display label. Return values from steps and consume
   inferred dependency outputs instead of sharing mutable state.

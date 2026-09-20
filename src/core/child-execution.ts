@@ -185,7 +185,13 @@ function childTracingOptions(
   return context.tracing ? { ...context.tracing, itemKey } : undefined;
 }
 
-const CHILD_RUN_CONTROL_KEYS = ["continueOnError", "dryRun", "stepIds", "targets"] as const;
+const CHILD_RUN_CONTROL_KEYS = [
+  "continueOnError",
+  "dryRun",
+  "maxConcurrency",
+  "stepIds",
+  "targets",
+] as const;
 
 function isChildRunControlKey(
   property: PropertyKey

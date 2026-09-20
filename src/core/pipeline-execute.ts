@@ -11,6 +11,7 @@ import { createRunId } from "./pipeline-ids.js";
 import type { CompiledPipeline } from "./pipeline-compiler.js";
 import type { StepsOptions } from "./pipeline-definition.js";
 import { decideStepDisposition } from "./pipeline-disposition.js";
+import { schedulePipelineSteps } from "./pipeline-scheduler.js";
 import { compiledStepGraph } from "./pipeline-graph.js";
 import { planStepById, stepToPlanStep } from "./pipeline-plan.js";
 import {
@@ -297,6 +298,19 @@ export async function executePlannedRun<
     return state.finish();
   }
 
+  const maxConcurrency = controls.maxConcurrency ?? 1;
+  if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1) {
+    state.recordRunErrors([
+      {
+        code: "TUBELESS_RUN_CONCURRENCY_INVALID",
+        kind: "validation",
+        phase: "execution",
+        message: "maxConcurrency must be a positive finite integer",
+      },
+    ]);
+    return state.finish();
+  }
+
   // SAFETY: `domainOptions` is the user-supplied options object; if a schema
   // is present it is re-validated below before assignment to `pipelineOptions`.
   let pipelineOptions = input.domainOptions as TOptions;
@@ -350,38 +364,28 @@ export async function executePlannedRun<
     plannedSteps.get(step.id) ??
     stepToPlanStep(step, true, undefined, undefined, compiledStepGraph(compiled, step));
 
-  const recordRemainingStates = (
-    fromIndex: number,
-    failedStepId?: string,
-    cancellationError?: PipelineError
-  ): void => {
-    for (let index = fromIndex; index < orderedSteps.length; index++) {
-      const step = orderedSteps[index]!;
-      const plannedStep = plannedStepFor(step);
-      if (plannedStep.skipReason) {
-        const dependencyId =
-          plannedStep.skipReason === "unmet-dependency"
-            ? plannedStep.dependencies.find((id) => plannedSteps.get(id)?.skipReason !== undefined)
-            : undefined;
-        state.skipStep(plannedStep, {
-          reason: plannedStep.skipReason,
-          dependencyId,
-        });
-      } else if (cancellationError) {
-        state.cancelStep(plannedStep, { ...cancellationError, stepId: step.id }, false);
-      } else {
-        state.skipStep(plannedStep, {
-          reason: "fail-fast",
-          message: failedStepId
-            ? `Not run because fail-fast stopped after ${failedStepId} failed.`
-            : "Not run because the pipeline was aborted before this step started.",
-          dependencyId: failedStepId,
-        });
-      }
+  let stopError: PipelineError | undefined;
+
+  const recordUnstartedStep = (step: AnyStep<TOptions>, error: PipelineError): void => {
+    const plannedStep = plannedStepFor(step);
+    if (plannedStep.skipReason) {
+      const dependencyId =
+        plannedStep.skipReason === "unmet-dependency"
+          ? plannedStep.dependencies.find((id) => plannedSteps.get(id)?.skipReason !== undefined)
+          : undefined;
+      state.skipStep(plannedStep, { reason: plannedStep.skipReason, dependencyId });
+    } else if (error.kind === "cancellation") {
+      state.cancelStep(plannedStep, { ...error, stepId: step.id }, false);
+    } else {
+      state.skipStep(plannedStep, {
+        reason: "fail-fast",
+        message: `Not run because fail-fast stopped after ${error.stepId} failed.`,
+        dependencyId: error.stepId,
+      });
     }
   };
 
-  const cancelBeforeStepStart = (stepId: string, stepIndex: number): boolean => {
+  const cancelBeforeStepStart = (step: AnyStep<TOptions>): boolean => {
     try {
       throwIfAborted(runtime);
       return false;
@@ -390,10 +394,11 @@ export async function executePlannedRun<
         code: "TUBELESS_RUN_CANCELLED",
         kind: "cancellation",
         phase: "execution",
-        stepId,
+        stepId: step.id,
       });
       state.recordRunErrors([pipelineError]);
-      recordRemainingStates(stepIndex, undefined, pipelineError);
+      stopError ??= pipelineError;
+      recordUnstartedStep(step, pipelineError);
       return true;
     }
   };
@@ -401,9 +406,8 @@ export async function executePlannedRun<
   const recordStepExecutionFailure = (
     error: unknown,
     plannedStep: PipelinePlanStep,
-    stepIndex: number,
     attempt: PipelineStepAttempt
-  ): boolean => {
+  ): void => {
     const cancelled = isPipelineCancellation(error, runtime);
     const childFailure =
       error instanceof PipelineExecutionError || error instanceof PipelineChildError;
@@ -427,18 +431,15 @@ export async function executePlannedRun<
       stepId: plannedStep.id,
     });
     state.failStep(plannedStep, attempt, pipelineError);
-    if (controls.continueOnError) return false;
-    recordRemainingStates(stepIndex + 1, plannedStep.id, cancelled ? pipelineError : undefined);
-    return true;
+    if (!controls.continueOnError) stopError ??= pipelineError;
   };
 
   const recordPolicySkip = async (
     plannedStep: PipelinePlanStep,
     step: AnyStep<TOptions>,
-    stepIndex: number,
     reason: string,
     value: unknown
-  ): Promise<boolean> => {
+  ): Promise<void> => {
     let attempt: PipelineStepAttempt | undefined;
     let published = value;
     if (step.outputSchema) {
@@ -450,7 +451,7 @@ export async function executePlannedRun<
           `Pipeline ${compiled.id} step ${step.id} output`
         );
       } catch (error) {
-        return recordStepExecutionFailure(error, plannedStep, stepIndex, attempt);
+        return recordStepExecutionFailure(error, plannedStep, attempt);
       }
     }
     state.skipStep(plannedStep, {
@@ -459,12 +460,11 @@ export async function executePlannedRun<
       output: { value: published },
       reason: "policy",
     });
-    return false;
   };
 
-  for (const [stepIndex, step] of orderedSteps.entries()) {
+  const executeOneStep = async (step: AnyStep<TOptions>): Promise<void> => {
     const plannedStep = plannedStepFor(step);
-    if (cancelBeforeStepStart(step.id, stepIndex)) break;
+    if (cancelBeforeStepStart(step)) return;
 
     const graph = compiledStepGraph(compiled, step);
     const disposition = decideStepDisposition({
@@ -476,7 +476,7 @@ export async function executePlannedRun<
     });
     if (disposition.kind === "skip") {
       state.skipStep(plannedStep, disposition);
-      continue;
+      return;
     }
 
     const inputEntries: Array<[string, unknown]> = [];
@@ -495,23 +495,13 @@ export async function executePlannedRun<
         });
       } catch (error) {
         const attempt = state.beginAttempt(plannedStep);
-        if (recordStepExecutionFailure(error, plannedStep, stepIndex, attempt)) break;
-        continue;
+        recordStepExecutionFailure(error, plannedStep, attempt);
+        return;
       }
-      if (cancelBeforeStepStart(step.id, stepIndex)) break;
+      if (cancelBeforeStepStart(step)) return;
       if (skipDecision) {
-        if (
-          await recordPolicySkip(
-            plannedStep,
-            step,
-            stepIndex,
-            skipDecision.reason,
-            skipDecision.value
-          )
-        ) {
-          break;
-        }
-        continue;
+        await recordPolicySkip(plannedStep, step, skipDecision.reason, skipDecision.value);
+        return;
       }
     }
 
@@ -531,9 +521,18 @@ export async function executePlannedRun<
       });
       state.completeStep(plannedStep, attempt, output);
     } catch (error) {
-      if (recordStepExecutionFailure(error, plannedStep, stepIndex, attempt)) break;
+      recordStepExecutionFailure(error, plannedStep, attempt);
     }
-  }
+  };
+
+  const unstarted = await schedulePipelineSteps({
+    orderedSteps,
+    stepGraph: compiled.stepGraph,
+    maxConcurrency,
+    executeOneStep,
+    shouldStop: () => stopError !== undefined,
+  });
+  for (const step of unstarted) recordUnstartedStep(step, stopError!);
 
   if (state.errors.length === 0 || controls.continueOnError) {
     const finalizeStartedAt = runtime.now();

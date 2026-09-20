@@ -47,6 +47,11 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   option types contain domain input only;
   callers pass those options and optional built-in controls to
   `run(options, controls?)`, while `plan(controls)` accepts controls alone.
+- Opt in to parallel independent steps with `run(options, { maxConcurrency: 4 })`.
+  The default is `1` to preserve side-effect order. Required inputs, optional inputs,
+  and failure gates all wait for terminal prerequisites. Skip predicates and output
+  validation occupy slots; fail-fast stops dispatch and drains in-flight steps.
+  Child runs have separate limits. See [the parallel DAG recipe](../examples/parallel-dag.ts).
 - Treat a `PipelineDefinitionError` during module loading as an authoring bug;
   static graph mistakes are rejected when `definePipeline` is called.
 - Use `dependsOn` when the output is required, `optionalDependsOn` when absence

@@ -50,6 +50,8 @@ export interface PipelineRunControls<
   TStepId extends string = string,
   TTargetId extends string = string,
 > {
+  /** Maximum simultaneous steps, including skip predicates and output validation. Defaults to 1. */
+  maxConcurrency?: number;
   continueOnError?: boolean;
   dryRun?: boolean;
   /**

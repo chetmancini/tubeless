@@ -63,19 +63,48 @@ Pass business inputs as the first argument and execution controls as the second:
 
 ```ts
 await pipeline.run(options, { dryRun: true });
+await pipeline.run(options, { maxConcurrency: 4 });
 await pipeline.runOrThrow(options, { targets: ["publish"] });
 ```
 
-| Control           | Default   | Effect                                                                   |
-| ----------------- | --------- | ------------------------------------------------------------------------ |
-| `dryRun`          | `false`   | Applies each step's dry-run policy; unmarked steps still run             |
-| `continueOnError` | `false`   | Lets independent work continue after a failure                           |
-| `targets`         | All steps | Selects declared goals and their required dependencies and failure gates |
-| `stepIds`         | All steps | Selects exactly the listed steps, without adding dependencies            |
+| Control           | Default   | Effect                                                                     |
+| ----------------- | --------- | -------------------------------------------------------------------------- |
+| `dryRun`          | `false`   | Applies each step's dry-run policy; unmarked steps still run               |
+| `maxConcurrency`  | `1`       | Limits simultaneous steps, including skip predicates and output validation |
+| `continueOnError` | `false`   | Lets independent work continue after a failure                             |
+| `targets`         | All steps | Selects declared goals and their required dependencies and failure gates   |
+| `stepIds`         | All steps | Selects exactly the listed steps, without adding dependencies              |
 
 `targets` and `stepIds` cannot be combined. Use `pipeline.plan(controls)` to
 check selection before running. Planning requires no business inputs and does
 not call step handlers or schema validators.
+
+`maxConcurrency` must be a positive finite integer. Invalid values fail the run
+with `TUBELESS_RUN_CONCURRENCY_INVALID` before options validation or step execution.
+The default of `1` preserves existing serial execution, including the ordering
+of independent side effects. Opt in only when independent steps can safely overlap.
+Declare ordering constraints as graph edges when side effects must run in sequence.
+
+All three edge types are scheduling prerequisites: a step waits until each required
+input, optional input, and failure gate is terminal (completed, failed, skipped, or
+cancelled). Their existing output and failure policies then determine whether it
+runs. Ready steps dispatch in the compiled topological order, with declaration
+order breaking graph ties. A freed slot can start a dependent immediately, without
+waiting for unrelated steps. Skip predicates and output schemas, including schemas
+for policy-skip values, occupy the same slot as the step handler.
+
+Fail-fast stops new dispatches after the first observed failure. In-flight steps
+settle and report their own outcomes before the run returns; finalization also waits
+for all in-flight work. With `continueOnError`, eligible steps continue and the
+finalizer receives all available outputs. Cancellation remains cooperative through
+`context.signal`. Concurrent lifecycle events and terminal reports reflect actual
+completion order. The default result still comes from the last step in the graph's
+stable topological order, regardless of which step finishes last.
+
+The limit applies to one pipeline run. A child wrapper occupies one parent slot;
+child runs retain their own limit, defaulting to `1`. Set `maxConcurrency` in child
+`mapOptions` to opt them in separately. Fan-out `concurrency` independently limits
+simultaneous child runs. See the [parallel DAG recipe](../examples/parallel-dag.ts).
 
 ## Selection and finalization
 

@@ -1,0 +1,60 @@
+import { compiledStepGraph, stepEdges, type CompiledStepGraph } from "./pipeline-graph.js";
+import type { AnyStep } from "./pipeline-steps.js";
+
+/** Schedule the compiled DAG; execution owns step outcomes and the stop policy. */
+export async function schedulePipelineSteps<TOptions extends object>(input: {
+  orderedSteps: readonly AnyStep<TOptions>[];
+  stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph>;
+  maxConcurrency: number;
+  executeOneStep(step: AnyStep<TOptions>): Promise<void>;
+  shouldStop(): boolean;
+}): Promise<readonly AnyStep<TOptions>[]> {
+  const { orderedSteps, executeOneStep, maxConcurrency, shouldStop } = input;
+  const indexByStep = new Map(orderedSteps.map((step, index) => [step, index]));
+  let nextReadyIndex = 0;
+  const pending = new Set(orderedSteps);
+  const ready = new Set<AnyStep<TOptions>>();
+  const running = new Map<AnyStep<TOptions>, Promise<void>>();
+  const terminal = new Set<AnyStep<TOptions>>();
+  const prerequisites = new Map(
+    orderedSteps.map((step) => [step, stepEdges(step, compiledStepGraph(input, step))])
+  );
+  const dependents = new Map<AnyStep<TOptions>, AnyStep<TOptions>[]>();
+  for (const [step, edges] of prerequisites) {
+    if (edges.length === 0) ready.add(step);
+    for (const prerequisite of edges) {
+      const children = dependents.get(prerequisite) ?? [];
+      children.push(step);
+      dependents.set(prerequisite, children);
+    }
+  }
+
+  try {
+    while (ready.size > 0 || running.size > 0) {
+      // Keep our place instead of rescanning the completed prefix. A newly
+      // ready step can rewind the cursor to preserve stable compiled order.
+      while (ready.size > 0 && running.size < maxConcurrency && !shouldStop()) {
+        const step = orderedSteps[nextReadyIndex++]!;
+        if (!ready.delete(step)) continue;
+        pending.delete(step);
+        const task = executeOneStep(step).then(() => {
+          running.delete(step);
+          terminal.add(step);
+          for (const dependent of dependents.get(step) ?? []) {
+            if (prerequisites.get(dependent)!.every((edge) => terminal.has(edge))) {
+              ready.add(dependent);
+              nextReadyIndex = Math.min(nextReadyIndex, indexByStep.get(dependent)!);
+            }
+          }
+        });
+        running.set(step, task);
+      }
+      if (running.size === 0) break;
+      await Promise.race(running.values());
+    }
+  } finally {
+    // Even unexpected execution errors must not let in-flight work escape the run.
+    await Promise.allSettled(running.values());
+  }
+  return [...pending];
+}
