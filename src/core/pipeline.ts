@@ -135,6 +135,7 @@ function snapshotRunControls<TStepId extends string, TTargetId extends string>(
   return snapshot;
 }
 
+/** Compile a typed step graph into a validated, executable pipeline. */
 export function definePipeline<
   const TSteps extends readonly AnyStep[],
   TResult = DefaultPipelineResult<TSteps>,

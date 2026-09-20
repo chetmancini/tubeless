@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import { writeAtomicText } from "./atomic-text.js";
 
+/** Mutable set of completed item keys backed by an explicit JSON flush. */
 export interface CheckpointStore<TMeta = unknown> {
   has(key: string): boolean;
   record(key: string, meta?: TMeta): void;
@@ -61,6 +62,7 @@ export interface OpenCheckpointOptions {
   onCorruptFile?: (cause: unknown) => void;
 }
 
+/** Open a JSON checkpoint file, falling back to an empty store when it is absent. */
 export function openCheckpoint<TMeta = unknown>(
   filePath: string,
   options: OpenCheckpointOptions = {}

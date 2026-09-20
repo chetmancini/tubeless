@@ -1,5 +1,6 @@
 import { throwIfAborted } from "./abort.js";
 
+/** Scheduling and cancellation settings for bounded concurrent work. */
 export interface RunConcurrentOptions {
   /** Maximum in-flight workers. Defaults to one for deterministic sequential work. */
   concurrency?: number;
@@ -7,8 +8,10 @@ export interface RunConcurrentOptions {
   signal?: AbortSignal;
 }
 
+/** Asynchronous worker invoked for one input item by the concurrency helpers. */
 export type ConcurrentWorker<T, R> = (item: T, index: number, signal?: AbortSignal) => Promise<R>;
 
+/** Split an input collection into fixed-size batches. */
 export function chunk<T>(items: readonly T[], size: number): T[][] {
   if (!Number.isInteger(size) || size <= 0) {
     throw new Error(`chunk size must be a positive integer, got ${size}`);
@@ -27,6 +30,7 @@ function resolveConcurrency(concurrency: number | undefined): number {
   return Math.max(1, concurrency ?? 1);
 }
 
+/** Partial results and first failure returned by `runConcurrentSettled`. */
 export interface ConcurrentSettleResult<R> {
   /** Sparse: holes are items never started or failed. */
   readonly results: ReadonlyArray<R | undefined>;
@@ -126,6 +130,7 @@ async function runConcurrentSettledWithLabel<T, R>(
   return { completedIndexes, failure, results };
 }
 
+/** Run fixed-size input batches with bounded concurrency and input-order results. */
 export async function runBatched<T, R>(
   items: readonly T[],
   options: { size: number; concurrency?: number; signal?: AbortSignal },

@@ -1,8 +1,8 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { hashDeclarationSurface } from "./generate-api-reference.mjs";
+import { hashDeclarationSurface, resolveSymbolDocumentation } from "./generate-api-reference.mjs";
 
 function writeSurface(root: string, types: string) {
   writeFileSync(join(root, "entry.d.ts"), `export type { Pipeline } from "./types.js";\n`);
@@ -47,5 +47,20 @@ describe("hashDeclarationSurface", () => {
       "export interface Pipeline { run(options: object, controls?: object): void }\n"
     );
     expect(hashDeclarationSurface(join(root, "entry.d.ts"), root)).not.toBe(before);
+  });
+});
+
+describe("resolveSymbolDocumentation", () => {
+  it("follows re-exports to the nearest summary and source declaration", () => {
+    const entry = resolve("dist/core/pipeline.d.ts");
+
+    expect(resolveSymbolDocumentation(entry, "PipelineContext")).toMatchObject({
+      description: "Caller-supplied services and metadata shared by one pipeline execution.",
+      source: { path: "src/core/pipeline-types.ts" },
+    });
+    expect(resolveSymbolDocumentation(entry, "createSteps")).toMatchObject({
+      description: "Create typed step constructors for one pipeline definition.",
+      source: { path: "src/core/pipeline-steps.ts" },
+    });
   });
 });

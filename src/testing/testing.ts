@@ -12,6 +12,7 @@ import type {
 } from "../core/pipeline.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
 
+/** Log levels captured by a pipeline test runtime. */
 export type PipelineTestLogLevel = "error" | "log" | "warn";
 
 /** One silent logger call captured by a pipeline test runtime. */
@@ -35,6 +36,7 @@ export type PipelineTestSleep = (
   clock: PipelineTestClock
 ) => void | Promise<void>;
 
+/** Clock, directory, and sleep overrides for a pipeline test runtime. */
 export interface PipelineTestRuntimeOptions {
   /** Runtime working directory. Defaults to process.cwd(). */
   cwd?: string;

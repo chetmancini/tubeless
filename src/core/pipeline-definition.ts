@@ -54,6 +54,8 @@ type PipelineFinalizer<
   | Promise<TResultSchema extends StandardSchemaV1 ? InferSchemaInput<TResultSchema> : TResult>;
 
 /**
+ * Declarative configuration for compiling a typed pipeline.
+ *
  * A pipeline may omit finalize when its final step in execution order supplies the result.
  * The default emits undefined if that step published no output. If its output cannot
  * satisfy an explicit result type or schema input, a compatible finalizer is required.

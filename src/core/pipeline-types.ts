@@ -9,6 +9,7 @@ export type PipelineDefinitionIdentity = Readonly<PipelineDefinitionIdentityCont
 type ReadonlyDefinition<T> = T extends object
   ? { readonly [K in keyof T]: ReadonlyDefinition<T[K]> }
   : T;
+/** Immutable snapshot of the compiled pipeline definition recorded for inspection and tracing. */
 export type PipelineDefinitionSnapshot = ReadonlyDefinition<PipelineDefinitionSnapshotContract>;
 
 import type { RUN_MODEL_VERSION } from "./pipeline-ids.js";
@@ -23,12 +24,14 @@ import type {
   PipelineTracingOptions,
 } from "../tracing/tracing-contracts.js";
 
+/** Minimal logger used by pipeline execution, reporters, and CLI adapters. */
 export interface PipelineLogger {
   error(message?: unknown, ...optionalParams: unknown[]): void;
   log(message?: unknown, ...optionalParams: unknown[]): void;
   warn(message?: unknown, ...optionalParams: unknown[]): void;
 }
 
+/** Caller-supplied services and metadata shared by one pipeline execution. */
 export interface PipelineContext {
   /** Optional caller-owned identifier used to correlate separate executions. */
   correlationId?: string;
@@ -46,6 +49,7 @@ export interface PipelineContext {
   tracing?: PipelineTracingOptions;
 }
 
+/** Built-in controls for selecting and scheduling work in a pipeline run. */
 export interface PipelineRunControls<
   TStepId extends string = string,
   TTargetId extends string = string,
@@ -82,6 +86,7 @@ export interface PipelineRuntime extends PipelineContext {
   sleep: (durationMs: number, signal?: AbortSignal) => Promise<void>;
 }
 
+/** Resolved execution context provided to pipeline handlers. */
 export interface PipelineExecutionContext<TOptions extends object> extends PipelineRuntime {
   dryRun: boolean;
   options: TOptions;
@@ -92,7 +97,9 @@ export interface PipelineExecutionContext<TOptions extends object> extends Pipel
 }
 
 /**
- * Optional indented detail row under a parent step's progress.
+ * Lifecycle status displayed for an optional nested progress row.
+ *
+ * Detail rows are indented under a parent step's progress.
  * Domain-agnostic: mapped children, nested work units, per-file status, etc.
  */
 export type PipelineStepProgressDetailStatus =
@@ -103,6 +110,7 @@ export type PipelineStepProgressDetailStatus =
   | "running"
   | "skipped";
 
+/** One optional nested row in a step progress snapshot. */
 export interface PipelineStepProgressDetail {
   /** Stable identity for the row (item key, path, job id, …). */
   id: string;
@@ -119,6 +127,7 @@ export interface PipelineStepProgressDetail {
   status?: PipelineStepProgressDetailStatus;
 }
 
+/** Latest progress snapshot reported by a running step. */
 export interface PipelineStepProgress {
   /** Work completed so far. Values outside the reported total are allowed but renderers may clamp them. */
   completed: number;
@@ -134,6 +143,7 @@ export interface PipelineStepProgress {
   details?: readonly PipelineStepProgressDetail[];
 }
 
+/** Step execution context with attempt identity and progress reporting helpers. */
 export interface PipelineStepContext<
   TOptions extends object,
 > extends PipelineExecutionContext<TOptions> {
@@ -145,6 +155,7 @@ export interface PipelineStepContext<
   reportProgress(progress: PipelineStepProgress): void;
 }
 
+/** Adapter that invokes one step on an external execution engine. */
 export interface RemoteStepAdapter<TOptions extends object, TPayload, TResult> {
   /** Presentation only. The kernel never switches on this. */
   readonly engine: string;
@@ -153,8 +164,10 @@ export interface RemoteStepAdapter<TOptions extends object, TPayload, TResult> {
   invoke(payload: TPayload, context: PipelineStepContext<TOptions>): Promise<TResult>;
 }
 
+/** Pipeline lifecycle phase in which an error occurred. */
 export type PipelineErrorPhase = PipelineErrorPhaseContract;
 
+/** Broad category of a structured pipeline error. */
 export type PipelineErrorKind = PipelineErrorKindContract;
 
 /** Ordered catalog of every stable package-owned pipeline error code. */
@@ -187,6 +200,7 @@ export interface PipelineFanOutFailure {
   error: PipelineErrorCause;
 }
 
+/** Bounded diagnostics collected from a failed or cancelled fan-out step. */
 export interface PipelineFanOutDiagnostics {
   /** Failed started items, in input order; at most 32 entries. */
   failures: readonly PipelineFanOutFailure[];
@@ -197,6 +211,7 @@ export interface PipelineFanOutDiagnostics {
   schedulerError?: PipelineErrorCause;
 }
 
+/** Structured, machine-readable error stored in plans, runs, and traces. */
 export interface PipelineError {
   /** Present for aggregated fan-out failures; absent for setup errors. */
   fanOut?: PipelineFanOutDiagnostics;
@@ -219,6 +234,7 @@ export interface StandardSchemaV1<TInput = unknown, TOutput = TInput> {
   readonly "~standard": StandardSchemaV1Props<TInput, TOutput>;
 }
 
+/** Standard Schema V1 metadata and validation contract consumed by Tubeless. */
 export interface StandardSchemaV1Props<TInput = unknown, TOutput = TInput> {
   readonly types?: { readonly input: TInput; readonly output: TOutput };
   readonly validate: (
@@ -229,10 +245,12 @@ export interface StandardSchemaV1Props<TInput = unknown, TOutput = TInput> {
   readonly version: 1;
 }
 
+/** Successful value or validation issues returned by a Standard Schema V1 validator. */
 export type StandardSchemaV1Result<TOutput> =
   | { readonly issues?: undefined; readonly value: TOutput }
   | { readonly issues: readonly StandardSchemaV1Issue[] };
 
+/** Validation issue shape accepted from a Standard Schema V1 validator. */
 export interface StandardSchemaV1Issue {
   readonly message: string;
   readonly path?: readonly (PropertyKey | { readonly key: PropertyKey })[];
@@ -248,6 +266,7 @@ export type InferSchemaOutput<TSchema extends StandardSchemaV1> = NonNullable<
   TSchema["~standard"]["types"]
 >["output"];
 
+/** Bounded JSON-safe snapshot of a thrown value and its cause chain. */
 export interface PipelineErrorCause {
   cause?: PipelineErrorCause;
   message: string;
@@ -269,12 +288,14 @@ interface PipelineStepReportBase {
   startedAtMs?: number;
 }
 
+/** Terminal report for a successfully completed step. */
 export interface PipelineStepCompleteReport extends PipelineStepReportBase {
   attemptId: string;
   startedAtMs: number;
   status: "completed";
 }
 
+/** Terminal report for a structurally or intentionally skipped step. */
 export interface PipelineStepSkippedReport extends PipelineStepReportBase {
   /** Dependency that blocked this step, when applicable. */
   dependencyId?: string;
@@ -284,11 +305,13 @@ export interface PipelineStepSkippedReport extends PipelineStepReportBase {
   status: "skipped";
 }
 
+/** Terminal report for a cancelled step. */
 export interface PipelineStepCancelledReport extends PipelineStepReportBase {
   error: PipelineError;
   status: "cancelled";
 }
 
+/** Terminal report for a failed step. */
 export interface PipelineStepFailedReport extends PipelineStepReportBase {
   attemptId: string;
   error: PipelineError;
@@ -303,6 +326,7 @@ export type PipelineStepReport =
   | PipelineStepSkippedReport
   | PipelineStepCompleteReport;
 
+/** Terminal status recorded in a step report. */
 export type PipelineStepReportStatus = PipelineStepReport["status"];
 
 /** Terminal disposition of a completed run record. */
@@ -376,21 +400,30 @@ export type PipelineStepStatus =
   | ({ pipelineId: string; step: PipelinePlanStep } & PipelineStepSkippedReport)
   | ({ pipelineId: string; step: PipelinePlanStep } & PipelineStepCompleteReport);
 
+/** Any planned, running, or terminal step lifecycle status. */
 export type PipelineStepLifecycleStatus = PipelineStepStatus["status"];
 
+/** Lifecycle event emitted when a step is planned. */
 export type PipelineStepPlannedEvent = Extract<PipelineStepStatus, { status: "planned" }>;
 type PipelineStepRunningStatus = Extract<PipelineStepStatus, { status: "running" }>;
+/** Lifecycle event emitted when a step begins running. */
 export type PipelineStepStartEvent = Omit<PipelineStepRunningStatus, "progress"> & {
   progress?: undefined;
 };
+/** Lifecycle event emitted when a running step reports progress. */
 export type PipelineStepProgressEvent = Omit<PipelineStepRunningStatus, "progress"> & {
   progress: PipelineStepProgress;
 };
+/** Lifecycle event emitted when a step is cancelled. */
 export type PipelineStepCancelledEvent = Extract<PipelineStepStatus, { status: "cancelled" }>;
+/** Lifecycle event emitted when a step fails. */
 export type PipelineStepFailedEvent = Extract<PipelineStepStatus, { status: "failed" }>;
+/** Lifecycle event emitted when a step is skipped. */
 export type PipelineStepSkippedEvent = Extract<PipelineStepStatus, { status: "skipped" }>;
+/** Lifecycle event emitted when a step completes successfully. */
 export type PipelineStepCompleteEvent = Extract<PipelineStepStatus, { status: "completed" }>;
 
+/** Optional callbacks for observing pipeline and step lifecycle events. */
 export interface PipelineHooks<TResult = unknown> {
   onFinalizeComplete?(event: { durationMs: number; pipelineId: string; value: TResult }): void;
   onFinalizeError?(event: { durationMs: number; error: PipelineError; pipelineId: string }): void;
@@ -418,6 +451,7 @@ export type PipelineStepSelectionReason =
   | { kind: "outside-target-closure" }
   | { kind: "not-selected" };
 
+/** Planned representation of one declared step and its selection state. */
 export interface PipelinePlanStep {
   dependencies: string[];
   description?: string;
@@ -451,6 +485,7 @@ export interface PipelinePlanStep {
   skipReason?: PipelineStepSkipReason;
 }
 
+/** Side-effect-free validation and selection result for a pipeline run. */
 export interface PipelinePlan {
   definition?: PipelineDefinitionSnapshot;
   dryRun: boolean;
@@ -462,8 +497,10 @@ export interface PipelinePlan {
 
 /** Layout directions for generated Mermaid flowcharts. */
 export const PIPELINE_MERMAID_DIRECTIONS = ["BT", "LR", "RL", "TB", "TD"] as const;
+/** Supported Mermaid flowchart direction. */
 export type PipelineMermaidDirection = (typeof PIPELINE_MERMAID_DIRECTIONS)[number];
 
+/** Rendering options for a pipeline Mermaid flowchart. */
 export interface PipelineMermaidOptions {
   /** Mermaid flowchart direction. Defaults to top-down (`TD`). */
   direction?: PipelineMermaidDirection;
@@ -471,6 +508,7 @@ export interface PipelineMermaidOptions {
   includeDescriptions?: boolean;
 }
 
+/** Compiled pipeline that can be planned, executed, and rendered as a graph. */
 export interface Pipeline<
   TOptions extends object,
   TResult,

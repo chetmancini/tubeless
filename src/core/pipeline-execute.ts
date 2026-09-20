@@ -71,6 +71,7 @@ function firstOriginalPipelineError(errors: readonly PipelineError[]): unknown {
   return undefined;
 }
 
+/** Error thrown by `runOrThrow` when a pipeline run does not complete successfully. */
 export class PipelineExecutionError extends Error {
   constructor(
     readonly result: PipelineRun<unknown>,

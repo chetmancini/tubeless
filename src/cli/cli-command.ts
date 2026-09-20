@@ -397,6 +397,7 @@ function normalizeStructuredValue(
   return value;
 }
 
+/** Create a typed command from a declarative parameter schema and run handler. */
 export function defineCommand<const TSchema extends CliParamsSchema, TResult = void>(
   config: CliCommandConfig<TSchema, TResult>
 ): CliCommand<TSchema, TResult> {

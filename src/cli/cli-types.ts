@@ -10,6 +10,7 @@ import { brandTubelessError } from "../utilities/tubeless-error.js";
  * rolling its own `process.argv` scanning and `as` casts.
  */
 
+/** Supported value kinds for declarative command parameters. */
 export type CliParamType = "string" | "number" | "boolean" | "path";
 
 interface CliParamBase {
@@ -30,6 +31,7 @@ interface CliParamBase {
   env?: string;
 }
 
+/** Declarative configuration for a string command parameter. */
 export interface CliStringParam extends CliParamBase {
   type: "string";
   choices?: readonly string[];
@@ -39,6 +41,7 @@ export interface CliStringParam extends CliParamBase {
   multiple?: boolean;
 }
 
+/** Declarative configuration for a numeric command parameter. */
 export interface CliNumberParam extends CliParamBase {
   type: "number";
   default?: number;
@@ -50,12 +53,14 @@ export interface CliNumberParam extends CliParamBase {
   multiple?: boolean;
 }
 
+/** Declarative configuration for a boolean command parameter. */
 export interface CliBooleanParam extends CliParamBase {
   type: "boolean";
   /** Defaults to `false`. A bare `--flag` sets `true`; `--no-flag` sets `false`. */
   default?: boolean;
 }
 
+/** Declarative configuration for a filesystem path command parameter. */
 export interface CliPathParam extends CliParamBase {
   type: "path";
   /** Relative defaults and values are resolved against `context.cwd`. */
@@ -67,8 +72,10 @@ export interface CliPathParam extends CliParamBase {
   kind?: "file" | "directory";
 }
 
+/** Any supported declarative command parameter configuration. */
 export type CliParam = CliStringParam | CliNumberParam | CliBooleanParam | CliPathParam;
 
+/** Named parameter schema accepted by `defineCommand`. */
 export type CliParamsSchema = Record<string, CliParam>;
 
 /** JSON-safe description of one validated command parameter for non-terminal clients. */
@@ -148,6 +155,7 @@ type OptionalCliParams<TSchema extends CliParamsSchema> = {
 };
 
 /**
+ * Validated values returned from a command's parameter schema.
  * Every command's parsed values include `dryRun` and `resume`, whether or not `TSchema`
  * declares them. `resume` is `false` unless `--resume` is passed or `checkpoint.defaultResume`
  * is `true`; it's meaningful even without `checkpoint` configured — a command can implement
@@ -159,6 +167,7 @@ export type CliParams<TSchema extends CliParamsSchema> = {
 } & RequiredCliParams<TSchema> &
   OptionalCliParams<TSchema>;
 
+/** Runtime services and environment passed to a command. */
 export interface CliContext {
   cwd: string;
   /** Environment used for `param.env` fallbacks. Defaults to `process.env`. */
@@ -174,11 +183,13 @@ export interface CliContext {
   checkpoint?: CheckpointStore;
 }
 
+/** Successful values, help text, or validation errors returned by command parsing. */
 export type CliParseResult<TSchema extends CliParamsSchema> =
   | { kind: "values"; values: CliParams<TSchema> }
   | { kind: "help"; helpText: string }
   | { kind: "error"; errors: readonly string[]; helpText: string };
 
+/** Error thrown when command-line arguments fail schema validation. */
 export class CliValidationError extends Error {
   constructor(
     readonly errors: readonly string[],
@@ -190,6 +201,7 @@ export class CliValidationError extends Error {
   }
 }
 
+/** Control-flow error thrown when command help was requested. */
 export class CliHelpRequested extends Error {
   constructor(readonly helpText: string) {
     super(helpText);
@@ -198,6 +210,7 @@ export class CliHelpRequested extends Error {
   }
 }
 
+/** Checkpoint persistence settings for resumable commands. */
 export interface CliCheckpointConfig {
   /** Relative paths resolve against `context.cwd`, like `CliPathParam`. */
   path: string;
@@ -216,6 +229,7 @@ export interface CliCheckpointConfig {
   defaultResume?: boolean;
 }
 
+/** Declarative configuration consumed by `defineCommand`. */
 export interface CliCommandConfig<TSchema extends CliParamsSchema, TResult> {
   /** Shown in generated usage text; defaults to the running script's file name. */
   name?: string;
@@ -240,6 +254,7 @@ export interface CliCommandConfig<TSchema extends CliParamsSchema, TResult> {
   run(values: CliParams<TSchema>, context: CliContext): TResult | Promise<TResult>;
 }
 
+/** Typed command that can parse, validate, execute, or own a CLI entry point. */
 export interface CliCommand<TSchema extends CliParamsSchema, TResult> {
   /** Structured schema metadata for adapters that should not parse generated help text. */
   readonly descriptor: CliCommandDescriptor;

@@ -1,3 +1,4 @@
+/** Read a required non-empty environment variable or throw a contextual error. */
 export function requireEnv(varName: string, usedBy: string): string {
   const value = process.env[varName];
   if (!value) {

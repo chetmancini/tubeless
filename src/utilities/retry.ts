@@ -1,5 +1,6 @@
 import { abortableSleep, throwIfAborted as throwIfSignalAborted } from "./abort.js";
 
+/** Backoff, cancellation, and retry policy settings for `withRetry`. */
 export interface RetryOptions {
   maxAttempts: number;
   baseDelayMs: number;
@@ -26,7 +27,7 @@ export interface RetryAttemptContext {
   signal?: AbortSignal;
 }
 
-/** A no-argument async function remains assignable for simple retry callers. */
+/** Operation invoked once per retry attempt until it succeeds or the policy stops. */
 export type RetryOperation<T> = (context: RetryAttemptContext) => Promise<T>;
 
 function computeDelayMs(attempt: number, options: RetryOptions): number {
@@ -53,6 +54,7 @@ async function sleepBeforeRetry(durationMs: number, options: RetryOptions): Prom
   await abortableSleep(durationMs, options.signal, "Retry");
 }
 
+/** Retry an asynchronous operation with exponential backoff and optional jitter. */
 export async function withRetry<T>(
   operation: RetryOperation<T>,
   options: RetryOptions,

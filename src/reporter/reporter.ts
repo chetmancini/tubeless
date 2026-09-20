@@ -2,15 +2,19 @@ import type { PipelineHooks, PipelineLogger } from "../core/pipeline.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
 import { safeTerminalText } from "./terminal-text.js";
 
+/** Policy for ANSI color in terminal reporter output. */
 export type ReporterColorMode = "always" | "auto" | "never";
+/** Symbol set used for step lifecycle markers in reporter output. */
 export type ReporterSymbolMode = "ascii" | "auto" | "emoji" | "unicode";
 
+/** Detected or caller-overridden terminal rendering capabilities. */
 export interface ReporterTerminalCapabilities {
   color: boolean;
   isTTY: boolean;
   unicode: boolean;
 }
 
+/** Presentation settings shared by plain and interactive pipeline reporters. */
 export interface RunReporterConfig {
   /** Defaults to auto: color only when the output supports it. */
   color?: ReporterColorMode;

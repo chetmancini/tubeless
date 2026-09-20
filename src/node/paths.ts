@@ -1,7 +1,8 @@
 import * as path from "path";
 
 /**
- * Declares a set of workspace-relative default paths as one factory instead of one
+ * Create a factory that resolves a named set of workspace-relative paths.
+ * This replaces one
  * `function defaultXDir(cwd) { return path.join(cwd, "...") }` per path. The returned
  * function re-resolves against `cwd` on every call — nothing is computed or cached at
  * module-load time, so a frozen-`process.cwd()` bug cannot be reintroduced by

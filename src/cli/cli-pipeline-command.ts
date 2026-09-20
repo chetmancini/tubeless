@@ -29,6 +29,7 @@ export type PipelineCliBuiltins = {
   maxConcurrency: CliNumberParam;
 };
 
+/** Validated domain parameters plus the built-in pipeline execution controls. */
 export type PipelineCliValues<TSchema extends CliParamsSchema> = CliParams<TSchema> & {
   stepIds: readonly string[];
   targets: readonly string[];
@@ -36,11 +37,13 @@ export type PipelineCliValues<TSchema extends CliParamsSchema> = CliParams<TSche
   maxConcurrency: number;
 };
 
+/** Parse result returned by commands created with `definePipelineCommand`. */
 export type PipelineCliParseResult<TSchema extends CliParamsSchema> =
   | { kind: "values"; values: PipelineCliValues<TSchema> }
   | { kind: "help"; helpText: string }
   | { kind: "error"; errors: readonly string[]; helpText: string };
 
+/** Typed CLI facade over a pipeline with planning and graph helpers. */
 export interface PipelineCommand<TSchema extends CliParamsSchema, TResult> {
   readonly descriptor: CliCommandDescriptor;
   /** Stable identity of the wrapped pipeline. */
@@ -65,15 +68,18 @@ export interface PipelineCommand<TSchema extends CliParamsSchema, TResult> {
   main(argv?: readonly string[], context?: Partial<CliContext>): Promise<void>;
 }
 
+/** Parsed values and CLI services passed to a pipeline hook factory. */
 export interface PipelineCommandHookContext<TSchema extends CliParamsSchema> {
   context: CliContext;
   values: PipelineCliValues<TSchema>;
 }
 
+/** One lifecycle hook set or an ordered collection of hook sets. */
 export type PipelineCommandHookSets<TResult> =
   | PipelineHooks<TResult>
   | readonly PipelineHooks<TResult>[];
 
+/** Static or lazily constructed lifecycle hooks for a pipeline command. */
 export type PipelineCommandHookConfig<TResult, TSchema extends CliParamsSchema> =
   | PipelineCommandHookSets<TResult>
   | ((input: PipelineCommandHookContext<TSchema>) => PipelineCommandHookSets<TResult> | undefined);

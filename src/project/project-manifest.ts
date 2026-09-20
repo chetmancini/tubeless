@@ -3,6 +3,7 @@ export const PIPELINE_PROJECT_MANIFEST_VERSION = 1 as const;
 
 const PIPELINE_PROJECT_MANIFEST_MARKER = Symbol.for("tubeless/pipeline-project-manifest/v1");
 
+/** Explicit command-module registration in a project manifest. */
 export interface PipelineProjectCommandModule {
   /** Stable project-wide identity used by workbench commands and the studio. */
   id: string;
@@ -14,6 +15,7 @@ export interface PipelineProjectCommandModule {
   name?: string;
 }
 
+/** Authoring shape accepted by `definePipelineProject`. */
 export interface PipelineProjectManifestInput {
   /** Explicitly registered definePipelineCommand modules. */
   commands: readonly PipelineProjectCommandModule[];
@@ -21,6 +23,7 @@ export interface PipelineProjectManifestInput {
   cwd?: string;
 }
 
+/** Validated, immutable project command catalog used by the workbench. */
 export interface PipelineProjectManifest {
   readonly commands: readonly PipelineProjectCommandModule[];
   readonly cwd?: string;

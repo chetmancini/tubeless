@@ -25,9 +25,11 @@ import {
 } from "./reporter.js";
 import { safeTerminalLog, safeTerminalText } from "./terminal-text.js";
 
+/** Rendering mode selected for pipeline lifecycle reporting. */
 export type PipelineReporterMode = "auto" | "interactive" | "plain";
 export type ResolvedPipelineReporterMode = Exclude<PipelineReporterMode, "auto">;
 
+/** Writable terminal-like destination used by the interactive reporter. */
 export interface ReporterOutput {
   readonly columns?: number;
   readonly rows?: number;
@@ -41,6 +43,7 @@ export interface ReporterOutput {
   write(chunk: string): unknown;
 }
 
+/** Rendering and output settings for automatic, plain, or interactive reporting. */
 export interface PipelineReporterConfig extends RunReporterConfig {
   /** Auto selects the interactive renderer only for a capable, non-CI TTY. */
   mode?: PipelineReporterMode;

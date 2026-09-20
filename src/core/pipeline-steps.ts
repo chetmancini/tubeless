@@ -36,6 +36,7 @@ type AnyStepDryRunHandler<TOptions extends object> = {
   ): unknown | Promise<unknown>;
 }["bivarianceHack"];
 
+/** Runtime shape shared by every declared pipeline step. */
 export interface AnyStep<TOptions extends object = object> {
   readonly [STEP_NESTED_PIPELINE]?: NonNullable<PipelinePlanStep["nestedPipeline"]>;
   readonly [STEP_REMOTE]?: NonNullable<PipelinePlanStep["remote"]>;
@@ -69,6 +70,7 @@ export interface AnyStep<TOptions extends object = object> {
 /** The step fields that `buildStep` merges onto the id-bearing shell. */
 type StepDefinitionBody<TOptions extends object> = Omit<AnyStep<TOptions>, "id">;
 
+/** Typed pipeline step carrying its stable ID, output, and option types. */
 export interface Step<
   TId extends string,
   TOut,
@@ -266,12 +268,14 @@ type RemoteStepDefinitionBase<
   dryRun?: StepDryRunPolicy<TParentOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>>;
 };
 
+/** Step constructors scoped to one pipeline's domain option types. */
 export type StepFactory<
   TOptions extends object,
   TInputOptions extends object = TOptions,
 > = ReturnType<typeof createStepFactory<TOptions, TInputOptions>>;
 
 /**
+ * Create typed step constructors for one pipeline definition.
  * Returns a step factory scoped to one pipeline's domain options. Pass built-in
  * run controls as the second argument to `run` / `runOrThrow`. Child
  * `mapOptions` may still return domain options plus those controls.

@@ -1,5 +1,6 @@
 import { abortableSleep, throwIfAborted } from "./abort.js";
 
+/** Serialize reservations at a fixed minimum interval with cancellation support. */
 export class RateLimiter {
   private nextAt = 0;
   private readonly pending: { slot: number }[] = [];
