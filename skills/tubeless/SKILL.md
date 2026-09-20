@@ -32,6 +32,9 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 - Opt in to independent DAG parallelism with `run(options, { maxConcurrency: 4 })`;
   the default is `1`. All dependency edge types wait for terminal prerequisites.
   Declare edges for side-effect ordering; child runs have their own concurrency limit.
+  Fail-fast stops dispatch without cancelling active work. External cancellation
+  stops dispatch in either error mode and drains active work. Final reports and
+  step errors use plan order; hooks and traces use event order.
 - Give steps stable kebab-case IDs and descriptions of their domain work.
   `name` is an optional display label. Return values from steps and consume
   inferred dependency outputs instead of sharing mutable state.

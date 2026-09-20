@@ -90,8 +90,9 @@ function stepReportFromStatus(
 export class PipelineRunState<TResult> {
   readonly #currentStepStatuses = new Map<string, PipelineStepStatus["status"]>();
   readonly #errors: PipelineError[] = [];
+  readonly #runErrors = new Set<PipelineError>();
   readonly #outputs = new Map<string, unknown>();
-  readonly #reports: PipelineStepReport[] = [];
+  readonly #stepOrder = new Map<string, number>();
   readonly #reportsByStepId = new Map<string, PipelineStepReport>();
   #definitionIdentity: PipelineRun["definitionIdentity"];
   #finalizationAttempted = false;
@@ -125,6 +126,7 @@ export class PipelineRunState<TResult> {
     this.#expectPhase("created");
     this.#phase = "running";
     this.#definitionIdentity = plan.definition?.identity;
+    plan.steps.forEach((step, index) => this.#stepOrder.set(step.id, index));
     this.lifecycle.pipelineStart(plan, targetIds);
   }
 
@@ -250,6 +252,7 @@ export class PipelineRunState<TResult> {
 
   recordRunErrors(errors: readonly PipelineError[]): void {
     this.#expectPhase("running");
+    for (const error of errors) this.#runErrors.add(error);
     this.#errors.push(...errors);
   }
 
@@ -281,16 +284,27 @@ export class PipelineRunState<TResult> {
     this.#expectPhase("running");
     this.#expectAllStepsTerminal();
     this.#phase = "finished";
+    const errorOrder = (error: PipelineError): number => {
+      // A run-level diagnostic may identify a step without becoming a step failure.
+      if (this.#runErrors.has(error)) return -1;
+      if (error.phase === "finalization") return this.#stepOrder.size;
+      return error.stepId === undefined ? -1 : (this.#stepOrder.get(error.stepId) ?? -1);
+    };
+    // Live observations retain event order; only the finished record is ordered by plan.
+    const errors = [...this.#errors].sort((left, right) => errorOrder(left) - errorOrder(right));
+    const steps = [...this.#reportsByStepId.values()].sort(
+      (left, right) => this.#stepOrder.get(left.id)! - this.#stepOrder.get(right.id)!
+    );
     const result: PipelineRun<TResult> = {
       pipelineId: this.pipelineId,
       dryRun: this.dryRun,
-      errors: this.#errors,
+      errors,
       finalized: this.#finalized,
       finishedAtMs: this.now(),
       runId: this.identity.runId,
       startedAtMs: this.startedAtMs,
       status: terminalRunStatus(this.#errors),
-      steps: this.#reports,
+      steps,
       value: this.#value,
       version: RUN_MODEL_VERSION,
     };
@@ -328,7 +342,6 @@ export class PipelineRunState<TResult> {
     this.#currentStepStatuses.set(event.step.id, event.status);
     if (event.status !== "planned" && event.status !== "running") {
       const report = stepReportFromStatus(event);
-      this.#reports.push(report);
       this.#reportsByStepId.set(event.step.id, report);
     }
     if (effects.output) this.#outputs.set(event.step.id, effects.output.value);

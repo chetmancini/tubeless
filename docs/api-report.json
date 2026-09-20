@@ -70,7 +70,7 @@
         "StepFactory",
         "StepSkipDecision"
       ],
-      "sha256": "5e28c14cf7484686a5a2664fea5e6c2a812f4c151ee8fc67ee41414e99dc4b8a",
+      "sha256": "b60f99b84a2ac0c0f8714982c523bef74dc228c9b010d611c2ef8dabd9a5823f",
       "specifier": "tubeless"
     },
     {
@@ -110,7 +110,7 @@
         "ReporterTerminalCapabilities",
         "RunReporterConfig"
       ],
-      "sha256": "9d8c9a832387246e2cfff8c36b1fa6829886896f60d1b8166b9b946b9d310e7a",
+      "sha256": "e68ecaa1b6f1420755b650902bb2eac4514480d1ee25d16ce5e65eb485996348",
       "specifier": "tubeless/cli"
     },
     {
@@ -166,7 +166,7 @@
         "PipelineProjectManifestInput",
         "validatePipelineDocument"
       ],
-      "sha256": "f609e4abbb4c4a3d0b6fe28dfb5e8f4c57f1005a123a04e5dc37cb9ff1a78e98",
+      "sha256": "46ad0a93d5d7a4b838918f26491000cb8cb6255ea96c45238736c4546b59ccb0",
       "specifier": "tubeless/project"
     },
     {
@@ -180,7 +180,7 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "384b89b3f4ce4ef1834282efc4b6dce31590d216099ee8c678e7b899fd073318",
+      "sha256": "9b3d95a86431c83dc9a0839178e710acd2c9b0100cfaa8ed6fd15024a020185f",
       "specifier": "tubeless/testing"
     },
     {

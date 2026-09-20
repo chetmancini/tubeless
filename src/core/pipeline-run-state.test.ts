@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import type { PipelineLifecycleObserver } from "./lifecycle.js";
 import { PipelineRunState } from "./pipeline-run-state.js";
 import type {
@@ -178,6 +179,45 @@ describe("PipelineRunState", () => {
       ["independent", "completed"],
     ]);
   });
+
+  it.each([undefined, "first", "second"])(
+    "orders run errors ahead of step errors regardless of contextual stepId (%s)",
+    async (stepId) => {
+      const { state, steps, statuses, lifecycle } = setup(["first", "second", "skipped"]);
+      const firstFailure = testError("step", "TUBELESS_STEP_FAILED", "first");
+      const secondFailure = testError("step", "TUBELESS_STEP_FAILED", "second");
+      const runError: PipelineError = {
+        code: "TUBELESS_RUN_CANCELLED",
+        kind: "cancellation",
+        phase: "execution",
+        message: "run stopped",
+        stepId,
+      };
+      const finalError: PipelineError = {
+        code: "TUBELESS_FINALIZATION_FAILED",
+        kind: "finalization",
+        phase: "finalization",
+        stepId: PIPELINE_FINALIZE_STEP_ID,
+        message: "finalization failed",
+      };
+      state.failStep(steps[1]!, state.beginAttempt(steps[1]!), secondFailure);
+      state.skipStep(steps[2]!, { reason: "filtered" });
+      state.failStep(steps[0]!, state.beginAttempt(steps[0]!), firstFailure);
+      state.recordRunErrors([runError]);
+      state.beginFinalization();
+      state.failFinalization(finalError, 1);
+      const result = await state.finish();
+
+      expect(result.steps.map(({ id }) => id)).toEqual(["first", "second", "skipped"]);
+      expect(result.errors).toEqual([runError, firstFailure, secondFailure, finalError]);
+      expect(
+        statuses
+          .filter(({ status }) => status === "failed" || status === "skipped")
+          .map(({ step }) => step.id)
+      ).toEqual(["second", "skipped", "first"]);
+      expect(lifecycle.pipelineComplete).toHaveBeenCalledWith(result);
+    }
+  );
 
   it("rejects invalid step and run transitions", async () => {
     const { state, steps } = setup(["work"]);

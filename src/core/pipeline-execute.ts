@@ -342,10 +342,12 @@ export async function executePlannedRun<
     stepToPlanStep(step, true, undefined, undefined, compiledStepGraph(compiled, step));
 
   let stopError: PipelineError | undefined;
+  let externalCancellationError: PipelineError | undefined;
 
   const recordUnstartedStep = (step: AnyStep<TOptions>, error: PipelineError): void => {
     const plannedStep = plannedStepFor(step);
-    if (plannedStep.skipReason) {
+    // Only the external signal can override a selected step's planned skip.
+    if (plannedStep.skipReason && (!plannedStep.selected || error !== externalCancellationError)) {
       const dependencyId =
         plannedStep.skipReason === "unmet-dependency"
           ? plannedStep.dependencies.find((id) => plannedSteps.get(id)?.skipReason !== undefined)
@@ -362,22 +364,29 @@ export async function executePlannedRun<
     }
   };
 
-  const cancelBeforeStepStart = (step: AnyStep<TOptions>): boolean => {
+  const recordExternalCancellation = (stepId: string): PipelineError | undefined => {
+    if (externalCancellationError) return externalCancellationError;
     try {
       throwIfAborted(runtime);
-      return false;
+      return undefined;
     } catch (error) {
-      const pipelineError = toPipelineError(error, {
+      externalCancellationError = toPipelineError(error, {
         code: "TUBELESS_RUN_CANCELLED",
         kind: "cancellation",
         phase: "execution",
-        stepId: step.id,
+        stepId,
       });
-      state.recordRunErrors([pipelineError]);
-      stopError ??= pipelineError;
-      recordUnstartedStep(step, pipelineError);
-      return true;
+      state.recordRunErrors([externalCancellationError]);
+      return externalCancellationError;
     }
+  };
+
+  const cancelBeforeStepStart = (step: AnyStep<TOptions>): boolean => {
+    const pipelineError = recordExternalCancellation(step.id);
+    if (!pipelineError) return false;
+    stopError ??= pipelineError;
+    recordUnstartedStep(step, pipelineError);
+    return true;
   };
 
   const recordStepExecutionFailure = (
@@ -507,8 +516,14 @@ export async function executePlannedRun<
     stepGraph: compiled.stepGraph,
     maxConcurrency,
     executeOneStep,
-    shouldStop: () => stopError !== undefined,
+    shouldStop: () => stopError !== undefined || runtime.signal?.aborted === true,
   });
+  if (unstarted.length > 0 && runtime.signal?.aborted) {
+    // An external abort takes precedence for work that never started, even
+    // when an earlier failure stopped dispatch. Keep every active step's outcome.
+    // Only reuse diagnostics created from this signal, never a step-local AbortError.
+    stopError = recordExternalCancellation(unstarted[0]!.id)!;
+  }
   for (const step of unstarted) recordUnstartedStep(step, stopError!);
 
   if (state.errors.length === 0 || controls.continueOnError) {

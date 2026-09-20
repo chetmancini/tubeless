@@ -52,6 +52,7 @@ export interface PipelineRunControls<
 > {
   /** Maximum simultaneous steps, including skip predicates and output validation. Defaults to 1. */
   maxConcurrency?: number;
+  /** Continue eligible branches after failure; otherwise stop dispatch and drain active steps. */
   continueOnError?: boolean;
   dryRun?: boolean;
   /**
@@ -314,6 +315,7 @@ export interface PipelineRun<TResult = unknown> {
   correlationId?: string;
   pipelineId: string;
   dryRun: boolean;
+  /** Run-level errors first, step errors in plan order, then finalization errors. */
   errors: PipelineError[];
   finalized: boolean;
   finishedAtMs: number;
@@ -321,6 +323,7 @@ export interface PipelineRun<TResult = unknown> {
   runId: string;
   startedAtMs: number;
   status: PipelineRunStatus;
+  /** Terminal step reports in stable plan order, independent of completion order. */
   steps: PipelineStepReport[];
   value?: TResult;
   version: typeof RUN_MODEL_VERSION;

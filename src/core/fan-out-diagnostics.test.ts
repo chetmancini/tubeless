@@ -145,7 +145,11 @@ describe("fan-out diagnostics", () => {
       throw reason;
     }).run({}, {}, { signal: controller.signal });
     expect(run.status).toBe("cancelled");
-    const diagnostics = run.errors[0]!.fanOut!;
+    expect(run.errors.map(({ code, stepId }) => [code, stepId])).toEqual([
+      ["TUBELESS_RUN_CANCELLED", "downstream"],
+      ["TUBELESS_RUN_CANCELLED", "children"],
+    ]);
+    const diagnostics = run.errors.find(({ stepId }) => stepId === "children")!.fanOut!;
     expect(diagnostics.schedulerError).toMatchObject({ message: "stop" });
     expect(diagnostics.failureCount).toBeLessThan(10);
     expect(diagnostics.failures).toHaveLength(diagnostics.failureCount);
