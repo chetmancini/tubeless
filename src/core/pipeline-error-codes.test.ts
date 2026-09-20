@@ -380,6 +380,11 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
       return firstError((await pipeline.run({})).errors);
     },
   },
+  TUBELESS_RUN_CONCURRENCY_INVALID: {
+    phase: "execution",
+    kind: "validation",
+    emit: async () => firstError((await selectionPipeline().run({}, { maxConcurrency: 0 })).errors),
+  },
   TUBELESS_OPTIONS_VALIDATION_FAILED: {
     phase: "execution",
     kind: "validation",

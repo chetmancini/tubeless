@@ -3,7 +3,9 @@ import { definePipelineProject } from "tubeless/project";
 // Checked-in command catalog. Module paths resolve from this file; cwd is
 // this directory. Adapt IDs and files to the consumer; keep registrations
 // explicit. CLI argv still uses --step/--target; mapOptions and hooks
-// receive stepIds and targets.
+// receive stepIds and targets. Direct pipeline callers can opt in to parallel
+// DAG execution with run(options, { maxConcurrency: 4 }); command runs keep
+// the serial default. See ../parallel-dag.ts for independent branches and a join.
 
 /** Checked-in project command catalog with stable registered identities. */
 export default definePipelineProject({

@@ -125,10 +125,11 @@ type CheckedStepTuple<TSteps extends readonly AnyStep[]> =
 function snapshotRunControls<TStepId extends string, TTargetId extends string>(
   controls: PipelineRunControls<TStepId, TTargetId>
 ): PipelineRunControls<TStepId, TTargetId> {
-  const { continueOnError, dryRun, stepIds, targets } = controls;
+  const { continueOnError, dryRun, maxConcurrency, stepIds, targets } = controls;
   const snapshot: PipelineRunControls<TStepId, TTargetId> = {};
   if (continueOnError !== undefined) snapshot.continueOnError = continueOnError;
   if (dryRun !== undefined) snapshot.dryRun = dryRun;
+  if (maxConcurrency !== undefined) snapshot.maxConcurrency = maxConcurrency;
   if (stepIds !== undefined) snapshot.stepIds = [...stepIds];
   if (targets !== undefined) snapshot.targets = [...targets];
   return snapshot;

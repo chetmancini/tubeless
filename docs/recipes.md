@@ -11,6 +11,7 @@ one of these recipes.
 | Intent                                        | Executable recipe                                                        | Main primitives                                                            |
 | --------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
 | Single goal with default target and result    | [`minimal-pipeline.ts`](../examples/minimal-pipeline.ts)                 | `definePipeline({ id, steps })`                                            |
+| Run independent DAG branches concurrently     | [`parallel-dag.ts`](../examples/parallel-dag.ts)                         | `maxConcurrency`, dependency joins, serial default                         |
 | Sequential import or ETL                      | [`typed-import.ts`](../examples/typed-import.ts)                         | `createSteps`, `dependsOn`, `requireOutputs`, `targets`                    |
 | Define and compose pipelines in YAML or JSON  | [`yaml-pipelines.ts`](../examples/yaml-pipelines.ts)                     | `compilePipelineDocument`, adapters, skips, child fan-out                  |
 | Validate options, outputs, and results        | [`validated-boundaries.ts`](../examples/validated-boundaries.ts)         | Standard Schema, `outputSchema`, `resultSchema`                            |
