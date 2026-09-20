@@ -95,8 +95,10 @@ describe("StudioDataController", () => {
     expect(loadSnapshot).toHaveBeenCalledTimes(2);
     expect(controller.getState().snapshot?.runs.map((item) => item.runId)).toEqual(["first"]);
 
+    controller.refresh();
     requests[1]!.resolve(snapshot([run("second")]));
     await settle();
+    expect(loadSnapshot).toHaveBeenCalledTimes(2);
     expect(controller.getState().snapshot?.runs.map((item) => item.runId)).toEqual(["second"]);
     expect(controller.getState().manualRefreshing).toBe(false);
   });

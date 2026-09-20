@@ -76,7 +76,7 @@ export class StudioDataController {
       this.#update({ manualRefreshing: true });
     }
     if (this.#snapshotRefreshActive) {
-      this.#snapshotRefreshQueued = true;
+      if (manual) this.#snapshotRefreshQueued = true;
       return;
     }
     this.#startSnapshotRefresh();
