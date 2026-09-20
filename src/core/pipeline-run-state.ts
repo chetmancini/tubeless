@@ -90,6 +90,7 @@ function stepReportFromStatus(
 export class PipelineRunState<TResult> {
   readonly #currentStepStatuses = new Map<string, PipelineStepStatus["status"]>();
   readonly #errors: PipelineError[] = [];
+  readonly #runErrors = new Set<PipelineError>();
   readonly #outputs = new Map<string, unknown>();
   readonly #stepOrder = new Map<string, number>();
   readonly #reportsByStepId = new Map<string, PipelineStepReport>();
@@ -251,6 +252,7 @@ export class PipelineRunState<TResult> {
 
   recordRunErrors(errors: readonly PipelineError[]): void {
     this.#expectPhase("running");
+    for (const error of errors) this.#runErrors.add(error);
     this.#errors.push(...errors);
   }
 
@@ -283,6 +285,8 @@ export class PipelineRunState<TResult> {
     this.#expectAllStepsTerminal();
     this.#phase = "finished";
     const errorOrder = (error: PipelineError): number => {
+      // A run-level diagnostic may identify a step without becoming a step failure.
+      if (this.#runErrors.has(error)) return -1;
       if (error.phase === "finalization") return this.#stepOrder.size;
       return error.stepId === undefined ? -1 : (this.#stepOrder.get(error.stepId) ?? -1);
     };

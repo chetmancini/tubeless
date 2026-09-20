@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import { defer, rejectWhenAborted } from "./child-pipeline.test-support.js";
 import { createSteps, definePipeline, PipelineExecutionError } from "./pipeline.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
@@ -197,6 +198,54 @@ describe("parallel failure semantics", () => {
       ).toEqual(["first", "second"]);
       expect(laterRun).not.toHaveBeenCalled();
       expect(finalize).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([false, true])(
+    "prioritizes run cancellation from a failure hook in runOrThrow (continueOnError=%s)",
+    async (continueOnError) => {
+      const controller = new AbortController();
+      const failure = new Error("step failed");
+      const cancellation = new Error("operator cancelled the run");
+      const { step } = createSteps();
+      const first = step("first", {
+        run: () => {
+          throw failure;
+        },
+      });
+      const active = step("active", { run: () => 1 });
+      const pendingRun = vi.fn();
+      const pending = step("pending", { run: pendingRun });
+      const pipeline = definePipeline({ id: "run-error-order", steps: [first, active, pending] });
+      const error = await pipeline
+        .runOrThrow(
+          {},
+          { maxConcurrency: 2, continueOnError },
+          {
+            signal: controller.signal,
+            hooks: { onStepFail: () => controller.abort(cancellation) },
+          }
+        )
+        .catch((error: unknown) => error);
+
+      expect(error).toBeInstanceOf(PipelineExecutionError);
+      if (!(error instanceof PipelineExecutionError)) throw error;
+      expect(error.cause).toBe(cancellation);
+      expect(error.message).toContain(cancellation.message);
+      expect(error.result.status).toBe("failed");
+      expect(error.result.errors.map(({ code, stepId }) => [code, stepId])).toEqual([
+        ["TUBELESS_RUN_CANCELLED", "pending"],
+        ["TUBELESS_STEP_FAILED", "first"],
+        ...(continueOnError
+          ? [["TUBELESS_FINALIZATION_CANCELLED", PIPELINE_FINALIZE_STEP_ID]]
+          : []),
+      ]);
+      expect(error.result.steps.map(({ id, status }) => [id, status])).toEqual([
+        ["first", "failed"],
+        ["active", "completed"],
+        ["pending", "cancelled"],
+      ]);
+      expect(pendingRun).not.toHaveBeenCalled();
     }
   );
 
