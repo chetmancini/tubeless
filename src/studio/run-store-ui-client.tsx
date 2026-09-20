@@ -1,7 +1,7 @@
 import { DefinitionHistory } from "./run-store-ui-definitions.js";
 import type { ComponentChildren, TargetedEvent } from "preact";
 import { render } from "preact";
-import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { CliParameterDescriptor } from "../cli/cli.js";
 import type { PipelinePlan, PipelineRunControls } from "../core/pipeline.js";
 import type {
@@ -12,9 +12,9 @@ import type {
 import {
   createStudioApi,
   type StudioApi,
-  type StudioRunDetail,
   type StudioSnapshot,
 } from "./run-store-ui-client-transport.js";
+import { StudioDataController } from "./run-store-ui-data-controller.js";
 import type {
   PipelineRunStudioCommand,
   PipelineRunStudioLaunchRequest,
@@ -1418,7 +1418,6 @@ function ClearHistoryModal({ api, onCleared, onClose, snapshot }: ClearHistoryMo
 
 type StudioView = "pipelines" | "runs";
 const defaultStudioApi = createStudioApi();
-const DETAIL_RETRY_MS = 1_200;
 
 export function connectionPresentation(connected: boolean) {
   return {
@@ -1443,53 +1442,28 @@ export function resolveSelectedRunId(
 }
 
 function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
-  const [snapshot, setSnapshot] = useState<StudioSnapshot | null>(null);
+  const dataController = useMemo(() => new StudioDataController(api), [api]);
+  const [data, setData] = useState(() => dataController.getState());
+  const { connected, detail, manualRefreshing, snapshot } = data;
   const [commands, setCommands] = useState<PipelineRunStudioCommand[]>([]);
   const [view, setView] = useState<StudioView>("runs");
   const [query, setQuery] = useState("");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<StudioRunDetail | null>(null);
-  const [detailFingerprint, setDetailFingerprint] = useState<string | null>(null);
-  const [detailRetry, setDetailRetry] = useState(0);
-  const [connected, setConnected] = useState(true);
-  const [manualRefreshing, setManualRefreshing] = useState(false);
   const [canCancel, setCanCancel] = useState(false);
   const [canClearHistory, setCanClearHistory] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [launchCommandId, setLaunchCommandId] = useState<string | null>(null);
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
   const [toast, setToast] = useState("");
-  const detailMounted = useRef(true);
-  const detailRequest = useRef<{ runId: string; selectionVersion: number } | null>(null);
-  const detailRetryTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const detailSelection = useRef({ runId: selectedRunId, version: 0 });
-  if (detailSelection.current.runId !== selectedRunId) {
-    detailSelection.current = {
-      runId: selectedRunId,
-      version: detailSelection.current.version + 1,
-    };
-  }
-  const loading = useRef(false);
   const pendingRunId = useRef<string | null>(null);
   const runIndex = useMemo(() => createStudioRunIndex(snapshot?.runs ?? []), [snapshot]);
 
-  const refresh = useCallback(
-    async (manual = false) => {
-      if (loading.current) return;
-      loading.current = true;
-      if (manual) setManualRefreshing(true);
-      try {
-        setSnapshot(await api.loadSnapshot());
-        setConnected(true);
-      } catch {
-        setConnected(false);
-      } finally {
-        loading.current = false;
-        setManualRefreshing(false);
-      }
-    },
-    [api]
-  );
+  useEffect(() => {
+    setData(dataController.getState());
+    return dataController.subscribe(setData);
+  }, [dataController]);
+
+  useEffect(() => () => dataController.dispose(), [dataController]);
 
   useEffect(() => {
     void api
@@ -1506,32 +1480,16 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
         setCanClearHistory(capabilities.canClearHistory);
       })
       .catch(() => {});
-    void refresh();
-    const interval = setInterval(() => void refresh(), 1200);
+    dataController.refresh();
+    const interval = setInterval(() => dataController.refresh(), 1200);
     return () => clearInterval(interval);
-  }, [api, refresh]);
+  }, [api, dataController]);
 
   useEffect(() => {
     if (!toast) return;
     const timeout = setTimeout(() => setToast(""), 4200);
     return () => clearTimeout(timeout);
   }, [toast]);
-
-  useEffect(
-    () => () => {
-      detailMounted.current = false;
-      if (detailRetryTimeout.current) clearTimeout(detailRetryTimeout.current);
-    },
-    []
-  );
-
-  useEffect(
-    () => () => {
-      if (detailRetryTimeout.current) clearTimeout(detailRetryTimeout.current);
-      detailRetryTimeout.current = undefined;
-    },
-    [selectedRunId]
-  );
 
   const matchedRoots = query ? runIndex.matchingRootIds(query) : null;
   const roots = runIndex.roots
@@ -1554,50 +1512,8 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     ? [selectedSummary.runId, selectedSummary.eventCount, selectedSummary.status].join(":")
     : null;
   useEffect(() => {
-    if (!selectedRunId || !selectedFingerprint) {
-      setDetail(null);
-      setDetailFingerprint(null);
-      return;
-    }
-    if (selectedFingerprint === detailFingerprint && detail) return;
-    const requestedRunId = selectedRunId;
-    const selectionVersion = detailSelection.current.version;
-    if (
-      detailRequest.current?.runId === requestedRunId &&
-      detailRequest.current.selectionVersion === selectionVersion
-    ) {
-      return;
-    }
-    const request = { runId: requestedRunId, selectionVersion };
-    const isCurrentSelection = () =>
-      detailMounted.current &&
-      detailSelection.current.runId === requestedRunId &&
-      detailSelection.current.version === selectionVersion;
-    const scheduleRetry = () => {
-      if (!isCurrentSelection()) return;
-      if (detailRetryTimeout.current) clearTimeout(detailRetryTimeout.current);
-      detailRetryTimeout.current = setTimeout(() => {
-        detailRetryTimeout.current = undefined;
-        setDetailRetry((attempt) => attempt + 1);
-      }, DETAIL_RETRY_MS);
-    };
-    if (detailRetryTimeout.current) clearTimeout(detailRetryTimeout.current);
-    detailRetryTimeout.current = undefined;
-    detailRequest.current = request;
-    void api
-      .loadRunDetail(requestedRunId)
-      .then((loaded) => {
-        if (detailRequest.current === request) detailRequest.current = null;
-        if (!isCurrentSelection()) return;
-        setDetail(loaded);
-        setDetailFingerprint(loaded ? selectedFingerprint : null);
-        if (!loaded) scheduleRetry();
-      })
-      .catch(() => {
-        if (detailRequest.current === request) detailRequest.current = null;
-        scheduleRetry();
-      });
-  }, [api, detail, detailFingerprint, detailRetry, selectedFingerprint, selectedRunId]);
+    dataController.selectRun(selectedRunId, selectedFingerprint);
+  }, [dataController, selectedFingerprint, selectedRunId]);
 
   const showToast = (message: string) => setToast(message);
   const selectRun = (runId: string) => {
@@ -1610,7 +1526,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     try {
       await api.cancelRun(runId);
       showToast("Run cancelled · " + shortId(runId));
-      setTimeout(() => void refresh(true), 80);
+      dataController.invalidate({ delayMs: 80 });
     } catch (caught) {
       showToast(errorMessage(caught));
     } finally {
@@ -1742,7 +1658,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
                 type="button"
                 title="Refresh now"
                 aria-label="Refresh now"
-                onClick={() => void refresh(true)}
+                onClick={() => dataController.refresh(true)}
               >
                 <svg
                   width="16"
@@ -1801,7 +1717,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
             setQuery("");
             setLaunchCommandId(null);
             showToast("Run accepted · " + shortId(runId));
-            setTimeout(() => void refresh(true), 80);
+            dataController.invalidate({ delayMs: 80 });
           }}
         />
       )}
@@ -1815,7 +1731,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
             setSelectedRunId(null);
             setClearHistoryOpen(false);
             showToast("Cleared " + eventCount + " recorded event" + (eventCount === 1 ? "" : "s"));
-            void refresh(true);
+            dataController.invalidate({ resetHistory: true });
           }}
         />
       )}

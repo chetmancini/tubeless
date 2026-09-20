@@ -43,22 +43,6 @@ import type {
 import { PipelineBoundaryValidationError, validateStandardSchema } from "./pipeline-validation.js";
 import { createPipelineTraceEmitter } from "../tracing/tracing-internal.js";
 
-const PIPELINE_RUN_ID_OBSERVER = Symbol.for("tubeless.pipeline.runIdObserver");
-
-interface ObservedPipelineRuntime {
-  [PIPELINE_RUN_ID_OBSERVER]?: (runId: string) => void;
-}
-
-/** Observe an execution ID from an internal host without allowing it to be overridden. */
-export function observePipelineRunId<TContext extends object>(
-  context: TContext,
-  observer: (runId: string) => void
-): TContext {
-  // SAFETY: the internal observer is intentionally hidden from the returned
-  // public type and can observe, but never choose, the generated run ID.
-  return { ...context, [PIPELINE_RUN_ID_OBSERVER]: observer };
-}
-
 const PIPELINE_LOGGER_BASE = Symbol("pipelineLoggerBase");
 
 type TracedPipelineLogger = PipelineLogger & { [PIPELINE_LOGGER_BASE]?: PipelineLogger };
@@ -243,13 +227,6 @@ export async function executePlannedRun<
   const { compiled, controls, runtime } = input;
   const startedAtMs = runtime.now();
   const runId = createRunId(compiled.id);
-  try {
-    // SAFETY: only internal hosts attach this observation callback. A callback
-    // failure must not change whether the pipeline execution itself can start.
-    (runtime as PipelineRuntime & ObservedPipelineRuntime)[PIPELINE_RUN_ID_OBSERVER]?.(runId);
-  } catch {
-    // Ignore observation failures; execution identity remains package-owned.
-  }
   const correlationId = runtime.correlationId;
   const identity: PipelineRunIdentity = { runId };
   if (correlationId !== undefined) identity.correlationId = correlationId;
