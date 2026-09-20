@@ -114,9 +114,13 @@ export class StudioDataController {
     ) {
       return;
     }
-    this.#resetDetail();
+    // A new revision of the selected run refreshes its data without retiring
+    // the current read or blanking the last successful detail.
+    if (this.#detailSelection.runId !== runId || !fingerprint) {
+      this.#resetDetail();
+      this.#update({ detail: null });
+    }
     this.#detailSelection = { fingerprint, runId };
-    this.#update({ detail: null });
     if (runId && fingerprint) this.#loadDetail(this.#detailSelectionVersion);
   }
 
@@ -164,6 +168,8 @@ export class StudioDataController {
     const { fingerprint, runId } = this.#detailSelection;
     if (
       this.#disposed ||
+      this.#detailRequest !== null ||
+      this.#detailRetryTimeout !== undefined ||
       !runId ||
       !fingerprint ||
       selectionVersion !== this.#detailSelectionVersion
@@ -179,6 +185,8 @@ export class StudioDataController {
         this.#detailRequest = null;
         if (detail) {
           this.#update({ detail });
+          // Coalesce revisions received during this read into one follow-up.
+          if (fingerprint !== this.#detailSelection.fingerprint) this.#loadDetail(selectionVersion);
           return;
         }
         this.#scheduleDetailRetry(selectionVersion);

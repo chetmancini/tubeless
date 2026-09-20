@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   formatMappedChildProgressMessage,
-  mappedChildProgressDetails,
   mappedChildProgressUnits,
-  toMappedChildStepProgress,
+  mappedChildProgressSummary,
   type MappedChildProgressSnapshot,
 } from "./mapped-child-progress.js";
 
@@ -149,47 +148,10 @@ describe("formatMappedChildProgressMessage", () => {
   });
 });
 
-describe("mappedChildProgressDetails", () => {
-  it("lists active children sorted by key as running detail rows", () => {
+describe("mappedChildProgressSummary", () => {
+  it("builds counts and a message without allocating detail rows", () => {
     expect(
-      mappedChildProgressDetails(
-        snapshot({
-          active: new Map([
-            ["zeta", "write"],
-            ["alpha", "parse"],
-          ]),
-        })
-      )
-    ).toEqual([
-      { id: "alpha", label: "parse", status: "running" },
-      { id: "zeta", label: "write", status: "running" },
-    ]);
-  });
-
-  it("caps detail rows and reports overflow", () => {
-    expect(
-      mappedChildProgressDetails(
-        snapshot({
-          active: new Map([
-            ["a", "1"],
-            ["b", "2"],
-            ["c", "3"],
-          ]),
-        }),
-        { detailLimit: 2 }
-      )
-    ).toEqual([
-      { id: "a", label: "1", status: "running" },
-      { id: "b", label: "2", status: "running" },
-      { id: "+1 more", status: "pending" },
-    ]);
-  });
-});
-
-describe("toMappedChildStepProgress", () => {
-  it("builds a PipelineStepProgress-compatible payload with details", () => {
-    expect(
-      toMappedChildStepProgress(
+      mappedChildProgressSummary(
         snapshot({
           finishedItems: 1,
           itemCount: 2,
@@ -202,12 +164,11 @@ describe("toMappedChildStepProgress", () => {
       completed: 4,
       total: 6,
       message: "1/2 items · 1 running (max 4)",
-      details: [{ id: "a", label: "run", status: "running" }],
     });
   });
 
   it("lets callers fully customize the message", () => {
-    const progress = toMappedChildStepProgress(
+    const progress = mappedChildProgressSummary(
       snapshot({ finishedItems: 2, itemCount: 5, stepsPerItem: 1, terminalChildSteps: 2 }),
       {
         formatMessage: (state, units) =>

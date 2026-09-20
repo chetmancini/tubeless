@@ -76,6 +76,85 @@ async function settle(): Promise<void> {
 afterEach(() => vi.useRealTimers());
 
 describe("StudioDataController", () => {
+  it("retains live details and coalesces same-run revisions while a read is pending", async () => {
+    const requests: Deferred<StudioRunDetail | null>[] = [];
+    const loadRunDetail = vi.fn(() => {
+      const request = deferred<StudioRunDetail | null>();
+      requests.push(request);
+      return request.promise;
+    });
+    const controller = new StudioDataController(api({ loadRunDetail }));
+
+    controller.selectRun("live", "live:1:running");
+    requests[0]!.resolve({ run: run("live", 1) });
+    await settle();
+    controller.selectRun("live", "live:2:running");
+    controller.selectRun("live", "live:3:running");
+    controller.selectRun("live", "live:4:running");
+    expect(controller.getState().detail?.run.eventCount).toBe(1);
+    expect(loadRunDetail).toHaveBeenCalledTimes(2);
+
+    requests[1]!.resolve({ run: run("live", 2) });
+    await settle();
+    expect(controller.getState().detail?.run.eventCount).toBe(2);
+    expect(loadRunDetail).toHaveBeenCalledTimes(3);
+    requests[2]!.resolve({ run: run("live", 4) });
+    await settle();
+    expect(controller.getState().detail?.run.eventCount).toBe(4);
+    expect(loadRunDetail).toHaveBeenCalledTimes(3);
+    controller.dispose();
+  });
+
+  it.each(["missing", "failed"] as const)(
+    "retains details and retries the latest revision after a %s refresh",
+    async (outcome) => {
+      vi.useFakeTimers();
+      const requests: Deferred<StudioRunDetail | null>[] = [];
+      const loadRunDetail = vi.fn(() => {
+        const request = deferred<StudioRunDetail | null>();
+        requests.push(request);
+        return request.promise;
+      });
+      const controller = new StudioDataController(api({ loadRunDetail }), 50);
+      controller.selectRun("live", "live:1:running");
+      requests[0]!.resolve({ run: run("live", 1) });
+      await settle();
+      controller.selectRun("live", "live:2:running");
+      if (outcome === "missing") requests[1]!.resolve(null);
+      else requests[1]!.reject(new Error("offline"));
+      await settle();
+      controller.selectRun("live", "live:3:running");
+      expect(controller.getState().detail?.run.eventCount).toBe(1);
+      expect(loadRunDetail).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(loadRunDetail).toHaveBeenCalledTimes(3);
+      requests[2]!.resolve({ run: run("live", 3) });
+      await settle();
+      expect(controller.getState().detail?.run.eventCount).toBe(3);
+      controller.dispose();
+    }
+  );
+
+  it("rejects old detail responses after switching away and back to the same run", async () => {
+    const requests: Deferred<StudioRunDetail | null>[] = [];
+    const loadRunDetail = vi.fn(() => {
+      const request = deferred<StudioRunDetail | null>();
+      requests.push(request);
+      return request.promise;
+    });
+    const controller = new StudioDataController(api({ loadRunDetail }));
+    controller.selectRun("first", "first:1:running");
+    controller.selectRun("second", "second:1:running");
+    controller.selectRun("first", "first:2:running");
+    requests[2]!.resolve({ run: run("first", 2) });
+    await settle();
+    requests[0]!.resolve({ run: run("first", 1) });
+    requests[1]!.resolve({ run: run("second", 1) });
+    await settle();
+    expect(controller.getState().detail?.run).toMatchObject({ runId: "first", eventCount: 2 });
+    controller.dispose();
+  });
+
   it("queues a refresh requested while a snapshot request is still loading", async () => {
     const requests: Deferred<StudioSnapshot>[] = [];
     const loadSnapshot = vi.fn(() => {
