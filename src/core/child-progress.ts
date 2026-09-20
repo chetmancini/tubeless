@@ -7,7 +7,7 @@ import type {
 } from "./pipeline-types.js";
 import { hasVisibleStepProgress } from "./progress.js";
 import {
-  toMappedChildStepProgress,
+  mappedChildProgressSummary,
   type MappedChildProgressSnapshot,
   type ToMappedChildStepProgressOptions,
 } from "./mapped-child-progress.js";
@@ -262,7 +262,7 @@ export function createMappedChildProgress(
     if (visibleKeys.length < keys.length) {
       details.push({ id: `+${keys.length - visibleKeys.length} more`, status: "pending" });
     }
-    report({ ...toMappedChildStepProgress(snapshot, options), details });
+    report({ ...mappedChildProgressSummary(snapshot, options), details });
   };
 
   return {

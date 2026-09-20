@@ -1,10 +1,8 @@
-import type { PipelineStepProgressDetail } from "./pipeline-types.js";
-
 /**
  * Live state for a `forEachPipeline` fan-out. Domain-agnostic: items can be
  * shards, URLs, files, jobs, or anything else the parent maps over.
  *
- * Runtime-free: only a type-only import of the shared progress detail.
+ * Runtime-free: presentation data only.
  */
 export interface MappedChildProgressSnapshot {
   /** Item key → short status label for currently in-flight children. */
@@ -45,8 +43,7 @@ export interface FormatMappedChildProgressOptions {
   /**
    * For `forEachPipeline`, cap visible item groups, including the final snapshot.
    * By default, live snapshots show up to 32 groups and the final snapshot shows all.
-   * Larger caps increase per-event presentation work. Standalone formatting
-   * helpers apply this to active rows and default to all supplied active items.
+   * Larger caps increase per-event presentation work.
    */
   detailLimit?: number;
   /**
@@ -158,36 +155,6 @@ export function formatMappedChildProgressMessage(
   return parts.join(" · ");
 }
 
-/**
- * Build sorted detail rows for in-flight mapped children.
- * Stable key order so multi-line UIs do not thrash row positions.
- */
-export function mappedChildProgressDetails(
-  snapshot: MappedChildProgressSnapshot,
-  options: Pick<FormatMappedChildProgressOptions, "detailLimit"> = {}
-): PipelineStepProgressDetail[] {
-  const entries = [...snapshot.active.entries()].sort(([left], [right]) =>
-    left.localeCompare(right)
-  );
-  const limit =
-    options.detailLimit === undefined
-      ? entries.length
-      : Math.max(0, Math.floor(options.detailLimit));
-  const visible = entries.slice(0, limit);
-  const details: PipelineStepProgressDetail[] = visible.map(([id, label]) => ({
-    id,
-    label,
-    status: "running" as const,
-  }));
-  if (entries.length > visible.length) {
-    details.push({
-      id: `+${entries.length - visible.length} more`,
-      status: "pending",
-    });
-  }
-  return details;
-}
-
 export interface ToMappedChildStepProgressOptions extends FormatMappedChildProgressOptions {
   /**
    * Replace the default message while keeping the same completed/total units.
@@ -202,14 +169,8 @@ export interface ToMappedChildStepProgressOptions extends FormatMappedChildProgr
   ) => string;
 }
 
-/**
- * Build a progress payload for an opaque mapped-child parent step.
- * Shape matches `PipelineStepProgress` without importing the runtime module.
- *
- * `message` is a one-line summary; `details` lists each in-flight item for
- * multi-line reporters.
- */
-export function toMappedChildStepProgress(
+/** Build progress counts and a summary; the child projector owns detail rows. */
+export function mappedChildProgressSummary(
   snapshot: MappedChildProgressSnapshot,
   options: ToMappedChildStepProgressOptions = {}
 ) {
@@ -230,8 +191,5 @@ export function toMappedChildStepProgress(
     completed: units.completed,
     total,
     message,
-    details: mappedChildProgressDetails(snapshot, {
-      detailLimit: options.detailLimit,
-    }),
   };
 }
