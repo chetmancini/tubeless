@@ -16,13 +16,49 @@ const LIVE_FAN_OUT_GROUP_LIMIT = 32;
 
 type ReportProgress = (progress: PipelineStepProgress) => void;
 
+function sameChildProgress(
+  left: PipelineStepProgress | undefined,
+  right: PipelineStepProgress | undefined
+): boolean {
+  if (left === right) return true;
+  if (
+    !left ||
+    !right ||
+    !Object.is(left.completed, right.completed) ||
+    !Object.is(left.total, right.total) ||
+    left.message !== right.message
+  )
+    return false;
+  if (left.details === right.details) return true;
+  const leftDetails = left.details ?? [];
+  const rightDetails = right.details ?? [];
+  return (
+    leftDetails.length === rightDetails.length &&
+    leftDetails.every((row, index) => {
+      const other = rightDetails[index]!;
+      return (
+        row === other ||
+        (row.id === other.id &&
+          row.name === other.name &&
+          Object.is(row.depth, other.depth) &&
+          Object.is(row.completed, other.completed) &&
+          Object.is(row.total, other.total) &&
+          row.label === other.label &&
+          row.status === other.status)
+      );
+    })
+  );
+}
+
 function sameChildStatus(left: PipelineStepStatus, right: PipelineStepStatus): boolean {
   if (left.status !== right.status) return false;
   if (left.status === "planned" || right.status === "planned") return true;
   if (left.attemptId !== right.attemptId) return false;
   if (left.status === "running" || right.status === "running") {
     return (
-      left.status === "running" && right.status === "running" && left.progress === right.progress
+      left.status === "running" &&
+      right.status === "running" &&
+      sameChildProgress(left.progress, right.progress)
     );
   }
   return left.finishedAtMs === right.finishedAtMs;

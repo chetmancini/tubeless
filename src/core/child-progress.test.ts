@@ -99,6 +99,36 @@ describe("canonical child progress projection", () => {
     }
   );
 
+  it.each(["single", "mapped"] as const)(
+    "%s keeps distinct detail updates when hook families alternate",
+    (kind) => {
+      const snapshots: PipelineStepProgress[] = [];
+      const report = (progress: PipelineStepProgress) => snapshots.push(progress);
+      const hooks =
+        kind === "single"
+          ? createSingleChildProgress(plan, report)
+          : createMappedChildProgress(["item"], 1, undefined, report).plan("item", plan);
+      const progress: PipelineStepProgress = {
+        completed: 1,
+        total: 2,
+        details: [{ id: "record", label: "reading" }],
+      };
+      hooks.onStepStatus!({ ...running, progress });
+      const changed = {
+        ...running,
+        progress: { ...progress, details: [{ id: "record", label: "writing" }] },
+      };
+      hooks.onStepProgress!(changed);
+      expect(snapshots).toHaveLength(2);
+      // Pair the focused update with an equivalent canonical copy.
+      hooks.onStepStatus!(structuredClone(changed));
+      expect(snapshots).toHaveLength(2);
+      expect(snapshots.at(-1)?.details).toContainEqual(
+        expect.objectContaining({ id: "record", label: "writing" })
+      );
+    }
+  );
+
   it("reconciles missing terminal statuses before an item result mapping fails", () => {
     const snapshots: PipelineStepProgress[] = [];
     const progress = createMappedChildProgress(["item"], 1, undefined, (next) =>

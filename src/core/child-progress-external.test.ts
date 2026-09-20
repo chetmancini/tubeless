@@ -13,7 +13,8 @@ function emitFocused(hooks: PipelineHooks, event: PipelineStepStatus): void {
       hooks.onStepPlan?.(event);
       break;
     case "running":
-      if (event.progress) hooks.onStepProgress?.({ ...event, progress: event.progress });
+      if (event.progress)
+        hooks.onStepProgress?.({ ...event, progress: structuredClone(event.progress) });
       else hooks.onStepStart?.({ ...event, progress: undefined });
       break;
     case "completed":
@@ -46,7 +47,28 @@ describe.each(["single", "mapped"] as const)("external %s child progress", (kind
             step("work", {
               skip: () => status === "skipped" && "nothing to do",
               run: (_, context) => {
-                context.reportProgress({ completed: 1, total: 2, message: "half" });
+                const progress: PipelineStepProgress = {
+                  completed: 1,
+                  total: 2,
+                  message: "half",
+                  details: [
+                    {
+                      id: "record",
+                      name: "Record",
+                      depth: 1,
+                      completed: 1,
+                      total: 2,
+                      status: "running",
+                      label: "reading",
+                    },
+                  ],
+                };
+                context.reportProgress(progress);
+                // A change confined to a detail row must remain observable.
+                context.reportProgress({
+                  ...progress,
+                  details: [{ ...progress.details![0]!, label: "writing" }],
+                });
                 if (status === "failed") throw new Error("work failed");
                 if (status === "cancelled") {
                   controller.abort();
@@ -104,6 +126,16 @@ describe.each(["single", "mapped"] as const)("external %s child progress", (kind
           snapshots.every(({ details }) => !details?.some(({ id }) => id === "filtered"))
         ).toBe(true);
         if (status !== "skipped") {
+          expect(
+            snapshots.some(({ details }) =>
+              details?.some((row) => row.id === "record" && row.label === "reading")
+            )
+          ).toBe(true);
+          expect(
+            snapshots.some(({ details }) =>
+              details?.some((row) => row.id === "record" && row.label === "writing")
+            )
+          ).toBe(true);
           expect(
             snapshots.some(({ details }) =>
               details?.some(
