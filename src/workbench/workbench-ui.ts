@@ -1,16 +1,14 @@
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
-import { createRunId } from "../core/pipeline-ids.js";
-import { observePipelineRunId } from "../core/pipeline-execute.js";
 import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import { loadPipelineProjectManifest } from "./workbench-project-loader.js";
 import type { PipelineRunEventReader } from "../run-store/run-store.js";
 import type {
   PipelineRunStudioCommand,
-  PipelineRunStudioLaunchResult,
   PipelineRunStudioLauncher,
 } from "../studio/run-store-ui.js";
+import { WorkbenchLaunchSession } from "./workbench-launch-session.js";
 import { executePipelineCommandValues } from "./workbench-run.js";
 import {
   commandContext,
@@ -39,46 +37,6 @@ Options:
       --port <number>   HTTP port (default: 4317)
   -h, --help            Show this help
 `;
-
-/** Resolve a studio launch only after the run store has the run, or after a silent exit. */
-async function acknowledgeRecordedLaunch(
-  store: PipelineRunEventReader,
-  runId: string,
-  execution: Promise<number>,
-  stopping: Promise<void>
-): Promise<PipelineRunStudioLaunchResult> {
-  let exitCode: number | undefined;
-  let stopped = false;
-  const settled = execution.then((code) => {
-    exitCode = code;
-    return code;
-  });
-  // Mark the derived chain handled: an early return below can skip
-  // `Promise.race`, leaving a later execution rejection unobserved here.
-  // Racing `settled` still sees the rejection and propagates it as before.
-  void settled.catch(() => {});
-  const stoppedOnce = stopping.then(() => {
-    stopped = true;
-  });
-  while (exitCode === undefined && !stopped) {
-    const events = await store.listEvents({ runId, limit: 1 });
-    if (events.length > 0) return { accepted: true, runId };
-    await Promise.race([
-      settled,
-      stoppedOnce,
-      new Promise<void>((resolve) => setTimeout(resolve, 10)),
-    ]);
-  }
-  const events = await store.listEvents({ runId, limit: 1 });
-  if (events.length > 0) return { accepted: true, runId };
-  if (stopped) {
-    return { accepted: false, errors: ["The local studio is stopping."] };
-  }
-  return {
-    accepted: false,
-    errors: [`Pipeline command exited (${exitCode}) before recording a run.`],
-  };
-}
 
 function parseUiArgs(argv: readonly string[]) {
   return parseArgs({
@@ -195,8 +153,8 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
         }
 
         const studioStopController = new AbortController();
-        const launchControllers = new Map<string, AbortController>();
-        const activeLaunches = new Set<Promise<number>>();
+        const launchSessions = new Map<string, WorkbenchLaunchSession>();
+        const activeLaunches = new Set<Promise<void>>();
         let markStudioStopping = (): void => undefined;
         const studioStopping = new Promise<void>((resolve) => {
           markStudioStopping = resolve;
@@ -205,7 +163,6 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           command: WorkbenchPipelineCommand;
           commandIo: WorkbenchCliIo;
           descriptor: PipelineRunStudioCommand;
-          runIdPrefix: string;
         }[] = [];
         for (const spec of specs) {
           const commandIo = { ...io, cwd: spec.cwd };
@@ -225,7 +182,6 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
             command: loaded.command,
             commandIo,
             descriptor,
-            runIdPrefix: loaded.command.descriptor.name,
           });
         }
         const registrationIds = new Set<string>();
@@ -281,67 +237,42 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
                     const registration = commandById.get(commandId);
                     if (!registration)
                       return { accepted: false, errors: ["Pipeline command not found."] };
-                    const runController = new AbortController();
-                    const signal = AbortSignal.any([
-                      studioStopController.signal,
-                      runController.signal,
-                    ]);
-                    const launchId = createRunId(registration.runIdPrefix);
-                    launchControllers.set(launchId, runController);
-                    let announceRunId: (runId: string) => void = () => {};
-                    const announcedRunId = new Promise<string>((resolve) => {
-                      announceRunId = resolve;
+                    let session!: WorkbenchLaunchSession;
+                    session = new WorkbenchLaunchSession({
+                      onRunRecorded(runId) {
+                        launchSessions.set(runId, session);
+                      },
+                      signal: studioStopController.signal,
+                      stopping: studioStopping,
+                      store: writableStore!,
                     });
-                    const pipelineContext = observePipelineRunId(
-                      { tracing: { exporter: writableStore! } },
-                      announceRunId
-                    );
                     let parsedCommand: ReturnType<WorkbenchPipelineCommand["parseValues"]>;
                     try {
                       parsedCommand = registration.command.parseValues(
                         values,
-                        commandContext(registration.commandIo, signal, pipelineContext)
+                        commandContext(
+                          registration.commandIo,
+                          session.signal,
+                          session.pipelineContext
+                        )
                       );
                     } catch (error) {
-                      launchControllers.delete(launchId);
                       return { accepted: false, errors: [errorMessage(error)] };
                     }
                     if (parsedCommand.kind === "error") {
-                      launchControllers.delete(launchId);
                       return { accepted: false, errors: parsedCommand.errors };
                     }
                     if (parsedCommand.kind === "help") {
-                      launchControllers.delete(launchId);
                       return { accepted: false, errors: ["Help is not a launchable value set."] };
                     }
                     const execution = executePipelineCommandValues(
                       registration.command,
                       parsedCommand.values,
                       registration.commandIo,
-                      signal,
-                      pipelineContext
+                      session.signal,
+                      session.pipelineContext
                     );
-                    activeLaunches.add(execution);
-                    let runId = launchId;
-                    let executionSettled = false;
-                    const cleanupLaunch = () => {
-                      executionSettled = true;
-                      activeLaunches.delete(execution);
-                      launchControllers.delete(launchId);
-                      launchControllers.delete(runId);
-                    };
-                    // Settle the acknowledgement loop before observing a late
-                    // execution failure, so the studio request handler (which
-                    // logs a pre-acknowledgement failure) and this chain (which
-                    // logs a post-acknowledgement failure) never report twice.
-                    let launchAcknowledged = false;
-                    void execution.then(cleanupLaunch, (error) => {
-                      cleanupLaunch();
-                      if (!launchAcknowledged) return;
-                      // The launch response already went out, so the request
-                      // handler will never see this failure. Report it here;
-                      // stderr itself may be the broken piece (EPIPE), so fall
-                      // back to console rather than throwing again.
+                    const tracked = session.track(execution, (error) => {
                       try {
                         registration.commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
                       } catch {
@@ -350,35 +281,24 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
                         );
                       }
                     });
-                    try {
-                      const executionRunId = await Promise.race([
-                        announcedRunId,
-                        execution.then(() => undefined),
-                        studioStopping.then(() => undefined),
-                      ]);
-                      if (executionRunId) {
-                        launchControllers.delete(launchId);
-                        runId = executionRunId;
-                        if (!executionSettled) launchControllers.set(runId, runController);
+                    activeLaunches.add(tracked.settled);
+                    void tracked.settled.then(() => {
+                      activeLaunches.delete(tracked.settled);
+                      const runId = session.runId;
+                      if (runId && launchSessions.get(runId) === session) {
+                        launchSessions.delete(runId);
                       }
-                      return await acknowledgeRecordedLaunch(
-                        store!,
-                        runId,
-                        execution,
-                        studioStopping
-                      );
-                    } finally {
-                      launchAcknowledged = true;
-                    }
+                    });
+                    return tracked.acknowledgement;
                   },
                   cancel(runId) {
-                    const controller = launchControllers.get(runId);
-                    if (!controller) return { cancelled: false };
-                    controller.abort(new DOMException("The run was cancelled.", "AbortError"));
+                    const session = launchSessions.get(runId);
+                    if (!session) return { cancelled: false };
+                    session.abort(new DOMException("The run was cancelled.", "AbortError"));
                     return { cancelled: true, runId };
                   },
                   liveRunIds() {
-                    return [...launchControllers.keys()];
+                    return [...launchSessions.keys()];
                   },
                 };
           const studioOptions: Parameters<typeof startPipelineRunStudio>[0] = {

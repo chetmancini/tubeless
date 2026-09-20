@@ -186,7 +186,7 @@ describe("workbench UI integration", () => {
       const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
         liveRunIds: string[];
       };
-      expect(snapshot.liveRunIds.length).toBeGreaterThan(0);
+      expect(snapshot.liveRunIds).toEqual([]);
     });
     expect(resolved).toBe(false);
     await writeFile(gateFile, "go");
@@ -305,7 +305,7 @@ describe("workbench UI integration", () => {
       const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
         liveRunIds: string[];
       };
-      expect(snapshot.liveRunIds.length).toBeGreaterThan(0);
+      expect(snapshot.liveRunIds).toEqual([]);
     });
     expect(resolved).toBe(false);
     controller.abort();
