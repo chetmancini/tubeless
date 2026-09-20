@@ -86,6 +86,97 @@ describe("parallel DAG scheduling", () => {
     expect((await run).value).toBe(8);
   });
 
+  it("joins a diamond only after both branches settle, with stable reports", async () => {
+    const releases = [defer(), defer()];
+    const entered = [defer(), defer()];
+    const rightComplete = defer();
+    let active = 0;
+    let highWater = 0;
+    const completed: string[] = [];
+    const { step } = createSteps();
+    const source = step("source", { run: () => 10 });
+    const branch = async (index: number, value: number) => {
+      active++;
+      highWater = Math.max(highWater, active);
+      entered[index]!.resolve();
+      await releases[index]!.promise;
+      active--;
+      return value + index;
+    };
+    const left = step("left", { dependsOn: [source], run: ({ source }) => branch(0, source) });
+    const right = step("right", { dependsOn: [source], run: ({ source }) => branch(1, source) });
+    const joinRun = vi.fn(({ left, right }: { left: number; right: number }) => left + right);
+    const join = step("join", { dependsOn: [left, right], run: joinRun });
+    const pipeline = definePipeline({ id: "diamond", steps: [source, left, right, join] });
+    const outcome = pipeline.run(
+      {},
+      { maxConcurrency: 2 },
+      {
+        hooks: {
+          onStepComplete: ({ step }) => {
+            completed.push(step.id);
+            if (step.id === "right") rightComplete.resolve();
+          },
+        },
+      }
+    );
+    await Promise.all(entered.map(({ promise }) => promise));
+    expect(active).toBe(2);
+    releases[1]!.resolve();
+    await rightComplete.promise;
+    expect(joinRun).not.toHaveBeenCalled();
+    releases[0]!.resolve();
+    const result = await outcome;
+    expect(result.value).toBe(21);
+    expect(highWater).toBe(2);
+    expect(active).toBe(0);
+    expect(completed).toEqual(["source", "right", "left", "join"]);
+    expect(result.steps.map(({ id }) => id)).toEqual(["source", "left", "right", "join"]);
+  });
+
+  it("multiplies parent and fan-out limits without sharing parent slots with children", async () => {
+    const full = defer();
+    const release = defer();
+    let active = 0;
+    let highWater = 0;
+    let completed = 0;
+    const { step, forEachPipeline } = createSteps();
+    const child = definePipeline({
+      id: "child",
+      steps: [
+        step("work", {
+          run: async () => {
+            active++;
+            highWater = Math.max(highWater, active);
+            if (active === 32) full.resolve();
+            await release.promise;
+            active--;
+            completed++;
+            return true;
+          },
+        }),
+      ],
+    });
+    const wrappers = Array.from({ length: 4 }, (_, index) =>
+      forEachPipeline(`group-${index}`, {
+        pipeline: child,
+        items: () => Array.from({ length: 9 }, (_, item) => item),
+        key: (item) => String(item),
+        concurrency: 8,
+        mapOptions: () => ({}),
+      })
+    );
+    const parent = definePipeline({ id: "parent", steps: wrappers });
+    const outcome = parent.run({}, { maxConcurrency: 4 });
+    await full.promise;
+    expect(active).toBe(32);
+    release.resolve();
+    expect((await outcome).status).toBe("completed");
+    expect(highWater).toBe(32);
+    expect(active).toBe(0);
+    expect(completed).toBe(36);
+  });
+
   it("does not rescan completed prefixes in a long serial chain", async () => {
     const { step } = createSteps();
     const steps: AnyStep[] = [];
@@ -297,6 +388,36 @@ describe("parallel DAG scheduling", () => {
       expect(finalize).toHaveBeenCalledTimes(continueOnError ? 1 : 0);
       expect(laterRun).toHaveBeenCalledTimes(continueOnError ? 1 : 0);
       expect(complete).toHaveBeenCalledOnce();
+    }
+  );
+
+  it.each([false, true])(
+    "records failures released together (continueOnError=%s)",
+    async (continueOnError) => {
+      const release = defer();
+      const entered = [defer(), defer()];
+      const { step } = createSteps();
+      const failures = entered.map((started, index) =>
+        step(`failure-${index}`, {
+          run: async () => {
+            started.resolve();
+            await release.promise;
+            throw new Error(`failure ${index}`);
+          },
+        })
+      );
+      const later = vi.fn(() => true);
+      const pipeline = definePipeline({
+        id: "simultaneous-failures",
+        steps: [...failures, step("later", { run: later })],
+      });
+      const outcome = pipeline.run({}, { maxConcurrency: 2, continueOnError });
+      await Promise.all(entered.map(({ promise }) => promise));
+      release.resolve();
+      const result = await outcome;
+      expect(result.status).toBe("failed");
+      expect(result.errors.map(({ stepId }) => stepId)).toEqual(["failure-0", "failure-1"]);
+      expect(later).toHaveBeenCalledTimes(continueOnError ? 1 : 0);
     }
   );
 

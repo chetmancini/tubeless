@@ -3,9 +3,10 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { openCheckpoint } from "../node/checkpoint.js";
-import { definePipelineCommand, type CliContext } from "./cli.js";
+import { definePipelineCommand, type CliContext, type CliParamsSchema } from "./cli.js";
 import { type ReporterOutput } from "../reporter/interactive-reporter.js";
 import { createSteps, definePipeline } from "../core/pipeline.js";
+import { defer } from "../core/child-pipeline.test-support.js";
 import { renderPipelinePlan } from "../render/render.js";
 
 interface MiniOptions {
@@ -61,6 +62,7 @@ describe("definePipelineCommand", () => {
 
     expect(seen[0]).toEqual({});
     expect(seen[0]).not.toHaveProperty("continueOnError");
+    expect(seen[0]).not.toHaveProperty("maxConcurrency");
     expect(seen[0]).not.toHaveProperty("dryRun");
     expect(seen[0]).not.toHaveProperty("plan");
     expect(seen[0]).not.toHaveProperty("resume");
@@ -114,17 +116,99 @@ describe("definePipelineCommand", () => {
     expect(result.helpText).toContain("--target <string...>");
     expect(result.helpText).toContain("one of: first, second");
     expect(result.helpText).toContain("--continue-on-error");
+    expect(result.helpText).toContain("--max-concurrency <number>");
     expect(result.helpText).not.toContain("--plan");
     expect(
       command.descriptor.parameters
         .filter((parameter) => parameter.group === "execution")
         .map((parameter) => parameter.key)
-    ).toEqual(["dryRun", "resume", "stepIds", "continueOnError", "targets"]);
+    ).toEqual(["dryRun", "resume", "stepIds", "continueOnError", "maxConcurrency", "targets"]);
     expect(
       command.descriptor.parameters
         .filter((parameter) => parameter.exclusive === true)
         .map((parameter) => parameter.key)
     ).toEqual(["stepIds", "targets"]);
+  });
+
+  it.each([undefined, 2, 4])(
+    "forwards concurrency %s without leaking domain options",
+    async (limit) => {
+      const capacity = limit ?? 1;
+      const full = defer();
+      const release = defer();
+      let active = 0;
+      let highWater = 0;
+      const { step } = createSteps();
+      const steps = Array.from({ length: 5 }, (_, index) =>
+        step(`work-${index}`, {
+          run: async (_inputs, context) => {
+            expect(context.options).toEqual({});
+            active++;
+            highWater = Math.max(highWater, active);
+            if (active === capacity) full.resolve();
+            await release.promise;
+            active--;
+            return index;
+          },
+        })
+      );
+      const command = definePipelineCommand(definePipeline({ id: "cli-concurrency", steps }), {
+        reporter: false,
+      });
+      const result = command.run(limit === undefined ? [] : ["--max-concurrency", String(limit)]);
+      await full.promise;
+      expect(active).toBe(capacity);
+      release.resolve();
+      await result;
+      expect(highWater).toBe(capacity);
+      expect(active).toBe(0);
+    }
+  );
+
+  it("validates structured concurrency values for Studio and exposes their constraints", async () => {
+    const pipeline = makeMiniPipeline();
+    const execute = vi.spyOn(pipeline, "runOrThrow");
+    const command = definePipelineCommand(pipeline, { reporter: false });
+    expect(command.parseValues({})).toMatchObject({
+      kind: "values",
+      values: { maxConcurrency: 1 },
+    });
+    const parsed = command.parseValues({ maxConcurrency: 4 });
+    expect(parsed.kind).toBe("values");
+    if (parsed.kind !== "values") throw new Error("Expected valid form values");
+    await command.execute(parsed.values);
+    expect(execute).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ maxConcurrency: 4 }),
+      expect.anything()
+    );
+    expect(command.descriptor.parameters.find(({ key }) => key === "maxConcurrency")).toMatchObject(
+      {
+        default: 1,
+        integer: true,
+        min: 1,
+        type: "number",
+        group: "execution",
+      }
+    );
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity])(
+    "rejects concurrency %s in CLI and form parsing",
+    (value) => {
+      const command = definePipelineCommand(makeMiniPipeline(), { reporter: false });
+      expect(command.parse(["--max-concurrency", String(value)]).kind).toBe("error");
+      expect(command.parseValues({ maxConcurrency: value }).kind).toBe("error");
+    }
+  );
+
+  it.each<CliParamsSchema>([
+    { maxConcurrency: { type: "number" as const } },
+    { workers: { type: "number" as const, flag: "max-concurrency" } },
+  ])("reserves the concurrency key and flag", (params) => {
+    expect(() =>
+      definePipelineCommand(makeMiniPipeline(), { params, mapOptions: () => ({}) })
+    ).toThrow(/reserved/);
   });
 
   it("does not treat a custom execution-group parameter as exclusive with step or target", () => {

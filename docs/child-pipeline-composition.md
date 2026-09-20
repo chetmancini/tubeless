@@ -126,6 +126,13 @@ concurrently within one parent step; it does not make the parent graph execute
 its steps in parallel. Opt in to parent DAG parallelism with the parent run's
 `maxConcurrency` control. Each wrapper occupies one parent slot for its full
 lifetime, while child DAG limits and fan-out item concurrency apply independently.
+Four parallel parent steps, each with fan-out `concurrency: 8`, can create 32 active
+children. Increasing each child's `maxConcurrency` can multiply active child steps
+again. The CLI's `--max-concurrency` controls the parent run only; it is not inherited
+by children. Set child controls explicitly in `mapOptions` when needed.
+
+There is no shared parent/child semaphore. A parent holding a shared slot while
+waiting for children that need the same slots could deadlock.
 
 ## Failures and cancellation
 

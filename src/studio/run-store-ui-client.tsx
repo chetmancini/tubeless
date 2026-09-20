@@ -719,7 +719,8 @@ interface RunRowProps {
 }
 
 function RunRow({ nowMs, onSelect, run, runIndex, selectedRunId }: RunRowProps) {
-  const activeStep = run.steps.find((step) => step.status === "running");
+  const activeSteps = run.steps.filter((step) => step.status === "running");
+  const activeStep = activeSteps[0];
   const nestedCount = runIndex.descendantCount(run.runId);
   return (
     <button
@@ -769,8 +770,19 @@ function RunRow({ nowMs, onSelect, run, runIndex, selectedRunId }: RunRowProps) 
       </div>
       {run.status === "running" && (
         <div class="run-activity">
-          <strong>{activeStep?.name || activeStep?.id || "Starting"}</strong>
-          <span>{activeStep?.progress?.message || "Execution in progress"}</span>
+          <strong>
+            {activeSteps.length > 1
+              ? `${activeSteps.length} steps running`
+              : activeStep?.name || activeStep?.id || "Starting"}
+          </strong>
+          <span>
+            {activeSteps.length > 1
+              ? `${activeSteps
+                  .slice(0, 3)
+                  .map((step) => step.name || step.id)
+                  .join(", ")}${activeSteps.length > 3 ? ` +${activeSteps.length - 3} more` : ""}`
+              : activeStep?.progress?.message || "Execution in progress"}
+          </span>
         </div>
       )}
     </button>

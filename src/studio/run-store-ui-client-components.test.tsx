@@ -86,6 +86,46 @@ describe("Studio components", () => {
     expect(markup).toContain("1s ago");
   });
 
+  it.each([0, 1, 3, 5])("summarizes %s running steps without completed names", (count) => {
+    const root = run({
+      steps: [
+        { id: "done", name: "Completed task", status: "completed" },
+        ...Array.from({ length: count }, (_, index) => ({
+          id: `step-${index}`,
+          name: index === 1 ? undefined : `Task ${index}`,
+          status: "running" as const,
+          progress: { completed: 1, message: "Loading records" },
+        })),
+      ],
+    });
+    const index = createStudioRunIndex([root]);
+    const markup = renderToString(
+      <RunsView
+        canCancel={false}
+        cancelling={false}
+        liveRunIds={[root.runId]}
+        nowMs={2_000}
+        onCancel={() => {}}
+        onSelect={() => {}}
+        roots={index.roots}
+        runIndex={index}
+        selectedRun={null}
+        selectedRunId={null}
+        totalRunCount={1}
+      />
+    );
+    expect(markup).not.toContain("Completed task");
+    if (count > 1) {
+      expect(markup).toContain(`${count} steps running`);
+      expect(markup).toContain(`Task 0, step-1, Task 2${count > 3 ? " +2 more" : ""}`);
+      expect(markup).not.toContain("Task 3");
+      expect(markup).not.toContain("Loading records");
+    } else {
+      expect(markup).toContain(count === 1 ? "Task 0" : "Starting");
+      expect(markup).toContain(count === 1 ? "Loading records" : "Execution in progress");
+    }
+  });
+
   it("renders plan data without controller state", () => {
     const plan: PipelinePlan = {
       dryRun: true,
