@@ -680,7 +680,7 @@ describe("local pipeline run studio", () => {
 
     queries.length = 0;
     const detail = await fetch(`${server.url}/api/runs/run-1`).then((response) => response.json());
-    expect(detail.events.map((event: { id: number }) => event.id)).toEqual([1, 2, 3]);
+    expect(detail).not.toHaveProperty("events");
     expect(detail.run).toMatchObject({
       logCount: 1,
       logs: [{ message: "loaded rows" }],

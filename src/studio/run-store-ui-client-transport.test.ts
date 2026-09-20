@@ -103,25 +103,14 @@ describe("Studio API response parsing", () => {
     await expect(api.loadSnapshot()).rejects.toThrow(/invalid response for snapshot/);
   });
 
-  it("validates run-detail events with the shared trace schema", async () => {
-    const event = {
-      id: 1,
-      name: "pipeline.started",
-      payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
-      pipelineId: "fixture",
-      runId: "run-1",
-      timestampMs: 1,
-      version: 2,
-    };
-    const validFetcher: typeof fetch = vi.fn(async () =>
-      jsonResponse({ events: [event], run: run() })
-    );
+  it("validates projected run details without requiring raw events", async () => {
+    const validFetcher: typeof fetch = vi.fn(async () => jsonResponse({ run: run() }));
     await expect(createStudioApi(validFetcher).loadRunDetail("run-1")).resolves.toEqual({
       run: run(),
     });
 
     const invalidFetcher: typeof fetch = vi.fn(async () =>
-      jsonResponse({ events: [{ ...event, name: "pipeline.unknown" }], run: run() })
+      jsonResponse({ run: { ...run(), logs: 1 } })
     );
     await expect(createStudioApi(invalidFetcher).loadRunDetail("run-1")).rejects.toThrow(
       /invalid response for run detail/

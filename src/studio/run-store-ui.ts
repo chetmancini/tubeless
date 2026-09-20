@@ -241,7 +241,7 @@ export async function startPipelineRunStudio(
           );
           return;
         }
-        writeJson(response, { events, run: projectPipelineRun(events) });
+        writeJson(response, { run: projectPipelineRun(events) });
         return;
       }
       const cancelMatch = /^\/api\/runs\/([^/]+)\/cancel$/.exec(url.pathname);

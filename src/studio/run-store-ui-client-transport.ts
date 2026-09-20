@@ -9,7 +9,6 @@ import {
   isDefinitionIdentity,
   isDefinitionSnapshot,
   isPipelineTraceError,
-  isStoredPipelineEvent,
 } from "../run-store/run-store-codec.js";
 import {
   isPipelineRunStudioParameter,
@@ -318,12 +317,7 @@ export function createStudioApi(fetcher: typeof fetch = fetch): StudioApi {
       const payload = await readJson(response);
       if (response.status === 404) return null;
       if (!response.ok) throw responseError(payload, "Run detail request failed.");
-      if (
-        !isRecord(payload) ||
-        !isStoredStudioRun(payload.run) ||
-        !Array.isArray(payload.events) ||
-        !payload.events.every(isStoredPipelineEvent)
-      ) {
+      if (!isRecord(payload) || !isStoredStudioRun(payload.run)) {
         throw invalidResponse("run detail");
       }
       return { run: payload.run };
