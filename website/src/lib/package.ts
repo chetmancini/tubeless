@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 type PackageJson = {
   name: string;
@@ -18,7 +17,7 @@ type PackageJson = {
   dependencies?: Record<string, string>;
 };
 
-const rootPackage = join(dirname(fileURLToPath(import.meta.url)), "../../../package.json");
+const rootPackage = join(__REPO_ROOT__, "package.json");
 const pkg = JSON.parse(readFileSync(rootPackage, "utf8")) as PackageJson;
 
 function compactEngine(range: string | undefined): string | undefined {

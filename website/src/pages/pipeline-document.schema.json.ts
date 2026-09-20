@@ -1,9 +1,8 @@
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import type { APIRoute } from "astro";
 
-const schemaPath = join(dirname(fileURLToPath(import.meta.url)), "../../../docs/pipeline-document.schema.json");
+const schemaPath = join(__REPO_ROOT__, "docs", "pipeline-document.schema.json");
 
 export const GET: APIRoute = () => new Response(readFileSync(schemaPath), {
   headers: {

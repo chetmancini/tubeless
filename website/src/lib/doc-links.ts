@@ -1,11 +1,5 @@
+import { defineMdastPlugin, type MdastPluginEntry, type PluginFactoryContext } from "satteri";
 import { GITHUB_BLOB } from "./paths";
-
-type MarkdownNode = {
-  type?: string;
-  depth?: number;
-  url?: string;
-  children?: MarkdownNode[];
-};
 
 type SiteHref = (path: string) => string;
 
@@ -44,21 +38,34 @@ export function rewriteDocLinks(markdown: string, siteHref: SiteHref): string {
   });
 }
 
-function rewriteMarkdownNode(node: MarkdownNode): void {
-  if (node.url && (node.type === "link" || node.type === "image" || node.type === "definition")) {
-    node.url = rewriteDocTarget(node.url, rootHref);
-  }
-  node.children?.forEach(rewriteMarkdownNode);
-}
+// Docs pages reference each other and repo files with relative Markdown links.
+// Sätteri visits each link node once; a document that carries neither inline
+// nor reference targets skips the plugin and keeps the parser's plugin-free
+// fast path.
+const docLinksPlugin = defineMdastPlugin({
+  name: "doc-links",
+  link(node, ctx) {
+    ctx.setProperty(node, "url", rewriteDocTarget(node.url, rootHref));
+  },
+  image(node, ctx) {
+    ctx.setProperty(node, "url", rewriteDocTarget(node.url, rootHref));
+  },
+  definition(node, ctx) {
+    ctx.setProperty(node, "url", rewriteDocTarget(node.url, rootHref));
+  },
+});
 
-export default function remarkDocLinks(): (tree: MarkdownNode) => void {
-  return rewriteMarkdownNode;
-}
+export const docLinks: MdastPluginEntry = ({ source }: PluginFactoryContext) =>
+  source.includes("](") || source.includes("]:") ? docLinksPlugin : null;
 
-export function remarkRemoveDocTitle(): (tree: MarkdownNode) => void {
-  return (tree) => {
-    if (tree.children?.[0]?.type === "heading" && tree.children[0].depth === 1) {
-      tree.children.shift();
+// Each docs page begins with an h1 that the Doc layout renders as the page
+// title, so the article body drops it.
+export const removeDocTitle = defineMdastPlugin({
+  name: "remove-doc-title",
+  before(root, ctx) {
+    const first = root.children[0];
+    if (first && first.type === "heading" && first.depth === 1) {
+      ctx.removeChildAt(root, 0);
     }
-  };
-}
+  },
+});

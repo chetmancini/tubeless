@@ -1,10 +1,9 @@
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { rewriteDocLinks } from "./doc-links";
 import { GITHUB_BLOB, absUrl, href } from "./paths";
 
-const docsDir = join(dirname(fileURLToPath(import.meta.url)), "../../../docs");
+const docsDir = join(__REPO_ROOT__, "docs");
 
 export type DocPage = {
   slug: string;

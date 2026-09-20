@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const websiteRoot = dirname(fileURLToPath(new URL("../package.json", import.meta.url)));
-const astroCli = join(websiteRoot, "node_modules", "astro", "astro.js");
+const astroCli = join(websiteRoot, "node_modules", ".bin", "astro");
 const builtHtml = await readFile(join(websiteRoot, "dist", "index.html"), "utf8");
 
 function assertDisabled(html) {
