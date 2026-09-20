@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -140,9 +141,11 @@ describe("workbench UI integration", () => {
   it("holds the launch POST until mapOptions records a store row", async () => {
     const gateDirectory = await mkdtemp(path.join(os.tmpdir(), "tubeless-gate-"));
     const gateFile = path.join(gateDirectory, "gate");
+    const startedFile = path.join(gateDirectory, "started");
     const { directory } = await writeGatedPipelineCommandModule({
       mapOptionsSource: `async (values) => {
         const gateFile = ${JSON.stringify(gateFile)};
+        writeFileSync(${JSON.stringify(startedFile)}, "started");
         while (!existsSync(gateFile)) {
           await new Promise((resolve) => setTimeout(resolve, 10));
         }
@@ -182,6 +185,7 @@ describe("workbench UI integration", () => {
       resolved = true;
       return response;
     });
+    await vi.waitFor(() => expect(existsSync(startedFile)).toBe(true));
     await vi.waitFor(async () => {
       const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
         liveRunIds: string[];
@@ -258,9 +262,11 @@ describe("workbench UI integration", () => {
   it("rejects a pending launch when the studio shuts down", async () => {
     const gateDirectory = await mkdtemp(path.join(os.tmpdir(), "tubeless-gate-"));
     const gateFile = path.join(gateDirectory, "gate");
+    const startedFile = path.join(gateDirectory, "started");
     const { directory } = await writeGatedPipelineCommandModule({
       mapOptionsSource: `async (values, context) => {
         const gateFile = ${JSON.stringify(gateFile)};
+        writeFileSync(${JSON.stringify(startedFile)}, "started");
         while (!existsSync(gateFile)) {
           if (context.signal?.aborted) throw context.signal.reason;
           await new Promise((resolve) => setTimeout(resolve, 10));
@@ -301,6 +307,7 @@ describe("workbench UI integration", () => {
       resolved = true;
       return response;
     });
+    await vi.waitFor(() => expect(existsSync(startedFile)).toBe(true));
     await vi.waitFor(async () => {
       const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
         liveRunIds: string[];

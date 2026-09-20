@@ -187,7 +187,7 @@ export async function writeGatedPipelineCommandModule(options: {
   const cliModuleUrl = pathToFileURL(path.resolve("dist/cli/cli.js")).href;
   const pipelineModuleUrl = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
   return writeModule(`
-    import { existsSync } from "node:fs";
+    import { existsSync, writeFileSync } from "node:fs";
     import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
     import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
     const { step } = createSteps();
