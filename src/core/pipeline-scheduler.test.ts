@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { defer, rejectWhenAborted } from "./child-pipeline.test-support.js";
-import { createSteps, definePipeline, PipelineExecutionError } from "./pipeline.js";
+import { createSteps, definePipeline, PipelineExecutionError, type AnyStep } from "./pipeline.js";
 import { standardSchema } from "./pipeline.test-support.js";
 import { compilePipelineGraph } from "./pipeline-graph.js";
 import { schedulePipelineSteps } from "./pipeline-scheduler.js";
@@ -84,6 +84,76 @@ describe("parallel DAG scheduling", () => {
     expect(finalize).not.toHaveBeenCalled();
     slowRelease.resolve();
     expect((await run).value).toBe(8);
+  });
+
+  it("does not rescan completed prefixes in a long serial chain", async () => {
+    const { step } = createSteps();
+    const steps: AnyStep[] = [];
+    for (let index = 0; index < 1000; index++) {
+      steps.push(
+        step(`step-${index}`, {
+          dependsOn: index === 0 ? [] : [steps[index - 1]!],
+          run: () => index,
+        })
+      );
+    }
+    const graph = compilePipelineGraph(steps);
+    let stepLookups = 0;
+    // Count scheduler array accesses without timing-dependent performance assertions.
+    const orderedSteps = new Proxy(graph.orderedSteps, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^\d+$/.test(property)) stepLookups++;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const executed: string[] = [];
+    const unstarted = await schedulePipelineSteps({
+      ...graph,
+      orderedSteps,
+      maxConcurrency: 1,
+      shouldStop: () => false,
+      executeOneStep: async (step) => {
+        executed.push(step.id);
+      },
+    });
+    expect(unstarted).toEqual([]);
+    expect(executed).toEqual(steps.map(({ id }) => id));
+    expect(stepLookups).toBeLessThanOrEqual(steps.length * 5);
+  });
+
+  it("returns to an earlier ready step after dispatching a later independent step", async () => {
+    const firstRelease = defer();
+    const independentRelease = defer();
+    const dependentStarted = defer();
+    const started: string[] = [];
+    const { step } = createSteps();
+    const first = step("first", { run: () => firstRelease.promise });
+    const dependent = step("dependent", {
+      dependsOn: [first],
+      run: () => {
+        dependentStarted.resolve();
+      },
+    });
+    const independent = step("independent", { run: () => independentRelease.promise });
+    const later = step("later", { run: () => 4 });
+    const pipeline = definePipeline({
+      id: "rewind-ready-cursor",
+      steps: [first, dependent, independent, later],
+    });
+    const run = pipeline.run(
+      {},
+      { maxConcurrency: 2 },
+      {
+        hooks: { onStepStart: ({ step }) => started.push(step.id) },
+      }
+    );
+    expect(started).toEqual(["first", "independent"]);
+    firstRelease.resolve();
+    await dependentStarted.promise;
+    expect(started).toEqual(["first", "independent", "dependent"]);
+    independentRelease.resolve();
+    expect((await run).value).toBe(4);
+    expect(started).toEqual(["first", "independent", "dependent", "later"]);
   });
 
   it("waits for required, optional, and failure-gate prerequisites together", async () => {

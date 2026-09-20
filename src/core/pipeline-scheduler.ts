@@ -10,6 +10,8 @@ export async function schedulePipelineSteps<TOptions extends object>(input: {
   shouldStop(): boolean;
 }): Promise<readonly AnyStep<TOptions>[]> {
   const { orderedSteps, executeOneStep, maxConcurrency, shouldStop } = input;
+  const indexByStep = new Map(orderedSteps.map((step, index) => [step, index]));
+  let nextReadyIndex = 0;
   const pending = new Set(orderedSteps);
   const ready = new Set<AnyStep<TOptions>>();
   const running = new Map<AnyStep<TOptions>, Promise<void>>();
@@ -29,10 +31,10 @@ export async function schedulePipelineSteps<TOptions extends object>(input: {
 
   try {
     while (ready.size > 0 || running.size > 0) {
-      // Scan the stable compiled order, including newly unlocked steps before
-      // later ready steps. With one slot this preserves the original loop order.
-      for (const step of orderedSteps) {
-        if (running.size >= maxConcurrency || shouldStop()) break;
+      // Keep our place instead of rescanning the completed prefix. A newly
+      // ready step can rewind the cursor to preserve stable compiled order.
+      while (ready.size > 0 && running.size < maxConcurrency && !shouldStop()) {
+        const step = orderedSteps[nextReadyIndex++]!;
         if (!ready.delete(step)) continue;
         pending.delete(step);
         const task = executeOneStep(step).then(() => {
@@ -41,6 +43,7 @@ export async function schedulePipelineSteps<TOptions extends object>(input: {
           for (const dependent of dependents.get(step) ?? []) {
             if (prerequisites.get(dependent)!.every((edge) => terminal.has(edge))) {
               ready.add(dependent);
+              nextReadyIndex = Math.min(nextReadyIndex, indexByStep.get(dependent)!);
             }
           }
         });
