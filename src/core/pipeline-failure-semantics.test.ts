@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import { defer, rejectWhenAborted } from "./child-pipeline.test-support.js";
-import { createSteps, definePipeline, PipelineExecutionError } from "./pipeline.js";
+import {
+  createSteps,
+  definePipeline,
+  PipelineExecutionError,
+  type PipelineStepCancelledEvent,
+} from "./pipeline.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
 describe("parallel failure semantics", () => {
@@ -195,7 +200,7 @@ describe("parallel failure semantics", () => {
       ]);
       expect(
         result.errors.filter(({ phase }) => phase === "execution").map(({ stepId }) => stepId)
-      ).toEqual(["first", "second"]);
+      ).toEqual(["later", "first", "second"]);
       expect(laterRun).not.toHaveBeenCalled();
       expect(finalize).not.toHaveBeenCalled();
     }
@@ -248,6 +253,136 @@ describe("parallel failure semantics", () => {
       expect(pendingRun).not.toHaveBeenCalled();
     }
   );
+
+  it.each([false, true])(
+    "uses the external abort reason for pending work after an unrelated cancellation (continueOnError=%s)",
+    async (continueOnError) => {
+      const release = defer();
+      const locallyCancelled = defer();
+      const controller = new AbortController();
+      const localAbort = new Error("operation cancelled itself", {
+        cause: new Error("local timeout"),
+      });
+      localAbort.name = "AbortError";
+      const externalAbort = new Error("operator stopped the pipeline", {
+        cause: new Error("shutdown requested"),
+      });
+      const { step } = createSteps();
+      const local = step("local", {
+        run: () => {
+          throw localAbort;
+        },
+      });
+      const active = step("active", { run: () => release.promise });
+      const pendingRun = vi.fn();
+      const pending = step("pending", { dependsOn: [active], run: pendingRun });
+      const later = step("later", { dependsOn: [pending], run: pendingRun });
+      const complete = vi.fn();
+      const cancellations: PipelineStepCancelledEvent[] = [];
+      const traces: PipelineTraceEvent[] = [];
+      const pipeline = definePipeline({
+        id: "distinct-cancellations",
+        steps: [local, active, pending, later],
+      });
+      const outcome = pipeline
+        .runOrThrow(
+          {},
+          { maxConcurrency: 2, continueOnError },
+          {
+            signal: controller.signal,
+            hooks: {
+              onStepCancel: (event) => {
+                cancellations.push(event);
+                if (event.step.id === "local") locallyCancelled.resolve();
+              },
+              onPipelineComplete: complete,
+            },
+            tracing: {
+              exporter: {
+                export: (event) => {
+                  traces.push(event);
+                },
+              },
+            },
+          }
+        )
+        .catch((error: unknown) => error);
+      await locallyCancelled.promise;
+      controller.abort(externalAbort);
+      expect(complete).not.toHaveBeenCalled();
+      release.resolve();
+      const error = await outcome;
+      expect(error).toBeInstanceOf(PipelineExecutionError);
+      if (!(error instanceof PipelineExecutionError)) throw error;
+      expect(error.cause).toBe(externalAbort);
+      expect(error.result.status).toBe("cancelled");
+      expect(error.result.errors.slice(0, 2)).toMatchObject([
+        {
+          stepId: "pending",
+          message: externalAbort.message,
+          cause: { message: "shutdown requested" },
+        },
+        { stepId: "local", message: localAbort.message, cause: { message: "local timeout" } },
+      ]);
+      for (const id of ["pending", "later"]) {
+        const diagnostic = {
+          stepId: id,
+          message: externalAbort.message,
+          stack: externalAbort.stack,
+          cause: { message: "shutdown requested" },
+        };
+        expect(error.result.steps.find((report) => report.id === id)).toMatchObject({
+          status: "cancelled",
+          error: diagnostic,
+        });
+        expect(cancellations.find((event) => event.step.id === id)).toMatchObject({
+          error: diagnostic,
+        });
+        expect(
+          traces.find((event) => event.name === "step.cancelled" && event.stepId === id)
+        ).toMatchObject({
+          error: { message: externalAbort.message, cause: { message: "shutdown requested" } },
+        });
+      }
+      expect(pendingRun).not.toHaveBeenCalled();
+    }
+  );
+
+  it("records the external cancellation once when an active skip predicate observes it first", async () => {
+    const entered = defer();
+    const release = defer();
+    const controller = new AbortController();
+    const { step } = createSteps();
+    const runStep = vi.fn();
+    const first = step("first", {
+      skip: async () => {
+        entered.resolve();
+        await release.promise;
+        return false as const;
+      },
+      run: runStep,
+    });
+    const pending = step("pending", { dependsOn: [first], run: runStep });
+    const pipeline = definePipeline({ id: "reuse-external-cancellation", steps: [first, pending] });
+    const run = pipeline.run({}, { maxConcurrency: 2 }, { signal: controller.signal });
+    await entered.promise;
+    controller.abort("operator stopped");
+    release.resolve();
+    const result = await run;
+    expect(result.errors).toMatchObject([
+      {
+        code: "TUBELESS_RUN_CANCELLED",
+        stepId: "first",
+        message: "Pipeline run aborted: operator stopped",
+      },
+    ]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.steps.map(({ id, status }) => [id, status])).toEqual([
+      ["first", "cancelled"],
+      ["pending", "cancelled"],
+    ]);
+    expect(runStep).not.toHaveBeenCalled();
+  });
 
   it("cancels pending work after abort even when every active handler ignores the signal", async () => {
     const release = defer();

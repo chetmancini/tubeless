@@ -121,8 +121,12 @@ describe("HTTP remote recipe", () => {
       signal: controller.signal,
     });
     expect(result.status).toBe("cancelled");
-    expect(result.errors[0]).toMatchObject({ code: "TUBELESS_RUN_CANCELLED", stepId: "enrich" });
-    expect(result.steps.find((entry) => entry.id === "summarize")?.status).not.toBe("completed");
+    expect(result.errors.map(({ code, stepId }) => [code, stepId])).toEqual([
+      ["TUBELESS_RUN_CANCELLED", "summarize"],
+      ["TUBELESS_RUN_CANCELLED", "enrich"],
+    ]);
+    expect(result.errors[0]?.message).toBe(controller.signal.reason.message);
+    expect(result.steps.find((entry) => entry.id === "summarize")?.status).toBe("cancelled");
     await closed;
   });
 });

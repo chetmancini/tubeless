@@ -342,6 +342,7 @@ export async function executePlannedRun<
     stepToPlanStep(step, true, undefined, undefined, compiledStepGraph(compiled, step));
 
   let stopError: PipelineError | undefined;
+  let externalCancellationError: PipelineError | undefined;
 
   const recordUnstartedStep = (step: AnyStep<TOptions>, error: PipelineError): void => {
     const plannedStep = plannedStepFor(step);
@@ -362,24 +363,26 @@ export async function executePlannedRun<
     }
   };
 
-  const cancellationBeforeStart = (stepId: string): PipelineError | undefined => {
+  const recordExternalCancellation = (stepId: string): PipelineError | undefined => {
+    if (externalCancellationError) return externalCancellationError;
     try {
       throwIfAborted(runtime);
       return undefined;
     } catch (error) {
-      return toPipelineError(error, {
+      externalCancellationError = toPipelineError(error, {
         code: "TUBELESS_RUN_CANCELLED",
         kind: "cancellation",
         phase: "execution",
         stepId,
       });
+      state.recordRunErrors([externalCancellationError]);
+      return externalCancellationError;
     }
   };
 
   const cancelBeforeStepStart = (step: AnyStep<TOptions>): boolean => {
-    const pipelineError = cancellationBeforeStart(step.id);
+    const pipelineError = recordExternalCancellation(step.id);
     if (!pipelineError) return false;
-    state.recordRunErrors([pipelineError]);
     stopError ??= pipelineError;
     recordUnstartedStep(step, pipelineError);
     return true;
@@ -517,13 +520,8 @@ export async function executePlannedRun<
   if (unstarted.length > 0 && runtime.signal?.aborted) {
     // An external abort takes precedence for work that never started, even
     // when an earlier failure stopped dispatch. Keep every active step's outcome.
-    stopError = state.errors.find(
-      (error) => error.kind === "cancellation" && error.phase === "execution"
-    );
-    if (!stopError) {
-      stopError = cancellationBeforeStart(unstarted[0]!.id)!;
-      state.recordRunErrors([stopError]);
-    }
+    // Only reuse diagnostics created from this signal, never a step-local AbortError.
+    stopError = recordExternalCancellation(unstarted[0]!.id)!;
   }
   for (const step of unstarted) recordUnstartedStep(step, stopError!);
 

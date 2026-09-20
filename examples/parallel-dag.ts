@@ -37,9 +37,9 @@ export const ParallelOrderPipeline = definePipeline({
 
 export async function runParallelDagExample() {
   // Without this control, the two independent loaders run serially.
-  // Fail-fast stops new steps but lets both active loaders settle. Use run()
-  // to inspect every failure and the final reports in stable plan order.
-  return ParallelOrderPipeline.runOrThrow(
+  // Fail-fast stops new steps but lets both active loaders settle. The returned
+  // run contains every failure and the final reports in stable plan order.
+  return ParallelOrderPipeline.run(
     { quantities: [2, 3], unitPrices: [10, 5] },
     { maxConcurrency: 4 }
   );
