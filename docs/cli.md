@@ -203,6 +203,8 @@ validation, option mapping, reporting, and the result summary. Omit `mapOptions`
 when validated flags already satisfy same-name pipeline options; keep it when
 names, types, defaults, or derived values differ. `--step` and `--target` stay
 the flag names; the parsed keys are `stepIds` and `targets`.
+`--max-concurrency` becomes the numeric `maxConcurrency` control, available to
+`mapOptions` and hooks but excluded from the default domain-option mapping.
 
 Start with [`cli-job.ts`](../examples/cli-job.ts) to implement a command.
 
@@ -210,12 +212,20 @@ Start with [`cli-job.ts`](../examples/cli-job.ts) to implement a command.
 
 Pass these flags after `--`, alongside the command's own arguments:
 
-| Flag                  | Effect                                                                 |
-| --------------------- | ---------------------------------------------------------------------- |
-| `--dry-run`           | Uses each step's dry-run policy; unmarked steps still execute          |
-| `--target <id>`       | Runs a declared target and its required dependencies and failure gates |
-| `--step <id>`         | Runs only the specified step IDs; it does not add prerequisites        |
-| `--continue-on-error` | Continues independent work after failure; the run still fails          |
+| Flag                         | Effect                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `--dry-run`                  | Uses each step's dry-run policy; unmarked steps still execute            |
+| `--target <id>`              | Runs a declared target and its required dependencies and failure gates   |
+| `--step <id>`                | Runs only the specified step IDs; it does not add prerequisites          |
+| `--max-concurrency <number>` | Limits simultaneous steps in this run; positive integer, defaults to `1` |
+| `--continue-on-error`        | Continues independent work after failure; the run still fails            |
+
+For example, `bunx tubeless run import-rows -- --source rows.txt --max-concurrency 4`
+allows up to four ready steps at once. Async skip predicates and output validation
+occupy the step's slot. Fail-fast stops new dispatch and waits for active work;
+`--continue-on-error` keeps eligible branches running. Child runs have separate
+limits: set `maxConcurrency` in child `mapOptions` to opt them in. Parent and fan-out
+limits multiply; see [child pipeline composition](./child-pipeline-composition.md).
 
 Repeat `--target` or `--step` to select multiple IDs, but do not combine them.
 Check command help for any additional controls and application parameters:

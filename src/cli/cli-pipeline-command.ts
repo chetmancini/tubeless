@@ -6,6 +6,7 @@ import type {
   CliCommandConfig,
   CliCommandDescriptor,
   CliContext,
+  CliNumberParam,
   CliParams,
   CliParamsSchema,
   CliStringParam,
@@ -25,12 +26,14 @@ export type PipelineCliBuiltins = {
   stepIds: CliStringParam & { multiple: true };
   targets: CliStringParam & { multiple: true };
   continueOnError: CliBooleanParam;
+  maxConcurrency: CliNumberParam;
 };
 
 export type PipelineCliValues<TSchema extends CliParamsSchema> = CliParams<TSchema> & {
   stepIds: readonly string[];
   targets: readonly string[];
   continueOnError: boolean;
+  maxConcurrency: number;
 };
 
 export type PipelineCliParseResult<TSchema extends CliParamsSchema> =
@@ -82,7 +85,7 @@ type PipelineCommandMapOptions<TOptions extends object, TSchema extends CliParam
 
 type DefaultPipelineCommandOptions<TSchema extends CliParamsSchema> = Omit<
   PipelineCliValues<TSchema>,
-  "continueOnError" | "dryRun" | "resume" | "stepIds" | "targets"
+  "continueOnError" | "maxConcurrency" | "dryRun" | "resume" | "stepIds" | "targets"
 >;
 
 type CanDefaultPipelineCommandOptions<TOptions extends object, TSchema extends CliParamsSchema> =
@@ -130,8 +133,8 @@ export type DefinePipelineCommandConfig<
         mapOptions: PipelineCommandMapOptions<TOptions, TSchema>;
       });
 
-const PIPELINE_COMMAND_KEYS = new Set(["continueOnError", "stepIds", "targets"]);
-const PIPELINE_COMMAND_FLAGS = new Set(["continue-on-error", "step", "target"]);
+const PIPELINE_COMMAND_KEYS = new Set(["continueOnError", "maxConcurrency", "stepIds", "targets"]);
+const PIPELINE_COMMAND_FLAGS = new Set(["continue-on-error", "max-concurrency", "step", "target"]);
 
 function assertNoPipelineCommandConflicts(params: CliParamsSchema): void {
   for (const [key, param] of Object.entries(params)) {
@@ -153,7 +156,7 @@ function normalizePipelineCliValues<TSchema extends CliParamsSchema>(
   values: CliParams<PipelineCliBuiltins & TSchema>
 ): PipelineCliValues<TSchema> {
   // SAFETY: `PipelineCliValues<TSchema>` is `CliParams<TSchema>` plus the builtin
-  // `stepIds`/`targets`/`continueOnError` keys, all of which `CliParams<PipelineCliBuiltins & TSchema>`
+  // `stepIds`/`targets`/`continueOnError`/`maxConcurrency` keys, which `CliParams<PipelineCliBuiltins & TSchema>`
   // already provides, so the runtime shape matches the target type.
   const pipelineValues = values as PipelineCliValues<TSchema>;
   const { continueOnError, stepIds, targets } = pipelineValues;
@@ -167,6 +170,7 @@ function normalizePipelineCliValues<TSchema extends CliParamsSchema>(
 
 function pipelineRunControlsFromCliValues(values: {
   continueOnError: boolean;
+  maxConcurrency: number;
   dryRun: boolean;
   stepIds: readonly string[];
   targets: readonly string[];
@@ -174,6 +178,7 @@ function pipelineRunControlsFromCliValues(values: {
   const controls: PipelineRunControls = {
     dryRun: values.dryRun,
     continueOnError: values.continueOnError,
+    maxConcurrency: values.maxConcurrency,
   };
   if (values.stepIds.length > 0) controls.stepIds = values.stepIds;
   if (values.targets.length > 0) controls.targets = values.targets;
@@ -201,6 +206,7 @@ function defaultPipelineCommandOptions<TSchema extends CliParamsSchema>(
 ): DefaultPipelineCommandOptions<TSchema> {
   const {
     continueOnError: _continueOnError,
+    maxConcurrency: _maxConcurrency,
     dryRun: _dryRun,
     resume: _resume,
     stepIds: _stepIds,
@@ -239,6 +245,14 @@ export function definePipelineCommand<
       type: "boolean",
       group: "execution",
       description: "Continue independent work after a step fails.",
+    },
+    maxConcurrency: {
+      type: "number",
+      group: "execution",
+      default: 1,
+      integer: true,
+      min: 1,
+      description: "Maximum simultaneous steps in this run.",
     },
   };
   if (targetFlagEnabled) {
@@ -284,6 +298,7 @@ export function definePipelineCommand<
       const controls = pipelineRunControlsFromCliValues({
         dryRun: values.dryRun,
         continueOnError: pipelineValues.continueOnError,
+        maxConcurrency: pipelineValues.maxConcurrency,
         stepIds: pipelineValues.stepIds,
         targets: targetFlagEnabled ? pipelineValues.targets : [],
       });

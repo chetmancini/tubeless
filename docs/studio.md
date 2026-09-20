@@ -44,6 +44,10 @@ Nested steps show the child pipeline and its declared steps. Recorded progress
 includes the most recent per-item details; when details are truncated, Studio
 shows how many were omitted.
 
+When several steps in a run are active, the run list shows a count such as
+“3 steps running” and the first three names, with a remaining count for larger groups.
+A single active step keeps its progress message.
+
 | Control       | What it does                                                                      | When available                                                                       |
 | ------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Preview plan  | Shows the selected steps and dry-run behavior without starting or recording a run | A pipeline command is registered                                                     |
@@ -75,6 +79,10 @@ The command's parameter definitions determine the form controls: checkboxes
 for booleans, selects for constrained strings, bounded numeric fields, and text
 fields for paths and other values. Submitted values go through the command's
 normal validation and option mapping. Studio does not construct a shell command.
+
+Pipeline command forms include
+**Max Concurrency**, a positive integer defaulting to `1`, under execution controls;
+it has the same behavior as the CLI's `--max-concurrency` flag.
 
 ## Checked-in project manifest
 

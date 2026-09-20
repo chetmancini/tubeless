@@ -48,14 +48,17 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   callers pass those options and optional built-in controls to
   `run(options, controls?)`, while `plan(controls)` accepts controls alone.
 - Opt in to parallel independent steps with `run(options, { maxConcurrency: 4 })`.
-  The default is `1` to preserve side-effect order. Required inputs, optional inputs,
+  Pipeline commands expose the same control as `--max-concurrency 4`, including
+  Studio forms. The default is `1` to preserve side-effect order. Required inputs, optional inputs,
   and failure gates all wait for terminal prerequisites. Skip predicates and output
   validation occupy slots; fail-fast stops dispatch and drains in-flight steps
   without cancelling them. `continueOnError` keeps eligible branches running;
   external cancellation stops dispatch in either mode and cancels unstarted selected
   steps after active work settles. Final step reports and step errors follow plan
   order; live hooks and traces follow event order. Every concurrent failure is kept.
-  Child runs have separate limits. See [the parallel DAG recipe](../examples/parallel-dag.ts).
+  Child runs have separate limits, supplied through child `mapOptions`. Parent and
+  fan-out limits multiply: four fan-out steps at eight children each allow 32 active
+  children. Do not share a semaphore between waiting parents and their children. See [the parallel DAG recipe](../examples/parallel-dag.ts).
 - Treat a `PipelineDefinitionError` during module loading as an authoring bug;
   static graph mistakes are rejected when `definePipeline` is called.
 - Use `dependsOn` when the output is required, `optionalDependsOn` when absence

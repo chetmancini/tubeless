@@ -3,9 +3,9 @@ import { definePipelineProject } from "tubeless/project";
 // Checked-in command catalog. Module paths resolve from this file; cwd is
 // this directory. Adapt IDs and files to the consumer; keep registrations
 // explicit. CLI argv still uses --step/--target; mapOptions and hooks
-// receive stepIds and targets. Direct pipeline callers can opt in to parallel
-// DAG execution with run(options, { maxConcurrency: 4 }); command runs keep
-// the serial default. Fail-fast drains active steps without cancelling them; final
+// receive stepIds, targets, and maxConcurrency. Opt in to parallel DAG execution
+// with run(options, { maxConcurrency: 4 }) or --max-concurrency 4 in the CLI
+// (also exposed in Studio forms). Both default to serial execution. Fail-fast drains active steps without cancelling them; final
 // reports use plan order. See ../parallel-dag.ts for independent branches and a join.
 
 /** Checked-in project command catalog with stable registered identities. */
