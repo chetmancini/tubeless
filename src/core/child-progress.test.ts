@@ -54,7 +54,6 @@ describe("canonical child progress projection", () => {
         kind === "single"
           ? createSingleChildProgress(plan, report)
           : createMappedChildProgress(["item"], 1, { sampleLimit: 1 }, report).plan("item", plan);
-      expect(Object.keys(hooks)).toEqual(["onStepStatus"]);
       hooks.onStepStatus!({ pipelineId: child.id, step: work, status: "planned" });
       hooks.onStepStatus!({ ...running, progress: { completed: 0 } });
       expect(snapshots).toHaveLength(0);

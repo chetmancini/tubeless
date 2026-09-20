@@ -16,6 +16,42 @@ const LIVE_FAN_OUT_GROUP_LIMIT = 32;
 
 type ReportProgress = (progress: PipelineStepProgress) => void;
 
+function sameChildStatus(left: PipelineStepStatus, right: PipelineStepStatus): boolean {
+  if (left.status !== right.status) return false;
+  if (left.status === "planned" || right.status === "planned") return true;
+  if (left.attemptId !== right.attemptId) return false;
+  if (left.status === "running" || right.status === "running") {
+    return (
+      left.status === "running" && right.status === "running" && left.progress === right.progress
+    );
+  }
+  return left.finishedAtMs === right.finishedAtMs;
+}
+
+/** External children may emit either hook family, or both for the same event. */
+function childProgressHooks(update: (event: PipelineStepStatus) => void): PipelineHooks {
+  const pending = new Map<string, { event: PipelineStepStatus; focused: boolean }>();
+  const consume = (event: PipelineStepStatus, focused: boolean): void => {
+    const previous = pending.get(event.step.id);
+    if (previous && previous.focused !== focused && sameChildStatus(previous.event, event)) {
+      pending.delete(event.step.id);
+      return;
+    }
+    pending.set(event.step.id, { event, focused });
+    update(event);
+  };
+  const onFocusedStatus = (event: PipelineStepStatus): void => consume(event, true);
+  return {
+    onStepStatus: (event) => consume(event, false),
+    onStepStart: onFocusedStatus,
+    onStepProgress: onFocusedStatus,
+    onStepComplete: onFocusedStatus,
+    onStepSkip: onFocusedStatus,
+    onStepCancel: onFocusedStatus,
+    onStepFail: onFocusedStatus,
+  };
+}
+
 /** Retain one child's step states without forwarding its lifecycle to parent hooks. */
 function createChildProgress(plan: PipelinePlan) {
   const rows = new Map<string, PipelineStepProgressDetail>();
@@ -116,18 +152,16 @@ export function createSingleChildProgress(
   report: ReportProgress
 ): PipelineHooks {
   const child = createChildProgress(plan);
-  return {
-    onStepStatus(event) {
-      const update = child.update(event);
-      if (!update) return;
-      report({
-        completed: child.completed,
-        total: Math.max(1, child.total),
-        message: `${plan.pipelineId}/${update.message}`,
-        details: child.details(),
-      });
-    },
-  };
+  return childProgressHooks((event) => {
+    const update = child.update(event);
+    if (!update) return;
+    report({
+      completed: child.completed,
+      total: Math.max(1, child.total),
+      message: `${plan.pipelineId}/${update.message}`,
+      details: child.details(),
+    });
+  });
 }
 
 /** Own fan-out counts, activity labels and bounded detail rendering. */
@@ -210,15 +244,13 @@ export function createMappedChildProgress(
         plannedItems += 1;
         stepsPerItem = Math.max(stepsPerItem, child.total);
       }
-      return {
-        onStepStatus(event) {
-          const update = child.update(event);
-          if (!update || update.label === undefined) return;
-          terminalChildSteps += update.terminalDelta;
-          active.set(key, update.label);
-          publish();
-        },
-      };
+      return childProgressHooks((event) => {
+        const update = child.update(event);
+        if (!update || update.label === undefined) return;
+        terminalChildSteps += update.terminalDelta;
+        active.set(key, update.label);
+        publish();
+      });
     },
     childCompleted(key: string): void {
       // Public child implementations may return success without emitting all
