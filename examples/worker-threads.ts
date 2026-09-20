@@ -37,12 +37,9 @@ export const WorkerPrimesPipeline = definePipeline({
   finalize: (outputs) => Object.values(outputs),
 });
 
+// Repeated calls and direct pipeline runs share this adapter. The application must
+// await primeAdapter.close() at shutdown, after every caller has settled.
 export async function runWorkerThreadsExample() {
-  try {
-    // DAG concurrency admits four calls; the shared adapter bounds CPU execution to four threads.
-    return await WorkerPrimesPipeline.runOrThrow({}, { maxConcurrency: 4 });
-  } finally {
-    // At application shutdown, close after all callers sharing this adapter have settled.
-    await primeAdapter.close();
-  }
+  // DAG concurrency admits four calls; the shared adapter bounds CPU execution to four threads.
+  return WorkerPrimesPipeline.runOrThrow({}, { maxConcurrency: 4 });
 }

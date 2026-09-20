@@ -227,6 +227,55 @@ try {
     consumerRoot
   );
 
+  // Compile the shipped recipe and verify that one invocation does not close the
+  // pool shared by later helper calls or direct pipeline runs.
+  writeFileSync(
+    join(consumerRoot, "tsconfig.worker-example.json"),
+    JSON.stringify({
+      compilerOptions: {
+        lib: ["ES2022", "DOM"],
+        module: "NodeNext",
+        outDir: "worker-example",
+        rootDir: join(installedPackage, "examples"),
+        strict: true,
+        target: "ES2022",
+        types: [],
+      },
+      files: [
+        join(installedPackage, "examples/worker-threads.ts"),
+        join(installedPackage, "examples/prime-worker.ts"),
+      ],
+    })
+  );
+  run(
+    join(packageRoot, "node_modules/.bin/tsc"),
+    ["-p", "tsconfig.worker-example.json"],
+    consumerRoot
+  );
+  run(
+    "node",
+    [
+      "--input-type",
+      "module",
+      "--eval",
+      `
+    import { primeAdapter, runWorkerThreadsExample, WorkerPrimesPipeline } from "./worker-example/worker-threads.js";
+    const expected = "[9592,17984,25997,33860]";
+    try {
+      for (let index = 0; index < 2; index++) {
+        if (JSON.stringify(await runWorkerThreadsExample()) !== expected) {
+          throw new Error("Worker recipe failed on repeated invocation");
+        }
+      }
+      if (JSON.stringify(await WorkerPrimesPipeline.runOrThrow({}, { maxConcurrency: 4 })) !== expected) {
+        throw new Error("Worker recipe closed the shared pipeline adapter");
+      }
+    } finally { await primeAdapter.close(); }
+  `,
+    ],
+    consumerRoot
+  );
+
   const tubelessBin = join(consumerRoot, "node_modules", ".bin", "tubeless");
   if (!existsSync(tubelessBin)) {
     throw new Error("Packed tubeless artifact is missing the tubeless executable");

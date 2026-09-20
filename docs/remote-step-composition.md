@@ -188,7 +188,10 @@ still settle under the pipeline's normal failure semantics.
 Call `await adapter.close()` when its owner is done, normally in `finally` after
 all callers have settled. Closing rejects queued calls, terminates active and idle
 workers, and waits for their exit. It is idempotent; subsequent invocations reject.
-Do not close a shared adapter while other callers still need it.
+Do not close a shared adapter while other callers still need it. The worker recipe
+exports a shared `primeAdapter`: repeated `runWorkerThreadsExample()` calls and
+direct `WorkerPrimesPipeline` runs reuse it. The application calls
+`await primeAdapter.close()` at shutdown, after all those runs settle.
 
 The adapter always forwards `dryRun` in the worker context, but it does not suppress
 writes itself. Use `dryRun: "skip"`, a local preview handler, or a worker function
