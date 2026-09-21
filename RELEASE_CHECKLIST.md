@@ -1,9 +1,9 @@
 # Release checklist
 
-Merging to `main` does not publish. Cut a release with `make release` as
-documented in [CONTRIBUTING.md](./CONTRIBUTING.md). CI publishes the
-matching `v*` tag to npm via trusted publishing (`.github/workflows/publish.yml`,
-GitHub Environment `npm`). Do not `npm publish` from a laptop. Do not store
+Merging to `main` does not publish. Cut a release with `make release`. CI
+publishes the matching `v*` tag to npm via trusted publishing
+(`.github/workflows/publish.yml`, GitHub Environment `npm`). Do not
+`npm publish` from a laptop. Do not store
 an `NPM_TOKEN`. Keep `"private": true` in git; the publish job deletes that
 field immediately before `npm publish`.
 

@@ -1,4 +1,4 @@
-# Categories for GitHub's generated release notes. See CONTRIBUTING.md.
+# Categories for GitHub's generated release notes. See scripts/cut-release.sh and the publish workflow.
 
 changelog:
   exclude:
