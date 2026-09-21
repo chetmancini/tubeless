@@ -11,7 +11,7 @@ Package: `tubeless`
 | Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
 | `tubeless`            | `./dist/core/pipeline.d.ts`        | `2d0a644c4801e4bb68ced228b597b68f369a90c74b941d930c4e6a1ae1de0008` |               58 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `3ad3b5cf5b8bd8e04e0c6b6df2c10928ead000d606068948e3dab8ac84062ff0` |               32 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `bf0a4a3252d54bd48ddca355407b6c3d1de5a448ef881be5ce15779fb7acb581` |               35 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `ab57c16dc0d9a0b1d55eb1cfc0df32e6ee950037c09a98531ab64930206c2616` |                6 |
 | `tubeless/node`       | `./dist/node/node.d.ts`            | `18d78a706a226d09f1e4f7acc52c652b5ff08f7e461dffed4cf8c2627c04bc97` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
@@ -106,8 +106,11 @@ Package: `tubeless`
 | [`CliPathParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L64)                            | Declarative configuration for a filesystem path command parameter.                  |
 | [`CliStringParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L35)                          | Declarative configuration for a string command parameter.                           |
 | [`CliValidationError`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L193)                     | Error thrown when command-line arguments fail schema validation.                    |
+| [`CommandCatalog`](https://github.com/chetmancini/tubeless/blob/main/src/cli/command-catalog.ts#L27)                    | Validated, immutable command catalog used by the workbench.                         |
+| [`CommandCatalogEntry`](https://github.com/chetmancini/tubeless/blob/main/src/cli/command-catalog.ts#L7)                | Explicit command-module registration in a command catalog.                          |
+| [`CommandCatalogInput`](https://github.com/chetmancini/tubeless/blob/main/src/cli/command-catalog.ts#L19)               | Input accepted by `defineCommandCatalog`.                                           |
 | [`defineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-command.ts#L401)                        | Create a typed command from a declarative parameter schema and run handler.         |
-| [`defineCommandCatalog`](https://github.com/chetmancini/tubeless/blob/main/src/cli/command-catalog.ts#L45)              | Declare a versioned, dependency-free catalog of workbench commands.                 |
+| [`defineCommandCatalog`](https://github.com/chetmancini/tubeless/blob/main/src/cli/command-catalog.ts#L46)              | Declare a versioned, dependency-free catalog of workbench commands.                 |
 | [`definePipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L230)       | Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. |
 | [`DefinePipelineCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L131) | Configuration for a typed pipeline command.                                         |
 | [`PipelineCliParseResult`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L47)       | Parse result returned by commands created with `definePipelineCommand`.             |

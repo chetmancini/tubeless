@@ -15,7 +15,8 @@ export interface CommandCatalogEntry {
   name?: string;
 }
 
-interface CommandCatalogInput {
+/** Input accepted by `defineCommandCatalog`. */
+export interface CommandCatalogInput {
   /** Explicitly registered definePipelineCommand modules. */
   commands: readonly CommandCatalogEntry[];
   /** Command execution directory, relative to this file. Defaults to this file's directory. */

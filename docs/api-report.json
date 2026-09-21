@@ -85,6 +85,9 @@
         "CliPathParam",
         "CliStringParam",
         "CliValidationError",
+        "CommandCatalog",
+        "CommandCatalogEntry",
+        "CommandCatalogInput",
         "defineCommand",
         "defineCommandCatalog",
         "definePipelineCommand",
@@ -101,7 +104,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "3ad3b5cf5b8bd8e04e0c6b6df2c10928ead000d606068948e3dab8ac84062ff0",
+      "sha256": "bf0a4a3252d54bd48ddca355407b6c3d1de5a448ef881be5ce15779fb7acb581",
       "specifier": "tubeless/cli"
     },
     {

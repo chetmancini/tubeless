@@ -18,7 +18,12 @@ export {
   type CliStringParam,
 } from "./cli-types.js";
 export { defineCommand } from "./cli-command.js";
-export { defineCommandCatalog } from "./command-catalog.js";
+export {
+  defineCommandCatalog,
+  type CommandCatalog,
+  type CommandCatalogEntry,
+  type CommandCatalogInput,
+} from "./command-catalog.js";
 export {
   definePipelineCommand,
   type DefinePipelineCommandConfig,

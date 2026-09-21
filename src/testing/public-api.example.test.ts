@@ -20,6 +20,9 @@ import {
   defineCommand,
   definePipelineCommand,
   type CliParamsSchema,
+  type CommandCatalog,
+  type CommandCatalogEntry,
+  type CommandCatalogInput,
 } from "tubeless/cli";
 import * as cli from "tubeless/cli";
 import * as project from "tubeless/project";
@@ -252,9 +255,13 @@ describe("public API example", () => {
       },
       reporter: false,
     });
-    const catalog = defineCommandCatalog({
-      commands: [{ id: "import", file: "./import.ts", export: "ImportCommand" }],
-    });
+    const entry: CommandCatalogEntry = {
+      id: "import",
+      file: "./import.ts",
+      export: "ImportCommand",
+    };
+    const input: CommandCatalogInput = { commands: [entry] };
+    const catalog: CommandCatalog = defineCommandCatalog(input);
 
     expect(command.descriptor.name).toBe("import");
     expect(catalog.commands[0]?.id).toBe("import");
