@@ -234,7 +234,11 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Use `runOrThrow` when every step must succeed and the caller expects a value.
   It always throws for an unsuccessful run, including `continueOnError` runs.
   Use `run` when the caller must inspect failures, skips, timings, or best-effort
-  output. Its versioned `PipelineRun` exposes its unique `runId`, optional
+  output. Branch on `run.finalized` before consuming `run.value`; the true branch
+  narrows the value to the exact pipeline result type, including when that type
+  contains `undefined`. Finalization is independent of success, so a failed
+  best-effort run can still carry a finalized value. Its versioned `PipelineRun`
+  exposes its unique `runId`, optional
   reusable `correlationId`, terminal status and
   timestamps, errors, and timestamped step reports with correlated attempt IDs;
   structural skips have no attempt ID or start timestamp. Use hooks or tracing

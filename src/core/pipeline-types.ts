@@ -329,8 +329,7 @@ export type PipelineStepReportStatus = PipelineStepReport["status"];
 /** Terminal disposition of a completed run record. */
 export type PipelineRunStatus = "cancelled" | "completed" | "failed";
 
-/** Versioned public record returned for one pipeline execution. */
-export interface PipelineRun<TResult = unknown> {
+interface PipelineRunRecord {
   definitionIdentity?: PipelineDefinitionIdentity;
   /** Caller-owned identifier shared by related executions, when supplied. */
   correlationId?: string;
@@ -338,7 +337,6 @@ export interface PipelineRun<TResult = unknown> {
   dryRun: boolean;
   /** Run-level errors first, step errors in plan order, then finalization errors. */
   errors: PipelineError[];
-  finalized: boolean;
   finishedAtMs: number;
   parentRunId?: string;
   runId: string;
@@ -346,9 +344,21 @@ export interface PipelineRun<TResult = unknown> {
   status: PipelineRunStatus;
   /** Terminal step reports in stable plan order, independent of completion order. */
   steps: PipelineStepReport[];
-  value?: TResult;
   version: typeof RUN_MODEL_VERSION;
 }
+
+/** Versioned public record returned for one pipeline execution. */
+export type PipelineRun<TResult = unknown> =
+  | (PipelineRunRecord & {
+      /** Finalization did not produce a result. Independent of terminal run status. */
+      finalized: false;
+      value?: undefined;
+    })
+  | (PipelineRunRecord & {
+      /** Finalization produced a result. Independent of terminal run status. */
+      finalized: true;
+      value: TResult;
+    });
 
 /**
  * Why a step did not run. Built-in structural reasons keep dependency semantics;

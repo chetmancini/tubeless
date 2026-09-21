@@ -309,6 +309,20 @@ workflow identifier. Pass `context.parentRunId` only when linking to another
 Tubeless execution ID. The same identities are available in step contexts and
 optional trace exports.
 
+`finalized` is the result-presence discriminant. When it is `true`, TypeScript
+narrows `value` to `TResult`; when it is `false`, `value` is `undefined`.
+Finalization and terminal status are independent: a failed best-effort run may
+still have a finalized partial value. A finalized `TResult` may itself be
+`undefined`; `finalized` still distinguishes that result from no result.
+
+```ts
+const run = await pipeline.run(options, { continueOnError: true });
+
+if (run.finalized) {
+  consume(run.value);
+}
+```
+
 An actual step execution receives one `attemptId`. It appears on the
 `PipelineStepContext`, its terminal `PipelineStepReport`, and trace lifecycle
 records. Executed reports also carry start and finish timestamps. Structural

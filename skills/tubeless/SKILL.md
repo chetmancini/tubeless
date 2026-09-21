@@ -57,7 +57,9 @@ the installed declarations before using them; do not silently upgrade Tubeless.
   finalizer is appropriate when partial results are valid domain results.
 - Use `runOrThrow` for callers expecting a successful value, `run` for callers
   inspecting structured failures or partial results, and `plan(controls)` when
-  no work should execute. Plans do not validate domain input.
+  no work should execute. Branch on `run.finalized` to narrow `run.value` to the
+  exact result type; finalization is independent of success, and a finalized
+  result may itself be `undefined`. Plans do not validate domain input.
 - Use `context.log`, forward `context.signal`, use `context.sleep` for waits,
   and report progress for long loops. Resolve relative paths from `context.cwd`.
 - Branch on structured error `code`, `phase`, and `kind`, not message text.

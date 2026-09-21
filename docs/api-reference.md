@@ -10,14 +10,14 @@ Package: `tubeless`
 
 | Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless`            | `./dist/core/pipeline.d.ts`        | `54c1ba7a5b1bd2359a83efcbb8e2a898e60ad0fd1f76e6318e6f00acbf0b58e5` |               59 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `f8ecb8569c6d1bc658dff9644c03ecd70df0e23a47ac71520c461c7ec4ade942` |               31 |
+| `tubeless`            | `./dist/core/pipeline.d.ts`        | `0a1efe03193841baa39582cdb1bbc51340e4c9b086ea0c7b8d63532ce63aba81` |               59 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `3d055064e323f0c444c5d11593860e021e5d103c612a6a15bdc37c8d6c7e0b41` |               31 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `7dbfbd4d894f2e9cc737b5373d1f654f5f08e8b5b5cce27511ef876779713656` |                6 |
-| `tubeless/node`       | `./dist/node/node.d.ts`            | `3bcb39727781832f150ff3c8ce84ff8c9f8fb8811c8440535a89398afb3a2c7c` |               12 |
+| `tubeless/node`       | `./dist/node/node.d.ts`            | `3b5683eb651d17315ed1c2ed5549c31accc7b6ffd727c9dd50ecd90845cab8a3` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `d9a43a3066b618d1839d33b821af293105bb4ba72ff24a2f9e33783aca64e780` |                8 |
-| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `fabf547ff961de088dd9b0852371a61d39e003f153cb2d663ef94136c9f4fff0` |                7 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `17873457c7cf9f26277fbf99f6a625cd48eba7097ca23e9bbf6fd5711c213832` |                8 |
+| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `3b03d201af3e9775b1bd347b4ceee057a893c5a221dc1f5b40aa5bd64af9f5fe` |                7 |
 | `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `bde2a6b18d95b6d6311fec6ae8719ff432208e650803635c9355ec1af62dad27` |                3 |
 
 ## Symbols
@@ -30,7 +30,7 @@ Package: `tubeless`
 | [`definePipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline.ts#L137)                        | Compile a typed step graph into a validated, executable pipeline.                           |
 | [`isPipelineErrorCode`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L175)             | Return whether an unknown value is a stable package-owned pipeline error code.              |
 | [`MappedChildProgressOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L170)      | Presentation options for opaque `forEachPipeline` progress.                                 |
-| [`Pipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L509)                        | Compiled pipeline that can be planned, executed, and rendered as a graph.                   |
+| [`Pipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L519)                        | Compiled pipeline that can be planned, executed, and rendered as a graph.                   |
 | [`PIPELINE_ERROR_CODES`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L167)            | Ordered catalog of every stable package-owned pipeline error code.                          |
 | [`PipelineContext`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L35)                  | Caller-supplied services and metadata shared by one pipeline execution.                     |
 | [`PipelineDefinition`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-definition.ts#L69)          | Declarative configuration for compiling a typed pipeline.                                   |
@@ -46,45 +46,45 @@ Package: `tubeless`
 | [`PipelineExecutionError`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-execute.ts#L75)         | Error thrown by `runOrThrow` when a pipeline run does not complete successfully.            |
 | [`PipelineFanOutDiagnostics`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L197)       | Bounded diagnostics collected from a failed or cancelled fan-out step.                      |
 | [`PipelineFanOutFailure`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L186)           | Bounded diagnostics for a failed or cancelled runtime fan-out.                              |
-| [`PipelineHooks`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L424)                   | Optional callbacks for observing pipeline and step lifecycle events.                        |
-| [`PipelineInput`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L545)                   | Input accepted by a pipeline run before any options schema transformation.                  |
+| [`PipelineHooks`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L434)                   | Optional callbacks for observing pipeline and step lifecycle events.                        |
+| [`PipelineInput`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L555)                   | Input accepted by a pipeline run before any options schema transformation.                  |
 | [`PipelineLogger`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L28)                   | Minimal logger used by pipeline execution, reporters, and CLI adapters.                     |
-| [`PipelineMermaidDirection`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L498)        | Supported Mermaid flowchart direction.                                                      |
-| [`PipelineMermaidOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L501)          | Rendering options for a pipeline Mermaid flowchart.                                         |
-| [`PipelinePlan`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L486)                    | Side-effect-free validation and selection result for a pipeline run.                        |
-| [`PipelinePlanStep`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L452)                | Planned representation of one declared step and its selection state.                        |
-| [`PipelineResult`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L550)                  | Successful result produced by a pipeline run.                                               |
-| [`PipelineRun`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L333)                     | Versioned public record returned for one pipeline execution.                                |
+| [`PipelineMermaidDirection`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L508)        | Supported Mermaid flowchart direction.                                                      |
+| [`PipelineMermaidOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L511)          | Rendering options for a pipeline Mermaid flowchart.                                         |
+| [`PipelinePlan`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L496)                    | Side-effect-free validation and selection result for a pipeline run.                        |
+| [`PipelinePlanStep`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L462)                | Planned representation of one declared step and its selection state.                        |
+| [`PipelineResult`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L560)                  | Successful result produced by a pipeline run.                                               |
+| [`PipelineRun`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L351)                     | Versioned public record returned for one pipeline execution.                                |
 | [`PipelineRunControls`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L53)              | Built-in controls for selecting and scheduling work in a pipeline run.                      |
 | [`PipelineRunStatus`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L330)               | Terminal disposition of a completed run record.                                             |
-| [`PipelineStepCancelledEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L415)      | Lifecycle event emitted when a step is cancelled.                                           |
+| [`PipelineStepCancelledEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L425)      | Lifecycle event emitted when a step is cancelled.                                           |
 | [`PipelineStepCancelledReport`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L306)     | Terminal report for a cancelled step.                                                       |
-| [`PipelineStepCompleteEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L421)       | Lifecycle event emitted when a step completes successfully.                                 |
+| [`PipelineStepCompleteEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L431)       | Lifecycle event emitted when a step completes successfully.                                 |
 | [`PipelineStepCompleteReport`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L289)      | Terminal report for a successfully completed step.                                          |
 | [`PipelineStepContext`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L140)             | Step execution context with attempt identity and progress reporting helpers.                |
-| [`PipelineStepFailedEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L417)         | Lifecycle event emitted when a step fails.                                                  |
+| [`PipelineStepFailedEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L427)         | Lifecycle event emitted when a step fails.                                                  |
 | [`PipelineStepFailedReport`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L312)        | Terminal report for a failed step.                                                          |
-| [`PipelineStepLifecycleStatus`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L401)     | Any planned, running, or terminal step lifecycle status.                                    |
-| [`PipelineStepPlannedEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L404)        | Lifecycle event emitted when a step is planned.                                             |
+| [`PipelineStepLifecycleStatus`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L411)     | Any planned, running, or terminal step lifecycle status.                                    |
+| [`PipelineStepPlannedEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L414)        | Lifecycle event emitted when a step is planned.                                             |
 | [`PipelineStepProgress`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L124)            | Latest progress snapshot reported by a running step.                                        |
 | [`PipelineStepProgressDetail`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L107)      | One optional nested row in a step progress snapshot.                                        |
 | [`PipelineStepProgressDetailStatus`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L98) | Lifecycle status displayed for an optional nested progress row.                             |
-| [`PipelineStepProgressEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L411)       | Lifecycle event emitted when a running step reports progress.                               |
+| [`PipelineStepProgressEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L421)       | Lifecycle event emitted when a running step reports progress.                               |
 | [`PipelineStepReport`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L320)              | Terminal state recorded for one step after a run.                                           |
 | [`PipelineStepReportStatus`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L327)        | Terminal status recorded in a step report.                                                  |
-| [`PipelineStepSelectionReason`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L441)     | Machine-readable explanation of why a planned step was included or omitted.                 |
-| [`PipelineStepSkippedEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L419)        | Lifecycle event emitted when a step is skipped.                                             |
+| [`PipelineStepSelectionReason`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L451)     | Machine-readable explanation of why a planned step was included or omitted.                 |
+| [`PipelineStepSkippedEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L429)        | Lifecycle event emitted when a step is skipped.                                             |
 | [`PipelineStepSkippedReport`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L296)       | Terminal report for a structurally or intentionally skipped step.                           |
-| [`PipelineStepSkipReason`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L357)          | Why a step did not run.                                                                     |
-| [`PipelineStepStartEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L407)          | Lifecycle event emitted when a step begins running.                                         |
-| [`PipelineStepStatus`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L386)              | One observable status in a step's planned → running → terminal lifecycle.                   |
+| [`PipelineStepSkipReason`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L367)          | Why a step did not run.                                                                     |
+| [`PipelineStepStartEvent`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L417)          | Lifecycle event emitted when a step begins running.                                         |
+| [`PipelineStepStatus`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L396)              | One observable status in a step's planned → running → terminal lifecycle.                   |
 | [`PipelineValidationIssue`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L180)         | One dependency-free Standard Schema issue normalized for reports and traces.                |
 | [`RemoteStepAdapter`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L152)               | Adapter that invokes one step on an external execution engine.                              |
 | [`requireOutputs`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-finalizer.ts#L31)               | Build a finalizer that only runs when every listed step published an output.                |
 | [`RUN_MODEL_VERSION`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-ids.ts#L2)                   | Current persisted run-record schema version.                                                |
 | [`StandardSchemaV1`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L226)                | Dependency-free subset of the Standard Schema V1 protocol.                                  |
 | [`Step`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L74)                             | Typed pipeline step carrying its stable ID, output, and option types.                       |
-| [`StepSkipDecision`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L378)                | Decision from an optional `skip` predicate.                                                 |
+| [`StepSkipDecision`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L388)                | Decision from an optional `skip` predicate.                                                 |
 
 ### `tubeless/cli`
 

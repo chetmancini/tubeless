@@ -19,7 +19,7 @@ one of these recipes.
 | Inspect, plan, or graph a pipeline or command | [`typed-import.ts`](../examples/typed-import.ts)                         | `tubeless inspect`, `tubeless plan`, `tubeless graph`, `toMermaid`                 |
 | Safe write/publish preview                    | [`publish-with-gates.ts`](../examples/publish-with-gates.ts)             | `dryRun`, `optionalDependsOn`, `skipAfterFailureOf`                                |
 | Deliberately omit unnecessary work            | [`conditional-step.ts`](../examples/conditional-step.ts)                 | `step` with `skip`, valued skip, skip-aware output typing                          |
-| Preserve independent work after failure       | [`best-effort.ts`](../examples/best-effort.ts)                           | `continueOnError`, structured `run` result                                         |
+| Preserve independent work after failure       | [`best-effort.ts`](../examples/best-effort.ts)                           | `continueOnError`, `finalized` result narrowing                                    |
 | Compose one reusable workflow                 | [`child-pipeline.ts`](../examples/child-pipeline.ts)                     | `fromPipeline`, domain `mapOptions`, child `controls`, async `mapResult`           |
 | Call a real HTTP service                      | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `fromRemote`, fetch cancellation, validated HTTP output                            |
 | Host a pipeline in a durable engine           | [`host-embedding.ts`](../examples/host-embedding.ts)                     | `runOrThrow`, pass `correlationId` / `parentRunId`                                 |

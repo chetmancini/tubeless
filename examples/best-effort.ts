@@ -40,7 +40,7 @@ export async function runBestEffortExample() {
 
   return {
     errors: result.errors,
-    metadataStillCompleted: result.value?.metadata?.checked === 8,
+    metadataStillCompleted: result.finalized && result.value.metadata?.checked === 8,
     reports: result.steps,
   };
 }

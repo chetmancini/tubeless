@@ -205,6 +205,9 @@ describe("pipeline defaults", () => {
 
     const result = await definePipeline({ id: "undefined", steps: [empty] }).run({});
     expect(result).toMatchObject({ finalized: true, status: "completed", value: undefined });
+    if (!result.finalized) throw new Error("Expected an undefined finalized result");
+    expectTypeOf(result.value).toEqualTypeOf<undefined>();
+    expect(Object.hasOwn(result, "value")).toBe(true);
     await expect(definePipeline({ id: "cached", steps: [skipped] }).runOrThrow({})).resolves.toBe(
       3
     );

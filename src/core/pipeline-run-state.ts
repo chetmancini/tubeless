@@ -28,6 +28,10 @@ type StepTransitionEffects = {
   output?: { value: unknown };
 };
 
+type PipelineFinalization<TResult> =
+  | { finalized: false; value: undefined }
+  | { finalized: true; value: TResult };
+
 export function isCancellationOnly(errors: readonly PipelineError[]): boolean {
   return errors.length > 0 && errors.every(({ kind }) => kind === "cancellation");
 }
@@ -96,10 +100,9 @@ export class PipelineRunState<TResult> {
   readonly #reportsByStepId = new Map<string, PipelineStepReport>();
   #definitionIdentity: PipelineRun["definitionIdentity"];
   #finalizationAttempted = false;
-  #finalized = false;
+  #finalization: PipelineFinalization<TResult> = { finalized: false, value: undefined };
   #nextAttemptSequence = 0;
   #phase: RunPhase = "created";
-  #value: TResult | undefined;
 
   constructor(
     readonly pipelineId: string,
@@ -267,8 +270,7 @@ export class PipelineRunState<TResult> {
 
   completeFinalization(value: TResult, durationMs: number): void {
     this.#expectPhase("finalizing");
-    this.#value = value;
-    this.#finalized = true;
+    this.#finalization = { finalized: true, value };
     this.#phase = "running";
     this.lifecycle.finalizeComplete(durationMs, value);
   }
@@ -299,14 +301,13 @@ export class PipelineRunState<TResult> {
       pipelineId: this.pipelineId,
       dryRun: this.dryRun,
       errors,
-      finalized: this.#finalized,
       finishedAtMs: this.now(),
       runId: this.identity.runId,
       startedAtMs: this.startedAtMs,
       status: terminalRunStatus(this.#errors),
       steps,
-      value: this.#value,
       version: RUN_MODEL_VERSION,
+      ...this.#finalization,
     };
     if (this.#definitionIdentity) result.definitionIdentity = this.#definitionIdentity;
     if (this.identity.correlationId !== undefined) {

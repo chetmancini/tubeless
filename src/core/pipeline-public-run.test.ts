@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { createSteps, definePipeline, requireOutputs } from "./pipeline.js";
+import type { PipelineRun } from "./pipeline.js";
 import { makePipeline, standardSchema, thrownDefinitionErrors } from "./pipeline.test-support.js";
 
 describe("definePipeline run and selection", () => {
@@ -97,6 +98,36 @@ describe("definePipeline run and selection", () => {
       parentRunId?: string;
       runId: string;
     }>();
+  });
+
+  it("narrows finalized results independently of terminal status", async () => {
+    const { step } = createSteps();
+    const fail = step("fail", {
+      run: (): never => {
+        throw new Error("expected failure");
+      },
+    });
+    const keep = step("keep", { run: () => "kept" });
+    const pipeline = definePipeline({
+      id: "narrow-finalized-result",
+      steps: [fail, keep],
+      finalize: (): string => "partial",
+    });
+
+    const run = await pipeline.run({}, { continueOnError: true });
+
+    function consumeFinalizedResult(result: PipelineRun<string>): string | undefined {
+      if (result.finalized) {
+        expectTypeOf(result.value).toEqualTypeOf<string>();
+        return result.value;
+      }
+      expectTypeOf(result.value).toEqualTypeOf<undefined>();
+      return result.value;
+    }
+
+    expect(run.status).toBe("failed");
+    expect(run.finalized).toBe(true);
+    expect(consumeFinalizedResult(run)).toBe("partial");
   });
 
   it("does not observe continueOnError mutations after run starts", async () => {

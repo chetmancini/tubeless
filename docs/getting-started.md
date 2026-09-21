@@ -154,6 +154,8 @@ const normalizePlan = ImportPipeline.plan({ targets: ["normalize"] });
   independent steps finish, but it never makes their failures successful.
 - `run` returns a report with step statuses, errors, timings, and any final result.
   Use it when your caller needs to inspect failed or partially completed work.
+  Check `report.finalized` to narrow `report.value` to the exact result type;
+  a failed best-effort run may still be finalized.
 - `plan` shows which steps are selected and which will be skipped. It does not
   execute steps or validate domain inputs.
 - `targets` selects declared downstream goals plus their required inputs and

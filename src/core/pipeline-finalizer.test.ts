@@ -25,6 +25,8 @@ describe("pipeline finalizers", () => {
     const filtered = await pipeline.run({}, { stepIds: ["write"] });
     expect(filtered.status).toBe("failed");
     expect(filtered.finalized).toBe(false);
+    expect(Object.hasOwn(filtered, "value")).toBe(true);
+    expect(filtered.value).toBeUndefined();
     expect(filtered.errors[0]).toMatchObject({
       message: "Required pipeline outputs missing: build, write",
       stepId: PIPELINE_FINALIZE_STEP_ID,
