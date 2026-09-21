@@ -37,21 +37,24 @@ Supported operating systems are Linux and macOS. Windows is untested.
 
 ## Try the CLI
 
-From a Tubeless checkout, list and run a registered catalog command:
+From a Tubeless checkout, list and run a pipeline directly from a project:
 
 ```sh
-bunx tubeless list --project examples/catalog/tubeless.project.ts
-bunx tubeless inspect --project examples/catalog/tubeless.project.ts import-rows
-bunx tubeless run --project examples/catalog/tubeless.project.ts import-rows -- --source ../rows.txt
+bunx tubeless list --project examples/tubeless.project.ts
+bunx tubeless inspect --project examples/tubeless.project.ts validated-import
+bunx tubeless run --project examples/tubeless.project.ts validated-import -- --source rows.txt
 ```
 
-`import-rows` reads a newline-delimited file; the catalog sets cwd to its
-directory, so `--source ../rows.txt` resolves to [`examples/rows.txt`](../examples/rows.txt).
+The project contains only pipelines. The workbench derives `--source` from the
+pipeline's input schema; there is no command wrapper or catalog.
 
-In your app, add a `tubeless.project.ts` that registers one
-`definePipelineCommand` module, then run `bunx tubeless list` with no
-`--project`. See [`examples/catalog/tubeless.project.ts`](../examples/catalog/tubeless.project.ts),
-[`examples/cli-job.ts`](../examples/cli-job.ts), and [the CLI](./cli.md).
+In your app, export `defineProject("my-app", [MyPipeline])` from
+`tubeless.project.ts`, then run `bunx tubeless list` with no `--project`.
+Pipelines whose options schema exposes Standard JSON Schema input metadata get
+their flags automatically. Use the catalog example only for custom command inputs
+or presentation. See [`examples/automatic-cli.ts`](../examples/automatic-cli.ts),
+[`examples/catalog/tubeless.project.ts`](../examples/catalog/tubeless.project.ts),
+and [the CLI](./cli.md).
 
 ## 1. Define domain options
 

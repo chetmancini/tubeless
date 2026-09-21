@@ -2,7 +2,7 @@
 
 Studio is a local browser interface for inspecting pipeline runs. It shows
 step status, progress, logs, and errors from a SQLite run store or a saved NDJSON
-trace. You can also register pipeline commands to preview and launch them from
+trace. You can also load a project or register pipeline commands to preview and launch them from
 the browser. Recording and Studio are optional; pipelines run without either.
 
 ## Record and inspect a run
@@ -32,7 +32,7 @@ bunx tubeless ui --trace run.ndjson
 ```
 
 The NDJSON view is always read-only. It cannot launch commands or clear history,
-and does not accept a project catalog or `--command`.
+and does not accept a project file or `--command`.
 
 ## Use the browser controls
 
@@ -60,7 +60,26 @@ business inputs; those are checked when you run the command. A preview is
 optional. Cancellation affects only a live launch owned by the current Studio
 process; it cannot resume or cancel work from an earlier crashed process.
 
-## Register commands for browser execution
+## Launch project pipelines
+
+Pass a checked-in project file to expose its schema-backed pipelines in Studio:
+
+```ts
+// tubeless.project.ts
+import { defineProject } from "tubeless/project";
+import { ImportPipeline, PublishPipeline } from "./pipelines.js";
+
+export default defineProject("data-jobs", [ImportPipeline, PublishPipeline]);
+```
+
+```sh
+bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.project.ts
+```
+
+Studio derives the same form fields that the CLI derives as flags. No command
+wrapper or catalog is needed.
+
+## Register custom commands for browser execution
 
 Provide command files explicitly:
 
@@ -84,9 +103,10 @@ Pipeline command forms include
 **Max Concurrency**, a positive integer defaulting to `1`, under execution controls;
 it has the same behavior as the CLI's `--max-concurrency` flag.
 
-## Checked-in command catalog
+## Advanced: checked-in command catalog
 
-Use a command catalog to register commands once for both the CLI and Studio:
+Use a command catalog when pipelines need custom CLI inputs, option mapping,
+display names, or aliases. It registers those command adapters once for both the CLI and Studio:
 
 ```ts
 // tubeless.project.ts

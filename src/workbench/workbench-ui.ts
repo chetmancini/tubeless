@@ -2,7 +2,12 @@ import * as path from "node:path";
 import { parseArgs } from "node:util";
 import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
-import { loadPipelineProjectManifest } from "./workbench-project-loader.js";
+import {
+  loadPipelineProjectFile,
+  loadResolvedPipelineProjectCommand,
+  resolvePipelineProjectCommands,
+  type ResolvedPipelineProjectCommand,
+} from "./workbench-project-loader.js";
 import type { PipelineRunEventReader } from "../run-store/run-store.js";
 import type {
   PipelineRunStudioCommand,
@@ -25,8 +30,8 @@ import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 const UI_USAGE = `Usage: tubeless ui [options] [project-file]
 
 Serve the local pipeline studio from an append-only SQLite run store or a
-finished NDJSON trace. Register definePipelineCommand modules directly or through
-a project manifest, and only with a writable SQLite store.
+finished NDJSON trace. Load pipelines from a project, or register
+definePipelineCommand modules directly, and only with a writable SQLite store.
 
 Options:
       --command <path> Register a launchable pipeline command (repeatable)
@@ -55,13 +60,23 @@ function parseUiArgs(argv: readonly string[]) {
   });
 }
 
-/** A registered launchable command module: its file plus optional export/name. */
-interface StudioCommandSpec {
-  cwd: string;
-  exportName?: string;
-  filePath: string;
-  id?: string;
-  name?: string;
+/** One direct command module or a pipeline/command registered by a project file. */
+type StudioCommandSpec =
+  | {
+      cwd: string;
+      exportName?: string;
+      filePath: string;
+      kind: "module";
+    }
+  | { kind: "project"; registration: ResolvedPipelineProjectCommand };
+
+async function loadStudioCommandSpec(spec: StudioCommandSpec, io: WorkbenchCliIo) {
+  if (spec.kind === "project") {
+    return loadResolvedPipelineProjectCommand(spec.registration, io);
+  }
+  const commandIo = { ...io, cwd: spec.cwd };
+  const loaded = await loadPipelineCommand(spec.filePath, spec.exportName, commandIo);
+  return "exitCode" in loaded ? loaded : { ...loaded, commandIo };
 }
 
 export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
@@ -71,7 +86,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
       parse: parseUiArgs,
       async run(parsed, commandIo) {
         if (parsed.positionals.length > 1) {
-          return writeUsageError(commandIo, "Pass at most one project manifest.", UI_USAGE);
+          return writeUsageError(commandIo, "Pass at most one project file.", UI_USAGE);
         }
         const directCommandFiles = parsed.values.command ?? [];
         const projectFile = parsed.positionals[0];
@@ -101,6 +116,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           const spec: StudioCommandSpec = {
             cwd: io.cwd,
             filePath: path.resolve(io.cwd, file),
+            kind: "module",
           };
           if (parsed.values.export !== undefined) {
             spec.exportName = parsed.values.export;
@@ -108,34 +124,32 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           return spec;
         });
         if (projectFile) {
-          const loadedConfig = await loadPipelineProjectManifest(projectFile, io);
+          const loadedConfig = await loadPipelineProjectFile(projectFile, io);
           if ("exitCode" in loadedConfig) return loadedConfig.exitCode;
-          const configDirectory = path.dirname(loadedConfig.filePath);
-          const configCwd = path.resolve(configDirectory, loadedConfig.manifest.cwd ?? ".");
           specs.push(
-            ...loadedConfig.manifest.commands.map((command) => {
-              const spec: StudioCommandSpec = {
-                cwd: configCwd,
-                filePath: path.resolve(configDirectory, command.file),
-              };
-              if (command.export !== undefined) {
-                spec.exportName = command.export;
-              }
-              spec.id = command.id;
-              if (command.name !== undefined) {
-                spec.name = command.name;
-              }
-              return spec;
-            })
+            ...resolvePipelineProjectCommands(loadedConfig).map(
+              (registration): StudioCommandSpec => ({ kind: "project", registration })
+            )
           );
         }
         const identities = new Set<string>();
         for (const spec of specs) {
-          const identity = `${spec.filePath}\0${spec.exportName ?? ""}`;
+          const identity =
+            spec.kind === "module"
+              ? `${spec.filePath}\0${spec.exportName ?? ""}`
+              : spec.registration.kind === "module"
+                ? `${spec.registration.filePath}\0${spec.registration.exportName ?? ""}`
+                : `project-pipeline\0${spec.registration.id}`;
           if (identities.has(identity)) {
+            const source =
+              spec.kind === "module"
+                ? spec.filePath
+                : spec.registration.kind === "module"
+                  ? spec.registration.filePath
+                  : spec.registration.id;
             return writeUsageError(
               io,
-              `Command module ${JSON.stringify(spec.filePath)} is duplicated.`,
+              `Studio command source ${JSON.stringify(source)} is duplicated.`,
               UI_USAGE
             );
           }
@@ -165,13 +179,18 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           descriptor: PipelineRunStudioCommand;
         }[] = [];
         for (const spec of specs) {
-          const commandIo = { ...io, cwd: spec.cwd };
-          const loaded = await loadPipelineCommand(spec.filePath, spec.exportName, commandIo);
+          const loaded = await loadStudioCommandSpec(spec, io);
           if ("exitCode" in loaded) return loaded.exitCode;
-          const commandName = spec.name ?? loaded.command.descriptor.name;
+          const registered = spec.kind === "project" ? spec.registration : undefined;
+          const commandName =
+            registered?.kind === "module" && registered.name
+              ? registered.name
+              : loaded.command.descriptor.name;
           const descriptor: PipelineRunStudioCommand = {
             canPlan: true,
-            id: spec.id ?? `${spec.filePath}#${loaded.exportName}`,
+            id:
+              registered?.id ??
+              `${spec.kind === "module" ? spec.filePath : projectFile}#${loaded.exportName}`,
             name: commandName,
             parameters: loaded.command.descriptor.parameters,
           };
@@ -180,7 +199,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           }
           registrations.push({
             command: loaded.command,
-            commandIo,
+            commandIo: loaded.commandIo,
             descriptor,
           });
         }

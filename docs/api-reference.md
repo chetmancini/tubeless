@@ -16,7 +16,7 @@ Package: `tubeless`
 | `tubeless/node`       | `./dist/node/node.d.ts`            | `18d78a706a226d09f1e4f7acc52c652b5ff08f7e461dffed4cf8c2627c04bc97` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `80888268d3b90d2786391c7ccbae3eb8e37096b3e47030fae402f9ee45a47300` |                3 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `70dbc393e5832dbfa160b23ebc4eb50bc19d1638ba821f548851867a072d0d4b` |                3 |
 | `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `71f294681c42ba83db7fe1e39ccf47953d265cef5afabcd97d9fb8c07a3b9872` |                7 |
 | `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `8dc0a69c5587b13c38f22208a4d24e619d53e81d2b8376a3d483e921f109f499` |                3 |
 
@@ -169,7 +169,7 @@ Package: `tubeless`
 
 | Symbol                                                                                                           | Description                                                                       |
 | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| [`defineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L27)         | Define an immutable project from typed pipelines or a parsed pipeline document.   |
+| [`defineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L35)         | Define an immutable project from typed pipelines or a parsed pipeline document.   |
 | [`PipelineDocumentError`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-document.ts#L70) | A document shape or reference error; graph errors remain PipelineDefinitionError. |
 | [`ProjectRegistry`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-compiler.ts#L75)       | Only explicitly registered functions and schemas can be referenced by a document. |
 

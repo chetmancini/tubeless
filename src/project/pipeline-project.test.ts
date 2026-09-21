@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { createSteps, definePipeline } from "../core/pipeline.js";
-import { defineProject } from "./pipeline-project.js";
+import { defineProject, isPipelineProject } from "./pipeline-project.js";
 
 const { step: alphaStep } = createSteps<{ value: string }>();
 const alpha = definePipeline({
@@ -36,6 +36,8 @@ describe("pipeline project", () => {
     expect(project.pipelines).toEqual([alpha]);
     expect(Object.isFrozen(project)).toBe(true);
     expect(Object.isFrozen(project.pipelines)).toBe(true);
+    expect(isPipelineProject(project)).toBe(true);
+    expect(isPipelineProject({ ...project })).toBe(false);
     expect(() => defineProject("duplicate", [alpha, alpha])).toThrow(
       'pipeline id "alpha" is declared more than once'
     );

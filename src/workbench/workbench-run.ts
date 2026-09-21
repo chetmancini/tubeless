@@ -27,11 +27,11 @@ import {
 
 const RUN_USAGE = `Usage: tubeless run [options] <command-file> [-- <command-args...>]
 
-Execute a registered id or exported definePipelineCommand using its validated CLI contract.
+Execute a project pipeline or exported definePipelineCommand using its validated CLI contract.
 
 Options:
   -e, --export <name>   Select a command export when the file has more than one
-  -p, --project <path>  Resolve a registered id from this project manifest
+  -p, --project <path>  Resolve a pipeline or command id from this project file
       --store <path>    Append run events to a local SQLite database
       --trace <path>    Write NDJSON traces to a file, or - for stdout
                         (command output then goes to stderr)

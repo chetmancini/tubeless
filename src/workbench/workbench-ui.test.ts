@@ -150,7 +150,7 @@ describe("runUi", () => {
     expect(await runUi(["first.mjs", "second.mjs"], twoStudios)).toBe(
       TUBELESS_WORKBENCH_EXIT_CODE.usage
     );
-    expect(twoStudios.errors.join("")).toContain("Error: Pass at most one project manifest.");
+    expect(twoStudios.errors.join("")).toContain("Error: Pass at most one project file.");
 
     const duplicate = captureIo(directory);
     expect(await runUi(["--command", "pipeline.mjs", "--command", "pipeline.mjs"], duplicate)).toBe(

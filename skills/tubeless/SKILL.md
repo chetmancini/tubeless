@@ -1,6 +1,6 @@
 ---
 name: tubeless
-description: Author, modify, or review typed Tubeless pipelines, pipeline-backed CLI commands, and project catalogs in TypeScript projects. Use for dependency modeling, failure and skip policies, dry runs, child pipelines, and pipeline tests.
+description: Author, modify, or review typed Tubeless pipelines, pipeline-backed CLI commands, and projects in TypeScript projects. Use for dependency modeling, failure and skip policies, dry runs, child pipelines, and pipeline tests.
 ---
 
 # Author Tubeless pipelines
@@ -94,13 +94,13 @@ Read the corresponding package recipe before using these features:
   needed when their shapes differ.
   Built-in `--step` / `--target` flags map to `stepIds` / `targets`. Do not
   redeclare built-in flags. Read `docs/cli.md` for option mapping.
-  Use `defineCommand` from `tubeless/cli` for standalone scripts and
-  `defineCommandCatalog` from `tubeless/cli` for command catalogs shared
-  by the CLI and optional Studio.
-- Use `pipelines/<name>.ts` for definitions and `scripts/<name>.ts` for command
-  wrappers when introducing a layout. Register commands explicitly in
-  `tubeless.project.ts`; adapt the package's `examples/catalog/` without copying
-  unrelated example IDs. Preserve existing consumer conventions.
+  Export `defineProject(id, pipelines)` from `tubeless.project.ts` to expose
+  schema-backed pipelines directly to the CLI and optional Studio. Use
+  `defineCommand` for standalone scripts and `defineCommandCatalog` only for
+  advanced custom command adapters.
+- Use `pipelines/<name>.ts` for definitions. Add `scripts/<name>.ts` command
+  wrappers only when explicit `params`, `mapOptions`, or presentation overrides
+  are needed. Preserve existing consumer conventions.
 - Keep storage and Studio optional. Read `docs/studio.md` before adding them;
   read the composition guides before adding child or remote execution.
 - Use `tubeless/node` for cwd-relative path factories, JSON artifacts, required

@@ -23,11 +23,12 @@ Agent instructions:
 - Installable skill pack: ./agent-skills.md
 - Convert existing code: tubeless-make-pipeline, installed with npx skills add chetmancini/tubeless
 - Canonical guide: ./agent-guide.md
-- Command catalog: ../examples/catalog/tubeless.project.ts
+- Minimal project: ../examples/tubeless.project.ts
+- Advanced command catalog: ../examples/catalog/tubeless.project.ts
 - Maintain stable step IDs.
 - Use optional step names only as display overrides; dependencies and selection use IDs.
 - Use pipeline.toMermaid() to generate static graph documentation.
-- Use tubeless list to enumerate only explicitly registered commands from the command catalog. Use stable registered IDs with inspect, plan, graph, and run; no command modules are discovered from the filesystem or history.
+- Use tubeless list to enumerate pipelines from defineProject or explicit commands from an advanced catalog. Use stable pipeline or command IDs with inspect, plan, graph, and run; no command modules are discovered from the filesystem or history.
 - Use tubeless inspect with a registered ID, pipeline, or marked command module for a read-only inventory of identity plus the default plan. Prefer the marked command when both are exported.
 - Use tubeless plan with a pipeline or marked command module to preview target, exact-step, and dry-run selection without executing or supplying domain options. Prefer the marked command when both are exported. Use command.plan() or tubeless plan; do not simulate planning with --plan.
 - Use tubeless graph with a pipeline or marked command module to print Mermaid without a wrapper script. Prefer the marked command when both are exported. Command files expose the same graph as command.toMermaid().
@@ -61,6 +62,7 @@ Advanced:
 Executable examples:
 
 - ../examples/catalog/tubeless.project.ts
+- ../examples/tubeless.project.ts
 - ../examples/minimal-pipeline.ts
 - ../examples/typed-import.ts
 - ../examples/yaml-pipelines.ts

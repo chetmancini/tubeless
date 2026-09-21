@@ -75,16 +75,16 @@ for previews, and `toMermaid` for diagrams. See [getting started](./docs/getting
 
 ## Use the CLI
 
-Define commands and their optional catalog with `tubeless/cli`; group pipelines with `tubeless/project`.
-`definePipelineCommand(pipeline)` infers flags from its input schema. See the [CLI guide](./docs/cli.md) for the one-line wrapper and command catalog. From this repository:
+Projects made with `defineProject(id, pipelines)` are directly usable by the CLI;
+schema-backed pipelines get inferred flags automatically. See the [CLI guide](./docs/cli.md)
+for direct project usage and advanced custom command adapters. From this repository:
 
 ```sh
-bunx tubeless list --project examples/catalog/tubeless.project.ts
-bunx tubeless inspect --project examples/catalog/tubeless.project.ts import-rows
-bunx tubeless run --project examples/catalog/tubeless.project.ts import-rows -- --source ../rows.txt
+bunx tubeless list --project examples/tubeless.project.ts
+bunx tubeless inspect --project examples/tubeless.project.ts validated-import
+bunx tubeless run --project examples/tubeless.project.ts validated-import -- --source rows.txt
 ```
 
-`import-rows` reads a newline-delimited file (cwd is the catalog directory).
 In your app, add `tubeless.project.ts` and omit `--project`. Pass application
 flags after `--`. Record runs with `--store` or `--trace`, then inspect them with
 `tubeless history` or the [local studio](./docs/studio.md).

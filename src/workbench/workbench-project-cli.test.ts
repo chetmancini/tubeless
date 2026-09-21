@@ -96,7 +96,68 @@ async function writeProjectFixture(): Promise<{
   return { directory, manifest, workDirectory };
 }
 
-describe("project manifest workbench", () => {
+async function writeAutomaticProjectFixture(): Promise<{
+  directory: string;
+  projectFile: string;
+}> {
+  const directory = await mkdtemp(path.join(tmpdir(), "tubeless-automatic-project-"));
+  directories.push(directory);
+  const pipelineModuleUrl = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
+  const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project.js")).href;
+  const projectFile = path.join(directory, "tubeless.project.ts");
+  await writeFile(
+    projectFile,
+    `
+      import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
+      import { defineProject } from ${JSON.stringify(projectModuleUrl)};
+      const optionsSchema = {
+        "~standard": {
+          version: 1,
+          vendor: "fixture",
+          validate: (value) => ({ value }),
+          jsonSchema: { input: () => ({
+            type: "object",
+            properties: { message: { type: "string", description: "Message to print." } },
+            required: ["message"],
+          }) },
+        },
+      };
+      const { step } = createSteps(optionsSchema);
+      const work = step("work", {
+        run: (_inputs, context) => {
+          context.log.log(\`worked:\${context.options.message}\`);
+          return context.options.message;
+        },
+      });
+      const pipeline = definePipeline({ id: "automatic", steps: [work] });
+      export default defineProject("fixture-project", [pipeline]);
+    `
+  );
+  return { directory, projectFile };
+}
+
+describe("project file workbench", () => {
+  it("lists and runs project pipelines with automatically inferred CLI flags", async () => {
+    const { directory, projectFile } = await writeAutomaticProjectFixture();
+
+    const listIo = captureIo(directory);
+    expect(await runWorkbenchCli(["list", "--json"], listIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(JSON.parse(listIo.output.join(""))).toEqual({
+      id: "fixture-project",
+      pipelines: ["automatic"],
+      project: projectFile,
+    });
+
+    const runIo = captureIo(directory);
+    expect(await runWorkbenchCli(["run", "automatic", "--", "--message", "hello"], runIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(runIo.output.join(" ")).toContain("worked:hello");
+    expect(runIo.errors).toEqual([]);
+  });
+
   it("lists registrations without scanning or loading command modules", async () => {
     const { directory } = await writeProjectFixture();
     await rm(path.join(directory, "pipeline.mjs"));
@@ -180,7 +241,7 @@ describe("project manifest workbench", () => {
         TUBELESS_WORKBENCH_EXIT_CODE.usage
       );
       expect(io.errors.join("")).toContain(
-        "--export cannot be combined with --project; the manifest owns export selection."
+        "--export cannot be combined with --project; the project file owns export selection."
       );
       expect(io.errors.join("")).toContain(`Usage: tubeless ${command}`);
     }
@@ -229,12 +290,12 @@ describe("project manifest workbench", () => {
     expect(io.errors.join(" ")).toContain("resolves to a duplicate module registration");
   });
 
-  it("publishes project ids to the studio while legacy catalogs keep their file identity", async () => {
-    const { directory, manifest } = await writeProjectFixture();
+  it("publishes project pipelines and inferred parameters to Studio", async () => {
+    const { directory, projectFile } = await writeAutomaticProjectFixture();
     const controller = new AbortController();
     const io = { ...captureIo(directory), signal: controller.signal };
     const running = runWorkbenchCli(
-      ["ui", "--store", path.join(directory, "runs.sqlite"), "--port", "0", manifest],
+      ["ui", "--store", path.join(directory, "runs.sqlite"), "--port", "0", projectFile],
       io
     );
 
@@ -243,7 +304,15 @@ describe("project manifest workbench", () => {
     expect(url).toBeDefined();
     await expect(fetch(`${url}/api/commands`).then((response) => response.json())).resolves.toEqual(
       {
-        commands: [expect.objectContaining({ id: "import-data", name: "Import data" })],
+        commands: [
+          expect.objectContaining({
+            id: "automatic",
+            name: "automatic",
+            parameters: expect.arrayContaining([
+              expect.objectContaining({ flag: "message", key: "message", required: true }),
+            ]),
+          }),
+        ],
       }
     );
 

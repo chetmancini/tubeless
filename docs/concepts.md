@@ -477,8 +477,9 @@ operational descriptions to node labels.
 
 ## CLI commands
 
-Wrap a pipeline with `definePipelineCommand` to give it command-line arguments,
-validation, help, progress reporting, and a result summary. See
+Put schema-backed pipelines in `defineProject(id, pipelines)` to give the CLI and
+Studio inferred arguments, validation, help, and progress reporting without wrappers.
+Use `definePipelineCommand` directly for a standalone script or advanced adapter. See
 [`cli-job.ts`](../examples/cli-job.ts) for a complete example and
 [the CLI guide](./cli.md) for all commands and flags.
 
@@ -487,12 +488,11 @@ They load the module without executing step handlers or requiring business
 inputs. If a module exports both a pipeline and a command, they prefer the
 command. Keep module imports free of side effects.
 
-`tubeless run` requires a `definePipelineCommand` export. A raw pipeline can
-instead be invoked from application code through `run` or `runOrThrow`.
-Register commands in `tubeless.project.ts` to address them by stable project ID.
-The [command catalog example](../examples/catalog/tubeless.project.ts) shows
-file layout and registrations; the [Studio guide](./studio.md) shows how to
-use the same catalog in the browser.
+For a direct command file, `tubeless run` requires a `definePipelineCommand` export.
+Pipelines in `tubeless.project.ts` are addressable by pipeline ID and wrapped
+automatically. A raw pipeline outside a project can be invoked from application
+code through `run` or `runOrThrow`. The [command catalog example](../examples/catalog/tubeless.project.ts)
+shows the advanced custom-adapter layout; the [Studio guide](./studio.md) shows both paths.
 
 ### Map command arguments to pipeline inputs
 

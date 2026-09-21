@@ -36,7 +36,8 @@ one of these recipes.
 | Export lifecycle events                       | [`tracing.ts`](../examples/tracing.ts)                                   | app-owned JSON / OTel adapters, composition, `onExporterError`                     |
 | Watch many primitives in one run              | [`peloton.ts`](../examples/peloton.ts)                                   | delays, logs, children, fan-out, retry, gates, test runtime                        |
 | Watch an advanced YAML pipeline               | [`yaml-peloton.ts`](../examples/yaml-peloton.ts)                         | declarative graph, concurrent handlers, retries, progress, dry runs, gates         |
-| Project layout, IDs, and command catalog      | [`tubeless.project.ts`](../examples/catalog/tubeless.project.ts)         | `defineProject`, `pipelines/`, optional `defineCommandCatalog`, `tubeless list`    |
+| Expose a project to CLI and Studio            | [`tubeless.project.ts`](../examples/tubeless.project.ts)                 | `defineProject`, inferred flags, `tubeless list`                                   |
+| Register custom command adapters              | [`catalog/tubeless.project.ts`](../examples/catalog/tubeless.project.ts) | `defineCommandCatalog`, aliases, custom mappings                                   |
 
 ## Node helpers
 
@@ -86,14 +87,15 @@ pipeline does not require credentials.
 6. Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
    `tubeless/project`. Use `project.get(id)` to retain the selected pipeline's exact
    option and result types; call its existing methods directly.
-   Start pipeline scripts with `definePipelineCommand(pipeline)` from `tubeless/cli`.
-   It infers flags from the options schema's Standard JSON Schema input metadata.
+   A checked-in `defineProject` exposes its pipelines to the CLI and Studio directly;
+   they infer flags from the options schema's Standard JSON Schema input metadata.
+   Start standalone or customized scripts with `definePipelineCommand(pipeline)`.
    Use `overrides` for presentation only; explicit `params` and `mapOptions` are
    advanced options for type-only pipelines or custom input shapes.
    Non-string `enum`/`const` constraints also require explicit parameters.
    Use `defineCommand` from the same entrypoint for standalone scripts and
-   `defineCommandCatalog` from `tubeless/cli` for command catalogs shared
-   by terminal commands and Studio.
+   `defineCommandCatalog` from `tubeless/cli` only for custom command adapters
+   shared by terminal commands and Studio.
    Preview selection with
    `command.plan()` or `tubeless plan`; do not simulate planning with `--plan`.
    `--step` and `--target` are argv flags; `mapOptions` and hooks read `stepIds`
@@ -106,9 +108,9 @@ pipeline does not require credentials.
    specific step outputs. Read plan `selectionReasons` instead of recreating
    target-closure logic in a CLI or application.
 8. Use the file layout and export conventions in the
-   [command catalog example](../examples/catalog/tubeless.project.ts), adapting IDs to
-   your own commands. Register project commands explicitly; do not infer executable modules from run
-   history or the filesystem.
+   [command catalog example](../examples/catalog/tubeless.project.ts) only when
+   custom adapters are needed. Do not infer executable modules from run history
+   or the filesystem.
    Cancel only a live launch owned by the current studio process; it is not
    crash-resume and does not abort sibling launches.
 
