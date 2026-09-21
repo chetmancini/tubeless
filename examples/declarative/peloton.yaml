@@ -9,6 +9,8 @@ metadata:
 
 pipelines:
   yaml-peloton:
+    name: Peloton from YAML
+    description: "YAML road-race demo: progress, concurrent inspections, retries, dry runs, and failure gates. All I/O is simulated."
     optionsSchema: raceOptions
     targets: [validate-tech, publish-start-list]
     steps:

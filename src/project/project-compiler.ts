@@ -349,6 +349,8 @@ export function compileValidatedPipelineDocument(
     const finalize = handler(registry.finalizers, definition.finalize.run, `${path}.finalize.run`);
     const pipeline = definePipeline({
       id,
+      name: definition.name,
+      description: definition.description,
       steps: entries.map((entry) => entry.step),
       targets: resolveSteps(definition.targets, `${path}.targets`),
       resultSchema: schema(registry.schemas, definition.resultSchema, `${path}.resultSchema`),

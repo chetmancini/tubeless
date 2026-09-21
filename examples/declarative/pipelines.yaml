@@ -7,6 +7,8 @@ metadata:
 
 pipelines:
   yaml-import:
+    name: Import rows from YAML
+    description: Normalize caller-provided rows through the reusable child workflow.
     optionsSchema: lines
     targets: [normalize]
     steps:
@@ -21,6 +23,8 @@ pipelines:
       requireOutputs: [normalize]
 
   yaml-preview:
+    name: Preview rows from YAML
+    description: Return caller-provided rows without normalization.
     optionsSchema: lines
     targets: [load]
     steps:
@@ -32,6 +36,8 @@ pipelines:
       requireOutputs: [load]
 
   normalize-all:
+    name: Normalize rows
+    description: Normalize every non-empty row through its own child run.
     optionsSchema: lines
     steps:
       - id: normalize
@@ -45,6 +51,8 @@ pipelines:
       requireOutputs: [normalize]
 
   normalize-one:
+    name: Normalize one row
+    description: Trim and lowercase one row.
     optionsSchema: line
     steps:
       - id: normalize

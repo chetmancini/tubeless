@@ -49,6 +49,49 @@ function makeMiniPipeline(onRun: (options: MiniOptions, dryRun: boolean) => void
 }
 
 describe("definePipelineCommand", () => {
+  it("inherits pipeline presentation and lets command presentation override it", () => {
+    const { step } = createSteps();
+    const work = step("work", { run: () => true });
+    const pipeline = definePipeline({
+      id: "presented",
+      name: "Presented pipeline",
+      description: "Pipeline-owned help text.",
+      steps: [work],
+    });
+
+    expect(definePipelineCommand(pipeline).descriptor).toMatchObject({
+      name: "Presented pipeline",
+      description: "Pipeline-owned help text.",
+    });
+    expect(
+      definePipelineCommand(pipeline, {
+        name: "Command override",
+        description: "Command-specific help text.",
+      }).descriptor
+    ).toMatchObject({
+      name: "Command override",
+      description: "Command-specific help text.",
+    });
+  });
+
+  it("falls back when an external pipeline supplies blank presentation", () => {
+    const { step } = createSteps();
+    const externalPipeline = Object.assign(
+      definePipeline({
+        id: "external",
+        steps: [step("work", { run: () => true })],
+      }),
+      {
+        name: "  ",
+        description: "\n\t",
+      }
+    );
+
+    const descriptor = definePipelineCommand(externalPipeline).descriptor;
+    expect(descriptor).toMatchObject({ name: "external" });
+    expect(descriptor).not.toHaveProperty("description");
+  });
+
   it("defaults to no domain options without leaking command-only values", async () => {
     const seen: MiniOptions[] = [];
     const command = definePipelineCommand(

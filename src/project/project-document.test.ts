@@ -33,6 +33,12 @@ describe("pipeline document JSON Schema", () => {
             },
           },
         },
+        pipeline: {
+          properties: {
+            name: { $ref: "#/$defs/text" },
+            description: { $ref: "#/$defs/text" },
+          },
+        },
       },
     });
     expect(Object.keys(jsonSchema.properties).sort()).toEqual([
@@ -91,6 +97,8 @@ describe("validatePipelineDocument", () => {
         pipelines: {
           example: {
             ...pipeline,
+            name: "Example pipeline",
+            description: "Run the full example workflow.",
             optionsSchema: "options",
             resultSchema: "result",
             targets: ["work"],
@@ -157,6 +165,8 @@ describe("validatePipelineDocument", () => {
     { ...document, metadata: { typo: "unknown" } },
     { ...document, typo: true },
     { version: 1, pipelines: { example: { ...pipeline, steps: [] } } },
+    { version: 1, pipelines: { example: { ...pipeline, name: " " } } },
+    { version: 1, pipelines: { example: { ...pipeline, description: 1 } } },
     {
       version: 1,
       pipelines: {
@@ -258,6 +268,28 @@ describe("validatePipelineDocument", () => {
     expect(compilePipelineDocument(validated, registry).get("example")!.plan()).toEqual(
       compilePipelineDocument(document, registry).get("example")!.plan()
     );
+  });
+
+  it("preserves pipeline presentation through compilation", () => {
+    const compiled = compilePipelineDocument(
+      {
+        version: 1,
+        pipelines: {
+          example: {
+            ...pipeline,
+            name: "Example pipeline",
+            description: "Run the example workflow.",
+          },
+        },
+      },
+      { steps: { work: () => true }, finalizers: { done: () => true } }
+    ).get("example");
+
+    expect(compiled).toMatchObject({
+      id: "example",
+      name: "Example pipeline",
+      description: "Run the example workflow.",
+    });
   });
 
   it("leaves semantic graph checking to compilation", () => {

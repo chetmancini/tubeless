@@ -58,6 +58,8 @@ const load = step("load", {
 
 export const ValidatedPipeline = definePipeline({
   id: "validated-import",
+  name: "Validated import",
+  description: "Import rows with schema-validated options and results.",
   steps: [load],
   resultSchema,
   finalize: requireOutputs([load], ({ load }, context) => ({

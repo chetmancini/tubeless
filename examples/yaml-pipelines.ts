@@ -5,8 +5,8 @@ import { registry } from "./declarative/handlers.ts";
 
 // This loader uses Bun's native YAML import. Node applications can pass the
 // result of their chosen YAML parser (or JSON.parse) to defineProject.
-// Document metadata supplies project.name and project.description. An optional
-// fourth argument can override either field without changing pipeline identities.
+// Document metadata supplies project presentation, while each pipeline owns the
+// name and description inherited by its command. Either layer can be overridden.
 export const project = defineProject("yaml-examples", document, registry);
 
 const params = {
@@ -16,8 +16,6 @@ const params = {
 function command(id: string) {
   const pipeline = project.get(id);
   return definePipelineCommand(pipeline, {
-    name: id === "yaml-import" ? "Import rows from YAML" : "Preview rows from YAML",
-    description: `Run ${id} from the YAML document.`,
     params,
     mapOptions: ({ lines }) => ({ lines: lines.split(",") }),
     summarize: (result) => [JSON.stringify(result)],
