@@ -106,8 +106,9 @@ type CanDefaultPipelineCommandOptions<TOptions extends object, TSchema extends C
     : false;
 
 interface DefinePipelineCommandConfigBase<TResult, TSchema extends CliParamsSchema> {
-  /** Defaults to pipeline.id. */
+  /** Defaults to pipeline.name, then pipeline.id. */
   name?: string;
+  /** Defaults to pipeline.description. */
   description?: string;
   /** Advanced: replace inferred flags for type-only pipelines or custom CLI inputs. */
   params?: TSchema;
@@ -315,8 +316,8 @@ export function definePipelineCommand<
   const params = { ...bridgeParams, ...userParams } as PipelineCliBuiltins & TSchema;
 
   const commandConfig = {
-    name: config.name ?? pipeline.id,
-    description: config.description,
+    name: config.name ?? pipeline.name ?? pipeline.id,
+    description: config.description ?? pipeline.description,
     params,
     positionals: config.positionals,
     checkpoint: config.checkpoint,

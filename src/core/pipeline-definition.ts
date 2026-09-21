@@ -73,6 +73,10 @@ export type PipelineDefinition<
   TResultSchema extends StandardSchemaV1 | undefined = undefined,
 > = {
   id: string;
+  /** Optional display name; stable identity remains `id`. */
+  name?: string;
+  /** Human-readable purpose shown by command and discovery surfaces. */
+  description?: string;
   /** Author- or build-supplied version of handlers, mappings, schemas, and finalizer (1–256 characters). */
   implementationVersion?: string;
   steps: TSteps;

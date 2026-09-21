@@ -122,6 +122,11 @@
       "additionalProperties": false,
       "required": ["steps", "finalize"],
       "properties": {
+        "name": { "$ref": "#/$defs/text", "description": "Pipeline display name." },
+        "description": {
+          "$ref": "#/$defs/text",
+          "description": "Human-readable pipeline purpose."
+        },
         "optionsSchema": {
           "$ref": "#/$defs/text",
           "description": "Name in registry.optionsSchemas."

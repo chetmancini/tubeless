@@ -220,6 +220,32 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
       );
     },
   },
+  TUBELESS_DEFINITION_PIPELINE_NAME_BLANK: {
+    phase: "definition",
+    kind: "definition",
+    emit: () =>
+      definitionError(() =>
+        definePipeline({
+          id: "blank-name",
+          name: " ",
+          steps: [],
+          finalize: () => undefined,
+        })
+      ),
+  },
+  TUBELESS_DEFINITION_PIPELINE_DESCRIPTION_BLANK: {
+    phase: "definition",
+    kind: "definition",
+    emit: () =>
+      definitionError(() =>
+        definePipeline({
+          id: "blank-description",
+          description: " ",
+          steps: [],
+          finalize: () => undefined,
+        })
+      ),
+  },
   TUBELESS_DEFINITION_STEP_ID_BLANK: {
     phase: "definition",
     kind: "definition",

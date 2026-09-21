@@ -89,6 +89,9 @@ pipeline does not require credentials.
    option and result types; call its existing methods directly.
    Let `definePipeline` infer its generics to preserve literal IDs; annotate the
    finalizer's return type when an explicit result contract is needed.
+   Put optional `name` and `description` on a pipeline when CLI and Studio need
+   friendlier presentation. `definePipelineCommand` inherits both; command-level
+   values override them without changing the pipeline ID.
    Add optional `{ name, description }` as the third argument for presentation;
    the project name defaults to its ID. For documents, metadata is inherited and
    can be overridden in a fourth argument after the registry.
