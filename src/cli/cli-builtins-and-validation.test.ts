@@ -39,6 +39,20 @@ describe("defineCommand: built-in --dry-run", () => {
     });
   });
 
+  it("preserves an own __proto__ parameter", () => {
+    const params = Object.fromEntries([["__proto__", { type: "string" as const }]]);
+    const command = defineCommand({ params, run: (values) => values });
+
+    expect(command.descriptor.parameters).toContainEqual(
+      expect.objectContaining({ flag: "__proto__", key: "__proto__", type: "string" })
+    );
+    const result = command.parse(["--__proto__", "value"]);
+    expect(result.kind).toBe("values");
+    if (result.kind !== "values") return;
+    expect(Object.hasOwn(result.values, "__proto__")).toBe(true);
+    expect(result.values["__proto__"]).toBe("value");
+  });
+
   it("throws at definition time if a schema redeclares the dryRun key", () => {
     expect(() =>
       defineCommand({

@@ -60,7 +60,12 @@ export function buildEffectiveSchema(
     };
   }
   for (const [key, param] of Object.entries(params)) {
-    effectiveParams[key] = param;
+    Object.defineProperty(effectiveParams, key, {
+      value: param,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
   return effectiveParams;
 }

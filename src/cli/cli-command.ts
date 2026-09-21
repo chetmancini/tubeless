@@ -120,14 +120,19 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       const raw = readValue(key, param);
       if (errors.length > errorCount) continue;
       const envValue = raw === undefined && param.env ? context.env?.[param.env] : undefined;
-      values[key] = resolveParam(
-        key,
-        param,
-        raw ?? envValue,
-        context.cwd,
-        errors,
-        raw !== undefined ? "argv" : envValue !== undefined ? "env" : "default"
-      );
+      Object.defineProperty(values, key, {
+        value: resolveParam(
+          key,
+          param,
+          raw ?? envValue,
+          context.cwd,
+          errors,
+          raw !== undefined ? "argv" : envValue !== undefined ? "env" : "default"
+        ),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     }
     if (errors.length > 0) return { kind: "error", errors, helpText };
     // SAFETY: resolveParam populated every effective schema key and all input checks passed.
