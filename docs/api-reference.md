@@ -11,12 +11,12 @@ Package: `tubeless`
 | Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
 | `tubeless`            | `./dist/core/pipeline.d.ts`        | `54c1ba7a5b1bd2359a83efcbb8e2a898e60ad0fd1f76e6318e6f00acbf0b58e5` |               59 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `cd969c79ec0e795d5b759e32711eb68e91167819d6484e1c3590f40fee6436a8` |               31 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `f8ecb8569c6d1bc658dff9644c03ecd70df0e23a47ac71520c461c7ec4ade942` |               31 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `7dbfbd4d894f2e9cc737b5373d1f654f5f08e8b5b5cce27511ef876779713656` |                6 |
 | `tubeless/node`       | `./dist/node/node.d.ts`            | `3bcb39727781832f150ff3c8ce84ff8c9f8fb8811c8440535a89398afb3a2c7c` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `0af403ee4bdb3672eab96143e8dc9672ea19e4d363f0651de410db35f83a8fd2` |                8 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `d9a43a3066b618d1839d33b821af293105bb4ba72ff24a2f9e33783aca64e780` |                8 |
 | `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `fabf547ff961de088dd9b0852371a61d39e003f153cb2d663ef94136c9f4fff0` |                7 |
 | `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `bde2a6b18d95b6d6311fec6ae8719ff432208e650803635c9355ec1af62dad27` |                3 |
 

@@ -56,6 +56,18 @@ describe("definePipelineCommand", () => {
     expect(command.pipeline).toBe(pipeline);
     expectTypeOf(command.pipeline).toEqualTypeOf<typeof pipeline>();
     expectTypeOf(command.pipeline.id).toEqualTypeOf<"mini">();
+    expectTypeOf(command.id).toEqualTypeOf<typeof pipeline.id>();
+    expectTypeOf(command.stepIds).toEqualTypeOf<typeof pipeline.stepIds>();
+    expectTypeOf(command.targetIds).toEqualTypeOf<typeof pipeline.targetIds>();
+    expectTypeOf(command.plan).parameter(0).toEqualTypeOf<Parameters<typeof pipeline.plan>[0]>();
+
+    function invalidCallsForTypechecking() {
+      // @ts-expect-error Commands preserve literal step ids in planning controls.
+      command.plan({ stepIds: ["typo"] });
+      // @ts-expect-error Commands preserve literal target ids in planning controls.
+      command.plan({ targets: ["typo"] });
+    }
+    void invalidCallsForTypechecking;
   });
 
   it("inherits pipeline presentation and lets command presentation override it", () => {
@@ -366,7 +378,7 @@ describe("definePipelineCommand", () => {
     expect(pipeline.targetIds).toEqual([]);
     expect(result.kind === "help" && result.helpText).not.toContain("--target");
 
-    const undeclared = command.plan({ targets: ["internal"] });
+    const undeclared = command.plan({ targets: ["internal" as never] });
     expect(undeclared.ok).toBe(false);
     expect(undeclared.errors[0]?.code).toBe("TUBELESS_PLANNING_TARGET_UNDECLARED");
   });

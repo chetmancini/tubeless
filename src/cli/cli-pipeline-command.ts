@@ -61,13 +61,13 @@ export interface PipelineCommand<
   readonly pipeline: TPipeline;
   readonly descriptor: CliCommandDescriptor;
   /** Stable identity of the wrapped pipeline. */
-  readonly id: string;
+  readonly id: TPipeline["id"];
   /** Stable definition-order step ids for discovery surfaces such as CLI help. */
-  readonly stepIds: readonly string[];
+  readonly stepIds: TPipeline["stepIds"];
   /** Stable declared goal ids that support dependency-aware target execution. */
-  readonly targetIds: readonly string[];
+  readonly targetIds: TPipeline["targetIds"];
   /** Plan without parsing or requiring domain parameters. */
-  plan(controls?: PipelineRunControls): PipelinePlan;
+  plan(controls?: Parameters<TPipeline["plan"]>[0]): PipelinePlan;
   /** Generate a static Mermaid flowchart without running or planning the pipeline. */
   toMermaid(options?: PipelineMermaidOptions): string;
   parse(argv?: readonly string[], context?: Partial<CliContext>): PipelineCliParseResult<TSchema>;
@@ -429,7 +429,7 @@ export function definePipelineCommand<
       : result;
   }
 
-  function plan(controls: PipelineRunControls = {}): PipelinePlan {
+  function plan(controls: Parameters<TPipeline["plan"]>[0] = {}): PipelinePlan {
     return pipeline.plan(controls);
   }
 
