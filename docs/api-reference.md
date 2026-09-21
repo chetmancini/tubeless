@@ -107,7 +107,7 @@ Package: `tubeless`
 | [`CliStringParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L35)                          | Declarative configuration for a string command parameter.                           |
 | [`CliValidationError`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L193)                     | Error thrown when command-line arguments fail schema validation.                    |
 | [`defineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-command.ts#L401)                        | Create a typed command from a declarative parameter schema and run handler.         |
-| [`definePipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L231)       | Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. |
+| [`definePipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L235)       | Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. |
 | [`DefinePipelineCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L132) | Configuration for a typed pipeline command.                                         |
 | [`PipelineCliParseResult`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L47)       | Parse result returned by commands created with `definePipelineCommand`.             |
 | [`PipelineCliValues`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L39)            | Validated domain parameters plus the built-in pipeline execution controls.          |

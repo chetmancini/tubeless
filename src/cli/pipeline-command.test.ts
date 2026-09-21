@@ -74,6 +74,24 @@ describe("definePipelineCommand", () => {
     });
   });
 
+  it("falls back when an external pipeline supplies blank presentation", () => {
+    const { step } = createSteps();
+    const externalPipeline = Object.assign(
+      definePipeline({
+        id: "external",
+        steps: [step("work", { run: () => true })],
+      }),
+      {
+        name: "  ",
+        description: "\n\t",
+      }
+    );
+
+    const descriptor = definePipelineCommand(externalPipeline).descriptor;
+    expect(descriptor).toMatchObject({ name: "external" });
+    expect(descriptor).not.toHaveProperty("description");
+  });
+
   it("defaults to no domain options without leaking command-only values", async () => {
     const seen: MiniOptions[] = [];
     const command = definePipelineCommand(
