@@ -75,8 +75,8 @@ for previews, and `toMermaid` for diagrams. See [getting started](./docs/getting
 
 ## Use the CLI
 
-Define commands with `tubeless/cli` and catalogs with `tubeless/project`.
-The [CLI guide](./docs/cli.md) covers the manifest. From this repository:
+`definePipelineCommand(pipeline)` from `tubeless/cli` infers flags from its input schema.
+See the [CLI guide](./docs/cli.md) for the one-line wrapper and optional catalogs. From this repository:
 
 ```sh
 bunx tubeless list --project examples/catalog/tubeless.project.ts

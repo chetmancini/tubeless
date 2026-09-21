@@ -1,5 +1,10 @@
 import { createCommand } from "./cli-command.js";
 import { flagName } from "./cli-parser.js";
+import {
+  inferCliParams,
+  type InferredCliParams,
+  type InferredFlagOverrides,
+} from "./cli-schema.js";
 import type {
   CliBooleanParam,
   CliCheckpointConfig,
@@ -18,6 +23,7 @@ import {
   type PipelineMermaidOptions,
   type PipelinePlan,
   type PipelineRunControls,
+  type StandardSchemaV1,
 } from "../core/pipeline.js";
 import { createPipelineReporter, type PipelineReporterConfig } from "../reporter/reporter-entry.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE } from "./cli-exit.js";
@@ -103,7 +109,7 @@ interface DefinePipelineCommandConfigBase<TResult, TSchema extends CliParamsSche
   /** Defaults to pipeline.id. */
   name?: string;
   description?: string;
-  /** Extra flags beyond the command and pipeline built-ins. */
+  /** Advanced: replace inferred flags for type-only pipelines or custom CLI inputs. */
   params?: TSchema;
   /** Extra parameter keys accepted in positional order. */
   positionals?: readonly (keyof TSchema & string)[];
@@ -220,7 +226,21 @@ function defaultPipelineCommandOptions<TSchema extends CliParamsSchema>(
   return domainValues;
 }
 
-/** Turn a typed pipeline into a command with selection, plan, and reporting defaults. */
+/** Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. */
+export function definePipelineCommand<TOptions extends object, TResult>(
+  pipeline: Pipeline<TOptions, TResult> &
+    (keyof TOptions extends never ? unknown : { readonly optionsSchema: StandardSchemaV1 }),
+  config?: Omit<
+    DefinePipelineCommandConfigBase<TResult, InferredCliParams<NoInfer<TOptions>>>,
+    "params"
+  > & {
+    params?: never;
+    mapOptions?: never;
+    /** Advanced: customize flag spelling, aliases, help or environment fallbacks. */
+    overrides?: InferredFlagOverrides<NoInfer<TOptions>>;
+  }
+): PipelineCommand<InferredCliParams<TOptions>, TResult>;
+/** Advanced: declare CLI inputs explicitly, mapping them only when their shape differs. */
 export function definePipelineCommand<
   TOptions extends object,
   TResult,
@@ -228,10 +248,29 @@ export function definePipelineCommand<
 >(
   pipeline: Pipeline<TOptions, TResult>,
   config: DefinePipelineCommandConfig<NoInfer<TOptions>, TResult, TSchema>
+): PipelineCommand<TSchema, TResult>;
+export function definePipelineCommand<
+  TOptions extends object,
+  TResult,
+  const TSchema extends CliParamsSchema = {},
+>(
+  pipeline: Pipeline<TOptions, TResult>,
+  config: DefinePipelineCommandConfigBase<TResult, TSchema> & {
+    mapOptions?: PipelineCommandMapOptions<TOptions, TSchema>;
+    overrides?: InferredFlagOverrides<TOptions>;
+  } = {}
 ): PipelineCommand<TSchema, TResult> {
-  // SAFETY: `config.params` is declared as `TSchema`; the empty-object fallback is only
-  // reached when the caller omits `params`, which is exactly the `{}` schema case.
-  const userParams = config.params ?? ({} as TSchema);
+  // SAFETY: explicit params retain TSchema; the inferred overload derives its schema
+  // from the same pipeline input type. Type-only pipelines have no runtime fields.
+  const userParams = (config.params ??
+    (pipeline.optionsSchema && !config.mapOptions
+      ? inferCliParams(pipeline.optionsSchema, config.overrides)
+      : {})) as TSchema;
+  if (config.overrides && (config.params || config.mapOptions || !pipeline.optionsSchema)) {
+    throw new Error(
+      "Flag overrides require inferred pipeline flags; use params for an explicit CLI."
+    );
+  }
   assertNoPipelineCommandConflicts(userParams);
 
   const targetFlagEnabled = pipeline.targetIds.length > 0;

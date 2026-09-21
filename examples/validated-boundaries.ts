@@ -1,13 +1,15 @@
 import { createSteps, definePipeline, requireOutputs, type StandardSchemaV1 } from "tubeless";
 
 function standardSchema<TInput, TOutput>(
-  validate: StandardSchemaV1<TInput, TOutput>["~standard"]["validate"]
+  validate: StandardSchemaV1<TInput, TOutput>["~standard"]["validate"],
+  input?: Record<string, unknown>
 ): StandardSchemaV1<TInput, TOutput> {
   return {
     "~standard": {
       validate,
       vendor: "example",
       version: 1,
+      ...(input ? { jsonSchema: { input: () => input } } : {}),
     },
   };
 }
@@ -20,6 +22,11 @@ const optionsSchema = standardSchema<{ source: string }, { limit: number; source
     return typeof source === "string"
       ? { value: { limit: 100, source } }
       : { issues: [{ message: "Expected a source path", path: ["source"] }] };
+  },
+  {
+    type: "object",
+    properties: { source: { type: "string", description: "Source to import." } },
+    required: ["source"],
   }
 );
 
