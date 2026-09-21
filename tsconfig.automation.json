@@ -1,0 +1,4 @@
+{
+  "extends": "./examples/tsconfig.json",
+  "include": ["scripts/check-pipeline.ts", "scripts/run-pipeline-command.ts"]
+}

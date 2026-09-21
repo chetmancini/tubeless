@@ -13,6 +13,8 @@
 - The public website lives in `website/` and is not part of the npm package.
   Rebuild it when human-facing docs or recommended usage change.
 - Run `make check` from this package directory before handoff.
+- Repository CI is defined by `scripts/check-pipeline.ts`; keep its check
+  graph, `package.json`, and `.github/workflows/check.yml` aligned.
 
 ## Source organization
 

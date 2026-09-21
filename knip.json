@@ -4,7 +4,8 @@
     "src/reporter/live-ticker-worker.ts",
     "src/node/worker-thread-runtime.ts",
     "src/studio/run-store-ui-client-browser.ts",
-    "src/**/*.test.tsx"
+    "src/**/*.test.tsx",
+    "scripts/check-pipeline.ts"
   ],
   "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{js,mjs,ts}", "!scripts/fixtures/**"],
   "ignoreExportsUsedInFile": {
