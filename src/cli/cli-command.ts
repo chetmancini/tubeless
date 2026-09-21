@@ -114,7 +114,7 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     errors: string[],
     helpText: string
   ): CliParseResult<TSchema> {
-    const values: Record<string, ResolvedParamValue> = {};
+    const values: Record<string, ResolvedParamValue> = { resume: false };
     for (const [key, param] of Object.entries(effectiveParams)) {
       const errorCount = errors.length;
       const raw = readValue(key, param);

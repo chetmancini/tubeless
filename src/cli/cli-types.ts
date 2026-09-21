@@ -156,13 +156,13 @@ type OptionalCliParams<TSchema extends CliParamsSchema> = {
 
 /**
  * Validated values returned from a command's parameter schema.
- * Every command's parsed values include `dryRun`. Commands with managed checkpointing or
- * `resume: true` also receive `resume`; it is `false` unless `--resume` is passed or
- * `checkpoint.defaultResume` is `true`.
+ * Every command's parsed values include `dryRun` and `resume`. Commands without resume
+ * support always receive `false`; supported commands use `--resume` or
+ * `checkpoint.defaultResume`.
  */
 export type CliParams<TSchema extends CliParamsSchema> = {
   dryRun: boolean;
-  resume?: boolean;
+  resume: boolean;
 } & RequiredCliParams<TSchema> &
   OptionalCliParams<TSchema>;
 

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { openCheckpoint, type CheckpointStore } from "../node/checkpoint.js";
 import { CliHelpRequested, CliValidationError, defineCommand } from "./cli.js";
 import { testLog } from "./cli.test-support.js";
@@ -89,6 +89,19 @@ describe("defineCommand: checkpoint", () => {
     seedCheckpoint();
     await command.run(["--no-resume"]);
     expect(seenHasA).toBe(false);
+  });
+
+  it("keeps resume required for direct execution of resume-capable commands", () => {
+    const command = defineCommand({
+      checkpoint: { path: checkpointPath, defaultResume: true },
+      params: {},
+      run: () => undefined,
+    });
+
+    expectTypeOf<Parameters<typeof command.execute>[0]>().toMatchTypeOf<{
+      dryRun: boolean;
+      resume: boolean;
+    }>();
   });
 
   it("throws at definition time if a schema redeclares resume, with or without checkpoint configured", () => {
@@ -463,7 +476,10 @@ describe("defineCommand: checkpoint", () => {
 
   it("rejects resume input when the command does not support it", () => {
     const command = defineCommand({ params: {}, run: (v) => v });
-    expect(command.parse([])).toEqual({ kind: "values", values: { dryRun: false } });
+    expect(command.parse([])).toEqual({
+      kind: "values",
+      values: { dryRun: false, resume: false },
+    });
     expect(command.parse(["--resume"])).toMatchObject({
       kind: "error",
       errors: ["Unknown option: --resume"],
