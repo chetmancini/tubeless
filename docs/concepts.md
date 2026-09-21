@@ -490,7 +490,7 @@ command. Keep module imports free of side effects.
 `tubeless run` requires a `definePipelineCommand` export. A raw pipeline can
 instead be invoked from application code through `run` or `runOrThrow`.
 Register commands in `tubeless.project.ts` to address them by stable project ID.
-The [project manifest example](../examples/catalog/tubeless.project.ts) shows
+The [command catalog example](../examples/catalog/tubeless.project.ts) shows
 file layout and registrations; the [Studio guide](./studio.md) shows how to
 use the same catalog in the browser.
 

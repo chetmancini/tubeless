@@ -7,10 +7,10 @@ import {
   type WorkbenchPipelineCommand,
 } from "./pipeline-module.js";
 import {
-  isPipelineProjectManifest,
-  type PipelineProjectCommandModule,
-  type PipelineProjectManifest,
-} from "../project/project-manifest.js";
+  isCommandCatalog,
+  type CommandCatalog,
+  type CommandCatalogEntry,
+} from "../cli/command-catalog.js";
 import {
   errorMessage,
   loadPipelineCommand,
@@ -25,7 +25,7 @@ export const DEFAULT_PIPELINE_PROJECT_MANIFEST = "tubeless.project.ts";
 
 export interface LoadedPipelineProjectManifest {
   filePath: string;
-  manifest: PipelineProjectManifest;
+  manifest: CommandCatalog;
 }
 
 export interface ResolvedPipelineProjectCommand {
@@ -69,7 +69,7 @@ export async function loadPipelineProjectManifest(
     const manifest = selectUniqueExport(
       await importModuleNamespace(filePath),
       undefined,
-      isPipelineProjectManifest,
+      isCommandCatalog,
       "project manifest",
       { hintExport: false }
     ).value;
@@ -108,7 +108,7 @@ function resolvePipelineProjectCommand(
 
 function resolveProjectCommandModule(
   loaded: LoadedPipelineProjectManifest,
-  command: PipelineProjectCommandModule
+  command: CommandCatalogEntry
 ): ResolvedPipelineProjectCommand {
   const manifestDirectory = path.dirname(loaded.filePath);
   const resolved: ResolvedPipelineProjectCommand = {

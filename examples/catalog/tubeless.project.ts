@@ -1,4 +1,9 @@
-import { definePipelineProject } from "tubeless/project";
+import { defineCommandCatalog } from "tubeless/cli";
+import { defineProject } from "tubeless/project";
+import { EnrichPipeline } from "./pipelines/enrich.ts";
+import { ImportPipeline } from "./pipelines/import.ts";
+import { NormalizePipeline } from "./pipelines/normalize.ts";
+import { PublishPipeline } from "./pipelines/publish.ts";
 
 // Checked-in command catalog. Module paths resolve from this file; cwd is
 // this directory. Adapt IDs and files to the consumer; keep registrations
@@ -10,8 +15,16 @@ import { definePipelineProject } from "tubeless/project";
 // For CPU work, ../worker-threads.ts uses an explicit Node worker adapter. Compile
 // its worker module to JavaScript and let the application own the pool's close().
 
-/** Checked-in project command catalog with stable registered identities. */
-export default definePipelineProject({
+/** Typed application project. Retrieve a pipeline by id, then plan, run, or graph it. */
+export const CatalogProject = defineProject("catalog", [
+  NormalizePipeline,
+  ImportPipeline,
+  EnrichPipeline,
+  PublishPipeline,
+]);
+
+/** Optional CLI/Studio command catalog with stable registered identities. */
+export default defineCommandCatalog({
   cwd: ".",
   commands: [
     {

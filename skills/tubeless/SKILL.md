@@ -56,13 +56,16 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 - Use `context.log`, forward `context.signal`, use `context.sleep` for waits,
   and report progress for long loops. Resolve relative paths from `context.cwd`.
 - Branch on structured error `code`, `phase`, and `kind`, not message text.
+- Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
+  `tubeless/project`. Retrieve one with `project.get(id)`; it keeps the exact pipeline
+  option and result types and uses the pipeline's existing methods directly.
 
 ## Add only the capabilities the workflow needs
 
 Read the corresponding package recipe before using these features:
 
 - For YAML or JSON authoring, read `docs/declarative-pipelines.md` and
-  `examples/yaml-pipelines.ts`. Use `compilePipelineDocument` from
+  `examples/yaml-pipelines.ts`. Use `defineProject(id, document, registry)` from
   `tubeless/project` on parsed data with explicitly registered handlers,
   adapters, skip predicates, and schemas. Each document step declares `run`,
   `fromPipeline`, or `forEachPipeline`; composed pipeline IDs resolve inside
@@ -87,7 +90,7 @@ Read the corresponding package recipe before using these features:
   Built-in `--step` / `--target` flags map to `stepIds` / `targets`. Do not
   redeclare built-in flags. Read `docs/cli.md` for option mapping.
   Use `defineCommand` from `tubeless/cli` for standalone scripts and
-  `definePipelineProject` from `tubeless/project` for project catalogs shared
+  `defineCommandCatalog` from `tubeless/cli` for command catalogs shared
   by the CLI and optional Studio.
 - Use `pipelines/<name>.ts` for definitions and `scripts/<name>.ts` for command
   wrappers when introducing a layout. Register commands explicitly in

@@ -62,7 +62,7 @@
         "Step",
         "StepSkipDecision"
       ],
-      "sha256": "5bb1b0b2028b33983b508507e4ce3cb89d524596700ef9b95787c59b623098fb",
+      "sha256": "89c2e9b3883b52888d2355b3ba9f275a8743af7e5b86e976344b9378996ea997",
       "specifier": "tubeless"
     },
     {
@@ -86,6 +86,7 @@
         "CliStringParam",
         "CliValidationError",
         "defineCommand",
+        "defineCommandCatalog",
         "definePipelineCommand",
         "DefinePipelineCommandConfig",
         "PipelineCliParseResult",
@@ -100,7 +101,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "a2964037e6fadcc9aab32004546295d5377f965e68fb1198e211e0c1e822e67d",
+      "sha256": "c41afe064eb90b6c849c1f1cab3a7346eb3ea97f233ab343ef668f470bcd6190",
       "specifier": "tubeless/cli"
     },
     {
@@ -132,7 +133,7 @@
         "WorkerThreadContext",
         "writeJson"
       ],
-      "sha256": "e26301ad37e74634f3de2154bb58725ef0b5d8391facafb6048c53ec9ceb7b79",
+      "sha256": "947cc09aaaac4f49aca22674d1e43837f8ebeed0db1fb1d161e520d02cae18cd",
       "specifier": "tubeless/node"
     },
     {
@@ -149,17 +150,8 @@
     },
     {
       "declaration": "./dist/project/project.d.ts",
-      "exports": [
-        "compilePipelineDocument",
-        "definePipelineProject",
-        "PipelineDocumentError",
-        "PipelineDocumentRegistry",
-        "PipelineProjectCommandModule",
-        "PipelineProjectManifest",
-        "PipelineProjectManifestInput",
-        "validatePipelineDocument"
-      ],
-      "sha256": "e08c9e78313b12e1c3fc6a2d36173ca6c2a42c04c828f5b9b7dbbac509ff2978",
+      "exports": ["defineProject", "PipelineDocumentError", "ProjectRegistry"],
+      "sha256": "810399fc31393f1f4eefd71a21154f41b05e4c44a60c6d1e1336fa609e43ce3a",
       "specifier": "tubeless/project"
     },
     {
@@ -173,7 +165,7 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "15ff4db5215958e627d7bc7c8ebba2b8a575db8a059ffffde045b3edc4098c5d",
+      "sha256": "3c491b24f1b09991971c9e36da25d50669011b6c92de3d1f559a9eea09cf629d",
       "specifier": "tubeless/testing"
     },
     {

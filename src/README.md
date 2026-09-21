@@ -2,8 +2,8 @@
 
 Keep one dependency-free runtime with focused public entrypoints. `tubeless`
 owns pipeline execution; `tubeless/cli` owns terminal command declarations;
-`tubeless/project` owns project catalogs and declarative pipeline compilation
-shared by terminal commands and Studio.
+`tubeless/cli` also owns optional command catalogs; `tubeless/project` owns typed
+pipeline collections and declarative compilation.
 Each public API has one entrypoint. Studio and storage are optional integrations
 behind the bundled executable; their implementation modules are not public subpaths.
 Directory names describe internal ownership. Keep implementation tests beside
@@ -19,7 +19,7 @@ their source files.
 | `render/`    | Plan and error formatting                                                                     |
 | `run-store/` | Event reader/store contracts, projection, SQLite and NDJSON adapters                          |
 | `studio/`    | HTTP server, browser client, page, state and UI protocol                                      |
-| `project/`   | Project catalogs, command registration contracts and parsed pipeline document compilation     |
+| `project/`   | Typed pipeline projects and parsed pipeline document compilation                              |
 | `workbench/` | Module loading, executable integration and adapter wiring                                     |
 | `node/`      | Optional filesystem, path, environment, checkpoints and Node worker execution                 |
 | `testing/`   | Test runtime and executable-example integration tests                                         |
@@ -37,7 +37,7 @@ their source files.
   execution or a concrete storage adapter itself.
 - CLI adapts pipelines with Node helpers and terminal reporters. It must not load
   workbench, storage or Studio, including through lazy imports.
-- Project catalogs do not load their command modules. The project compiler consumes
+- Command catalogs do not load their command modules. The project compiler consumes
   core to build pipelines from parsed documents; it performs no parsing or I/O.
   The project entrypoint stays independent of CLI, workbench, storage and Studio.
 - Workbench is internal executable integration: it loads modules, selects storage

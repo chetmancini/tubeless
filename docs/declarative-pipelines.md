@@ -1,12 +1,11 @@
 # YAML and JSON pipelines
 
-Use `compilePipelineDocument` from `tubeless/project` to turn a parsed YAML
-or JSON document and a registry of functions into ordinary pipelines. The
+Use `defineProject(id, document, registry)` from `tubeless/project` to turn a parsed
+YAML or JSON document and a registry of functions into an ordinary project. The
 document owns step identities, dependencies, targets, and policies; application
 code owns the handlers, schemas, and command parameters.
 
-The compiler belongs to the dependency-free `tubeless/project` entrypoint alongside
-project catalogs. It does not parse YAML,
+The project compiler remains dependency-free. It does not parse YAML,
 import modules, or run application code. Use your runtime's YAML support or a
 parser of your choice. JSON works through `JSON.parse` without another package.
 
@@ -32,9 +31,6 @@ dependency references, cycles, and targets, load the compiled command with
 `tubeless inspect` or `tubeless plan`. Domain schemas run only during execution.
 The CLI's Bun YAML parser can overwrite duplicate mapping keys; choose a parser
 with duplicate-key rejection when that check is required.
-
-For application code, `validatePipelineDocument(parsed)` from `tubeless/project`
-returns a validated copy of the document. It does not require a registry.
 
 ## Downloadable JSON Schema
 
@@ -71,8 +67,8 @@ array of names or organizations), and `date` (a quoted `YYYY-MM-DD` calendar
 date). All fields are optional. Dates and authors are maintained by the author;
 they are not inferred from Git and do not schedule execution.
 
-`validatePipelineDocument` preserves metadata and `tubeless validate --json`
-reports it. Compilation produces the same pipeline map regardless of metadata.
+`tubeless validate --json` preserves and reports metadata. Project compilation
+produces the same pipelines regardless of metadata.
 Studio command labels still come from explicit command registrations; document
 metadata does not override labels, IDs, options, or run timestamps.
 
@@ -229,16 +225,15 @@ finalization. A runtime `skip` is a successful policy skip, can publish a value,
 and unlocks dependents. The compiler preserves the engine's existing semantics.
 See [core concepts](./concepts.md).
 
-## Registry and programmatic use
+## Define a project
 
 ```ts
-import { compilePipelineDocument } from "tubeless/project";
+import { defineProject } from "tubeless/project";
 
 // `document` is the unknown result of your YAML or JSON parser.
 // `registry` explicitly imports and registers your application functions.
-const pipelines = compilePipelineDocument(document, registry);
-const pipeline = pipelines.get("import");
-if (!pipeline) throw new Error("Missing import pipeline");
+const project = defineProject("imports", document, registry);
+const pipeline = project.get("import");
 
 const plan = pipeline.plan({ targets: ["normalize"] });
 const result = await pipeline.runOrThrow({ lines: [" Alpha ", "Beta"] });
@@ -250,7 +245,8 @@ live in `context.options`. Use the normal `context.log`, `context.signal`,
 `context.sleep`, and progress APIs. Finalizers receive `(outputs, context)`;
 without `requireOutputs`, they must handle absent outputs themselves.
 
-The registry has separate `steps` and `finalizers` function maps, plus optional
+`defineProject` validates the document and compiles its pipelines. The registry has
+separate `steps` and `finalizers` function maps, plus optional
 `skipPredicates`, `fromPipelineAdapters`, `forEachPipelineAdapters`,
 `optionsSchemas`, and `schemas` maps. Schemas use Standard Schema v1.
 `optionsSchemas` must accept and produce objects, matching Tubeless domain

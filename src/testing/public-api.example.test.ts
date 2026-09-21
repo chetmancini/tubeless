@@ -16,13 +16,14 @@ import {
 } from "tubeless/tracing";
 import {
   CliValidationError,
+  defineCommandCatalog,
   defineCommand,
   definePipelineCommand,
   type CliParamsSchema,
 } from "tubeless/cli";
 import * as cli from "tubeless/cli";
 import * as project from "tubeless/project";
-import { definePipelineProject, type PipelineProjectManifestInput } from "tubeless/project";
+import { defineProject } from "tubeless/project";
 import { MinimalPipeline, runMinimalExample } from "../../examples/minimal-pipeline.js";
 
 interface ImportOptions {
@@ -240,13 +241,8 @@ describe("public API example", () => {
   });
 
   it("keeps terminal commands and project catalogs on distinct public entrypoints", () => {
-    expect(cli).not.toHaveProperty("definePipelineProject");
-    expect(Object.keys(project).sort()).toEqual([
-      "PipelineDocumentError",
-      "compilePipelineDocument",
-      "definePipelineProject",
-      "validatePipelineDocument",
-    ]);
+    expect(cli).toHaveProperty("defineCommandCatalog");
+    expect(Object.keys(project).sort()).toEqual(["PipelineDocumentError", "defineProject"]);
   });
 
   it("registers CLI commands in a project catalog", () => {
@@ -256,12 +252,22 @@ describe("public API example", () => {
       },
       reporter: false,
     });
-    const catalog = {
+    const catalog = defineCommandCatalog({
       commands: [{ id: "import", file: "./import.ts", export: "ImportCommand" }],
-    } satisfies PipelineProjectManifestInput;
-    const project = definePipelineProject(catalog);
+    });
 
     expect(command.descriptor.name).toBe("import");
-    expect(project.commands[0]?.id).toBe("import");
+    expect(catalog.commands[0]?.id).toBe("import");
+  });
+
+  it("defines a typed project from pipelines", async () => {
+    const project = defineProject("public-api", [ImportPipeline, ChildPipeline]);
+
+    expect(project.id).toBe("public-api");
+    expect(project.pipelineIds).toEqual(["import", "public-child"]);
+    await expect(project.get("import").runOrThrow({ lines: [" Alpha "] })).resolves.toEqual({
+      count: 1,
+      rows: ["alpha"],
+    });
   });
 });

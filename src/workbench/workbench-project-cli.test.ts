@@ -37,7 +37,6 @@ async function writeProjectFixture(): Promise<{
   await mkdir(workDirectory, { recursive: true });
   const cliModuleUrl = pathToFileURL(path.resolve("dist/cli/cli.js")).href;
   const pipelineModuleUrl = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
-  const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project-manifest.js")).href;
   await writeFile(
     path.join(directory, "pipeline.mjs"),
     `
@@ -67,8 +66,8 @@ async function writeProjectFixture(): Promise<{
   );
   const manifest = path.join(configDirectory, "project.mjs");
   const manifestSource = `
-    import { definePipelineProject } from ${JSON.stringify(projectModuleUrl)};
-    export default definePipelineProject({
+    import { defineCommandCatalog } from ${JSON.stringify(cliModuleUrl)};
+    export default defineCommandCatalog({
       cwd: "./work",
       commands: [{
         id: "import-data",
@@ -82,8 +81,8 @@ async function writeProjectFixture(): Promise<{
   await writeFile(
     path.join(directory, "tubeless.project.ts"),
     `
-      import { definePipelineProject } from ${JSON.stringify(projectModuleUrl)};
-      export default definePipelineProject({
+      import { defineCommandCatalog } from ${JSON.stringify(cliModuleUrl)};
+      export default defineCommandCatalog({
         cwd: "./config/work",
         commands: [{
           id: "import-data",
@@ -210,13 +209,13 @@ describe("project manifest workbench", () => {
 
   it("rejects module aliases that resolve to the same registration", async () => {
     const { directory } = await writeProjectFixture();
-    const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project-manifest.js")).href;
+    const cliModuleUrl = pathToFileURL(path.resolve("dist/cli/cli.js")).href;
     const manifest = path.join(directory, "config", "duplicate.mjs");
     await writeFile(
       manifest,
       `
-        import { definePipelineProject } from ${JSON.stringify(projectModuleUrl)};
-        export default definePipelineProject({ commands: [
+        import { defineCommandCatalog } from ${JSON.stringify(cliModuleUrl)};
+        export default defineCommandCatalog({ commands: [
           { id: "first", file: "../pipeline.mjs", export: "FixtureCommand" },
           { id: "second", file: ".././pipeline.mjs", export: "FixtureCommand" },
         ] });

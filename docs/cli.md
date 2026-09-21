@@ -17,12 +17,12 @@ on Node.js 22 or later without Bun.
 
 ### Authoring API
 
-Import terminal commands from `tubeless/cli` and project declarations from
-`tubeless/project`:
+Import terminal commands and their optional catalog from `tubeless/cli`.
+Application pipeline projects come from `tubeless/project`:
 
 ```ts
-import { defineCommand, definePipelineCommand } from "tubeless/cli";
-import { definePipelineProject } from "tubeless/project";
+import { defineCommand, defineCommandCatalog, definePipelineCommand } from "tubeless/cli";
+import { defineProject } from "tubeless/project";
 ```
 
 Use `defineCommand` for a standalone script and `definePipelineCommand` for a
@@ -34,7 +34,7 @@ between commands. Its mode, output stream, color, symbols and terminal-capabilit
 types are exported there too. CLI declarations do not require `@types/node`;
 `CliContext.env` accepts a record of string or undefined values.
 
-Use `definePipelineProject` in `tubeless.project.ts` to register command modules
+Use `defineCommandCatalog` in `tubeless.project.ts` to register command modules
 with stable IDs. A project catalog is shared by the terminal and Studio; declaring
 one does not load its command modules or start either interface.
 
@@ -42,7 +42,7 @@ one does not load its command modules or start either interface.
 | ------- | ------------------ | -------------------------------------------------------------------- |
 | Core    | `tubeless`         | Typed graphs, planning, execution, hooks and run reports             |
 | CLI     | `tubeless/cli`     | Standalone and pipeline commands, typed flags and terminal execution |
-| Project | `tubeless/project` | Project catalogs, command IDs and module registrations               |
+| Project | `tubeless/project` | Typed pipeline collections and parsed YAML/JSON projects             |
 | Studio  | `tubeless ui`      | Optional browser interface for recorded runs and registered commands |
 
 Users interact with a project through the `tubeless` executable: `list` shows its

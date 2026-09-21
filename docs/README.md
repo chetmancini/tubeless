@@ -7,16 +7,16 @@ adapt in your project.
 
 ## Start here
 
-| Document                                                    | Use it for                                            |
-| ----------------------------------------------------------- | ----------------------------------------------------- |
-| [Website](https://tubeless.io/)                             | Guides for developers and coding agents               |
-| [Package README](../README.md)                              | What it is, a first example, then the recipe index    |
-| [Getting started](./getting-started.md)                     | Building, running, and testing a first pipeline       |
-| [Recipe index](./recipes.md)                                | Finding a working example for your task               |
-| [Project manifest](../examples/catalog/tubeless.project.ts) | Registering commands and choosing a file layout       |
-| [Core concepts](./concepts.md)                              | Dependencies, skips, failures, dry runs, and contexts |
-| [Agent guide](./agent-guide.md)                             | Rules for generating and modifying pipeline code      |
-| [Comparison](./comparison.md)                               | How Tubeless fits next to other job runners           |
+| Document                                                   | Use it for                                            |
+| ---------------------------------------------------------- | ----------------------------------------------------- |
+| [Website](https://tubeless.io/)                            | Guides for developers and coding agents               |
+| [Package README](../README.md)                             | What it is, a first example, then the recipe index    |
+| [Getting started](./getting-started.md)                    | Building, running, and testing a first pipeline       |
+| [Recipe index](./recipes.md)                               | Finding a working example for your task               |
+| [Command catalog](../examples/catalog/tubeless.project.ts) | Registering commands and choosing a file layout       |
+| [Core concepts](./concepts.md)                             | Dependencies, skips, failures, dry runs, and contexts |
+| [Agent guide](./agent-guide.md)                            | Rules for generating and modifying pipeline code      |
+| [Comparison](./comparison.md)                              | How Tubeless fits next to other job runners           |
 
 ## How to
 

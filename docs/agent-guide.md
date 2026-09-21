@@ -12,8 +12,11 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 ## Workflow
 
 1. Read the [recipe index](./recipes.md) and open the smallest matching example.
-2. Use the [project manifest](../examples/catalog/tubeless.project.ts) as a layout
-   example. Keep existing project IDs; choose descriptive IDs for new commands.
+2. Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
+   `tubeless/project`; retrieve one with `project.get(id)` and use its ordinary
+   `plan`, `run`, `runOrThrow`, or `toMermaid` methods. Use the
+   [project example](../examples/catalog/tubeless.project.ts) as a layout reference.
+   Add its separate command catalog only when CLI or Studio launch registration is needed.
 3. Declare stable IDs and operational descriptions. Add `name` only when printed
    output needs a friendlier display name.
 4. Model data dependencies before failure policy or CLI concerns.
@@ -24,8 +27,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 - For YAML or JSON authoring, read [declarative pipelines](./declarative-pipelines.md)
   and adapt [the YAML recipe](../examples/yaml-pipelines.ts). Parse at the
-  application edge, then use `compilePipelineDocument` from `tubeless/project`
-  with explicitly registered handlers, adapters, predicates, and schemas. A
+  application edge, then use `defineProject(id, document, registry)` from
+  `tubeless/project` with explicitly registered handlers, adapters, predicates, and schemas. A
   step declares exactly one of `run`, `fromPipeline`, or `forEachPipeline`;
   child pipeline IDs resolve within the document, while application code owns
   option, item, and result mapping through the matching adapter registry. Keep command registration
@@ -112,6 +115,10 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Use `runConcurrent` for bounded lightweight functions that do not need child
   lifecycle events. Use `runConcurrentSettled` when the caller needs completed
   results and the first failure instead of a throw.
+- Use `defineProject` from `tubeless/project` to collect typed pipelines. Pipeline IDs
+  stay literal, duplicate IDs fail during project definition, and `get(id)` returns the
+  exact pipeline type. Give the project itself a stable ID; it remains literal on
+  `project.id`. The project adds no execution layer.
 - Use `definePipelineCommand` from `tubeless/cli` for scripts centered on
   a pipeline. Do not parse `process.argv` manually or redeclare built-in dry-run,
   `--step`, or `--target` flags. `mapOptions`, validation, and hooks receive `stepIds` and `targets`,
@@ -123,7 +130,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Use `command.plan()` or `tubeless plan` for a selection-only preview. Do not
   simulate planning with `--plan`.
 - Use `defineCommand` from `tubeless/cli` for standalone scripts. Declare command
-  catalogs with `definePipelineProject` from `tubeless/project`; the catalog
+  catalogs with `defineCommandCatalog` from `tubeless/cli`; the catalog
   works with the CLI before Studio is added. Keep application-specific prompts
   in the consumer.
 - Use `pipeline.toMermaid()` or `command.toMermaid()` when documentation needs
@@ -255,7 +262,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   external job or workflow. `runId` is package-generated for every execution;
   pass a known execution `runId` as `parentRunId` only to link that parent.
 - Use `tubeless ui` to inspect local recordings. Browser execution requires
-  explicitly registered commands. Use `definePipelineProject` for a checked-in command catalog with
+  explicitly registered commands. Use `defineCommandCatalog` for a checked-in command catalog with
   stable registered IDs, and register only explicit `definePipelineCommand`
   modules; never make execution require the studio server or infer executable
   modules from observed history.
@@ -283,13 +290,13 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Read [core concepts](./concepts.md) for skip, failure, or selection changes.
 - Read [the CLI](./cli.md) for list, inspect, plan, graph, run, history, and exit codes.
 - Read [the studio](./studio.md) before changing `tubeless ui` or
-  `definePipelineProject`.
+  `defineCommandCatalog`.
 - Read [child composition](./child-pipeline-composition.md) before changing child
   propagation, progress, or parent/child selection.
 - Read the relevant executable example linked from the
   [recipe index](./recipes.md) before writing new usage.
 - Adapt consumer layout and export names from the
-  [project manifest](../examples/catalog/tubeless.project.ts).
+  [command catalog example](../examples/catalog/tubeless.project.ts).
 - Use the [generated API inventory](./api-reference.md) only to verify exports;
   it is not implementation guidance.
 

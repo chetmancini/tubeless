@@ -14,8 +14,9 @@ npm install tubeless
 The same package works with `pnpm add tubeless`, `yarn add tubeless`, and
 `bun add tubeless`. The README quick start is a complete first program.
 
-Add `tubeless/cli` for terminal commands and `tubeless/project` for project
-catalogs. Neither import loads storage or Studio; the executable supplies those optional tools.
+Add `tubeless/cli` for terminal commands and optional command catalogs, and
+`tubeless/project` for pipeline projects. Neither import loads storage or Studio;
+the executable supplies those optional tools.
 The executable requires Bun 1.3.14 or later:
 
 ```sh
@@ -161,7 +162,24 @@ wrap the pipeline. It supplies help, target and step selection, dry-run flags,
 and cancellation handling. See [the CLI](./cli.md) and
 [`cli-job.ts`](../examples/cli-job.ts).
 
-## 5. Draw the pipeline
+## 5. Define a project
+
+Collect application pipelines by passing them directly to `defineProject`:
+
+```ts
+import { defineProject } from "tubeless/project";
+
+const project = defineProject("data-jobs", [ImportPipeline, SummaryPipeline]);
+const summary = await project.get("import-summary").runOrThrow({ lines });
+```
+
+The stable project ID remains literal on `project.id`. Pipeline IDs do too, so
+`get` returns the exact pipeline with its own option and result types. The project
+is only an immutable collection; the selected pipeline's existing methods do the
+work. For YAML or JSON, pass the ID, parsed document, and handler registry to the
+same function; see [declarative pipelines](./declarative-pipelines.md).
+
+## 6. Draw the pipeline
 
 `toMermaid` returns Mermaid flowchart text describing the step dependencies.
 It does not run the pipeline. It uses `name` when present and otherwise displays the
@@ -176,7 +194,7 @@ use labeled dotted arrows. Set `includeDescriptions: true` when the extra node
 text is useful. The same source is available from `tubeless graph`; see
 [the CLI](./cli.md).
 
-## 6. Test without real delays
+## 7. Test without real delays
 
 ```ts
 import { createPipelineTestRuntime } from "tubeless/testing";

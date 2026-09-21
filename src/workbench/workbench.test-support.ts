@@ -161,14 +161,14 @@ export async function writeStudioConfig(
 ): Promise<void> {
   const exportName = command.exportName ?? "FixtureCommand";
   const name = command.name ?? "Studio fixture";
-  const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project-manifest.js")).href;
+  const cliModuleUrl = pathToFileURL(path.resolve("dist/cli/cli.js")).href;
   const configDirectory = path.join(directory, "config");
   await mkdir(configDirectory);
   await writeFile(
     path.join(configDirectory, "tubeless.project.mjs"),
     `
-      import { definePipelineProject } from ${JSON.stringify(projectModuleUrl)};
-      export default definePipelineProject({
+      import { defineCommandCatalog } from ${JSON.stringify(cliModuleUrl)};
+      export default defineCommandCatalog({
         cwd: "..",
         commands: [{
           id: "fixture",

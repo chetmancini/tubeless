@@ -6,7 +6,7 @@ import {
   PIPELINE_MERMAID_DIRECTIONS,
   type PipelineMermaidDirection,
 } from "../core/pipeline-types.js";
-import { PipelineDocumentError, validatePipelineDocument } from "../project/project.js";
+import { PipelineDocumentError, validatePipelineDocument } from "../project/project-document.js";
 import { renderPipelinePlan } from "../render/render.js";
 import {
   DEFAULT_PIPELINE_PROJECT_MANIFEST,

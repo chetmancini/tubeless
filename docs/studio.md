@@ -84,15 +84,15 @@ Pipeline command forms include
 **Max Concurrency**, a positive integer defaulting to `1`, under execution controls;
 it has the same behavior as the CLI's `--max-concurrency` flag.
 
-## Checked-in project manifest
+## Checked-in command catalog
 
-Use a project manifest to register commands once for both the CLI and Studio:
+Use a command catalog to register commands once for both the CLI and Studio:
 
 ```ts
 // tubeless.project.ts
-import { definePipelineProject } from "tubeless/project";
+import { defineCommandCatalog } from "tubeless/cli";
 
-export default definePipelineProject({
+export default defineCommandCatalog({
   cwd: ".",
   commands: [
     {
@@ -113,8 +113,8 @@ bunx tubeless run import-rows -- --source rows.txt
 bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.project.ts
 ```
 
-Command paths and `cwd` are relative to the manifest file. Empty or duplicate
-IDs and duplicate module registrations fail when the manifest loads. The
+Command paths and `cwd` are relative to the catalog file. Empty or duplicate
+IDs and duplicate module registrations fail when the catalog loads. The
 optional `name` changes a display label, not the registered command ID or the
 pipeline's own ID.
 

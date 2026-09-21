@@ -14,7 +14,7 @@ one of these recipes.
 | Run independent DAG branches concurrently     | [`parallel-dag.ts`](../examples/parallel-dag.ts)                         | `maxConcurrency` / CLI `--max-concurrency`, dependency joins, stable final reports |
 | CPU parallelism on Node worker threads        | [`worker-threads.ts`](../examples/worker-threads.ts)                     | `createWorkerThreadAdapter`, `fromRemote`, structured clone, pool ownership        |
 | Sequential import or ETL                      | [`typed-import.ts`](../examples/typed-import.ts)                         | `createSteps`, `dependsOn`, `requireOutputs`, `targets`                            |
-| Define and compose pipelines in YAML or JSON  | [`yaml-pipelines.ts`](../examples/yaml-pipelines.ts)                     | `compilePipelineDocument`, adapters, skips, child fan-out                          |
+| Define and compose pipelines in YAML or JSON  | [`yaml-pipelines.ts`](../examples/yaml-pipelines.ts)                     | `defineProject(id, document, registry)`, adapters, skips, child fan-out            |
 | Validate options, outputs, and results        | [`validated-boundaries.ts`](../examples/validated-boundaries.ts)         | Standard Schema, `outputSchema`, `resultSchema`                                    |
 | Inspect, plan, or graph a pipeline or command | [`typed-import.ts`](../examples/typed-import.ts)                         | `tubeless inspect`, `tubeless plan`, `tubeless graph`, `toMermaid`                 |
 | Safe write/publish preview                    | [`publish-with-gates.ts`](../examples/publish-with-gates.ts)             | `dryRun`, `optionalDependsOn`, `skipAfterFailureOf`                                |
@@ -35,7 +35,7 @@ one of these recipes.
 | Export lifecycle events                       | [`tracing.ts`](../examples/tracing.ts)                                   | app-owned JSON / OTel adapters, composition, `onExporterError`                     |
 | Watch many primitives in one run              | [`peloton.ts`](../examples/peloton.ts)                                   | delays, logs, children, fan-out, retry, gates, test runtime                        |
 | Watch an advanced YAML pipeline               | [`yaml-peloton.ts`](../examples/yaml-peloton.ts)                         | declarative graph, concurrent handlers, retries, progress, dry runs, gates         |
-| Project layout, IDs, and command manifest     | [`tubeless.project.ts`](../examples/catalog/tubeless.project.ts)         | `pipelines/`, `scripts/`, `definePipelineProject`, `tubeless list`                 |
+| Project layout, IDs, and command catalog      | [`tubeless.project.ts`](../examples/catalog/tubeless.project.ts)         | `defineProject`, `pipelines/`, optional `defineCommandCatalog`, `tubeless list`    |
 
 ## Node helpers
 
@@ -82,9 +82,12 @@ pipeline does not require credentials.
    throw on the first failure. Use `runConcurrentSettled` when the caller needs
    completed results plus that failure without throwing.
 
-6. Use `definePipelineCommand` from `tubeless/cli` for pipeline scripts.
+6. Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
+   `tubeless/project`. Use `project.get(id)` to retain the selected pipeline's exact
+   option and result types; call its existing methods directly.
+   Use `definePipelineCommand` from `tubeless/cli` for pipeline scripts.
    Use `defineCommand` from the same entrypoint for standalone scripts and
-   `definePipelineProject` from `tubeless/project` for project catalogs shared
+   `defineCommandCatalog` from `tubeless/cli` for command catalogs shared
    by terminal commands and Studio.
    Preview selection with
    `command.plan()` or `tubeless plan`; do not simulate planning with `--plan`.
@@ -98,7 +101,7 @@ pipeline does not require credentials.
    specific step outputs. Read plan `selectionReasons` instead of recreating
    target-closure logic in a CLI or application.
 8. Use the file layout and export conventions in the
-   [project manifest](../examples/catalog/tubeless.project.ts), adapting IDs to
+   [command catalog example](../examples/catalog/tubeless.project.ts), adapting IDs to
    your own commands. Register project commands explicitly; do not infer executable modules from run
    history or the filesystem.
    Cancel only a live launch owned by the current studio process; it is not

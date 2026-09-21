@@ -132,14 +132,16 @@ export function definePipeline<
   TResult = DefaultPipelineResult<TSteps>,
   const TTargets extends readonly TSteps[number][] = DefaultPipelineTargets<TSteps>,
   const TResultSchema extends StandardSchemaV1 | undefined = undefined,
+  const TId extends string = string,
 >(
   definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema> &
-    CheckedStepTuple<TSteps>
+    CheckedStepTuple<TSteps> & { readonly id: TId }
 ): Pipeline<
   StepsInputOptions<TSteps>,
   TResultSchema extends StandardSchemaV1 ? InferSchemaOutput<TResultSchema> : TResult,
   StepIds<TSteps>,
-  TargetIds<TTargets>
+  TargetIds<TTargets>,
+  TId
 > & { readonly definition: PipelineDefinitionSnapshot } {
   const compiled = compilePipeline<TSteps, TResult, TTargets, TResultSchema>(definition);
   type TInputOptions = StepsInputOptions<TSteps>;
@@ -199,7 +201,7 @@ export function definePipeline<
   }
 
   const pipeline = {
-    id: compiled.id,
+    id: definition.id,
     definition: compiled.definition,
     stepIds,
     targetIds,
