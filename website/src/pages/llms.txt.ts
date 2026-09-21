@@ -42,7 +42,7 @@ ${DOC_NAV.map(({ slug, label, blurb }) => `- [${label}](${absUrl(`docs/${slug}.m
 - [Skill pack](${absUrl("docs/agent-skills.md")}): Install with npx skills add chetmancini/tubeless; use tubeless-make-pipeline to convert existing code.
 - [Authoring skill](${GITHUB_BLOB}/skills/tubeless/SKILL.md): Write and review pipelines in your project.
 - [Code conversion skill](${GITHUB_BLOB}/skills/tubeless-make-pipeline/SKILL.md): Convert existing code into a pipeline while preserving its behavior.
-- [Pipeline project](${GITHUB_BLOB}/examples/tubeless.project.ts): Group pipelines with defineProject for typed lookup, CLI, and Studio.
+- [Pipeline project](${GITHUB_BLOB}/examples/tubeless.project.ts): Register each pipeline exactly once in defineProject, directly or through its command, for typed lookup, CLI, and Studio.
 - [YAML pipelines](${GITHUB_BLOB}/examples/yaml-pipelines.ts): Compile documents with compilePipelineDocument, use compiled.get(id) directly, and register selected pipelines with defineProject. Reuse compiled.metadata for project presentation.
 - [API report](${absUrl("api-report.json")}): Machine-readable public declarations.
 - [Pipeline document JSON Schema v1](${absUrl("schemas/pipeline-document-v1.schema.json")}): Validate YAML or JSON document structure and metadata without importing handlers.

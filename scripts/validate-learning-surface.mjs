@@ -153,9 +153,30 @@ assert(
   "Declarative guide must cover metadata reuse and direct pipeline lookup"
 );
 assert(
-  projectExample.includes("ImportPipeline"),
-  "Project example must include the import pipeline"
+  projectExample.includes("ImportCommand") &&
+    projectExample.includes("ValidatedPipeline") &&
+    !projectExample.includes("commands:"),
+  "Project example must register pipelines and commands in one mixed entry list"
 );
+for (const [name, source] of [
+  ["CLI guide", cliGuide],
+  ["Agent guide", agentGuide],
+  ["Recipe index", recipes],
+  ["Authoring skill", authoringSkill],
+]) {
+  assert(source.includes("exactly once"), `${name} must teach single-list project registration`);
+}
+for (const file of [
+  ...filesUnder(join(packageRoot, "docs"), ".md"),
+  ...filesUnder(join(packageRoot, "skills"), ".md"),
+  ...filesUnder(join(packageRoot, "examples"), ".ts"),
+]) {
+  const source = readFileSync(file, "utf8");
+  assert(
+    !/commands\s*:|commands`? option|ProjectOptions</.test(source),
+    `${file} must not teach the removed project commands option or generic ProjectOptions`
+  );
+}
 const requiredDocuments = [
   "README.md",
   "docs/README.md",

@@ -57,7 +57,7 @@ metadata does not rename individual pipelines or their command labels. Put optio
 `name` and `description` on each `definePipeline` definition for that presentation.
 
 For custom parameters, option mapping, or command presentation, pass ordinary
-`definePipelineCommand` adapters in the project's `commands` option:
+`definePipelineCommand` adapters directly in the project's entry list:
 
 ```ts
 import { definePipelineCommand } from "tubeless/cli";
@@ -69,17 +69,18 @@ const ImportCommand = definePipelineCommand(ImportPipeline, {
   name: "Import rows",
 });
 
-export default defineProject("data-jobs", [ImportPipeline], {
-  commands: [ImportCommand],
-});
+export default defineProject("data-jobs", [ImportCommand]);
 ```
 
-The optional `commands` factory receives project lookup after construction.
+Register each pipeline exactly once, either directly or through its command.
+Mixed lists such as `[SchemaBackedPipeline, ImportCommand]` preserve entry order.
+Duplicate pipeline IDs fail in every combination, including a pipeline and its
+own command. Child pipelines are not registered recursively. `project.pipelines`,
+`pipelineIds`, and `commands` are derived read-only snapshots, not separate inputs.
 For [compiled documents](./declarative-pipelines.md), build commands from
-`compiled.get(id)` and pass them in `commands: [...]` when registering selected pipelines.
-Each adapter must wrap the exact pipeline object in the project, with at most one adapter per
-pipeline ID. Pipeline IDs are also the CLI and Studio IDs; `name` only changes a
-display label. `ProjectOptions<TPipelines>` names the optional configuration contract. Its
+`compiled.get(id)` and register those commands directly in the list.
+Pipeline IDs are also the CLI and Studio IDs; `name` only changes a
+display label. `ProjectOptions` names the optional configuration contract. Its
 `cwd` sets the CLI and Studio execution directory relative to the project file;
 omitting it uses the project's directory. Application calls to `project.get(id)`
 still return the original pipeline and use its ordinary execution context.
@@ -88,7 +89,7 @@ Automatic project commands require Standard JSON Schema input metadata, even
 for pipelines with no domain inputs: erased TypeScript types cannot prove that
 inputs are optional. Schema-less project pipelines remain available to application
 code and `list`, `inspect`, `plan`, and `graph`. For CLI execution and Studio,
-supply an options schema or an explicit adapter in `commands` (`params: {}` is
+supply an options schema or register an explicit command (`params: {}` is
 sufficient when there are no domain inputs).
 
 | Pipeline input                | Generated CLI                                   |

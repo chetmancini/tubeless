@@ -44,12 +44,11 @@ command.parse([], { env });
 type EchoProject = PipelineProject<"packed-project", readonly [typeof pipeline]>;
 
 function createEchoProject(): EchoProject {
-  const metadata: ProjectOptions<readonly [typeof pipeline]> = {
+  const metadata: ProjectOptions = {
     name: "Echo jobs",
     description: "Echo a message.",
-    commands: [command],
   };
-  return defineProject("packed-project", [pipeline], metadata);
+  return defineProject("packed-project", [command], metadata);
 }
 
 function selectEcho(project: EchoProject): typeof pipeline {
@@ -74,7 +73,7 @@ selectEcho(createEchoProject());
 
 function selectUnionPipeline(id: "echo" | "echo-alias", lookup: "echo" | "packed-cli-types") {
   const unionPipeline = definePipeline({ id, steps: [echo] });
-  const project = defineProject("union-ids", [pipeline, unionPipeline]);
+  const project = defineProject("union-ids", [command, unionPipeline]);
   const selected = project.get("echo");
   const selectedId: "echo" | "echo-alias" = selected.id;
   selected.plan();
@@ -87,7 +86,12 @@ function selectUnionPipeline(id: "echo" | "echo-alias", lookup: "echo" | "packed
 
 function selectWidenedPipeline(id: string, lookup: string) {
   const widePipeline = definePipeline({ id, steps: [echo] });
-  const project = defineProject("wide-ids", [pipeline, widePipeline]);
+  const project = defineProject("wide-ids", [
+    command,
+    definePipelineCommand(widePipeline, {
+      params: { message: { type: "string" } },
+    }),
+  ]);
   const selected: typeof pipeline | typeof widePipeline = project.get(lookup);
   selected.plan();
   // @ts-expect-error Widened-id lookups retain the required domain input.

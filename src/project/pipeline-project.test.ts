@@ -1,6 +1,13 @@
-import { describe, expect, expectTypeOf, it } from "vitest";
-import { createSteps, definePipeline } from "../core/pipeline.js";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import {
+  createSteps,
+  definePipeline,
+  type PipelineInput,
+  type PipelineResult,
+  type StandardSchemaV1,
+} from "../core/pipeline.js";
 import { definePipelineCommand } from "../cli/cli-pipeline-command.js";
+import { defineCommand } from "../cli/cli.js";
 import { defineProject, isPipelineProject } from "./pipeline-project.js";
 import { compilePipelineDocument } from "./project-compiler.js";
 
@@ -17,57 +24,180 @@ const beta = definePipeline({
 });
 
 describe("pipeline project", () => {
+  it("preserves transformed inputs and results without executing or inferring commands", async () => {
+    const validate = vi.fn((value: unknown) => {
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        !("text" in value) ||
+        typeof value.text !== "string"
+      ) {
+        return { issues: [{ message: "Expected text" }] };
+      }
+      return { value: { length: value.text.length } };
+    });
+    const infer = vi.fn(() => {
+      throw new Error("must remain lazy");
+    });
+    const schema: StandardSchemaV1<{ text: string }, { length: number }> = {
+      "~standard": { version: 1, vendor: "test", validate, jsonSchema: { input: infer } },
+    };
+    const { step } = createSteps(schema);
+    const run = vi.fn();
+    const pipeline = definePipeline({
+      id: "transformed",
+      name: "Transformed input",
+      description: "Measure the input.",
+      steps: [
+        step("measure", {
+          run: (_inputs, context) => {
+            run();
+            return context.options.length;
+          },
+        }),
+      ],
+      finalize: (outputs): number => outputs.measure ?? 0,
+    });
+    const command = definePipelineCommand(pipeline, {
+      params: { text: { type: "string" } },
+      reporter: false,
+    });
+    const project = defineProject("transformed-project", [command]);
+    expect(defineProject("bare", [pipeline]).get("transformed")).toBe(pipeline);
+    expect(validate).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    expect(infer).not.toHaveBeenCalled();
+    expect(project.commands[0]?.descriptor).toMatchObject({
+      name: "Transformed input",
+      description: "Measure the input.",
+    });
+    const selected = project.get("transformed");
+    expectTypeOf(selected).toEqualTypeOf<typeof pipeline>();
+    expectTypeOf<PipelineInput<typeof selected>>().toEqualTypeOf<{ text: string }>();
+    expectTypeOf<PipelineResult<typeof selected>>().toEqualTypeOf<number>();
+    await expect(selected.runOrThrow({ text: "abc" })).resolves.toBe(3);
+    expect(validate).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers only the parent when a command wraps a composed pipeline", () => {
+    const { fromPipeline } = createSteps<{ value: string }>();
+    const parent = definePipeline({
+      id: "parent",
+      steps: [
+        fromPipeline("child", {
+          pipeline: alpha,
+          mapOptions: (_inputs, context) => context.options,
+        }),
+      ],
+    });
+    const project = defineProject("parents", [
+      definePipelineCommand(parent, { params: { value: { type: "string" } } }),
+    ]);
+    expect(project.pipelineIds).toEqual(["parent"]);
+    expect(project.get("parent").plan().steps[0]?.nestedPipeline?.pipelineId).toBe("alpha");
+    expect(() => {
+      // @ts-expect-error Child pipelines are not registered implicitly.
+      project.get("alpha");
+    }).toThrow('does not define pipeline "alpha"');
+  });
+
   it("snapshots explicit adapters without changing typed pipeline lookup", async () => {
     const command = definePipelineCommand(alpha, {
       params: { text: { type: "string" } },
       mapOptions: ({ text }) => ({ value: text.toUpperCase() }),
       reporter: false,
     });
-    const commands = [command];
-    const project = defineProject("adapters", [alpha, beta], { commands, cwd: "./work" });
-    commands.pop();
+    const entries = [command, beta];
+    const project = defineProject("adapters", entries, { cwd: "./work" });
+    entries.pop();
+    entries.reverse();
 
     expect(project.commands).toEqual([command]);
+    expect(project.pipelines).toEqual([alpha, beta]);
+    expect(project.pipelineIds).toEqual(["alpha", "beta"]);
+    expect(Object.isFrozen(project.pipelineIds)).toBe(true);
     expect(Object.isFrozen(project.commands)).toBe(true);
     expect(project.cwd).toBe("./work");
     expectTypeOf(project.get("alpha")).toEqualTypeOf<typeof alpha>();
     await expect(command.run(["--text", "hello"])).resolves.toBe("HELLO");
     await expect(project.get("alpha").runOrThrow({ value: "hello" })).resolves.toBe("hello");
-    expect(() => defineProject("duplicate", [alpha], { commands: [command, command] })).toThrow(
-      'Project command for "alpha" is declared more than once'
-    );
-    expect(() => defineProject("unknown", [beta], { commands: [command] })).toThrow(
-      "Each project command must wrap a pipeline in the project"
-    );
     const otherAlpha = definePipeline({
       id: "alpha",
       steps: [alphaStep("other", { run: () => "other" })],
     });
-    expect(() => defineProject("wrong-instance", [otherAlpha], { commands: [command] })).toThrow(
-      "Each project command must wrap a pipeline in the project"
-    );
-    expect(() => defineProject("unmarked", [alpha], { commands: [{ ...command }] })).toThrow(
-      "Each project command must wrap a pipeline in the project"
+    const otherCommand = definePipelineCommand(otherAlpha, {
+      params: { value: { type: "string" } },
+    });
+    for (const duplicates of [
+      [alpha, alpha],
+      [command, command],
+      [command, otherCommand],
+      [alpha, command],
+      [command, alpha],
+      [otherAlpha, command],
+    ] as const) {
+      expect(() => defineProject("duplicate", duplicates)).toThrow(
+        'Project pipeline id "alpha" is declared more than once'
+      );
+    }
+    expect(() => defineProject("unmarked", [{ ...command }])).toThrow(
+      "Project entries must be pipelines or definePipelineCommand adapters"
     );
   });
 
-  it("provides typed lookup when constructing command adapters", () => {
-    const pipelines = [alpha];
-    const project = defineProject("factory", pipelines, {
-      commands: (get) => {
-        pipelines.length = 0;
-        expectTypeOf(get("alpha")).toEqualTypeOf<typeof alpha>();
-        if (false) {
-          // @ts-expect-error Factories retain the project's literal pipeline ids.
-          get("missing");
-          // @ts-expect-error Required type-only inputs still require explicit CLI params.
-          definePipelineCommand(get("alpha"));
-        }
-        return [definePipelineCommand(get("alpha"), { params: { value: { type: "string" } } })];
-      },
-    });
+  it("registers decorated pipelines with an unrelated pipeline property", async () => {
+    const decorated = { ...alpha, pipeline: beta };
+    const project = defineProject("decorated", [decorated]);
+
     expect(project.pipelineIds).toEqual(["alpha"]);
-    expect(project.commands[0]?.id).toBe("alpha");
+    expect(project.pipelines).toEqual([decorated]);
+    expect(project.commands).toEqual([]);
+    expect(project.get("alpha")).toBe(decorated);
+    expectTypeOf(project.get("alpha")).toEqualTypeOf<typeof decorated>();
+    await expect(project.get("alpha").runOrThrow({ value: "hello" })).resolves.toBe("hello");
+  });
+
+  it("preserves exact pipeline contracts through command-only tuples", () => {
+    const alphaCommand = definePipelineCommand(alpha, { params: { value: { type: "string" } } });
+    const betaCommand = definePipelineCommand(beta, { params: { value: { type: "number" } } });
+    const project = defineProject("commands", [alphaCommand, betaCommand]);
+    const selected = project.get("alpha");
+    expect(selected).toBe(alpha);
+    expect(project.commands).toEqual([alphaCommand, betaCommand]);
+    expectTypeOf(project.pipelines).toEqualTypeOf<readonly [typeof alpha, typeof beta]>();
+    expectTypeOf(project.pipelineIds).toEqualTypeOf<readonly ["alpha", "beta"]>();
+    expectTypeOf(selected).toEqualTypeOf<typeof alpha>();
+    expectTypeOf<PipelineInput<typeof selected>>().toEqualTypeOf<{ value: string }>();
+    expectTypeOf<PipelineResult<typeof selected>>().toEqualTypeOf<string | undefined>();
+    expectTypeOf(selected.stepIds).toEqualTypeOf<readonly "read-alpha"[]>();
+    expectTypeOf(selected.targetIds).toEqualTypeOf<readonly "read-alpha"[]>();
+    function invalidCallsForTypechecking() {
+      // @ts-expect-error Commands preserve literal pipeline ids.
+      project.get("missing");
+      // @ts-expect-error Commands preserve domain input requirements.
+      selected.runOrThrow({ value: 1 });
+      // @ts-expect-error Commands preserve target ids.
+      selected.plan({ targets: ["read-beta"] });
+      // @ts-expect-error Commands are entries, not a project option.
+      defineProject("removed", [alpha], { commands: [alphaCommand] });
+      // @ts-expect-error Command factories are no longer a project option.
+      defineProject("removed-factory", [alpha], { commands: () => [alphaCommand] });
+    }
+    void invalidCallsForTypechecking;
+  });
+
+  it("rejects standalone commands and malformed entries", () => {
+    const standalone = defineCommand({ params: {}, run: () => undefined });
+    expect(() => {
+      // @ts-expect-error Standalone commands do not adapt a pipeline.
+      defineProject("standalone", [standalone]);
+    }).toThrow("Project entries must be pipelines or definePipelineCommand adapters");
+    for (const entry of [null, undefined, {}, { pipeline: alpha }]) {
+      expect(() => {
+        // @ts-expect-error Invalid entries are also rejected for JavaScript callers.
+        defineProject("invalid", [entry]);
+      }).toThrow();
+    }
   });
 
   it("keeps pipelines discoverable by their literal ids", async () => {
@@ -104,32 +234,45 @@ describe("pipeline project", () => {
     );
   });
 
-  it("selects pipelines whose union or widened ids overlap the lookup", async () => {
-    function variant(id: "union-alpha" | "union-beta") {
-      return definePipeline({
-        id,
+  it.each([false, true])(
+    "selects pipelines whose union or widened ids overlap the lookup (commands: %s)",
+    async (commands) => {
+      function variant(id: "union-alpha" | "union-beta") {
+        return definePipeline({
+          id,
+          steps: [alphaStep("read", { run: (_inputs, context) => context.options.value })],
+        });
+      }
+      const unionPipeline = variant("union-alpha");
+      const project = defineProject("unions", [
+        commands
+          ? definePipelineCommand(unionPipeline, { params: { value: { type: "string" } } })
+          : unionPipeline,
+        beta,
+      ]);
+      const selected = project.get("union-alpha");
+      expectTypeOf(selected).toEqualTypeOf<typeof unionPipeline>();
+      expectTypeOf(project.get("beta")).toEqualTypeOf<typeof beta>();
+      await expect(selected.runOrThrow({ value: "hello" })).resolves.toBe("hello");
+      const selectEither = (id: "union-alpha" | "beta") => project.get(id);
+      expectTypeOf(selectEither).returns.toEqualTypeOf<typeof unionPipeline | typeof beta>();
+
+      const widePipeline = definePipeline({
+        id: String("dynamic"),
         steps: [alphaStep("read", { run: (_inputs, context) => context.options.value })],
       });
+      const mixed = defineProject("mixed", [
+        commands
+          ? definePipelineCommand(widePipeline, { params: { value: { type: "string" } } })
+          : widePipeline,
+        beta,
+      ]);
+      expectTypeOf(mixed.get("dynamic")).toEqualTypeOf<typeof widePipeline>();
+      expectTypeOf(mixed.get("beta")).toEqualTypeOf<typeof widePipeline | typeof beta>();
+      const selectUnknown = (id: string) => mixed.get(id);
+      expectTypeOf(selectUnknown).returns.toEqualTypeOf<typeof widePipeline | typeof beta>();
     }
-    const unionPipeline = variant("union-alpha");
-    const project = defineProject("unions", [unionPipeline, beta]);
-    const selected = project.get("union-alpha");
-    expectTypeOf(selected).toEqualTypeOf<typeof unionPipeline>();
-    expectTypeOf(project.get("beta")).toEqualTypeOf<typeof beta>();
-    await expect(selected.runOrThrow({ value: "hello" })).resolves.toBe("hello");
-    const selectEither = (id: "union-alpha" | "beta") => project.get(id);
-    expectTypeOf(selectEither).returns.toEqualTypeOf<typeof unionPipeline | typeof beta>();
-
-    const widePipeline = definePipeline({
-      id: String("dynamic"),
-      steps: [alphaStep("read", { run: (_inputs, context) => context.options.value })],
-    });
-    const mixed = defineProject("mixed", [widePipeline, beta]);
-    expectTypeOf(mixed.get("dynamic")).toEqualTypeOf<typeof widePipeline>();
-    expectTypeOf(mixed.get("beta")).toEqualTypeOf<typeof widePipeline | typeof beta>();
-    const selectUnknown = (id: string) => mixed.get(id);
-    expectTypeOf(selectUnknown).returns.toEqualTypeOf<typeof widePipeline | typeof beta>();
-  });
+  );
 
   it("accepts only existing pipelines, not document compilation arguments", () => {
     const document: unknown = { version: 1, pipelines: {} };
@@ -137,11 +280,11 @@ describe("pipeline project", () => {
     expect(() => {
       // @ts-expect-error Parsed documents must be compiled before registration.
       defineProject("invalid-document", document, registry);
-    }).toThrow("defineProject expects an array of pipelines.");
+    }).toThrow("defineProject expects an array of pipelines or pipeline commands.");
     expect(() => {
       // @ts-expect-error The document/registry/fourth-options overload was removed.
       defineProject("invalid-document", document, registry, { name: "Document jobs" });
-    }).toThrow("defineProject expects an array of pipelines.");
+    }).toThrow("defineProject expects an array of pipelines or pipeline commands.");
     expect(defineProject("empty-typed", [], { name: "Typed jobs" }).name).toBe("Typed jobs");
   });
 
@@ -228,9 +371,9 @@ describe("pipeline project", () => {
     expect(() => defineProject("invalid", compiled.pipelines, { name: " " })).toThrow(
       "Project name must be a non-empty string."
     );
-    const executable = defineProject("yaml-cli", compiled.pipelines, {
-      commands: [definePipelineCommand(compiled.get("greeting"), { params: {}, reporter: false })],
-    });
+    const executable = defineProject("yaml-cli", [
+      definePipelineCommand(compiled.get("greeting"), { params: {}, reporter: false }),
+    ]);
     expect(project.get("greeting")).toBe(compiled.get("greeting"));
     await expect(executable.commands[0]?.run([])).resolves.toBe("hello");
   });

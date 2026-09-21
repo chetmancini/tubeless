@@ -111,7 +111,9 @@ pipeline does not require credentials.
    A checked-in `defineProject` exposes its pipelines to the CLI and Studio directly;
    they infer flags from the options schema's Standard JSON Schema input metadata.
    Without that metadata, supply explicit command `params` using adapters in the
-   project's `commands` option, even for pipelines with no domain inputs.
+   project's entry list, even for pipelines with no domain inputs. Register each
+   pipeline exactly once, directly or through its command. Mixed lists preserve
+   exact lookup types; duplicate pipeline IDs fail regardless of entry form.
    Default-export the project to select it for CLI and Studio; without a default,
    multiple distinct projects are rejected.
    Start standalone or customized scripts with `definePipelineCommand(pipeline)`.

@@ -16,7 +16,7 @@ Package: `tubeless`
 | `tubeless/node`       | `./dist/node/node.d.ts`            | `3bcb39727781832f150ff3c8ce84ff8c9f8fb8811c8440535a89398afb3a2c7c` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `64481c2ea83e766ee9f6f17d82d8fdc2b4e6569585f98d8154c0c77dce134db4` |                8 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `0af403ee4bdb3672eab96143e8dc9672ea19e4d363f0651de410db35f83a8fd2` |                8 |
 | `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `fabf547ff961de088dd9b0852371a61d39e003f153cb2d663ef94136c9f4fff0` |                7 |
 | `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `bde2a6b18d95b6d6311fec6ae8719ff432208e650803635c9355ec1af62dad27` |                3 |
 
@@ -171,11 +171,11 @@ Package: `tubeless`
 | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | [`CompiledPipelineDocument`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-compiler.ts#L24) | Immutable compiled pipelines and descriptive metadata from a parsed document.     |
 | [`compilePipelineDocument`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-compiler.ts#L233) | Compile parsed YAML or JSON into ordinary pipelines.                              |
-| [`defineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L63)            | Define an immutable project from existing pipelines and project configuration.    |
+| [`defineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L66)            | Register each pipeline once, directly or through its explicit command.            |
 | [`PipelineDocumentError`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-document.ts#L72)    | A document shape or reference error; graph errors remain PipelineDefinitionError. |
 | [`PipelineDocumentMetadata`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-document.ts#L11) | Optional human-facing document information, never execution policy.               |
-| [`PipelineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L48)          | Immutable named pipeline collection, preserving each pipeline's exact type by id. |
-| [`ProjectOptions`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L30)           | Optional project presentation and CLI adapters.                                   |
+| [`PipelineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L49)          | Immutable named pipeline collection, preserving each pipeline's exact type by id. |
+| [`ProjectOptions`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L39)           | Optional project presentation and execution directory.                            |
 | [`ProjectRegistry`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-compiler.ts#L98)          | Only explicitly registered functions and schemas can be referenced by a document. |
 
 ### `tubeless/testing`

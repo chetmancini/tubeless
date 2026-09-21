@@ -98,7 +98,7 @@ commands inherit them. Top-level document metadata does not override pipeline la
 IDs, options, or run timestamps.
 
 For custom CLI inputs, build a command directly from `compiled.get(id)`. It can
-run independently or be passed through the project's `commands` option:
+run independently or be registered directly in the project's entry list:
 
 ```ts
 import { definePipelineCommand } from "tubeless/cli";
@@ -109,9 +109,7 @@ const command = definePipelineCommand(pipeline, {
   mapOptions: ({ lines }) => ({ lines: lines.split(",") }),
 });
 
-export default defineProject("yaml-jobs", [pipeline], {
-  commands: [command],
-});
+export default defineProject("yaml-jobs", [command]);
 ```
 
 Only the selected pipeline is registered. Its compiled children still run through
@@ -344,5 +342,5 @@ those workflows. Register selected compiled pipelines with `defineProject` and
 export that project from a project module for
 CLI and Studio loading. Pipelines whose options schemas expose Standard JSON
 Schema input metadata receive automatic commands. Custom or schema-less inputs
-need `definePipelineCommand` adapters in the project's `commands` option.
+need `definePipelineCommand` adapters registered directly in the project's entry list.
 A YAML file alone does not grant execution access or define a new Studio protocol.
