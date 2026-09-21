@@ -138,13 +138,6 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
             <h3>Execution</h3>
             <p>Pipelines run in your Node.js process. No separate server is required.</p>
           </article>
-          <article>
-            <h3>When not to use it</h3>
-            <p>
-              Ordinary <code>await</code> / <code>Promise.all</code> is enough when you do not need typed handoffs, <code>plan()</code>, or dry-run gates.
-              Crash-resume and scheduling belong in a <a href={href("docs/comparison")}>host engine</a>.
-            </p>
-          </article>
         </div>
       </section>
 
