@@ -32,8 +32,15 @@ export async function runPipelineCommand(
     stdio: ["ignore", "pipe", "pipe"],
   });
   const completion = new Promise<void>((resolve, reject) => {
-    child.once("error", reject);
+    let spawnError: Error | undefined;
+    child.once("error", (error) => {
+      spawnError = error;
+    });
     child.once("close", (code, signal) => {
+      if (spawnError) {
+        reject(spawnError);
+        return;
+      }
       if (code === 0) {
         resolve();
         return;
