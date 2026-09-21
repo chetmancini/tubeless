@@ -87,8 +87,15 @@ pipeline does not require credentials.
 6. Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
    `tubeless/project`. Use `project.get(id)` to retain the selected pipeline's exact
    option and result types; call its existing methods directly.
+   Add optional `{ name, description }` as the third argument for presentation;
+   the project name defaults to its ID. For documents, metadata is inherited and
+   can be overridden in a fourth argument after the registry.
    A checked-in `defineProject` exposes its pipelines to the CLI and Studio directly;
    they infer flags from the options schema's Standard JSON Schema input metadata.
+   Without that metadata, register explicit command `params` through a command
+   catalog; automatic project commands reject schema-less pipelines, even with no inputs.
+   Default-export the project or catalog to select it for CLI and Studio; without
+   a default, multiple distinct roots are rejected, including mixed projects and catalogs.
    Start standalone or customized scripts with `definePipelineCommand(pipeline)`.
    Use `overrides` for presentation only; explicit `params` and `mapOptions` are
    advanced options for type-only pipelines or custom input shapes.

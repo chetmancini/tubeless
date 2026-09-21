@@ -9,6 +9,8 @@ import { PublishPipeline } from "./pipelines/publish.ts";
 // this directory. Adapt IDs and files to the consumer; keep registrations
 // explicit. Start with definePipelineCommand(pipeline) for schema-backed flags;
 // params/mapOptions are advanced input adapters. See ../automatic-cli.ts.
+// Type-only pipelines require explicit params here: automatic project commands
+// require Standard JSON Schema input metadata, even for pipelines with no inputs.
 // Numeric/boolean enum or const inputs require explicit params.
 // CLI argv still uses --step/--target; mapOptions and hooks
 // receive stepIds, targets, and maxConcurrency. Opt in to parallel DAG execution
@@ -19,14 +21,13 @@ import { PublishPipeline } from "./pipelines/publish.ts";
 // its worker module to JavaScript and let the application own the pool's close().
 
 /** Typed application project. Retrieve a pipeline by id, then plan, run, or graph it. */
-export const CatalogProject = defineProject("catalog", [
-  NormalizePipeline,
-  ImportPipeline,
-  EnrichPipeline,
-  PublishPipeline,
-]);
+export const CatalogProject = defineProject(
+  "catalog",
+  [NormalizePipeline, ImportPipeline, EnrichPipeline, PublishPipeline],
+  { name: "Catalog jobs", description: "Import, enrich, and publish row datasets." }
+);
 
-/** Optional CLI/Studio command catalog with stable registered identities. */
+/** The default export selects this catalog for CLI/Studio; CatalogProject stays available to application code. */
 export default defineCommandCatalog({
   cwd: ".",
   commands: [

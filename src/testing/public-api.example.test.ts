@@ -26,7 +26,7 @@ import {
 } from "tubeless/cli";
 import * as cli from "tubeless/cli";
 import * as project from "tubeless/project";
-import { defineProject } from "tubeless/project";
+import { defineProject, type PipelineProject, type ProjectMetadata } from "tubeless/project";
 import { MinimalPipeline, runMinimalExample } from "../../examples/minimal-pipeline.js";
 
 interface ImportOptions {
@@ -268,9 +268,18 @@ describe("public API example", () => {
   });
 
   it("defines a typed project from pipelines", async () => {
-    const project = defineProject("public-api", [ImportPipeline, ChildPipeline]);
+    const metadata: ProjectMetadata = {
+      name: "Public API jobs",
+      description: "Import and normalize rows.",
+    };
+    const project: PipelineProject<
+      "public-api",
+      readonly [typeof ImportPipeline, typeof ChildPipeline]
+    > = defineProject("public-api", [ImportPipeline, ChildPipeline], metadata);
 
     expect(project.id).toBe("public-api");
+    expect(project.name).toBe("Public API jobs");
+    expect(project.description).toBe("Import and normalize rows.");
     expect(project.pipelineIds).toEqual(["import", "public-child"]);
     await expect(project.get("import").runOrThrow({ lines: [" Alpha "] })).resolves.toEqual({
       count: 1,

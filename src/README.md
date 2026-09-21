@@ -42,6 +42,9 @@ their source files.
   The project entrypoint stays independent of CLI, workbench, storage and Studio.
 - Workbench is internal executable integration: it loads modules, selects storage
   adapters and supplies Studio launch capabilities. The public project API loads none of these.
+  Normalize project pipelines, catalog entries, and direct files into workbench
+  registrations at loading boundaries. Commands and Studio use their lazy plan
+  and command loaders rather than branching on the source kind.
 - Type-only imports can share contracts without loading their implementation.
   Avoid creating new cross-module contracts unless the consumer needs them.
 

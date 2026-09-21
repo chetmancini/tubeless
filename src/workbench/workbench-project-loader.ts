@@ -7,16 +7,8 @@ import {
   type WorkbenchPipelineCommand,
 } from "./pipeline-module.js";
 import { definePipelineCommand } from "../cli/cli-pipeline-command.js";
-import {
-  isCommandCatalog,
-  type CommandCatalog,
-  type CommandCatalogEntry,
-} from "../cli/command-catalog.js";
-import {
-  isPipelineProject,
-  type AnyProjectPipeline,
-  type PipelineProject,
-} from "../project/pipeline-project.js";
+import { isCommandCatalog, type CommandCatalogEntry } from "../cli/command-catalog.js";
+import { isPipelineProject, type AnyProjectPipeline } from "../project/pipeline-project.js";
 import {
   errorMessage,
   loadPipelineCommand,
@@ -29,70 +21,102 @@ import {
 /** Default project file checked in the invocation directory. No parent search is performed. */
 export const DEFAULT_PIPELINE_PROJECT_FILE = "tubeless.project.ts";
 
-interface LoadedCommandCatalog {
-  filePath: string;
-  kind: "catalog";
-  manifest: CommandCatalog;
-}
-
-interface LoadedPipelineProject {
-  filePath: string;
-  kind: "project";
-  project: PipelineProject<string, readonly AnyProjectPipeline[]>;
-}
-
-export type LoadedPipelineProjectFile = LoadedCommandCatalog | LoadedPipelineProject;
-
-interface ResolvedCommandModule {
-  cwd: string;
-  exportName?: string;
-  filePath: string;
-  id: string;
-  kind: "module";
-  name?: string;
-}
-
-interface ResolvedProjectPipeline {
-  cwd: string;
-  id: string;
-  kind: "pipeline";
-  pipeline: AnyProjectPipeline;
-}
-
-export type ResolvedPipelineProjectCommand = ResolvedCommandModule | ResolvedProjectPipeline;
-
 type LoadFailure = { exitCode: number };
 
-const EXPORT_PROJECT_MUTEX_ERROR =
-  "--export cannot be combined with --project; the project file owns export selection.";
-
-function inferProjectPipelineCommand(
-  registration: ResolvedProjectPipeline,
-  io: WorkbenchCliIo
-): WorkbenchPipelineCommand | LoadFailure {
-  try {
-    return definePipelineCommand(registration.pipeline);
-  } catch (error) {
-    io.stderr.write(
-      `Error: Cannot derive a CLI for project pipeline ${JSON.stringify(registration.id)}: ${errorMessage(error)}\n`
-    );
-    return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load };
-  }
+/** A source normalized once for discovery, planning, execution, and Studio. */
+export interface WorkbenchRegistration {
+  readonly identity: string;
+  readonly source: string;
+  readonly cwd: string;
+  /** Stable project/catalog id; direct modules acquire their Studio id after loading. */
+  readonly id?: string;
+  readonly name?: string;
+  readonly listing: string;
+  loadPlan(io: WorkbenchCliIo): Promise<{ view: WorkbenchPipeline } | LoadFailure>;
+  loadCommand(
+    io: WorkbenchCliIo
+  ): Promise<
+    | { command: WorkbenchPipelineCommand; commandIo: WorkbenchCliIo; exportName: string }
+    | LoadFailure
+  >;
 }
 
-type ResolvedTargetLoad =
-  | {
-      exportName: string | undefined;
-      fileArgument: string;
-      kind: "module";
-      loadIo: WorkbenchCliIo;
-      registration?: ResolvedCommandModule;
-    }
-  | {
-      kind: "pipeline";
-      loadIo: WorkbenchCliIo;
-      registration: ResolvedProjectPipeline;
-    };
+interface WorkbenchProjectFile {
+  filePath: string;
+  registrations: readonly WorkbenchRegistration[];
+  inventory: Record<string, unknown>;
+}
+
+/** Keep module imports lazy, including direct files and catalog entries. */
+export function createModuleRegistration(
+  filePath: string,
+  cwd: string,
+  exportName?: string,
+  entry?: CommandCatalogEntry
+): WorkbenchRegistration {
+  filePath = path.resolve(cwd, filePath);
+  return {
+    identity: `${filePath}\0${exportName ?? ""}`,
+    source: filePath,
+    cwd,
+    id: entry?.id,
+    name: entry?.name,
+    listing: entry
+      ? `${entry.id}\t${entry.file}${exportName ? `#${exportName}` : ""}${entry.name ? `\t${entry.name}` : ""}`
+      : filePath,
+    async loadPlan(io) {
+      const loaded = await loadPlanSource(filePath, exportName, { ...io, cwd });
+      if ("exitCode" in loaded) return loaded;
+      return {
+        view: loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline,
+      };
+    },
+    async loadCommand(io) {
+      const commandIo = { ...io, cwd };
+      const loaded = await loadPipelineCommand(filePath, exportName, commandIo);
+      return "exitCode" in loaded ? loaded : { ...loaded, commandIo };
+    },
+  };
+}
+
+function createPipelineRegistration(
+  pipeline: AnyProjectPipeline,
+  filePath: string
+): WorkbenchRegistration {
+  const cwd = path.dirname(filePath);
+  return {
+    identity: `project-pipeline\0${filePath}\0${pipeline.id}`,
+    source: pipeline.id,
+    cwd,
+    id: pipeline.id,
+    listing: pipeline.id,
+    async loadPlan() {
+      return { view: pipeline };
+    },
+    async loadCommand(io) {
+      try {
+        // Project registration erases option types, so absence of a schema cannot
+        // establish that the pipeline has no required domain inputs.
+        if (pipeline.optionsSchema === undefined) {
+          throw new Error(
+            "Automatic project commands require Standard JSON Schema input metadata. " +
+              "Use createSteps(schema), or register a definePipelineCommand with explicit params through defineCommandCatalog."
+          );
+        }
+        return {
+          command: definePipelineCommand(pipeline),
+          commandIo: { ...io, cwd },
+          exportName: pipeline.id,
+        };
+      } catch (error) {
+        io.stderr.write(
+          `Error: Cannot derive a CLI for project pipeline ${JSON.stringify(pipeline.id)}: ${errorMessage(error)}\n`
+        );
+        return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load };
+      }
+    },
+  };
+}
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
@@ -103,106 +127,67 @@ async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
-/** Load one explicitly named project file without searching parent directories. */
+/** Select one root and normalize it without importing catalog command modules. */
 export async function loadPipelineProjectFile(
   fileArgument: string,
   io: WorkbenchCliIo
-): Promise<LoadedPipelineProjectFile | LoadFailure> {
+): Promise<WorkbenchProjectFile | LoadFailure> {
   const filePath = path.resolve(io.cwd, fileArgument);
   try {
     const fileStat = await stat(filePath);
     if (!fileStat.isFile()) throw new Error(`${filePath} is not a file.`);
     const moduleExports = await importModuleNamespace(filePath);
-    const hasCatalog = Object.values(moduleExports).some(isCommandCatalog);
-    if (!hasCatalog) {
-      const project = selectUniqueExport(moduleExports, undefined, isPipelineProject, "project", {
-        hintExport: false,
-      }).value;
-      return { filePath, kind: "project", project };
+    const root = selectUniqueExport(
+      moduleExports,
+      Object.hasOwn(moduleExports, "default") ? "default" : undefined,
+      (value) => isPipelineProject(value) || isCommandCatalog(value),
+      "project or command catalog",
+      { hintExport: false }
+    ).value;
+    if (isPipelineProject(root)) {
+      return {
+        filePath,
+        registrations: root.pipelines.map((pipeline) =>
+          createPipelineRegistration(pipeline, filePath)
+        ),
+        inventory: {
+          id: root.id,
+          name: root.name,
+          description: root.description,
+          pipelines: root.pipelineIds,
+          project: filePath,
+        },
+      };
     }
 
-    const manifest = selectUniqueExport(
-      moduleExports,
-      undefined,
-      isCommandCatalog,
-      "command catalog",
-      {
-        hintExport: false,
-      }
-    ).value;
-    const moduleIdentities = new Set<string>();
-    for (const command of manifest.commands) {
-      const moduleIdentity = `${path.resolve(path.dirname(filePath), command.file)}\0${command.export ?? ""}`;
-      if (moduleIdentities.has(moduleIdentity)) {
+    const directory = path.dirname(filePath);
+    const cwd = path.resolve(directory, root.cwd ?? ".");
+    const registrations = root.commands.map((entry) =>
+      createModuleRegistration(path.resolve(directory, entry.file), cwd, entry.export, entry)
+    );
+    const identities = new Set<string>();
+    for (const registration of registrations) {
+      if (identities.has(registration.identity)) {
         throw new Error(
-          `Command catalog entry ${JSON.stringify(command.file)}${command.export ? ` export ${JSON.stringify(command.export)}` : ""} resolves to a duplicate module registration.`
+          `Command catalog entry ${JSON.stringify(registration.source)} resolves to a duplicate module registration.`
         );
       }
-      moduleIdentities.add(moduleIdentity);
+      identities.add(registration.identity);
     }
-    return { filePath, kind: "catalog", manifest };
+    return {
+      filePath,
+      registrations,
+      inventory: {
+        commands: root.commands,
+        cwd: root.cwd ?? ".",
+        manifest: filePath,
+        version: root.version,
+      },
+    };
   } catch (error) {
     io.stderr.write(`Error: ${errorMessage(error)}\n`);
     return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load };
   }
-}
-
-/** Resolve one stable pipeline or command id from a loaded project file. */
-function resolvePipelineProjectCommand(
-  loaded: LoadedPipelineProjectFile,
-  id: string,
-  io: WorkbenchCliIo
-): ResolvedPipelineProjectCommand | LoadFailure {
-  if (loaded.kind === "project") {
-    const pipeline = loaded.project.pipelines.find((candidate) => candidate.id === id);
-    if (!pipeline) {
-      io.stderr.write(
-        `Error: Project ${JSON.stringify(loaded.project.id)} does not define pipeline ${JSON.stringify(id)}.\n`
-      );
-      return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load };
-    }
-    return {
-      cwd: path.dirname(loaded.filePath),
-      id,
-      kind: "pipeline",
-      pipeline,
-    };
-  }
-
-  const command = loaded.manifest.commands.find((candidate) => candidate.id === id);
-  if (!command) {
-    io.stderr.write(
-      `Error: Command catalog ${loaded.filePath} does not register command ${JSON.stringify(id)}.\n`
-    );
-    return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load };
-  }
-  return resolveProjectCommandModule(loaded, command);
-}
-
-function resolveProjectCommandModule(
-  loaded: LoadedCommandCatalog,
-  command: CommandCatalogEntry
-): ResolvedCommandModule {
-  const manifestDirectory = path.dirname(loaded.filePath);
-  const resolved: ResolvedPipelineProjectCommand = {
-    cwd: path.resolve(manifestDirectory, loaded.manifest.cwd ?? "."),
-    filePath: path.resolve(manifestDirectory, command.file),
-    id: command.id,
-    kind: "module",
-  };
-  if (command.export !== undefined) resolved.exportName = command.export;
-  if (command.name !== undefined) resolved.name = command.name;
-  return resolved;
-}
-
-async function resolveRegisteredTarget(
-  target: string,
-  projectFile: string,
-  io: WorkbenchCliIo
-): Promise<ResolvedPipelineProjectCommand | LoadFailure> {
-  const loaded = await loadPipelineProjectFile(projectFile, io);
-  if ("exitCode" in loaded) return loaded;
-  return resolvePipelineProjectCommand(loaded, target, io);
 }
 
 function isPathLike(target: string): boolean {
@@ -225,135 +210,34 @@ async function projectFileForTarget(
   return (await pathExists(defaultFile)) ? defaultFile : undefined;
 }
 
-async function resolveTargetLoad(
+/** Resolve a direct file or registered id to the same lazy loading contract. */
+export async function resolveWorkbenchRegistration(
   target: string,
   exportName: string | undefined,
   projectFile: string | undefined,
   io: WorkbenchCliIo,
   usage: string
-): Promise<ResolvedTargetLoad | LoadFailure> {
+): Promise<WorkbenchRegistration | LoadFailure> {
   if (exportName !== undefined && projectFile !== undefined) {
-    return { exitCode: writeUsageError(io, EXPORT_PROJECT_MUTEX_ERROR, usage) };
+    return {
+      exitCode: writeUsageError(
+        io,
+        "--export cannot be combined with --project; the project file owns export selection.",
+        usage
+      ),
+    };
   }
 
   const resolvedProjectFile = await projectFileForTarget(target, projectFile, io);
   if (resolvedProjectFile === undefined) {
-    return { exportName, fileArgument: target, kind: "module", loadIo: io };
+    return createModuleRegistration(target, io.cwd, exportName);
   }
-
-  const registration = await resolveRegisteredTarget(target, resolvedProjectFile, io);
-  if ("exitCode" in registration) return registration;
-  if (registration.kind === "pipeline") {
-    return {
-      kind: "pipeline",
-      loadIo: { ...io, cwd: registration.cwd },
-      registration,
-    };
-  }
-  return {
-    exportName: registration.exportName,
-    fileArgument: registration.filePath,
-    kind: "module",
-    loadIo: { ...io, cwd: registration.cwd },
-    registration,
-  };
-}
-
-export async function loadPipelineCommandTarget(
-  target: string,
-  exportName: string | undefined,
-  projectFile: string | undefined,
-  io: WorkbenchCliIo,
-  usage: string
-): Promise<
-  | {
-      command: WorkbenchPipelineCommand;
-      commandIo: WorkbenchCliIo;
-      exportName: string;
-      registration?: ResolvedPipelineProjectCommand;
-    }
-  | LoadFailure
-> {
-  const resolved = await resolveTargetLoad(target, exportName, projectFile, io, usage);
-  if ("exitCode" in resolved) return resolved;
-  if (resolved.kind === "pipeline") {
-    const command = inferProjectPipelineCommand(resolved.registration, io);
-    if ("exitCode" in command) return command;
-    return {
-      command,
-      commandIo: resolved.loadIo,
-      exportName: resolved.registration.id,
-      registration: resolved.registration,
-    };
-  }
-  const loaded = await loadPipelineCommand(
-    resolved.fileArgument,
-    resolved.exportName,
-    resolved.loadIo
+  const loaded = await loadPipelineProjectFile(resolvedProjectFile, io);
+  if ("exitCode" in loaded) return loaded;
+  const registration = loaded.registrations.find(({ id }) => id === target);
+  if (registration) return registration;
+  io.stderr.write(
+    `Error: Project file ${loaded.filePath} does not register pipeline or command ${JSON.stringify(target)}.\n`
   );
-  if ("exitCode" in loaded) return loaded;
-  return { ...loaded, commandIo: resolved.loadIo, registration: resolved.registration };
-}
-
-export async function loadPlanSourceTarget(
-  target: string,
-  exportName: string | undefined,
-  projectFile: string | undefined,
-  io: WorkbenchCliIo,
-  usage: string
-): Promise<
-  | {
-      registration?: ResolvedPipelineProjectCommand;
-      view: WorkbenchPipeline;
-    }
-  | LoadFailure
-> {
-  const resolved = await resolveTargetLoad(target, exportName, projectFile, io, usage);
-  if ("exitCode" in resolved) return resolved;
-  if (resolved.kind === "pipeline") {
-    return { view: resolved.registration.pipeline, registration: resolved.registration };
-  }
-  const loaded = await loadPlanSource(resolved.fileArgument, resolved.exportName, resolved.loadIo);
-  if ("exitCode" in loaded) return loaded;
-  return {
-    view: loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline,
-    registration: resolved.registration,
-  };
-}
-
-/** Resolve all entries for Studio registration or project inventory. */
-export function resolvePipelineProjectCommands(
-  loaded: LoadedPipelineProjectFile
-): readonly ResolvedPipelineProjectCommand[] {
-  if (loaded.kind === "project") {
-    const cwd = path.dirname(loaded.filePath);
-    return loaded.project.pipelines.map((pipeline) => ({
-      cwd,
-      id: pipeline.id,
-      kind: "pipeline",
-      pipeline,
-    }));
-  }
-  return loaded.manifest.commands.map((command) => resolveProjectCommandModule(loaded, command));
-}
-
-/** Load or infer the runnable command represented by one project registration. */
-export async function loadResolvedPipelineProjectCommand(
-  registration: ResolvedPipelineProjectCommand,
-  io: WorkbenchCliIo
-): Promise<
-  { command: WorkbenchPipelineCommand; commandIo: WorkbenchCliIo; exportName: string } | LoadFailure
-> {
-  const commandIo = { ...io, cwd: registration.cwd };
-  if (registration.kind === "pipeline") {
-    const command = inferProjectPipelineCommand(registration, io);
-    return "exitCode" in command ? command : { command, commandIo, exportName: registration.id };
-  }
-  const loaded = await loadPipelineCommand(
-    registration.filePath,
-    registration.exportName,
-    commandIo
-  );
-  if ("exitCode" in loaded) return loaded;
-  return { ...loaded, commandIo };
+  return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load };
 }

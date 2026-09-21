@@ -14,7 +14,7 @@ import {
   isPipelineExecutionError,
   toExitCode,
 } from "../cli/cli-exit.js";
-import { loadPipelineCommandTarget } from "./workbench-project-loader.js";
+import { resolveWorkbenchRegistration } from "./workbench-project-loader.js";
 import {
   commandContext,
   errorMessage,
@@ -150,13 +150,15 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
     return writeUsageError(io, "Pass exactly one pipeline command file.", RUN_USAGE);
   }
 
-  const loaded = await loadPipelineCommandTarget(
+  const registration = await resolveWorkbenchRegistration(
     parsed.parsed.positionals[0]!,
     parsed.parsed.values.export,
     parsed.parsed.values.project,
     io,
     RUN_USAGE
   );
+  if ("exitCode" in registration) return registration.exitCode;
+  const loaded = await registration.loadCommand(io);
   if ("exitCode" in loaded) return loaded.exitCode;
 
   const storePath = parsed.parsed.values.store

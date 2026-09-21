@@ -59,6 +59,9 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 - Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
   `tubeless/project`. Retrieve one with `project.get(id)`; it keeps the exact pipeline
   option and result types and uses the pipeline's existing methods directly.
+  Optional `{ name, description }` in the third argument supplies project
+  presentation; the name defaults to the ID. Documents inherit those fields from
+  their metadata; an optional fourth argument after the registry overrides them.
 
 ## Add only the capabilities the workflow needs
 
@@ -96,8 +99,12 @@ Read the corresponding package recipe before using these features:
   redeclare built-in flags. Read `docs/cli.md` for option mapping.
   Export `defineProject(id, pipelines)` from `tubeless.project.ts` to expose
   schema-backed pipelines directly to the CLI and optional Studio. Use
+  explicit command `params` and a catalog for schema-less pipelines, even with no
+  inputs: automatic project commands require Standard JSON Schema input metadata. Use
   `defineCommand` for standalone scripts and `defineCommandCatalog` only for
   advanced custom command adapters.
+  Default-export the project or catalog to select it for CLI and Studio. Without
+  a default, exactly one distinct project or catalog may be exported; aliases are allowed.
 - Use `pipelines/<name>.ts` for definitions. Add `scripts/<name>.ts` command
   wrappers only when explicit `params`, `mapOptions`, or presentation overrides
   are needed. Preserve existing consumer conventions.

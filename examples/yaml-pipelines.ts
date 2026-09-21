@@ -5,6 +5,8 @@ import { registry } from "./declarative/handlers.ts";
 
 // This loader uses Bun's native YAML import. Node applications can pass the
 // result of their chosen YAML parser (or JSON.parse) to defineProject.
+// Document metadata supplies project.name and project.description. An optional
+// fourth argument can override either field without changing pipeline identities.
 export const project = defineProject("yaml-examples", document, registry);
 
 const params = {

@@ -12,7 +12,11 @@ import {
   type StepSkipDecision,
 } from "../core/pipeline.js";
 import type { AnyStep } from "../core/pipeline-steps.js";
-import { validatePipelineDocument, PipelineDocumentError } from "./project-document.js";
+import {
+  validatePipelineDocument,
+  PipelineDocumentError,
+  type PipelineDocument,
+} from "./project-document.js";
 
 export { PipelineDocumentError };
 
@@ -192,7 +196,14 @@ export function compilePipelineDocument(
   document: unknown,
   registry: ProjectRegistry
 ): ReadonlyMap<string, Pipeline<object, unknown>> {
-  const parsed = validatePipelineDocument(document);
+  return compileValidatedPipelineDocument(validatePipelineDocument(document), registry);
+}
+
+/** Compile a validated snapshot shared with project metadata extraction. */
+export function compileValidatedPipelineDocument(
+  parsed: PipelineDocument,
+  registry: ProjectRegistry
+): ReadonlyMap<string, Pipeline<object, unknown>> {
   const compiled = new Map<string, Pipeline<object, unknown>>();
   const compiling = new Set<string>();
 

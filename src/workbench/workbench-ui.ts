@@ -2,12 +2,7 @@ import * as path from "node:path";
 import { parseArgs } from "node:util";
 import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
-import {
-  loadPipelineProjectFile,
-  loadResolvedPipelineProjectCommand,
-  resolvePipelineProjectCommands,
-  type ResolvedPipelineProjectCommand,
-} from "./workbench-project-loader.js";
+import { loadPipelineProjectFile, createModuleRegistration } from "./workbench-project-loader.js";
 import type { PipelineRunEventReader } from "../run-store/run-store.js";
 import type {
   PipelineRunStudioCommand,
@@ -19,7 +14,6 @@ import {
   commandContext,
   DEFAULT_PIPELINE_RUN_STORE,
   errorMessage,
-  loadPipelineCommand,
   onFirstProcessSignal,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
@@ -60,25 +54,6 @@ function parseUiArgs(argv: readonly string[]) {
   });
 }
 
-/** One direct command module or a pipeline/command registered by a project file. */
-type StudioCommandSpec =
-  | {
-      cwd: string;
-      exportName?: string;
-      filePath: string;
-      kind: "module";
-    }
-  | { kind: "project"; registration: ResolvedPipelineProjectCommand };
-
-async function loadStudioCommandSpec(spec: StudioCommandSpec, io: WorkbenchCliIo) {
-  if (spec.kind === "project") {
-    return loadResolvedPipelineProjectCommand(spec.registration, io);
-  }
-  const commandIo = { ...io, cwd: spec.cwd };
-  const loaded = await loadPipelineCommand(spec.filePath, spec.exportName, commandIo);
-  return "exitCode" in loaded ? loaded : { ...loaded, commandIo };
-}
-
 export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
@@ -112,53 +87,29 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           return writeUsageError(io, "--port must be an integer from 0 to 65535.", UI_USAGE);
         }
 
-        const specs: StudioCommandSpec[] = directCommandFiles.map((file) => {
-          const spec: StudioCommandSpec = {
-            cwd: io.cwd,
-            filePath: path.resolve(io.cwd, file),
-            kind: "module",
-          };
-          if (parsed.values.export !== undefined) {
-            spec.exportName = parsed.values.export;
-          }
-          return spec;
-        });
+        const sources = directCommandFiles.map((file) =>
+          createModuleRegistration(file, io.cwd, parsed.values.export)
+        );
         if (projectFile) {
-          const loadedConfig = await loadPipelineProjectFile(projectFile, io);
-          if ("exitCode" in loadedConfig) return loadedConfig.exitCode;
-          specs.push(
-            ...resolvePipelineProjectCommands(loadedConfig).map(
-              (registration): StudioCommandSpec => ({ kind: "project", registration })
-            )
-          );
+          const loaded = await loadPipelineProjectFile(projectFile, io);
+          if ("exitCode" in loaded) return loaded.exitCode;
+          sources.push(...loaded.registrations);
         }
         const identities = new Set<string>();
-        for (const spec of specs) {
-          const identity =
-            spec.kind === "module"
-              ? `${spec.filePath}\0${spec.exportName ?? ""}`
-              : spec.registration.kind === "module"
-                ? `${spec.registration.filePath}\0${spec.registration.exportName ?? ""}`
-                : `project-pipeline\0${spec.registration.id}`;
-          if (identities.has(identity)) {
-            const source =
-              spec.kind === "module"
-                ? spec.filePath
-                : spec.registration.kind === "module"
-                  ? spec.registration.filePath
-                  : spec.registration.id;
+        for (const source of sources) {
+          if (identities.has(source.identity)) {
             return writeUsageError(
               io,
-              `Studio command source ${JSON.stringify(source)} is duplicated.`,
+              `Studio command source ${JSON.stringify(source.source)} is duplicated.`,
               UI_USAGE
             );
           }
-          identities.add(identity);
+          identities.add(source.identity);
         }
 
         const host = (parsed.values.host ?? "127.0.0.1").toLowerCase();
         const isLoopbackHost = host === "127.0.0.1" || host === "::1" || host === "localhost";
-        if (specs.length > 0 && !isLoopbackHost) {
+        if (sources.length > 0 && !isLoopbackHost) {
           return writeUsageError(
             io,
             "Browser-triggered execution requires a loopback --host.",
@@ -178,20 +129,13 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           commandIo: WorkbenchCliIo;
           descriptor: PipelineRunStudioCommand;
         }[] = [];
-        for (const spec of specs) {
-          const loaded = await loadStudioCommandSpec(spec, io);
+        for (const source of sources) {
+          const loaded = await source.loadCommand(io);
           if ("exitCode" in loaded) return loaded.exitCode;
-          const registered = spec.kind === "project" ? spec.registration : undefined;
-          const commandName =
-            registered?.kind === "module" && registered.name
-              ? registered.name
-              : loaded.command.descriptor.name;
           const descriptor: PipelineRunStudioCommand = {
             canPlan: true,
-            id:
-              registered?.id ??
-              `${spec.kind === "module" ? spec.filePath : projectFile}#${loaded.exportName}`,
-            name: commandName,
+            id: source.id ?? `${source.source}#${loaded.exportName}`,
+            name: source.name ?? loaded.command.descriptor.name,
             parameters: loaded.command.descriptor.parameters,
           };
           if (loaded.command.descriptor.description !== undefined) {

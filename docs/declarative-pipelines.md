@@ -69,6 +69,20 @@ they are not inferred from Git and do not schedule execution.
 
 `tubeless validate --json` preserves and reports metadata. Project compilation
 produces the same pipelines regardless of metadata.
+`defineProject(id, document, registry)` carries document `name` and `description`
+onto the project. `project.name` defaults to `id` when no name is supplied;
+`project.description` remains optional. Override either field with an optional
+fourth argument:
+
+```ts
+const project = defineProject("data-jobs", document, registry, {
+  name: "Production data jobs",
+  description: "Import and publish production datasets.",
+});
+```
+
+Overrides apply per field; omitted or `undefined` fields retain the document value.
+Project metadata is immutable. Document `authors` and `date` remain document-only.
 Studio command labels still come from explicit command registrations; document
 metadata does not override labels, IDs, options, or run timestamps.
 

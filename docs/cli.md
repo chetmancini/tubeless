@@ -43,12 +43,28 @@ for you, so a schema-backed pipeline needs no command wrapper or catalog:
 import { defineProject } from "tubeless/project";
 import { ImportPipeline, PublishPipeline } from "./pipelines.js";
 
-export default defineProject("data-jobs", [ImportPipeline, PublishPipeline]);
+export default defineProject("data-jobs", [ImportPipeline, PublishPipeline], {
+  name: "Data jobs",
+  description: "Import source data and publish normalized datasets.",
+});
 ```
+
+The optional third argument supplies project presentation. `project.name` defaults
+to `project.id`; `project.description` is optional. Both fields must be non-empty
+strings when supplied and are immutable on the returned project. `list --json`
+includes these fields alongside the stable project ID and pipeline IDs. Project
+metadata does not rename individual pipelines or their command labels.
 
 Use `defineCommandCatalog` only when commands need explicit `params`, `mapOptions`,
 custom presentation, or IDs that differ from their pipelines. A catalog registers
 those advanced command modules for both the terminal and Studio.
+
+Automatic project commands require Standard JSON Schema input metadata, even
+for pipelines with no domain inputs: erased TypeScript types cannot prove that
+inputs are optional. Schema-less project pipelines remain available to application
+code and `list`, `inspect`, `plan`, and `graph`, but `run` and Studio reject them
+with a load error. Supply an options schema or register an explicit command through
+`defineCommandCatalog` (`params: {}` is sufficient when there are no domain inputs).
 
 | Pipeline input                | Generated CLI                                   |
 | ----------------------------- | ----------------------------------------------- |
@@ -168,13 +184,21 @@ By default, Tubeless looks for `tubeless.project.ts` in the current directory.
 It does not search parent directories. Pass `--project <path>` when the project file
 has another name or location.
 
+In a project file, the default export is authoritative and must be a
+`defineProject` or `defineCommandCatalog` result. Other named exports do not
+change selection. Without a default export, the file must expose exactly one
+distinct project or catalog; aliases of the same object are allowed. Multiple
+roots, including a project alongside a catalog, fail as ambiguous. Add a default
+export to select one explicitly. An invalid default fails instead of falling back
+to a named export. These rules apply to every CLI operation and Studio.
+
 Without `--project`, an argument naming an existing file is treated as a file.
 Otherwise, a bare name can match a pipeline or command ID in the default
 project file. Arguments containing `/`, starting with `.`, or having an extension
 are always treated as paths. `--export` applies only when loading a file
 directly; a project selection already identifies the pipeline or command.
 
-For a file, the CLI selects its only matching export automatically. Pass
+For a directly loaded pipeline or command file, the CLI selects its only matching export automatically. Pass
 `--export Name` when the file exports more than one. `inspect`, `plan`, and
 `graph` prefer a marked command when a module exports both a pipeline and a
 command.

@@ -17,7 +17,11 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
    `plan`, `run`, `runOrThrow`, or `toMermaid` methods. Use the
    [project example](../examples/tubeless.project.ts) as the minimal reference.
    Schema-backed project pipelines are directly available to the CLI and Studio.
+   Automatic commands require Standard JSON Schema input metadata; schema-less
+   pipelines need explicit command `params` and a command catalog, even with no inputs.
    Add a separate command catalog only for custom CLI inputs, mapping, or presentation.
+   Use a default export to select the project or catalog for CLI and Studio.
+   Without a default, exactly one distinct project or catalog may be exported.
 3. Declare stable IDs and operational descriptions. Add `name` only when printed
    output needs a friendlier display name.
 4. Model data dependencies before failure policy or CLI concerns.
@@ -120,6 +124,11 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   stay literal, duplicate IDs fail during project definition, and `get(id)` returns the
   exact pipeline type. Give the project itself a stable ID; it remains literal on
   `project.id`. The project adds no execution layer.
+  Pass optional `{ name, description }` as the third argument for typed pipelines,
+  or fourth after the registry for documents. Document metadata supplies defaults;
+  explicit fields override them. The immutable `project.name` defaults to its ID.
+  Import `PipelineProject<TProjectId, TPipelines>` from `tubeless/project` when
+  annotating a shared project factory or a function that accepts a project.
 - Use `definePipelineCommand(pipeline)` from `tubeless/cli` for scripts centered on
   a pipeline. Flags are inferred from the Standard JSON Schema input metadata of
   the schema passed to `createSteps(schema)`; see [automatic CLI](../examples/automatic-cli.ts).

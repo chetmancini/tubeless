@@ -1,4 +1,5 @@
 import { createSteps, definePipeline } from "tubeless";
+import { defineProject, type PipelineProject, type ProjectMetadata } from "tubeless/project";
 import {
   definePipelineCommand,
   type CliContext,
@@ -39,3 +40,30 @@ const command = definePipelineCommand(pipeline, {
 });
 
 command.parse([], { env });
+
+type EchoProject = PipelineProject<"packed-project", readonly [typeof pipeline]>;
+
+function createEchoProject(): EchoProject {
+  const metadata: ProjectMetadata = { name: "Echo jobs", description: "Echo a message." };
+  return defineProject("packed-project", [pipeline], metadata);
+}
+
+function selectEcho(project: EchoProject): typeof pipeline {
+  const projectId: "packed-project" = project.id;
+  const pipelineIds: readonly ["packed-cli-types"] = project.pipelineIds;
+  const name: string = project.name;
+  const description: string | undefined = project.description;
+  // @ts-expect-error Project presentation is immutable.
+  project.name = "Changed";
+  // @ts-expect-error Only this project's pipeline ids are accepted.
+  project.get("missing");
+  // @ts-expect-error The selected pipeline retains its required message input.
+  project.get("packed-cli-types").runOrThrow({});
+  void projectId;
+  void pipelineIds;
+  void name;
+  void description;
+  return project.get("packed-cli-types");
+}
+
+selectEcho(createEchoProject());

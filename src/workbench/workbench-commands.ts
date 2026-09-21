@@ -11,7 +11,7 @@ import { renderPipelinePlan } from "../render/render.js";
 import {
   DEFAULT_PIPELINE_PROJECT_FILE,
   loadPipelineProjectFile,
-  loadPlanSourceTarget,
+  resolveWorkbenchRegistration,
 } from "./workbench-project-loader.js";
 import {
   errorMessage,
@@ -46,13 +46,16 @@ async function loadParsedPlanSource(
   io: WorkbenchCliIo,
   usage: string
 ) {
-  return loadPlanSourceTarget(
+  const registration = await resolveWorkbenchRegistration(
     parsed.positionals[0]!,
     parsed.values.export,
     parsed.values.project,
     io,
     usage
   );
+  if ("exitCode" in registration) return registration;
+  const loaded = await registration.loadPlan(io);
+  return "exitCode" in loaded ? loaded : { ...loaded, commandId: registration.id };
 }
 
 const LIST_USAGE = `Usage: tubeless list [options]
@@ -86,46 +89,12 @@ export async function runList(argv: readonly string[], io: WorkbenchCliIo): Prom
         );
         if ("exitCode" in loaded) return loaded.exitCode;
 
-        if (loaded.kind === "project") {
-          if (parsed.values.json) {
-            commandIo.stdout.write(
-              `${JSON.stringify(
-                {
-                  id: loaded.project.id,
-                  pipelines: loaded.project.pipelineIds,
-                  project: loaded.filePath,
-                },
-                null,
-                2
-              )}\n`
-            );
-            return TUBELESS_WORKBENCH_EXIT_CODE.success;
-          }
-
-          for (const id of loaded.project.pipelineIds) commandIo.stdout.write(`${id}\n`);
-          return TUBELESS_WORKBENCH_EXIT_CODE.success;
-        }
-
         if (parsed.values.json) {
-          commandIo.stdout.write(
-            `${JSON.stringify(
-              {
-                commands: loaded.manifest.commands,
-                cwd: loaded.manifest.cwd ?? ".",
-                manifest: loaded.filePath,
-                version: loaded.manifest.version,
-              },
-              null,
-              2
-            )}\n`
-          );
-          return TUBELESS_WORKBENCH_EXIT_CODE.success;
-        }
-
-        for (const command of loaded.manifest.commands) {
-          const selectedExport = command.export ? `#${command.export}` : "";
-          const displayName = command.name ? `\t${command.name}` : "";
-          commandIo.stdout.write(`${command.id}\t${command.file}${selectedExport}${displayName}\n`);
+          commandIo.stdout.write(`${JSON.stringify(loaded.inventory, null, 2)}\n`);
+        } else {
+          for (const registration of loaded.registrations) {
+            commandIo.stdout.write(`${registration.listing}\n`);
+          }
         }
         return TUBELESS_WORKBENCH_EXIT_CODE.success;
       },
@@ -262,14 +231,14 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
             stepIds: [...view.stepIds],
             plan,
           };
-          if (loaded.registration) inspection.commandId = loaded.registration.id;
+          if (loaded.commandId !== undefined) inspection.commandId = loaded.commandId;
           commandIo.stdout.write(`${JSON.stringify(inspection, null, 2)}\n`);
           return TUBELESS_WORKBENCH_EXIT_CODE.success;
         }
 
         commandIo.stdout.write(
           [
-            ...(loaded.registration ? [`Command ${loaded.registration.id}`] : []),
+            ...(loaded.commandId !== undefined ? [`Command ${loaded.commandId}`] : []),
             `Pipeline ${view.id}`,
             `Targets: ${formatIdList(view.targetIds)}`,
             `Exact steps: ${formatIdList(view.stepIds)}`,

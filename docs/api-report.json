@@ -153,8 +153,14 @@
     },
     {
       "declaration": "./dist/project/project.d.ts",
-      "exports": ["defineProject", "PipelineDocumentError", "ProjectRegistry"],
-      "sha256": "70dbc393e5832dbfa160b23ebc4eb50bc19d1638ba821f548851867a072d0d4b",
+      "exports": [
+        "defineProject",
+        "PipelineDocumentError",
+        "PipelineProject",
+        "ProjectMetadata",
+        "ProjectRegistry"
+      ],
+      "sha256": "5ac2b00caddecc26b83f6225c77955eeb67d9bfb819800345f14006af67ccc70",
       "specifier": "tubeless/project"
     },
     {

@@ -77,7 +77,13 @@ bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.project.ts
 ```
 
 Studio derives the same form fields that the CLI derives as flags. No command
-wrapper or catalog is needed.
+wrapper or catalog is needed. Automatic registration requires Standard JSON Schema
+input metadata; schema-less pipelines fail to load. Register those pipelines as
+explicit commands with `params` through a command catalog instead.
+
+The project file's default export selects the project or command catalog for
+Studio. Without a default, exactly one distinct project or catalog must be
+exported; mixed or multiple roots are ambiguous. An invalid default is a load error.
 
 ## Register custom commands for browser execution
 
