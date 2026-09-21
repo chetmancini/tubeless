@@ -455,7 +455,8 @@ describe("nested child progress", () => {
         steps: [
           fromPipeline("child", {
             pipeline: child,
-            mapOptions: () => ({ stepIds: ["work"] as const }),
+            controls: { stepIds: ["work"] },
+            mapOptions: () => ({}),
           }),
         ],
         finalize: () => 1,

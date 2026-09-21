@@ -27,6 +27,7 @@ const { fromPipeline } = createSteps<ImportOptions>();
 const normalizedImport = fromPipeline("normalized-import", {
   pipeline: NormalizePipeline,
   mapOptions: (_inputs, context) => ({ rows: context.options.lines }),
+  controls: { targets: ["normalize-rows"], maxConcurrency: 4 },
   mapResult: (rows) => ({ count: rows.length, rows }),
 });
 

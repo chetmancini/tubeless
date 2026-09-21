@@ -73,13 +73,6 @@ export interface PipelineRunControls<
   targets?: readonly TTargetId[];
 }
 
-/** Domain input plus built-in controls. Child `mapOptions` still returns this mix. */
-export type PipelineRunOptions<
-  TOptions extends object = object,
-  TStepId extends string = string,
-  TTargetId extends string = string,
-> = TOptions & PipelineRunControls<TStepId, TTargetId>;
-
 /** Resolved caller context. Core fills `now` and `sleep` before execution. */
 export interface PipelineRuntime extends PipelineContext {
   now: () => number;

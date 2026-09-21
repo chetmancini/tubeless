@@ -243,8 +243,8 @@ order in the file alone. Composition cycles are rejected.
 Every step declares exactly one of `run`, `fromPipeline`, or
 `forEachPipeline`. Child references resolve only pipelines in the same
 document. The adapter is application code: a `fromPipeline` adapter supplies
-`mapOptions` and optional `mapResult`; a `forEachPipeline` adapter supplies
-`items`, `key`, `mapOptions`, and optional `concurrency`, `progress`, and
+`mapOptions` and optional `controls` and `mapResult`; a `forEachPipeline` adapter supplies
+`items`, `key`, `mapOptions`, and optional `controls`, `concurrency`, `progress`, and
 `mapResult`. These are the same hooks as the TypeScript builders. Parent plans
 still expose one opaque wrapper with `nestedPipeline` metadata, and execution
 retains the normal nested progress and failure behavior.
@@ -286,9 +286,10 @@ are resolved once during compilation; modifying a registry later does not
 replace handlers in an already compiled pipeline.
 
 Skip predicates receive `(inputs, context)` and return the normal
-`StepSkipDecision`. A single-child adapter's `mapOptions` receives the same
-arguments. A fan-out adapter receives the normal `items`, `key`, `mapOptions`,
-and result-mapping arguments documented for `forEachPipeline`. Keep stable and
+`StepSkipDecision`. A single-child adapter's `mapOptions` and dynamic `controls`
+receive the same arguments. A fan-out adapter receives the normal `items`, `key`,
+`mapOptions`, `controls`, and result-mapping arguments documented for
+`forEachPipeline`. Keep stable and
 unique keys, and return the complete parent-facing result array from a valued
 fan-out skip.
 

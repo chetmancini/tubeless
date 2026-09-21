@@ -6,7 +6,7 @@ import {
   type Pipeline,
   type PipelineExecutionContext,
   type PipelineRun,
-  type PipelineRunOptions,
+  type PipelineRunControls,
   type PipelineStepContext,
   type StandardSchemaV1,
   type StepSkipDecision,
@@ -38,10 +38,13 @@ type PipelineDocumentSkipPredicate = (
 
 /** Application-owned wiring for one declarative `fromPipeline` step. */
 interface PipelineDocumentFromPipelineAdapter {
-  mapOptions(
-    inputs: Record<string, unknown>,
-    context: PipelineExecutionContext<object>
-  ): PipelineRunOptions;
+  controls?:
+    | PipelineRunControls
+    | ((
+        inputs: Record<string, unknown>,
+        context: PipelineExecutionContext<object>
+      ) => PipelineRunControls);
+  mapOptions(inputs: Record<string, unknown>, context: PipelineExecutionContext<object>): object;
   mapResult?(
     value: unknown,
     result: PipelineRun<unknown>,
@@ -51,6 +54,14 @@ interface PipelineDocumentFromPipelineAdapter {
 
 /** Application-owned wiring for one declarative `forEachPipeline` step. */
 interface PipelineDocumentForEachPipelineAdapter {
+  controls?:
+    | PipelineRunControls
+    | ((
+        item: unknown,
+        index: number,
+        inputs: Record<string, unknown>,
+        context: PipelineExecutionContext<object>
+      ) => PipelineRunControls);
   items(
     inputs: Record<string, unknown>,
     context: PipelineExecutionContext<object>
@@ -65,7 +76,7 @@ interface PipelineDocumentForEachPipelineAdapter {
     index: number,
     inputs: Record<string, unknown>,
     context: PipelineExecutionContext<object>
-  ): PipelineRunOptions;
+  ): object;
   mapResult?(
     value: unknown,
     result: PipelineRun<unknown>,
@@ -146,10 +157,21 @@ function fromPipelineAdapter(
   if (typeof adapter.mapOptions !== "function") {
     throw new PipelineDocumentError(path, "Expected an adapter with mapOptions");
   }
+  if (
+    adapter.controls !== undefined &&
+    typeof adapter.controls !== "function" &&
+    (typeof adapter.controls !== "object" || adapter.controls === null)
+  ) {
+    throw new PipelineDocumentError(path, "Expected adapter controls to be an object or function");
+  }
   if (adapter.mapResult !== undefined && typeof adapter.mapResult !== "function") {
     throw new PipelineDocumentError(path, "Expected adapter mapResult to be a function");
   }
-  return { mapOptions: adapter.mapOptions, mapResult: adapter.mapResult };
+  return {
+    controls: adapter.controls,
+    mapOptions: adapter.mapOptions,
+    mapResult: adapter.mapResult,
+  };
 }
 
 function forEachPipelineAdapter(
@@ -175,12 +197,20 @@ function forEachPipelineAdapter(
       "Expected adapter concurrency to be a number or function"
     );
   }
+  if (
+    adapter.controls !== undefined &&
+    typeof adapter.controls !== "function" &&
+    (typeof adapter.controls !== "object" || adapter.controls === null)
+  ) {
+    throw new PipelineDocumentError(path, "Expected adapter controls to be an object or function");
+  }
   if (adapter.mapResult !== undefined && typeof adapter.mapResult !== "function") {
     throw new PipelineDocumentError(path, "Expected adapter mapResult to be a function");
   }
   return {
     items: adapter.items,
     key: adapter.key,
+    controls: adapter.controls,
     concurrency: adapter.concurrency,
     progress: adapter.progress,
     mapOptions: adapter.mapOptions,
@@ -281,6 +311,7 @@ export function compileValidatedPipelineDocument(
           ...common,
           dryRun: definition.dryRun,
           pipeline: resolvePipeline(reference.pipeline, `${stepPath}.fromPipeline.pipeline`),
+          controls: adapter.controls,
           mapOptions: adapter.mapOptions,
           skip,
         };
@@ -312,6 +343,7 @@ export function compileValidatedPipelineDocument(
           items: adapter.items,
           key: adapter.key,
           concurrency: adapter.concurrency,
+          controls: adapter.controls,
           progress: adapter.progress,
           mapOptions: adapter.mapOptions,
           skip: fanOutSkip,

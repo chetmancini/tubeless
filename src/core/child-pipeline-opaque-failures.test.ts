@@ -64,7 +64,8 @@ describe("opaque child adapter: failures and planning", () => {
     const { fromPipeline: parentFromPipeline } = createSteps();
     const stage = parentFromPipeline("continuing-stage", {
       pipeline: child,
-      mapOptions: () => ({ continueOnError: true }),
+      controls: { continueOnError: true },
+      mapOptions: () => ({}),
     });
     const parent = definePipeline({
       id: "continuing-parent",
@@ -132,7 +133,8 @@ describe("opaque child adapter: failures and planning", () => {
     const { fromPipeline: parentFromPipeline } = createSteps();
     const stage = parentFromPipeline("planned-stage", {
       pipeline: child,
-      mapOptions: () => ({ stepIds: ["missing" as never] }),
+      controls: { stepIds: ["missing" as never] },
+      mapOptions: () => ({}),
     });
     const parent = definePipeline({ id: "planned-parent", steps: [stage], finalize: () => true });
 
@@ -247,7 +249,8 @@ describe("opaque child adapter: failures and planning", () => {
     const { fromPipeline: parentFromPipeline } = createSteps();
     const stage = parentFromPipeline("stage", {
       pipeline: publicChild,
-      mapOptions: () => ({ stepIds: ["missing" as never] }),
+      controls: { stepIds: ["missing" as never] },
+      mapOptions: () => ({}),
     });
     const parent = definePipeline({
       id: "invalid-spread-parent",
@@ -276,7 +279,8 @@ describe("opaque child adapter: failures and planning", () => {
     const { fromPipeline: parentFromPipeline } = createSteps();
     const stage = parentFromPipeline("stage", {
       pipeline: publicChild,
-      mapOptions: () => ({ stepIds: ["missing" as never] }),
+      controls: { stepIds: ["missing" as never] },
+      mapOptions: () => ({}),
     });
     const parent = definePipeline({
       id: "invalid-trace-parent",

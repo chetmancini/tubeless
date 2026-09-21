@@ -48,6 +48,7 @@ describe("declarative pipelines", () => {
     const mapOptions = vi.fn((_inputs, context) => ({
       value: "value" in context.options ? context.options.value : "missing",
     }));
+    const controls = vi.fn(() => ({ maxConcurrency: 2 }));
     const mapResult = vi.fn(async (value) => ({ childValue: value }));
     const skipChild = vi.fn((_inputs, context) =>
       "cached" in context.options && context.options.cached
@@ -80,7 +81,7 @@ describe("declarative pipelines", () => {
         parentResult: ({ "child-stage": childStage }) => childStage,
       },
       skipPredicates: { cached: skipChild },
-      fromPipelineAdapters: { single: { mapOptions, mapResult } },
+      fromPipelineAdapters: { single: { controls, mapOptions, mapResult } },
     });
     expect([...pipelines.keys()]).toEqual(["parent", "child"]);
     expect(pipelines.get("parent")!.plan().steps[0]?.nestedPipeline).toEqual({
@@ -96,6 +97,7 @@ describe("declarative pipelines", () => {
         .get("parent")!
         .runOrThrow({ value: "mapped" }, {}, createPipelineTestRuntime().context)
     ).resolves.toEqual({ childValue: "mapped" });
+    expect(controls).toHaveBeenCalledOnce();
     expect(mapResult).toHaveBeenCalledOnce();
     await expect(
       pipelines

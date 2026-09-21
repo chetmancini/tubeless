@@ -25,9 +25,14 @@ const { fromPipeline } = createSteps<ImportOptions>();
 const normalizedImport = fromPipeline("normalized-import", {
   pipeline: NormalizePipeline,
   mapOptions: (_inputs, context) => ({ rows: context.options.lines }),
+  controls: { targets: ["normalize-rows"], maxConcurrency: 4 },
   mapResult: (rows) => ({ count: rows.length, rows }),
 });
 ```
+
+`mapOptions` returns only the child's domain inputs. Put child-specific
+execution policy in `controls`, either as a value or as a callback with the
+same `(inputs, context)` arguments as `mapOptions`.
 
 ## Run a child for each item
 
@@ -45,12 +50,20 @@ const processShards = forEachPipeline("process-shards", {
   concurrency: (_inputs, context) => context.options.concurrency,
   // Optional presentation only. Defaults to the noun "items".
   progress: { itemNoun: "shards" },
+  controls: (shard) => ({
+    targets: shard.publish ? ["publish"] : ["build"],
+    maxConcurrency: 4,
+  }),
   mapOptions: (shard, _index, _inputs, context) => ({
     shardPath: shard.path,
     outputRoot: context.options.outputRoot,
   }),
 });
 ```
+
+A fan-out `controls` callback receives
+`(item, index, inputs, context)`, so each child can select its own targets or
+scheduling policy without putting those fields in its domain options.
 
 To skip the whole step when there are no items, add `skip` to its definition:
 
@@ -106,15 +119,16 @@ not supported.
 
 | Control           | Child behavior                                                                                |
 | ----------------- | --------------------------------------------------------------------------------------------- |
-| `dryRun`          | Always takes the parent's value, overriding any value in `mapOptions`                         |
-| `stepIds`         | Uses only a child-specific value supplied by `mapOptions`                                     |
-| `targets`         | Uses only a child-specific value supplied by `mapOptions`; IDs must be declared child targets |
-| `maxConcurrency`  | Uses only a value supplied by `mapOptions`; defaults to `1` per child run                     |
-| `continueOnError` | Uses only a value supplied by `mapOptions`                                                    |
+| `dryRun`          | A child can enable it; a dry-running parent always forces it to `true`                        |
+| `stepIds`         | Uses only the child-specific value supplied by `controls`                                     |
+| `targets`         | Uses only the child-specific value supplied by `controls`; IDs must be declared child targets |
+| `maxConcurrency`  | Uses only the value supplied by `controls`; defaults to `1` per child run                     |
+| `continueOnError` | Uses only the value supplied by `controls`                                                    |
 
-Child `mapOptions` returns domain inputs and any child-specific controls in
-one object. The adapter separates them before invoking the child. An invalid
-child plan fails the parent step before child execution begins.
+Domain properties may use the same names without collision: a child option
+named `targets` remains in `context.options.targets`, while `controls.targets`
+selects child work. An invalid child plan fails the parent step before child
+execution begins.
 
 In a dry run, each child step still follows its own policy. Mark child writes
 with `dryRun: "skip"` or provide a side-effect-free preview handler. You can
@@ -129,7 +143,7 @@ lifetime, while child DAG limits and fan-out item concurrency apply independentl
 Four parallel parent steps, each with fan-out `concurrency: 8`, can create 32 active
 children. Increasing each child's `maxConcurrency` can multiply active child steps
 again. The CLI's `--max-concurrency` controls the parent run only; it is not inherited
-by children. Set child controls explicitly in `mapOptions` when needed.
+by children. Set child controls explicitly with `controls` when needed.
 
 There is no shared parent/child semaphore. A parent holding a shared slot while
 waiting for children that need the same slots could deadlock.

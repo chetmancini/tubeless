@@ -552,7 +552,7 @@ describe("parallel DAG scheduling", () => {
   });
 
   it.each([undefined, 2])(
-    "keeps child concurrency separate and strips its control from domain options (%s)",
+    "keeps child concurrency separate from domain options (%s)",
     async (maxConcurrency) => {
       const started = defer();
       const release = defer();
@@ -573,7 +573,8 @@ describe("parallel DAG scheduling", () => {
       const { fromPipeline } = createSteps();
       const wrapper = fromPipeline("wrapper", {
         pipeline: child,
-        mapOptions: () => ({ label: "child", maxConcurrency }),
+        controls: { maxConcurrency },
+        mapOptions: () => ({ label: "child" }),
       });
       const parent = definePipeline({ id: "parent", steps: [wrapper] });
       const run = parent.run({}, { maxConcurrency: 4 });

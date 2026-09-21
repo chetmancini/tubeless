@@ -438,7 +438,8 @@ describe("opaque child adapter: composition", () => {
     const { fromPipeline: parentFromPipeline } = createSteps();
     const stage = parentFromPipeline("dry-stage", {
       pipeline: child,
-      mapOptions: () => ({ dryRun: false }),
+      controls: { dryRun: false },
+      mapOptions: () => ({}),
     });
     const parent = definePipeline({
       id: "dry-parent",
@@ -454,8 +455,32 @@ describe("opaque child adapter: composition", () => {
     expect(observedDryRuns).toEqual([true]);
   });
 
-  it("reads child mapOptions accessors through the original receiver", async () => {
-    class MixedChildOptions {
+  it("lets a child opt into dry-run when its parent is running normally", async () => {
+    const sideEffect = vi.fn();
+    const { step: childStep } = createSteps();
+    const write = childStep("write", { dryRun: "skip", run: sideEffect });
+    const inspect = childStep("inspect", {
+      run: (_inputs, context) => context.dryRun,
+    });
+    const child = definePipeline({
+      id: "opt-in-dry-child",
+      steps: [write, inspect],
+      finalize: (outputs) => outputs.inspect,
+    });
+    const { fromPipeline } = createSteps();
+    const stage = fromPipeline("stage", {
+      pipeline: child,
+      controls: { dryRun: true },
+      mapOptions: () => ({}),
+    });
+    const parent = definePipeline({ id: "opt-in-dry-parent", steps: [stage] });
+
+    await expect(parent.runOrThrow({})).resolves.toBe(true);
+    expect(sideEffect).not.toHaveBeenCalled();
+  });
+
+  it("passes child domain option instances without stripping control-named properties", async () => {
+    class ChildOptions {
       readonly #label = "secret";
       continueOnError = true;
 
@@ -468,11 +493,12 @@ describe("opaque child adapter: composition", () => {
       }
     }
 
-    const { step: childStep } = createSteps<{ label: string } & { read(): string }>();
+    const childOptions = new ChildOptions();
+    const { step: childStep } = createSteps<ChildOptions>();
     const inspect = childStep("inspect", {
       run: (_inputs, context) => {
-        expect(context.options).toBeInstanceOf(MixedChildOptions);
-        expect("continueOnError" in context.options).toBe(false);
+        expect(context.options).toBe(childOptions);
+        expect(context.options.continueOnError).toBe(true);
         return `${context.options.label}:${context.options.read()}`;
       },
     });
@@ -484,7 +510,7 @@ describe("opaque child adapter: composition", () => {
     const { fromPipeline: parentFromPipeline } = createSteps();
     const stage = parentFromPipeline("accessor-stage", {
       pipeline: child,
-      mapOptions: () => new MixedChildOptions(),
+      mapOptions: () => childOptions,
     });
     const parent = definePipeline({
       id: "accessor-parent",
@@ -495,13 +521,25 @@ describe("opaque child adapter: composition", () => {
     await expect(parent.runOrThrow({})).resolves.toBe("secret:secret");
   });
 
-  it("hides control keys on a frozen mixed mapOptions bag", async () => {
-    const mixed = Object.freeze({ continueOnError: true, label: "frozen" });
-    const { step: childStep } = createSteps<{ label: string }>();
+  it("preserves control-named properties on a frozen domain options object", async () => {
+    const mixed = Object.freeze({
+      continueOnError: true,
+      label: "frozen",
+      maxConcurrency: 99,
+      targets: ["domain-target"],
+    });
+    const { step: childStep } = createSteps<{
+      continueOnError: boolean;
+      label: string;
+      maxConcurrency: number;
+      targets: readonly string[];
+    }>();
     const inspect = childStep("inspect", {
       run: (_inputs, context) => {
-        expect("continueOnError" in context.options).toBe(false);
-        expect(Object.keys(context.options)).toEqual(["label"]);
+        expect(context.options).toBe(mixed);
+        expect(context.options.continueOnError).toBe(true);
+        expect(context.options.maxConcurrency).toBe(99);
+        expect(context.options.targets).toEqual(["domain-target"]);
         return context.options.label;
       },
     });
@@ -513,6 +551,7 @@ describe("opaque child adapter: composition", () => {
     const { fromPipeline: parentFromPipeline } = createSteps();
     const stage = parentFromPipeline("frozen-stage", {
       pipeline: child,
+      controls: { maxConcurrency: 1 },
       mapOptions: () => mixed,
     });
     const parent = definePipeline({

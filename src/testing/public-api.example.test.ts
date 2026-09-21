@@ -69,6 +69,7 @@ const { fromPipeline } = createSteps<ImportOptions>();
 const childStage = fromPipeline("child-stage", {
   pipeline: ChildPipeline,
   mapOptions: (_inputs, context) => ({ rows: context.options.lines }),
+  controls: { maxConcurrency: 2 },
 });
 const ParentPipeline = definePipeline({
   id: "public-parent",
