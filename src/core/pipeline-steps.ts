@@ -269,10 +269,9 @@ type RemoteStepDefinitionBase<
 };
 
 /** Step constructors scoped to one pipeline's domain option types. */
-export type StepFactory<
-  TOptions extends object,
-  TInputOptions extends object = TOptions,
-> = ReturnType<typeof createStepFactory<TOptions, TInputOptions>>;
+type StepFactory<TOptions extends object, TInputOptions extends object = TOptions> = ReturnType<
+  typeof createStepFactory<TOptions, TInputOptions>
+>;
 
 /**
  * Create typed step constructors for one pipeline definition.

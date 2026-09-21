@@ -2,7 +2,6 @@ import {
   createSteps,
   definePipeline,
   requireOutputs,
-  type AnyStep,
   type MappedChildProgressOptions,
   type Pipeline,
   type PipelineExecutionContext,
@@ -12,6 +11,7 @@ import {
   type StandardSchemaV1,
   type StepSkipDecision,
 } from "../core/pipeline.js";
+import type { AnyStep } from "../core/pipeline-steps.js";
 import { validatePipelineDocument, PipelineDocumentError } from "./project-document.js";
 
 export { PipelineDocumentError };

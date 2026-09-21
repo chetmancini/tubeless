@@ -1,30 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
-import { chunk, runBatched, runConcurrent, runConcurrentSettled } from "./batch.js";
-
-describe("chunk", () => {
-  it("splits an array into fixed-size groups", () => {
-    expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
-  });
-
-  it("returns an empty array for empty input", () => {
-    expect(chunk([], 3)).toEqual([]);
-  });
-
-  it("returns a single chunk when size exceeds the array length", () => {
-    expect(chunk([1, 2], 10)).toEqual([[1, 2]]);
-  });
-
-  it("rejects a zero or negative size instead of looping forever", () => {
-    expect(() => chunk([1, 2, 3], 0)).toThrow(/positive integer/);
-    expect(() => chunk([1, 2, 3], -1)).toThrow(/positive integer/);
-  });
-
-  it("rejects a non-integer size", () => {
-    expect(() => chunk([1, 2, 3], 1.5)).toThrow(/positive integer/);
-  });
-});
+import { runBatched, runConcurrent, runConcurrentSettled } from "./batch.js";
 
 describe("runBatched", () => {
+  it("returns an empty array without running the worker for empty input", async () => {
+    const worker = vi.fn(async (batch: number[]) => batch);
+    await expect(runBatched([], { size: 3 }, worker)).resolves.toEqual([]);
+    expect(worker).not.toHaveBeenCalled();
+  });
+
+  it("runs a single batch when size exceeds the array length", async () => {
+    await expect(runBatched([1, 2], { size: 10 }, async (batch) => batch)).resolves.toEqual([
+      [1, 2],
+    ]);
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity, -Infinity])("rejects invalid batch size %p", async (size) => {
+    const worker = vi.fn(async () => 0);
+    await expect(runBatched([1, 2, 3], { size }, worker)).rejects.toThrow(/positive integer/);
+    expect(worker).not.toHaveBeenCalled();
+  });
+
   it("chunks items and runs the worker per batch, preserving order", async () => {
     const seen: number[][] = [];
     const results = await runBatched([1, 2, 3, 4, 5], { size: 2 }, async (batch) => {

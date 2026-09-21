@@ -6,13 +6,13 @@ import {
   PIPELINE_ERROR_CODES,
   PipelineDefinitionError,
   requireOutputs,
-  type AnyStep,
   type PipelineError,
   type PipelineErrorCode,
   type PipelineErrorKind,
   type PipelineErrorPhase,
   type StandardSchemaV1,
 } from "./pipeline.js";
+import type { AnyStep } from "./pipeline-steps.js";
 import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 
 function standardSchema<TInput, TOutput>(

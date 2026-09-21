@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSteps, definePipeline, type AnyStep } from "./pipeline.js";
+import { createSteps, definePipeline } from "./pipeline.js";
+import type { AnyStep } from "./pipeline-steps.js";
 import { makePipeline, thrownDefinitionErrors } from "./pipeline.test-support.js";
 
 describe("definePipeline lifecycle and scheduling", () => {

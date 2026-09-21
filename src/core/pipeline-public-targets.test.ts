@@ -4,8 +4,8 @@ import {
   definePipeline,
   PipelineDefinitionError,
   requireOutputs,
-  type AnyStep,
 } from "./pipeline.js";
+import type { AnyStep } from "./pipeline-steps.js";
 import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import { makePipeline, thrownDefinitionErrors } from "./pipeline.test-support.js";
 

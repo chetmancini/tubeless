@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { defer, rejectWhenAborted } from "./child-pipeline.test-support.js";
-import { createSteps, definePipeline, PipelineExecutionError, type AnyStep } from "./pipeline.js";
+import { createSteps, definePipeline, PipelineExecutionError } from "./pipeline.js";
+import type { AnyStep } from "./pipeline-steps.js";
 import { standardSchema } from "./pipeline.test-support.js";
 import { compilePipelineGraph } from "./pipeline-graph.js";
 import { schedulePipelineSteps } from "./pipeline-scheduler.js";

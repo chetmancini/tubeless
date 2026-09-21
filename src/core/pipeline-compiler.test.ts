@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSteps,
   definePipeline,
-  type AnyStep,
   type PipelineExecutionContext,
   type StandardSchemaV1,
 } from "./pipeline.js";
+import type { AnyStep } from "./pipeline-steps.js";
 
 function standardSchema<TInput, TOutput>(
   validate: StandardSchemaV1<TInput, TOutput>["~standard"]["validate"],

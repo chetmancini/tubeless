@@ -33,11 +33,7 @@ import type {
 } from "./pipeline-types.js";
 
 export { PipelineExecutionError, RUN_MODEL_VERSION };
-export {
-  isPipelineErrorCode,
-  PIPELINE_ERROR_CODES,
-  PIPELINE_MERMAID_DIRECTIONS,
-} from "./pipeline-types.js";
+export { isPipelineErrorCode, PIPELINE_ERROR_CODES } from "./pipeline-types.js";
 export { createSteps } from "./pipeline-steps.js";
 export { PipelineDefinitionError, requireOutputs };
 export type {
@@ -61,11 +57,6 @@ export type {
   PipelineFanOutDiagnostics,
   PipelineFanOutFailure,
   StandardSchemaV1,
-  StandardSchemaV1Props,
-  StandardSchemaV1Result,
-  StandardSchemaV1Issue,
-  InferSchemaInput,
-  InferSchemaOutput,
   PipelineErrorCause,
   PipelineStepCompleteReport,
   PipelineStepSkippedReport,
@@ -97,7 +88,7 @@ export type {
 
 export type { PipelineDefinition } from "./pipeline-definition.js";
 
-export type { AnyStep, Step, MappedChildProgressOptions, StepFactory } from "./pipeline-steps.js";
+export type { Step, MappedChildProgressOptions } from "./pipeline-steps.js";
 
 type DuplicateStepIds<
   TSteps extends readonly AnyStep[],

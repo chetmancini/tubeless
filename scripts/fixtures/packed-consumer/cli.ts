@@ -8,7 +8,6 @@ import {
   type ReporterOutput,
   type ReporterSymbolMode,
   type ReporterTerminalCapabilities,
-  type RunReporterConfig,
 } from "tubeless/cli";
 
 const env: CliContext["env"] = { CI: "true", OPTIONAL: undefined };
@@ -17,8 +16,15 @@ const color: ReporterColorMode = "never";
 const symbols: ReporterSymbolMode = "ascii";
 const terminal: ReporterTerminalCapabilities = { color: false, isTTY: false, unicode: false };
 const output: ReporterOutput = { write: (_chunk) => undefined };
-const base: RunReporterConfig = { color, symbols, terminal, logPlan: false };
-const reporter: PipelineReporterConfig = { ...base, mode, output, progressBarWidth: 12 };
+const reporter: PipelineReporterConfig = {
+  color,
+  symbols,
+  terminal,
+  logPlan: false,
+  mode,
+  output,
+  progressBarWidth: 12,
+};
 
 const { step } = createSteps<{ message: string }>();
 const echo = step("echo", { run: (_inputs, context) => context.options.message });

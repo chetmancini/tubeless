@@ -75,9 +75,7 @@ export interface PipelineCommandHookContext<TSchema extends CliParamsSchema> {
 }
 
 /** One lifecycle hook set or an ordered collection of hook sets. */
-export type PipelineCommandHookSets<TResult> =
-  | PipelineHooks<TResult>
-  | readonly PipelineHooks<TResult>[];
+type PipelineCommandHookSets<TResult> = PipelineHooks<TResult> | readonly PipelineHooks<TResult>[];
 
 /** Static or lazily constructed lifecycle hooks for a pipeline command. */
 export type PipelineCommandHookConfig<TResult, TSchema extends CliParamsSchema> =

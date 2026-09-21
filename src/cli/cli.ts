@@ -26,7 +26,6 @@ export {
   type PipelineCommand,
   type PipelineCommandHookConfig,
   type PipelineCommandHookContext,
-  type PipelineCommandHookSets,
 } from "./cli-pipeline-command.js";
 export type {
   PipelineReporterConfig,
@@ -37,5 +36,4 @@ export type {
   ReporterColorMode,
   ReporterSymbolMode,
   ReporterTerminalCapabilities,
-  RunReporterConfig,
 } from "../reporter/reporter.js";

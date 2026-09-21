@@ -235,7 +235,7 @@ export interface StandardSchemaV1<TInput = unknown, TOutput = TInput> {
 }
 
 /** Standard Schema V1 metadata and validation contract consumed by Tubeless. */
-export interface StandardSchemaV1Props<TInput = unknown, TOutput = TInput> {
+interface StandardSchemaV1Props<TInput = unknown, TOutput = TInput> {
   readonly types?: { readonly input: TInput; readonly output: TOutput };
   readonly validate: (
     value: unknown,

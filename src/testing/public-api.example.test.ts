@@ -6,7 +6,7 @@ import {
   PIPELINE_ERROR_CODES,
   type RemoteStepAdapter,
 } from "tubeless";
-import { chunk, runConcurrent } from "tubeless/batch";
+import { runBatched, runConcurrent } from "tubeless/batch";
 import { RateLimiter } from "tubeless/rate-limit";
 import { withRetry } from "tubeless/retry";
 import {
@@ -187,8 +187,11 @@ describe("public API example", () => {
     expect(value).toEqual(["ALPHA", "BETA", "GAMMA"]);
   });
 
-  it("chunks and runs bounded concurrent work through tubeless/batch", async () => {
-    expect(chunk([1, 2, 3], 2)).toEqual([[1, 2], [3]]);
+  it("runs batches and bounded concurrent work through tubeless/batch", async () => {
+    await expect(runBatched([1, 2, 3], { size: 2 }, async (batch) => batch)).resolves.toEqual([
+      [1, 2],
+      [3],
+    ]);
     await expect(
       runConcurrent([1, 2], { concurrency: 1 }, async (value) => value * 2)
     ).resolves.toEqual([2, 4]);
