@@ -53,7 +53,8 @@ The optional third argument supplies project presentation. `project.name` defaul
 to `project.id`; `project.description` is optional. Both fields must be non-empty
 strings when supplied and are immutable on the returned project. `list --json`
 includes these fields alongside the stable project ID and pipeline IDs. Project
-metadata does not rename individual pipelines or their command labels.
+metadata does not rename individual pipelines or their command labels. Put optional
+`name` and `description` on each `definePipeline` definition for that presentation.
 
 For custom parameters, option mapping, or command presentation, pass ordinary
 `definePipelineCommand` adapters in the project's `commands` option:
@@ -109,9 +110,11 @@ sufficient when there are no domain inputs).
 The command also supplies `--help`, `--dry-run`, `--step`, `--target` (when the
 pipeline declares targets), `--continue-on-error`, `--max-concurrency`, automatic
 terminal reporting, cancellation, and exit codes. Its name defaults to the pipeline
-ID. `command.main()` owns a script entrypoint; `command.run(argv)` returns the
-result to application code. Use `command.plan()` for a selection-only preview.
-The same inferred descriptor drives Studio forms.
+name, then its ID; its description defaults to the pipeline description. Explicit
+command `name` and `description` values override those defaults when CLI-specific
+help differs. `command.main()` owns a script entrypoint; `command.run(argv)` returns
+the result to application code. Use `command.plan()` for a selection-only preview.
+The same resolved descriptor drives Studio forms.
 
 Inference reads the schema's **input**, so transformations run exactly once during
 pipeline execution. Parsing checks flag types, choices and numeric bounds;

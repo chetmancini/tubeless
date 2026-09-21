@@ -106,8 +106,9 @@ type CanDefaultPipelineCommandOptions<TOptions extends object, TSchema extends C
     : false;
 
 interface DefinePipelineCommandConfigBase<TResult, TSchema extends CliParamsSchema> {
-  /** Defaults to pipeline.id. */
+  /** Defaults to pipeline.name, then pipeline.id. */
   name?: string;
+  /** Defaults to pipeline.description. */
   description?: string;
   /** Advanced: replace inferred flags for type-only pipelines or custom CLI inputs. */
   params?: TSchema;
@@ -226,6 +227,10 @@ function defaultPipelineCommandOptions<TSchema extends CliParamsSchema>(
   return domainValues;
 }
 
+function nonBlankPipelineText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
 /** Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. */
 export function definePipelineCommand<TOptions extends object, TResult>(
   pipeline: Pipeline<TOptions, TResult> &
@@ -313,10 +318,12 @@ export function definePipelineCommand<
   // SAFETY: `bridgeParams` supplies the `PipelineCliBuiltins` keys and `userParams` is
   // `TSchema`, so the merged object satisfies `PipelineCliBuiltins & TSchema`.
   const params = { ...bridgeParams, ...userParams } as PipelineCliBuiltins & TSchema;
+  const inheritedName = nonBlankPipelineText(pipeline.name);
+  const inheritedDescription = nonBlankPipelineText(pipeline.description);
 
   const commandConfig = {
-    name: config.name ?? pipeline.id,
-    description: config.description,
+    name: config.name ?? inheritedName ?? pipeline.id,
+    description: config.description ?? inheritedDescription,
     params,
     positionals: config.positionals,
     checkpoint: config.checkpoint,

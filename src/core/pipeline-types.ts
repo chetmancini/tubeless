@@ -514,6 +514,10 @@ export interface Pipeline<
   TId extends string = string,
 > {
   readonly id: TId;
+  /** Optional display name; stable identity remains `id`. */
+  readonly name?: string;
+  /** Human-readable purpose for command and discovery surfaces. */
+  readonly description?: string;
   /** Compiled definition metadata. Absent only on externally implemented pipelines. */
   readonly definition?: PipelineDefinitionSnapshot;
   /** Runtime domain schema supplied to createSteps; CLI adapters can infer its input flags. */

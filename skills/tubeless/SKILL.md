@@ -38,6 +38,9 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 - Give steps stable kebab-case IDs and descriptions of their domain work.
   `name` is an optional display label. Return values from steps and consume
   inferred dependency outputs instead of sharing mutable state.
+- Give a pipeline optional `name` and `description` when CLI and Studio need
+  presentation beyond its stable ID. Pipeline commands inherit both fields;
+  command-level values are overrides for adapter-specific help.
 - Use `dependsOn` for required outputs, `optionalDependsOn` for expected
   absence, and `skipAfterFailureOf` for a failure gate without a required value.
   Keep publication dependent on successful validation.

@@ -210,6 +210,8 @@ export function definePipeline<
 
   const pipeline = {
     id: definition.id,
+    ...(definition.name === undefined ? {} : { name: definition.name }),
+    ...(definition.description === undefined ? {} : { description: definition.description }),
     definition: compiled.definition,
     // SAFETY: compilation verifies that every step belongs to the same options schema.
     optionsSchema: compiled.optionsSchema as StepsOptionsSchema<TSteps> &

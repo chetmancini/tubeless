@@ -10,15 +10,15 @@ Package: `tubeless`
 
 | Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless`            | `./dist/core/pipeline.d.ts`        | `416399d1e06dd397bb6aedb8e53345a72046f921b37d3114f66f0a6dcd6c949c` |               57 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `11036691919d4c284ecf83210f1a26d95eee54cfee571c195cf34c23395fb48a` |               31 |
+| `tubeless`            | `./dist/core/pipeline.d.ts`        | `02b6e0554a598bf9bd588e2a286b3c4b31f5af026f8c1d83dbf805886bedb1a3` |               57 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `a63f0b5d0918d3169b6e333ca400eaeef46150e18b395625b0cbc15b171e861c` |               31 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `ab57c16dc0d9a0b1d55eb1cfc0df32e6ee950037c09a98531ab64930206c2616` |                6 |
-| `tubeless/node`       | `./dist/node/node.d.ts`            | `5de0f0cf4d84a88b9d3d3dbf3933de516facaa225dda22196ad965a18a285a26` |               12 |
+| `tubeless/node`       | `./dist/node/node.d.ts`            | `7117f2d9696c0f232ec9bdcc2d18ffa985ee57418881098f99ec9ab1fca53ac8` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `991696b382cc7c88f9b98ae28adbc462648f01164cd4635b40e3321fb03d358a` |                5 |
-| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `1233dca6db4c5a9a71fee93039715df1a91f746cf4d7124caef452e157ed3dbf` |                7 |
-| `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `8dc0a69c5587b13c38f22208a4d24e619d53e81d2b8376a3d483e921f109f499` |                3 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `d266c86afe81e7428eacaa3228db013f298684bfee216ce1268586e18be0c4e3` |                5 |
+| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `c4f339fc7a5cd8f6525d32298b990b571de61756864da6b3c4c3400ca1b38f0e` |                7 |
+| `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `bde2a6b18d95b6d6311fec6ae8719ff432208e650803635c9355ec1af62dad27` |                3 |
 
 ## Symbols
 
@@ -106,8 +106,8 @@ Package: `tubeless`
 | [`CliStringParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L35)                          | Declarative configuration for a string command parameter.                           |
 | [`CliValidationError`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L193)                     | Error thrown when command-line arguments fail schema validation.                    |
 | [`defineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-command.ts#L401)                        | Create a typed command from a declarative parameter schema and run handler.         |
-| [`definePipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L230)       | Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. |
-| [`DefinePipelineCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L131) | Configuration for a typed pipeline command.                                         |
+| [`definePipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L235)       | Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. |
+| [`DefinePipelineCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L132) | Configuration for a typed pipeline command.                                         |
 | [`PipelineCliParseResult`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L47)       | Parse result returned by commands created with `definePipelineCommand`.             |
 | [`PipelineCliValues`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L39)            | Validated domain parameters plus the built-in pipeline execution controls.          |
 | [`PipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L53)              | Typed CLI facade over a pipeline with planning and graph helpers.                   |
@@ -168,7 +168,7 @@ Package: `tubeless`
 | Symbol                                                                                                           | Description                                                                       |
 | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | [`defineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L65)         | Define an immutable project from typed pipelines or a parsed pipeline document.   |
-| [`PipelineDocumentError`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-document.ts#L70) | A document shape or reference error; graph errors remain PipelineDefinitionError. |
+| [`PipelineDocumentError`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-document.ts#L72) | A document shape or reference error; graph errors remain PipelineDefinitionError. |
 | [`PipelineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L50)       | Immutable named pipeline collection, preserving each pipeline's exact type by id. |
 | [`ProjectOptions`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L32)        | Optional project presentation and CLI adapters.                                   |
 | [`ProjectRegistry`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-compiler.ts#L90)       | Only explicitly registered functions and schemas can be referenced by a document. |

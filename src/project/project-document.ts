@@ -17,6 +17,8 @@ export interface PipelineDocumentMetadata {
 }
 
 export interface PipelineDocumentDefinition {
+  name?: string;
+  description?: string;
   optionsSchema?: string;
   resultSchema?: string;
   targets?: readonly string[];
@@ -230,6 +232,8 @@ export function validatePipelineDocument(value: unknown): PipelineDocument {
         const path = `$.pipelines[${JSON.stringify(id)}]`;
         text(id, path);
         const pipeline = fields(value, path, [
+          "name",
+          "description",
           "optionsSchema",
           "resultSchema",
           "targets",
@@ -243,6 +247,8 @@ export function validatePipelineDocument(value: unknown): PipelineDocument {
         return [
           id,
           {
+            name: optionalText(pipeline.name, `${path}.name`),
+            description: optionalText(pipeline.description, `${path}.description`),
             optionsSchema: optionalText(pipeline.optionsSchema, `${path}.optionsSchema`),
             resultSchema: optionalText(pipeline.resultSchema, `${path}.resultSchema`),
             targets: references(pipeline.targets, `${path}.targets`),

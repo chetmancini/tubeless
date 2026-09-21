@@ -83,8 +83,9 @@ const project = defineProject("data-jobs", document, registry, {
 
 Overrides apply per field; omitted or `undefined` fields retain the document value.
 Project metadata is immutable. Document `authors` and `date` remain document-only.
-Studio command labels come from `definePipelineCommand` adapters; document
-metadata does not override labels, IDs, options, or run timestamps.
+Each pipeline definition may separately declare `name` and `description`; compiled
+commands inherit them. Top-level document metadata does not override pipeline labels,
+IDs, options, or run timestamps.
 
 For custom CLI inputs on compiled pipelines, the `commands` option can be a
 factory. It receives the project's `get` function after compilation, so adapters
@@ -222,6 +223,7 @@ order in the file alone. Composition cycles are rejected.
 
 | Field                            | Meaning                                                                                |
 | -------------------------------- | -------------------------------------------------------------------------------------- |
+| Pipeline `name`, `description`   | Optional command and Studio presentation; the mapping key remains the stable ID        |
 | `optionsSchema`                  | Name in `registry.optionsSchemas`; validates/transforms domain options                 |
 | `resultSchema`                   | Name in `registry.schemas`; validates/transforms the final result                      |
 | `targets`                        | Public target step IDs, using normal dependency closure                                |

@@ -483,6 +483,11 @@ Use `definePipelineCommand` directly for a standalone script or advanced adapter
 [`cli-job.ts`](../examples/cli-job.ts) for a complete example and
 [the CLI guide](./cli.md) for all commands and flags.
 
+Pipeline definitions may include an optional display `name` and `description`.
+Commands inherit both fields, while the pipeline ID remains the stable identity for
+project lookup, CLI selection, traces, and history. Command-level presentation wins
+when a particular adapter needs different help text.
+
 `tubeless inspect`, `plan`, and `graph` accept a pipeline or command export.
 They load the module without executing step handlers or requiring business
 inputs. If a module exports both a pipeline and a command, they prefer the

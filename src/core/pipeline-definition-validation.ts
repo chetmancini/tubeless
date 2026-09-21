@@ -28,6 +28,34 @@ export function validatePipelineDefinition<
   }
 
   if (
+    definition.name !== undefined &&
+    (typeof definition.name !== "string" || definition.name.trim().length === 0)
+  ) {
+    errors.push(
+      pipelineDiagnostic(
+        "TUBELESS_DEFINITION_PIPELINE_NAME_BLANK",
+        "definition",
+        "definition",
+        "Pipeline display name must not be blank"
+      )
+    );
+  }
+
+  if (
+    definition.description !== undefined &&
+    (typeof definition.description !== "string" || definition.description.trim().length === 0)
+  ) {
+    errors.push(
+      pipelineDiagnostic(
+        "TUBELESS_DEFINITION_PIPELINE_DESCRIPTION_BLANK",
+        "definition",
+        "definition",
+        "Pipeline description must not be blank"
+      )
+    );
+  }
+
+  if (
     definition.implementationVersion !== undefined &&
     (typeof definition.implementationVersion !== "string" ||
       definition.implementationVersion.trim().length === 0 ||

@@ -22,8 +22,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
    adapters in the project's `commands` option for CLI inputs, mapping, or presentation.
    Use a default export to select the project for CLI and Studio.
    Without a default, exactly one distinct project may be exported.
-3. Declare stable IDs and operational descriptions. Add `name` only when printed
-   output needs a friendlier display name.
+3. Declare stable IDs and operational descriptions. Add pipeline `name` only when
+   CLI or Studio needs a friendlier display name; commands inherit pipeline
+   presentation unless they explicitly override it.
 4. Model data dependencies before failure policy or CLI concerns.
 5. Typecheck the example or consumer, then run focused tests.
 6. Run `make check` from the package root after changing the package, documentation, or examples.
@@ -158,6 +159,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   values differ.
   The returned command exposes an immutable `descriptor`; UI adapters should
   render those parameter definitions instead of parsing help text.
+  Command `name` and `description` default to their pipeline values; the name falls
+  back to the pipeline ID. Supply command-level values only for CLI-specific wording.
   Use `command.plan()` or `tubeless plan` for a selection-only preview. Do not
   simulate planning with `--plan`.
 - Use `defineCommand` from `tubeless/cli` for standalone scripts. A

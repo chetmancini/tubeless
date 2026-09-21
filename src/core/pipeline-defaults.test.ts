@@ -8,6 +8,38 @@ import {
 import { standardSchema, thrownDefinitionErrors } from "./pipeline.test-support.js";
 
 describe("pipeline defaults", () => {
+  it("exposes optional pipeline presentation without changing its stable id", () => {
+    const { step } = createSteps();
+    const work = step("work", { run: () => true });
+    const pipeline = definePipeline({
+      id: "presented",
+      name: "Presented pipeline",
+      description: "Demonstrate pipeline-owned presentation.",
+      steps: [work],
+    });
+
+    expect(pipeline).toMatchObject({
+      id: "presented",
+      name: "Presented pipeline",
+      description: "Demonstrate pipeline-owned presentation.",
+    });
+    expectTypeOf(pipeline.id).toEqualTypeOf<"presented">();
+  });
+
+  it.each([
+    ["name", "TUBELESS_DEFINITION_PIPELINE_NAME_BLANK"],
+    ["description", "TUBELESS_DEFINITION_PIPELINE_DESCRIPTION_BLANK"],
+  ] as const)("rejects a blank pipeline %s", (field, code) => {
+    const { step } = createSteps();
+    const work = step("work", { run: () => true });
+
+    expect(
+      thrownDefinitionErrors(() =>
+        definePipeline({ id: "invalid-presentation", [field]: "  ", steps: [work] })
+      )[0]
+    ).toMatchObject({ code, kind: "definition", phase: "definition" });
+  });
+
   it("infers domain options and possible targets and outputs from just id and steps", async () => {
     const { step } = createSteps<{ text: string }>();
     const load = step("load", { run: (_, context) => context.options.text });
