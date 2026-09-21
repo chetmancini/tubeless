@@ -40,3 +40,11 @@ jobs:
           node scripts/summarize-api-report-diff.mjs --git-base "origin/${{ github.base_ref }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Confirm Node used for pack smoke
         run: node --version
+      - name: Upload Tubeless trace
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tubeless-check-node-${{ matrix.node }}
+          path: logs/check.ndjson
+          if-no-files-found: warn
+          retention-days: 7

@@ -6,7 +6,7 @@ export const USE_CASES = [
     label: "CI/CD",
     headline: "Build and release software",
     summary: "Run the same release logic locally and in your CI runner.",
-    description: "A release pipeline can build an artifact, run checks, and publish once those checks pass. The same code runs locally and in CI.",
+    description: "A release pipeline can build an artifact, run checks, and publish once those checks pass. The same code runs locally and in CI. Tubeless uses this setup for its own CI, where it runs linting, type checks, tests, documentation checks, and package verification.",
     stages: ["Build artifact", "Validate", "Publish"],
     benefits: [
       { title: "Release previews", detail: "Preview a target and its prerequisites without executing steps. Mark publication steps to skip during dry runs." },

@@ -19,8 +19,10 @@ make install
 make check
 ```
 
-`make check` is the same gate CI runs. `make help` lists the rest.
-`make install` runs `bun ci`.
+`make check` is the same gate CI runs. It bootstraps the package, then uses the
+root [`tubeless.project.ts`](./tubeless.project.ts) project to run the remaining
+checks as a concurrent Tubeless pipeline and record `logs/check.ndjson`.
+`make help` lists the rest. `make install` runs `bun ci`.
 
 Before changing usage or public behavior, read
 [`docs/agent-guide.md`](./docs/agent-guide.md) and the repository-local
