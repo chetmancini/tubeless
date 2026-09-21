@@ -64,6 +64,9 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 - Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
   `tubeless/project`. Retrieve one with `project.get(id)`; it keeps the exact pipeline
   option and result types and uses the pipeline's existing methods directly.
+  Register each pipeline exactly once, directly or through its command, for example
+  `[pipelineA, commandB]`. Duplicate IDs fail regardless of entry form. Children are
+  not registered recursively. The project views are derived immutable snapshots.
   Let `definePipeline` infer its generics; annotate the finalizer's return type
   for an explicit result contract. Partial explicit generics widen the pipeline ID
   to `string`, so project lookup no longer checks literal IDs at compile time.
@@ -93,7 +96,7 @@ Read the corresponding package recipe before using these features:
   compilation alone does not register children or any other pipelines. Export
   the project for CLI and Studio: Standard JSON Schema input metadata
   enables automatic commands; custom or schema-less inputs need explicit adapters
-  in the project's `commands` option. Handler inputs and pipeline results are
+  in the project's entry list. Handler inputs and pipeline results are
   unknown; validate or narrow them. Plans still do not validate business inputs.
   Use `tubeless validate --json <document.yaml>` for a structure-only check
   without handlers. Fetch `https://tubeless.io/schemas/pipeline-document-v1.schema.json`
@@ -129,13 +132,13 @@ Read the corresponding package recipe before using these features:
   omit it from Studio forms. Read `docs/cli.md` for option mapping.
   Export `defineProject(id, pipelines)` from `tubeless.project.ts` to expose
   schema-backed pipelines directly to the CLI and optional Studio. Use
-  explicit adapters in the project's `commands` option for schema-less pipelines,
+  explicit adapters in the project's entry list for schema-less pipelines,
   even with no inputs: automatic project commands require Standard JSON Schema
   input metadata. Declare custom `params`, `mapOptions`, and display names on
   `definePipelineCommand`; each adapter uses its pipeline's ID. Project `cwd`
   controls CLI/Studio execution relative to the project file. Use `defineCommand`
   for standalone scripts. For compiled documents, create explicit adapters from
-  `compiled.get(id)` and pass them in `commands: [...]`.
+  `compiled.get(id)` and register them directly in the entry list.
   Default-export the project to select it for CLI and Studio. Without a default,
   exactly one distinct project may be exported; aliases are allowed.
 - Use `pipelines/<name>.ts` for definitions. Add `scripts/<name>.ts` command

@@ -249,22 +249,22 @@ describe("public API example", () => {
     ]);
   });
 
-  it("accepts explicit CLI adapters in the project options", () => {
+  it("accepts explicit CLI adapters in the project entry list", () => {
     const command = definePipelineCommand(ImportPipeline, {
       params: {
         lines: { type: "string", multiple: true },
       },
       reporter: false,
     });
-    const options: ProjectOptions<readonly [typeof ImportPipeline]> = { commands: [command] };
-    const project = defineProject("jobs", [ImportPipeline], options);
+    const options: ProjectOptions = { name: "Import jobs" };
+    const project = defineProject("jobs", [command], options);
 
     expect(project.get("import")).toBe(ImportPipeline);
     expect(project.commands).toEqual([command]);
   });
 
   it("defines a typed project from pipelines", async () => {
-    const metadata: ProjectOptions<readonly [typeof ImportPipeline, typeof ChildPipeline]> = {
+    const metadata: ProjectOptions = {
       name: "Public API jobs",
       description: "Import and normalize rows.",
     };

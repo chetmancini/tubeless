@@ -51,7 +51,7 @@ pipeline's input schema; there is no command wrapper.
 In your app, export `defineProject("my-app", [MyPipeline])` from
 `tubeless.project.ts`, then run `bunx tubeless list` with no `--project`.
 Pipelines whose options schema exposes Standard JSON Schema input metadata get
-their flags automatically. Use the project commands option for custom command inputs
+their flags automatically. Register commands directly in the list for custom command inputs
 or presentation. See [`examples/automatic-cli.ts`](../examples/automatic-cli.ts),
 [`examples/project/tubeless.project.ts`](../examples/project/tubeless.project.ts),
 and [the CLI](./cli.md).

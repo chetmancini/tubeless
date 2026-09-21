@@ -75,7 +75,7 @@ for previews, and `toMermaid` for diagrams. See [getting started](./docs/getting
 
 ## Use the CLI
 
-Projects made with `defineProject(id, pipelines)` are directly usable by the CLI;
+Projects made with `defineProject(id, [pipeline, command])` register each pipeline once and are directly usable by the CLI;
 schema-backed pipelines get inferred flags automatically. See the [CLI guide](./docs/cli.md)
 for direct project usage and advanced custom command adapters. From this repository:
 

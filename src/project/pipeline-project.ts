@@ -6,6 +6,15 @@ const PIPELINE_PROJECT_MARKER = Symbol.for("tubeless/pipeline-project/v1");
 
 export type AnyProjectPipeline = Pipeline<object, unknown, string, string, string>;
 
+type ProjectEntry = AnyProjectPipeline | PipelineCommand<{}, unknown>;
+
+type EntryPipeline<TEntry extends ProjectEntry> =
+  TEntry extends PipelineCommand<{}, unknown> ? TEntry["pipeline"] : TEntry;
+
+type EntryPipelines<TEntries extends readonly ProjectEntry[]> = {
+  readonly [TIndex in keyof TEntries]: EntryPipeline<TEntries[TIndex]>;
+};
+
 type PipelineId<TPipelines extends readonly AnyProjectPipeline[]> = TPipelines[number]["id"];
 
 type PipelineIds<TPipelines extends readonly AnyProjectPipeline[]> = {
@@ -26,22 +35,14 @@ type PipelineById<
       : TPipeline
   : never;
 
-/** Optional project presentation and CLI adapters. */
-export interface ProjectOptions<
-  TPipelines extends readonly AnyProjectPipeline[] = readonly AnyProjectPipeline[],
-> {
+/** Optional project presentation and execution directory. */
+export interface ProjectOptions {
   /** Display name; defaults to the project id. */
   readonly name?: string;
   /** Human-readable purpose of the project. */
   readonly description?: string;
   /** Execution directory for CLI and Studio, relative to the project file. */
   readonly cwd?: string;
-  /** Explicit adapters, or a factory using project.get. */
-  readonly commands?:
-    | readonly PipelineCommand<{}, unknown>[]
-    | ((
-        get: PipelineProject<string, TPipelines>["get"]
-      ) => readonly PipelineCommand<{}, unknown>[]);
 }
 
 /** Immutable named pipeline collection, preserving each pipeline's exact type by id. */
@@ -53,31 +54,33 @@ export interface PipelineProject<
   readonly name: string;
   readonly description?: string;
   readonly cwd?: string;
+  /** Explicit commands from the entry list, in registration order. */
   readonly commands: readonly PipelineCommand<{}, unknown>[];
+  /** Underlying pipelines from every entry, in registration order. */
   readonly pipelines: Readonly<TPipelines>;
   readonly pipelineIds: PipelineIds<TPipelines>;
   get<const TId extends PipelineId<TPipelines>>(id: TId): PipelineById<TPipelines[number], TId>;
 }
 
-/** Define an immutable project from existing pipelines and project configuration. */
+/** Register each pipeline once, directly or through its explicit command. */
 export function defineProject<
   const TProjectId extends string,
-  const TPipelines extends readonly AnyProjectPipeline[],
+  const TEntries extends readonly ProjectEntry[],
 >(
   id: TProjectId,
-  pipelines: TPipelines,
-  options?: ProjectOptions<NoInfer<TPipelines>>
-): PipelineProject<TProjectId, TPipelines>;
+  entries: TEntries,
+  options?: ProjectOptions
+): PipelineProject<TProjectId, EntryPipelines<TEntries>>;
 export function defineProject(
   id: string,
-  pipelines: readonly AnyProjectPipeline[],
+  entries: readonly ProjectEntry[],
   options?: ProjectOptions
 ): PipelineProject<string, readonly AnyProjectPipeline[]> {
   if (typeof id !== "string" || id.trim().length === 0) {
     throw new Error("Project id must be a non-empty string.");
   }
-  if (!Array.isArray(pipelines)) {
-    throw new TypeError("defineProject expects an array of pipelines.");
+  if (!Array.isArray(entries)) {
+    throw new TypeError("defineProject expects an array of pipelines or pipeline commands.");
   }
 
   if (
@@ -96,15 +99,38 @@ export function defineProject(
   const description = options?.description;
   const cwd = options?.cwd;
 
-  const snapshot: readonly AnyProjectPipeline[] = Object.freeze([...pipelines]);
+  const pipelines: AnyProjectPipeline[] = [];
+  const commands: PipelineCommand<{}, unknown>[] = [];
   const byId = new Map<string, AnyProjectPipeline>();
-  for (const pipeline of snapshot) {
+  for (const entry of entries) {
+    if (typeof entry !== "object" || entry === null) {
+      throw new TypeError("Project entries must be pipelines or definePipelineCommand adapters.");
+    }
+    const associatedPipeline = pipelineForCommand(entry);
+    let pipeline: AnyProjectPipeline;
+    if (associatedPipeline) {
+      if (
+        !("pipeline" in entry) ||
+        entry.pipeline !== associatedPipeline ||
+        entry.id !== entry.pipeline.id
+      ) {
+        throw new TypeError("Project commands must be created with definePipelineCommand.");
+      }
+      pipeline = entry.pipeline;
+      commands.push(entry);
+    } else {
+      if (!("runOrThrow" in entry) || typeof entry.runOrThrow !== "function") {
+        throw new TypeError("Project entries must be pipelines or definePipelineCommand adapters.");
+      }
+      pipeline = entry;
+    }
     if (byId.has(pipeline.id)) {
       throw new Error(
         `Project pipeline id ${JSON.stringify(pipeline.id)} is declared more than once.`
       );
     }
     byId.set(pipeline.id, pipeline);
+    pipelines.push(pipeline);
   }
 
   const get: PipelineProject<string, readonly AnyProjectPipeline[]>["get"] = (id) => {
@@ -112,32 +138,15 @@ export function defineProject(
     if (!pipeline) throw new Error(`Project does not define pipeline ${JSON.stringify(id)}.`);
     return pipeline;
   };
-  const commands =
-    typeof options?.commands === "function" ? options.commands(get) : (options?.commands ?? []);
-  if (!Array.isArray(commands)) {
-    throw new TypeError("Project commands must be an array of definePipelineCommand adapters.");
-  }
-  const commandIds = new Set<string>();
-  for (const command of commands) {
-    if (!command || !byId.has(command.id) || byId.get(command.id) !== pipelineForCommand(command)) {
-      throw new Error("Each project command must wrap a pipeline in the project.");
-    }
-    if (commandIds.has(command.id)) {
-      throw new Error(
-        `Project command for ${JSON.stringify(command.id)} is declared more than once.`
-      );
-    }
-    commandIds.add(command.id);
-  }
 
   const project: PipelineProject<string, readonly AnyProjectPipeline[]> = {
     id,
     name,
     ...(description === undefined ? {} : { description }),
     ...(cwd === undefined ? {} : { cwd }),
-    commands: Object.freeze([...commands]),
-    pipelines: snapshot,
-    pipelineIds: Object.freeze(snapshot.map((pipeline) => pipeline.id)),
+    commands: Object.freeze(commands),
+    pipelines: Object.freeze(pipelines),
+    pipelineIds: Object.freeze(pipelines.map((pipeline) => pipeline.id)),
     get,
   };
   Object.defineProperty(project, PIPELINE_PROJECT_MARKER, { value: true });

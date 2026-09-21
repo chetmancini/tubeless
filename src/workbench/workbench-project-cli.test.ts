@@ -66,10 +66,9 @@ async function writeProjectFixture(): Promise<{
     projectFile,
     `
     import { defineProject } from ${JSON.stringify(projectModuleUrl)};
-    import { Pipeline, FixtureCommand } from "../pipeline.mjs";
-    export default defineProject("fixture", [Pipeline], {
+    import { FixtureCommand } from "../pipeline.mjs";
+    export default defineProject("fixture", [FixtureCommand], {
       cwd: "./work",
-      commands: [FixtureCommand],
     });
   `
   );
@@ -77,17 +76,16 @@ async function writeProjectFixture(): Promise<{
     path.join(directory, "tubeless.project.ts"),
     `
     import { defineProject } from ${JSON.stringify(projectModuleUrl)};
-    import { Pipeline, FixtureCommand } from "./pipeline.mjs";
-    export default defineProject("fixture", [Pipeline], {
+    import { FixtureCommand } from "./pipeline.mjs";
+    export default defineProject("fixture", [FixtureCommand], {
       cwd: "./config/work",
-      commands: [FixtureCommand],
     });
   `
   );
   return { directory, projectFile, workDirectory };
 }
 
-async function writeAutomaticProjectFixture(): Promise<{
+async function writeAutomaticProjectFixture(mixed = false): Promise<{
   directory: string;
   projectFile: string;
 }> {
@@ -96,11 +94,13 @@ async function writeAutomaticProjectFixture(): Promise<{
   const pipelineModuleUrl = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
   const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project.js")).href;
   const projectFile = path.join(directory, "tubeless.project.ts");
+  const cliModuleUrl = pathToFileURL(path.resolve("dist/cli/cli.js")).href;
   await writeFile(
     projectFile,
     `
       import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
       import { defineProject } from ${JSON.stringify(projectModuleUrl)};
+      import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
       export const UnrelatedProject = defineProject("unrelated", []);
       const optionsSchema = {
         "~standard": {
@@ -122,7 +122,17 @@ async function writeAutomaticProjectFixture(): Promise<{
         },
       });
       const pipeline = definePipeline({ id: "automatic", steps: [work] });
-      export default defineProject("fixture-project", [pipeline], {
+      const explicit = definePipelineCommand(definePipeline({
+        id: "explicit", name: "Explicit job", description: "Print mapped text.", steps: [work],
+      }), {
+        params: { text: { type: "string" } },
+        mapOptions: ({ text, resume }) => ({ message: text.toUpperCase() + (resume ? ":resumed" : "") }),
+        validate: ({ text }) => text === "invalid" ? ["Text is invalid"] : [],
+        resume: true,
+        reporter: false,
+        summarize: (result) => [\`summary:\${result}\`],
+      });
+      export default defineProject("fixture-project", [pipeline${mixed ? ", explicit" : ""}], {
         name: "Fixture jobs",
         description: "Print a message.",
       });
@@ -132,6 +142,72 @@ async function writeAutomaticProjectFixture(): Promise<{
 }
 
 describe("project file workbench", () => {
+  it("executes inferred and explicit commands from one mixed list in CLI and Studio", async () => {
+    const { directory, projectFile } = await writeAutomaticProjectFixture(true);
+    const listIo = captureIo(directory);
+    expect(await runWorkbenchCli(["list", "--json"], listIo)).toBe(0);
+    expect(JSON.parse(listIo.output.join(""))).toMatchObject({
+      pipelines: ["automatic", "explicit"],
+    });
+    const invalidIo = captureIo(directory);
+    expect(
+      await runWorkbenchCli(["run", "explicit", "--", "--text", "invalid"], invalidIo)
+    ).not.toBe(0);
+    expect(invalidIo.errors.join("")).toContain("Text is invalid");
+    const runIo = captureIo(directory);
+    expect(
+      await runWorkbenchCli(["run", "explicit", "--", "--text", "cli", "--resume"], runIo)
+    ).toBe(0);
+    expect(runIo.output.join("")).toContain("summary:CLI:resumed");
+
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), signal: controller.signal };
+    const running = runWorkbenchCli(
+      ["ui", "--store", path.join(directory, "runs.sqlite"), "--port", "0", projectFile],
+      io
+    );
+    try {
+      await vi.waitFor(() =>
+        expect(io.output.join("")).toContain("Tubeless local studio: http://")
+      );
+      const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
+      await expect(
+        fetch(`${url}/api/commands`).then((response) => response.json())
+      ).resolves.toMatchObject({
+        commands: [
+          {
+            id: "automatic",
+            parameters: expect.arrayContaining([expect.objectContaining({ key: "message" })]),
+          },
+          {
+            id: "explicit",
+            name: "Explicit job",
+            description: "Print mapped text.",
+            parameters: expect.arrayContaining([
+              expect.objectContaining({ key: "text" }),
+              expect.objectContaining({ key: "resume" }),
+            ]),
+          },
+        ],
+      });
+      for (const [id, values, expected] of [
+        ["automatic", { message: "studio" }, "worked:studio"],
+        ["explicit", { text: "studio", resume: true }, "summary:STUDIO:resumed"],
+      ] as const) {
+        const response = await fetch(`${url}/api/commands/${id}/runs`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
+          body: JSON.stringify({ values }),
+        });
+        expect(response.status).toBe(202);
+        await vi.waitFor(() => expect(io.output.join("")).toContain(expected));
+      }
+    } finally {
+      controller.abort();
+      await expect(running).resolves.toBe(0);
+    }
+  });
+
   it.each(["list", "inspect", "plan", "graph", "run", "ui"])(
     "preserves definition errors during project imports for %s",
     async (operation) => {
@@ -234,7 +310,7 @@ describe("project file workbench", () => {
       expect(io.errors.join("")).toContain('Cannot derive a CLI for project pipeline "type-only"');
       expect(io.errors.join("")).toContain("Standard JSON Schema input metadata");
       expect(io.errors.join("")).toContain("explicit params");
-      expect(io.errors.join("")).toContain("project commands option");
+      expect(io.errors.join("")).toContain("project entry list");
       expect(io.output.join("")).not.toContain("executed-type-only-step");
       expect(io.output.join("")).not.toContain("Tubeless local studio:");
 

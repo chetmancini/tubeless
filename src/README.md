@@ -39,7 +39,7 @@ their source files.
   workbench, storage or Studio, including through lazy imports.
 - The project compiler consumes
   core to build pipelines from parsed documents; it performs no parsing or I/O.
-  Project options accept explicit command adapters through type-only references;
+  Project entries accept explicit command adapters through type-only references;
   the project entrypoint has no runtime dependency on CLI, workbench, storage or Studio.
 - Workbench is internal executable integration: it loads modules, selects storage
   adapters and supplies Studio launch capabilities. The public project API loads none of these.

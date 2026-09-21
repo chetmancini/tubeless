@@ -3,7 +3,7 @@ import Base from "../layouts/Base.astro";
 import CodeBlock from "../components/CodeBlock.astro";
 import Install from "../components/Install.astro";
 import Terminal from "../components/Terminal.astro";
-import { FIRST_PIPELINE_SAMPLE } from "../data/code-samples";
+import { FIRST_PIPELINE_SAMPLE, PROJECT_SAMPLE } from "../data/code-samples";
 import { graphTape, runTape } from "../data/tapes";
 import { href } from "../lib/paths";
 ---
@@ -81,6 +81,17 @@ import { href } from "../lib/paths";
         </div>
         <Terminal tape={runTape} />
       </div>
+    </section>
+
+    <section class="section">
+      <h2>Share a project with CLI and Studio</h2>
+      <p class="lede">
+        Register each pipeline exactly once in <code>tubeless.project.ts</code>.
+        Put schema-backed pipelines directly in the list; use a command entry when
+        you need explicit parameters or option mapping. A command registers its
+        underlying pipeline, and <code>project.get(id)</code> keeps its exact types.
+      </p>
+      <CodeBlock code={PROJECT_SAMPLE} lang="ts" />
     </section>
 
     <section class="section">
