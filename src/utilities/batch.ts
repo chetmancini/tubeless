@@ -30,14 +30,23 @@ function resolveConcurrency(concurrency: number | undefined): number {
   return Math.max(1, concurrency ?? 1);
 }
 
-/** Partial results and first failure returned by `runConcurrentSettled`. */
-export interface ConcurrentSettleResult<R> {
-  /** Sparse: holes are items never started or failed. */
-  readonly results: ReadonlyArray<R | undefined>;
-  readonly completedIndexes: ReadonlySet<number>;
-  /** First worker rejection or the abort error; undefined when all completed. */
-  readonly failure: unknown;
-}
+/** Execution outcome returned by `runConcurrentPartial`, discriminated by `ok`. */
+export type ConcurrentPartialResult<R> =
+  | {
+      ok: true;
+      /** One successful output per input, in input order. R may include undefined. */
+      results: readonly R[];
+      completedIndexes: ReadonlySet<number>;
+    }
+  | {
+      ok: false;
+      /** Sparse: holes are items never started or failed. */
+      results: ReadonlyArray<R | undefined>;
+      /** Successful indexes, including workers that returned undefined. */
+      completedIndexes: ReadonlySet<number>;
+      /** First worker rejection or observed abort error; may itself be undefined. */
+      failure: unknown;
+    };
 
 /**
  * Run individual items with bounded, lazy scheduling and input-order results.
@@ -55,15 +64,17 @@ export async function runConcurrent<T, R>(
 }
 
 /**
- * Like `runConcurrent`, but returns completed results and the first failure
- * instead of throwing. Callers that need partials should use this API.
+ * Return complete or partial results, discriminated by `ok`.
+ * Stops scheduling on the first observed failure or cancellation and drains
+ * active workers, retaining their successful outputs without cancelling siblings.
+ * Invalid concurrency still throws as an authoring error.
  */
-export async function runConcurrentSettled<T, R>(
+export async function runConcurrentPartial<T, R>(
   items: readonly T[],
   options: RunConcurrentOptions,
   worker: ConcurrentWorker<T, R>
-): Promise<ConcurrentSettleResult<R>> {
-  return runConcurrentSettledWithLabel(items, options, worker, "Concurrent run");
+): Promise<ConcurrentPartialResult<R>> {
+  return runConcurrentPartialWithLabel(items, options, worker, "Concurrent run");
 }
 
 async function runConcurrentWithLabel<T, R>(
@@ -72,24 +83,24 @@ async function runConcurrentWithLabel<T, R>(
   worker: ConcurrentWorker<T, R>,
   label: string
 ): Promise<R[]> {
-  const settled = await runConcurrentSettledWithLabel(items, options, worker, label);
-  if (settled.failure !== undefined || settled.completedIndexes.size !== items.length) {
-    throw settled.failure;
+  const partial = await runConcurrentPartialWithLabel(items, options, worker, label);
+  if (!partial.ok) {
+    throw partial.failure;
   }
-  // SAFETY: every index is in completedIndexes, so each slot was assigned by a
-  // successful worker and is `R` rather than the sparse `R | undefined`.
-  return settled.results as R[];
+  // SAFETY: the internal helper owns a mutable array; ok guarantees every slot
+  // was assigned by a successful worker. Preserve runConcurrent's mutable return.
+  return partial.results as R[];
 }
 
-async function runConcurrentSettledWithLabel<T, R>(
+async function runConcurrentPartialWithLabel<T, R>(
   items: readonly T[],
   options: RunConcurrentOptions,
   worker: ConcurrentWorker<T, R>,
   label: string
-): Promise<ConcurrentSettleResult<R>> {
+): Promise<ConcurrentPartialResult<R>> {
   const concurrency = resolveConcurrency(options.concurrency);
   if (items.length === 0) {
-    return { completedIndexes: new Set(), failure: undefined, results: [] };
+    return { ok: true, completedIndexes: new Set(), results: [] };
   }
 
   const results = new Array<R | undefined>(items.length);
@@ -127,7 +138,9 @@ async function runConcurrentSettledWithLabel<T, R>(
   }
 
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => runNext()));
-  return { completedIndexes, failure, results };
+  if (failed) return { ok: false, completedIndexes, failure, results };
+  // SAFETY: without failure or cancellation every input was successfully assigned.
+  return { ok: true, completedIndexes, results: results as R[] };
 }
 
 /** Run fixed-size input batches with bounded concurrency and input-order results. */

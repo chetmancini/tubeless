@@ -107,14 +107,14 @@
     {
       "declaration": "./dist/utilities/batch.d.ts",
       "exports": [
-        "ConcurrentSettleResult",
+        "ConcurrentPartialResult",
         "ConcurrentWorker",
         "runBatched",
         "runConcurrent",
         "RunConcurrentOptions",
-        "runConcurrentSettled"
+        "runConcurrentPartial"
       ],
-      "sha256": "ab57c16dc0d9a0b1d55eb1cfc0df32e6ee950037c09a98531ab64930206c2616",
+      "sha256": "7dbfbd4d894f2e9cc737b5373d1f654f5f08e8b5b5cce27511ef876779713656",
       "specifier": "tubeless/batch"
     },
     {

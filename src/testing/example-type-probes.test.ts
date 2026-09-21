@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { createSteps, definePipeline, type StandardSchemaV1 } from "tubeless";
+import { runConcurrentPartial, type ConcurrentPartialResult } from "tubeless/batch";
 import { definePipelineCommand } from "tubeless/cli";
 import { NormalizePipeline } from "../../examples/child-pipeline.js";
 import { ImportPipeline as CliImportPipeline } from "../../examples/cli-job.js";
@@ -19,6 +20,37 @@ function standardSchema<TInput, TOutput>(
 }
 
 describe("example type probes", () => {
+  it("narrows partial concurrency results through the public package import", async () => {
+    for (const input of [1, -1]) {
+      const partial = await runConcurrentPartial([input], {}, async (item) => {
+        if (item < 0) throw undefined;
+        return item;
+      });
+      expectTypeOf(partial).toEqualTypeOf<ConcurrentPartialResult<number>>();
+      if (partial.ok) {
+        expectTypeOf(partial.results).toEqualTypeOf<readonly number[]>();
+        expectTypeOf(partial.completedIndexes).toEqualTypeOf<ReadonlySet<number>>();
+        // @ts-expect-error Success has no failure property.
+        expect(partial.failure).toBeUndefined();
+        expect(partial.results).toEqual([1]);
+      } else {
+        expectTypeOf(partial.results).toEqualTypeOf<ReadonlyArray<number | undefined>>();
+        expectTypeOf(partial.failure).toEqualTypeOf<unknown>();
+        // @ts-expect-error Failure results can contain holes and cannot be treated as dense.
+        const dense: readonly number[] = partial.results;
+        expect(dense).toHaveLength(1);
+        expect(partial.failure).toBeUndefined();
+      }
+    }
+    const partial = await runConcurrentPartial(
+      [0],
+      {},
+      async (): Promise<number | undefined> => undefined
+    );
+    if (!partial.ok) throw new Error("Expected successful undefined output");
+    expectTypeOf(partial.results).toEqualTypeOf<readonly (number | undefined)[]>();
+  });
+
   it("keeps public example type errors in the test surface", () => {
     expect(ImportPipeline.id).toBe("import");
     expect(CliImportPipeline.id).toBe("import");

@@ -127,8 +127,13 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   [worker protocol and lifecycle](./remote-step-composition.md#cpu-work-in-node-worker-threads)
   and the [executable recipe](../examples/worker-threads.ts).
 - Use `runConcurrent` for bounded lightweight functions that do not need child
-  lifecycle events. Use `runConcurrentSettled` when the caller needs completed
-  results and the first failure instead of a throw.
+  lifecycle events. Use `runConcurrentPartial` when the caller needs completed
+  results and the first failure instead of a throw. Both stop scheduling after
+  failure or cancellation and drain active workers without cancelling siblings.
+  Branch on `ok`: success has a dense input-order result array; failure has sparse
+  results and the original first rejection or observed abort error, which may be
+  `undefined`. Use `completedIndexes` to distinguish successful `undefined`
+  outputs from holes. Invalid concurrency still throws as an authoring error.
 - Use `defineProject` from `tubeless/project` to collect typed pipelines. Pipeline IDs
   stay literal, duplicate IDs fail during project definition, and `get(id)` returns the
   exact pipeline type. Union or widened IDs retain all matching candidate pipeline

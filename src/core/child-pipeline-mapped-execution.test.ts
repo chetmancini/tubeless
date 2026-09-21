@@ -1,16 +1,47 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { createSteps, definePipeline, type PipelineStepProgress, type Step } from "./pipeline.js";
 
+import { defer } from "./child-pipeline.test-support.js";
+
 describe("mapped child adapter: execution", () => {
+  it("retains successful undefined child outputs in input order", async () => {
+    const { step } = createSteps<{ index: number }>();
+    const process = step("process", {
+      run: (_inputs, context) => (context.options.index === 0 ? undefined : "second"),
+    });
+    const child = definePipeline({ id: "optional-child", steps: [process] });
+    const { forEachPipeline } = createSteps();
+    const mapOptions = vi.fn((_item: string, index: number) => ({ index }));
+    const children = forEachPipeline("children", {
+      pipeline: child,
+      items: () => ["a", "b"],
+      key: (item) => item,
+      concurrency: 2,
+      mapOptions,
+    });
+    const parent = definePipeline({ id: "optional-parent", steps: [children] });
+
+    const result = await parent.run({});
+
+    expect(result.status).toBe("completed");
+    expect(result.value).toEqual([undefined, "second"]);
+    expect(Object.keys(result.value!)).toEqual(["0", "1"]);
+    expect(mapOptions.mock.calls.map(([item, index]) => [item, index])).toEqual([
+      ["a", 0],
+      ["b", 1],
+    ]);
+  });
+
   it("runs runtime-selected children with bounded concurrency and stable result order", async () => {
     interface ParentOptions {
       concurrency: number;
     }
     interface ChildOptions {
-      delayMs: number;
       itemId: string;
     }
 
+    const started = { first: defer(), second: defer(), third: defer() };
+    const release = { first: defer(), second: defer(), third: defer() };
     let active = 0;
     let maxActive = 0;
     const { step: childStep } = createSteps<ChildOptions>();
@@ -18,7 +49,9 @@ describe("mapped child adapter: execution", () => {
       run: async (_inputs, context) => {
         active += 1;
         maxActive = Math.max(maxActive, active);
-        await new Promise((resolve) => setTimeout(resolve, context.options.delayMs));
+        const id = context.options.itemId as keyof typeof started;
+        started[id].resolve();
+        await release[id].promise;
         active -= 1;
         return context.options.itemId;
       },
@@ -32,11 +65,7 @@ describe("mapped child adapter: execution", () => {
     const { step: parentStep, forEachPipeline: parentForEachPipeline } =
       createSteps<ParentOptions>();
     const select = parentStep("select", {
-      run: () => [
-        { delayMs: 20, id: "first" },
-        { delayMs: 1, id: "second" },
-        { delayMs: 1, id: "third" },
-      ],
+      run: () => [{ id: "first" }, { id: "second" }, { id: "third" }],
     });
     const children = parentForEachPipeline("children", {
       pipeline: child,
@@ -45,7 +74,7 @@ describe("mapped child adapter: execution", () => {
       key: (item) => item.id,
       concurrency: (_inputs, context) => context.options.concurrency,
       progress: { itemNoun: "shards" },
-      mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
+      mapOptions: (item) => ({ itemId: item.id }),
     });
     expectTypeOf(children).toEqualTypeOf<
       Step<"children", readonly { workerId: string }[], ParentOptions>
@@ -53,9 +82,9 @@ describe("mapped child adapter: execution", () => {
     const skippedChildren = parentForEachPipeline("skipped-children", {
       pipeline: child,
       skip: () => "fan-out not requested",
-      items: (): readonly { delayMs: number; id: string }[] => [],
+      items: (): readonly { id: string }[] => [],
       key: (item) => item.id,
-      mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
+      mapOptions: (item) => ({ itemId: item.id }),
     });
     expectTypeOf(skippedChildren).toEqualTypeOf<
       Step<"skipped-children", readonly { workerId: string }[] | undefined, ParentOptions>
@@ -63,10 +92,9 @@ describe("mapped child adapter: execution", () => {
     const reusableSkippingFanOutDefinition = {
       pipeline: child,
       skip: () => "fan-out not requested",
-      items: (): readonly { delayMs: number; id: string }[] => [],
-      key: (item: { delayMs: number; id: string }) => item.id,
-      mapOptions: (item: { delayMs: number; id: string }) => ({
-        delayMs: item.delayMs,
+      items: (): readonly { id: string }[] => [],
+      key: (item: { id: string }) => item.id,
+      mapOptions: (item: { id: string }) => ({
         itemId: item.id,
       }),
     };
@@ -83,7 +111,7 @@ describe("mapped child adapter: execution", () => {
       skip: ({ select }) => (select.length === 0 ? { reason: "no children", value: [] } : false),
       items: ({ select }) => select,
       key: (item) => item.id,
-      mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
+      mapOptions: (item) => ({ itemId: item.id }),
     });
     expectTypeOf(skippableChildren).toEqualTypeOf<
       Step<"skippable-children", readonly { workerId: string }[], ParentOptions>
@@ -91,9 +119,9 @@ describe("mapped child adapter: execution", () => {
     const skippableMappedChildren = parentForEachPipeline("skippable-mapped-children", {
       pipeline: child,
       skip: () => ({ reason: "fan-out disabled", value: [{ id: "disabled" }] }),
-      items: (): readonly { delayMs: number; id: string }[] => [],
+      items: (): readonly { id: string }[] => [],
       key: (item) => item.id,
-      mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
+      mapOptions: (item) => ({ itemId: item.id }),
       mapResult: (value) => ({ id: value.workerId }),
     });
     expectTypeOf(skippableMappedChildren).toEqualTypeOf<
@@ -103,9 +131,9 @@ describe("mapped child adapter: execution", () => {
       pipeline: child,
       // @ts-expect-error skip value must be the complete mapped output array.
       skip: () => ({ reason: "fan-out disabled", value: [{ workerId: "wrong" }] }),
-      items: (): readonly { delayMs: number; id: string }[] => [],
+      items: (): readonly { id: string }[] => [],
       key: (item) => item.id,
-      mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
+      mapOptions: (item) => ({ itemId: item.id }),
       mapResult: (value) => ({ id: value.workerId }),
     });
     const parent = definePipeline({
@@ -122,13 +150,21 @@ describe("mapped child adapter: execution", () => {
     });
     const progress: PipelineStepProgress[] = [];
 
-    const result = await parent.run({ concurrency: 2 }, undefined, {
+    const run = parent.run({ concurrency: 2 }, undefined, {
       cwd: "/repo",
       hooks: {
         onStepProgress: ({ progress: nextProgress }) => progress.push(nextProgress),
       },
       log: console,
     });
+
+    await Promise.all([started.first.promise, started.second.promise]);
+    expect(active).toBe(2);
+    release.second.resolve();
+    await started.third.promise;
+    release.third.resolve();
+    release.first.resolve();
+    const result = await run;
 
     expect(result.status).toBe("completed");
     expect(result.value).toEqual([

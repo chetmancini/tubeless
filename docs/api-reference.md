@@ -12,7 +12,7 @@ Package: `tubeless`
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
 | `tubeless`            | `./dist/core/pipeline.d.ts`        | `54c1ba7a5b1bd2359a83efcbb8e2a898e60ad0fd1f76e6318e6f00acbf0b58e5` |               59 |
 | `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `cd969c79ec0e795d5b759e32711eb68e91167819d6484e1c3590f40fee6436a8` |               31 |
-| `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `ab57c16dc0d9a0b1d55eb1cfc0df32e6ee950037c09a98531ab64930206c2616` |                6 |
+| `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `7dbfbd4d894f2e9cc737b5373d1f654f5f08e8b5b5cce27511ef876779713656` |                6 |
 | `tubeless/node`       | `./dist/node/node.d.ts`            | `3bcb39727781832f150ff3c8ce84ff8c9f8fb8811c8440535a89398afb3a2c7c` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
@@ -124,14 +124,14 @@ Package: `tubeless`
 
 ### `tubeless/batch`
 
-| Symbol                                                                                                   | Description                                                                                    |
-| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [`ConcurrentSettleResult`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L34) | Partial results and first failure returned by `runConcurrentSettled`.                          |
-| [`ConcurrentWorker`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L12)       | Asynchronous worker invoked for one input item by the concurrency helpers.                     |
-| [`runBatched`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L134)            | Run fixed-size input batches with bounded concurrency and input-order results.                 |
-| [`runConcurrent`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L49)          | Run individual items with bounded, lazy scheduling and input-order results.                    |
-| [`RunConcurrentOptions`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L4)    | Scheduling and cancellation settings for bounded concurrent work.                              |
-| [`runConcurrentSettled`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L61)   | Like `runConcurrent`, but returns completed results and the first failure instead of throwing. |
+| Symbol                                                                                                    | Description                                                                    |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [`ConcurrentPartialResult`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L34) | Execution outcome returned by `runConcurrentPartial`, discriminated by `ok`.   |
+| [`ConcurrentWorker`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L12)        | Asynchronous worker invoked for one input item by the concurrency helpers.     |
+| [`runBatched`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L147)             | Run fixed-size input batches with bounded concurrency and input-order results. |
+| [`runConcurrent`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L58)           | Run individual items with bounded, lazy scheduling and input-order results.    |
+| [`RunConcurrentOptions`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L4)     | Scheduling and cancellation settings for bounded concurrent work.              |
+| [`runConcurrentPartial`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L72)    | Return complete or partial results, discriminated by `ok`.                     |
 
 ### `tubeless/node`
 
