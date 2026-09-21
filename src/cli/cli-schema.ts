@@ -121,6 +121,12 @@ export function inferCliParams(
   if (schema.type !== "object" || schema.anyOf || schema.oneOf || schema.allOf || schema.if) {
     return unsupported("pipeline options", "expected a flat object schema");
   }
+  if (
+    (schema.additionalProperties !== undefined && schema.additionalProperties !== false) ||
+    schema.patternProperties !== undefined
+  ) {
+    return unsupported("pipeline options", "dynamic property schemas need explicit parameters");
+  }
   const properties = record(schema.properties ?? {}, "pipeline properties");
   const required = new Set(Array.isArray(schema.required) ? schema.required : []);
   const params: CliParamsSchema = {};

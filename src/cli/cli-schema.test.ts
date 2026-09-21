@@ -289,6 +289,23 @@ describe("inferred pipeline CLI", () => {
     ).not.toThrow();
   });
 
+  it.each([
+    { type: "object", additionalProperties: { type: "string" } },
+    {
+      type: "object",
+      patternProperties: { "^label-": { type: "string" } },
+      additionalProperties: false,
+    },
+  ])("rejects dynamic-key option schemas before exposing an unusable command: %j", (metadata) => {
+    const source = pipeline(metadata, () => ({ value: {} }));
+    expect(() => definePipelineCommand(source)).toThrow(
+      /dynamic property schemas need explicit parameters.*Supply explicit params/
+    );
+    expect(() =>
+      definePipelineCommand(source, { params: {}, mapOptions: () => ({}) })
+    ).not.toThrow();
+  });
+
   it("requires explicit flags for validation-only schemas and supports zero-option pipelines", () => {
     const { step } = createSteps({
       "~standard": { version: 1, vendor: "test", validate: () => ({ value: {} }) },
