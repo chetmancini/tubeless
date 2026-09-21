@@ -13,6 +13,13 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { packedTarballFilename, resolveNpm } from "./resolve-npm.mjs";
 
+const [nodeMajor, nodeMinor] = process.versions.node.split(".").map(Number);
+if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 6)) {
+  throw new Error(
+    `Packed-artifact verification requires Node.js 22.6 or later; found ${process.versions.node}.`
+  );
+}
+
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
 const temporaryRoot = mkdtempSync(join(tmpdir(), "tubeless-pack-"));

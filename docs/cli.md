@@ -11,7 +11,7 @@ npx tubeless --help # Also uses the executable's Bun runtime
 
 The executable uses `#!/usr/bin/env bun`, so Bun must be installed and available
 on `PATH` even when npm or `npx` installs the package. The library itself can run
-on Node.js 22 or later without Bun.
+on Node.js 22.6 or later without Bun.
 
 ## Commands
 

@@ -5,7 +5,7 @@ rows. It then shows how to run the pipeline, preview selected steps, and test it
 
 ## Install
 
-Install the package in your TypeScript project. Library imports require Node.js 22 or later:
+Install the package in your TypeScript project. Library imports require Node.js 22.6 or later:
 
 ```sh
 npm install tubeless
@@ -28,7 +28,7 @@ Command-by-command usage is in [the CLI](./cli.md).
 ## Runtime support
 
 Library imports (`tubeless` and every subpath) are ESM-only and require
-Node.js 22 or later. They are dependency-free compiled JavaScript.
+Node.js 22.6 or later. They are dependency-free compiled JavaScript.
 
 The executable uses `#!/usr/bin/env bun`, so Bun must be installed and available
 on `PATH` even when npm or `npx` installs the package.

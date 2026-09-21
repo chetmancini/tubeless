@@ -30,7 +30,7 @@ For scheduling or crash recovery, pair it with a [queue or workflow engine](./do
 npm install tubeless
 ```
 
-The library uses ESM and requires Node.js 22 or later. The CLI also requires
+The library uses ESM and requires Node.js 22.6 or later. The CLI also requires
 Bun 1.3.14 or later. Linux and macOS are supported; Windows is untested.
 See [installation and runtime support](./docs/getting-started.md#install).
 

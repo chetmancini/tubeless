@@ -9,7 +9,7 @@ If a change is large or touches the public API, open an issue first.
 ## Prerequisites
 
 - Bun 1.3.14 or later
-- Node.js 22 or later
+- Node.js 22.6 or later
 - GNU Make
 
 ## Working on the package

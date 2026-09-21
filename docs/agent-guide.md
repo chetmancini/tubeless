@@ -204,7 +204,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 ## Runtime rules
 
-- Library entrypoints are ESM-only and require Node.js 22 or later. The
+- Library entrypoints are ESM-only and require Node.js 22.6 or later. The
   `tubeless` CLI uses a `#!/usr/bin/env bun` entrypoint and requires Bun 1.3.14
   or later on `PATH`.
 - Use `context.log`, never direct `console` calls inside steps. Wide interactive
