@@ -122,7 +122,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   results and the first failure instead of a throw.
 - Use `defineProject` from `tubeless/project` to collect typed pipelines. Pipeline IDs
   stay literal, duplicate IDs fail during project definition, and `get(id)` returns the
-  exact pipeline type. Give the project itself a stable ID; it remains literal on
+  exact pipeline type. Union or widened IDs retain all matching candidate pipeline
+  types. Give the project itself a stable ID; it remains literal on
   `project.id`. The project adds no execution layer.
   Pass optional `{ name, description }` as the third argument for typed pipelines,
   or fourth after the registry for documents. Document metadata supplies defaults;

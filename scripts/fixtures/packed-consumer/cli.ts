@@ -67,3 +67,28 @@ function selectEcho(project: EchoProject): typeof pipeline {
 }
 
 selectEcho(createEchoProject());
+
+function selectUnionPipeline(id: "echo" | "echo-alias", lookup: "echo" | "packed-cli-types") {
+  const unionPipeline = definePipeline({ id, steps: [echo] });
+  const project = defineProject("union-ids", [pipeline, unionPipeline]);
+  const selected = project.get("echo");
+  const selectedId: "echo" | "echo-alias" = selected.id;
+  selected.plan();
+  // @ts-expect-error Union-id lookups retain the required domain input.
+  selected.runOrThrow({});
+  const either: typeof pipeline | typeof unionPipeline = project.get(lookup);
+  either.plan();
+  void selectedId;
+}
+
+function selectWidenedPipeline(id: string, lookup: string) {
+  const widePipeline = definePipeline({ id, steps: [echo] });
+  const project = defineProject("wide-ids", [pipeline, widePipeline]);
+  const selected: typeof pipeline | typeof widePipeline = project.get(lookup);
+  selected.plan();
+  // @ts-expect-error Widened-id lookups retain the required domain input.
+  selected.runOrThrow({});
+}
+
+selectUnionPipeline("echo", "echo");
+selectWidenedPipeline("dynamic", "dynamic");

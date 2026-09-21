@@ -14,13 +14,17 @@ type PipelineIds<TPipelines extends readonly AnyProjectPipeline[]> = {
     : never;
 };
 
+// Distribute over pipeline candidates and retain those whose possible ids overlap the lookup.
 type PipelineById<
-  TPipelines extends readonly AnyProjectPipeline[],
-  TId extends PipelineId<TPipelines>,
-> =
-  string extends PipelineId<TPipelines>
-    ? TPipelines[number]
-    : Extract<TPipelines[number], { readonly id: TId }>;
+  TPipeline extends AnyProjectPipeline,
+  TId extends string,
+> = TPipeline extends AnyProjectPipeline
+  ? string extends TPipeline["id"]
+    ? TPipeline
+    : [TPipeline["id"] & TId] extends [never]
+      ? never
+      : TPipeline
+  : never;
 
 /** Optional project presentation; neither field changes pipeline identity or execution. */
 export interface ProjectMetadata {
@@ -40,7 +44,7 @@ export interface PipelineProject<
   readonly description?: string;
   readonly pipelines: Readonly<TPipelines>;
   readonly pipelineIds: PipelineIds<TPipelines>;
-  get<const TId extends PipelineId<TPipelines>>(id: TId): PipelineById<TPipelines, TId>;
+  get<const TId extends PipelineId<TPipelines>>(id: TId): PipelineById<TPipelines[number], TId>;
 }
 
 /** Define an immutable project from typed pipelines or a parsed pipeline document. */
@@ -69,19 +73,21 @@ export function defineProject(
   }
   let pipelines: readonly AnyProjectPipeline[];
   let documentMetadata: ProjectMetadata | undefined;
-  if (Array.isArray(pipelinesOrDocument)) {
-    pipelines = pipelinesOrDocument;
-    // The array overload takes metadata in the third position.
-    metadata = registryOrMetadata as ProjectMetadata | undefined;
-  } else {
-    if (!registryOrMetadata || !("steps" in registryOrMetadata)) {
-      throw new TypeError(
-        "defineProject expects an array of pipelines, or a parsed pipeline document and registry."
-      );
-    }
+  if (
+    registryOrMetadata !== null &&
+    typeof registryOrMetadata === "object" &&
+    "steps" in registryOrMetadata
+  ) {
     const document = validatePipelineDocument(pipelinesOrDocument);
     documentMetadata = document.metadata;
     pipelines = [...compileValidatedPipelineDocument(document, registryOrMetadata).values()];
+  } else if (Array.isArray(pipelinesOrDocument)) {
+    pipelines = pipelinesOrDocument;
+    metadata = registryOrMetadata;
+  } else {
+    throw new TypeError(
+      "defineProject expects an array of pipelines, or a parsed pipeline document and registry."
+    );
   }
 
   if (

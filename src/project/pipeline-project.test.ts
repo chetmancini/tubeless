@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { createSteps, definePipeline } from "../core/pipeline.js";
 import { defineProject, isPipelineProject } from "./pipeline-project.js";
+import { PipelineDocumentError } from "./project-document.js";
 
 const { step: alphaStep } = createSteps<{ value: string }>();
 const alpha = definePipeline({
@@ -48,6 +49,47 @@ describe("pipeline project", () => {
       "example"
     );
   });
+
+  it("selects pipelines whose union or widened ids overlap the lookup", async () => {
+    function variant(id: "union-alpha" | "union-beta") {
+      return definePipeline({
+        id,
+        steps: [alphaStep("read", { run: (_inputs, context) => context.options.value })],
+      });
+    }
+    const unionPipeline = variant("union-alpha");
+    const project = defineProject("unions", [unionPipeline, beta]);
+    const selected = project.get("union-alpha");
+    expectTypeOf(selected).toEqualTypeOf<typeof unionPipeline>();
+    expectTypeOf(project.get("beta")).toEqualTypeOf<typeof beta>();
+    await expect(selected.runOrThrow({ value: "hello" })).resolves.toBe("hello");
+    const selectEither = (id: "union-alpha" | "beta") => project.get(id);
+    expectTypeOf(selectEither).returns.toEqualTypeOf<typeof unionPipeline | typeof beta>();
+
+    const widePipeline = definePipeline({
+      id: String("dynamic"),
+      steps: [alphaStep("read", { run: (_inputs, context) => context.options.value })],
+    });
+    const mixed = defineProject("mixed", [widePipeline, beta]);
+    expectTypeOf(mixed.get("dynamic")).toEqualTypeOf<typeof widePipeline>();
+    expectTypeOf(mixed.get("beta")).toEqualTypeOf<typeof widePipeline | typeof beta>();
+    const selectUnknown = (id: string) => mixed.get(id);
+    expectTypeOf(selectUnknown).returns.toEqualTypeOf<typeof widePipeline | typeof beta>();
+  });
+
+  it.each([{ document: [] }, { document: [{ id: "not-a-pipeline" }] }])(
+    "rejects an array document when a registry is supplied: $document",
+    ({ document }) => {
+      const registry = { steps: {}, finalizers: {} };
+      expect(() => defineProject("invalid-document", document, registry)).toThrow(
+        PipelineDocumentError
+      );
+      expect(() =>
+        defineProject("invalid-document", document, registry, { name: "Document jobs" })
+      ).toThrow("$: Expected an object");
+      expect(defineProject("empty-typed", [], { name: "Typed jobs" }).name).toBe("Typed jobs");
+    }
+  );
 
   it.each(["", " ", null, 42])("rejects invalid presentation text %j", (value) => {
     for (const field of ["name", "description"] as const) {

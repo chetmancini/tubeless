@@ -177,7 +177,8 @@ const summary = await project.get("import-summary").runOrThrow({ lines });
 ```
 
 The stable project ID remains literal on `project.id`. Pipeline IDs do too, so
-`get` returns the exact pipeline with its own option and result types. The project
+`get` returns the exact pipeline with its own option and result types. For union
+or widened pipeline IDs, `get` retains all matching candidate types. A project
 is only an immutable collection; the selected pipeline's existing methods do the
 work. For YAML or JSON, pass the ID, parsed document, and handler registry to the
 same function; see [declarative pipelines](./declarative-pipelines.md).
