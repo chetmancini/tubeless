@@ -10,14 +10,14 @@ Package: `tubeless`
 
 | Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless`            | `./dist/core/pipeline.d.ts`        | `02b6e0554a598bf9bd588e2a286b3c4b31f5af026f8c1d83dbf805886bedb1a3` |               57 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `12f639b4104c5d7b6406992a45aee5a8eff3f7a1506ecbf902faca9b15b5e45c` |               31 |
+| `tubeless`            | `./dist/core/pipeline.d.ts`        | `7f44901f7d97e6f363ab3bc0b0acbde06dc0eb9d65bcfaf739b6677db815153f` |               57 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `bf1e06ac16261a201e7cc2ab3354a42ad1916d91d3181bb18b0aa6e72b8f750e` |               31 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `ab57c16dc0d9a0b1d55eb1cfc0df32e6ee950037c09a98531ab64930206c2616` |                6 |
-| `tubeless/node`       | `./dist/node/node.d.ts`            | `7117f2d9696c0f232ec9bdcc2d18ffa985ee57418881098f99ec9ab1fca53ac8` |               12 |
+| `tubeless/node`       | `./dist/node/node.d.ts`            | `f8fa76a63cb5f1b98c6e014d3454e1e7910167030178d16c3213a193fb8521b0` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `98535dae005f920866acdda8c248723cfd5256b23e2f3af8514d98b72cb2ced4` |                5 |
-| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `c4f339fc7a5cd8f6525d32298b990b571de61756864da6b3c4c3400ca1b38f0e` |                7 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `4baf45e8e5c819d26edf70e7645161c51eee607381e4ba8d2d493efdf200b829` |                5 |
+| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `eab87cd201e3e2b7f4fc906890b10b975ede01af81f6dbe5ad073d6308a94f4e` |                7 |
 | `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `bde2a6b18d95b6d6311fec6ae8719ff432208e650803635c9355ec1af62dad27` |                3 |
 
 ## Symbols
@@ -26,7 +26,7 @@ Package: `tubeless`
 
 | Symbol                                                                                                                 | Description                                                                                 |
 | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| [`createSteps`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L305)                     | Create typed step constructors for one pipeline definition.                                 |
+| [`createSteps`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L312)                     | Create typed step constructors for one pipeline definition.                                 |
 | [`definePipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline.ts#L135)                        | Compile a typed step graph into a validated, executable pipeline.                           |
 | [`isPipelineErrorCode`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L175)             | Return whether an unknown value is a stable package-owned pipeline error code.              |
 | [`MappedChildProgressOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L170)      | Presentation options for opaque `forEachPipeline` progress.                                 |

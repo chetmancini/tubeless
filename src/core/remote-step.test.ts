@@ -367,6 +367,19 @@ describe("fromRemote", () => {
       }),
     });
 
+    const transformedFallback = fromRemote("transformed-fallback", {
+      adapter: inputAdapter,
+      mapInput: () => ({}),
+      outputSchema: transformingSchema,
+      skip: () => ({
+        reason: "cached",
+        value: { n: 0 },
+      }),
+    });
+    expectTypeOf(transformedFallback).toEqualTypeOf<
+      Step<"transformed-fallback", { n: string }, DefaultOptions, DefaultOptions, { n: number }>
+    >();
+
     fromRemote("output-shaped-adapter", {
       // @ts-expect-error adapter results are validated as schema input, not output
       adapter: testAdapter(async () => ({ n: "1" })),

@@ -86,7 +86,7 @@ describe("mapped child adapter: execution", () => {
       mapOptions: (item) => ({ delayMs: item.delayMs, itemId: item.id }),
     });
     expectTypeOf(skippableChildren).toEqualTypeOf<
-      Step<"skippable-children", readonly { workerId: string }[] | undefined, ParentOptions>
+      Step<"skippable-children", readonly { workerId: string }[], ParentOptions>
     >();
     const skippableMappedChildren = parentForEachPipeline("skippable-mapped-children", {
       pipeline: child,
@@ -97,7 +97,7 @@ describe("mapped child adapter: execution", () => {
       mapResult: (value) => ({ id: value.workerId }),
     });
     expectTypeOf(skippableMappedChildren).toEqualTypeOf<
-      Step<"skippable-mapped-children", readonly { id: string }[] | undefined, ParentOptions>
+      Step<"skippable-mapped-children", readonly { id: string }[], ParentOptions>
     >();
     parentForEachPipeline("invalid-mapped-skip-value", {
       pipeline: child,

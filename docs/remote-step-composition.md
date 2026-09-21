@@ -11,8 +11,9 @@ The required fields are `adapter`, `mapInput`, and `outputSchema`:
 - `outputSchema` checks the returned value and provides its type to dependents.
 
 Add `skip` to the `fromRemote` definition when the request may be intentionally
-omitted. As with other skippable steps, dependent code must handle a possible
-`undefined`.
+omitted. As with other skippable steps, dependent code must handle `undefined`
+when any skip branch omits its value. If every branch supplies a value matching
+the output schema's input, dependents retain the transformed output type.
 See the [HTTP example](../examples/remote-steps.ts) for a complete implementation.
 
 ## Choose where the pipeline runs

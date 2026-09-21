@@ -158,7 +158,7 @@ describe("opaque child adapter: composition", () => {
       mapResult: (value) => ({ count: value.written, ran: false as const }),
     });
     expectTypeOf(skippedMappedChild).toEqualTypeOf<
-      Step<"skipped-mapped-child", { count: number; ran: false } | undefined, ParentOptions>
+      Step<"skipped-mapped-child", { count: number; ran: false }, ParentOptions>
     >();
     parentFromPipeline("invalid-skip-value-shape", {
       pipeline: child,
