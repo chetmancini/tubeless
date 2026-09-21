@@ -13,6 +13,13 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { packedTarballFilename, resolveNpm } from "./resolve-npm.mjs";
 
+const [nodeMajor, nodeMinor] = process.versions.node.split(".").map(Number);
+if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 6)) {
+  throw new Error(
+    `Packed-artifact verification requires Node.js 22.6 or later; found ${process.versions.node}.`
+  );
+}
+
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
 const temporaryRoot = mkdtempSync(join(tmpdir(), "tubeless-pack-"));
@@ -171,6 +178,10 @@ try {
     readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cli.ts"))
   );
   writeFileSync(
+    join(consumerRoot, "project.ts"),
+    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/project.ts"))
+  );
+  writeFileSync(
     join(consumerRoot, "tsconfig.json"),
     JSON.stringify({
       compilerOptions: {
@@ -182,10 +193,11 @@ try {
         target: "ES2022",
         types: [],
       },
-      files: ["cli.ts"],
+      files: ["cli.ts", "project.ts"],
     })
   );
   run(join(packageRoot, "node_modules/.bin/tsc"), ["-p", "tsconfig.json"], consumerRoot);
+  run("node", ["--experimental-strip-types", "project.ts"], consumerRoot);
 
   const smokeProgram = Object.keys(packageJson.exports)
     .map((subpath) =>

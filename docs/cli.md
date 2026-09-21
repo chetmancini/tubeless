@@ -11,7 +11,7 @@ npx tubeless --help # Also uses the executable's Bun runtime
 
 The executable uses `#!/usr/bin/env bun`, so Bun must be installed and available
 on `PATH` even when npm or `npx` installs the package. The library itself can run
-on Node.js 22 or later without Bun.
+on Node.js 22.6 or later without Bun.
 
 ## Commands
 
@@ -74,8 +74,9 @@ export default defineProject("data-jobs", [ImportPipeline], {
 });
 ```
 
-The optional `commands` factory receives project lookup after construction; use
-`commands: (get) => [...]` for [compiled documents](./declarative-pipelines.md).
+The optional `commands` factory receives project lookup after construction.
+For [compiled documents](./declarative-pipelines.md), build commands from
+`compiled.get(id)` and pass them in `commands: [...]` when registering selected pipelines.
 Each adapter must wrap the exact pipeline object in the project, with at most one adapter per
 pipeline ID. Pipeline IDs are also the CLI and Studio IDs; `name` only changes a
 display label. `ProjectOptions<TPipelines>` names the optional configuration contract. Its

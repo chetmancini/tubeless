@@ -13,6 +13,14 @@ function cli(...args: string[]) {
 describe("public YAML recipe", () => {
   const project = ["--project", "examples/project/tubeless.project.ts"];
 
+  it("registers selected entry pipelines without exposing their compiled children", () => {
+    const output = cli("list", ...project);
+    expect(output).toContain("yaml-import");
+    expect(output).toContain("yaml-preview");
+    expect(output).not.toContain("normalize-all");
+    expect(output).not.toContain("normalize-one");
+  });
+
   it("loads real YAML through public package imports and plans registered targets", () => {
     const output = cli("plan", ...project, "yaml-import", "--target", "normalize", "--explain");
     expect(output).toContain("normalize: run");

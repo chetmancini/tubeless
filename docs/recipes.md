@@ -14,7 +14,7 @@ one of these recipes.
 | Run independent DAG branches concurrently     | [`parallel-dag.ts`](../examples/parallel-dag.ts)                         | `maxConcurrency` / CLI `--max-concurrency`, dependency joins, stable final reports |
 | CPU parallelism on Node worker threads        | [`worker-threads.ts`](../examples/worker-threads.ts)                     | `createWorkerThreadAdapter`, `fromRemote`, structured clone, pool ownership        |
 | Sequential import or ETL                      | [`typed-import.ts`](../examples/typed-import.ts)                         | `createSteps`, `dependsOn`, `requireOutputs`, `targets`                            |
-| Define and compose pipelines in YAML or JSON  | [`yaml-pipelines.ts`](../examples/yaml-pipelines.ts)                     | `defineProject(id, document, registry)`, adapters, skips, child fan-out            |
+| Define and compose pipelines in YAML or JSON  | [`yaml-pipelines.ts`](../examples/yaml-pipelines.ts)                     | `compilePipelineDocument(document, registry)`, adapters, skips, child fan-out      |
 | Validate options, outputs, and results        | [`validated-boundaries.ts`](../examples/validated-boundaries.ts)         | Standard Schema, `outputSchema`, `resultSchema`                                    |
 | Inspect, plan, or graph a pipeline or command | [`typed-import.ts`](../examples/typed-import.ts)                         | `tubeless inspect`, `tubeless plan`, `tubeless graph`, `toMermaid`                 |
 | Safe write/publish preview                    | [`publish-with-gates.ts`](../examples/publish-with-gates.ts)             | `dryRun`, `optionalDependsOn`, `skipAfterFailureOf`                                |
@@ -104,8 +104,10 @@ pipeline does not require credentials.
    friendlier presentation. `definePipelineCommand` inherits both; command-level
    values override them without changing the pipeline ID.
    Add optional `{ name, description }` as the third argument for presentation;
-   the project name defaults to its ID. For documents, metadata is inherited and
-   can be overridden in a fourth argument after the registry.
+   the project name defaults to its ID. Compile parsed documents with
+   `compilePipelineDocument(document, registry)`, then register selected pipelines.
+   Reuse `compiled.metadata` through ordinary object construction, adding explicit
+   name/description overrides as needed. A child need not be a project entry to run.
    A checked-in `defineProject` exposes its pipelines to the CLI and Studio directly;
    they infer flags from the options schema's Standard JSON Schema input metadata.
    Without that metadata, supply explicit command `params` using adapters in the

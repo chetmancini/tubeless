@@ -1,11 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
-import { PipelineDefinitionError, type StandardSchemaV1 } from "../core/pipeline.js";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { PipelineDefinitionError, type Pipeline, type StandardSchemaV1 } from "tubeless";
 import { createPipelineTestRuntime } from "../testing/testing.js";
 import {
   compilePipelineDocument,
   PipelineDocumentError,
+  type CompiledPipelineDocument,
+  type PipelineDocumentMetadata,
   type ProjectRegistry,
-} from "./project-compiler.js";
+} from "tubeless/project";
 import type { PipelineDocument } from "./project-document.js";
 
 function document(): PipelineDocument {
@@ -41,6 +43,60 @@ function standardSchema<TInput, TOutput>(
 }
 
 describe("declarative pipelines", () => {
+  it("exposes immutable collection and metadata snapshots with honest dynamic types", () => {
+    const metadata = {
+      name: "Import jobs",
+      description: "Normalize rows.",
+      authors: ["Maintainer"],
+      date: "2026-09-21",
+    };
+    const source = { ...document(), metadata };
+    const compiled: CompiledPipelineDocument = compilePipelineDocument(source, registry());
+    const snapshot: PipelineDocumentMetadata | undefined = compiled.metadata;
+    const pipeline = compiled.get("import");
+    expectTypeOf(pipeline).toEqualTypeOf<Pipeline<object, unknown>>();
+    expectTypeOf(pipeline.id).toEqualTypeOf<string>();
+    expectTypeOf(pipeline.runOrThrow).returns.toEqualTypeOf<Promise<unknown>>();
+    expectTypeOf(pipeline.runOrThrow).parameter(0).toEqualTypeOf<object>();
+    expect(compiled.get("import")).toBe(pipeline);
+    expect(compiled.pipelines).toEqual([pipeline]);
+    expect(compiled.pipelines[0]).toBe(pipeline);
+    const { get } = compiled;
+    expect(get("import")).toBe(pipeline);
+    expect(() => get("missing")).toThrow('Compiled document does not define pipeline "missing".');
+    expect(() => get("toString")).toThrow('Compiled document does not define pipeline "toString".');
+    metadata.name = "Changed";
+    metadata.authors.push("Another author");
+    source.pipelines.preview = source.pipelines.import;
+    expect(snapshot).toEqual({
+      name: "Import jobs",
+      description: "Normalize rows.",
+      authors: ["Maintainer"],
+      date: "2026-09-21",
+    });
+    expect(compiled.pipelines).toHaveLength(1);
+    expect(Object.isFrozen(compiled)).toBe(true);
+    expect(Object.isFrozen(compiled.pipelines)).toBe(true);
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(snapshot?.authors)).toBe(true);
+    expect(() => {
+      // @ts-expect-error Compiled collections cannot be mutated.
+      compiled.pipelines.push(pipeline);
+    }).toThrow(TypeError);
+    expect(() => {
+      // @ts-expect-error Document metadata cannot be mutated.
+      compiled.metadata!.name = "Changed";
+    }).toThrow(TypeError);
+    expect(() => {
+      // @ts-expect-error Author snapshots cannot be mutated.
+      compiled.metadata!.authors!.push("Changed");
+    }).toThrow(TypeError);
+    expect(compilePipelineDocument(document(), registry()).metadata).toBeUndefined();
+    expect(
+      compilePipelineDocument({ ...document(), metadata: {} }, registry()).metadata
+    ).toBeDefined();
+  });
+
   it("composes a forward-referenced pipeline once and maps its result", async () => {
     const runChild = vi.fn((_inputs, context) =>
       "value" in context.options ? context.options.value : "missing"
@@ -83,25 +139,27 @@ describe("declarative pipelines", () => {
       skipPredicates: { cached: skipChild },
       fromPipelineAdapters: { single: { controls, mapOptions, mapResult } },
     });
-    expect([...pipelines.keys()]).toEqual(["parent", "child"]);
-    expect(pipelines.get("parent")!.plan().steps[0]?.nestedPipeline).toEqual({
-      identity: pipelines.get("child")!.definition!.identity,
+    expect(pipelines.pipelines.map(({ id }) => id)).toEqual(["parent", "child"]);
+    expect(pipelines.get("parent").plan().steps[0]?.nestedPipeline).toEqual({
+      identity: pipelines.get("child").definition!.identity,
       mode: "single",
       pipelineId: "child",
       stepIds: ["work"],
     });
     expect(runChild).not.toHaveBeenCalled();
     expect(mapOptions).not.toHaveBeenCalled();
+    const childPlan = vi.spyOn(pipelines.get("child"), "plan");
     await expect(
       pipelines
-        .get("parent")!
+        .get("parent")
         .runOrThrow({ value: "mapped" }, {}, createPipelineTestRuntime().context)
     ).resolves.toEqual({ childValue: "mapped" });
+    expect(childPlan).toHaveBeenCalledOnce();
     expect(controls).toHaveBeenCalledOnce();
     expect(mapResult).toHaveBeenCalledOnce();
     await expect(
       pipelines
-        .get("parent")!
+        .get("parent")
         .runOrThrow({ cached: true, value: "ignored" }, {}, createPipelineTestRuntime().context)
     ).resolves.toEqual({ childValue: "cached" });
     expect(runChild).toHaveBeenCalledOnce();
@@ -170,7 +228,7 @@ describe("declarative pipelines", () => {
         },
       },
     });
-    const parent = pipelines.get("parent")!;
+    const parent = pipelines.get("parent");
     expect(parent.plan().steps[1]?.nestedPipeline).toMatchObject({
       mode: "for-each",
       pipelineId: "child",
@@ -237,7 +295,7 @@ describe("declarative pipelines", () => {
           cachedValue: standardSchema(validateCached),
         },
       }
-    ).get("parent")!;
+    ).get("parent");
 
     const result = await pipeline.run({}, {}, createPipelineTestRuntime().context);
 
@@ -327,8 +385,8 @@ describe("declarative pipelines", () => {
     source.pipelines.preview = { ...source.pipelines.import };
     const handlers = registry();
     const pipelines = compilePipelineDocument(source, handlers);
-    expect([...pipelines.keys()]).toEqual(["import", "preview"]);
-    const pipeline = pipelines.get("import")!;
+    expect(pipelines.pipelines.map(({ id }) => id)).toEqual(["import", "preview"]);
+    const pipeline = pipelines.get("import");
     expect(pipeline.plan({ targets: ["normalize"] }).steps).toMatchObject([
       { id: "load", selected: true },
       { id: "normalize", selected: true, dependencies: ["load"] },
@@ -344,7 +402,7 @@ describe("declarative pipelines", () => {
   it("snapshots wiring and resolved handlers at compilation", async () => {
     const source = document();
     const handlers = registry();
-    const pipeline = compilePipelineDocument(source, handlers).get("import")!;
+    const pipeline = compilePipelineDocument(source, handlers).get("import");
     source.pipelines.import.steps = [];
     handlers.steps = {
       load: () => {
@@ -360,7 +418,7 @@ describe("declarative pipelines", () => {
     const source = document();
     source.pipelines.import.steps[1].dryRun = "skip";
     const handlers = registry();
-    const pipeline = compilePipelineDocument(source, handlers).get("import")!;
+    const pipeline = compilePipelineDocument(source, handlers).get("import");
     const result = await pipeline.run({}, { dryRun: true }, createPipelineTestRuntime().context);
     expect(result.status).toBe("failed");
     expect(result.steps).toMatchObject([
@@ -378,7 +436,7 @@ describe("declarative pipelines", () => {
     const handlers = registry();
     const preview = vi.fn((_inputs, context) => (context.dryRun ? "preview" : "wrong"));
     handlers.steps = { ...handlers.steps, preview };
-    const pipeline = compilePipelineDocument(source, handlers).get("import")!;
+    const pipeline = compilePipelineDocument(source, handlers).get("import");
     await expect(
       pipeline.runOrThrow({}, { dryRun: true }, createPipelineTestRuntime().context)
     ).resolves.toBe("PREVIEW");
@@ -417,7 +475,7 @@ describe("declarative pipelines", () => {
         extra,
       },
       finalizers: { result: (outputs) => outputs },
-    }).get("publish")!;
+    }).get("publish");
     const plan = pipeline.plan({ targets: ["publish"] });
     expect(plan.steps.find(({ id }) => id === "check")?.selected).toBe(true);
     expect(plan.steps.find(({ id }) => id === "extra")?.selected).toBe(false);
@@ -437,6 +495,8 @@ describe("declarative pipelines", () => {
     source.pipelines.import.steps[1].outputSchema = "output";
     source.pipelines.import.resultSchema = "result";
     const validateOptions = vi.fn(async () => ({ value: { greeting: "options" } }));
+    const validateOutput = vi.fn(async (value: unknown) => ({ value: `${value}-output` }));
+    const validateResult = vi.fn(async (value: unknown) => ({ value: `${value}-result` }));
     const handlers = registry();
     handlers.steps = {
       ...handlers.steps,
@@ -445,12 +505,14 @@ describe("declarative pipelines", () => {
     };
     handlers.optionsSchemas = { options: standardSchema(validateOptions) };
     handlers.schemas = {
-      output: standardSchema(async (value) => ({ value: `${value}-output` })),
-      result: standardSchema(async (value) => ({ value: `${value}-result` })),
+      output: standardSchema(validateOutput),
+      result: standardSchema(validateResult),
     };
-    const pipeline = compilePipelineDocument(source, handlers).get("import")!;
+    const pipeline = compilePipelineDocument(source, handlers).get("import");
     pipeline.plan();
     expect(validateOptions).not.toHaveBeenCalled();
+    expect(validateOutput).not.toHaveBeenCalled();
+    expect(validateResult).not.toHaveBeenCalled();
     await expect(pipeline.runOrThrow({}, {}, createPipelineTestRuntime().context)).resolves.toBe(
       "OPTIONS-OUTPUT-result"
     );
@@ -470,7 +532,7 @@ describe("declarative pipelines", () => {
         if (boundary === "output") source.pipelines.import.steps[1].outputSchema = "invalid";
         else source.pipelines.import.resultSchema = "invalid";
       }
-      const pipeline = compilePipelineDocument(source, handlers).get("import")!;
+      const pipeline = compilePipelineDocument(source, handlers).get("import");
       const result = await pipeline.run({}, {}, createPipelineTestRuntime().context);
       expect(result.status).toBe("failed");
       expect(result.errors.some((error) => error.kind === "validation")).toBe(true);
@@ -551,7 +613,7 @@ describe("declarative pipelines", () => {
     source.pipelines.import.finalize = { run: "result" };
     const handlers = registry();
     handlers.steps = { ...handlers.steps, normalize: ({ load }) => load ?? "absent" };
-    const pipeline = compilePipelineDocument(source, handlers).get("import")!;
+    const pipeline = compilePipelineDocument(source, handlers).get("import");
     await expect(
       pipeline.runOrThrow({}, { targets: ["normalize"] }, createPipelineTestRuntime().context)
     ).resolves.toBe("absent");

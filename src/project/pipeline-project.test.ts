@@ -2,7 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { createSteps, definePipeline } from "../core/pipeline.js";
 import { definePipelineCommand } from "../cli/cli-pipeline-command.js";
 import { defineProject, isPipelineProject } from "./pipeline-project.js";
-import { PipelineDocumentError } from "./project-document.js";
+import { compilePipelineDocument } from "./project-compiler.js";
 
 const { step: alphaStep } = createSteps<{ value: string }>();
 const alpha = definePipeline({
@@ -131,19 +131,19 @@ describe("pipeline project", () => {
     expectTypeOf(selectUnknown).returns.toEqualTypeOf<typeof widePipeline | typeof beta>();
   });
 
-  it.each([{ document: [] }, { document: [{ id: "not-a-pipeline" }] }])(
-    "rejects an array document when a registry is supplied: $document",
-    ({ document }) => {
-      const registry = { steps: {}, finalizers: {} };
-      expect(() => defineProject("invalid-document", document, registry)).toThrow(
-        PipelineDocumentError
-      );
-      expect(() =>
-        defineProject("invalid-document", document, registry, { name: "Document jobs" })
-      ).toThrow("$: Expected an object");
-      expect(defineProject("empty-typed", [], { name: "Typed jobs" }).name).toBe("Typed jobs");
-    }
-  );
+  it("accepts only existing pipelines, not document compilation arguments", () => {
+    const document: unknown = { version: 1, pipelines: {} };
+    const registry = { steps: {}, finalizers: {} };
+    expect(() => {
+      // @ts-expect-error Parsed documents must be compiled before registration.
+      defineProject("invalid-document", document, registry);
+    }).toThrow("defineProject expects an array of pipelines.");
+    expect(() => {
+      // @ts-expect-error The document/registry/fourth-options overload was removed.
+      defineProject("invalid-document", document, registry, { name: "Document jobs" });
+    }).toThrow("defineProject expects an array of pipelines.");
+    expect(defineProject("empty-typed", [], { name: "Typed jobs" }).name).toBe("Typed jobs");
+  });
 
   it.each(["", " ", null, 42])("rejects invalid presentation text %j", (value) => {
     for (const field of ["name", "description", "cwd"] as const) {
@@ -169,7 +169,7 @@ describe("pipeline project", () => {
     expect(() => defineProject("", [alpha])).toThrow("Project id must be a non-empty string");
   });
 
-  it("defines the same project shape from a parsed pipeline document", async () => {
+  it("registers compiled pipelines with ordinary metadata reuse and overrides", async () => {
     const document = {
       version: 1,
       metadata: { name: "Greeting jobs", description: "Say hello." },
@@ -184,7 +184,11 @@ describe("pipeline project", () => {
       steps: { greet: () => "hello" },
       finalizers: { result: ({ greet }: Record<string, unknown>) => greet },
     };
-    const project = defineProject("declarative-example", document, registry);
+    const compiled = compilePipelineDocument(document, registry);
+    const project = defineProject("declarative-example", compiled.pipelines, {
+      name: compiled.metadata?.name,
+      description: compiled.metadata?.description,
+    });
 
     expect(project).toMatchObject({
       id: "declarative-example",
@@ -193,27 +197,41 @@ describe("pipeline project", () => {
       pipelineIds: ["greeting"],
     });
     await expect(project.get("greeting").runOrThrow({})).resolves.toBe("hello");
-    expect(defineProject("override", document, registry, { name: "Custom name" })).toMatchObject({
+    expect(
+      defineProject("override", compiled.pipelines, {
+        ...compiled.metadata,
+        name: "Custom name",
+      })
+    ).toMatchObject({
       name: "Custom name",
       description: "Say hello.",
     });
     expect(
-      defineProject("override", document, registry, { description: "Custom purpose" })
+      defineProject("override", compiled.pipelines, {
+        ...compiled.metadata,
+        description: "Custom purpose",
+      })
     ).toMatchObject({
       name: "Greeting jobs",
       description: "Custom purpose",
     });
-    expect(defineProject("fallback", { ...document, metadata: undefined }, registry)).toMatchObject(
-      {
-        name: "fallback",
-      }
-    );
-    expect(() => defineProject("invalid", document, registry, { name: " " })).toThrow(
+    const fallback = defineProject("fallback", compiled.pipelines);
+    expect(fallback.name).toBe("fallback");
+    expect(fallback.description).toBeUndefined();
+    const cleared = defineProject("cleared", compiled.pipelines, {
+      ...compiled.metadata,
+      name: undefined,
+      description: undefined,
+    });
+    expect(cleared.name).toBe("cleared");
+    expect(cleared.description).toBeUndefined();
+    expect(() => defineProject("invalid", compiled.pipelines, { name: " " })).toThrow(
       "Project name must be a non-empty string."
     );
-    const executable = defineProject("yaml-cli", document, registry, {
-      commands: (get) => [definePipelineCommand(get("greeting"), { params: {}, reporter: false })],
+    const executable = defineProject("yaml-cli", compiled.pipelines, {
+      commands: [definePipelineCommand(compiled.get("greeting"), { params: {}, reporter: false })],
     });
+    expect(project.get("greeting")).toBe(compiled.get("greeting"));
     await expect(executable.commands[0]?.run([])).resolves.toBe("hello");
   });
 });

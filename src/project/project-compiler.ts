@@ -15,10 +15,18 @@ import type { AnyStep } from "../core/pipeline-steps.js";
 import {
   validatePipelineDocument,
   PipelineDocumentError,
-  type PipelineDocument,
+  type PipelineDocumentMetadata,
 } from "./project-document.js";
 
 export { PipelineDocumentError };
+
+/** Immutable compiled pipelines and descriptive metadata from a parsed document. */
+export interface CompiledPipelineDocument {
+  readonly pipelines: readonly Pipeline<object, unknown>[];
+  readonly metadata?: PipelineDocumentMetadata;
+  /** Return the shared compiled instance, or throw if the document has no such id. */
+  get(id: string): Pipeline<object, unknown>;
+}
 
 /** Dependency values are checked at runtime rather than inferred from a project document. */
 type PipelineDocumentHandler = (
@@ -225,15 +233,8 @@ function forEachPipelineAdapter(
 export function compilePipelineDocument(
   document: unknown,
   registry: ProjectRegistry
-): ReadonlyMap<string, Pipeline<object, unknown>> {
-  return compileValidatedPipelineDocument(validatePipelineDocument(document), registry);
-}
-
-/** Compile a validated snapshot shared with project metadata extraction. */
-export function compileValidatedPipelineDocument(
-  parsed: PipelineDocument,
-  registry: ProjectRegistry
-): ReadonlyMap<string, Pipeline<object, unknown>> {
+): CompiledPipelineDocument {
+  const parsed = validatePipelineDocument(document);
   const compiled = new Map<string, Pipeline<object, unknown>>();
   const compiling = new Set<string>();
 
@@ -399,5 +400,26 @@ export function compileValidatedPipelineDocument(
     return pipeline;
   };
 
-  return new Map(Object.keys(parsed.pipelines).map((id) => [id, compile(id)]));
+  const pipelines = Object.freeze(Object.keys(parsed.pipelines).map(compile));
+  const metadata =
+    parsed.metadata === undefined
+      ? undefined
+      : Object.freeze({
+          ...parsed.metadata,
+          authors:
+            parsed.metadata.authors === undefined
+              ? undefined
+              : Object.freeze([...parsed.metadata.authors]),
+        });
+  return Object.freeze({
+    pipelines,
+    ...(metadata === undefined ? {} : { metadata }),
+    get(id: string): Pipeline<object, unknown> {
+      const pipeline = compiled.get(id);
+      if (!pipeline) {
+        throw new Error(`Compiled document does not define pipeline ${JSON.stringify(id)}.`);
+      }
+      return pipeline;
+    },
+  });
 }

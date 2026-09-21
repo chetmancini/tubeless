@@ -20,7 +20,7 @@ export const DOC_NAV = [
   {
     slug: "declarative-pipelines",
     label: "YAML and JSON",
-    blurb: "Define pipelines in YAML or JSON and connect them to your application code.",
+    blurb: "Compile YAML or JSON with an application registry, then run or register selected pipelines.",
   },
   { slug: "comparison", label: "Comparison", blurb: "Compare Tubeless with Hamilton, Prefect, Temporal, and other job runners." },
   { slug: "child-pipeline-composition", label: "Child pipelines", blurb: "Reuse a workflow once or run it for a list of items." },

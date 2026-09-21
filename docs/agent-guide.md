@@ -33,12 +33,14 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 - For YAML or JSON authoring, read [declarative pipelines](./declarative-pipelines.md)
   and adapt [the YAML recipe](../examples/yaml-pipelines.ts). Parse at the
-  application edge, then use `defineProject(id, document, registry)` from
+  application edge, then use `compilePipelineDocument(document, registry)` from
   `tubeless/project` with explicitly registered handlers, adapters, predicates, and schemas. A
   step declares exactly one of `run`, `fromPipeline`, or `forEachPipeline`;
   child pipeline IDs resolve within the document, while application code owns
-  option, item, and result mapping through the matching adapter registry. Export the
-  compiled project for CLI and Studio: Standard JSON Schema input metadata enables
+  option, item, and result mapping through the matching adapter registry. Select a
+  pipeline with `compiled.get(id)`, or pass `compiled.pipelines` to `defineProject`.
+  Register only the pipelines you want to expose; compiled children need no separate
+  project entry. Export the project for CLI and Studio: Standard JSON Schema input metadata enables
   automatic commands; custom or schema-less inputs need explicit adapters in the
   project's `commands` option. Unknown fields and references fail compilation;
   plans still do not validate domain inputs. Dynamic wiring does not infer
@@ -142,14 +144,16 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Let `definePipeline` infer its type arguments. Annotate the finalizer's return
   type for an explicit result contract; partial explicit type arguments default
   the pipeline ID to `string` and lose literal-ID lookup checks.
-  Pass optional `{ name, description }` as the third argument for typed pipelines,
-  or fourth after the registry for documents. Document metadata supplies defaults;
-  explicit fields override them. The immutable `project.name` defaults to its ID.
+  Pass optional `{ name, description }` as the third argument. For documents,
+  reuse `compiled.metadata?.name` and `compiled.metadata?.description`, or spread
+  `compiled.metadata` before explicit overrides. Metadata and its authors are immutable
+  snapshots; authors/date stay descriptive. Project ID and cwd belong to registration.
+  The immutable `project.name` defaults to its ID.
   `ProjectOptions<TPipelines>` names the configuration type. Its optional `commands` accepts
   adapters created with `definePipelineCommand`; duplicate adapters and commands
   for pipelines outside the project are rejected. `cwd` controls CLI/Studio execution
-  relative to the project file. For compiled documents, `commands: (get) => [...]`
-  creates adapters after compilation using the project lookup. Pipeline IDs remain
+  relative to the project file. For compiled documents, build adapters from
+  `compiled.get(id)` and pass them in `commands: [...]`. Pipeline IDs remain
   the single selection identity.
   Import `PipelineProject<TProjectId, TPipelines>` from `tubeless/project` when
   annotating a shared project factory or a function that accepts a project.
@@ -205,7 +209,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 ## Runtime rules
 
-- Library entrypoints are ESM-only and require Node.js 22 or later. The
+- Library entrypoints are ESM-only and require Node.js 22.6 or later. The
   `tubeless` CLI uses a `#!/usr/bin/env bun` entrypoint and requires Bun 1.3.14
   or later on `PATH`.
 - Use `context.log`, never direct `console` calls inside steps. Wide interactive
