@@ -21,6 +21,8 @@ import { PublishPipeline } from "./pipelines/publish.ts";
 // its worker module to JavaScript and let the application own the pool's close().
 
 /** Typed application project. Retrieve a pipeline by id, then plan, run, or graph it. */
+// Let definePipeline infer its generics to keep each pipeline's literal id;
+// annotate the finalizer's return type when an explicit result contract is needed.
 export const CatalogProject = defineProject(
   "catalog",
   [NormalizePipeline, ImportPipeline, EnrichPipeline, PublishPipeline],

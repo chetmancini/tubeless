@@ -87,6 +87,8 @@ pipeline does not require credentials.
 6. Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
    `tubeless/project`. Use `project.get(id)` to retain the selected pipeline's exact
    option and result types; call its existing methods directly.
+   Let `definePipeline` infer its generics to preserve literal IDs; annotate the
+   finalizer's return type when an explicit result contract is needed.
    Add optional `{ name, description }` as the third argument for presentation;
    the project name defaults to its ID. For documents, metadata is inherited and
    can be overridden in a fourth argument after the registry.

@@ -54,8 +54,7 @@ async function loadParsedPlanSource(
     usage
   );
   if ("exitCode" in registration) return registration;
-  const loaded = await registration.loadPlan(io);
-  return "exitCode" in loaded ? loaded : { ...loaded, commandId: registration.id };
+  return registration.loadPlan(io);
 }
 
 const LIST_USAGE = `Usage: tubeless list [options]

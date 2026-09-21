@@ -32,7 +32,9 @@ export interface WorkbenchRegistration {
   readonly id?: string;
   readonly name?: string;
   readonly listing: string;
-  loadPlan(io: WorkbenchCliIo): Promise<{ view: WorkbenchPipeline } | LoadFailure>;
+  loadPlan(
+    io: WorkbenchCliIo
+  ): Promise<{ view: WorkbenchPipeline; commandId?: string } | LoadFailure>;
   loadCommand(
     io: WorkbenchCliIo
   ): Promise<
@@ -69,6 +71,7 @@ export function createModuleRegistration(
       if ("exitCode" in loaded) return loaded;
       return {
         view: loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline,
+        commandId: entry?.id,
       };
     },
     async loadCommand(io) {

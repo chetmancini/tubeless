@@ -92,3 +92,19 @@ function selectWidenedPipeline(id: string, lookup: string) {
 
 selectUnionPipeline("echo", "echo");
 selectWidenedPipeline("dynamic", "dynamic");
+
+type EchoResult = { message: string };
+const typedResult = definePipeline({
+  id: "typed-result",
+  steps: [echo],
+  finalize: (outputs): EchoResult => ({ message: outputs.echo ?? "" }),
+});
+const typedResultProject = defineProject("typed-result-project", [typedResult]);
+const typedResultId: "typed-result" = typedResult.id;
+const typedResultValue: Promise<EchoResult> = typedResultProject
+  .get("typed-result")
+  .runOrThrow({ message: "hello" });
+// @ts-expect-error Annotating the finalizer preserves the exact project lookup id.
+typedResultProject.get("missing");
+void typedResultId;
+void typedResultValue;

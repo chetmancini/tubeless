@@ -203,6 +203,10 @@ For a directly loaded pipeline or command file, the CLI selects its only matchin
 `graph` prefer a marked command when a module exports both a pipeline and a
 command.
 
+`inspect` reports `pipelineId` for every source. Its additional `commandId` field
+and `Command` heading identify a command catalog registration only; project
+pipelines and directly loaded files do not receive a catalog command identity.
+
 ```sh
 bunx tubeless inspect ./scripts/import.ts
 bunx tubeless plan ./scripts/import.ts --target normalize --explain

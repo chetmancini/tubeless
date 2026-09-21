@@ -183,6 +183,29 @@ is only an immutable collection; the selected pipeline's existing methods do the
 work. For YAML or JSON, pass the ID, parsed document, and handler registry to the
 same function; see [declarative pipelines](./declarative-pipelines.md).
 
+Let `definePipeline` infer its type arguments to preserve literal IDs. If you need
+an explicit result contract, annotate the finalizer's return type:
+
+```ts
+type Summary = { count: number };
+
+const CountPipeline = definePipeline({
+  id: "count-rows",
+  steps: [load, normalize],
+  finalize: requireOutputs([normalize], ({ normalize }): Summary => ({
+    count: normalize.length,
+  })),
+});
+```
+
+`CountPipeline.id` retains the literal `"count-rows"`, and its result is `Summary`.
+Calls such as `definePipeline<Steps, Result>(...)` instead default the omitted ID
+type argument to `string`. TypeScript does not infer the remaining parameters
+after explicit type arguments; adding another generic or overload cannot change
+that rule for the same call syntax. Those pipelines still run, but project lookup
+accepts string IDs and checks missing IDs at runtime. See
+[TypeScript's generic parameter defaults](https://www.typescriptlang.org/docs/handbook/2/generics.html#generic-parameter-defaults).
+
 ## 6. Draw the pipeline
 
 `toMermaid` returns Mermaid flowchart text describing the step dependencies.

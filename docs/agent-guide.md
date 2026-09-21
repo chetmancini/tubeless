@@ -125,6 +125,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   exact pipeline type. Union or widened IDs retain all matching candidate pipeline
   types. Give the project itself a stable ID; it remains literal on
   `project.id`. The project adds no execution layer.
+  Let `definePipeline` infer its type arguments. Annotate the finalizer's return
+  type for an explicit result contract; partial explicit type arguments default
+  the pipeline ID to `string` and lose literal-ID lookup checks.
   Pass optional `{ name, description }` as the third argument for typed pipelines,
   or fourth after the registry for documents. Document metadata supplies defaults;
   explicit fields override them. The immutable `project.name` defaults to its ID.

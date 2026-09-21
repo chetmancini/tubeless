@@ -266,6 +266,21 @@ describe("project file workbench", () => {
     );
     expect(runIo.output.join(" ")).toContain("worked:hello");
     expect(runIo.errors).toEqual([]);
+
+    const inspectIo = captureIo(directory);
+    expect(await runWorkbenchCli(["inspect", "automatic", "--json"], inspectIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    const inspection = JSON.parse(inspectIo.output.join(""));
+    expect(inspection.pipelineId).toBe("automatic");
+    expect(inspection).not.toHaveProperty("commandId");
+
+    const textIo = captureIo(directory);
+    expect(await runWorkbenchCli(["inspect", "automatic"], textIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(textIo.output.join("")).toContain("Pipeline automatic");
+    expect(textIo.output.join("")).not.toContain("Command automatic");
   });
 
   it("lists registrations without scanning or loading command modules", async () => {

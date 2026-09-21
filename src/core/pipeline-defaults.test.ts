@@ -280,4 +280,25 @@ describe("pipeline defaults", () => {
     };
     void invalid;
   });
+
+  it("preserves literal ids with an annotated finalizer instead of partial type arguments", async () => {
+    const { step } = createSteps();
+    const work = step("work", { run: () => "hello" });
+    type Result = { message: string };
+    const explicit = definePipeline<readonly [typeof work], Result>({
+      id: "explicit-generics",
+      steps: [work],
+      finalize: () => ({ message: "hello" }),
+    });
+    const inferred = definePipeline({
+      id: "inferred-id",
+      steps: [work],
+      finalize: (): Result => ({ message: "hello" }),
+    });
+
+    expectTypeOf(explicit.id).toEqualTypeOf<string>();
+    expectTypeOf(inferred.id).toEqualTypeOf<"inferred-id">();
+    expectTypeOf(inferred.runOrThrow).returns.resolves.toEqualTypeOf<Result>();
+    await expect(inferred.runOrThrow({})).resolves.toEqual({ message: "hello" });
+  });
 });

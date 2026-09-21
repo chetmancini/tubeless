@@ -59,6 +59,9 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 - Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
   `tubeless/project`. Retrieve one with `project.get(id)`; it keeps the exact pipeline
   option and result types and uses the pipeline's existing methods directly.
+  Let `definePipeline` infer its generics; annotate the finalizer's return type
+  for an explicit result contract. Partial explicit generics widen the pipeline ID
+  to `string`, so project lookup no longer checks literal IDs at compile time.
   Optional `{ name, description }` in the third argument supplies project
   presentation; the name defaults to the ID. Documents inherit those fields from
   their metadata; an optional fourth argument after the registry overrides them.
