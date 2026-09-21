@@ -97,7 +97,7 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
   config: CliCommandConfig<TSchema, TResult>,
   mainExits?: { validation?: number }
 ): CliCommand<TSchema, TResult> {
-  const effectiveParams = buildEffectiveSchema(config.params, config.checkpoint);
+  const effectiveParams = buildEffectiveSchema(config.params, config.checkpoint, config.resume);
   assertNoDuplicateFlags(effectiveParams);
   assertValidMultipleParams(effectiveParams);
   assertValidEnvironmentFallbacks(effectiveParams);
@@ -114,20 +114,25 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     errors: string[],
     helpText: string
   ): CliParseResult<TSchema> {
-    const values: Record<string, ResolvedParamValue> = {};
+    const values: Record<string, ResolvedParamValue> = { resume: false };
     for (const [key, param] of Object.entries(effectiveParams)) {
       const errorCount = errors.length;
       const raw = readValue(key, param);
       if (errors.length > errorCount) continue;
       const envValue = raw === undefined && param.env ? context.env?.[param.env] : undefined;
-      values[key] = resolveParam(
-        key,
-        param,
-        raw ?? envValue,
-        context.cwd,
-        errors,
-        raw !== undefined ? "argv" : envValue !== undefined ? "env" : "default"
-      );
+      Object.defineProperty(values, key, {
+        value: resolveParam(
+          key,
+          param,
+          raw ?? envValue,
+          context.cwd,
+          errors,
+          raw !== undefined ? "argv" : envValue !== undefined ? "env" : "default"
+        ),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     }
     if (errors.length > 0) return { kind: "error", errors, helpText };
     // SAFETY: resolveParam populated every effective schema key and all input checks passed.

@@ -26,7 +26,6 @@ describe("defineCommand: string params", () => {
       name: "import-rows",
       parameters: [
         { default: false, flag: "dry-run", key: "dryRun", type: "boolean" },
-        { default: false, flag: "resume", key: "resume", type: "boolean" },
         {
           description: "Input file.",
           flag: "input",
@@ -43,8 +42,8 @@ describe("defineCommand: string params", () => {
     });
     expect(Object.isFrozen(command.descriptor)).toBe(true);
     expect(Object.isFrozen(command.descriptor.parameters)).toBe(true);
-    expect(Object.isFrozen(command.descriptor.parameters[2])).toBe(true);
-    expect(Object.isFrozen(command.descriptor.parameters[3]?.choices)).toBe(true);
+    expect(Object.isFrozen(command.descriptor.parameters[1])).toBe(true);
+    expect(Object.isFrozen(command.descriptor.parameters[2]?.choices)).toBe(true);
   });
 
   it("parses a provided value", () => {

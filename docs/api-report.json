@@ -99,7 +99,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "a63f0b5d0918d3169b6e333ca400eaeef46150e18b395625b0cbc15b171e861c",
+      "sha256": "12f639b4104c5d7b6406992a45aee5a8eff3f7a1506ecbf902faca9b15b5e45c",
       "specifier": "tubeless/cli"
     },
     {
@@ -155,7 +155,7 @@
         "ProjectOptions",
         "ProjectRegistry"
       ],
-      "sha256": "d266c86afe81e7428eacaa3228db013f298684bfee216ce1268586e18be0c4e3",
+      "sha256": "98535dae005f920866acdda8c248723cfd5256b23e2f3af8514d98b72cb2ced4",
       "specifier": "tubeless/project"
     },
     {

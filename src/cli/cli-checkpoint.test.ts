@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { openCheckpoint, type CheckpointStore } from "../node/checkpoint.js";
 import { CliHelpRequested, CliValidationError, defineCommand } from "./cli.js";
 import { testLog } from "./cli.test-support.js";
@@ -89,6 +89,19 @@ describe("defineCommand: checkpoint", () => {
     seedCheckpoint();
     await command.run(["--no-resume"]);
     expect(seenHasA).toBe(false);
+  });
+
+  it("keeps resume required for direct execution of resume-capable commands", () => {
+    const command = defineCommand({
+      checkpoint: { path: checkpointPath, defaultResume: true },
+      params: {},
+      run: () => undefined,
+    });
+
+    expectTypeOf<Parameters<typeof command.execute>[0]>().toMatchTypeOf<{
+      dryRun: boolean;
+      resume: boolean;
+    }>();
   });
 
   it("throws at definition time if a schema redeclares resume, with or without checkpoint configured", () => {
@@ -441,29 +454,63 @@ describe("defineCommand: checkpoint", () => {
     }
   );
 
-  it("lists --resume in help for every command, checkpoint or not", () => {
+  it("lists --resume in help only for commands that support it", () => {
     const withCheckpoint = defineCommand({
       checkpoint: { path: checkpointPath },
       params: {},
       run: () => undefined,
     });
+    const withApplicationResume = defineCommand({
+      params: {},
+      resume: true,
+      run: () => undefined,
+    });
     const withoutCheckpoint = defineCommand({ params: {}, run: () => undefined });
     const withResult = withCheckpoint.parse(["--help"]);
+    const applicationResult = withApplicationResume.parse(["--help"]);
     const withoutResult = withoutCheckpoint.parse(["--help"]);
     expect(withResult.kind === "help" && withResult.helpText).toContain("--resume");
-    expect(withoutResult.kind === "help" && withoutResult.helpText).toContain("--resume");
+    expect(applicationResult.kind === "help" && applicationResult.helpText).toContain("--resume");
+    expect(withoutResult.kind === "help" && withoutResult.helpText).not.toContain("--resume");
   });
 
-  it("parses --resume/--no-resume into a typed values.resume even without checkpoint configured", () => {
+  it("rejects resume input when the command does not support it", () => {
     const command = defineCommand({ params: {}, run: (v) => v });
-    expect(command.parse([])).toMatchObject({ kind: "values", values: { resume: false } });
-    expect(command.parse(["--resume"])).toMatchObject({
+    expect(command.parse([])).toEqual({
       kind: "values",
-      values: { resume: true },
+      values: { dryRun: false, resume: false },
+    });
+    expect(command.parse(["--resume"])).toMatchObject({
+      kind: "error",
+      errors: ["Unknown option: --resume"],
     });
     expect(command.parse(["--no-resume"])).toMatchObject({
-      kind: "values",
-      values: { resume: false },
+      kind: "error",
+      errors: ["Unknown option: --no-resume"],
     });
+    expect(command.parseValues({ resume: true })).toMatchObject({
+      kind: "error",
+      errors: ["Unknown parameter: resume"],
+    });
+  });
+
+  it("parses application-owned resume behavior only when explicitly enabled", async () => {
+    const seen: (boolean | undefined)[] = [];
+    const command = defineCommand({
+      params: {},
+      resume: true,
+      run: (values) => {
+        seen.push(values.resume);
+      },
+    });
+
+    expect(command.descriptor.parameters.map((parameter) => parameter.key)).toEqual([
+      "dryRun",
+      "resume",
+    ]);
+    expect(command.parse([])).toMatchObject({ kind: "values", values: { resume: false } });
+    await command.run(["--resume"]);
+    await command.run(["--no-resume"]);
+    expect(seen).toEqual([true, false]);
   });
 });

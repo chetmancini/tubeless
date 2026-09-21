@@ -111,6 +111,9 @@ pipeline does not require credentials.
    `command.plan()` or `tubeless plan`; do not simulate planning with `--plan`.
    `--step` and `--target` are argv flags; `mapOptions` and hooks read `stepIds`
    and `targets`.
+   Commands expose `--resume` only when an explicit adapter configures managed
+   `checkpoint` support or sets `resume: true` and handles the value itself.
+   Automatic project commands omit the flag.
 7. Declare public goals with `targets: [step]` on the pipeline, select their IDs
    for goal-oriented execution, and use `stepIds` only for an exact filter. Omitted
    `targets` exposes the last step in execution order; `targets: []` opts out. Omitted

@@ -165,12 +165,36 @@ describe("definePipelineCommand", () => {
       command.descriptor.parameters
         .filter((parameter) => parameter.group === "execution")
         .map((parameter) => parameter.key)
-    ).toEqual(["dryRun", "resume", "stepIds", "continueOnError", "maxConcurrency", "targets"]);
+    ).toEqual(["dryRun", "stepIds", "continueOnError", "maxConcurrency", "targets"]);
     expect(
       command.descriptor.parameters
         .filter((parameter) => parameter.exclusive === true)
         .map((parameter) => parameter.key)
     ).toEqual(["stepIds", "targets"]);
+  });
+
+  it("exposes resume only for managed checkpoints or explicit application handling", () => {
+    const unsupported = definePipelineCommand(makeMiniPipeline(), { reporter: false });
+    const applicationOwned = definePipelineCommand(makeMiniPipeline(), {
+      reporter: false,
+      resume: true,
+    });
+    const managed = definePipelineCommand(makeMiniPipeline(), {
+      checkpoint: { path: "run.checkpoint.json" },
+      reporter: false,
+    });
+
+    expect(unsupported.descriptor.parameters.some(({ key }) => key === "resume")).toBe(false);
+    expect(unsupported.parse(["--resume"])).toMatchObject({
+      kind: "error",
+      errors: ["Unknown option: --resume"],
+    });
+    expect(applicationOwned.descriptor.parameters.some(({ key }) => key === "resume")).toBe(true);
+    expect(applicationOwned.parse(["--resume"])).toMatchObject({
+      kind: "values",
+      values: { resume: true },
+    });
+    expect(managed.descriptor.parameters.some(({ key }) => key === "resume")).toBe(true);
   });
 
   it.each([undefined, 2, 4])(

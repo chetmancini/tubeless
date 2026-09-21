@@ -39,6 +39,7 @@ Agent instructions:
 - Use createPipelineTestRuntime from tubeless/testing for deterministic tests with captured logs, statuses, progress, clock, and cancellation.
 - Import defineProject from tubeless/project to group typed pipelines or compile a parsed YAML/JSON document. Import definePipelineCommand from tubeless/cli for explicit adapters; pass them in the project commands option for CLI and Studio.
 - Omit mapOptions only when validated CLI flags already satisfy same-name pipeline options; map renamed, loaded, or derived values explicitly. --step and --target are argv flags; mapOptions and hooks receive stepIds and targets.
+- Expose --resume only through managed checkpoint configuration or an explicit resume: true command that handles values.resume. Unsupported commands reject it and omit it from Studio.
 - Declare public goals with targets: [step] on definePipeline, then select their
   IDs to include required inputs and failure gates. stepIds is an exact filter
   for any step and cannot be combined with targets.

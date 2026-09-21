@@ -282,6 +282,7 @@ describe("runUi", () => {
           expect.objectContaining({ flag: "target", type: "string" }),
         ])
       );
+      expect(payload.commands[0]?.parameters.some(({ flag }) => flag === "resume")).toBe(false);
 
       const commandId = payload.commands[0]?.id;
       expect(commandId).toBeDefined();

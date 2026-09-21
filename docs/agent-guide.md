@@ -157,6 +157,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   not `step` or `target`. Omit `mapOptions` when validated flags already satisfy
   same-name pipeline options; provide it when names, types, defaults, or derived
   values differ.
+  `--resume` is exposed only when `checkpoint` is configured or the command
+  explicitly sets `resume: true` and handles `values.resume` itself. Otherwise
+  the CLI rejects the flag and the descriptor omits the Studio control.
   The returned command exposes an immutable `descriptor`; UI adapters should
   render those parameter definitions instead of parsing help text.
   Command `name` and `description` default to their pipeline values; the name falls
