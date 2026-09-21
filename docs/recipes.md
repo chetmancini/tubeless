@@ -89,6 +89,10 @@ pipeline does not require credentials.
    option and result types; call its existing methods directly.
    Let `definePipeline` infer its generics to preserve literal IDs; annotate the
    finalizer's return type when an explicit result contract is needed.
+   Use `PipelineInput<typeof pipeline>` and `PipelineResult<typeof pipeline>` for
+   wrapper contracts instead of restating the pipeline generics. The input type is
+   the value accepted by `run` before schema transformation. Pipeline commands retain
+   the exact wrapped pipeline as `command.pipeline`.
    Put optional `name` and `description` on a pipeline when CLI and Studio need
    friendlier presentation. `definePipelineCommand` inherits both; command-level
    values override them without changing the pipeline ID.

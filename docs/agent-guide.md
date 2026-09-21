@@ -148,6 +148,10 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   the single selection identity.
   Import `PipelineProject<TProjectId, TPipelines>` from `tubeless/project` when
   annotating a shared project factory or a function that accepts a project.
+- Use `PipelineInput<typeof pipeline>` and `PipelineResult<typeof pipeline>` when
+  typing wrappers around an inferred pipeline. `PipelineInput` is the value accepted
+  by `run` before options-schema transformation. A command created with
+  `definePipelineCommand` exposes that same exact inferred type as `command.pipeline`.
 - Use `definePipelineCommand(pipeline)` from `tubeless/cli` for scripts centered on
   a pipeline. Flags are inferred from the Standard JSON Schema input metadata of
   the schema passed to `createSteps(schema)`; see [automatic CLI](../examples/automatic-cli.ts).

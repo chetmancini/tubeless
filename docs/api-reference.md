@@ -10,14 +10,14 @@ Package: `tubeless`
 
 | Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless`            | `./dist/core/pipeline.d.ts`        | `7f44901f7d97e6f363ab3bc0b0acbde06dc0eb9d65bcfaf739b6677db815153f` |               57 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `bf1e06ac16261a201e7cc2ab3354a42ad1916d91d3181bb18b0aa6e72b8f750e` |               31 |
+| `tubeless`            | `./dist/core/pipeline.d.ts`        | `54c1ba7a5b1bd2359a83efcbb8e2a898e60ad0fd1f76e6318e6f00acbf0b58e5` |               59 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `cd969c79ec0e795d5b759e32711eb68e91167819d6484e1c3590f40fee6436a8` |               31 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `ab57c16dc0d9a0b1d55eb1cfc0df32e6ee950037c09a98531ab64930206c2616` |                6 |
-| `tubeless/node`       | `./dist/node/node.d.ts`            | `f8fa76a63cb5f1b98c6e014d3454e1e7910167030178d16c3213a193fb8521b0` |               12 |
+| `tubeless/node`       | `./dist/node/node.d.ts`            | `3bcb39727781832f150ff3c8ce84ff8c9f8fb8811c8440535a89398afb3a2c7c` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `4baf45e8e5c819d26edf70e7645161c51eee607381e4ba8d2d493efdf200b829` |                5 |
-| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `eab87cd201e3e2b7f4fc906890b10b975ede01af81f6dbe5ad073d6308a94f4e` |                7 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `23c672cf7022a88a62ea39036c98ab6f0aaaef3f8469abd6de289dc41a9a7d81` |                5 |
+| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `fabf547ff961de088dd9b0852371a61d39e003f153cb2d663ef94136c9f4fff0` |                7 |
 | `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `bde2a6b18d95b6d6311fec6ae8719ff432208e650803635c9355ec1af62dad27` |                3 |
 
 ## Symbols
@@ -27,7 +27,7 @@ Package: `tubeless`
 | Symbol                                                                                                                 | Description                                                                                 |
 | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | [`createSteps`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L312)                     | Create typed step constructors for one pipeline definition.                                 |
-| [`definePipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline.ts#L135)                        | Compile a typed step graph into a validated, executable pipeline.                           |
+| [`definePipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline.ts#L137)                        | Compile a typed step graph into a validated, executable pipeline.                           |
 | [`isPipelineErrorCode`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L175)             | Return whether an unknown value is a stable package-owned pipeline error code.              |
 | [`MappedChildProgressOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L170)      | Presentation options for opaque `forEachPipeline` progress.                                 |
 | [`Pipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L509)                        | Compiled pipeline that can be planned, executed, and rendered as a graph.                   |
@@ -47,11 +47,13 @@ Package: `tubeless`
 | [`PipelineFanOutDiagnostics`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L197)       | Bounded diagnostics collected from a failed or cancelled fan-out step.                      |
 | [`PipelineFanOutFailure`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L186)           | Bounded diagnostics for a failed or cancelled runtime fan-out.                              |
 | [`PipelineHooks`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L424)                   | Optional callbacks for observing pipeline and step lifecycle events.                        |
+| [`PipelineInput`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L545)                   | Input accepted by a pipeline run before any options schema transformation.                  |
 | [`PipelineLogger`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L28)                   | Minimal logger used by pipeline execution, reporters, and CLI adapters.                     |
 | [`PipelineMermaidDirection`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L498)        | Supported Mermaid flowchart direction.                                                      |
 | [`PipelineMermaidOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L501)          | Rendering options for a pipeline Mermaid flowchart.                                         |
 | [`PipelinePlan`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L486)                    | Side-effect-free validation and selection result for a pipeline run.                        |
 | [`PipelinePlanStep`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L452)                | Planned representation of one declared step and its selection state.                        |
+| [`PipelineResult`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L550)                  | Successful result produced by a pipeline run.                                               |
 | [`PipelineRun`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L333)                     | Versioned public record returned for one pipeline execution.                                |
 | [`PipelineRunControls`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L53)              | Built-in controls for selecting and scheduling work in a pipeline run.                      |
 | [`PipelineRunStatus`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L330)               | Terminal disposition of a completed run record.                                             |
@@ -106,13 +108,13 @@ Package: `tubeless`
 | [`CliStringParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L35)                          | Declarative configuration for a string command parameter.                           |
 | [`CliValidationError`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L192)                     | Error thrown when command-line arguments fail schema validation.                    |
 | [`defineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-command.ts#L406)                        | Create a typed command from a declarative parameter schema and run handler.         |
-| [`definePipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L237)       | Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. |
-| [`DefinePipelineCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L134) | Configuration for a typed pipeline command.                                         |
-| [`PipelineCliParseResult`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L47)       | Parse result returned by commands created with `definePipelineCommand`.             |
-| [`PipelineCliValues`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L39)            | Validated domain parameters plus the built-in pipeline execution controls.          |
-| [`PipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L53)              | Typed CLI facade over a pipeline with planning and graph helpers.                   |
-| [`PipelineCommandHookConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L87)    | Static or lazily constructed lifecycle hooks for a pipeline command.                |
-| [`PipelineCommandHookContext`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L78)   | Parsed values and CLI services passed to a pipeline hook factory.                   |
+| [`definePipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L245)       | Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. |
+| [`DefinePipelineCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L142) | Configuration for a typed pipeline command.                                         |
+| [`PipelineCliParseResult`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L49)       | Parse result returned by commands created with `definePipelineCommand`.             |
+| [`PipelineCliValues`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L41)            | Validated domain parameters plus the built-in pipeline execution controls.          |
+| [`PipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L55)              | Typed CLI facade over a pipeline with planning and graph helpers.                   |
+| [`PipelineCommandHookConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L95)    | Static or lazily constructed lifecycle hooks for a pipeline command.                |
+| [`PipelineCommandHookContext`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L86)   | Parsed values and CLI services passed to a pipeline hook factory.                   |
 | [`PipelineReporterConfig`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L47)  | Rendering and output settings for automatic, plain, or interactive reporting.       |
 | [`PipelineReporterMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L29)    | Rendering mode selected for pipeline lifecycle reporting.                           |
 | [`ReporterColorMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L6)                    | Policy for ANSI color in terminal reporter output.                                  |

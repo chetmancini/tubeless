@@ -1,4 +1,4 @@
-import { createSteps, definePipeline } from "tubeless";
+import { createSteps, definePipeline, type PipelineInput, type PipelineResult } from "tubeless";
 
 const { step } = createSteps<{ lines: readonly string[] }>();
 
@@ -18,6 +18,9 @@ export const MinimalPipeline = definePipeline({
   id: "minimal",
   steps: [load, normalize],
 });
+
+export type MinimalPipelineInput = PipelineInput<typeof MinimalPipeline>;
+export type MinimalPipelineResult = PipelineResult<typeof MinimalPipeline>;
 
 export async function runMinimalExample() {
   return MinimalPipeline.runOrThrow({ lines: [" Alpha ", "", "Beta"] });

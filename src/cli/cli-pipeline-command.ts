@@ -20,8 +20,10 @@ import { markPipelineCommand } from "../utilities/pipeline-command-marker.js";
 import {
   type Pipeline,
   type PipelineHooks,
+  type PipelineInput,
   type PipelineMermaidOptions,
   type PipelinePlan,
+  type PipelineResult,
   type PipelineRunControls,
   type StandardSchemaV1,
 } from "../core/pipeline.js";
@@ -50,7 +52,13 @@ export type PipelineCliParseResult<TSchema extends CliParamsSchema> =
   | { kind: "error"; errors: readonly string[]; helpText: string };
 
 /** Typed CLI facade over a pipeline with planning and graph helpers. */
-export interface PipelineCommand<TSchema extends CliParamsSchema, TResult> {
+export interface PipelineCommand<
+  TSchema extends CliParamsSchema,
+  TResult,
+  TPipeline extends Pipeline<object, unknown> = Pipeline<object, TResult>,
+> {
+  /** Exact pipeline adapted by this command. */
+  readonly pipeline: TPipeline;
   readonly descriptor: CliCommandDescriptor;
   /** Stable identity of the wrapped pipeline. */
   readonly id: string;
@@ -234,39 +242,52 @@ function nonBlankPipelineText(value: unknown): string | undefined {
 }
 
 /** Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. */
-export function definePipelineCommand<TOptions extends object, TResult>(
-  pipeline: Pipeline<TOptions, TResult> &
-    (keyof TOptions extends never ? unknown : { readonly optionsSchema: StandardSchemaV1 }),
+export function definePipelineCommand<const TPipeline extends Pipeline<object, unknown>>(
+  pipeline: TPipeline &
+    (keyof PipelineInput<TPipeline> extends never
+      ? unknown
+      : { readonly optionsSchema: StandardSchemaV1 }),
   config?: Omit<
-    DefinePipelineCommandConfigBase<TResult, InferredCliParams<NoInfer<TOptions>>>,
+    DefinePipelineCommandConfigBase<
+      PipelineResult<TPipeline>,
+      InferredCliParams<NoInfer<PipelineInput<TPipeline>>>
+    >,
     "params"
   > & {
     params?: never;
     mapOptions?: never;
     /** Advanced: customize flag spelling, aliases, help or environment fallbacks. */
-    overrides?: InferredFlagOverrides<NoInfer<TOptions>>;
+    overrides?: InferredFlagOverrides<NoInfer<PipelineInput<TPipeline>>>;
   }
-): PipelineCommand<InferredCliParams<TOptions>, TResult>;
+): PipelineCommand<
+  InferredCliParams<PipelineInput<TPipeline>>,
+  PipelineResult<TPipeline>,
+  TPipeline
+>;
 /** Advanced: declare CLI inputs explicitly, mapping them only when their shape differs. */
 export function definePipelineCommand<
-  TOptions extends object,
-  TResult,
+  const TPipeline extends Pipeline<object, unknown>,
   const TSchema extends CliParamsSchema = {},
 >(
-  pipeline: Pipeline<TOptions, TResult>,
-  config: DefinePipelineCommandConfig<NoInfer<TOptions>, TResult, TSchema>
-): PipelineCommand<TSchema, TResult>;
+  pipeline: TPipeline,
+  config: DefinePipelineCommandConfig<
+    NoInfer<PipelineInput<TPipeline>>,
+    PipelineResult<TPipeline>,
+    TSchema
+  >
+): PipelineCommand<TSchema, PipelineResult<TPipeline>, TPipeline>;
 export function definePipelineCommand<
-  TOptions extends object,
-  TResult,
+  const TPipeline extends Pipeline<object, unknown>,
   const TSchema extends CliParamsSchema = {},
 >(
-  pipeline: Pipeline<TOptions, TResult>,
-  config: DefinePipelineCommandConfigBase<TResult, TSchema> & {
-    mapOptions?: PipelineCommandMapOptions<TOptions, TSchema>;
-    overrides?: InferredFlagOverrides<TOptions>;
+  pipeline: TPipeline,
+  config: DefinePipelineCommandConfigBase<PipelineResult<TPipeline>, TSchema> & {
+    mapOptions?: PipelineCommandMapOptions<PipelineInput<TPipeline>, TSchema>;
+    overrides?: InferredFlagOverrides<PipelineInput<TPipeline>>;
   } = {}
-): PipelineCommand<TSchema, TResult> {
+): PipelineCommand<TSchema, PipelineResult<TPipeline>, TPipeline> {
+  type TOptions = PipelineInput<TPipeline>;
+  type TResult = PipelineResult<TPipeline>;
   // SAFETY: explicit params retain TSchema; the inferred overload derives its schema
   // from the same pipeline input type. Type-only pipelines have no runtime fields.
   const userParams = (config.params ??
@@ -376,13 +397,14 @@ export function definePipelineCommand<
           ...normalizePipelineHookSets(configuredHooks),
         ];
 
-        result = await pipeline.runOrThrow(mapped, controls, {
+        // SAFETY: TResult is extracted from this exact pipeline's runOrThrow return type.
+        result = (await pipeline.runOrThrow(mapped, controls, {
           ...cliContext.pipelineContext,
           cwd: runtimeContext.cwd,
           log: runtimeContext.log,
           hooks: hooks.length > 0 ? hooks : undefined,
           signal: runtimeContext.signal,
-        });
+        })) as TResult;
       } finally {
         reporter?.dispose();
       }
@@ -423,6 +445,7 @@ export function definePipelineCommand<
 
   return markPipelineCommand(
     {
+      pipeline,
       descriptor: command.descriptor,
       id: pipeline.id,
       stepIds: pipeline.stepIds,

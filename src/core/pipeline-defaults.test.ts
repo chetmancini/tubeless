@@ -4,10 +4,35 @@ import {
   definePipeline,
   requireOutputs,
   type PipelineDefinition,
+  type PipelineInput,
+  type PipelineResult,
 } from "./pipeline.js";
 import { standardSchema, thrownDefinitionErrors } from "./pipeline.test-support.js";
 
 describe("pipeline defaults", () => {
+  it("extracts inferred run input and result contracts", async () => {
+    const optionsSchema = standardSchema<{ source: string }, { limit: number; source: string }>(
+      (value) => {
+        // SAFETY: this focused type test supplies the declared schema input below.
+        const input = value as { source: string };
+        return { value: { limit: 10, source: input.source } };
+      }
+    );
+    const { step } = createSteps(optionsSchema);
+    const work = step("work", {
+      run: (_inputs, context) => context.options.source.length + context.options.limit,
+    });
+    const pipeline = definePipeline({ id: "contract", steps: [work] });
+
+    type Input = PipelineInput<typeof pipeline>;
+    type Result = PipelineResult<typeof pipeline>;
+
+    expectTypeOf<Input>().toEqualTypeOf<{ source: string }>();
+    expectTypeOf<Result>().toEqualTypeOf<number | undefined>();
+    expectTypeOf(pipeline.id).toEqualTypeOf<"contract">();
+    await expect(pipeline.runOrThrow({ source: "rows.txt" })).resolves.toBe(18);
+  });
+
   it("exposes optional pipeline presentation without changing its stable id", () => {
     const { step } = createSteps();
     const work = step("work", { run: () => true });
