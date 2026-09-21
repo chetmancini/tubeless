@@ -3,6 +3,7 @@ import Rainbow from "../components/Rainbow.astro";
 import PostHog from "../components/PostHog.astro";
 import SiteFooter from "../components/SiteFooter.astro";
 import SiteHeader from "../components/SiteHeader.astro";
+import { PACKAGE } from "../lib/package";
 import { absUrl, href } from "../lib/paths";
 import "../styles/global.css";
 
@@ -17,7 +18,7 @@ type Props = {
 const { title, description, markdown, structuredData, noindex } = Astro.props;
 const pageTitle = title === "Tubeless" ? "Tubeless — Typed pipelines for Node.js" : `${title} · Tubeless`;
 const canonical = new URL(Astro.url.pathname, Astro.site);
-const socialImage = absUrl("og.jpg");
+const socialImage = `${absUrl("og.jpg")}?v=${PACKAGE.version}`;
 const socialImageAlt = "Tubeless: a typed pipeline graph from load through validate and normalize to publish and deploy";
 ---
 
