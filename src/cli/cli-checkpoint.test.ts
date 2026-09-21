@@ -441,29 +441,60 @@ describe("defineCommand: checkpoint", () => {
     }
   );
 
-  it("lists --resume in help for every command, checkpoint or not", () => {
+  it("lists --resume in help only for commands that support it", () => {
     const withCheckpoint = defineCommand({
       checkpoint: { path: checkpointPath },
       params: {},
       run: () => undefined,
     });
+    const withApplicationResume = defineCommand({
+      params: {},
+      resume: true,
+      run: () => undefined,
+    });
     const withoutCheckpoint = defineCommand({ params: {}, run: () => undefined });
     const withResult = withCheckpoint.parse(["--help"]);
+    const applicationResult = withApplicationResume.parse(["--help"]);
     const withoutResult = withoutCheckpoint.parse(["--help"]);
     expect(withResult.kind === "help" && withResult.helpText).toContain("--resume");
-    expect(withoutResult.kind === "help" && withoutResult.helpText).toContain("--resume");
+    expect(applicationResult.kind === "help" && applicationResult.helpText).toContain("--resume");
+    expect(withoutResult.kind === "help" && withoutResult.helpText).not.toContain("--resume");
   });
 
-  it("parses --resume/--no-resume into a typed values.resume even without checkpoint configured", () => {
+  it("rejects resume input when the command does not support it", () => {
     const command = defineCommand({ params: {}, run: (v) => v });
-    expect(command.parse([])).toMatchObject({ kind: "values", values: { resume: false } });
+    expect(command.parse([])).toEqual({ kind: "values", values: { dryRun: false } });
     expect(command.parse(["--resume"])).toMatchObject({
-      kind: "values",
-      values: { resume: true },
+      kind: "error",
+      errors: ["Unknown option: --resume"],
     });
     expect(command.parse(["--no-resume"])).toMatchObject({
-      kind: "values",
-      values: { resume: false },
+      kind: "error",
+      errors: ["Unknown option: --no-resume"],
     });
+    expect(command.parseValues({ resume: true })).toMatchObject({
+      kind: "error",
+      errors: ["Unknown parameter: resume"],
+    });
+  });
+
+  it("parses application-owned resume behavior only when explicitly enabled", async () => {
+    const seen: (boolean | undefined)[] = [];
+    const command = defineCommand({
+      params: {},
+      resume: true,
+      run: (values) => {
+        seen.push(values.resume);
+      },
+    });
+
+    expect(command.descriptor.parameters.map((parameter) => parameter.key)).toEqual([
+      "dryRun",
+      "resume",
+    ]);
+    expect(command.parse([])).toMatchObject({ kind: "values", values: { resume: false } });
+    await command.run(["--resume"]);
+    await command.run(["--no-resume"]);
+    expect(seen).toEqual([true, false]);
   });
 });

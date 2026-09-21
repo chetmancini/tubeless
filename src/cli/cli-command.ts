@@ -97,7 +97,7 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
   config: CliCommandConfig<TSchema, TResult>,
   mainExits?: { validation?: number }
 ): CliCommand<TSchema, TResult> {
-  const effectiveParams = buildEffectiveSchema(config.params, config.checkpoint);
+  const effectiveParams = buildEffectiveSchema(config.params, config.checkpoint, config.resume);
   assertNoDuplicateFlags(effectiveParams);
   assertValidMultipleParams(effectiveParams);
   assertValidEnvironmentFallbacks(effectiveParams);

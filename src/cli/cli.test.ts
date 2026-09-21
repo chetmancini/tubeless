@@ -26,7 +26,6 @@ describe("defineCommand: string params", () => {
       name: "import-rows",
       parameters: [
         { default: false, flag: "dry-run", key: "dryRun", type: "boolean" },
-        { default: false, flag: "resume", key: "resume", type: "boolean" },
         {
           description: "Input file.",
           flag: "input",
@@ -43,8 +42,8 @@ describe("defineCommand: string params", () => {
     });
     expect(Object.isFrozen(command.descriptor)).toBe(true);
     expect(Object.isFrozen(command.descriptor.parameters)).toBe(true);
-    expect(Object.isFrozen(command.descriptor.parameters[2])).toBe(true);
-    expect(Object.isFrozen(command.descriptor.parameters[3]?.choices)).toBe(true);
+    expect(Object.isFrozen(command.descriptor.parameters[1])).toBe(true);
+    expect(Object.isFrozen(command.descriptor.parameters[2]?.choices)).toBe(true);
   });
 
   it("parses a provided value", () => {
@@ -55,7 +54,7 @@ describe("defineCommand: string params", () => {
     const result = command.parse(["--version", "json"]);
     expect(result).toEqual({
       kind: "values",
-      values: { version: "json", dryRun: false, resume: false },
+      values: { version: "json", dryRun: false },
     });
   });
 
@@ -65,7 +64,6 @@ describe("defineCommand: string params", () => {
         attempts: readonly number[];
         count: number;
         dryRun: boolean;
-        resume: boolean;
         tags: readonly string[];
       }) => `${values.count}:${values.attempts.join(",")}:${values.tags.join(",")}:${values.dryRun}`
     );
@@ -87,7 +85,7 @@ describe("defineCommand: string params", () => {
 
     expect(parsed).toEqual({
       kind: "values",
-      values: { attempts: [1, 2], count: 2, dryRun: true, resume: false, tags: ["one", "two"] },
+      values: { attempts: [1, 2], count: 2, dryRun: true, tags: ["one", "two"] },
     });
     if (parsed.kind !== "values") throw new Error("Expected structured values to validate.");
     await expect(command.execute(parsed.values)).resolves.toBe("2:1,2:one,two:true");

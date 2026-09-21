@@ -509,7 +509,10 @@ when the flag values alone cannot satisfy the pipeline's required options.
 Command-only values such as `resume`, `stepIds`, and `targets` are removed from
 domain options before execution. Selection and failure controls are applied
 separately. The command-line flags are `--resume`, `--step`, and `--target`;
-option mappers and hooks use the parsed property names.
+option mappers and hooks use the parsed property names. `--resume` is present
+only when the command configures managed `checkpoint` support or declares
+application-owned handling with `resume: true`; other commands reject it and
+omit it from their descriptors.
 
 A command's `descriptor` lists parameter names, descriptions, types, defaults,
 choices, numeric constraints, repeatability, paths, and positional support.

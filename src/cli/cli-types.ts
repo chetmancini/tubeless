@@ -156,14 +156,13 @@ type OptionalCliParams<TSchema extends CliParamsSchema> = {
 
 /**
  * Validated values returned from a command's parameter schema.
- * Every command's parsed values include `dryRun` and `resume`, whether or not `TSchema`
- * declares them. `resume` is `false` unless `--resume` is passed or `checkpoint.defaultResume`
- * is `true`; it's meaningful even without `checkpoint` configured — a command can implement
- * its own "is this done" check and just read `values.resume` directly.
+ * Every command's parsed values include `dryRun`. Commands with managed checkpointing or
+ * `resume: true` also receive `resume`; it is `false` unless `--resume` is passed or
+ * `checkpoint.defaultResume` is `true`.
  */
 export type CliParams<TSchema extends CliParamsSchema> = {
   dryRun: boolean;
-  resume: boolean;
+  resume?: boolean;
 } & RequiredCliParams<TSchema> &
   OptionalCliParams<TSchema>;
 
@@ -249,6 +248,12 @@ export interface CliCommandConfig<TSchema extends CliParamsSchema, TResult> {
    * again after a successful non-dry-run unless `clearOnSuccess` is `false`.
    */
   checkpoint?: CliCheckpointConfig;
+  /**
+   * Exposes `--resume`/`--no-resume` for application-owned resume behavior without a
+   * managed checkpoint. The command must interpret `values.resume` itself. Managed
+   * checkpointing enables the same flag automatically.
+   */
+  resume?: true;
   /** Runs after every field passes its own validation; return error messages to reject. */
   validate?(values: CliParams<TSchema>, context: CliContext): string[] | void;
   run(values: CliParams<TSchema>, context: CliContext): TResult | Promise<TResult>;

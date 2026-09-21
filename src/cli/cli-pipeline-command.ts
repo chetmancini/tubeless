@@ -115,6 +115,8 @@ interface DefinePipelineCommandConfigBase<TResult, TSchema extends CliParamsSche
   /** Extra parameter keys accepted in positional order. */
   positionals?: readonly (keyof TSchema & string)[];
   checkpoint?: CliCheckpointConfig;
+  /** Expose resume input for application-owned handling without managed checkpointing. */
+  resume?: true;
   /** Additional lifecycle hooks, or a factory resolved from parsed values and CLI context. */
   hooks?: PipelineCommandHookConfig<TResult, TSchema>;
   /** Configure plain/interactive reporting, or disable it. Defaults to automatic mode. */
@@ -327,6 +329,7 @@ export function definePipelineCommand<
     params,
     positionals: config.positionals,
     checkpoint: config.checkpoint,
+    resume: config.resume,
     validate: (values, context) => {
       const pipelineValues = normalizePipelineCliValues<TSchema>(values);
       const errors = config.validate?.(pipelineValues, context) ?? [];

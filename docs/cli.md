@@ -147,8 +147,14 @@ const command = definePipelineCommand(pipeline, {
 
 Explicit arguments take precedence over environment fallbacks. Other optional
 settings include `name`, `description`, `positionals`, `summarize`, `hooks`,
-`checkpoint`, and `reporter`. Most commands need none of these; reporting already
+`checkpoint`, `resume`, and `reporter`. Most commands need none of these; reporting already
 chooses interactive or plain output automatically.
+
+`--resume` is capability-gated. Configuring `checkpoint` exposes the flag and
+supplies the managed checkpoint store. Set `resume: true` only when application
+code owns the resume state and interprets `values.resume` itself. Commands with
+neither setting reject `--resume`, and their descriptors omit it so Studio does
+not render a resume control.
 
 ### Advanced: custom CLI inputs
 

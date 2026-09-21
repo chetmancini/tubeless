@@ -107,7 +107,10 @@ Read the corresponding package recipe before using these features:
   inference for type-only pipelines or custom CLI inputs; `mapOptions` is only
   needed when their shapes differ.
   Built-in `--step` / `--target` flags map to `stepIds` / `targets`. Do not
-  redeclare built-in flags. Read `docs/cli.md` for option mapping.
+  redeclare built-in flags. `--resume` is available only with managed
+  `checkpoint` configuration or an explicit `resume: true` command whose
+  application code handles `values.resume`; unsupported commands reject it and
+  omit it from Studio forms. Read `docs/cli.md` for option mapping.
   Export `defineProject(id, pipelines)` from `tubeless.project.ts` to expose
   schema-backed pipelines directly to the CLI and optional Studio. Use
   explicit adapters in the project's `commands` option for schema-less pipelines,

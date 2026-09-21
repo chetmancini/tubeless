@@ -59,6 +59,9 @@ Preview uses the form's dry-run and step/target controls. It does not validate
 business inputs; those are checked when you run the command. A preview is
 optional. Cancellation affects only a live launch owned by the current Studio
 process; it cannot resume or cancel work from an earlier crashed process.
+Studio renders `Resume` only when the command descriptor declares it through
+managed `checkpoint` support or explicit application-owned `resume: true`
+handling.
 
 ## Launch project pipelines
 

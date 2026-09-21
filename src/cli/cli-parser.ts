@@ -13,14 +13,11 @@ import type {
 } from "./cli-types.js";
 
 /**
- * Every command gets `-h`/`--help`, `--dry-run`, and `--resume`/`--no-resume` for free, the
- * same way every pipeline step gets `context.dryRun` — that's the point: a command's
- * `dryRun` value is forwarded through executor controls when the command runs a pipeline.
- * `resume` is useful even
- * without `config.checkpoint` set — a script can implement its own "is this done" check
- * (a DB query, re-reading an output artifact) and just read `values.resume` directly.
- * Schemas can't redeclare any of these names; `defineCommand` throws immediately if one
- * tries, instead of silently shadowing the built-in.
+ * Every command gets `-h`/`--help` and `--dry-run` for free, the same way every pipeline
+ * step gets `context.dryRun`. `--resume`/`--no-resume` is added only for managed
+ * checkpointing or an explicit application-owned resume capability. Schemas can't
+ * redeclare any of these names; `defineCommand` throws immediately if one tries, instead
+ * of silently shadowing the built-in.
  */
 const DRY_RUN_KEY = "dryRun";
 const DRY_RUN_PARAM: CliBooleanParam = {
@@ -38,7 +35,8 @@ const RESERVED_FLAG_NAMES: ReadonlySet<string> = new Set([
 
 export function buildEffectiveSchema(
   params: CliParamsSchema,
-  checkpoint: CliCheckpointConfig | undefined
+  checkpoint: CliCheckpointConfig | undefined,
+  resume: true | undefined
 ): CliParamsSchema {
   if (Object.prototype.hasOwnProperty.call(params, DRY_RUN_KEY)) {
     throw new Error(
@@ -47,20 +45,24 @@ export function buildEffectiveSchema(
   }
   if (Object.prototype.hasOwnProperty.call(params, RESUME_KEY)) {
     throw new Error(
-      `"${RESUME_KEY}" is a reserved parameter provided automatically by every command; remove it from params.`
+      `"${RESUME_KEY}" is a reserved parameter; set resume: true on the command instead of declaring it in params.`
     );
   }
-  const resumeParam: CliBooleanParam = {
-    type: "boolean",
-    description: "Resume: skip work that's already done instead of starting fresh.",
-    default: checkpoint?.defaultResume ?? false,
-    group: "execution",
-  };
-  return {
+  const effectiveParams: CliParamsSchema = {
     [DRY_RUN_KEY]: DRY_RUN_PARAM,
-    [RESUME_KEY]: resumeParam,
-    ...params,
   };
+  if (checkpoint || resume === true) {
+    effectiveParams[RESUME_KEY] = {
+      type: "boolean",
+      description: "Resume: skip work that's already done instead of starting fresh.",
+      default: checkpoint?.defaultResume ?? false,
+      group: "execution",
+    };
+  }
+  for (const [key, param] of Object.entries(params)) {
+    effectiveParams[key] = param;
+  }
+  return effectiveParams;
 }
 
 function defaultCommandName(): string {
@@ -584,11 +586,11 @@ export function assertNoDuplicateFlags(schema: CliParamsSchema): void {
     // "no-resume" is reserved alongside "resume" (see RESERVED_FLAG_NAMES): the tokenizer
     // exact-matches a registered flag before falling back to "no-" negation, so a schema
     // that claims "no-resume" for itself (derived or via an explicit `flag:` override)
-    // would silently intercept it, breaking the --no-resume opt-out for every command.
+    // would silently intercept it when resume support is enabled.
     const isBuiltInKey = key === DRY_RUN_KEY || key === RESUME_KEY;
     if (!isBuiltInKey && RESERVED_FLAG_NAMES.has(flag)) {
       throw new Error(
-        `--${flag} is a reserved flag provided automatically by every command; remove "${key}" from params or give it a different flag name.`
+        `--${flag} is a reserved flag; remove "${key}" from params or give it a different flag name.`
       );
     }
     const existingKey = keyByFlag.get(flag);
