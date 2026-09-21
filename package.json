@@ -1,6 +1,6 @@
 {
   "name": "tubeless",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Typed pipeline primitives for composable data-processing workflows.",
   "author": {
     "name": "Chet Mancini",
