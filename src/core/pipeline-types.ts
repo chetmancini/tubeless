@@ -540,3 +540,13 @@ export interface Pipeline<
   /** Generate a static Mermaid flowchart without running or planning the pipeline. */
   toMermaid(options?: PipelineMermaidOptions): string;
 }
+
+/** Input accepted by a pipeline run before any options schema transformation. */
+export type PipelineInput<TPipeline extends Pipeline<object, unknown>> = Parameters<
+  TPipeline["run"]
+>[0];
+
+/** Successful result produced by a pipeline run. */
+export type PipelineResult<TPipeline extends Pipeline<object, unknown>> = Awaited<
+  ReturnType<TPipeline["runOrThrow"]>
+>;

@@ -84,6 +84,8 @@ export type {
   PipelineMermaidDirection,
   PipelineMermaidOptions,
   Pipeline,
+  PipelineInput,
+  PipelineResult,
 } from "./pipeline-types.js";
 
 export type { PipelineDefinition } from "./pipeline-definition.js";

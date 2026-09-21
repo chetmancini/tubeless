@@ -67,6 +67,10 @@ the installed declarations before using them; do not silently upgrade Tubeless.
   Let `definePipeline` infer its generics; annotate the finalizer's return type
   for an explicit result contract. Partial explicit generics widen the pipeline ID
   to `string`, so project lookup no longer checks literal IDs at compile time.
+  Use `PipelineInput<typeof pipeline>` and `PipelineResult<typeof pipeline>` for
+  wrapper contracts; the input is the value accepted by `run` before schema
+  transformation. `definePipelineCommand` retains the exact pipeline on
+  `command.pipeline`.
   Optional `{ name, description }` in the third argument supplies project
   presentation; the name defaults to the ID. Documents inherit those fields from
   their metadata; an optional fourth argument after the registry overrides them.

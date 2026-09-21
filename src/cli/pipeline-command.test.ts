@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -49,6 +49,15 @@ function makeMiniPipeline(onRun: (options: MiniOptions, dryRun: boolean) => void
 }
 
 describe("definePipelineCommand", () => {
+  it("exposes the exact wrapped pipeline", () => {
+    const pipeline = makeMiniPipeline();
+    const command = definePipelineCommand(pipeline, { reporter: false });
+
+    expect(command.pipeline).toBe(pipeline);
+    expectTypeOf(command.pipeline).toEqualTypeOf<typeof pipeline>();
+    expectTypeOf(command.pipeline.id).toEqualTypeOf<"mini">();
+  });
+
   it("inherits pipeline presentation and lets command presentation override it", () => {
     const { step } = createSteps();
     const work = step("work", { run: () => true });
