@@ -1,4 +1,4 @@
 {
   "extends": "./examples/tsconfig.json",
-  "include": ["tubeless.project.ts", "scripts/run-pipeline-command.ts"]
+  "include": ["scripts/check-pipeline.ts", "scripts/run-pipeline-command.ts"]
 }

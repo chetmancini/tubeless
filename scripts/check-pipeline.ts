@@ -1,7 +1,6 @@
 import { createSteps, definePipeline, requireOutputs } from "tubeless";
 import { definePipelineCommand } from "tubeless/cli";
-import { defineProject } from "tubeless/project";
-import { runPipelineCommand } from "./scripts/run-pipeline-command.ts";
+import { runPipelineCommand } from "./run-pipeline-command.ts";
 
 const { step } = createSteps();
 
@@ -36,7 +35,7 @@ const qualityGate = step("quality-gate", {
   run: () => ({ checks: checks.length }),
 });
 
-export const CheckPipeline = definePipeline({
+const CheckPipeline = definePipeline({
   id: "check",
   name: "Repository checks",
   description: "Run the complete Tubeless package quality gate.",
@@ -45,12 +44,6 @@ export const CheckPipeline = definePipeline({
   finalize: requireOutputs([qualityGate], (outputs) => outputs["quality-gate"]),
 });
 
-const CheckCommand = definePipelineCommand(CheckPipeline, {
+export const CheckCommand = definePipelineCommand(CheckPipeline, {
   summarize: ({ checks }) => [`Passed ${checks} repository checks.`],
-});
-
-export default defineProject("tubeless", [CheckPipeline], {
-  name: "Tubeless",
-  description: "Repository automation powered by Tubeless itself.",
-  commands: [CheckCommand],
 });

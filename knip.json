@@ -5,7 +5,7 @@
     "src/node/worker-thread-runtime.ts",
     "src/studio/run-store-ui-client-browser.ts",
     "src/**/*.test.tsx",
-    "tubeless.project.ts"
+    "scripts/check-pipeline.ts"
   ],
   "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{js,mjs,ts}", "!scripts/fixtures/**"],
   "ignoreExportsUsedInFile": {
