@@ -33,6 +33,7 @@ This static site provides explicit Markdown URLs; Accept negotiation is not avai
 
 - [Product overview](${absUrl("index.md")}): What Tubeless does and how to get started.
 - [Use cases](${absUrl("use-cases.md")}): CI/CD, ML flows, LLM workflows, data pipelines, and operational workflows, with example workflows and runnable code.
+- [Brand assets](${absUrl("brand.md")}): Download the Tubeless wordmark and app icon as SVG files.
 - [Developer resources](${absUrl("developers.md")}): Package docs, CLI reference, Studio guide, and machine-readable resources.
 ${DOC_NAV.map(({ slug, label, blurb }) => `- [${label}](${absUrl(`docs/${slug}.md`)}): ${blurb}`).join("\n")}
 

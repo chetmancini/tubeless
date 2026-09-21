@@ -1,0 +1,85 @@
+---
+import Base from "../layouts/Base.astro";
+import { href } from "../lib/paths";
+
+const logos = [
+  {
+    name: "Wordmark",
+    description: "The primary logo for light backgrounds.",
+    file: "wordmark.svg",
+    preview: "light",
+    shape: "wide",
+  },
+  {
+    name: "Reversed wordmark",
+    description: "Use this version on dark backgrounds.",
+    file: "wordmark-inverse.svg",
+    preview: "dark",
+    shape: "wide",
+  },
+  {
+    name: "App icon",
+    description: "The square wheel mark for avatars and icons.",
+    file: "logo.svg",
+    preview: "light",
+    shape: "square",
+  },
+] as const;
+---
+
+<Base
+  title="Brand"
+  markdown="brand.md"
+  description="Download the Tubeless wordmark and app icon as SVG files."
+>
+  <main class="wrap">
+    <header class="page-lead brand-lead">
+      <h1 class="page-title">Tubeless brand</h1>
+      <p>Logo files for referring to Tubeless in articles, integrations, and community projects.</p>
+    </header>
+
+    <section class="section brand-assets" aria-labelledby="logos-heading">
+      <h2 id="logos-heading">Logos</h2>
+      <div class="brand-grid">
+        {logos.map((logo) => (
+          <article class="brand-card">
+            <div class:list={["brand-preview", logo.preview, logo.shape]}>
+              <img src={href(logo.file)} alt={`Tubeless ${logo.name.toLowerCase()}`} />
+            </div>
+            <div class="brand-card-copy">
+              <div>
+                <h3>{logo.name}</h3>
+                <p>{logo.description}</p>
+              </div>
+              <a class="btn ghost" href={href(logo.file)} download>Download SVG</a>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  </main>
+</Base>
+
+<style>
+  .brand-lead { padding-bottom: 3rem; }
+  .brand-assets { padding-top: 3rem; }
+  .brand-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; margin-top: 1.8rem; }
+  .brand-card { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+  .brand-card:last-child { grid-column: 1 / -1; }
+  .brand-preview { display: grid; place-items: center; min-height: 15rem; padding: 3rem; border-bottom: 1px solid var(--line); }
+  .brand-preview.light { background: var(--road); }
+  .brand-preview.dark { background: var(--carbon); }
+  .brand-preview.wide img { width: min(100%, 20rem); height: auto; }
+  .brand-preview.square img { width: 7rem; height: 7rem; }
+  .brand-card-copy { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding: 1.35rem; }
+  .brand-card-copy h3 { margin: 0 0 0.25rem; font-size: 1rem; }
+  .brand-card-copy p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+  .brand-card-copy .btn { flex: none; }
+
+  @media (max-width: 700px) {
+    .brand-grid { grid-template-columns: 1fr; }
+    .brand-card:last-child { grid-column: auto; }
+    .brand-preview { min-height: 11rem; padding: 2rem; }
+    .brand-card-copy { align-items: flex-start; flex-direction: column; }
+  }
+</style>

@@ -42,7 +42,7 @@ const resources = [
   description="Tubeless developer resources: TypeScript package docs, CLI reference, Studio guide, and agent documentation."
 >
   <main class="wrap">
-    <header class="page-lead">
+    <header class="page-lead developer-lead">
       <h1 class="page-title">Tubeless developer resources</h1>
       <p>
         Find guides for building TypeScript pipelines, running CLI commands, and
@@ -50,7 +50,7 @@ const resources = [
       </p>
     </header>
 
-    <section class="section" aria-labelledby="resources-heading">
+    <section class="section developer-resources" aria-labelledby="resources-heading">
       <h2 id="resources-heading">Documentation and API references</h2>
       <div class="agent-grid">
         {resources.map((resource) => (
@@ -63,3 +63,16 @@ const resources = [
     </section>
   </main>
 </Base>
+
+<style>
+  .developer-lead .page-title { font-size: clamp(3.6rem, 6vw, 5.4rem); }
+  .developer-resources { padding-top: 3rem; }
+  .developer-resources .agent-grid { gap: 1.25rem; margin-top: 2rem; }
+  .developer-resources .agent-grid a { min-height: 10rem; padding: 2rem; }
+
+  @media (max-width: 700px) {
+    .developer-resources { padding-top: 2.4rem; }
+    .developer-resources .agent-grid { margin-top: 1.5rem; }
+    .developer-resources .agent-grid a { min-height: 0; padding: 1.5rem; }
+  }
+</style>

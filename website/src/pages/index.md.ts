@@ -29,6 +29,7 @@ npx skills add chetmancini/tubeless
 
 - [Getting started](${absUrl("docs/getting-started.md")})
 - [Use cases](${absUrl("use-cases.md")}): CI/CD, ML flows, LLM workflows, data pipelines, and operational workflows.
+- [Brand assets](${absUrl("brand.md")}): Tubeless logos in SVG format.
 - [Developer resources](${absUrl("developers.md")})
 - [Agent instructions and resource index](${absUrl("llms.txt")})
 - [Authoring guide](${absUrl("docs/agent-guide.md")})

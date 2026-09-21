@@ -14,6 +14,7 @@ assert.ok(index.includes(documentSchema.$id), "Agents must be able to discover t
 assert.deepEqual(documentSchema, JSON.parse(readFileSync(join(root, "../../docs/pipeline-document.schema.json"), "utf8")), "Website schema must match the packaged source");
 assert.equal(read("CNAME").trim(), "tubeless.io", "Pages artifact must preserve the custom domain");
 assert.ok(index.includes("https://tubeless.io/developers.md"));
+assert.ok(index.includes("https://tubeless.io/brand.md"));
 const pages = readdirSync(join(root, "docs"))
   .filter((name) => existsSync(join(root, "docs", name, "index.html")));
 assert.ok(pages.length > 0, "Built documentation pages must exist");
@@ -99,10 +100,19 @@ assert.match(homepage, /name="description" content="Tubeless is a TypeScript lib
 
 const developers = read("developers/index.html");
 assert.match(developers, /<title>Developer Resources · Tubeless<\/title>/);
-assert.match(developers, /<h1 class="page-title">Tubeless developer resources<\/h1>/);
+assert.match(developers, /<h1 class="page-title"[^>]*>Tubeless developer resources<\/h1>/);
 assert.match(developers, /href="\/docs\/api-reference"/);
 assert.match(developers, /type="text\/markdown" href="\/developers\.md"/);
 assert.match(read("developers.md"), /^# Tubeless developer resources\n/);
+
+const brand = read("brand/index.html");
+assert.match(brand, /<title>Brand · Tubeless<\/title>/);
+assert.match(brand, /<h1 class="page-title"[^>]*>Tubeless brand<\/h1>/);
+assert.match(brand, /href="\/wordmark\.svg"/);
+assert.match(brand, /href="\/wordmark-inverse\.svg"/);
+assert.match(brand, /href="\/logo\.svg"/);
+assert.match(brand, /type="text\/markdown" href="\/brand\.md"/);
+assert.match(read("brand.md"), /^# Tubeless brand\n/);
 
 const sitemap = read("sitemap.xml");
 assert.match(sitemap, /^<\?xml version="1.0" encoding="UTF-8"\?>\n<urlset xmlns="http:\/\/www.sitemaps.org\/schemas\/sitemap\/0.9">/);

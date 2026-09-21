@@ -83,7 +83,7 @@ import { githubBlob, href } from "../lib/paths";
   .case-index strong + span { color: var(--muted); font-size: 0.88rem; }
   .case-jump { position: absolute; top: 1rem; right: 1.25rem; color: var(--gold); font-size: 1.3rem; }
   .case-section { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); align-items: start; gap: 4rem; }
-  .case-copy h2 { max-width: 12ch; text-wrap: balance; }
+  .case-copy h2 { text-wrap: balance; }
   .case-description { margin: 1.5rem 0 2rem; font-size: 1.08rem; color: var(--muted); }
   .case-benefits { display: grid; gap: 1.4rem; }
   .case-benefits h3, .case-recipes h3 { margin: 0 0 0.4rem; font-size: 1rem; font-weight: 500; }
@@ -106,7 +106,6 @@ import { githubBlob, href } from "../lib/paths";
   @media (max-width: 700px) {
     .use-cases-lead { padding-top: 2.8rem; }
     .case-section { grid-template-columns: 1fr; }
-    .case-copy h2 { max-width: 18ch; }
     .case-example { padding: 1.4rem; }
     .case-index { gap: 0.7rem; margin-bottom: 2.5rem; }
     .case-index a { padding: 1rem; }

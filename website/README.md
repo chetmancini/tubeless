@@ -3,7 +3,7 @@
 Human docs site plus agent entrypoints. **Not part of the npm package.**
 
 Source of truth for long-form docs remains `../docs/*.md`. This project renders
-those files and adds the landing, start, use-cases, developer-resource, and agents pages.
+those files and adds the landing, start, use-cases, brand, developer-resource, and agents pages.
 
 ## Local
 
@@ -45,6 +45,7 @@ The build fails when only one variable is set.
 | Markdown downloads and full text | `src/pages/*.md.ts`, `src/pages/docs/[slug].md.ts`, `src/pages/llms-full.txt.ts`; generated from `DOC_NAV` and `../docs/*.md` |
 | Agent URL table | `src/pages/agents.astro`, `src/pages/llms.txt.ts` |
 | Developer resource hub | `src/pages/developers.astro`, `src/pages/developers.md.ts` |
+| Brand page and downloadable logos | `src/pages/brand.astro`, `src/pages/brand.md.ts`, and `public/wordmark*.svg`; the square mark remains `public/logo.svg` |
 | Homepage Markdown overview | `src/pages/index.md.ts`; advertised in the homepage head and `llms.txt` |
 | Visual system | `src/styles/global.css` |
 | Logo and social card | `../docs/assets/logo.svg` and `../docs/assets/social.svg`; `bun scripts/rasterize-og.mjs` writes `public/og.jpg` at 1200×630 JPEG. `bun scripts/rasterize-icon.mjs` writes `public/apple-touch-icon.png` at 180×180. `public/og.png` is a historical URL only |
