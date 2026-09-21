@@ -143,6 +143,12 @@ Read the corresponding package recipe before using these features:
   `compiled.get(id)` and register them directly in the entry list.
   Default-export the project to select it for CLI and Studio. Without a default,
   exactly one distinct project may be exported; aliases are allowed.
+- Run a schema-backed pipeline file directly with
+  `tubeless run ./pipelines/import.ts -- --source rows.txt`. A marked
+  `definePipelineCommand` export wins when present; otherwise the file must expose
+  one unique pipeline whose Standard JSON Schema input metadata supports inferred
+  flags. Use `--export` to select among multiple exports. Schema-less or unsupported
+  input shapes still require an explicit command adapter.
 - Use `pipelines/<name>.ts` for definitions. Add `scripts/<name>.ts` command
   wrappers only when explicit `params`, `mapOptions`, or presentation overrides
   are needed. Preserve existing consumer conventions.

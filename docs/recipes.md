@@ -116,7 +116,10 @@ pipeline does not require credentials.
    exact lookup types; duplicate pipeline IDs fail regardless of entry form.
    Default-export the project to select it for CLI and Studio; without a default,
    multiple distinct projects are rejected.
-   Start standalone or customized scripts with `definePipelineCommand(pipeline)`.
+   Run a uniquely exported schema-backed pipeline file directly when inferred flags
+   are sufficient. Start customized scripts with `definePipelineCommand(pipeline)`;
+   an explicit command wins when both it and its pipeline are exported. Use
+   `--export` to resolve multiple commands or pipelines.
    Use `overrides` for presentation only; explicit `params` and `mapOptions` are
    advanced options for type-only pipelines or custom input shapes.
    Non-string `enum`/`const` constraints also require explicit parameters.

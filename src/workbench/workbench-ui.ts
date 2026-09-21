@@ -25,10 +25,10 @@ const UI_USAGE = `Usage: tubeless ui [options] [project-file]
 
 Serve the local pipeline studio from an append-only SQLite run store or a
 finished NDJSON trace. Load pipelines from a project, or register
-definePipelineCommand modules directly, and only with a writable SQLite store.
+pipeline or definePipelineCommand modules directly, and only with a writable SQLite store.
 
 Options:
-      --command <path> Register a launchable pipeline command (repeatable)
+      --command <path> Register a launchable pipeline or command (repeatable)
   -e, --export <name>  Select the export when registering exactly one command
       --store <path>    SQLite database (default: .tubeless/runs.sqlite)
       --trace <path>    Read a finished NDJSON trace artifact (history-only)

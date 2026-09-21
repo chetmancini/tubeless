@@ -3,12 +3,7 @@ import * as path from "node:path";
 import type { CliContext } from "../cli/cli.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE } from "../cli/cli-exit.js";
 import type { PipelineContext } from "../core/pipeline.js";
-import {
-  loadPipelineCommandModule,
-  loadPlanSourceModule,
-  type WorkbenchPipelineCommand,
-  type WorkbenchPlanSource,
-} from "./pipeline-module.js";
+import { loadPlanSourceModule, type WorkbenchPlanSource } from "./pipeline-module.js";
 import { tubelessErrorKind } from "../utilities/tubeless-error.js";
 
 export { TUBELESS_WORKBENCH_EXIT_CODE };
@@ -138,16 +133,6 @@ export async function loadWorkbenchModule<T>(
     io.stderr.write(`Error: ${errorMessage(error)}\n`);
     return { exitCode };
   }
-}
-
-export async function loadPipelineCommand(
-  fileArgument: string,
-  exportName: string | undefined,
-  io: WorkbenchCliIo
-): Promise<{ command: WorkbenchPipelineCommand; exportName: string } | { exitCode: number }> {
-  return loadWorkbenchModule(fileArgument, io, (filePath) =>
-    loadPipelineCommandModule(filePath, exportName)
-  );
 }
 
 export async function loadPlanSource(

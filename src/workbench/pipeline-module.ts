@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import type { CliCommandDescriptor, CliContext } from "../cli/cli.js";
 import { pipelineForCommand } from "../utilities/pipeline-command-marker.js";
 import type {
+  Pipeline,
   PipelineMermaidOptions,
   PipelinePlan,
   PipelineRunControls,
@@ -15,6 +16,9 @@ export interface WorkbenchPipeline {
   plan(controls?: PipelineRunControls): PipelinePlan;
   toMermaid(options?: PipelineMermaidOptions): string;
 }
+
+/** Full pipeline surface required to derive a runnable CLI command. */
+export type WorkbenchExecutablePipeline = Pipeline<object, unknown>;
 
 /** Runtime surface exposed only by commands created with definePipelineCommand. */
 export type WorkbenchPipelineCommandParseResult =
@@ -195,20 +199,6 @@ export async function importModuleNamespace(filePath: string): Promise<Record<st
   // Record<string, unknown> documents the import result's shape; selectors
   // validate each export at runtime before use.
   return (await import(pathToFileURL(filePath).href)) as Record<string, unknown>;
-}
-
-/** Load a command and its export name for a stable external registration identity. */
-export async function loadPipelineCommandModule(
-  filePath: string,
-  exportName?: string
-): Promise<{ command: WorkbenchPipelineCommand; exportName: string }> {
-  const selected = selectUniqueExport(
-    await importModuleNamespace(filePath),
-    exportName,
-    isWorkbenchPipelineCommand,
-    "pipeline command"
-  );
-  return { command: selected.value, exportName: selected.exportName };
 }
 
 /** Load a marked command when present, otherwise a pipeline, for inspect/plan/graph. */

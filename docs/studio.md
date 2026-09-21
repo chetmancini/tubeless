@@ -98,8 +98,10 @@ bunx tubeless ui \
   --command ./scripts/publish.ts
 ```
 
-Each file must export a command created with `definePipelineCommand`.
-Use `--export` when registering one file with multiple matching exports.
+Each file may export a command created with `definePipelineCommand`, or one unique
+schema-backed pipeline from which Studio can infer a command. An explicit command
+wins when present. Use `--export` when registering one file with multiple matching
+exports; schema-less or unsupported inputs require an explicit command adapter.
 Studio does not infer executable files from recorded runs.
 
 The command's parameter definitions determine the form controls: checkboxes

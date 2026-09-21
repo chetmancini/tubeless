@@ -20,7 +20,7 @@ Commands:
   tubeless inspect   Show pipeline identity and the default structural plan
   tubeless plan      Preview step selection without executing the pipeline
   tubeless graph     Generate Mermaid flowchart source
-  tubeless run       Execute a project pipeline or exported definePipelineCommand
+  tubeless run       Execute a project pipeline or a pipeline or command file
   tubeless history   Show recorded runs from the local SQLite store
   tubeless ui        Open the optional local run studio
 

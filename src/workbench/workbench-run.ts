@@ -25,12 +25,12 @@ import {
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
 
-const RUN_USAGE = `Usage: tubeless run [options] <command-file> [-- <command-args...>]
+const RUN_USAGE = `Usage: tubeless run [options] <pipeline-id-or-file> [-- <command-args...>]
 
-Execute a project pipeline or exported definePipelineCommand using its validated CLI contract.
+Execute a project pipeline or a directly exported pipeline or command using its validated CLI contract.
 
 Options:
-  -e, --export <name>   Select a command export when the file has more than one
+  -e, --export <name>   Select a pipeline or command export when the file has more than one
   -p, --project <path>  Resolve a pipeline or command id from this project file
       --store <path>    Append run events to a local SQLite database
       --trace <path>    Write NDJSON traces to a file, or - for stdout
@@ -38,6 +38,7 @@ Options:
   -h, --help            Show this workbench help
 
 Pass application flags after --. For command help, use: tubeless run <file> -- --help
+Schema-backed pipelines infer arguments; use definePipelineCommand for custom inputs.
 `;
 
 function parseRunArgs(argv: readonly string[]) {
@@ -147,7 +148,7 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
     return TUBELESS_WORKBENCH_EXIT_CODE.success;
   }
   if (parsed.parsed.positionals.length !== 1) {
-    return writeUsageError(io, "Pass exactly one pipeline command file.", RUN_USAGE);
+    return writeUsageError(io, "Pass exactly one pipeline ID or file.", RUN_USAGE);
   }
 
   const registration = await resolveWorkbenchRegistration(

@@ -100,7 +100,7 @@ describe("runCommand", () => {
     expect(io.errors.join("")).toContain(
       "Error: --store and --trace cannot write to the same path."
     );
-    expect(io.errors.join("")).toContain("Usage: tubeless run [options] <command-file>");
+    expect(io.errors.join("")).toContain("Usage: tubeless run [options] <pipeline-id-or-file>");
   });
 
   it("writes NDJSON to stdout for --trace - and moves command output to stderr", async () => {
