@@ -102,7 +102,12 @@ Read the corresponding package recipe before using these features:
   separately through `controls`, either as a typed value or a callback. A child's
   `dryRun: false` never disables a dry-running parent.
   Use ordinary helpers or `runConcurrent` for lightweight work without child
-  lifecycle reporting.
+  lifecycle reporting. Use `runConcurrentPartial` from `tubeless/batch` for partial
+  results: branch on `ok`, use `completedIndexes` for successful outputs (including
+  `undefined`), and read `failure` only when `ok` is false. A rejection may itself
+  be `undefined`. Both helpers stop admitting work after failure or cancellation,
+  drain active workers, and preserve input-order results without cancelling
+  siblings. Invalid concurrency throws rather than returning an execution outcome.
 - `createSteps(optionsSchema)`, `outputSchema`, or `resultSchema` for runtime
   validation at untrusted boundaries. Reuse the project's Standard Schema
   implementation; core needs no schema dependency.

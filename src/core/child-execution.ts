@@ -1,6 +1,6 @@
 import { throwIfAborted } from "../utilities/abort.js";
 import { emitRejectedPlanLifecycle } from "./lifecycle.js";
-import { runConcurrentSettled } from "../utilities/batch.js";
+import { runConcurrentPartial } from "../utilities/batch.js";
 import { isPipelineCancellation, PipelineExecutionError } from "./pipeline-execute.js";
 import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
@@ -337,7 +337,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
     progress?.publish();
     if (items.length === 0) return [];
 
-    const settled = await runConcurrentSettled(
+    const partial = await runConcurrentPartial(
       items,
       { concurrency, signal: context.signal },
       async (item, itemIndex): Promise<Outcome> => {
@@ -389,13 +389,14 @@ export function createMappedChildRunner<TParentOptions extends object>(
     );
 
     progress?.finish();
-    const outcomes = settled.results.filter((outcome): outcome is Outcome => outcome !== undefined);
-    const schedulerFailure =
-      settled.failure === undefined
-        ? undefined
-        : settled.failure instanceof Error
-          ? settled.failure
-          : new Error(String(settled.failure));
+    const outcomes = partial.ok
+      ? partial.results
+      : partial.results.filter((outcome): outcome is Outcome => outcome !== undefined);
+    const schedulerFailure = partial.ok
+      ? undefined
+      : partial.failure instanceof Error
+        ? partial.failure
+        : new Error(String(partial.failure));
 
     const failures = outcomes.filter(
       (outcome): outcome is Extract<Outcome, { ok: false }> => !outcome.ok

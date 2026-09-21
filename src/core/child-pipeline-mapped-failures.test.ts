@@ -10,6 +10,9 @@ describe("mapped child adapter: failures", () => {
       itemId: string;
     }
 
+    const successfulStarted = defer();
+    const releaseSuccess = defer();
+    const failuresReported = defer();
     let successfulChildFinished = false;
     const { step: childStep } = createSteps<ChildOptions>();
     const process = childStep("process", {
@@ -17,7 +20,8 @@ describe("mapped child adapter: failures", () => {
         if (context.options.fail) {
           throw new Error("bad source");
         }
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        successfulStarted.resolve();
+        await releaseSuccess.promise;
         successfulChildFinished = true;
         return context.options.itemId;
       },
@@ -33,6 +37,7 @@ describe("mapped child adapter: failures", () => {
       items: () => [
         { fail: true, id: "broken" },
         { fail: false, id: "valid" },
+        { fail: true, id: "also-broken" },
       ],
       key: (item) => item.id,
       concurrency: 2,
@@ -45,11 +50,39 @@ describe("mapped child adapter: failures", () => {
       finalize,
     });
 
-    const result = await parent.run({});
+    const finished = vi.fn();
+    const run = parent.run(
+      {},
+      {},
+      {
+        hooks: {
+          onStepProgress: ({ progress }) => {
+            if (
+              progress.details?.filter((detail) => !detail.depth && detail.status === "failed")
+                .length === 2
+            ) {
+              failuresReported.resolve();
+            }
+          },
+        },
+      }
+    );
+    void run.then(finished);
+    await Promise.all([successfulStarted.promise, failuresReported.promise]);
+    expect(finished).not.toHaveBeenCalled();
+    releaseSuccess.resolve();
+    const result = await run;
 
     expect(successfulChildFinished).toBe(true);
     expect(result.status).not.toBe("completed");
     expect(result.errors[0]?.message).toContain("broken: failed at process: bad source");
+    expect(result.errors[0]?.fanOut).toMatchObject({
+      failureCount: 2,
+      failures: [
+        { index: 0, key: "broken", cancelled: false },
+        { index: 2, key: "also-broken", cancelled: false },
+      ],
+    });
     expect(finalize).not.toHaveBeenCalled();
   });
 

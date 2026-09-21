@@ -81,8 +81,15 @@ pipeline does not require credentials.
    reporting. Add `skip` to `forEachPipeline` when policy may omit the whole
    fan-out and a skip should appear in reports. Use `runConcurrent`
    for lightweight worker functions that should
-   throw on the first failure. Use `runConcurrentSettled` when the caller needs
-   completed results plus that failure without throwing.
+   throw on the first failure. Use `runConcurrentPartial` when the caller needs
+   completed results plus that failure without throwing. Both stop admitting work
+   after the first observed failure or cancellation, then drain active workers
+   without cancelling siblings. `runConcurrentPartial` returns
+   `ConcurrentPartialResult<R>`: branch on `ok`, never on `failure`. Success has
+   dense input-order `readonly R[]` results; failure has sparse results and the
+   first rejection or observed abort error. `completedIndexes` identifies
+   successful outputs, including `undefined`; a rejection can also be `undefined`.
+   Invalid concurrency still throws, including for empty input.
 
 6. Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
    `tubeless/project`. Use `project.get(id)` to retain the selected pipeline's exact

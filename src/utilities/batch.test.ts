@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { runBatched, runConcurrent, runConcurrentSettled } from "./batch.js";
+import { runBatched, runConcurrent, runConcurrentPartial } from "./batch.js";
 
 describe("runBatched", () => {
   it("returns an empty array without running the worker for empty input", async () => {
@@ -45,7 +45,7 @@ describe("runBatched", () => {
     await runBatched([1, 2, 3, 4, 5, 6], { size: 1, concurrency: 2 }, async (batch) => {
       active++;
       maxActive = Math.max(maxActive, active);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await Promise.resolve();
       active--;
       return batch[0];
     });
@@ -58,7 +58,7 @@ describe("runBatched", () => {
     await runBatched([1, 2, 3], { size: 1 }, async (batch) => {
       active++;
       maxActive = Math.max(maxActive, active);
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      await Promise.resolve();
       active--;
       return batch[0];
     });
@@ -106,149 +106,264 @@ describe("runBatched", () => {
   });
 });
 
-describe("runConcurrent", () => {
-  it("preserves input order while bounding active work", async () => {
-    let active = 0;
-    let maxActive = 0;
-    const results = await runConcurrent([3, 1, 2], { concurrency: 2 }, async (item) => {
-      active += 1;
-      maxActive = Math.max(maxActive, active);
-      await new Promise((resolve) => setTimeout(resolve, item));
-      active -= 1;
-      return item * 2;
-    });
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
-    expect(results).toEqual([6, 2, 4]);
-    expect(maxActive).toBeLessThanOrEqual(2);
+const rejectionValues = [undefined, false, null, "worker failed", new Error("worker failed")];
+
+describe("runConcurrent", () => {
+  it.each(rejectionValues)("rejects with the original worker rejection %p", async (failure) => {
+    const run = runConcurrent([0], {}, async () => {
+      throw failure;
+    });
+    await expect(run).rejects.toBe(failure);
   });
 
-  it("passes each worker its index and signal", async () => {
-    const controller = new AbortController();
-    const seen: Array<[number, AbortSignal | undefined]> = [];
-
-    await runConcurrent(["a", "b"], { signal: controller.signal }, async (_item, index, signal) => {
-      seen.push([index, signal]);
-      return index;
-    });
-
-    expect(seen).toEqual([
-      [0, controller.signal],
-      [1, controller.signal],
+  it("returns successful undefined outputs", async () => {
+    await expect(runConcurrent([0, 1], {}, async () => undefined)).resolves.toEqual([
+      undefined,
+      undefined,
     ]);
   });
 
-  it("stops scheduling after a worker failure while allowing active work to settle", async () => {
-    let releaseSlowWorker: (() => void) | undefined;
-    const slowWorkerSettled = new Promise<void>((resolve) => {
-      releaseSlowWorker = resolve;
-    });
+  it("rejects only after active workers drain", async () => {
+    const active = deferred<number>();
+    const failure = new Error("first failure");
     const seen: number[] = [];
-    const run = runConcurrent([0, 1, 2], { concurrency: 2 }, async (item) => {
+    const run = runConcurrent([0, 1, 2], { concurrency: 2 }, (item) => {
       seen.push(item);
-      if (item === 0) {
-        await slowWorkerSettled;
-        return item;
-      }
-      throw new Error("worker failed");
+      return item === 0 ? Promise.reject(failure) : active.promise;
     });
-
+    const rejected = vi.fn();
+    void run.catch(rejected);
     await Promise.resolve();
-    releaseSlowWorker?.();
-    await expect(run).rejects.toThrow("worker failed");
+    expect(rejected).not.toHaveBeenCalled();
+    active.resolve(1);
+    await expect(run).rejects.toBe(failure);
     expect(seen).toEqual([0, 1]);
   });
 
-  it("rethrows the first worker failure after concurrent workers settle", async () => {
-    const firstFailure = new Error("first failure");
-    const laterFailure = new Error("later failure");
-    let rejectLaterWorker: ((reason?: unknown) => void) | undefined;
-    const laterWorker = new Promise<never>((_resolve, reject) => {
-      rejectLaterWorker = reject;
-    });
-
-    const run = runConcurrent([0, 1], { concurrency: 2 }, async (item) => {
-      if (item === 0) throw firstFailure;
-      await laterWorker;
-      throw laterFailure;
-    });
-
-    await Promise.resolve();
-    rejectLaterWorker?.(laterFailure);
-
-    await expect(run).rejects.toBe(firstFailure);
-  });
-
-  it("stops scheduling after cancellation", async () => {
-    const controller = new AbortController();
-    const seen: number[] = [];
-
+  it("rejects with the original cancellation Error", async () => {
+    const failure = new Error("stop");
     await expect(
-      runConcurrent([0, 1, 2], { concurrency: 1, signal: controller.signal }, async (item) => {
-        seen.push(item);
-        controller.abort("stop");
-        return item;
-      })
-    ).rejects.toThrow("Concurrent run aborted: stop");
-    expect(seen).toEqual([0]);
-  });
-
-  it("still throws the first worker failure after the settled core is used", async () => {
-    const firstFailure = new Error("first failure");
-    await expect(
-      runConcurrent([0], {}, async () => {
-        throw firstFailure;
-      })
-    ).rejects.toBe(firstFailure);
+      runConcurrent([0], { signal: AbortSignal.abort(failure) }, async () => 0)
+    ).rejects.toBe(failure);
   });
 });
 
-describe("runConcurrentSettled", () => {
-  it("returns completed results plus the abort failure when aborted mid-run", async () => {
+describe("runConcurrentPartial", () => {
+  it("schedules lazily within the limit and orders results by original input indexes", async () => {
+    const workers = [deferred<string>(), deferred<string>(), deferred<string>()];
     const controller = new AbortController();
-    const seen: number[] = [];
-
-    const settled = await runConcurrentSettled(
-      [0, 1, 2],
-      { concurrency: 1, signal: controller.signal },
-      async (item) => {
-        seen.push(item);
-        controller.abort("stop");
-        return `done-${item}`;
-      }
+    const worker = vi.fn(
+      (_item: string, index: number, _signal?: AbortSignal) => workers[index]!.promise
+    );
+    const run = runConcurrentPartial(
+      ["a", "b", "c"],
+      { concurrency: 2, signal: controller.signal },
+      worker
     );
 
-    expect(seen).toEqual([0]);
-    expect(settled.results[0]).toBe("done-0");
-    expect(settled.results[1]).toBeUndefined();
-    expect(settled.results[2]).toBeUndefined();
-    expect([...settled.completedIndexes]).toEqual([0]);
-    expect(settled.failure).toEqual(
-      expect.objectContaining({ message: "Concurrent run aborted: stop" })
-    );
-  });
-
-  it("returns dense results and no failure when every worker completes", async () => {
-    const settled = await runConcurrentSettled(
-      [3, 1, 2],
-      { concurrency: 2 },
-      async (item) => item * 2
-    );
-
-    expect(settled.failure).toBeUndefined();
-    expect(settled.results).toEqual([6, 2, 4]);
-    expect([...settled.completedIndexes].sort((left, right) => left - right)).toEqual([0, 1, 2]);
-  });
-
-  it("records a worker rejection without keeping that item as completed", async () => {
-    const failure = new Error("worker failed");
-    const settled = await runConcurrentSettled([0, 1], { concurrency: 1 }, async (item) => {
-      if (item === 0) throw failure;
-      return item;
+    expect(worker.mock.calls).toEqual([
+      ["a", 0, controller.signal],
+      ["b", 1, controller.signal],
+    ]);
+    workers[1]!.resolve("second");
+    await Promise.resolve();
+    expect(worker.mock.calls).toEqual([
+      ["a", 0, controller.signal],
+      ["b", 1, controller.signal],
+      ["c", 2, controller.signal],
+    ]);
+    workers[2]!.resolve("third");
+    workers[0]!.resolve("first");
+    const partial = await run;
+    expect(partial).toEqual({
+      ok: true,
+      results: ["first", "second", "third"],
+      completedIndexes: new Set([0, 1, 2]),
     });
-
-    expect(settled.failure).toBe(failure);
-    expect(settled.results[0]).toBeUndefined();
-    expect(settled.completedIndexes.has(0)).toBe(false);
-    expect(settled.completedIndexes.has(1)).toBe(false);
+    expect(partial).not.toHaveProperty("failure");
   });
+
+  it("defaults to sequential scheduling and records successful undefined outputs", async () => {
+    const first = deferred<undefined>();
+    const worker = vi.fn(() => first.promise);
+    const run = runConcurrentPartial([0, 1], {}, worker);
+    expect(worker).toHaveBeenCalledTimes(1);
+    first.resolve(undefined);
+    const partial = await run;
+    expect(worker).toHaveBeenCalledTimes(2);
+    expect(partial).toEqual({
+      ok: true,
+      results: [undefined, undefined],
+      completedIndexes: new Set([0, 1]),
+    });
+    expect(Object.keys(partial.results)).toEqual(["0", "1"]);
+  });
+
+  it.each(rejectionValues)("records rejection %p separately from success", async (failure) => {
+    const worker = vi.fn(async () => {
+      throw failure;
+    });
+    const partial = await runConcurrentPartial([0, 1], {}, worker);
+    expect(partial.ok).toBe(false);
+    if (partial.ok) throw new Error("Expected a failed outcome");
+    expect(partial.failure).toBe(failure);
+    expect(partial.results).toHaveLength(2);
+    expect(Object.keys(partial.results)).toEqual([]);
+    expect(partial.completedIndexes.size).toBe(0);
+    expect(worker).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops queued work and retains successful outputs that arrive during draining", async () => {
+    const workers = [
+      deferred<string | undefined>(),
+      deferred<string | undefined>(),
+      deferred<string | undefined>(),
+    ];
+    const controller = new AbortController();
+    const worker = vi.fn((_item: number, index: number, signal?: AbortSignal) => {
+      expect(signal).toBe(controller.signal);
+      return workers[index]!.promise;
+    });
+    const run = runConcurrentPartial(
+      [0, 1, 2, 3],
+      { concurrency: 3, signal: controller.signal },
+      worker
+    );
+    const resolved = vi.fn();
+    void run.then(resolved);
+    workers[1]!.reject(undefined);
+    await Promise.resolve();
+    expect(resolved).not.toHaveBeenCalled();
+    expect(controller.signal.aborted).toBe(false);
+    workers[2]!.resolve(undefined);
+    workers[0]!.resolve("late success");
+    const partial = await run;
+    expect(partial.ok).toBe(false);
+    if (partial.ok) throw new Error("Expected a failed outcome");
+    expect(partial.failure).toBeUndefined();
+    expect(partial.results).toHaveLength(4);
+    expect(partial.results[0]).toBe("late success");
+    expect(partial.results[2]).toBeUndefined();
+    expect(Object.keys(partial.results)).toEqual(["0", "2"]);
+    expect(partial.completedIndexes).toEqual(new Set([0, 2]));
+    expect(worker.mock.calls.map(([, index]) => index)).toEqual([0, 1, 2]);
+    expect(controller.signal.aborted).toBe(false);
+  });
+
+  it.each(rejectionValues)(
+    "preserves first observed rejection %p over later failures and abort",
+    async (failure) => {
+      const workers = [deferred<number>(), deferred<number>()];
+      const controller = new AbortController();
+      const run = runConcurrentPartial(
+        [0, 1, 2],
+        { concurrency: 2, signal: controller.signal },
+        (_item, index) => workers[index]!.promise
+      );
+      workers[1]!.reject(failure);
+      await Promise.resolve();
+      controller.abort(new Error("later abort"));
+      workers[0]!.reject(new Error("later worker failure"));
+      const partial = await run;
+      expect(partial.ok).toBe(false);
+      if (partial.ok) throw new Error("Expected a failed outcome");
+      expect(partial.failure).toBe(failure);
+      expect(partial.completedIndexes.size).toBe(0);
+    }
+  );
+
+  it("does not start workers for a pre-aborted signal", async () => {
+    const failure = new Error("already cancelled");
+    const worker = vi.fn(async () => 0);
+    const partial = await runConcurrentPartial(
+      [0, 1],
+      { signal: AbortSignal.abort(failure) },
+      worker
+    );
+    expect(partial).toMatchObject({ ok: false, failure, completedIndexes: new Set() });
+    if (partial.ok) throw new Error("Expected a failed outcome");
+    expect(partial.failure).toBe(failure);
+    expect(Object.keys(partial.results)).toEqual([]);
+    expect(worker).not.toHaveBeenCalled();
+  });
+
+  it("stops admission on mid-run cancellation and drains active successes", async () => {
+    const controller = new AbortController();
+    const failure = new Error("operator stop");
+    const workers = [deferred<number>(), deferred<number>()];
+    const worker = vi.fn((_item: number, index: number) => workers[index]!.promise);
+    const run = runConcurrentPartial(
+      [0, 1, 2],
+      { concurrency: 2, signal: controller.signal },
+      worker
+    );
+    const resolved = vi.fn();
+    void run.then(resolved);
+    controller.abort(failure);
+    workers[0]!.resolve(10);
+    await Promise.resolve();
+    expect(resolved).not.toHaveBeenCalled();
+    workers[1]!.resolve(20);
+    const partial = await run;
+    expect(partial.ok).toBe(false);
+    if (partial.ok) throw new Error("Expected a failed outcome");
+    expect(partial.failure).toBe(failure);
+    expect(partial.results.slice(0, 2)).toEqual([10, 20]);
+    expect(partial.completedIndexes).toEqual(new Set([0, 1]));
+    expect(worker).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves an observed cancellation over a later worker rejection", async () => {
+    const controller = new AbortController();
+    const failure = new Error("operator stop");
+    const workers = [deferred<number>(), deferred<number>()];
+    const run = runConcurrentPartial(
+      [0, 1],
+      { concurrency: 2, signal: controller.signal },
+      (_item, index) => workers[index]!.promise
+    );
+    controller.abort(failure);
+    workers[0]!.resolve(10);
+    await Promise.resolve();
+    workers[1]!.reject(undefined);
+    const partial = await run;
+    expect(partial.ok).toBe(false);
+    if (partial.ok) throw new Error("Expected a failed outcome");
+    expect(partial.failure).toBe(failure);
+    expect(partial.completedIndexes).toEqual(new Set([0]));
+  });
+
+  it.each([undefined, AbortSignal.abort("stop")])(
+    "succeeds for empty input even when aborted",
+    async (signal) => {
+      const worker = vi.fn(async () => 0);
+      const partial = await runConcurrentPartial([], { signal }, worker);
+      expect(partial).toEqual({ ok: true, results: [], completedIndexes: new Set() });
+      expect(worker).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([0, -1, 1.5, NaN, Infinity, -Infinity])(
+    "throws for invalid concurrency %p even with empty input",
+    async (concurrency) => {
+      const worker = vi.fn(async () => 0);
+      for (const items of [[], [0]]) {
+        await expect(runConcurrentPartial(items, { concurrency }, worker)).rejects.toThrow(
+          /concurrency/
+        );
+        await expect(runConcurrent(items, { concurrency }, worker)).rejects.toThrow(/concurrency/);
+      }
+      expect(worker).not.toHaveBeenCalled();
+    }
+  );
 });
