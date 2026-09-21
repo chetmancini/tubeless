@@ -14,7 +14,7 @@ import {
 } from "./workbench.test-support.js";
 
 describe("workbench run integration", () => {
-  it("runs a discovered pipeline command with application arguments after the boundary", async () => {
+  it("prefers an explicit pipeline command and runs arguments after the boundary", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     const io = captureIo(directory);
 

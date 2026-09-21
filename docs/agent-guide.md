@@ -16,7 +16,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
    `tubeless/project`; retrieve one with `project.get(id)` and use its ordinary
    `plan`, `run`, `runOrThrow`, or `toMermaid` methods. Use the
    [project example](../examples/tubeless.project.ts) as the minimal reference.
-   Schema-backed project pipelines are directly available to the CLI and Studio.
+   Schema-backed pipelines are directly available to the CLI from project IDs or
+   files, and to Studio from projects or registered command files.
    Automatic commands require Standard JSON Schema input metadata; schema-less
    pipelines need explicit command `params`, even with no inputs. Pass custom
    adapters directly in the project's entry list for CLI inputs, mapping, or presentation.
@@ -198,8 +199,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   exported. Let the workbench discover the sole matching export or pass
   `--export`.
 - Use `tubeless run <pipeline-id> -- <command-args>` for project pipelines, or
-  the existing file form only for modules exporting a
-  `definePipelineCommand`. Keep application flags after `--`; the command must
+  `tubeless run <pipeline-file> -- <command-args>` for a uniquely selected
+  schema-backed pipeline. A marked `definePipelineCommand` export wins when present;
+  schema-less or unsupported inputs require one explicitly. Keep application flags after `--`; the command must
   continue to own domain validation and option mapping. Pass `--trace <path>` for
   NDJSON traces (`-` writes NDJSON to stdout and moves command output to stderr)
   and `--store` for SQLite; they compose. Use `tubeless history` to list or show

@@ -1,11 +1,7 @@
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import {
-  loadPipelineCommandModule,
-  loadPlanSourceModule,
-  selectUniqueExport,
-} from "./pipeline-module.js";
+import { loadPlanSourceModule, selectUniqueExport } from "./pipeline-module.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli } from "./workbench.js";
 import {
   captureIo,
@@ -23,6 +19,8 @@ describe("workbench module loading and help", () => {
         stepIds: [],
         targetIds: [],
         plan: () => ({ dryRun: false, errors: [], ok: true, pipelineId: id, steps }),
+        run: async () => ({ status: "completed" }),
+        runOrThrow: async () => undefined,
         toMermaid: () => \`flowchart TD\\n  node["\${id}"]\`,
       });
       export const FirstPipeline = pipeline("first");
@@ -73,7 +71,7 @@ describe("workbench module loading and help", () => {
     ).toThrow("Module exports multiple numbers (First, Second).");
   });
 
-  it("discovers only pipeline commands, deduplicates aliases, and supports explicit selection", async () => {
+  it("prefers pipeline commands, deduplicates aliases, and supports explicit selection", async () => {
     const fixture = await writeActualPipelineCommandModule();
     const fixtureUrl = JSON.stringify(pathToFileURL(fixture.filePath).href);
     const cliUrl = JSON.stringify(pathToFileURL(path.resolve("dist/cli/cli.js")).href);
@@ -89,22 +87,22 @@ describe("workbench module loading and help", () => {
       export const Second = definePipelineCommand(CommandPipeline, { reporter: false });
     `);
 
-    await expect(loadPipelineCommandModule(aliases.filePath)).resolves.toMatchObject({
-      exportName: "First",
+    await expect(loadPlanSourceModule(aliases.filePath)).resolves.toMatchObject({
+      kind: "command",
       command: { id: "command-fixture" },
     });
-    await expect(loadPipelineCommandModule(multiple.filePath, "Second")).resolves.toMatchObject({
-      exportName: "Second",
+    await expect(loadPlanSourceModule(multiple.filePath, "Second")).resolves.toMatchObject({
+      kind: "command",
       command: { id: "command-fixture" },
     });
-    await expect(loadPipelineCommandModule(multiple.filePath)).rejects.toThrow(
+    await expect(loadPlanSourceModule(multiple.filePath)).rejects.toThrow(
       "Module exports multiple pipeline commands (First, Second); pass --export <name>."
     );
     const generic = await writeModule(
       `export { Generic } from ${JSON.stringify(pathToFileURL(aliases.filePath).href)};`
     );
-    await expect(loadPipelineCommandModule(generic.filePath)).rejects.toThrow(
-      "Module does not export a tubeless pipeline command."
+    await expect(loadPlanSourceModule(generic.filePath)).rejects.toThrow(
+      "Module does not export a tubeless pipeline or pipeline command."
     );
   });
 
@@ -123,9 +121,119 @@ describe("workbench module loading and help", () => {
         toMermaid: () => "flowchart TD",
       }, {});
     `);
-    await expect(loadPipelineCommandModule(filePath)).rejects.toThrow(
-      "Module does not export a tubeless pipeline command."
+    await expect(loadPlanSourceModule(filePath)).rejects.toThrow(
+      "Module does not export a tubeless pipeline or pipeline command."
     );
+  });
+
+  it("runs a uniquely exported schema-backed pipeline without a command wrapper", async () => {
+    const pipelineUrl = JSON.stringify(pathToFileURL(path.resolve("dist/core/pipeline.js")).href);
+    const { directory } = await writeModule(`
+      import { createSteps, definePipeline } from ${pipelineUrl};
+      const optionsSchema = {
+        "~standard": {
+          version: 1,
+          vendor: "fixture",
+          validate: (value) => ({ value }),
+          jsonSchema: { input: () => ({
+            type: "object",
+            properties: { source: { type: "string" } },
+            required: ["source"],
+          }) },
+        },
+      };
+      const { step } = createSteps(optionsSchema);
+      const work = step("work", {
+        run: (_inputs, context) => context.log.log(\`direct:\${context.options.source}\`),
+      });
+      export const ImportPipeline = definePipeline({ id: "import", steps: [work] });
+    `);
+    const io = captureIo(directory);
+
+    const exitCode = await runWorkbenchCli(
+      ["run", "pipeline.mjs", "--", "--source", "rows.txt"],
+      io
+    );
+
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(io.errors).toEqual([]);
+    expect(io.output.join("")).toContain("direct:rows.txt");
+  });
+
+  it("keeps pipeline ambiguity errors and lets --export select a direct pipeline", async () => {
+    const pipelineUrl = JSON.stringify(pathToFileURL(path.resolve("dist/core/pipeline.js")).href);
+    const { directory } = await writeModule(`
+      import { createSteps, definePipeline } from ${pipelineUrl};
+      const optionsSchema = {
+        "~standard": {
+          version: 1,
+          vendor: "fixture",
+          validate: (value) => ({ value }),
+          jsonSchema: { input: () => ({ type: "object", properties: {} }) },
+        },
+      };
+      const { step } = createSteps(optionsSchema);
+      const first = step("first", { run: (_inputs, context) => context.log.log("ran:first") });
+      const second = step("second", { run: (_inputs, context) => context.log.log("ran:second") });
+      export const FirstPipeline = definePipeline({ id: "first", steps: [first] });
+      export const SecondPipeline = definePipeline({ id: "second", steps: [second] });
+    `);
+    const ambiguousIo = captureIo(directory);
+    const selectedIo = captureIo(directory);
+
+    expect(await runWorkbenchCli(["run", "pipeline.mjs"], ambiguousIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(ambiguousIo.errors.join("")).toContain(
+      "Module exports multiple pipelines (FirstPipeline, SecondPipeline); pass --export <name>."
+    );
+    expect(
+      await runWorkbenchCli(["run", "--export", "SecondPipeline", "pipeline.mjs"], selectedIo)
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(selectedIo.output.join("")).toContain("ran:second");
+    expect(selectedIo.output.join("")).not.toContain("ran:first");
+  });
+
+  it("requires an explicit adapter for direct pipelines with unsupported inputs", async () => {
+    const schemaLess = await writeActualPipelineModule();
+    const schemaLessIo = captureIo(schemaLess.directory);
+    expect(await runWorkbenchCli(["run", "pipeline.mjs"], schemaLessIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(schemaLessIo.errors.join("")).toContain(
+      'Cannot derive a CLI for directly loaded pipeline "planning-fixture"'
+    );
+    expect(schemaLessIo.errors.join("")).toContain("Standard JSON Schema input metadata");
+    expect(schemaLessIo.errors.join("")).toContain(
+      "export a definePipelineCommand with explicit params"
+    );
+
+    const pipelineUrl = JSON.stringify(pathToFileURL(path.resolve("dist/core/pipeline.js")).href);
+    const unsupported = await writeModule(`
+      import { createSteps, definePipeline } from ${pipelineUrl};
+      const optionsSchema = {
+        "~standard": {
+          version: 1,
+          vendor: "fixture",
+          validate: (value) => ({ value }),
+          jsonSchema: { input: () => ({
+            type: "object",
+            properties: { nested: { type: "object", properties: {} } },
+          }) },
+        },
+      };
+      const { step } = createSteps(optionsSchema);
+      const work = step("work", { run: () => undefined });
+      export const UnsupportedPipeline = definePipeline({ id: "unsupported", steps: [work] });
+    `);
+    const unsupportedIo = captureIo(unsupported.directory);
+    expect(await runWorkbenchCli(["run", "pipeline.mjs"], unsupportedIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(unsupportedIo.errors.join("")).toContain(
+      'Cannot derive a CLI for directly loaded pipeline "unsupported"'
+    );
+    expect(unsupportedIo.errors.join("")).toContain("Supply explicit params");
   });
 
   it("uses stable usage, load, and definition exit codes", async () => {

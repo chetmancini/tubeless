@@ -26,7 +26,7 @@ This static site provides explicit Markdown URLs; Accept negotiation is not avai
 
 - [Typed imports and ETL](${absUrl("docs/recipes.md")}): Choose the smallest matching executable recipe for ingestion, enrichment, or export jobs.
 - [Validation and publication workflows](${absUrl("docs/agent-guide.md")}): Model required dependencies and failure gates; never publish after unsuccessful validation.
-- [Pipeline-backed CLI programs](${absUrl("docs/cli.md")}): Export defineProject to expose schema-backed pipelines to tubeless list, tubeless inspect <pipeline-id>, and tubeless plan <pipeline-id>. Run with tubeless run <pipeline-id> -- <command-args> only when execution is intended. Use definePipelineCommand for custom CLI adapters.
+- [Pipeline-backed CLI programs](${absUrl("docs/cli.md")}): Export defineProject to expose schema-backed pipelines to tubeless list, tubeless inspect <pipeline-id>, and tubeless plan <pipeline-id>. You can also run one uniquely exported schema-backed pipeline directly from its file. Run with tubeless run <pipeline-id-or-file> -- <command-args> only when execution is intended. Use definePipelineCommand for custom CLI adapters.
 - [Choosing an execution model](${absUrl("docs/comparison.md")}): See how Tubeless fits next to other tools and frameworks.
 
 ## Documentation

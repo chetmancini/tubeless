@@ -73,6 +73,34 @@ async function writeCommandFixture(): Promise<{ directory: string; filePath: str
   return { directory, filePath };
 }
 
+async function writeSchemaPipelineFixture(): Promise<{ directory: string; filePath: string }> {
+  const directory = await tempDir();
+  const filePath = path.join(directory, "pipeline.mjs");
+  const pipelineModuleUrl = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
+  await writeFile(
+    filePath,
+    `
+      import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
+      const optionsSchema = {
+        "~standard": {
+          version: 1,
+          vendor: "fixture",
+          validate: (value) => ({ value }),
+          jsonSchema: { input: () => ({
+            type: "object",
+            properties: { message: { type: "string" } },
+            required: ["message"],
+          }) },
+        },
+      };
+      const { step } = createSteps(optionsSchema);
+      const work = step("work", { run: (_inputs, context) => context.options.message });
+      export const Pipeline = definePipeline({ id: "schema-fixture", steps: [work] });
+    `
+  );
+  return { directory, filePath };
+}
+
 async function writeStudioConfig(directory: string): Promise<string> {
   const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project.js")).href;
   const configDirectory = path.join(directory, "config");
@@ -303,6 +331,38 @@ describe("runUi", () => {
           expect.objectContaining({ runId: launch.runId, status: "completed" })
         );
         expect(snapshot.liveRunIds).toEqual([]);
+      });
+    } finally {
+      controller.abort();
+      await pending.catch(() => undefined);
+    }
+    await expect(pending).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+  });
+
+  it("registers a directly exported schema-backed pipeline", async () => {
+    const { directory } = await writeSchemaPipelineFixture();
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), signal: controller.signal };
+    const pending = runUi(
+      ["--store", path.join(directory, "runs.sqlite"), "--port", "0", "--command", "pipeline.mjs"],
+      io
+    );
+    try {
+      await vi.waitFor(() =>
+        expect(io.output.join("")).toContain("Tubeless local studio: http://")
+      );
+      const url = studioUrl(io.output.join(""));
+      await expect(
+        fetch(`${url}/api/commands`).then((response) => response.json())
+      ).resolves.toEqual({
+        commands: [
+          expect.objectContaining({
+            id: "schema-fixture",
+            parameters: expect.arrayContaining([
+              expect.objectContaining({ flag: "message", required: true }),
+            ]),
+          }),
+        ],
       });
     } finally {
       controller.abort();

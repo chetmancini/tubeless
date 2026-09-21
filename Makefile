@@ -28,8 +28,8 @@ help:
 	@echo "      Preview selected work without executing steps"
 	@echo "  make graph FILE=path/to/module.ts ARGS=\"--markdown\""
 	@echo "      Generate the pipeline or command Mermaid graph"
-	@echo "  make run FILE=path/to/command.ts ARGS=\"--source input.json\""
-	@echo "      Run a project pipeline or exported definePipelineCommand"
+	@echo "  make run FILE=path/to/pipeline.ts ARGS=\"--source input.json\""
+	@echo "      Run a project pipeline or exported pipeline or command"
 	@echo "  make ui [STUDIO=path/to/tubeless.project.ts] [COMMAND=path/to/command.ts]"
 	@echo "      Open the local run studio; a project or COMMAND enables browser launches"
 	@echo

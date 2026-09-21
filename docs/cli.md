@@ -233,9 +233,9 @@ are always treated as paths. `--export` applies only when loading a file
 directly; a project selection already identifies the pipeline.
 
 For a directly loaded pipeline or command file, the CLI selects its only matching export automatically. Pass
-`--export Name` when the file exports more than one. `inspect`, `plan`, and
-`graph` prefer a marked command when a module exports both a pipeline and a
-command.
+`--export Name` when the file exports more than one. Every operation prefers a
+marked command when a module exports both a pipeline and a command. Otherwise,
+`run` derives a command from one uniquely selected schema-backed pipeline.
 
 `inspect` reports the pipeline identity, whether it is loaded from a project or
 a standalone module.
@@ -249,8 +249,9 @@ bunx tubeless run ./scripts/import.ts -- --source rows.txt --target normalize
 
 For `run`, flags that choose the file or recording destination go before `--`.
 Flags passed to the pipeline command go after it, including `--target`,
-`--step`, and `--dry-run`. Direct files must export a `definePipelineCommand`;
-pipelines selected from `defineProject` are wrapped automatically.
+`--step`, and `--dry-run`. Schema-backed pipelines are wrapped automatically
+whether selected from `defineProject` or exported directly from a file. Export
+a `definePipelineCommand` when inputs need explicit parameters or mapping.
 
 ```sh
 tubeless run --export ImportCommand ./scripts/import.ts -- --source rows.txt --target normalize
@@ -324,7 +325,7 @@ The same graph is available in process as `pipeline.toMermaid()` or
 tubeless run [options] <pipeline-id-or-file> [-- <command-args...>]
 ```
 
-- `-e, --export <name>` selects a command export
+- `-e, --export <name>` selects a pipeline or command export
 - `-p, --project <path>` looks up the pipeline ID in the selected project file
 - `--store <path>` appends run events to a local SQLite database
 - `--trace <path>` writes NDJSON traces to a file, or `-` for stdout
@@ -336,10 +337,11 @@ stderr so stdout stays valid NDJSON. To send events to OpenTelemetry or another 
 shows JSON and OpenTelemetry adapters. Use `composeTraceExporters` from `tubeless/tracing` for multiple
 destinations; a failed exporter does not stop the others or fail the pipeline.
 
-`run` accepts a pipeline ID from `defineProject` or a file exporting
-`definePipelineCommand`. Project pipelines use their explicit adapter when supplied,
-otherwise they are wrapped automatically using Standard JSON Schema input metadata.
-Directly loaded files must export a command. In each case, the command adapter owns parsing, validation, option
+`run` accepts a pipeline ID from `defineProject` or a file exporting a pipeline
+or `definePipelineCommand`. An explicit command wins when present. Otherwise, one
+uniquely selected pipeline is wrapped automatically using Standard JSON Schema
+input metadata. Direct and project pipelines use the same derivation rules; custom
+or unsupported input shapes require an explicit command adapter. In each case, the command adapter owns parsing, validation, option
 mapping, reporting, and the result summary. For custom commands, omit `mapOptions`
 when validated flags already satisfy same-name pipeline options; keep it when
 names, types, defaults, or derived values differ. `--step` and `--target` stay

@@ -66,7 +66,10 @@ describe("workbench CLI lifecycle", () => {
     expect(await runWorkbenchCli(["run", "pipeline.mjs"], rawPipelineIo)).toBe(
       TUBELESS_WORKBENCH_EXIT_CODE.load
     );
-    expect(rawPipelineIo.errors.join("")).toContain("does not export a tubeless pipeline command");
+    expect(rawPipelineIo.errors.join("")).toContain(
+      'Cannot derive a CLI for directly loaded pipeline "planning-fixture"'
+    );
+    expect(rawPipelineIo.errors.join("")).toContain("export a definePipelineCommand");
     expect(
       await runWorkbenchCli(
         ["run", "pipeline.mjs", "--message", "outside-boundary"],
