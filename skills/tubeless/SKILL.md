@@ -76,9 +76,11 @@ Read the corresponding package recipe before using these features:
   adapters, skip predicates, and schemas. Each document step declares `run`,
   `fromPipeline`, or `forEachPipeline`; composed pipeline IDs resolve inside
   the document and use the matching adapter registry for application-owned
-  option, item, and result mapping. Keep parsing at the application edge and command registration
-  explicit. Handler inputs and pipeline results are unknown; validate or narrow
-  them. Plans still do not validate business inputs.
+  option, item, and result mapping. Keep parsing at the application edge. Export
+  the compiled project for CLI and Studio: Standard JSON Schema input metadata
+  enables automatic commands; custom or schema-less inputs need explicit adapters
+  in the project's `commands` option. Handler inputs and pipeline results are
+  unknown; validate or narrow them. Plans still do not validate business inputs.
   Use `tubeless validate --json <document.yaml>` for a structure-only check
   without handlers. Fetch `https://tubeless.io/schemas/pipeline-document-v1.schema.json`
   for editor and agent validation, or use packaged `docs/pipeline-document.schema.json`.

@@ -317,6 +317,8 @@ initialization code. Registry functions remain trusted application code.
 Version 1 supports ordinary steps, single-child composition, child fan-out, and
 runtime skip predicates. Remote steps, expressions, inline code, and external
 pipeline references are not document features. Use TypeScript authoring for
-those workflows. CLI and Studio loading still use explicit
-`definePipelineCommand` registration; the YAML file does not grant execution
-access or define a new Studio protocol.
+those workflows. Export the compiled `defineProject` from a project module for
+CLI and Studio loading. Pipelines whose options schemas expose Standard JSON
+Schema input metadata receive automatic commands. Custom or schema-less inputs
+need `definePipelineCommand` adapters in the project's `commands` option.
+A YAML file alone does not grant execution access or define a new Studio protocol.

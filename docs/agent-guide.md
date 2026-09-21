@@ -36,8 +36,10 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   `tubeless/project` with explicitly registered handlers, adapters, predicates, and schemas. A
   step declares exactly one of `run`, `fromPipeline`, or `forEachPipeline`;
   child pipeline IDs resolve within the document, while application code owns
-  option, item, and result mapping through the matching adapter registry. Keep command registration
-  explicit for CLI and Studio. Unknown fields and references fail compilation;
+  option, item, and result mapping through the matching adapter registry. Export the
+  compiled project for CLI and Studio: Standard JSON Schema input metadata enables
+  automatic commands; custom or schema-less inputs need explicit adapters in the
+  project's `commands` option. Unknown fields and references fail compilation;
   plans still do not validate domain inputs. Dynamic wiring does not infer
   TypeScript output types, so validate or narrow unknown values in handlers.
   Use [YAML Peloton](../examples/yaml-peloton.ts) for a larger example with
