@@ -1,7 +1,7 @@
 # Remote-step composition
 
 Use `fromRemote` when a pipeline step needs to call a service or execution
-engine outside the current process. The step sends input through an adapter,
+engine outside the local handler, including a Node worker thread. The step sends input through an adapter,
 waits for the result, and validates it before dependent steps run.
 
 The required fields are `adapter`, `mapInput`, and `outputSchema`:
@@ -116,6 +116,86 @@ retrying a request that may already have committed.
 Test live and dry-run requests, invalid response data, malformed JSON, HTTP
 errors, and cancellation of an in-flight request. The example's integration
 tests use a local HTTP server so they need no credentials or external service.
+
+## CPU work in Node worker threads
+
+`maxConcurrency` overlaps asynchronous steps, but synchronous CPU-heavy handlers
+still block the pipeline's event loop. Use `createWorkerThreadAdapter` from
+`tubeless/node` to run an explicit module export on another thread:
+
+```ts
+import { createWorkerThreadAdapter } from "tubeless/node";
+
+const adapter = createWorkerThreadAdapter({
+  module: new URL("./image-worker.js", import.meta.url),
+  exportName: "resize",
+  poolSize: 4,
+});
+```
+
+Pass this adapter to `fromRemote`, build its payload with `mapInput`, and supply
+`outputSchema` as usual. The adapter returns `unknown`; the schema validates it
+on the parent thread before any dependent consumes it. Nothing moves an arbitrary
+`step.run` closure into a worker. The export must be a function accepting
+`(payload, context)`; it may return a value or a promise. Compile TypeScript worker
+modules to JavaScript for Node. File and data URLs are supported; module loading
+and missing/non-function exports reject the invocation.
+
+The [worker recipe](../examples/worker-threads.ts) and its
+[CPU function](../examples/prime-worker.ts) demonstrate four independent prime
+counts. The worker can import `WorkerThreadContext` as a type from `tubeless/node`.
+Its context contains `signal`, `log`, `reportProgress`, `cwd`, `dryRun`, `runId`,
+`attemptId`, and optional `correlationId` / `parentRunId`. Domain options, closures,
+hooks, schemas, and the parent's logger object do not cross the boundary. Include
+needed domain values in `mapInput`. `cwd` is metadata; it does not change the
+worker's process working directory. Resolve relative paths explicitly.
+
+Payloads are snapshotted with structured clone when invoked, even if queued.
+Results cross the same boundary. Maps, dates, typed arrays, and cloneable objects
+are supported; functions are not. No transfer list is used, so ArrayBuffers are
+copied rather than detached. SharedArrayBuffers remain shared if explicitly
+supplied. Module globals are private to each worker and persist across invocations;
+workers are not a security sandbox.
+
+The adapter creates workers lazily, reuses them, and runs one invocation per worker.
+`poolSize` is a positive integer defaulting to `1`; excess invocations queue in FIFO
+order. Sharing one adapter across steps or runs shares that pool limit. Separate
+adapters own separate pools. Set the pipeline's `maxConcurrency` high enough to
+admit the desired number of calls; a four-thread pool with serial DAG execution
+still handles only one step at a time. Idle workers do not keep Node alive.
+
+Worker `context.log` messages are formatted in the worker and sent to the parent
+step's logger. `reportProgress` forwards the snapshot to the same step. Within one
+invocation messages keep send order; different workers interleave as messages
+arrive. Late callbacks from a finished invocation are dropped. Use the supplied
+logger rather than `console` to preserve step attribution. Thrown errors retain
+their message, name, stack, string/number code, and up to five nested causes.
+Invalid output, thrown errors, and worker exits fail the owning step; the adapter
+never retries work automatically. A crashed worker is replaced for later calls.
+
+External cancellation removes queued calls immediately. Active calls receive a
+cancel message that aborts the worker context's signal. Once cancellation is
+observed by the adapter, that invocation rejects with `AbortError` even if its
+handler subsequently returns a value. By default it allows 100 ms for cooperative
+cleanup (`cancelTimeoutMs` overrides this); then it terminates the worker and waits
+for its exit before settling the invocation or reusing the pool slot. A synchronous
+loop cannot receive messages while blocked, so it requires this termination path.
+Forced termination may interrupt cleanup; await all work owned by the handler,
+and make external writes safe for interruption. Cancellation does not roll back
+side effects. Fail-fast alone sends no cancellation: already-active worker calls
+still settle under the pipeline's normal failure semantics.
+
+Call `await adapter.close()` when its owner is done, normally in `finally` after
+all callers have settled. Closing rejects queued calls, terminates active and idle
+workers, and waits for their exit. It is idempotent; subsequent invocations reject.
+Do not close a shared adapter while other callers still need it. The worker recipe
+exports a shared `primeAdapter`: repeated `runWorkerThreadsExample()` calls and
+direct `WorkerPrimesPipeline` runs reuse it. The application calls
+`await primeAdapter.close()` at shutdown, after all those runs settle.
+
+The adapter always forwards `dryRun` in the worker context, but it does not suppress
+writes itself. Use `dryRun: "skip"`, a local preview handler, or a worker function
+that honors `context.dryRun`. Pure CPU computation can run in either mode.
 
 ## Invoke a pipeline from a worker
 

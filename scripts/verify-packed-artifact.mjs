@@ -195,6 +195,87 @@ try {
     .join("\n");
   run("node", ["--input-type=module", "--eval", smokeProgram], consumerRoot);
 
+  // Exercise the worker bootstrap from the installed tarball, including file-worker
+  // startup when the caller itself was launched with --input-type module.
+  run(
+    "node",
+    [
+      "--input-type",
+      "module",
+      "--eval",
+      `
+    import { createWorkerThreadAdapter } from "tubeless/node";
+    import { createSteps, definePipeline } from "tubeless";
+    const adapter = createWorkerThreadAdapter({
+      module: new URL("data:text/javascript,export function double(value) { return value * 2; }"),
+      exportName: "double",
+      poolSize: 2,
+    });
+    const { fromRemote } = createSteps();
+    const work = fromRemote("work", {
+      adapter, mapInput: () => 21,
+      outputSchema: { "~standard": { vendor: "smoke", version: 1,
+        validate: value => typeof value === "number" ? { value } : { issues: [{ message: "number required" }] },
+      } },
+    });
+    try {
+      const result = await definePipeline({ id: "packed-worker", steps: [work] }).runOrThrow({});
+      if (result !== 42) throw new Error("Invalid worker result");
+    } finally { await adapter.close(); }
+  `,
+    ],
+    consumerRoot
+  );
+
+  // Compile the shipped recipe and verify that one invocation does not close the
+  // pool shared by later helper calls or direct pipeline runs.
+  writeFileSync(
+    join(consumerRoot, "tsconfig.worker-example.json"),
+    JSON.stringify({
+      compilerOptions: {
+        lib: ["ES2022", "DOM"],
+        module: "NodeNext",
+        outDir: "worker-example",
+        rootDir: join(installedPackage, "examples"),
+        strict: true,
+        target: "ES2022",
+        types: [],
+      },
+      files: [
+        join(installedPackage, "examples/worker-threads.ts"),
+        join(installedPackage, "examples/prime-worker.ts"),
+      ],
+    })
+  );
+  run(
+    join(packageRoot, "node_modules/.bin/tsc"),
+    ["-p", "tsconfig.worker-example.json"],
+    consumerRoot
+  );
+  run(
+    "node",
+    [
+      "--input-type",
+      "module",
+      "--eval",
+      `
+    import { primeAdapter, runWorkerThreadsExample, WorkerPrimesPipeline } from "./worker-example/worker-threads.js";
+    const expected = "[9592,17984,25997,33860]";
+    try {
+      for (let index = 0; index < 2; index++) {
+        if (JSON.stringify(await runWorkerThreadsExample()) !== expected) {
+          throw new Error("Worker recipe failed on repeated invocation");
+        }
+      }
+      if (JSON.stringify(await WorkerPrimesPipeline.runOrThrow({}, { maxConcurrency: 4 })) !== expected) {
+        throw new Error("Worker recipe closed the shared pipeline adapter");
+      }
+    } finally { await primeAdapter.close(); }
+  `,
+    ],
+    consumerRoot
+  );
+
   const tubelessBin = join(consumerRoot, "node_modules", ".bin", "tubeless");
   if (!existsSync(tubelessBin)) {
     throw new Error("Packed tubeless artifact is missing the tubeless executable");

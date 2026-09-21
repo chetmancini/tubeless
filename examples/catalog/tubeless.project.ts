@@ -7,6 +7,8 @@ import { definePipelineProject } from "tubeless/project";
 // with run(options, { maxConcurrency: 4 }) or --max-concurrency 4 in the CLI
 // (also exposed in Studio forms). Both default to serial execution. Fail-fast drains active steps without cancelling them; final
 // reports use plan order. See ../parallel-dag.ts for independent branches and a join.
+// For CPU work, ../worker-threads.ts uses an explicit Node worker adapter. Compile
+// its worker module to JavaScript and let the application own the pool's close().
 
 /** Checked-in project command catalog with stable registered identities. */
 export default definePipelineProject({

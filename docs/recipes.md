@@ -12,6 +12,7 @@ one of these recipes.
 | --------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
 | Single goal with default target and result    | [`minimal-pipeline.ts`](../examples/minimal-pipeline.ts)                 | `definePipeline({ id, steps })`                                                    |
 | Run independent DAG branches concurrently     | [`parallel-dag.ts`](../examples/parallel-dag.ts)                         | `maxConcurrency` / CLI `--max-concurrency`, dependency joins, stable final reports |
+| CPU parallelism on Node worker threads        | [`worker-threads.ts`](../examples/worker-threads.ts)                     | `createWorkerThreadAdapter`, `fromRemote`, structured clone, pool ownership        |
 | Sequential import or ETL                      | [`typed-import.ts`](../examples/typed-import.ts)                         | `createSteps`, `dependsOn`, `requireOutputs`, `targets`                            |
 | Define and compose pipelines in YAML or JSON  | [`yaml-pipelines.ts`](../examples/yaml-pipelines.ts)                     | `compilePipelineDocument`, adapters, skips, child fan-out                          |
 | Validate options, outputs, and results        | [`validated-boundaries.ts`](../examples/validated-boundaries.ts)         | Standard Schema, `outputSchema`, `resultSchema`                                    |
@@ -39,7 +40,7 @@ one of these recipes.
 ## Node helpers
 
 `tubeless/node` provides optional helpers for pipelines that use the local
-filesystem and environment. It uses Node built-ins and adds no runtime package
+filesystem, environment, and worker threads. It uses Node built-ins and adds no runtime package
 dependencies. Importing core does not load these helpers.
 
 | Helper                                    | Behavior                                                                                                                                                                            |
@@ -49,6 +50,7 @@ dependencies. Importing core does not load these helpers.
 | `writeJson(path, value)`                  | Writes pretty JSON with a trailing newline, creates parent directories, and replaces the file by renaming a sibling temporary file. Serialization must succeed before disk changes. |
 | `resetDir(path)`                          | Recursively deletes the directory and recreates it empty. Use for generated output only.                                                                                            |
 | `requireEnv(name, usedBy)`                | Reads the environment when called and throws a descriptive error for missing or empty values.                                                                                       |
+| `createWorkerThreadAdapter`               | Reuses a bounded Node worker pool for explicit module exports; validates results through `fromRemote`. The caller owns `close()`.                                                   |
 | `openCheckpoint`, `withCheckpointedBatch` | Track completed work for resumable pipelines.                                                                                                                                       |
 
 `writeJson` throws when the value has no JSON representation, including top-level
@@ -58,7 +60,7 @@ Each write uses its own temporary file, including across worker threads. Concurr
 writes replace complete files; the last rename wins. This does not merge checkpoint
 updates or provide a lock for read-modify-write operations.
 
-These helpers do not know whether a pipeline is in dry-run mode. Put writes and
+Filesystem helpers do not know whether a pipeline is in dry-run mode. Put writes and
 directory resets in steps marked `dryRun: "skip"`, as in
 [`node-artifacts.ts`](../examples/node-artifacts.ts). Validate untrusted JSON at
 the boundary with a schema; `readJson<T>` alone is not validation. Read required

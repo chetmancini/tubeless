@@ -13,7 +13,7 @@ Package: `tubeless`
 | `tubeless`            | `./dist/core/pipeline.d.ts`        | `5bb1b0b2028b33983b508507e4ce3cb89d524596700ef9b95787c59b623098fb` |               58 |
 | `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `a2964037e6fadcc9aab32004546295d5377f965e68fb1198e211e0c1e822e67d` |               31 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `ab57c16dc0d9a0b1d55eb1cfc0df32e6ee950037c09a98531ab64930206c2616` |                6 |
-| `tubeless/node`       | `./dist/node/node.d.ts`            | `3c25bde7d1342716e4d754cd02fba9c855d1cfd040aad50819c6cb4f7ca1950c` |                8 |
+| `tubeless/node`       | `./dist/node/node.d.ts`            | `e26301ad37e74634f3de2154bb58725ef0b5d8391facafb6048c53ec9ceb7b79` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
 | `tubeless/project`    | `./dist/project/project.d.ts`      | `e08c9e78313b12e1c3fc6a2d36173ca6c2a42c04c828f5b9b7dbbac509ff2978` |                8 |
@@ -134,16 +134,20 @@ Package: `tubeless`
 
 ### `tubeless/node`
 
-| Symbol                                                                                                   | Description                                                                                                                   |
-| -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| [`CheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/node/checkpoint.ts#L5)         | Mutable set of completed item keys backed by an explicit JSON flush.                                                          |
-| [`definePaths`](https://github.com/chetmancini/tubeless/blob/main/src/node/paths.ts#L11)                 | Create a factory that resolves a named set of workspace-relative paths.                                                       |
-| [`openCheckpoint`](https://github.com/chetmancini/tubeless/blob/main/src/node/checkpoint.ts#L66)         | Open a JSON checkpoint file, falling back to an empty store when it is absent.                                                |
-| [`readJson`](https://github.com/chetmancini/tubeless/blob/main/src/node/file-utils.ts#L14)               | Read and parse trusted JSON without runtime schema validation.                                                                |
-| [`requireEnv`](https://github.com/chetmancini/tubeless/blob/main/src/node/env.ts#L2)                     | Read a required non-empty environment variable or throw a contextual error.                                                   |
-| [`resetDir`](https://github.com/chetmancini/tubeless/blob/main/src/node/file-utils.ts#L23)               | Remove and recreate a directory for generated output.                                                                         |
-| [`withCheckpointedBatch`](https://github.com/chetmancini/tubeless/blob/main/src/node/checkpoint.ts#L113) | Runs `persist()`, and only once it resolves without throwing, records every item in `batch` into `checkpoint` and flushes it. |
-| [`writeJson`](https://github.com/chetmancini/tubeless/blob/main/src/node/file-utils.ts#L5)               | Serialize JSON and atomically replace the destination file.                                                                   |
+| Symbol                                                                                                                  | Description                                                                                                                   |
+| ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| [`CheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/node/checkpoint.ts#L5)                        | Mutable set of completed item keys backed by an explicit JSON flush.                                                          |
+| [`createWorkerThreadAdapter`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-adapter.ts#L64)  | Run an explicit module export in a lazily created, reusable Node worker pool.                                                 |
+| [`definePaths`](https://github.com/chetmancini/tubeless/blob/main/src/node/paths.ts#L11)                                | Create a factory that resolves a named set of workspace-relative paths.                                                       |
+| [`openCheckpoint`](https://github.com/chetmancini/tubeless/blob/main/src/node/checkpoint.ts#L66)                        | Open a JSON checkpoint file, falling back to an empty store when it is absent.                                                |
+| [`readJson`](https://github.com/chetmancini/tubeless/blob/main/src/node/file-utils.ts#L14)                              | Read and parse trusted JSON without runtime schema validation.                                                                |
+| [`requireEnv`](https://github.com/chetmancini/tubeless/blob/main/src/node/env.ts#L2)                                    | Read a required non-empty environment variable or throw a contextual error.                                                   |
+| [`resetDir`](https://github.com/chetmancini/tubeless/blob/main/src/node/file-utils.ts#L23)                              | Remove and recreate a directory for generated output.                                                                         |
+| [`withCheckpointedBatch`](https://github.com/chetmancini/tubeless/blob/main/src/node/checkpoint.ts#L113)                | Runs `persist()`, and only once it resolves without throwing, records every item in `batch` into `checkpoint` and flushes it. |
+| [`WorkerThreadAdapter`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-adapter.ts#L24)        | Invoke cloneable payloads through a reusable pool of Node worker threads.                                                     |
+| [`WorkerThreadAdapterOptions`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-adapter.ts#L12) | Configure the module export and worker-pool limits for a thread adapter.                                                      |
+| [`WorkerThreadContext`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-protocol.ts#L14)       | Provide cancellation, logging, progress, and run metadata to a worker export.                                                 |
+| [`writeJson`](https://github.com/chetmancini/tubeless/blob/main/src/node/file-utils.ts#L5)                              | Serialize JSON and atomically replace the destination file.                                                                   |
 
 ### `tubeless/rate-limit`
 
