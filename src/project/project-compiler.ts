@@ -12,7 +12,11 @@ import {
   type StepSkipDecision,
 } from "../core/pipeline.js";
 import type { AnyStep } from "../core/pipeline-steps.js";
-import { validatePipelineDocument, PipelineDocumentError } from "./project-document.js";
+import {
+  validatePipelineDocument,
+  PipelineDocumentError,
+  type PipelineDocument,
+} from "./project-document.js";
 
 export { PipelineDocumentError };
 
@@ -72,7 +76,7 @@ interface PipelineDocumentForEachPipelineAdapter {
 }
 
 /** Only explicitly registered functions and schemas can be referenced by a document. */
-export interface PipelineDocumentRegistry {
+export interface ProjectRegistry {
   steps: Readonly<Record<string, PipelineDocumentHandler>>;
   finalizers: Readonly<Record<string, PipelineDocumentFinalizer>>;
   skipPredicates?: Readonly<Record<string, PipelineDocumentSkipPredicate>>;
@@ -134,7 +138,7 @@ function registeredObject<T extends object>(
 }
 
 function fromPipelineAdapter(
-  registry: PipelineDocumentRegistry["fromPipelineAdapters"],
+  registry: ProjectRegistry["fromPipelineAdapters"],
   name: string,
   path: string
 ): PipelineDocumentFromPipelineAdapter {
@@ -149,7 +153,7 @@ function fromPipelineAdapter(
 }
 
 function forEachPipelineAdapter(
-  registry: PipelineDocumentRegistry["forEachPipelineAdapters"],
+  registry: ProjectRegistry["forEachPipelineAdapters"],
   name: string,
   path: string
 ): PipelineDocumentForEachPipelineAdapter {
@@ -190,9 +194,16 @@ function forEachPipelineAdapter(
  */
 export function compilePipelineDocument(
   document: unknown,
-  registry: PipelineDocumentRegistry
+  registry: ProjectRegistry
 ): ReadonlyMap<string, Pipeline<object, unknown>> {
-  const parsed = validatePipelineDocument(document);
+  return compileValidatedPipelineDocument(validatePipelineDocument(document), registry);
+}
+
+/** Compile a validated snapshot shared with project metadata extraction. */
+export function compileValidatedPipelineDocument(
+  parsed: PipelineDocument,
+  registry: ProjectRegistry
+): ReadonlyMap<string, Pipeline<object, unknown>> {
   const compiled = new Map<string, Pipeline<object, unknown>>();
   const compiling = new Set<string>();
 

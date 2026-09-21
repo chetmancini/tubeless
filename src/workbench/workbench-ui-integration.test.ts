@@ -42,7 +42,7 @@ describe("workbench UI integration", () => {
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
   });
 
-  it("loads and launches explicitly registered commands from a project manifest", async () => {
+  it("loads and launches explicitly registered commands from a project", async () => {
     const { directory } = await writeActualPipelineCommandModule();
     await writeStudioConfig(directory);
     const controller = new AbortController();
@@ -68,7 +68,7 @@ describe("workbench UI integration", () => {
     expect(commands).toEqual({
       commands: [
         expect.objectContaining({
-          id: "fixture",
+          id: "command-fixture",
           name: "Studio fixture",
         }),
       ],
@@ -152,7 +152,7 @@ describe("workbench UI integration", () => {
         return values;
       }`,
     });
-    await writeStudioConfig(directory, { exportName: "GatedCommand", name: "Gated fixture" });
+    await writeStudioConfig(directory, "GatedCommand");
     const controller = new AbortController();
     const io = { ...captureIo(directory), signal: controller.signal };
     const command = runWorkbenchCli(
@@ -212,7 +212,7 @@ describe("workbench UI integration", () => {
         throw new Error("map exploded");
       }`,
     });
-    await writeStudioConfig(directory, { exportName: "GatedCommand", name: "Gated fixture" });
+    await writeStudioConfig(directory, "GatedCommand");
     const controller = new AbortController();
     const io = { ...captureIo(directory), signal: controller.signal };
     const command = runWorkbenchCli(
@@ -274,7 +274,7 @@ describe("workbench UI integration", () => {
         return values;
       }`,
     });
-    await writeStudioConfig(directory, { exportName: "GatedCommand", name: "Gated fixture" });
+    await writeStudioConfig(directory, "GatedCommand");
     const controller = new AbortController();
     const io = { ...captureIo(directory), signal: controller.signal };
     const command = runWorkbenchCli(
@@ -441,14 +441,14 @@ describe("workbench UI integration", () => {
     );
 
     await writeStudioConfig(directory);
-    const catalogIo = captureIo(directory);
+    const projectIo = captureIo(directory);
     await expect(
       runWorkbenchCli(
         ["ui", "--host", "0.0.0.0", "--port", "0", "config/tubeless.project.mjs"],
-        catalogIo
+        projectIo
       )
     ).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
-    expect(catalogIo.errors.join("")).toContain(
+    expect(projectIo.errors.join("")).toContain(
       "Browser-triggered execution requires a loopback --host."
     );
   });

@@ -19,8 +19,8 @@ help:
 	@echo
 	@echo "Pipeline tools"
 	@echo "  make list [PROJECT=path/to/tubeless.project.ts]"
-	@echo "      List explicitly registered project commands"
-	@echo "  make verify FILE=path/to/module.ts [EXPORT=Name] [PROJECT=manifest]"
+	@echo "      List project pipeline IDs"
+	@echo "  make verify FILE=path/to/module.ts [EXPORT=Name] [PROJECT=project-file]"
 	@echo "      Load and verify a pipeline or command module; alias: make inspect"
 	@echo "  make validate FILE=path/to/pipelines.yaml [ARGS=--json]"
 	@echo "      Check YAML or JSON document structure without importing handlers"
@@ -29,9 +29,9 @@ help:
 	@echo "  make graph FILE=path/to/module.ts ARGS=\"--markdown\""
 	@echo "      Generate the pipeline or command Mermaid graph"
 	@echo "  make run FILE=path/to/command.ts ARGS=\"--source input.json\""
-	@echo "      Run an exported definePipelineCommand"
+	@echo "      Run a project pipeline or exported definePipelineCommand"
 	@echo "  make ui [STUDIO=path/to/tubeless.project.ts] [COMMAND=path/to/command.ts]"
-	@echo "      Open the local run studio; a manifest or COMMAND enables browser launches"
+	@echo "      Open the local run studio; a project or COMMAND enables browser launches"
 	@echo
 	@echo "Developing tubeless"
 	@echo "  make install       Install exact dependencies from bun.lock"

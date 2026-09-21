@@ -518,8 +518,9 @@ export interface Pipeline<
   TResult,
   TStepId extends string = string,
   TTargetId extends string = TStepId,
+  TId extends string = string,
 > {
-  readonly id: string;
+  readonly id: TId;
   /** Compiled definition metadata. Absent only on externally implemented pipelines. */
   readonly definition?: PipelineDefinitionSnapshot;
   /** Runtime domain schema supplied to createSteps; CLI adapters can infer its input flags. */

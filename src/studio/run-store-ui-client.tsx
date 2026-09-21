@@ -589,7 +589,7 @@ export function PipelinesView({
       <div class="sheet-head">
         <div>
           <div class="sheet-title">Available pipelines</div>
-          <div class="sheet-subtitle">Declared by the local project manifest</div>
+          <div class="sheet-subtitle">Available in this Studio session</div>
         </div>
         <span class="sheet-subtitle">{commands.length} shown</span>
       </div>

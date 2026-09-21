@@ -26,7 +26,7 @@ const allowedDependencies: Record<string, readonly string[]> = {
   studio: ["run-store"],
   cli: ["core", "node", "reporter", "utilities"],
   testing: ["core", "utilities"],
-  project: ["core"],
+  project: ["core", "utilities"],
   workbench: ["cli", "core", "project", "render", "run-store", "studio", "tracing", "utilities"],
 };
 

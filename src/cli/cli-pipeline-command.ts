@@ -16,7 +16,7 @@ import type {
   CliParamsSchema,
   CliStringParam,
 } from "./cli-types.js";
-import { markPipelineCommand } from "./pipeline-command-marker.js";
+import { markPipelineCommand } from "../utilities/pipeline-command-marker.js";
 import {
   type Pipeline,
   type PipelineHooks,
@@ -411,20 +411,23 @@ export function definePipelineCommand<
       : result;
   }
 
-  return markPipelineCommand({
-    descriptor: command.descriptor,
-    id: pipeline.id,
-    stepIds: pipeline.stepIds,
-    targetIds: pipeline.targetIds,
-    execute: (values, contextOverrides) =>
-      // SAFETY: `execute` receives `PipelineCliValues<TSchema>` from the public interface,
-      // which is a subtype of `CliParams<PipelineCliBuiltins & TSchema>`.
-      command.execute(values as CliParams<PipelineCliBuiltins & TSchema>, contextOverrides),
-    parse,
-    parseValues,
-    plan,
-    toMermaid: (options) => pipeline.toMermaid(options),
-    run: command.run,
-    main: command.main,
-  });
+  return markPipelineCommand(
+    {
+      descriptor: command.descriptor,
+      id: pipeline.id,
+      stepIds: pipeline.stepIds,
+      targetIds: pipeline.targetIds,
+      execute: (values, contextOverrides) =>
+        // SAFETY: `execute` receives `PipelineCliValues<TSchema>` from the public interface,
+        // which is a subtype of `CliParams<PipelineCliBuiltins & TSchema>`.
+        command.execute(values as CliParams<PipelineCliBuiltins & TSchema>, contextOverrides),
+      parse,
+      parseValues,
+      plan,
+      toMermaid: (options) => pipeline.toMermaid(options),
+      run: command.run,
+      main: command.main,
+    },
+    pipeline
+  );
 }

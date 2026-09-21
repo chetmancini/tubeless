@@ -109,7 +109,7 @@ describe("workbench module loading and help", () => {
   });
 
   it("rejects a marked command that is missing structured launch methods", async () => {
-    const markerUrl = pathToFileURL(path.resolve("dist/cli/pipeline-command-marker.js")).href;
+    const markerUrl = pathToFileURL(path.resolve("dist/utilities/pipeline-command-marker.js")).href;
     const { filePath } = await writeModule(`
       import { markPipelineCommand } from ${JSON.stringify(markerUrl)};
       export const Incomplete = markPipelineCommand({
@@ -121,7 +121,7 @@ describe("workbench module loading and help", () => {
         parse: () => ({ kind: "values" }),
         run: async () => undefined,
         toMermaid: () => "flowchart TD",
-      });
+      }, {});
     `);
     await expect(loadPipelineCommandModule(filePath)).rejects.toThrow(
       "Module does not export a tubeless pipeline command."

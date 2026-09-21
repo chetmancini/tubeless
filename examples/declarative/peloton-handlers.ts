@@ -4,7 +4,7 @@ import type {
   StandardSchemaV1,
 } from "tubeless";
 import { runConcurrent } from "tubeless/batch";
-import type { PipelineDocumentRegistry } from "tubeless/project";
+import type { ProjectRegistry } from "tubeless/project";
 import { withRetry } from "tubeless/retry";
 
 interface Rider {
@@ -89,7 +89,7 @@ function pause(context: PipelineStepContext<object>) {
 }
 
 /** All I/O is simulated: the demo never contacts a service or writes a file. */
-export const pelotonRegistry: PipelineDocumentRegistry = {
+export const pelotonRegistry: ProjectRegistry = {
   optionsSchemas: { raceOptions: schema<object, RaceOptions>(readOptions) },
   schemas: { riders: schema<unknown, Rider[]>(readRiders) },
   steps: {

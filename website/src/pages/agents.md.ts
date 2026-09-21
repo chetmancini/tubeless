@@ -18,6 +18,6 @@ or \`tubeless\` for writing and editing pipelines.
 - [Developer resources](${absUrl("developers.md")})
 - [Authoring skill](${githubBlob("skills/tubeless/SKILL.md")})
 - [Code conversion skill](${githubBlob("skills/tubeless-make-pipeline/SKILL.md")})
-- [Project manifest](${githubBlob("examples/catalog/tubeless.project.ts")})
+- [Pipeline project](${githubBlob("examples/tubeless.project.ts")}): Group pipelines with defineProject for typed lookup, CLI, and Studio.
 - [Machine-readable API report](${absUrl("api-report.json")})
 `, { headers: { "content-type": "text/markdown; charset=utf-8" } });

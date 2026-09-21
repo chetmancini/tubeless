@@ -3,6 +3,7 @@ import { definePipelineCommand } from "tubeless/cli";
 import { ImportPipeline } from "../pipelines/import.ts";
 
 export const ImportCommand = definePipelineCommand(ImportPipeline, {
+  name: "Import rows",
   description: "Normalize a newline-delimited list of input rows.",
   params: {
     source: {

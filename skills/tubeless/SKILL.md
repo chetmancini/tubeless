@@ -1,6 +1,6 @@
 ---
 name: tubeless
-description: Author, modify, or review typed Tubeless pipelines, pipeline-backed CLI commands, and project catalogs in TypeScript projects. Use for dependency modeling, failure and skip policies, dry runs, child pipelines, and pipeline tests.
+description: Author, modify, or review typed Tubeless pipelines, pipeline-backed CLI commands, and projects in TypeScript projects. Use for dependency modeling, failure and skip policies, dry runs, child pipelines, and pipeline tests.
 ---
 
 # Author Tubeless pipelines
@@ -56,20 +56,31 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 - Use `context.log`, forward `context.signal`, use `context.sleep` for waits,
   and report progress for long loops. Resolve relative paths from `context.cwd`.
 - Branch on structured error `code`, `phase`, and `kind`, not message text.
+- Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
+  `tubeless/project`. Retrieve one with `project.get(id)`; it keeps the exact pipeline
+  option and result types and uses the pipeline's existing methods directly.
+  Let `definePipeline` infer its generics; annotate the finalizer's return type
+  for an explicit result contract. Partial explicit generics widen the pipeline ID
+  to `string`, so project lookup no longer checks literal IDs at compile time.
+  Optional `{ name, description }` in the third argument supplies project
+  presentation; the name defaults to the ID. Documents inherit those fields from
+  their metadata; an optional fourth argument after the registry overrides them.
 
 ## Add only the capabilities the workflow needs
 
 Read the corresponding package recipe before using these features:
 
 - For YAML or JSON authoring, read `docs/declarative-pipelines.md` and
-  `examples/yaml-pipelines.ts`. Use `compilePipelineDocument` from
+  `examples/yaml-pipelines.ts`. Use `defineProject(id, document, registry)` from
   `tubeless/project` on parsed data with explicitly registered handlers,
   adapters, skip predicates, and schemas. Each document step declares `run`,
   `fromPipeline`, or `forEachPipeline`; composed pipeline IDs resolve inside
   the document and use the matching adapter registry for application-owned
-  option, item, and result mapping. Keep parsing at the application edge and command registration
-  explicit. Handler inputs and pipeline results are unknown; validate or narrow
-  them. Plans still do not validate business inputs.
+  option, item, and result mapping. Keep parsing at the application edge. Export
+  the compiled project for CLI and Studio: Standard JSON Schema input metadata
+  enables automatic commands; custom or schema-less inputs need explicit adapters
+  in the project's `commands` option. Handler inputs and pipeline results are
+  unknown; validate or narrow them. Plans still do not validate business inputs.
   Use `tubeless validate --json <document.yaml>` for a structure-only check
   without handlers. Fetch `https://tubeless.io/schemas/pipeline-document-v1.schema.json`
   for editor and agent validation, or use packaged `docs/pipeline-document.schema.json`.
@@ -91,13 +102,20 @@ Read the corresponding package recipe before using these features:
   needed when their shapes differ.
   Built-in `--step` / `--target` flags map to `stepIds` / `targets`. Do not
   redeclare built-in flags. Read `docs/cli.md` for option mapping.
-  Use `defineCommand` from `tubeless/cli` for standalone scripts and
-  `definePipelineProject` from `tubeless/project` for project catalogs shared
-  by the CLI and optional Studio.
-- Use `pipelines/<name>.ts` for definitions and `scripts/<name>.ts` for command
-  wrappers when introducing a layout. Register commands explicitly in
-  `tubeless.project.ts`; adapt the package's `examples/catalog/` without copying
-  unrelated example IDs. Preserve existing consumer conventions.
+  Export `defineProject(id, pipelines)` from `tubeless.project.ts` to expose
+  schema-backed pipelines directly to the CLI and optional Studio. Use
+  explicit adapters in the project's `commands` option for schema-less pipelines,
+  even with no inputs: automatic project commands require Standard JSON Schema
+  input metadata. Declare custom `params`, `mapOptions`, and display names on
+  `definePipelineCommand`; each adapter uses its pipeline's ID. Project `cwd`
+  controls CLI/Studio execution relative to the project file. Use `defineCommand`
+  for standalone scripts. For compiled documents, use `commands: (get) => [...]`
+  to create explicit adapters after compilation.
+  Default-export the project to select it for CLI and Studio. Without a default,
+  exactly one distinct project may be exported; aliases are allowed.
+- Use `pipelines/<name>.ts` for definitions. Add `scripts/<name>.ts` command
+  wrappers only when explicit `params`, `mapOptions`, or presentation overrides
+  are needed. Preserve existing consumer conventions.
 - Keep storage and Studio optional. Read `docs/studio.md` before adding them;
   read the composition guides before adding child or remote execution.
 - Use `tubeless/node` for cwd-relative path factories, JSON artifacts, required

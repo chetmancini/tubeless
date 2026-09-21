@@ -127,20 +127,27 @@ function snapshotRunControls<TStepId extends string, TTargetId extends string>(
   return snapshot;
 }
 
-/** Compile a typed step graph into a validated, executable pipeline. */
+/**
+ * Compile a typed step graph into a validated, executable pipeline.
+ * Prefer inferred type arguments to preserve the literal id. For an explicit
+ * result contract, annotate the finalizer's return type; partially supplied type
+ * arguments use defaults for remaining parameters, including the id's string type.
+ */
 export function definePipeline<
   const TSteps extends readonly AnyStep[],
   TResult = DefaultPipelineResult<TSteps>,
   const TTargets extends readonly TSteps[number][] = DefaultPipelineTargets<TSteps>,
   const TResultSchema extends StandardSchemaV1 | undefined = undefined,
+  const TId extends string = string,
 >(
   definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema> &
-    CheckedStepTuple<TSteps>
+    CheckedStepTuple<TSteps> & { readonly id: TId }
 ): Pipeline<
   StepsInputOptions<TSteps>,
   TResultSchema extends StandardSchemaV1 ? InferSchemaOutput<TResultSchema> : TResult,
   StepIds<TSteps>,
-  TargetIds<TTargets>
+  TargetIds<TTargets>,
+  TId
 > & {
   readonly definition: PipelineDefinitionSnapshot;
   readonly optionsSchema: StepsOptionsSchema<TSteps>;
@@ -203,7 +210,7 @@ export function definePipeline<
   }
 
   const pipeline = {
-    id: compiled.id,
+    id: definition.id,
     definition: compiled.definition,
     // SAFETY: compilation verifies that every step belongs to the same options schema.
     optionsSchema: compiled.optionsSchema as StepsOptionsSchema<TSteps> &

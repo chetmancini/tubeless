@@ -1,10 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import {
-  compilePipelineDocument,
-  PipelineDocumentError,
-  validatePipelineDocument,
-} from "./project.js";
+import { compilePipelineDocument } from "./project-compiler.js";
+import { PipelineDocumentError, validatePipelineDocument } from "./project-document.js";
 
 const jsonSchema = JSON.parse(
   readFileSync(new URL("../../docs/pipeline-document.schema.json", import.meta.url), "utf8")

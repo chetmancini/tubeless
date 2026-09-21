@@ -81,12 +81,12 @@ export const USE_CASES = [
     description: "Register maintenance scripts as named commands with declared inputs. Teammates can see what’s available, preview a task, and follow its progress when they run it.",
     stages: ["Check inputs", "Plan changes", "Apply changes", "Verify"],
     benefits: [
-      { title: "Shared commands", detail: "A project manifest lists the commands available to your team. Run them from the terminal or launch them through the local Studio." },
+      { title: "Shared commands", detail: "Group pipelines with defineProject to share them with your team. Schema-backed pipelines run from the terminal or launch through the local Studio." },
       { title: "Troubleshooting a run", detail: "Record runs to see which steps completed before a failure or cancellation. For commands that change data, add a dry-run handler so teammates can review the proposed changes first." },
     ],
     boundary: "Your application handles permissions and credentials. If a run stops after making some changes, it also needs to handle cleanup or recovery; cancellation doesn’t roll those changes back.",
     recipes: [
-      { label: "Shared project catalog", file: "catalog/tubeless.project.ts" },
+      { label: "Project with custom adapters", file: "project/tubeless.project.ts" },
       { label: "Cancellation and testing", file: "cancellation-and-testing.ts" },
     ],
     guide: { label: "Studio documentation", path: "studio" },

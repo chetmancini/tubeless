@@ -1,4 +1,5 @@
 import { createSteps, definePipeline } from "tubeless";
+import { defineProject, type PipelineProject, type ProjectOptions } from "tubeless/project";
 import {
   definePipelineCommand,
   type CliContext,
@@ -39,3 +40,75 @@ const command = definePipelineCommand(pipeline, {
 });
 
 command.parse([], { env });
+
+type EchoProject = PipelineProject<"packed-project", readonly [typeof pipeline]>;
+
+function createEchoProject(): EchoProject {
+  const metadata: ProjectOptions<readonly [typeof pipeline]> = {
+    name: "Echo jobs",
+    description: "Echo a message.",
+    commands: [command],
+  };
+  return defineProject("packed-project", [pipeline], metadata);
+}
+
+function selectEcho(project: EchoProject): typeof pipeline {
+  const projectId: "packed-project" = project.id;
+  const pipelineIds: readonly ["packed-cli-types"] = project.pipelineIds;
+  const name: string = project.name;
+  const description: string | undefined = project.description;
+  // @ts-expect-error Project presentation is immutable.
+  project.name = "Changed";
+  // @ts-expect-error Only this project's pipeline ids are accepted.
+  project.get("missing");
+  // @ts-expect-error The selected pipeline retains its required message input.
+  project.get("packed-cli-types").runOrThrow({});
+  void projectId;
+  void pipelineIds;
+  void name;
+  void description;
+  return project.get("packed-cli-types");
+}
+
+selectEcho(createEchoProject());
+
+function selectUnionPipeline(id: "echo" | "echo-alias", lookup: "echo" | "packed-cli-types") {
+  const unionPipeline = definePipeline({ id, steps: [echo] });
+  const project = defineProject("union-ids", [pipeline, unionPipeline]);
+  const selected = project.get("echo");
+  const selectedId: "echo" | "echo-alias" = selected.id;
+  selected.plan();
+  // @ts-expect-error Union-id lookups retain the required domain input.
+  selected.runOrThrow({});
+  const either: typeof pipeline | typeof unionPipeline = project.get(lookup);
+  either.plan();
+  void selectedId;
+}
+
+function selectWidenedPipeline(id: string, lookup: string) {
+  const widePipeline = definePipeline({ id, steps: [echo] });
+  const project = defineProject("wide-ids", [pipeline, widePipeline]);
+  const selected: typeof pipeline | typeof widePipeline = project.get(lookup);
+  selected.plan();
+  // @ts-expect-error Widened-id lookups retain the required domain input.
+  selected.runOrThrow({});
+}
+
+selectUnionPipeline("echo", "echo");
+selectWidenedPipeline("dynamic", "dynamic");
+
+type EchoResult = { message: string };
+const typedResult = definePipeline({
+  id: "typed-result",
+  steps: [echo],
+  finalize: (outputs): EchoResult => ({ message: outputs.echo ?? "" }),
+});
+const typedResultProject = defineProject("typed-result-project", [typedResult]);
+const typedResultId: "typed-result" = typedResult.id;
+const typedResultValue: Promise<EchoResult> = typedResultProject
+  .get("typed-result")
+  .runOrThrow({ message: "hello" });
+// @ts-expect-error Annotating the finalizer preserves the exact project lookup id.
+typedResultProject.get("missing");
+void typedResultId;
+void typedResultValue;

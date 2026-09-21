@@ -21,7 +21,7 @@ in `npx skills add tubeless`; use `chetmancini/tubeless`.
 
 | Skill                                                                 | Use it for                                                 |
 | --------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [`tubeless`](../skills/tubeless/SKILL.md)                             | Authoring and reviewing pipelines, commands, and catalogs  |
+| [`tubeless`](../skills/tubeless/SKILL.md)                             | Authoring and reviewing pipelines, commands, and projects  |
 | [`tubeless-make-pipeline`](../skills/tubeless-make-pipeline/SKILL.md) | Converting existing code into a structured, typed pipeline |
 
 Each skill works on its own in a consumer repository. Both use documentation

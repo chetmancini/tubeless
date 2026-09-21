@@ -31,11 +31,11 @@ const parseSchema = standardSchema<ParseResult, ParseResult>((value) => ({
   value: value as ParseResult,
 }));
 const enrichSchema = standardSchema<EnrichResult, EnrichResult>((value) => ({
-  // SAFETY: example schema trusts test adapter enrich output in this catalog pipeline.
+  // SAFETY: example schema trusts test adapter enrich output in this example pipeline.
   value: value as EnrichResult,
 }));
 const chargeSchema = standardSchema<ChargeResult, ChargeResult>((value) => ({
-  // SAFETY: example schema trusts test adapter charge output in this catalog pipeline.
+  // SAFETY: example schema trusts test adapter charge output in this example pipeline.
   value: value as ChargeResult,
 }));
 

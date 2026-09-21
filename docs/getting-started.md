@@ -14,8 +14,9 @@ npm install tubeless
 The same package works with `pnpm add tubeless`, `yarn add tubeless`, and
 `bun add tubeless`. The README quick start is a complete first program.
 
-Add `tubeless/cli` for terminal commands and `tubeless/project` for project
-catalogs. Neither import loads storage or Studio; the executable supplies those optional tools.
+Add `tubeless/cli` for terminal commands, and
+`tubeless/project` for pipeline projects. Neither import loads storage or Studio;
+the executable supplies those optional tools.
 The executable requires Bun 1.3.14 or later:
 
 ```sh
@@ -36,21 +37,24 @@ Supported operating systems are Linux and macOS. Windows is untested.
 
 ## Try the CLI
 
-From a Tubeless checkout, list and run a registered catalog command:
+From a Tubeless checkout, list and run a pipeline directly from a project:
 
 ```sh
-bunx tubeless list --project examples/catalog/tubeless.project.ts
-bunx tubeless inspect --project examples/catalog/tubeless.project.ts import-rows
-bunx tubeless run --project examples/catalog/tubeless.project.ts import-rows -- --source ../rows.txt
+bunx tubeless list --project examples/tubeless.project.ts
+bunx tubeless inspect --project examples/tubeless.project.ts validated-import
+bunx tubeless run --project examples/tubeless.project.ts validated-import -- --source rows.txt
 ```
 
-`import-rows` reads a newline-delimited file; the catalog sets cwd to its
-directory, so `--source ../rows.txt` resolves to [`examples/rows.txt`](../examples/rows.txt).
+The project contains only pipelines. The workbench derives `--source` from the
+pipeline's input schema; there is no command wrapper.
 
-In your app, add a `tubeless.project.ts` that registers one
-`definePipelineCommand` module, then run `bunx tubeless list` with no
-`--project`. See [`examples/catalog/tubeless.project.ts`](../examples/catalog/tubeless.project.ts),
-[`examples/cli-job.ts`](../examples/cli-job.ts), and [the CLI](./cli.md).
+In your app, export `defineProject("my-app", [MyPipeline])` from
+`tubeless.project.ts`, then run `bunx tubeless list` with no `--project`.
+Pipelines whose options schema exposes Standard JSON Schema input metadata get
+their flags automatically. Use the project commands option for custom command inputs
+or presentation. See [`examples/automatic-cli.ts`](../examples/automatic-cli.ts),
+[`examples/project/tubeless.project.ts`](../examples/project/tubeless.project.ts),
+and [the CLI](./cli.md).
 
 ## 1. Define domain options
 
@@ -161,7 +165,48 @@ wrap the pipeline. It supplies help, target and step selection, dry-run flags,
 and cancellation handling. See [the CLI](./cli.md) and
 [`cli-job.ts`](../examples/cli-job.ts).
 
-## 5. Draw the pipeline
+## 5. Define a project
+
+Collect application pipelines by passing them directly to `defineProject`:
+
+```ts
+import { defineProject } from "tubeless/project";
+
+const project = defineProject("data-jobs", [ImportPipeline, SummaryPipeline]);
+const summary = await project.get("import-summary").runOrThrow({ lines });
+```
+
+The stable project ID remains literal on `project.id`. Pipeline IDs do too, so
+`get` returns the exact pipeline with its own option and result types. For union
+or widened pipeline IDs, `get` retains all matching candidate types. A project
+is only an immutable collection; the selected pipeline's existing methods do the
+work. For YAML or JSON, pass the ID, parsed document, and handler registry to the
+same function; see [declarative pipelines](./declarative-pipelines.md).
+
+Let `definePipeline` infer its type arguments to preserve literal IDs. If you need
+an explicit result contract, annotate the finalizer's return type:
+
+```ts
+type Summary = { count: number };
+
+const CountPipeline = definePipeline({
+  id: "count-rows",
+  steps: [load, normalize],
+  finalize: requireOutputs([normalize], ({ normalize }): Summary => ({
+    count: normalize.length,
+  })),
+});
+```
+
+`CountPipeline.id` retains the literal `"count-rows"`, and its result is `Summary`.
+Calls such as `definePipeline<Steps, Result>(...)` instead default the omitted ID
+type argument to `string`. TypeScript does not infer the remaining parameters
+after explicit type arguments; adding another generic or overload cannot change
+that rule for the same call syntax. Those pipelines still run, but project lookup
+accepts string IDs and checks missing IDs at runtime. See
+[TypeScript's generic parameter defaults](https://www.typescriptlang.org/docs/handbook/2/generics.html#generic-parameter-defaults).
+
+## 6. Draw the pipeline
 
 `toMermaid` returns Mermaid flowchart text describing the step dependencies.
 It does not run the pipeline. It uses `name` when present and otherwise displays the
@@ -176,7 +221,7 @@ use labeled dotted arrows. Set `includeDescriptions: true` when the extra node
 text is useful. The same source is available from `tubeless graph`; see
 [the CLI](./cli.md).
 
-## 6. Test without real delays
+## 7. Test without real delays
 
 ```ts
 import { createPipelineTestRuntime } from "tubeless/testing";

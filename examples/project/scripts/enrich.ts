@@ -2,6 +2,7 @@ import { definePipelineCommand } from "tubeless/cli";
 import { EnrichPipeline } from "../pipelines/enrich.ts";
 
 export const EnrichCommand = definePipelineCommand(EnrichPipeline, {
+  name: "Enrich rows",
   description: "Parse locally, rehearse a remote enrich, and skip remote charge on dry-run.",
   params: {
     lines: {

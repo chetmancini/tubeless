@@ -4,8 +4,8 @@ import { createPipelineTestRuntime } from "../testing/testing.js";
 import {
   compilePipelineDocument,
   PipelineDocumentError,
-  type PipelineDocumentRegistry,
-} from "./project.js";
+  type ProjectRegistry,
+} from "./project-compiler.js";
 import type { PipelineDocument } from "./project-document.js";
 
 function document(): PipelineDocument {
@@ -24,7 +24,7 @@ function document(): PipelineDocument {
   };
 }
 
-function registry(): PipelineDocumentRegistry {
+function registry(): ProjectRegistry {
   return {
     steps: {
       load: vi.fn(() => "hello"),

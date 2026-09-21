@@ -6,12 +6,12 @@ import {
   PIPELINE_MERMAID_DIRECTIONS,
   type PipelineMermaidDirection,
 } from "../core/pipeline-types.js";
-import { PipelineDocumentError, validatePipelineDocument } from "../project/project.js";
+import { PipelineDocumentError, validatePipelineDocument } from "../project/project-document.js";
 import { renderPipelinePlan } from "../render/render.js";
 import {
-  DEFAULT_PIPELINE_PROJECT_MANIFEST,
-  loadPipelineProjectManifest,
-  loadPlanSourceTarget,
+  DEFAULT_PIPELINE_PROJECT_FILE,
+  loadPipelineProjectFile,
+  resolveWorkbenchRegistration,
 } from "./workbench-project-loader.js";
 import {
   errorMessage,
@@ -46,22 +46,24 @@ async function loadParsedPlanSource(
   io: WorkbenchCliIo,
   usage: string
 ) {
-  return loadPlanSourceTarget(
+  const registration = await resolveWorkbenchRegistration(
     parsed.positionals[0]!,
     parsed.values.export,
     parsed.values.project,
     io,
     usage
   );
+  if ("exitCode" in registration) return registration;
+  return registration.loadPlan(io);
 }
 
 const LIST_USAGE = `Usage: tubeless list [options]
 
-List explicitly registered commands from a Tubeless project manifest.
+List pipelines or explicitly registered commands from a Tubeless project file.
 
 Options:
-  -p, --project <path>  Project manifest (default: ./tubeless.project.ts)
-      --json            Emit the versioned manifest inventory as JSON
+  -p, --project <path>  Project file (default: ./tubeless.project.ts)
+      --json            Emit the project inventory as JSON
   -h, --help            Show this help
 `;
 
@@ -80,32 +82,18 @@ export async function runList(argv: readonly string[], io: WorkbenchCliIo): Prom
       parse: parseListArgs,
       positionalCountError: { count: 0, message: "List does not accept a positional argument." },
       async run(parsed, commandIo) {
-        const loaded = await loadPipelineProjectManifest(
-          parsed.values.project ?? DEFAULT_PIPELINE_PROJECT_MANIFEST,
+        const loaded = await loadPipelineProjectFile(
+          parsed.values.project ?? DEFAULT_PIPELINE_PROJECT_FILE,
           commandIo
         );
         if ("exitCode" in loaded) return loaded.exitCode;
 
         if (parsed.values.json) {
-          commandIo.stdout.write(
-            `${JSON.stringify(
-              {
-                commands: loaded.manifest.commands,
-                cwd: loaded.manifest.cwd ?? ".",
-                manifest: loaded.filePath,
-                version: loaded.manifest.version,
-              },
-              null,
-              2
-            )}\n`
-          );
-          return TUBELESS_WORKBENCH_EXIT_CODE.success;
-        }
-
-        for (const command of loaded.manifest.commands) {
-          const selectedExport = command.export ? `#${command.export}` : "";
-          const displayName = command.name ? `\t${command.name}` : "";
-          commandIo.stdout.write(`${command.id}\t${command.file}${selectedExport}${displayName}\n`);
+          commandIo.stdout.write(`${JSON.stringify(loaded.inventory, null, 2)}\n`);
+        } else {
+          for (const registration of loaded.registrations) {
+            commandIo.stdout.write(`${registration.id}\n`);
+          }
         }
         return TUBELESS_WORKBENCH_EXIT_CODE.success;
       },
@@ -197,7 +185,7 @@ Show a registered id or exported pipeline's identity plus the default structural
 
 Options:
   -e, --export <name>   Select a pipeline or command export when the file has more than one
-  -p, --project <path>  Resolve a registered id from this project manifest
+  -p, --project <path>  Resolve a pipeline or command id from this project file
       --json            Emit identity and the default plan as JSON
   -h, --help            Show this help
 `;
@@ -207,7 +195,6 @@ function formatIdList(values: readonly string[]): string {
 }
 
 interface WorkbenchInspection {
-  commandId?: string;
   pipelineId: string;
   plan: PipelinePlan;
   stepIds: string[];
@@ -242,14 +229,12 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
             stepIds: [...view.stepIds],
             plan,
           };
-          if (loaded.registration) inspection.commandId = loaded.registration.id;
           commandIo.stdout.write(`${JSON.stringify(inspection, null, 2)}\n`);
           return TUBELESS_WORKBENCH_EXIT_CODE.success;
         }
 
         commandIo.stdout.write(
           [
-            ...(loaded.registration ? [`Command ${loaded.registration.id}`] : []),
             `Pipeline ${view.id}`,
             `Targets: ${formatIdList(view.targetIds)}`,
             `Exact steps: ${formatIdList(view.stepIds)}`,
@@ -271,7 +256,7 @@ Preview a registered or exported pipeline without running steps or requiring dom
 
 Options:
   -e, --export <name>   Select a pipeline or command export when the file has more than one
-  -p, --project <path>  Resolve a registered id from this project manifest
+  -p, --project <path>  Resolve a pipeline or command id from this project file
   -t, --target <id>     Select a declared target and its prerequisites (repeatable)
   -s, --step <id>       Select exact internal steps (repeatable)
       --dry-run         Show each step's dry-run disposition
@@ -335,7 +320,7 @@ Generate Mermaid flowchart source from a registered or exported pipeline or comm
 
 Options:
   -e, --export <name>       Select a pipeline or command export when the file has more than one
-  -p, --project <path>      Resolve a registered id from this project manifest
+  -p, --project <path>      Resolve a pipeline or command id from this project file
   -d, --direction <value>   Flowchart direction: BT, LR, RL, TB, or TD (default: TD)
       --descriptions        Include step descriptions in node labels
       --markdown            Wrap the result in a fenced Mermaid Markdown block

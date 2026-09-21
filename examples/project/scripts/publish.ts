@@ -3,6 +3,7 @@ import { definePipelineCommand } from "tubeless/cli";
 import { PublishPipeline } from "../pipelines/publish.ts";
 
 export const PublishCommand = definePipelineCommand(PublishPipeline, {
+  name: "Publish artifact",
   description: "Validate and publish a source artifact.",
   params: {
     source: {

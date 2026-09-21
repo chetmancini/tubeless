@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli, type WorkbenchCliIo } from "./workbench.js";
+import { loadPipelineProjectFile } from "./workbench-project-loader.js";
 
 const directories: string[] = [];
 
@@ -27,7 +28,7 @@ function captureIo(cwd: string): WorkbenchCliIo & { errors: string[]; output: st
 
 async function writeProjectFixture(): Promise<{
   directory: string;
-  manifest: string;
+  projectFile: string;
   workDirectory: string;
 }> {
   const directory = await mkdtemp(path.join(tmpdir(), "tubeless-project-"));
@@ -36,13 +37,13 @@ async function writeProjectFixture(): Promise<{
   const workDirectory = path.join(configDirectory, "work");
   await mkdir(workDirectory, { recursive: true });
   const cliModuleUrl = pathToFileURL(path.resolve("dist/cli/cli.js")).href;
+  const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project.js")).href;
   const pipelineModuleUrl = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
-  const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project-manifest.js")).href;
   await writeFile(
     path.join(directory, "pipeline.mjs"),
     `
       import { definePipelineCommand } from ${JSON.stringify(cliModuleUrl)};
-      import { createSteps, definePipeline, requireOutputs } from ${JSON.stringify(pipelineModuleUrl)};
+      import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
       const { step } = createSteps();
       const work = step("work", {
         run: (_inputs, context) => {
@@ -50,88 +51,279 @@ async function writeProjectFixture(): Promise<{
           return context.options.message;
         },
       });
-      export const FixtureCommand = definePipelineCommand(
-        definePipeline({
-          id: "project-fixture",
-          steps: [work],
-          targets: [work],
-          finalize: requireOutputs([work], ({ work }) => work),
-        }),
-        {
-          params: { message: { type: "string" } },
-          reporter: false,
-          summarize: (result) => [\`completed:\${result}\`],
-        }
-      );
-    `
-  );
-  const manifest = path.join(configDirectory, "project.mjs");
-  const manifestSource = `
-    import { definePipelineProject } from ${JSON.stringify(projectModuleUrl)};
-    export default definePipelineProject({
-      cwd: "./work",
-      commands: [{
-        id: "import-data",
-        file: "../pipeline.mjs",
-        export: "FixtureCommand",
+      export const Pipeline = definePipeline({ id: "import-data", steps: [work] });
+      export const FixtureCommand = definePipelineCommand(Pipeline, {
         name: "Import data",
-      }],
-    });
-  `;
-  await writeFile(manifest, manifestSource);
-  await writeFile(
-    path.join(directory, "tubeless.project.ts"),
-    `
-      import { definePipelineProject } from ${JSON.stringify(projectModuleUrl)};
-      export default definePipelineProject({
-        cwd: "./config/work",
-        commands: [{
-          id: "import-data",
-          file: "./pipeline.mjs",
-          export: "FixtureCommand",
-          name: "Import data",
-        }],
+        params: { text: { type: "string" } },
+        mapOptions: ({ text }) => ({ message: text.toUpperCase() }),
+        reporter: false,
+        summarize: (result) => [\`completed:\${result}\`],
       });
     `
   );
-  return { directory, manifest, workDirectory };
+  const projectFile = path.join(configDirectory, "project.mjs");
+  await writeFile(
+    projectFile,
+    `
+    import { defineProject } from ${JSON.stringify(projectModuleUrl)};
+    import { Pipeline, FixtureCommand } from "../pipeline.mjs";
+    export default defineProject("fixture", [Pipeline], {
+      cwd: "./work",
+      commands: [FixtureCommand],
+    });
+  `
+  );
+  await writeFile(
+    path.join(directory, "tubeless.project.ts"),
+    `
+    import { defineProject } from ${JSON.stringify(projectModuleUrl)};
+    import { Pipeline, FixtureCommand } from "./pipeline.mjs";
+    export default defineProject("fixture", [Pipeline], {
+      cwd: "./config/work",
+      commands: [FixtureCommand],
+    });
+  `
+  );
+  return { directory, projectFile, workDirectory };
 }
 
-describe("project manifest workbench", () => {
-  it("lists registrations without scanning or loading command modules", async () => {
-    const { directory } = await writeProjectFixture();
-    await rm(path.join(directory, "pipeline.mjs"));
-    const io = captureIo(directory);
-
-    const exitCode = await runWorkbenchCli(["list", "--json"], io);
-
-    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
-    expect(JSON.parse(io.output.join(""))).toMatchObject({
-      commands: [
-        {
-          export: "FixtureCommand",
-          file: "./pipeline.mjs",
-          id: "import-data",
-          name: "Import data",
+async function writeAutomaticProjectFixture(): Promise<{
+  directory: string;
+  projectFile: string;
+}> {
+  const directory = await mkdtemp(path.join(tmpdir(), "tubeless-automatic-project-"));
+  directories.push(directory);
+  const pipelineModuleUrl = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
+  const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project.js")).href;
+  const projectFile = path.join(directory, "tubeless.project.ts");
+  await writeFile(
+    projectFile,
+    `
+      import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
+      import { defineProject } from ${JSON.stringify(projectModuleUrl)};
+      export const UnrelatedProject = defineProject("unrelated", []);
+      const optionsSchema = {
+        "~standard": {
+          version: 1,
+          vendor: "fixture",
+          validate: (value) => ({ value }),
+          jsonSchema: { input: () => ({
+            type: "object",
+            properties: { message: { type: "string", description: "Message to print." } },
+            required: ["message"],
+          }) },
         },
-      ],
-      cwd: "./config/work",
-      version: 1,
-    });
-    expect(io.errors).toEqual([]);
+      };
+      const { step } = createSteps(optionsSchema);
+      const work = step("work", {
+        run: (_inputs, context) => {
+          context.log.log(\`worked:\${context.options.message}\`);
+          return context.options.message;
+        },
+      });
+      const pipeline = definePipeline({ id: "automatic", steps: [work] });
+      export default defineProject("fixture-project", [pipeline], {
+        name: "Fixture jobs",
+        description: "Print a message.",
+      });
+    `
+  );
+  return { directory, projectFile };
+}
+
+describe("project file workbench", () => {
+  it.each(["list", "inspect", "plan", "graph", "run", "ui"])(
+    "preserves definition errors during project imports for %s",
+    async (operation) => {
+      const directory = await mkdtemp(path.join(tmpdir(), "tubeless-invalid-project-"));
+      directories.push(directory);
+      const pipelineModuleUrl = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
+      const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project.js")).href;
+      const projectFile = path.join(directory, "tubeless.project.ts");
+      await writeFile(
+        projectFile,
+        `
+          import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
+          import { defineProject } from ${JSON.stringify(projectModuleUrl)};
+          const { step } = createSteps();
+          const work = step("work", { run: () => "done" });
+          export default defineProject("invalid-project", [
+            definePipeline({ id: "invalid", steps: [work, work] }),
+          ]);
+        `
+      );
+      const io = captureIo(directory);
+      const args =
+        operation === "ui"
+          ? [operation, projectFile]
+          : operation === "list"
+            ? [operation]
+            : [operation, "invalid"];
+
+      expect(await runWorkbenchCli(args, io)).toBe(TUBELESS_WORKBENCH_EXIT_CODE.definition);
+      expect(io.errors.join("")).toContain("work");
+      expect(io.output).toEqual([]);
+    }
+  );
+
+  it.each([
+    ["export { project, project as alias };", "project"],
+    ["export { project as default, otherProject };", "project"],
+    ["export { project, otherProject };", "multiple"],
+    ["export { project }; export default null;", 'Export "default"'],
+    ["export { project }; export default undefined;", 'Export "default"'],
+  ])("selects project-file roots for %s", async (exports, expected) => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-root-selection-"));
+    directories.push(directory);
+    const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project.js")).href;
+    const filePath = path.join(directory, "roots.mjs");
+    await writeFile(
+      filePath,
+      `
+      import { defineProject } from ${JSON.stringify(projectModuleUrl)};
+      const project = defineProject("selected", []);
+      const otherProject = defineProject("other", []);
+      ${exports}
+    `
+    );
+    const io = captureIo(directory);
+    const loaded = await loadPipelineProjectFile(filePath, io);
+    if (expected === "project") {
+      expect(loaded).toMatchObject({ inventory: { id: "selected" } });
+      expect(io.errors).toEqual([]);
+    } else {
+      expect(loaded).toEqual({ exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load });
+      expect(io.errors.join("")).toContain(expected);
+      expect(io.errors.join("")).not.toContain("--export");
+    }
   });
 
-  it("inspects, plans, graphs, and runs an explicit registered identity", async () => {
-    const { directory, manifest, workDirectory } = await writeProjectFixture();
-    const projectArgs = ["--project", manifest, "import-data"];
+  it.each(["run", "ui"])(
+    "rejects type-only project inputs before %s can execute them",
+    async (command) => {
+      const directory = await mkdtemp(path.join(tmpdir(), "tubeless-type-only-project-"));
+      directories.push(directory);
+      const pipelineModuleUrl = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
+      const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project.js")).href;
+      const projectFile = path.join(directory, "tubeless.project.ts");
+      await writeFile(
+        projectFile,
+        `
+          import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
+          import { defineProject } from ${JSON.stringify(projectModuleUrl)};
+          type RequiredOptions = { message: string };
+          const { step } = createSteps<RequiredOptions>();
+          const work = step("work", {
+            run: (_inputs, context) => {
+              context.log.log("executed-type-only-step");
+              return context.options.message;
+            },
+          });
+          export default defineProject("type-only-project", [
+            definePipeline({ id: "type-only", steps: [work] }),
+          ]);
+        `
+      );
+      const io = { ...captureIo(directory), signal: AbortSignal.timeout(1_000) };
+      const args =
+        command === "run"
+          ? ["run", "type-only"]
+          : ["ui", "--store", path.join(directory, "runs.sqlite"), "--port", "0", projectFile];
+
+      expect(await runWorkbenchCli(args, io)).toBe(TUBELESS_WORKBENCH_EXIT_CODE.load);
+      expect(io.errors.join("")).toContain('Cannot derive a CLI for project pipeline "type-only"');
+      expect(io.errors.join("")).toContain("Standard JSON Schema input metadata");
+      expect(io.errors.join("")).toContain("explicit params");
+      expect(io.errors.join("")).toContain("project commands option");
+      expect(io.output.join("")).not.toContain("executed-type-only-step");
+      expect(io.output.join("")).not.toContain("Tubeless local studio:");
+
+      for (const operation of ["list", "inspect", "plan", "graph"]) {
+        const planIo = captureIo(directory);
+        const planArgs = operation === "list" ? [operation] : [operation, "type-only"];
+        expect(await runWorkbenchCli(planArgs, planIo)).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+        expect(planIo.errors).toEqual([]);
+        expect(planIo.output.join("")).not.toContain("executed-type-only-step");
+      }
+    }
+  );
+
+  it("lists and runs project pipelines with automatically inferred CLI flags", async () => {
+    const { directory, projectFile } = await writeAutomaticProjectFixture();
+
+    const listIo = captureIo(directory);
+    expect(await runWorkbenchCli(["list", "--json"], listIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(JSON.parse(listIo.output.join(""))).toEqual({
+      id: "fixture-project",
+      name: "Fixture jobs",
+      description: "Print a message.",
+      pipelines: ["automatic"],
+      project: projectFile,
+      cwd: directory,
+    });
+
+    const runIo = captureIo(directory);
+    expect(await runWorkbenchCli(["run", "automatic", "--", "--message", "hello"], runIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(runIo.output.join(" ")).toContain("worked:hello");
+    expect(runIo.errors).toEqual([]);
+
+    const inspectIo = captureIo(directory);
+    expect(await runWorkbenchCli(["inspect", "automatic", "--json"], inspectIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    const inspection = JSON.parse(inspectIo.output.join(""));
+    expect(inspection.pipelineId).toBe("automatic");
+    expect(inspection).not.toHaveProperty("commandId");
+
+    const textIo = captureIo(directory);
+    expect(await runWorkbenchCli(["inspect", "automatic"], textIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(textIo.output.join("")).toContain("Pipeline automatic");
+    expect(textIo.output.join("")).not.toContain("Command automatic");
+  });
+
+  it("lists project pipelines without executing handlers or requiring command inputs", async () => {
+    const { directory, workDirectory } = await writeProjectFixture();
+    const io = captureIo(directory);
+    expect(await runWorkbenchCli(["list", "--json"], io)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(JSON.parse(io.output.join(""))).toMatchObject({
+      id: "fixture",
+      pipelines: ["import-data"],
+      cwd: workDirectory,
+    });
+    expect(io.errors).toEqual([]);
+    const textIo = captureIo(directory);
+    expect(await runWorkbenchCli(["list"], textIo)).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(textIo.output.join("")).toBe("import-data\n");
+  });
+
+  it("rejects a pipeline registered through both a project and a direct command file", async () => {
+    const { directory, projectFile } = await writeProjectFixture();
+    const io = captureIo(directory);
+    expect(await runWorkbenchCli(["ui", "--command", "./pipeline.mjs", projectFile], io)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.usage
+    );
+    expect(io.errors.join("")).toContain('Studio command id "import-data" is duplicated.');
+    expect(io.output).toEqual([]);
+  });
+
+  it("inspects, plans, graphs, and runs a project pipeline with a custom adapter", async () => {
+    const { directory, projectFile, workDirectory } = await writeProjectFixture();
+    const projectArgs = ["--project", projectFile, "import-data"];
 
     const inspectIo = captureIo(directory);
     expect(await runWorkbenchCli(["inspect", ...projectArgs, "--json"], inspectIo)).toBe(
       TUBELESS_WORKBENCH_EXIT_CODE.success
     );
     expect(JSON.parse(inspectIo.output.join(""))).toMatchObject({
-      commandId: "import-data",
-      pipelineId: "project-fixture",
+      pipelineId: "import-data",
       stepIds: ["work"],
     });
 
@@ -153,27 +345,33 @@ describe("project manifest workbench", () => {
         [
           "run",
           "--project",
-          manifest,
+          projectFile,
           "--trace",
           "run.ndjson",
           "import-data",
           "--",
-          "--message",
+          "--text",
           "hello",
         ],
         runIo
       )
     ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
     expect(runIo.output.join(" ")).toContain(`cwd:${workDirectory}`);
-    expect(runIo.output.join(" ")).toContain("completed:hello");
+    expect(runIo.output.join(" ")).toContain("completed:HELLO");
     await expect(readFile(path.join(directory, "run.ndjson"), "utf8")).resolves.toContain(
       '"name":"pipeline.completed"'
     );
   });
 
   it("rejects --export combined with --project on inspect, plan, graph, and run", async () => {
-    const { directory, manifest } = await writeProjectFixture();
-    const mutexArgs = ["--export", "FixtureCommand", "--project", manifest, "import-data"] as const;
+    const { directory, projectFile } = await writeProjectFixture();
+    const mutexArgs = [
+      "--export",
+      "FixtureCommand",
+      "--project",
+      projectFile,
+      "import-data",
+    ] as const;
 
     for (const command of ["inspect", "plan", "graph", "run"] as const) {
       const io = captureIo(directory);
@@ -181,61 +379,39 @@ describe("project manifest workbench", () => {
         TUBELESS_WORKBENCH_EXIT_CODE.usage
       );
       expect(io.errors.join("")).toContain(
-        "--export cannot be combined with --project; the manifest owns export selection."
+        "--export cannot be combined with --project; the project file owns export selection."
       );
       expect(io.errors.join("")).toContain(`Usage: tubeless ${command}`);
     }
   });
 
-  it("uses a bare id from the current directory default manifest", async () => {
+  it("uses a bare id from the current directory default projectFile", async () => {
     const { directory } = await writeProjectFixture();
     const io = captureIo(directory);
 
     expect(await runWorkbenchCli(["inspect", "import-data", "--json"], io)).toBe(
       TUBELESS_WORKBENCH_EXIT_CODE.success
     );
-    expect(JSON.parse(io.output.join(""))).toMatchObject({ commandId: "import-data" });
+    expect(JSON.parse(io.output.join(""))).toMatchObject({ pipelineId: "import-data" });
   });
 
-  it("keeps an existing file argument ahead of default-manifest identity lookup", async () => {
+  it("keeps an existing file argument ahead of default-project identity lookup", async () => {
     const { directory } = await writeProjectFixture();
     const io = captureIo(directory);
 
     expect(await runWorkbenchCli(["inspect", "pipeline.mjs", "--json"], io)).toBe(
       TUBELESS_WORKBENCH_EXIT_CODE.success
     );
-    expect(JSON.parse(io.output.join(""))).toMatchObject({ pipelineId: "project-fixture" });
+    expect(JSON.parse(io.output.join(""))).toMatchObject({ pipelineId: "import-data" });
     expect(JSON.parse(io.output.join(""))).not.toHaveProperty("commandId");
   });
 
-  it("rejects module aliases that resolve to the same registration", async () => {
-    const { directory } = await writeProjectFixture();
-    const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project-manifest.js")).href;
-    const manifest = path.join(directory, "config", "duplicate.mjs");
-    await writeFile(
-      manifest,
-      `
-        import { definePipelineProject } from ${JSON.stringify(projectModuleUrl)};
-        export default definePipelineProject({ commands: [
-          { id: "first", file: "../pipeline.mjs", export: "FixtureCommand" },
-          { id: "second", file: ".././pipeline.mjs", export: "FixtureCommand" },
-        ] });
-      `
-    );
-    const io = captureIo(directory);
-
-    expect(await runWorkbenchCli(["list", "--project", manifest], io)).toBe(
-      TUBELESS_WORKBENCH_EXIT_CODE.load
-    );
-    expect(io.errors.join(" ")).toContain("resolves to a duplicate module registration");
-  });
-
-  it("publishes project ids to the studio while legacy catalogs keep their file identity", async () => {
-    const { directory, manifest } = await writeProjectFixture();
+  it("publishes project pipelines and inferred parameters to Studio", async () => {
+    const { directory, projectFile } = await writeAutomaticProjectFixture();
     const controller = new AbortController();
     const io = { ...captureIo(directory), signal: controller.signal };
     const running = runWorkbenchCli(
-      ["ui", "--store", path.join(directory, "runs.sqlite"), "--port", "0", manifest],
+      ["ui", "--store", path.join(directory, "runs.sqlite"), "--port", "0", projectFile],
       io
     );
 
@@ -244,7 +420,15 @@ describe("project manifest workbench", () => {
     expect(url).toBeDefined();
     await expect(fetch(`${url}/api/commands`).then((response) => response.json())).resolves.toEqual(
       {
-        commands: [expect.objectContaining({ id: "import-data", name: "Import data" })],
+        commands: [
+          expect.objectContaining({
+            id: "automatic",
+            name: "automatic",
+            parameters: expect.arrayContaining([
+              expect.objectContaining({ flag: "message", key: "message", required: true }),
+            ]),
+          }),
+        ],
       }
     );
 

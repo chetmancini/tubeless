@@ -1,13 +1,13 @@
-import { compilePipelineDocument } from "tubeless/project";
+import { defineProject } from "tubeless/project";
 import { definePipelineCommand } from "tubeless/cli";
 import document from "./declarative/peloton.yaml";
 import { pelotonRegistry } from "./declarative/peloton-handlers.ts";
 
-const pipeline = compilePipelineDocument(document, pelotonRegistry).get("yaml-peloton");
-if (!pipeline) throw new Error("Missing yaml-peloton pipeline");
+const pipeline = defineProject("yaml-peloton", document, pelotonRegistry).get("yaml-peloton");
 export const YamlPelotonPipeline = pipeline;
 
 export const YamlPelotonCommand = definePipelineCommand(YamlPelotonPipeline, {
+  name: "Peloton from YAML",
   description:
     "YAML road-race demo: progress, concurrent inspections, retries, dry runs, and failure gates. All I/O is simulated.",
   params: {

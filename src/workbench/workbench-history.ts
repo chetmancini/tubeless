@@ -25,7 +25,7 @@ Show recorded pipeline runs from SQLite or an NDJSON trace.
 Options:
       --store <path>    SQLite database (default: .tubeless/runs.sqlite)
       --trace <path>    Read a finished NDJSON trace artifact
-      --pipeline <id>   Filter by recorded pipeline ID (not registered command ID)
+      --pipeline <id>   Filter by recorded pipeline ID
       --json            Emit the projected run list or run as JSON
       --events          Emit raw store events as NDJSON
   -h, --help            Show this help

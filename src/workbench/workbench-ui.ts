@@ -2,7 +2,7 @@ import * as path from "node:path";
 import { parseArgs } from "node:util";
 import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
-import { loadPipelineProjectManifest } from "./workbench-project-loader.js";
+import { loadPipelineProjectFile, createModuleRegistration } from "./workbench-project-loader.js";
 import type { PipelineRunEventReader } from "../run-store/run-store.js";
 import type {
   PipelineRunStudioCommand,
@@ -14,7 +14,6 @@ import {
   commandContext,
   DEFAULT_PIPELINE_RUN_STORE,
   errorMessage,
-  loadPipelineCommand,
   onFirstProcessSignal,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
@@ -25,8 +24,8 @@ import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 const UI_USAGE = `Usage: tubeless ui [options] [project-file]
 
 Serve the local pipeline studio from an append-only SQLite run store or a
-finished NDJSON trace. Register definePipelineCommand modules directly or through
-a project manifest, and only with a writable SQLite store.
+finished NDJSON trace. Load pipelines from a project, or register
+definePipelineCommand modules directly, and only with a writable SQLite store.
 
 Options:
       --command <path> Register a launchable pipeline command (repeatable)
@@ -55,15 +54,6 @@ function parseUiArgs(argv: readonly string[]) {
   });
 }
 
-/** A registered launchable command module: its file plus optional export/name. */
-interface StudioCommandSpec {
-  cwd: string;
-  exportName?: string;
-  filePath: string;
-  id?: string;
-  name?: string;
-}
-
 export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
@@ -71,7 +61,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
       parse: parseUiArgs,
       async run(parsed, commandIo) {
         if (parsed.positionals.length > 1) {
-          return writeUsageError(commandIo, "Pass at most one project manifest.", UI_USAGE);
+          return writeUsageError(commandIo, "Pass at most one project file.", UI_USAGE);
         }
         const directCommandFiles = parsed.values.command ?? [];
         const projectFile = parsed.positionals[0];
@@ -97,54 +87,29 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           return writeUsageError(io, "--port must be an integer from 0 to 65535.", UI_USAGE);
         }
 
-        const specs: StudioCommandSpec[] = directCommandFiles.map((file) => {
-          const spec: StudioCommandSpec = {
-            cwd: io.cwd,
-            filePath: path.resolve(io.cwd, file),
-          };
-          if (parsed.values.export !== undefined) {
-            spec.exportName = parsed.values.export;
-          }
-          return spec;
-        });
+        const sources = directCommandFiles.map((file) =>
+          createModuleRegistration(file, io.cwd, parsed.values.export)
+        );
         if (projectFile) {
-          const loadedConfig = await loadPipelineProjectManifest(projectFile, io);
-          if ("exitCode" in loadedConfig) return loadedConfig.exitCode;
-          const configDirectory = path.dirname(loadedConfig.filePath);
-          const configCwd = path.resolve(configDirectory, loadedConfig.manifest.cwd ?? ".");
-          specs.push(
-            ...loadedConfig.manifest.commands.map((command) => {
-              const spec: StudioCommandSpec = {
-                cwd: configCwd,
-                filePath: path.resolve(configDirectory, command.file),
-              };
-              if (command.export !== undefined) {
-                spec.exportName = command.export;
-              }
-              spec.id = command.id;
-              if (command.name !== undefined) {
-                spec.name = command.name;
-              }
-              return spec;
-            })
-          );
+          const loaded = await loadPipelineProjectFile(projectFile, io);
+          if ("exitCode" in loaded) return loaded.exitCode;
+          sources.push(...loaded.registrations);
         }
         const identities = new Set<string>();
-        for (const spec of specs) {
-          const identity = `${spec.filePath}\0${spec.exportName ?? ""}`;
-          if (identities.has(identity)) {
+        for (const source of sources) {
+          if (identities.has(source.identity)) {
             return writeUsageError(
               io,
-              `Command module ${JSON.stringify(spec.filePath)} is duplicated.`,
+              `Studio command source ${JSON.stringify(source.source)} is duplicated.`,
               UI_USAGE
             );
           }
-          identities.add(identity);
+          identities.add(source.identity);
         }
 
         const host = (parsed.values.host ?? "127.0.0.1").toLowerCase();
         const isLoopbackHost = host === "127.0.0.1" || host === "::1" || host === "localhost";
-        if (specs.length > 0 && !isLoopbackHost) {
+        if (sources.length > 0 && !isLoopbackHost) {
           return writeUsageError(
             io,
             "Browser-triggered execution requires a loopback --host.",
@@ -164,15 +129,13 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           commandIo: WorkbenchCliIo;
           descriptor: PipelineRunStudioCommand;
         }[] = [];
-        for (const spec of specs) {
-          const commandIo = { ...io, cwd: spec.cwd };
-          const loaded = await loadPipelineCommand(spec.filePath, spec.exportName, commandIo);
+        for (const source of sources) {
+          const loaded = await source.loadCommand(io);
           if ("exitCode" in loaded) return loaded.exitCode;
-          const commandName = spec.name ?? loaded.command.descriptor.name;
           const descriptor: PipelineRunStudioCommand = {
             canPlan: true,
-            id: spec.id ?? `${spec.filePath}#${loaded.exportName}`,
-            name: commandName,
+            id: loaded.command.id,
+            name: loaded.command.descriptor.name,
             parameters: loaded.command.descriptor.parameters,
           };
           if (loaded.command.descriptor.description !== undefined) {
@@ -180,7 +143,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           }
           registrations.push({
             command: loaded.command,
-            commandIo,
+            commandIo: loaded.commandIo,
             descriptor,
           });
         }

@@ -14,7 +14,7 @@ import {
   isPipelineExecutionError,
   toExitCode,
 } from "../cli/cli-exit.js";
-import { loadPipelineCommandTarget } from "./workbench-project-loader.js";
+import { resolveWorkbenchRegistration } from "./workbench-project-loader.js";
 import {
   commandContext,
   errorMessage,
@@ -27,11 +27,11 @@ import {
 
 const RUN_USAGE = `Usage: tubeless run [options] <command-file> [-- <command-args...>]
 
-Execute a registered id or exported definePipelineCommand using its validated CLI contract.
+Execute a project pipeline or exported definePipelineCommand using its validated CLI contract.
 
 Options:
   -e, --export <name>   Select a command export when the file has more than one
-  -p, --project <path>  Resolve a registered id from this project manifest
+  -p, --project <path>  Resolve a pipeline or command id from this project file
       --store <path>    Append run events to a local SQLite database
       --trace <path>    Write NDJSON traces to a file, or - for stdout
                         (command output then goes to stderr)
@@ -150,13 +150,15 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
     return writeUsageError(io, "Pass exactly one pipeline command file.", RUN_USAGE);
   }
 
-  const loaded = await loadPipelineCommandTarget(
+  const registration = await resolveWorkbenchRegistration(
     parsed.parsed.positionals[0]!,
     parsed.parsed.values.export,
     parsed.parsed.values.project,
     io,
     RUN_USAGE
   );
+  if ("exitCode" in registration) return registration.exitCode;
+  const loaded = await registration.loadCommand(io);
   if ("exitCode" in loaded) return loaded.exitCode;
 
   const storePath = parsed.parsed.values.store

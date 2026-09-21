@@ -83,12 +83,12 @@ assert(
   "Agent guide must not send authors to a production pipeline outside this package"
 );
 assert(
-  agentGuide.includes("examples/catalog/tubeless.project.ts"),
-  "Agent guide must point authors at the project manifest"
+  agentGuide.includes("examples/project/tubeless.project.ts"),
+  "Agent guide must point authors at the project example"
 );
 assert(
-  recipes.includes("examples/catalog/tubeless.project.ts"),
-  "Recipe index must point authors at the project manifest"
+  recipes.includes("examples/project/tubeless.project.ts"),
+  "Recipe index must point authors at the project example"
 );
 const concepts = readFileSync(join(packageRoot, "docs", "concepts.md"), "utf8");
 const cliGuide = readFileSync(join(packageRoot, "docs", "cli.md"), "utf8");
@@ -116,13 +116,13 @@ assert(
   cliJob.includes("`--step`") && cliJob.includes("`stepIds`") && cliJob.includes("`targets`"),
   "CLI recipe must distinguish --step/--target flags from stepIds/targets values"
 );
-const catalog = readFileSync(
-  join(packageRoot, "examples", "catalog", "tubeless.project.ts"),
+const projectExample = readFileSync(
+  join(packageRoot, "examples", "project", "tubeless.project.ts"),
   "utf8"
 );
 assert(
-  catalog.includes('id: "import-rows"'),
-  "Project manifest must declare the import-rows command id"
+  projectExample.includes("ImportPipeline"),
+  "Project example must include the import pipeline"
 );
 const requiredDocuments = [
   "README.md",
@@ -137,12 +137,12 @@ const requiredDocuments = [
   "docs/studio.md",
   "skills/tubeless/SKILL.md",
   "skills/tubeless-make-pipeline/SKILL.md",
-  "examples/catalog/tubeless.project.ts",
-  "examples/catalog/pipelines/import.ts",
-  "examples/catalog/pipelines/normalize.ts",
-  "examples/catalog/pipelines/publish.ts",
-  "examples/catalog/scripts/import.ts",
-  "examples/catalog/scripts/publish.ts",
+  "examples/project/tubeless.project.ts",
+  "examples/project/pipelines/import.ts",
+  "examples/project/pipelines/normalize.ts",
+  "examples/project/pipelines/publish.ts",
+  "examples/project/scripts/import.ts",
+  "examples/project/scripts/publish.ts",
 ];
 for (const document of requiredDocuments) {
   const path = join(packageRoot, document);

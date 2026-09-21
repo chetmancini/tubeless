@@ -2,7 +2,7 @@
 
 Studio is a local browser interface for inspecting pipeline runs. It shows
 step status, progress, logs, and errors from a SQLite run store or a saved NDJSON
-trace. You can also register pipeline commands to preview and launch them from
+trace. You can also load a project or register pipeline commands to preview and launch them from
 the browser. Recording and Studio are optional; pipelines run without either.
 
 ## Record and inspect a run
@@ -32,7 +32,7 @@ bunx tubeless ui --trace run.ndjson
 ```
 
 The NDJSON view is always read-only. It cannot launch commands or clear history,
-and does not accept a project catalog or `--command`.
+and does not accept a project file or `--command`.
 
 ## Use the browser controls
 
@@ -60,7 +60,31 @@ business inputs; those are checked when you run the command. A preview is
 optional. Cancellation affects only a live launch owned by the current Studio
 process; it cannot resume or cancel work from an earlier crashed process.
 
-## Register commands for browser execution
+## Launch project pipelines
+
+Pass a checked-in project file to expose its schema-backed pipelines in Studio:
+
+```ts
+// tubeless.project.ts
+import { defineProject } from "tubeless/project";
+import { ImportPipeline, PublishPipeline } from "./pipelines.js";
+
+export default defineProject("data-jobs", [ImportPipeline, PublishPipeline]);
+```
+
+```sh
+bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.project.ts
+```
+
+Studio derives the same form fields that the CLI derives as flags. No command
+wrapper is needed. Automatic registration requires Standard JSON Schema input
+metadata. Supply explicit adapters in the project commands option for schema-less
+pipelines or custom CLI inputs.
+
+The project file's default export selects the project for Studio. Without a
+default, exactly one distinct project must be exported; multiple projects are ambiguous. An invalid default is a load error.
+
+## Register custom commands for browser execution
 
 Provide command files explicitly:
 
@@ -84,39 +108,34 @@ Pipeline command forms include
 **Max Concurrency**, a positive integer defaulting to `1`, under execution controls;
 it has the same behavior as the CLI's `--max-concurrency` flag.
 
-## Checked-in project manifest
+## Custom adapters in a project
 
-Use a project manifest to register commands once for both the CLI and Studio:
+Use the same project for typed lookup, CLI, and Studio. Add explicit command
+adapters when pipelines need custom parameters, option mapping, or display names:
 
 ```ts
 // tubeless.project.ts
-import { definePipelineProject } from "tubeless/project";
+import { defineProject } from "tubeless/project";
+import { ImportPipeline } from "./pipelines/import.ts";
+import { ImportCommand } from "./scripts/import.ts";
 
-export default definePipelineProject({
-  cwd: ".",
-  commands: [
-    {
-      id: "import-rows",
-      file: "./scripts/import.ts",
-      export: "ImportCommand",
-      name: "Import rows",
-    },
-    { id: "publish", file: "./scripts/publish.ts", export: "PublishCommand" },
-  ],
+export default defineProject("data-jobs", [ImportPipeline], {
+  commands: [ImportCommand],
 });
 ```
 
 ```sh
 bunx tubeless list
-bunx tubeless inspect import-rows
-bunx tubeless run import-rows -- --source rows.txt
+bunx tubeless inspect import
+bunx tubeless run import -- --source rows.txt
 bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.project.ts
 ```
 
-Command paths and `cwd` are relative to the manifest file. Empty or duplicate
-IDs and duplicate module registrations fail when the manifest loads. The
-optional `name` changes a display label, not the registered command ID or the
-pipeline's own ID.
+CLI and Studio use the pipeline's ID. Set `name` on `definePipelineCommand` for
+a display label. The optional project `cwd` is relative to the project file and
+defaults to its directory. Duplicate adapters or adapters for pipelines outside
+the project fail during project definition. See the
+[complete project example](../examples/project/tubeless.project.ts).
 
 ## Storage behavior
 

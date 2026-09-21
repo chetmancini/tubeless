@@ -44,7 +44,7 @@ console.log(`Verified ${pages.length} Markdown documents, discovery links, and f
 assert.match(index, /^# tubeless\n\n> .+\n/);
 assert.match(index, /## When to use Tubeless\n/);
 assert.match(index, /Pipelines run in your process/);
-assert.match(index, /tubeless plan <registered-id>/);
+assert.match(index, /tubeless plan <pipeline-id>/);
 for (const section of index.split(/^## /m).slice(1)) {
   const [heading, ...lines] = section.split("\n");
   const entries = lines.filter((line) => line.trim());

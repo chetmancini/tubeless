@@ -62,7 +62,7 @@
         "Step",
         "StepSkipDecision"
       ],
-      "sha256": "a6068b9118f799e936c4467c83bb7e6fc01f018ae87180533f0125ed065047b7",
+      "sha256": "b6a31138874d99137e4b52b563af225f4129730c82d9855125944f7390b71d0a",
       "specifier": "tubeless"
     },
     {
@@ -100,7 +100,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "30df65d84a1ce02731d843e2b5f6f8ee04a1eb726281a020fff7eb84323a8846",
+      "sha256": "590705b173c90603b47ea71c2d22ee24016d9f3ba3d76540f057621be760e19f",
       "specifier": "tubeless/cli"
     },
     {
@@ -132,7 +132,7 @@
         "WorkerThreadContext",
         "writeJson"
       ],
-      "sha256": "e422f1bb662450d67fe23b99e95c1fba2863dce8bae594e228262abb4caaf0ac",
+      "sha256": "5caa6ab8c2e5ad6bfe37f848d0d3a4a56718064d338b27642558e4c402370a71",
       "specifier": "tubeless/node"
     },
     {
@@ -150,16 +150,13 @@
     {
       "declaration": "./dist/project/project.d.ts",
       "exports": [
-        "compilePipelineDocument",
-        "definePipelineProject",
+        "defineProject",
         "PipelineDocumentError",
-        "PipelineDocumentRegistry",
-        "PipelineProjectCommandModule",
-        "PipelineProjectManifest",
-        "PipelineProjectManifestInput",
-        "validatePipelineDocument"
+        "PipelineProject",
+        "ProjectOptions",
+        "ProjectRegistry"
       ],
-      "sha256": "0ca27fe216a97fb75214b0270ac6e4f2d02226e7be13f058ac9002ab07dae1c8",
+      "sha256": "8de75f0962ccf6ff7d1247a27b6a3022d47c3dad8c6580e9dd26748dbc502e40",
       "specifier": "tubeless/project"
     },
     {
@@ -173,7 +170,7 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "7466ea2f042d4aed8c1c969a078e91ec7618aec0052b123f7f71521cc6d4681f",
+      "sha256": "5d3a28628c4e35bc2cde7a632273eb2e11876421e2225eaf6342ab7cd41842fc",
       "specifier": "tubeless/testing"
     },
     {

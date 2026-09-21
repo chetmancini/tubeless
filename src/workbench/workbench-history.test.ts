@@ -158,7 +158,7 @@ describe("runHistory", () => {
     const events = [...failedRunEvents, ...secondRunEvents];
     if (source === "--store") await seedStore(filename, events);
     else await writeFile(filename, `${events.map((next) => JSON.stringify(next)).join("\n")}\n`);
-    // A catalog must not resolve registered IDs or load modules during history reads.
+    // A project must not resolve pipeline IDs or load modules during history reads.
     await writeFile(path.join(directory, "tubeless.project.ts"), 'throw new Error("do not load");');
 
     for (const mode of [[], ["--json"], ["--events"]]) {
@@ -209,7 +209,7 @@ describe("runHistory", () => {
     const helpIo = captureIo(io.cwd);
     expect(await runHistory(["--help"], helpIo)).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
     expect(helpIo.output.join("")).toContain("--pipeline <id>");
-    expect(helpIo.output.join("")).toContain("not registered command ID");
+    expect(helpIo.output.join("")).toContain("Filter by recorded pipeline ID");
   });
 
   it("lists one line per recorded run", async () => {

@@ -15,19 +15,19 @@ const WORKBENCH_USAGE = `Usage: tubeless <command> [options] <registered-id|pipe
 Inspect, plan, visualize, or safely run exported tubeless workflows.
 
 Commands:
-  tubeless list      List commands explicitly registered in the project manifest
+  tubeless list      List pipelines or commands in the project file
   tubeless validate  Check a YAML or JSON pipeline document without loading handlers
   tubeless inspect   Show pipeline identity and the default structural plan
   tubeless plan      Preview step selection without executing the pipeline
   tubeless graph     Generate Mermaid flowchart source
-  tubeless run       Execute an exported definePipelineCommand
+  tubeless run       Execute a project pipeline or exported definePipelineCommand
   tubeless history   Show recorded runs from the local SQLite store
   tubeless ui        Open the optional local run studio
 
 Run tubeless <command> --help for command-specific options.
 `;
 
-/** Run the `tubeless` development workbench. Execution requires a definePipelineCommand export. */
+/** Run the `tubeless` development workbench. */
 export async function runWorkbenchCli(
   argv: readonly string[],
   io: WorkbenchCliIo

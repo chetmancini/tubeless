@@ -1,4 +1,4 @@
-import type { PipelineDocumentRegistry } from "tubeless/project";
+import type { ProjectRegistry } from "tubeless/project";
 
 function rows(value: unknown): string[] {
   if (!Array.isArray(value) || !value.every((row: unknown) => typeof row === "string")) {
@@ -8,7 +8,7 @@ function rows(value: unknown): string[] {
 }
 
 /** Domain code stays independent of YAML parsing and document loading. */
-export const registry: PipelineDocumentRegistry = {
+export const registry: ProjectRegistry = {
   optionsSchemas: {
     lines: {
       "~standard": {

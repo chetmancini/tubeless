@@ -18,6 +18,7 @@ export {
   type CliStringParam,
 } from "./cli-types.js";
 export { defineCommand } from "./cli-command.js";
+
 export {
   definePipelineCommand,
   type DefinePipelineCommandConfig,
