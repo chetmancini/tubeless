@@ -317,7 +317,8 @@ describe("mapped child adapter: failures", () => {
       pipeline: child,
       items: () => [{ id: "only" }],
       key: (item) => item.id,
-      mapOptions: () => ({ stepIds: ["missing" as never] }),
+      controls: { stepIds: ["missing" as never] },
+      mapOptions: () => ({}),
     });
     const parent = definePipeline({
       id: "mapped-planned-parent",

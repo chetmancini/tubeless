@@ -92,6 +92,9 @@ Read the corresponding package recipe before using these features:
 
 - `fromPipeline` for an independently useful child workflow;
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
+  Keep `mapOptions` limited to child domain input. Supply child execution controls
+  separately through `controls`, either as a typed value or a callback. A child's
+  `dryRun: false` never disables a dry-running parent.
   Use ordinary helpers or `runConcurrent` for lightweight work without child
   lifecycle reporting.
 - `createSteps(optionsSchema)`, `outputSchema`, or `resultSchema` for runtime

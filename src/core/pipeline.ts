@@ -43,7 +43,6 @@ export type {
   PipelineLogger,
   PipelineContext,
   PipelineRunControls,
-  PipelineRunOptions,
   PipelineExecutionContext,
   PipelineStepProgressDetailStatus,
   PipelineStepProgressDetail,

@@ -20,7 +20,7 @@ one of these recipes.
 | Safe write/publish preview                    | [`publish-with-gates.ts`](../examples/publish-with-gates.ts)             | `dryRun`, `optionalDependsOn`, `skipAfterFailureOf`                                |
 | Deliberately omit unnecessary work            | [`conditional-step.ts`](../examples/conditional-step.ts)                 | `step` with `skip`, valued skip, skip-aware output typing                          |
 | Preserve independent work after failure       | [`best-effort.ts`](../examples/best-effort.ts)                           | `continueOnError`, structured `run` result                                         |
-| Compose one reusable workflow                 | [`child-pipeline.ts`](../examples/child-pipeline.ts)                     | `fromPipeline`, `mapOptions`, resolved async `mapResult`                           |
+| Compose one reusable workflow                 | [`child-pipeline.ts`](../examples/child-pipeline.ts)                     | `fromPipeline`, domain `mapOptions`, child `controls`, async `mapResult`           |
 | Call a real HTTP service                      | [`remote-steps.ts`](../examples/remote-steps.ts)                         | `fromRemote`, fetch cancellation, validated HTTP output                            |
 | Host a pipeline in a durable engine           | [`host-embedding.ts`](../examples/host-embedding.ts)                     | `runOrThrow`, pass `correlationId` / `parentRunId`                                 |
 | Fan out over runtime items                    | [`fan-out-progress.ts`](../examples/fan-out-progress.ts)                 | `forEachPipeline` with `skip`, stable keys, concurrency, progress                  |

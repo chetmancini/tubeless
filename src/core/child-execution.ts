@@ -15,7 +15,6 @@ import type {
   PipelinePlan,
   PipelineRun,
   PipelineRunControls,
-  PipelineRunOptions,
   PipelineRuntime,
   PipelineStepContext,
 } from "./pipeline-types.js";
@@ -41,7 +40,7 @@ type ChildPipeline = Pipeline<object, unknown, string, string>;
 
 type CompiledChildExecute = (
   plan: PipelinePlan,
-  options: PipelineRunOptions,
+  options: object,
   controls: PipelineRunControls,
   context?: Partial<PipelineContext>
 ) => Promise<PipelineRun<unknown>>;
@@ -61,7 +60,7 @@ function compiledChildExecute(pipeline: ChildPipeline): CompiledChildExecute | u
 function executeCompiledChild(
   pipeline: ChildPipeline,
   plan: PipelinePlan,
-  domainOptions: PipelineRunOptions,
+  domainOptions: object,
   controls: PipelineRunControls,
   context: PipelineContext
 ): Promise<PipelineRun<unknown>> {
@@ -117,7 +116,7 @@ async function failedPublicChildPlanRun(
 async function rejectedChildPlanResult(
   pipeline: ChildPipeline,
   plan: PipelinePlan,
-  domainOptions: PipelineRunOptions,
+  domainOptions: object,
   controls: PipelineRunControls,
   context: PipelineContext
 ): Promise<PipelineRun<unknown>> {
@@ -132,10 +131,13 @@ type ChildInputs = Record<string, unknown>;
 
 export interface SingleChildExecutionConfig<TParentOptions extends object> {
   pipeline: ChildPipeline;
-  mapOptions(
-    inputs: ChildInputs,
-    context: PipelineExecutionContext<TParentOptions>
-  ): PipelineRunOptions;
+  controls?:
+    | PipelineRunControls
+    | ((
+        inputs: ChildInputs,
+        context: PipelineExecutionContext<TParentOptions>
+      ) => PipelineRunControls);
+  mapOptions(inputs: ChildInputs, context: PipelineExecutionContext<TParentOptions>): object;
   mapResult?(
     value: unknown,
     result: PipelineRun<unknown>,
@@ -154,12 +156,20 @@ export interface MappedChildExecutionConfig<TParentOptions extends object> {
     | number
     | ((inputs: ChildInputs, context: PipelineExecutionContext<TParentOptions>) => number);
   progress?: ToMappedChildStepProgressOptions;
+  controls?:
+    | PipelineRunControls
+    | ((
+        item: unknown,
+        index: number,
+        inputs: ChildInputs,
+        context: PipelineExecutionContext<TParentOptions>
+      ) => PipelineRunControls);
   mapOptions(
     item: unknown,
     index: number,
     inputs: ChildInputs,
     context: PipelineExecutionContext<TParentOptions>
-  ): PipelineRunOptions;
+  ): object;
   mapResult?(
     value: unknown,
     result: PipelineRun<unknown>,
@@ -176,85 +186,25 @@ function childTracingOptions(
   return context.tracing ? { ...context.tracing, itemKey } : undefined;
 }
 
-const CHILD_RUN_CONTROL_KEYS = [
-  "continueOnError",
-  "dryRun",
-  "maxConcurrency",
-  "stepIds",
-  "targets",
-] as const;
-
-function isChildRunControlKey(
-  property: PropertyKey
-): property is (typeof CHILD_RUN_CONTROL_KEYS)[number] {
-  return (
-    typeof property === "string" &&
-    // SAFETY: `includes` membership over the literal tuple guarantees the cast
-    // target is exactly one of the declared run-control keys.
-    CHILD_RUN_CONTROL_KEYS.includes(property as (typeof CHILD_RUN_CONTROL_KEYS)[number])
-  );
-}
-
-interface ChildRunBags {
-  controls: PipelineRunControls;
-  domainOptions: PipelineRunOptions;
-}
-
-function splitChildRunOptions(options: PipelineRunOptions): ChildRunBags {
-  const controls: PipelineRunControls = {};
-  let hasControls = false;
-  for (const key of CHILD_RUN_CONTROL_KEYS) {
-    if (!Object.prototype.hasOwnProperty.call(options, key)) continue;
-    hasControls = true;
-    Object.assign(controls, { [key]: options[key] });
+function childRunControls(
+  controls: PipelineRunControls | undefined,
+  parentDryRun: boolean
+): PipelineRunControls {
+  const resolved: PipelineRunControls = {};
+  if (controls?.continueOnError !== undefined) {
+    resolved.continueOnError = controls.continueOnError;
   }
-  if (!hasControls) {
-    return { controls, domainOptions: options };
+  if (controls?.maxConcurrency !== undefined) {
+    resolved.maxConcurrency = controls.maxConcurrency;
   }
-  return { controls, domainOptions: createChildDomainOptionsView(options) };
-}
-
-function createChildDomainOptionsView(options: PipelineRunOptions): PipelineRunOptions {
-  // SAFETY: proxy an empty facade so hiding non-configurable control keys on a
-  // frozen mapOptions bag does not violate proxy invariants. Reads still use
-  // `options` as the receiver so accessors and methods keep their original `this`.
-  return new Proxy({} as PipelineRunOptions, {
-    get(_target, property) {
-      if (isChildRunControlKey(property)) return undefined;
-      const value = readChildOptionProperty(options, property);
-      return value instanceof Function ? value.bind(options) : value;
-    },
-    has(_target, property) {
-      return !isChildRunControlKey(property) && property in options;
-    },
-    ownKeys() {
-      return Reflect.ownKeys(options).filter((property) => !isChildRunControlKey(property));
-    },
-    getOwnPropertyDescriptor(_target, property) {
-      if (isChildRunControlKey(property)) return undefined;
-      const descriptor = Reflect.getOwnPropertyDescriptor(options, property);
-      if (descriptor === undefined) return undefined;
-      return { ...descriptor, configurable: true };
-    },
-    getPrototypeOf() {
-      return Object.getPrototypeOf(options);
-    },
-    set(_target, property, value) {
-      if (isChildRunControlKey(property)) return true;
-      return Reflect.set(options, property, value, options);
-    },
-  });
-}
-
-function readChildOptionProperty(options: PipelineRunOptions, property: PropertyKey): unknown {
-  // SAFETY: child mapOptions is an untyped bag; this index reads the requested
-  // key on that original object so accessors keep it as `this`.
-  return options[property as keyof PipelineRunOptions];
-}
-
-function childRunBags(options: PipelineRunOptions, dryRun: boolean): ChildRunBags {
-  const { controls, domainOptions } = splitChildRunOptions(options);
-  return { controls: { ...controls, dryRun }, domainOptions };
+  if (controls?.stepIds !== undefined) resolved.stepIds = [...controls.stepIds];
+  if (controls?.targets !== undefined) resolved.targets = [...controls.targets];
+  if (parentDryRun || controls?.dryRun === true) {
+    resolved.dryRun = true;
+  } else if (controls?.dryRun !== undefined) {
+    resolved.dryRun = false;
+  }
+  return resolved;
 }
 
 function isConcurrencyFunction<TOptions extends object>(
@@ -280,7 +230,7 @@ function firstChildFailure(result: PipelineRun<unknown>) {
 
 async function runChildPipeline(
   pipeline: ChildPipeline,
-  domainOptions: PipelineRunOptions,
+  domainOptions: object,
   controls: PipelineRunControls,
   context: PipelineContext,
   hooks: PipelineHooks,
@@ -324,10 +274,10 @@ export function createSingleChildRunner<TParentOptions extends object>(
   config: SingleChildExecutionConfig<TParentOptions>
 ): (inputs: ChildInputs, context: PipelineStepContext<TParentOptions>) => Promise<unknown> {
   return async (inputs, context) => {
-    const { controls, domainOptions } = childRunBags(
-      config.mapOptions(inputs, context),
-      context.dryRun
-    );
+    const domainOptions = config.mapOptions(inputs, context);
+    const configuredControls =
+      typeof config.controls === "function" ? config.controls(inputs, context) : config.controls;
+    const controls = childRunControls(configuredControls, context.dryRun);
     const baseChildContext: PipelineContext = {
       correlationId: context.correlationId,
       cwd: context.cwd,
@@ -395,10 +345,12 @@ export function createMappedChildRunner<TParentOptions extends object>(
         progress?.start(key);
         try {
           throwIfAborted(context.signal, `Mapped child pipeline ${config.pipeline.id}`);
-          const { controls, domainOptions } = childRunBags(
-            config.mapOptions(item, itemIndex, inputs, context),
-            context.dryRun
-          );
+          const domainOptions = config.mapOptions(item, itemIndex, inputs, context);
+          const configuredControls =
+            typeof config.controls === "function"
+              ? config.controls(item, itemIndex, inputs, context)
+              : config.controls;
+          const controls = childRunControls(configuredControls, context.dryRun);
           // Plan once per mapped-options bag for progress and execution.
           const childPlan = config.pipeline.plan(controls);
           const childHooks = progress?.plan(key, childPlan) ?? {};

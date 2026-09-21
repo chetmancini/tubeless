@@ -358,7 +358,7 @@ For example, `bunx tubeless run import -- --source rows.txt --max-concurrency 4`
 allows up to four ready steps at once. Async skip predicates and output validation
 occupy the step's slot. Fail-fast stops new dispatch and waits for active work;
 `--continue-on-error` keeps eligible branches running. Child runs have separate
-limits: set `maxConcurrency` in child `mapOptions` to opt them in. Parent and fan-out
+limits: set `maxConcurrency` in child `controls` to opt them in. Parent and fan-out
 limits multiply; see [child pipeline composition](./child-pipeline-composition.md).
 
 Repeat `--target` or `--step` to select multiple IDs, but do not combine them.

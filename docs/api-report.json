@@ -31,7 +31,6 @@
         "PipelinePlanStep",
         "PipelineRun",
         "PipelineRunControls",
-        "PipelineRunOptions",
         "PipelineRunStatus",
         "PipelineStepCancelledEvent",
         "PipelineStepCancelledReport",
@@ -62,7 +61,7 @@
         "Step",
         "StepSkipDecision"
       ],
-      "sha256": "4157961498cf54be2eb43f7ee269890a954d9caa3215dc396c94dab5a417f0e0",
+      "sha256": "02b6e0554a598bf9bd588e2a286b3c4b31f5af026f8c1d83dbf805886bedb1a3",
       "specifier": "tubeless"
     },
     {
@@ -100,7 +99,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "0a9c6ee935e13bbff26d7a7182e514e3e83b759141a0ba8c4aad8bc215dfeb88",
+      "sha256": "a63f0b5d0918d3169b6e333ca400eaeef46150e18b395625b0cbc15b171e861c",
       "specifier": "tubeless/cli"
     },
     {
@@ -132,7 +131,7 @@
         "WorkerThreadContext",
         "writeJson"
       ],
-      "sha256": "80108ff99d9518eea0623fb3454e73daa1101cc1d0e0b347fb30ad56cf09051b",
+      "sha256": "7117f2d9696c0f232ec9bdcc2d18ffa985ee57418881098f99ec9ab1fca53ac8",
       "specifier": "tubeless/node"
     },
     {
@@ -156,7 +155,7 @@
         "ProjectOptions",
         "ProjectRegistry"
       ],
-      "sha256": "834bdb1dc6c64413424144fdf8155f10935b53904eb828e8bbb0bf35cc37095f",
+      "sha256": "d266c86afe81e7428eacaa3228db013f298684bfee216ce1268586e18be0c4e3",
       "specifier": "tubeless/project"
     },
     {
@@ -170,7 +169,7 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "d576ff8a4f26b88661573a18e8ee7aa419c310526a49f483236d866a635b1e3f",
+      "sha256": "c4f339fc7a5cd8f6525d32298b990b571de61756864da6b3c4c3400ca1b38f0e",
       "specifier": "tubeless/testing"
     },
     {

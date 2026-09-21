@@ -131,7 +131,7 @@ order, regardless of which step finishes last.
 
 The limit applies to one pipeline run. A child wrapper occupies one parent slot;
 child runs retain their own limit, defaulting to `1`. Set `maxConcurrency` in child
-`mapOptions` to opt them in separately. Fan-out `concurrency` independently limits
+`controls` to opt them in separately. Fan-out `concurrency` independently limits
 simultaneous child runs. These limits multiply: four parallel fan-out steps with
 `concurrency: 8` can create 32 active children. Child DAG parallelism can increase
 the number of active child steps further. There is no shared semaphore; having
@@ -418,11 +418,11 @@ sides of each validation step:
 | `resultSchema` | The finalizer's return value                                             | The final pipeline result        |
 
 Built-in run controls are passed separately from domain options, so strict
-object schemas do not need fields for `dryRun` or `targets`. For child
-`mapOptions`, which combines options and controls in one object, Tubeless
-separates the controls before validation. The options object retains its
-methods, getters, inherited properties, non-enumerable properties, and symbols.
-Steps receive the validated object without added control fields.
+object schemas do not need fields for `dryRun` or `targets`. Child composition
+uses the same boundary: `mapOptions` returns domain input and `controls` supplies
+execution policy. Domain fields may therefore use names such as `targets` or
+`maxConcurrency` without being removed before validation. Steps receive the
+validated domain object without added control fields.
 
 With no `finalize`, `resultSchema` validates the output of the last step in
 execution order, including `undefined` when that output is absent. A schema may

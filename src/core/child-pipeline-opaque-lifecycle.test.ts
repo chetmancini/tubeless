@@ -4,7 +4,7 @@ import { createSteps, definePipeline } from "./pipeline.js";
 import { captureOutput } from "./child-pipeline.test-support.js";
 
 describe("opaque child adapter: lifecycle", () => {
-  it("applies a child pipeline's declared target closure through mapOptions", async () => {
+  it("applies a child pipeline's declared target closure through controls", async () => {
     const ran: string[] = [];
     const { step: childStep } = createSteps();
     const load = childStep("load", { run: () => (ran.push("load"), "loaded") });
@@ -19,9 +19,11 @@ describe("opaque child adapter: lifecycle", () => {
       finalize: (outputs) => outputs.publish,
     });
     const { fromPipeline: parentFromPipeline } = createSteps();
+    const controls = vi.fn(() => ({ targets: ["publish"] as const }));
     const stage = parentFromPipeline("targeted-stage", {
       pipeline: child,
-      mapOptions: () => ({ targets: ["publish"] as const }),
+      controls,
+      mapOptions: () => ({}),
     });
     const parent = definePipeline({
       id: "targeted-parent",
@@ -30,6 +32,7 @@ describe("opaque child adapter: lifecycle", () => {
     });
 
     await expect(parent.runOrThrow({})).resolves.toBe("loaded:published");
+    expect(controls).toHaveBeenCalledOnce();
     expect(ran).toEqual(["load", "publish"]);
   });
 

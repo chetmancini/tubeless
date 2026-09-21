@@ -52,8 +52,9 @@ describe("example type probes", () => {
       const { fromPipeline } = createSteps<{ lines: readonly string[] }>();
       fromPipeline("invalid-child-selection", {
         pipeline: NormalizePipeline,
-        // @ts-expect-error Child run options are checked against its declared target IDs.
-        mapOptions: () => ({ rows: [], targets: ["normalise-rows"] }),
+        // @ts-expect-error Child controls are checked against its declared target IDs.
+        controls: { targets: ["normalise-rows"] },
+        mapOptions: () => ({ rows: [] }),
       });
 
       const optionsSchema = standardSchema<{ source: string }, { limit: number; source: string }>(

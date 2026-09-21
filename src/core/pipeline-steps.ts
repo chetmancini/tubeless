@@ -12,7 +12,7 @@ import type {
   PipelineExecutionContext,
   PipelinePlanStep,
   PipelineRun,
-  PipelineRunOptions,
+  PipelineRunControls,
   PipelineStepContext,
   RemoteStepAdapter,
   StandardSchemaV1,
@@ -119,9 +119,14 @@ type PipelineResultOf<TPipeline> =
     ? TResult
     : never;
 
-type PipelineRunOptionsOf<TPipeline> =
-  TPipeline extends Pipeline<infer TOptions, unknown, infer TStepId, infer TTargetId>
-    ? PipelineRunOptions<TOptions, TStepId, TTargetId>
+type PipelineOptionsOf<TPipeline> =
+  TPipeline extends Pipeline<infer TOptions, unknown, infer _TStepId, infer _TTargetId>
+    ? TOptions
+    : never;
+
+type PipelineRunControlsOf<TPipeline> =
+  TPipeline extends Pipeline<infer _TOptions, unknown, infer TStepId, infer TTargetId>
+    ? PipelineRunControls<TStepId, TTargetId>
     : never;
 
 type ChildPipelineStepDefinitionBase<
@@ -137,10 +142,16 @@ type ChildPipelineStepDefinitionBase<
   name?: string;
   description?: string;
   dryRun?: "skip";
+  controls?:
+    | PipelineRunControlsOf<TChildPipeline>
+    | ((
+        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
+        context: PipelineExecutionContext<TParentOptions>
+      ) => PipelineRunControlsOf<TChildPipeline>);
   mapOptions(
     inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
     context: PipelineExecutionContext<TParentOptions>
-  ): PipelineRunOptionsOf<TChildPipeline>;
+  ): PipelineOptionsOf<TChildPipeline>;
 };
 
 /** Child step without policy skip (dependents see the full child result type). */
@@ -188,12 +199,20 @@ type MappedChildPipelineStepDefinition<
    * Purely presentational — does not change scheduling or results.
    */
   progress?: MappedChildProgressOptions;
+  controls?:
+    | PipelineRunControlsOf<TChildPipeline>
+    | ((
+        item: TItem,
+        index: number,
+        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
+        context: PipelineExecutionContext<TParentOptions>
+      ) => PipelineRunControlsOf<TChildPipeline>);
   mapOptions(
     item: TItem,
     index: number,
     inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
     context: PipelineExecutionContext<TParentOptions>
-  ): PipelineRunOptionsOf<TChildPipeline>;
+  ): PipelineOptionsOf<TChildPipeline>;
 };
 
 type StepSkipPredicate<
@@ -280,8 +299,8 @@ type StepFactory<
 /**
  * Create typed step constructors for one pipeline definition.
  * Returns a step factory scoped to one pipeline's domain options. Pass built-in
- * run controls as the second argument to `run` / `runOrThrow`. Child
- * `mapOptions` may still return domain options plus those controls.
+ * run controls as the second argument to `run` / `runOrThrow`, or through a
+ * child step's separate `controls` field.
  */
 export function createSteps<TOptions extends object = {}>(): StepFactory<TOptions>;
 export function createSteps<const TSchema extends StandardSchemaV1<object, object> | undefined>(

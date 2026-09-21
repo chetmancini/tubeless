@@ -62,7 +62,8 @@ describe("mapped child adapter: planning and progress", () => {
       items: () => [{ id: "only" }],
       key: (item) => item.id,
       // Select only process so setup is filtered out at the child plan.
-      mapOptions: (item) => ({ itemId: item.id, stepIds: ["process"] as const }),
+      controls: { stepIds: ["process"] },
+      mapOptions: (item) => ({ itemId: item.id }),
     });
     const parent = definePipeline({
       id: "filtered-parent",
@@ -125,7 +126,8 @@ describe("mapped child adapter: planning and progress", () => {
         { id: "full", stepIds: ["prepare", "process"] as const },
       ],
       key: (item) => item.id,
-      mapOptions: (item) => ({ itemId: item.id, stepIds: item.stepIds }),
+      controls: (item) => ({ stepIds: item.stepIds }),
+      mapOptions: (item) => ({ itemId: item.id }),
     });
     const parent = definePipeline({
       id: "mixed-plan-parent",

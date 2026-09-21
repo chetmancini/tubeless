@@ -67,7 +67,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   external cancellation stops dispatch in either mode and cancels unstarted selected
   steps after active work settles. Final step reports and step errors follow plan
   order; live hooks and traces follow event order. Every concurrent failure is kept.
-  Child runs have separate limits, supplied through child `mapOptions`. Parent and
+  Child runs have separate limits, supplied through the child `controls` field. Parent and
   fan-out limits multiply: four fan-out steps at eight children each allow 32 active
   children. Do not share a semaphore between waiting parents and their children. See [the parallel DAG recipe](../examples/parallel-dag.ts).
 - Treat a `PipelineDefinitionError` during module loading as an authoring bug;
@@ -86,6 +86,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Handle its resulting `T | undefined` output type explicitly.
 - Use `fromPipeline` for one independently useful child workflow and
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
+  Keep `mapOptions` exclusively about child domain inputs. Put child `targets`,
+  `stepIds`, concurrency, failure policy, and optional dry-run opt-in in the separate
+  `controls` value or callback. A child cannot disable its parent's dry run.
   Add `skip` only when the whole fan-out may be intentionally omitted; handle
   its `readonly T[] | undefined` output explicitly.
   Async `fromPipeline` result mappings publish resolved values; use that resolved

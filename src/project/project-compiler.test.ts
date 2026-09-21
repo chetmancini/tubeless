@@ -48,6 +48,7 @@ describe("declarative pipelines", () => {
     const mapOptions = vi.fn((_inputs, context) => ({
       value: "value" in context.options ? context.options.value : "missing",
     }));
+    const controls = vi.fn(() => ({ maxConcurrency: 2 }));
     const mapResult = vi.fn(async (value) => ({ childValue: value }));
     const skipChild = vi.fn((_inputs, context) =>
       "cached" in context.options && context.options.cached
@@ -80,7 +81,7 @@ describe("declarative pipelines", () => {
         parentResult: ({ "child-stage": childStage }) => childStage,
       },
       skipPredicates: { cached: skipChild },
-      fromPipelineAdapters: { single: { mapOptions, mapResult } },
+      fromPipelineAdapters: { single: { controls, mapOptions, mapResult } },
     });
     expect([...pipelines.keys()]).toEqual(["parent", "child"]);
     expect(pipelines.get("parent")!.plan().steps[0]?.nestedPipeline).toEqual({
@@ -96,6 +97,7 @@ describe("declarative pipelines", () => {
         .get("parent")!
         .runOrThrow({ value: "mapped" }, {}, createPipelineTestRuntime().context)
     ).resolves.toEqual({ childValue: "mapped" });
+    expect(controls).toHaveBeenCalledOnce();
     expect(mapResult).toHaveBeenCalledOnce();
     await expect(
       pipelines
@@ -105,17 +107,26 @@ describe("declarative pipelines", () => {
     expect(runChild).toHaveBeenCalledOnce();
   });
 
-  it("fans out a child pipeline with registered item wiring and policy skip", async () => {
+  it("fans out a child pipeline with registered item wiring, controls, and policy skip", async () => {
     const items = vi.fn(({ source }) => source as readonly { id: string; value: number }[]);
     const runChild = vi.fn((_inputs, context) =>
       "value" in context.options ? context.options.value : -1
     );
+    const runAlternate = vi.fn((_inputs, context) =>
+      "value" in context.options ? context.options.value + 10 : -1
+    );
+    const controls = vi.fn((_item, index) => ({
+      stepIds: [index === 0 ? "work" : "alternate"],
+    }));
     const source: PipelineDocument = {
       version: 1,
       pipelines: {
         child: {
-          steps: [{ id: "work", run: "work" }],
-          finalize: { run: "childResult", requireOutputs: ["work"] },
+          steps: [
+            { id: "work", run: "work" },
+            { id: "alternate", run: "alternate" },
+          ],
+          finalize: { run: "childResult" },
         },
         parent: {
           steps: [
@@ -135,9 +146,10 @@ describe("declarative pipelines", () => {
       steps: {
         source: (_inputs, context) => ("values" in context.options ? context.options.values : []),
         work: runChild,
+        alternate: runAlternate,
       },
       finalizers: {
-        childResult: ({ work }) => ({ value: work }),
+        childResult: ({ work, alternate }) => ({ value: work ?? alternate }),
         parentResult: ({ children }) => children,
       },
       skipPredicates: {
@@ -151,6 +163,7 @@ describe("declarative pipelines", () => {
           items,
           key: (item) => String((item as { id: string }).id),
           concurrency: 2,
+          controls,
           progress: { itemNoun: "records" },
           mapOptions: (item) => ({ value: (item as { value: number }).value }),
           mapResult: (value) => (value as { value: number }).value * 2,
@@ -162,23 +175,34 @@ describe("declarative pipelines", () => {
       mode: "for-each",
       pipelineId: "child",
     });
+    const values = [
+      { id: "a", value: 2 },
+      { id: "b", value: 3 },
+    ];
+    const runOptions = { values };
     await expect(
-      parent.runOrThrow(
-        {
-          values: [
-            { id: "a", value: 2 },
-            { id: "b", value: 3 },
-          ],
-        },
-        {},
-        createPipelineTestRuntime().context
-      )
-    ).resolves.toEqual([4, 6]);
+      parent.runOrThrow(runOptions, {}, createPipelineTestRuntime().context)
+    ).resolves.toEqual([4, 26]);
     await expect(
       parent.runOrThrow({ skip: true, values: [] }, {}, createPipelineTestRuntime().context)
     ).resolves.toEqual([]);
     expect(items).toHaveBeenCalledOnce();
-    expect(runChild).toHaveBeenCalledTimes(2);
+    expect(controls).toHaveBeenNthCalledWith(
+      1,
+      values[0],
+      0,
+      { source: values },
+      expect.objectContaining({ options: runOptions })
+    );
+    expect(controls).toHaveBeenNthCalledWith(
+      2,
+      values[1],
+      1,
+      { source: values },
+      expect.objectContaining({ options: runOptions })
+    );
+    expect(runChild).toHaveBeenCalledOnce();
+    expect(runAlternate).toHaveBeenCalledOnce();
   });
 
   it("validates an ordinary valued skip before publishing it to a required dependent", async () => {

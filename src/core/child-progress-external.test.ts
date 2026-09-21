@@ -102,7 +102,8 @@ describe.each(["single", "mapped"] as const)("external %s child progress", (kind
         };
         const config = {
           pipeline: mode === "compiled" ? child : external,
-          mapOptions: () => ({ stepIds: ["work"] as const }),
+          controls: { stepIds: ["work"] as const },
+          mapOptions: () => ({}),
         };
         const parent = definePipeline({
           id: "parent",
