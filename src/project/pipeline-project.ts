@@ -1,8 +1,6 @@
 import { pipelineForCommand } from "../utilities/pipeline-command-marker.js";
 import type { PipelineCommand } from "../cli/cli-pipeline-command.js";
 import type { Pipeline } from "../core/pipeline.js";
-import { compileValidatedPipelineDocument, type ProjectRegistry } from "./project-compiler.js";
-import { validatePipelineDocument } from "./project-document.js";
 
 const PIPELINE_PROJECT_MARKER = Symbol.for("tubeless/pipeline-project/v1");
 
@@ -38,7 +36,7 @@ export interface ProjectOptions<
   readonly description?: string;
   /** Execution directory for CLI and Studio, relative to the project file. */
   readonly cwd?: string;
-  /** Explicit adapters, or a factory using project.get (useful for compiled documents). */
+  /** Explicit adapters, or a factory using project.get. */
   readonly commands?:
     | readonly PipelineCommand<{}, unknown>[]
     | ((
@@ -61,7 +59,7 @@ export interface PipelineProject<
   get<const TId extends PipelineId<TPipelines>>(id: TId): PipelineById<TPipelines[number], TId>;
 }
 
-/** Define an immutable project from typed pipelines or a parsed pipeline document. */
+/** Define an immutable project from existing pipelines and project configuration. */
 export function defineProject<
   const TProjectId extends string,
   const TPipelines extends readonly AnyProjectPipeline[],
@@ -70,38 +68,16 @@ export function defineProject<
   pipelines: TPipelines,
   options?: ProjectOptions<NoInfer<TPipelines>>
 ): PipelineProject<TProjectId, TPipelines>;
-export function defineProject<const TProjectId extends string>(
-  id: TProjectId,
-  document: unknown,
-  registry: ProjectRegistry,
-  options?: ProjectOptions
-): PipelineProject<TProjectId, readonly AnyProjectPipeline[]>;
 export function defineProject(
   id: string,
-  pipelinesOrDocument: unknown,
-  registryOrOptions?: ProjectRegistry | ProjectOptions,
+  pipelines: readonly AnyProjectPipeline[],
   options?: ProjectOptions
 ): PipelineProject<string, readonly AnyProjectPipeline[]> {
   if (typeof id !== "string" || id.trim().length === 0) {
     throw new Error("Project id must be a non-empty string.");
   }
-  let pipelines: readonly AnyProjectPipeline[];
-  let documentMetadata: ProjectOptions | undefined;
-  if (
-    registryOrOptions !== null &&
-    typeof registryOrOptions === "object" &&
-    "steps" in registryOrOptions
-  ) {
-    const document = validatePipelineDocument(pipelinesOrDocument);
-    documentMetadata = document.metadata;
-    pipelines = [...compileValidatedPipelineDocument(document, registryOrOptions).values()];
-  } else if (Array.isArray(pipelinesOrDocument)) {
-    pipelines = pipelinesOrDocument;
-    options = registryOrOptions;
-  } else {
-    throw new TypeError(
-      "defineProject expects an array of pipelines, or a parsed pipeline document and registry."
-    );
+  if (!Array.isArray(pipelines)) {
+    throw new TypeError("defineProject expects an array of pipelines.");
   }
 
   if (
@@ -116,8 +92,8 @@ export function defineProject(
       throw new Error(`Project ${field} must be a non-empty string.`);
     }
   }
-  const name = options?.name ?? documentMetadata?.name ?? id;
-  const description = options?.description ?? documentMetadata?.description;
+  const name = options?.name ?? id;
+  const description = options?.description;
   const cwd = options?.cwd;
 
   const snapshot: readonly AnyProjectPipeline[] = Object.freeze([...pipelines]);

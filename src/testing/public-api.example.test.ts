@@ -242,7 +242,11 @@ describe("public API example", () => {
 
   it("exposes one project inventory API", () => {
     expect(cli).not.toHaveProperty("defineCommandCatalog");
-    expect(Object.keys(project).sort()).toEqual(["PipelineDocumentError", "defineProject"]);
+    expect(Object.keys(project).sort()).toEqual([
+      "PipelineDocumentError",
+      "compilePipelineDocument",
+      "defineProject",
+    ]);
   });
 
   it("accepts explicit CLI adapters in the project options", () => {

@@ -180,8 +180,9 @@ The stable project ID remains literal on `project.id`. Pipeline IDs do too, so
 `get` returns the exact pipeline with its own option and result types. For union
 or widened pipeline IDs, `get` retains all matching candidate types. A project
 is only an immutable collection; the selected pipeline's existing methods do the
-work. For YAML or JSON, pass the ID, parsed document, and handler registry to the
-same function; see [declarative pipelines](./declarative-pipelines.md).
+work. For YAML or JSON, call `compilePipelineDocument(document, registry)` first,
+then use `compiled.get(id)` directly or register selected compiled pipelines;
+see [declarative pipelines](./declarative-pipelines.md).
 
 Let `definePipeline` infer its type arguments to preserve literal IDs. If you need
 an explicit result contract, annotate the finalizer's return type:

@@ -19,5 +19,6 @@ or \`tubeless\` for writing and editing pipelines.
 - [Authoring skill](${githubBlob("skills/tubeless/SKILL.md")})
 - [Code conversion skill](${githubBlob("skills/tubeless-make-pipeline/SKILL.md")})
 - [Pipeline project](${githubBlob("examples/tubeless.project.ts")}): Group pipelines with defineProject for typed lookup, CLI, and Studio.
+- [YAML pipelines](${githubBlob("examples/yaml-pipelines.ts")}): Compile parsed documents with compilePipelineDocument, use compiled.get(id), and register selected pipelines.
 - [Machine-readable API report](${absUrl("api-report.json")})
 `, { headers: { "content-type": "text/markdown; charset=utf-8" } });

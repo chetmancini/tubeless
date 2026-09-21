@@ -1,7 +1,7 @@
 # YAML and JSON pipelines
 
-Use `defineProject(id, document, registry)` from `tubeless/project` to turn a parsed
-YAML or JSON document and a registry of functions into an ordinary project. The
+Use `compilePipelineDocument(document, registry)` from `tubeless/project` to turn a parsed
+YAML or JSON document and a registry of functions into ordinary pipelines. The
 document owns step identities, dependencies, targets, and policies; application
 code owns the handlers, schemas, and command parameters.
 
@@ -67,42 +67,55 @@ array of names or organizations), and `date` (a quoted `YYYY-MM-DD` calendar
 date). All fields are optional. Dates and authors are maintained by the author;
 they are not inferred from Git and do not schedule execution.
 
-`tubeless validate --json` preserves and reports metadata. Project compilation
+`tubeless validate --json` preserves and reports metadata. Document compilation
 produces the same pipelines regardless of metadata.
-`defineProject(id, document, registry)` carries document `name` and `description`
-onto the project. `project.name` defaults to `id` when no name is supplied;
-`project.description` remains optional. Override either field with an optional
-fourth argument:
+The compiled value exposes validated, immutable `metadata`, including an immutable
+authors snapshot. Reuse its name and description when registering a project:
 
 ```ts
-const project = defineProject("data-jobs", document, registry, {
+import { compilePipelineDocument, defineProject } from "tubeless/project";
+
+const compiled = compilePipelineDocument(document, registry);
+const project = defineProject("data-jobs", compiled.pipelines, {
+  name: compiled.metadata?.name,
+  description: compiled.metadata?.description,
+});
+
+// Ordinary object construction controls overrides.
+const production = defineProject("production", compiled.pipelines, {
+  ...compiled.metadata,
   name: "Production data jobs",
-  description: "Import and publish production datasets.",
+  cwd: "./jobs",
 });
 ```
 
-Overrides apply per field; omitted or `undefined` fields retain the document value.
-Project metadata is immutable. Document `authors` and `date` remain document-only.
+Project IDs and execution `cwd` belong to registration. Project metadata is immutable;
+`project.name` defaults to its ID when no name is supplied. Passing `undefined`
+uses that default and leaves description absent; there is no implicit metadata inheritance.
+Document `authors` and `date` remain available as descriptive data on `compiled.metadata`.
 Each pipeline definition may separately declare `name` and `description`; compiled
 commands inherit them. Top-level document metadata does not override pipeline labels,
 IDs, options, or run timestamps.
 
-For custom CLI inputs on compiled pipelines, the `commands` option can be a
-factory. It receives the project's `get` function after compilation, so adapters
-wrap the same pipeline objects that application code retrieves:
+For custom CLI inputs, build a command directly from `compiled.get(id)`. It can
+run independently or be passed through the project's `commands` option:
 
 ```ts
 import { definePipelineCommand } from "tubeless/cli";
 
-export default defineProject("yaml-jobs", document, registry, {
-  commands: (get) => [
-    definePipelineCommand(get("yaml-import"), {
-      params: { lines: { type: "string" } },
-      mapOptions: ({ lines }) => ({ lines: lines.split(",") }),
-    }),
-  ],
+const pipeline = compiled.get("yaml-import");
+const command = definePipelineCommand(pipeline, {
+  params: { lines: { type: "string" } },
+  mapOptions: ({ lines }) => ({ lines: lines.split(",") }),
+});
+
+export default defineProject("yaml-jobs", [pipeline], {
+  commands: [command],
 });
 ```
+
+Only the selected pipeline is registered. Its compiled children still run through
+composition, without becoming separate project entries.
 
 ## Try the example
 
@@ -258,15 +271,15 @@ finalization. A runtime `skip` is a successful policy skip, can publish a value,
 and unlocks dependents. The compiler preserves the engine's existing semantics.
 See [core concepts](./concepts.md).
 
-## Define a project
+## Compile and select pipelines
 
 ```ts
-import { defineProject } from "tubeless/project";
+import { compilePipelineDocument } from "tubeless/project";
 
 // `document` is the unknown result of your YAML or JSON parser.
 // `registry` explicitly imports and registers your application functions.
-const project = defineProject("imports", document, registry);
-const pipeline = project.get("import");
+const compiled = compilePipelineDocument(document, registry);
+const pipeline = compiled.get("import");
 
 const plan = pipeline.plan({ targets: ["normalize"] });
 const result = await pipeline.runOrThrow({ lines: [" Alpha ", "Beta"] });
@@ -278,7 +291,13 @@ live in `context.options`. Use the normal `context.log`, `context.signal`,
 `context.sleep`, and progress APIs. Finalizers receive `(outputs, context)`;
 without `requireOutputs`, they must handle absent outputs themselves.
 
-`defineProject` validates the document and compiles its pipelines. The registry has
+`compilePipelineDocument` validates the document and compiles its pipelines. It returns
+an immutable `CompiledPipelineDocument` with a readonly `pipelines` collection,
+`get(id)`, and optional `PipelineDocumentMetadata`. Lookup throws a clear error for
+an unknown ID. Repeated lookup, collection entries, and references from parent
+pipelines share one compiled instance per pipeline ID. Compilation does not register
+a project; `defineProject` collects whichever existing pipelines you choose.
+The registry has
 separate `steps` and `finalizers` function maps, plus optional
 `skipPredicates`, `fromPipelineAdapters`, `forEachPipelineAdapters`,
 `optionsSchemas`, and `schemas` maps. Schemas use Standard Schema v1.
@@ -296,7 +315,8 @@ unique keys, and return the complete parent-facing result array from a valued
 fan-out skip.
 
 YAML cannot provide TypeScript's inferred graph wiring. Handler inputs and
-pipeline results are `unknown`, and handler options are `object`. Narrow them
+pipeline results are `unknown`, handler options are `object`, and pipeline IDs
+are `string`. Narrow them
 or validate at the application boundary. Schemas validate runtime values; the
 compiler does not prove compatibility between two schemas.
 
@@ -320,7 +340,8 @@ initialization code. Registry functions remain trusted application code.
 Version 1 supports ordinary steps, single-child composition, child fan-out, and
 runtime skip predicates. Remote steps, expressions, inline code, and external
 pipeline references are not document features. Use TypeScript authoring for
-those workflows. Export the compiled `defineProject` from a project module for
+those workflows. Register selected compiled pipelines with `defineProject` and
+export that project from a project module for
 CLI and Studio loading. Pipelines whose options schemas expose Standard JSON
 Schema input metadata receive automatic commands. Custom or schema-less inputs
 need `definePipelineCommand` adapters in the project's `commands` option.

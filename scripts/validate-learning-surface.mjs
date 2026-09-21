@@ -120,6 +120,38 @@ const projectExample = readFileSync(
   join(packageRoot, "examples", "project", "tubeless.project.ts"),
   "utf8"
 );
+const declarativeGuide = readFileSync(
+  join(packageRoot, "docs", "declarative-pipelines.md"),
+  "utf8"
+);
+const yamlExample = readFileSync(join(packageRoot, "examples", "yaml-pipelines.ts"), "utf8");
+const authoringSkill = readFileSync(join(packageRoot, "skills", "tubeless", "SKILL.md"), "utf8");
+for (const [name, source] of [
+  ["Declarative guide", declarativeGuide],
+  ["Agent guide", agentGuide],
+  ["Recipe index", recipes],
+  ["Authoring skill", authoringSkill],
+  ["YAML example", yamlExample],
+]) {
+  assert(
+    source.includes("compilePipelineDocument"),
+    `${name} must teach explicit document compilation`
+  );
+}
+for (const file of [
+  ...filesUnder(join(packageRoot, "docs"), ".md"),
+  ...filesUnder(join(packageRoot, "skills"), ".md"),
+  ...filesUnder(join(packageRoot, "examples"), ".ts"),
+]) {
+  assert(
+    !/defineProject\([^,\n]+,\s*document\s*,/.test(readFileSync(file, "utf8")),
+    `${file} must not teach the removed document/registry project overload`
+  );
+}
+assert(
+  declarativeGuide.includes("compiled.metadata") && declarativeGuide.includes("compiled.get("),
+  "Declarative guide must cover metadata reuse and direct pipeline lookup"
+);
 assert(
   projectExample.includes("ImportPipeline"),
   "Project example must include the import pipeline"
@@ -131,6 +163,7 @@ const requiredDocuments = [
   "docs/agent-skills.md",
   "docs/cli.md",
   "docs/concepts.md",
+  "docs/declarative-pipelines.md",
   "docs/getting-started.md",
   "docs/llms.txt",
   "docs/recipes.md",
@@ -138,6 +171,8 @@ const requiredDocuments = [
   "skills/tubeless/SKILL.md",
   "skills/tubeless-make-pipeline/SKILL.md",
   "examples/project/tubeless.project.ts",
+  "examples/yaml-pipelines.ts",
+  "examples/yaml-peloton.ts",
   "examples/project/pipelines/import.ts",
   "examples/project/pipelines/normalize.ts",
   "examples/project/pipelines/publish.ts",

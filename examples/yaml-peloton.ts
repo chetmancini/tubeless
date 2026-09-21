@@ -1,10 +1,10 @@
-import { defineProject } from "tubeless/project";
+import { compilePipelineDocument } from "tubeless/project";
 import { definePipelineCommand } from "tubeless/cli";
 import document from "./declarative/peloton.yaml";
 import { pelotonRegistry } from "./declarative/peloton-handlers.ts";
 
-const pipeline = defineProject("yaml-peloton", document, pelotonRegistry).get("yaml-peloton");
-export const YamlPelotonPipeline = pipeline;
+const compiled = compilePipelineDocument(document, pelotonRegistry);
+export const YamlPelotonPipeline = compiled.get("yaml-peloton");
 
 export const YamlPelotonCommand = definePipelineCommand(YamlPelotonPipeline, {
   params: {

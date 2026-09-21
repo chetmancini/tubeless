@@ -171,6 +171,10 @@ try {
     readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cli.ts"))
   );
   writeFileSync(
+    join(consumerRoot, "project.ts"),
+    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/project.ts"))
+  );
+  writeFileSync(
     join(consumerRoot, "tsconfig.json"),
     JSON.stringify({
       compilerOptions: {
@@ -182,10 +186,11 @@ try {
         target: "ES2022",
         types: [],
       },
-      files: ["cli.ts"],
+      files: ["cli.ts", "project.ts"],
     })
   );
   run(join(packageRoot, "node_modules/.bin/tsc"), ["-p", "tsconfig.json"], consumerRoot);
+  run("node", ["--experimental-strip-types", "project.ts"], consumerRoot);
 
   const smokeProgram = Object.keys(packageJson.exports)
     .map((subpath) =>

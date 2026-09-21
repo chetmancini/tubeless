@@ -9,11 +9,11 @@ export interface PipelineDocument {
 
 /** Optional human-facing document information, never execution policy. */
 export interface PipelineDocumentMetadata {
-  name?: string;
-  description?: string;
-  authors?: readonly string[];
+  readonly name?: string;
+  readonly description?: string;
+  readonly authors?: readonly string[];
   /** Author-maintained date in YYYY-MM-DD format. */
-  date?: string;
+  readonly date?: string;
 }
 
 export interface PipelineDocumentDefinition {

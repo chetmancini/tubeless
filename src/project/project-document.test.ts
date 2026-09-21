@@ -265,8 +265,8 @@ describe("validatePipelineDocument", () => {
       },
       finalizers: { done: () => undefined },
     };
-    expect(compilePipelineDocument(validated, registry).get("example")!.plan()).toEqual(
-      compilePipelineDocument(document, registry).get("example")!.plan()
+    expect(compilePipelineDocument(validated, registry).get("example").plan()).toEqual(
+      compilePipelineDocument(document, registry).get("example").plan()
     );
   });
 
