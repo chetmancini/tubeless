@@ -141,8 +141,20 @@ describe("pipeline project", () => {
       );
     }
     expect(() => defineProject("unmarked", [{ ...command }])).toThrow(
-      "Project commands must be created with definePipelineCommand"
+      "Project entries must be pipelines or definePipelineCommand adapters"
     );
+  });
+
+  it("registers decorated pipelines with an unrelated pipeline property", async () => {
+    const decorated = { ...alpha, pipeline: beta };
+    const project = defineProject("decorated", [decorated]);
+
+    expect(project.pipelineIds).toEqual(["alpha"]);
+    expect(project.pipelines).toEqual([decorated]);
+    expect(project.commands).toEqual([]);
+    expect(project.get("alpha")).toBe(decorated);
+    expectTypeOf(project.get("alpha")).toEqualTypeOf<typeof decorated>();
+    await expect(project.get("alpha").runOrThrow({ value: "hello" })).resolves.toBe("hello");
   });
 
   it("preserves exact pipeline contracts through command-only tuples", () => {

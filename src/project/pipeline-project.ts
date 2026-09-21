@@ -106,14 +106,23 @@ export function defineProject(
     if (typeof entry !== "object" || entry === null) {
       throw new TypeError("Project entries must be pipelines or definePipelineCommand adapters.");
     }
-    const pipeline = "pipeline" in entry ? entry.pipeline : entry;
-    if ("pipeline" in entry) {
-      if (pipelineForCommand(entry) !== pipeline || entry.id !== pipeline.id) {
+    const associatedPipeline = pipelineForCommand(entry);
+    let pipeline: AnyProjectPipeline;
+    if (associatedPipeline) {
+      if (
+        !("pipeline" in entry) ||
+        entry.pipeline !== associatedPipeline ||
+        entry.id !== entry.pipeline.id
+      ) {
         throw new TypeError("Project commands must be created with definePipelineCommand.");
       }
+      pipeline = entry.pipeline;
       commands.push(entry);
-    } else if (typeof pipeline.runOrThrow !== "function") {
-      throw new TypeError("Project entries must be pipelines or definePipelineCommand adapters.");
+    } else {
+      if (!("runOrThrow" in entry) || typeof entry.runOrThrow !== "function") {
+        throw new TypeError("Project entries must be pipelines or definePipelineCommand adapters.");
+      }
+      pipeline = entry;
     }
     if (byId.has(pipeline.id)) {
       throw new Error(
