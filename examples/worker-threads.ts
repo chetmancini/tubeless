@@ -34,7 +34,12 @@ const counts = [100_000, 200_000, 300_000, 400_000].map((limit) =>
 export const WorkerPrimesPipeline = definePipeline({
   id: "worker-primes",
   steps: counts,
-  finalize: (outputs) => Object.values(outputs),
+  finalize: (outputs) => [
+    outputs["primes-100000"],
+    outputs["primes-200000"],
+    outputs["primes-300000"],
+    outputs["primes-400000"],
+  ],
 });
 
 // Repeated calls and direct pipeline runs share this adapter. The application must
