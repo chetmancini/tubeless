@@ -119,8 +119,14 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   stay literal, duplicate IDs fail during project definition, and `get(id)` returns the
   exact pipeline type. Give the project itself a stable ID; it remains literal on
   `project.id`. The project adds no execution layer.
-- Use `definePipelineCommand` from `tubeless/cli` for scripts centered on
-  a pipeline. Do not parse `process.argv` manually or redeclare built-in dry-run,
+- Use `definePipelineCommand(pipeline)` from `tubeless/cli` for scripts centered on
+  a pipeline. Flags are inferred from the Standard JSON Schema input metadata of
+  the schema passed to `createSteps(schema)`; see [automatic CLI](../examples/automatic-cli.ts).
+  Use `overrides` only for aliases, flag names, descriptions or environment fallbacks.
+  Type-only or validation-only schemas need explicit `params`; this replaces inference.
+  Nested/union inputs, array defaults, and non-string `enum`/`const` constraints
+  need explicit parameters and, when shapes
+  differ, `mapOptions`. Keep these advanced escape hatches out of ordinary wrappers. Do not parse `process.argv` manually or redeclare built-in dry-run,
   `--step`, or `--target` flags. `mapOptions`, validation, and hooks receive `stepIds` and `targets`,
   not `step` or `target`. Omit `mapOptions` when validated flags already satisfy
   same-name pipeline options; provide it when names, types, defaults, or derived

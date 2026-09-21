@@ -236,6 +236,10 @@ export interface StandardSchemaV1<TInput = unknown, TOutput = TInput> {
 
 /** Standard Schema V1 metadata and validation contract consumed by Tubeless. */
 interface StandardSchemaV1Props<TInput = unknown, TOutput = TInput> {
+  /** Optional Standard JSON Schema input converter, used to infer CLI flags. */
+  readonly jsonSchema?: {
+    readonly input: (options: { readonly target: "draft-2020-12" }) => Record<string, unknown>;
+  };
   readonly types?: { readonly input: TInput; readonly output: TOutput };
   readonly validate: (
     value: unknown,
@@ -519,6 +523,8 @@ export interface Pipeline<
   readonly id: TId;
   /** Compiled definition metadata. Absent only on externally implemented pipelines. */
   readonly definition?: PipelineDefinitionSnapshot;
+  /** Runtime domain schema supplied to createSteps; CLI adapters can infer its input flags. */
+  readonly optionsSchema?: StandardSchemaV1;
   /** Stable definition-order step ids for discovery surfaces such as CLI help. */
   readonly stepIds: readonly TStepId[];
   /** Stable declared goal ids that support dependency-aware target execution. */

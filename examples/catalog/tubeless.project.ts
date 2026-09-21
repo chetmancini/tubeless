@@ -7,7 +7,10 @@ import { PublishPipeline } from "./pipelines/publish.ts";
 
 // Checked-in command catalog. Module paths resolve from this file; cwd is
 // this directory. Adapt IDs and files to the consumer; keep registrations
-// explicit. CLI argv still uses --step/--target; mapOptions and hooks
+// explicit. Start with definePipelineCommand(pipeline) for schema-backed flags;
+// params/mapOptions are advanced input adapters. See ../automatic-cli.ts.
+// Numeric/boolean enum or const inputs require explicit params.
+// CLI argv still uses --step/--target; mapOptions and hooks
 // receive stepIds, targets, and maxConcurrency. Opt in to parallel DAG execution
 // with run(options, { maxConcurrency: 4 }) or --max-concurrency 4 in the CLI
 // (also exposed in Studio forms). Both default to serial execution. Fail-fast drains active steps without cancelling them; final
@@ -27,6 +30,12 @@ export const CatalogProject = defineProject("catalog", [
 export default defineCommandCatalog({
   cwd: ".",
   commands: [
+    {
+      id: "validated-import",
+      file: "../automatic-cli.ts",
+      export: "ValidatedCommand",
+      name: "Import with inferred flags",
+    },
     {
       id: "yaml-peloton",
       file: "../yaml-peloton.ts",

@@ -35,6 +35,10 @@ describe("example type probes", () => {
       ImportPipeline.plan({ targets: ["load-rows"] });
 
       const missingLinesParams = { source: { type: "path" } } as const;
+      // @ts-expect-error Type-only domain inputs cannot be inferred at runtime.
+      definePipelineCommand(CliImportPipeline);
+      // @ts-expect-error Presentation overrides cannot replace an absent runtime schema.
+      definePipelineCommand(CliImportPipeline, { overrides: { lines: { short: "l" } } });
       // @ts-expect-error --source does not supply ImportPipeline's required lines option.
       definePipelineCommand(CliImportPipeline, { params: missingLinesParams });
 

@@ -36,6 +36,8 @@ export const ImportPipeline = definePipeline({
 });
 
 /**
+ * Advanced CLI adapter: use automatic-cli.ts when the pipeline input schema
+ * already describes its flags. This example intentionally maps a file to rows.
  * The kind of entry point a `scripts/*.ts` file would export: flags become a typed,
  * validated `args` object instead of hand-parsed `process.argv`. `--source`'s `path` type
  * resolves relative to `context.cwd` and confirms the file exists before `run` sees it.

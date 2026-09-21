@@ -220,7 +220,7 @@ export function compilePipelineDocument(
       definition.optionsSchema,
       `${path}.optionsSchema`
     );
-    const factory = optionsSchema ? createSteps(optionsSchema) : createSteps<object>();
+    const factory = createSteps(optionsSchema);
     const entries = definition.steps.map((definition, index) => {
       const stepPath = `${path}.steps[${index}]`;
       // Populate these arrays after all steps exist, allowing forward references

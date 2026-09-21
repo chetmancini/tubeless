@@ -70,13 +70,13 @@ import { href } from "../lib/paths";
           <p>
             Use <code>runOrThrow</code> to receive the final value or an exception. Use <code>run</code>
             to inspect step results and errors. Use <code>plan</code> to see which steps would run without
-            running steps. For CLI scripts, <code>definePipelineCommand</code> supplies help,
-            selection flags, and dry-run controls.
+            running steps. For CLI scripts, <code>definePipelineCommand(pipeline)</code> infers
+            flags from the input schema and supplies help, selection, dry runs, and reporting.
           </p>
           <p class="lede">
-            The CLI recipe uses <code>load-rows</code> / <code>normalize-rows</code>
-            (<code>examples/cli-job.ts</code>), while the sample above is the minimal library form
-            (<code>load</code> / <code>normalize</code>).
+            Start with <code>examples/automatic-cli.ts</code> for the one-line wrapper.
+            The terminal shows the advanced file-to-rows adapter in <code>examples/cli-job.ts</code>;
+            explicit flag definitions and option mapping are only needed for custom inputs.
           </p>
         </div>
         <Terminal tape={runTape} />

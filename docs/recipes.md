@@ -30,7 +30,8 @@ one of these recipes.
 | Retry and rate-limit remote calls             | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `withRetry`, `RateLimiter`, injected sleep and signal                              |
 | Resume durable long-running work              | [`resumable-enrichment.ts`](../examples/resumable-enrichment.ts)         | `dryRun`, `openCheckpoint`, `withCheckpointedBatch`                                |
 | Write local pipeline artifacts                | [`node-artifacts.ts`](../examples/node-artifacts.ts)                     | `definePaths`, atomic `writeJson`, `context.cwd`, `dryRun`                         |
-| Expose and run a typed command-line program   | [`cli-job.ts`](../examples/cli-job.ts)                                   | `definePipelineCommand`, conditional `mapOptions`, `tubeless run`                  |
+| Turn a schema-backed pipeline into a CLI      | [`automatic-cli.ts`](../examples/automatic-cli.ts)                       | `definePipelineCommand(pipeline)`, inferred flags, automatic reporting             |
+| Map custom command inputs to pipeline options | [`cli-job.ts`](../examples/cli-job.ts)                                   | `definePipelineCommand`, conditional `mapOptions`, `tubeless run`                  |
 | Handle cancellation and deterministic testing | [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts) | `createPipelineTestRuntime`, captured status/progress                              |
 | Export lifecycle events                       | [`tracing.ts`](../examples/tracing.ts)                                   | app-owned JSON / OTel adapters, composition, `onExporterError`                     |
 | Watch many primitives in one run              | [`peloton.ts`](../examples/peloton.ts)                                   | delays, logs, children, fan-out, retry, gates, test runtime                        |
@@ -85,7 +86,11 @@ pipeline does not require credentials.
 6. Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
    `tubeless/project`. Use `project.get(id)` to retain the selected pipeline's exact
    option and result types; call its existing methods directly.
-   Use `definePipelineCommand` from `tubeless/cli` for pipeline scripts.
+   Start pipeline scripts with `definePipelineCommand(pipeline)` from `tubeless/cli`.
+   It infers flags from the options schema's Standard JSON Schema input metadata.
+   Use `overrides` for presentation only; explicit `params` and `mapOptions` are
+   advanced options for type-only pipelines or custom input shapes.
+   Non-string `enum`/`const` constraints also require explicit parameters.
    Use `defineCommand` from the same entrypoint for standalone scripts and
    `defineCommandCatalog` from `tubeless/cli` for command catalogs shared
    by terminal commands and Studio.

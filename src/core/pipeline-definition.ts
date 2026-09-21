@@ -22,6 +22,12 @@ export type StepsInputOptions<TSteps extends readonly AnyStep[]> =
     ? TInputOptions
     : StepsOptions<TSteps>;
 
+/** Preserve whether the step factory supplied a runtime options schema. */
+export type StepsOptionsSchema<TSteps extends readonly AnyStep[]> =
+  TSteps[number] extends Step<string, unknown, object, object, unknown, infer TSchema>
+    ? TSchema
+    : StandardSchemaV1 | undefined;
+
 export type StepIds<TSteps extends readonly AnyStep[]> = TSteps[number]["id"];
 
 export type TargetIds<TTargets extends readonly AnyStep[]> = TTargets[number]["id"];

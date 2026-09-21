@@ -77,7 +77,9 @@ export interface Step<
   TOptions extends object,
   TInputOptions extends object = TOptions,
   TRunOut = TOut,
+  TOptionsSchema extends StandardSchemaV1 | undefined = StandardSchemaV1 | undefined,
 > extends AnyStep<TOptions> {
+  readonly [STEP_OPTIONS_SCHEMA]?: TOptionsSchema;
   readonly id: TId;
   run(
     inputs: Record<string, unknown>,
@@ -269,9 +271,11 @@ type RemoteStepDefinitionBase<
 };
 
 /** Step constructors scoped to one pipeline's domain option types. */
-type StepFactory<TOptions extends object, TInputOptions extends object = TOptions> = ReturnType<
-  typeof createStepFactory<TOptions, TInputOptions>
->;
+type StepFactory<
+  TOptions extends object,
+  TInputOptions extends object = TOptions,
+  TOptionsSchema extends StandardSchemaV1 | undefined = undefined,
+> = ReturnType<typeof createStepFactory<TOptions, TInputOptions, TOptionsSchema>>;
 
 /**
  * Create typed step constructors for one pipeline definition.
@@ -280,16 +284,35 @@ type StepFactory<TOptions extends object, TInputOptions extends object = TOption
  * `mapOptions` may still return domain options plus those controls.
  */
 export function createSteps<TOptions extends object = {}>(): StepFactory<TOptions>;
-export function createSteps<const TSchema extends StandardSchemaV1<object, object>>(
+export function createSteps<const TSchema extends StandardSchemaV1<object, object> | undefined>(
   optionsSchema: TSchema
-): StepFactory<InferSchemaOutput<TSchema>, InferSchemaInput<TSchema>>;
-export function createSteps(optionsSchema?: StandardSchemaV1<object, object>): StepFactory<object> {
-  return createStepFactory<object>(optionsSchema);
+): StepFactory<
+  TSchema extends StandardSchemaV1 ? InferSchemaOutput<TSchema> : object,
+  TSchema extends StandardSchemaV1 ? InferSchemaInput<TSchema> : object,
+  TSchema
+>;
+export function createSteps(
+  optionsSchema?: StandardSchemaV1<object, object>
+): StepFactory<object, object, StandardSchemaV1 | undefined> {
+  return createStepFactory<object, object, StandardSchemaV1 | undefined>(optionsSchema);
 }
 
-function createStepFactory<TOptions extends object, TInputOptions extends object = TOptions>(
-  optionsSchema?: StandardSchemaV1
-) {
+function createStepFactory<
+  TOptions extends object,
+  TInputOptions extends object = TOptions,
+  TOptionsSchema extends StandardSchemaV1 | undefined = undefined,
+>(optionsSchema?: TOptionsSchema) {
+  // Preserve the runtime schema in the step type so adapters cannot infer flags
+  // from erased TypeScript-only options.
+  type BuiltStep<
+    TId extends string,
+    TOut,
+    TStepOptions extends object,
+    TInput extends object,
+    TRunOut = TOut,
+  > = TOptionsSchema extends StandardSchemaV1
+    ? Step<TId, TOut, TStepOptions, TInput, TRunOut, TOptionsSchema>
+    : Step<TId, TOut, TStepOptions, TInput, TRunOut>;
   const buildStep = (id: string, definition: StepDefinitionBody<TOptions>): AnyStep<TOptions> => {
     const built: AnyStep<TOptions> = { id, ...definition };
     if (optionsSchema) {
@@ -310,7 +333,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
         | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>>
         | undefined;
     }
-  ): Step<
+  ): BuiltStep<
     TId,
     InferSchemaOutput<TSchema> | undefined,
     TOptions,
@@ -327,7 +350,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
     definition: PlainStepFields<TOptions, TDeps, TOptionalDeps, TOut> & {
       skip: StepSkipPredicate<TOptions, TDeps, TOptionalDeps, TOut> | undefined;
     }
-  ): Step<TId, TOut | undefined, TOptions, TInputOptions>;
+  ): BuiltStep<TId, TOut | undefined, TOptions, TInputOptions>;
   function step<
     TId extends string,
     TSchema extends StandardSchemaV1,
@@ -336,7 +359,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
   >(
     id: TId,
     definition: SchemaStepFields<TOptions, TDeps, TOptionalDeps, TSchema> & { skip?: never }
-  ): Step<TId, InferSchemaOutput<TSchema>, TOptions, TInputOptions, InferSchemaInput<TSchema>>;
+  ): BuiltStep<TId, InferSchemaOutput<TSchema>, TOptions, TInputOptions, InferSchemaInput<TSchema>>;
   function step<
     TId extends string,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
@@ -345,7 +368,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
   >(
     id: TId,
     definition: PlainStepFields<TOptions, TDeps, TOptionalDeps, TOut> & { skip?: never }
-  ): Step<TId, TOut, TOptions, TInputOptions>;
+  ): BuiltStep<TId, TOut, TOptions, TInputOptions>;
   function step(id: string, definition: StepDefinitionBody<TOptions>): AnyStep<TOptions> {
     return buildStep(id, definition);
   }
@@ -405,7 +428,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
       skip?: never;
       mapResult?: undefined;
     }
-  ): Step<TId, PipelineResultOf<TChildPipeline>, TOptions, TInputOptions>;
+  ): BuiltStep<TId, PipelineResultOf<TChildPipeline>, TOptions, TInputOptions>;
   function fromPipeline<
     TId extends string,
     TChildPipeline extends Pipeline<object, unknown>,
@@ -422,7 +445,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
         context: PipelineStepContext<TOptions>
       ): TOut;
     }
-  ): Step<TId, Awaited<TOut>, TOptions, TInputOptions>;
+  ): BuiltStep<TId, Awaited<TOut>, TOptions, TInputOptions>;
   function fromPipeline<
     TId extends string,
     TChildPipeline extends Pipeline<object, unknown>,
@@ -436,7 +459,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
         | undefined;
       mapResult?: undefined;
     }
-  ): Step<TId, PipelineResultOf<TChildPipeline> | undefined, TOptions, TInputOptions>;
+  ): BuiltStep<TId, PipelineResultOf<TChildPipeline> | undefined, TOptions, TInputOptions>;
   function fromPipeline<
     TId extends string,
     TChildPipeline extends Pipeline<object, unknown>,
@@ -453,7 +476,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
         context: PipelineStepContext<TOptions>
       ): TOut;
     }
-  ): Step<TId, Awaited<TOut> | undefined, TOptions, TInputOptions>;
+  ): BuiltStep<TId, Awaited<TOut> | undefined, TOptions, TInputOptions>;
   function fromPipeline(
     id: string,
     definition: Parameters<typeof buildPipelineStep>[1]
@@ -513,7 +536,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
     definition: RemoteStepDefinitionBase<TOptions, TDeps, TOptionalDeps, TPayload, TSchema> & {
       skip?: never;
     }
-  ): Step<TId, InferSchemaOutput<TSchema>, TOptions, TInputOptions, InferSchemaInput<TSchema>>;
+  ): BuiltStep<TId, InferSchemaOutput<TSchema>, TOptions, TInputOptions, InferSchemaInput<TSchema>>;
   function fromRemote<
     TId extends string,
     TSchema extends StandardSchemaV1,
@@ -527,7 +550,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
         | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>>
         | undefined;
     }
-  ): Step<
+  ): BuiltStep<
     TId,
     InferSchemaOutput<TSchema> | undefined,
     TOptions,
@@ -608,7 +631,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
       skip?: never;
       mapResult?: undefined;
     }
-  ): Step<TId, readonly PipelineResultOf<TChildPipeline>[], TOptions, TInputOptions>;
+  ): BuiltStep<TId, readonly PipelineResultOf<TChildPipeline>[], TOptions, TInputOptions>;
   function forEachPipeline<
     TId extends string,
     TChildPipeline extends Pipeline<object, unknown>,
@@ -634,7 +657,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
         context: PipelineStepContext<TOptions>
       ): TOut;
     }
-  ): Step<TId, readonly TOut[], TOptions, TInputOptions>;
+  ): BuiltStep<TId, readonly TOut[], TOptions, TInputOptions>;
   function forEachPipeline<
     TId extends string,
     TChildPipeline extends Pipeline<object, unknown>,
@@ -660,7 +683,12 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
         | undefined;
       mapResult?: undefined;
     }
-  ): Step<TId, readonly PipelineResultOf<TChildPipeline>[] | undefined, TOptions, TInputOptions>;
+  ): BuiltStep<
+    TId,
+    readonly PipelineResultOf<TChildPipeline>[] | undefined,
+    TOptions,
+    TInputOptions
+  >;
   function forEachPipeline<
     TId extends string,
     TChildPipeline extends Pipeline<object, unknown>,
@@ -686,7 +714,7 @@ function createStepFactory<TOptions extends object, TInputOptions extends object
         context: PipelineStepContext<TOptions>
       ): TOut;
     }
-  ): Step<TId, readonly TOut[] | undefined, TOptions, TInputOptions>;
+  ): BuiltStep<TId, readonly TOut[] | undefined, TOptions, TInputOptions>;
   function forEachPipeline(
     id: string,
     definition: Parameters<typeof buildMappedPipelineStep>[1]
