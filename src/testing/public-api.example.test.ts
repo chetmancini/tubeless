@@ -16,17 +16,13 @@ import {
 } from "tubeless/tracing";
 import {
   CliValidationError,
-  defineCommandCatalog,
   defineCommand,
   definePipelineCommand,
   type CliParamsSchema,
-  type CommandCatalog,
-  type CommandCatalogEntry,
-  type CommandCatalogInput,
 } from "tubeless/cli";
 import * as cli from "tubeless/cli";
 import * as project from "tubeless/project";
-import { defineProject, type PipelineProject, type ProjectMetadata } from "tubeless/project";
+import { defineProject, type PipelineProject, type ProjectOptions } from "tubeless/project";
 import { MinimalPipeline, runMinimalExample } from "../../examples/minimal-pipeline.js";
 
 interface ImportOptions {
@@ -243,32 +239,27 @@ describe("public API example", () => {
     await expect(command.run(["--count", "invalid"])).rejects.toBeInstanceOf(CliValidationError);
   });
 
-  it("keeps terminal commands and project catalogs on distinct public entrypoints", () => {
-    expect(cli).toHaveProperty("defineCommandCatalog");
+  it("exposes one project inventory API", () => {
+    expect(cli).not.toHaveProperty("defineCommandCatalog");
     expect(Object.keys(project).sort()).toEqual(["PipelineDocumentError", "defineProject"]);
   });
 
-  it("registers CLI commands in a project catalog", () => {
+  it("accepts explicit CLI adapters in the project options", () => {
     const command = definePipelineCommand(ImportPipeline, {
       params: {
         lines: { type: "string", multiple: true },
       },
       reporter: false,
     });
-    const entry: CommandCatalogEntry = {
-      id: "import",
-      file: "./import.ts",
-      export: "ImportCommand",
-    };
-    const input: CommandCatalogInput = { commands: [entry] };
-    const catalog: CommandCatalog = defineCommandCatalog(input);
+    const options: ProjectOptions<readonly [typeof ImportPipeline]> = { commands: [command] };
+    const project = defineProject("jobs", [ImportPipeline], options);
 
-    expect(command.descriptor.name).toBe("import");
-    expect(catalog.commands[0]?.id).toBe("import");
+    expect(project.get("import")).toBe(ImportPipeline);
+    expect(project.commands).toEqual([command]);
   });
 
   it("defines a typed project from pipelines", async () => {
-    const metadata: ProjectMetadata = {
+    const metadata: ProjectOptions<readonly [typeof ImportPipeline, typeof ChildPipeline]> = {
       name: "Public API jobs",
       description: "Import and normalize rows.",
     };

@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { createSteps, definePipeline } from "../core/pipeline.js";
+import { definePipelineCommand } from "../cli/cli-pipeline-command.js";
 import { defineProject, isPipelineProject } from "./pipeline-project.js";
 import { PipelineDocumentError } from "./project-document.js";
 
@@ -16,6 +17,59 @@ const beta = definePipeline({
 });
 
 describe("pipeline project", () => {
+  it("snapshots explicit adapters without changing typed pipeline lookup", async () => {
+    const command = definePipelineCommand(alpha, {
+      params: { text: { type: "string" } },
+      mapOptions: ({ text }) => ({ value: text.toUpperCase() }),
+      reporter: false,
+    });
+    const commands = [command];
+    const project = defineProject("adapters", [alpha, beta], { commands, cwd: "./work" });
+    commands.pop();
+
+    expect(project.commands).toEqual([command]);
+    expect(Object.isFrozen(project.commands)).toBe(true);
+    expect(project.cwd).toBe("./work");
+    expectTypeOf(project.get("alpha")).toEqualTypeOf<typeof alpha>();
+    await expect(command.run(["--text", "hello"])).resolves.toBe("HELLO");
+    await expect(project.get("alpha").runOrThrow({ value: "hello" })).resolves.toBe("hello");
+    expect(() => defineProject("duplicate", [alpha], { commands: [command, command] })).toThrow(
+      'Project command for "alpha" is declared more than once'
+    );
+    expect(() => defineProject("unknown", [beta], { commands: [command] })).toThrow(
+      "Each project command must wrap a pipeline in the project"
+    );
+    const otherAlpha = definePipeline({
+      id: "alpha",
+      steps: [alphaStep("other", { run: () => "other" })],
+    });
+    expect(() => defineProject("wrong-instance", [otherAlpha], { commands: [command] })).toThrow(
+      "Each project command must wrap a pipeline in the project"
+    );
+    expect(() => defineProject("unmarked", [alpha], { commands: [{ ...command }] })).toThrow(
+      "Each project command must wrap a pipeline in the project"
+    );
+  });
+
+  it("provides typed lookup when constructing command adapters", () => {
+    const pipelines = [alpha];
+    const project = defineProject("factory", pipelines, {
+      commands: (get) => {
+        pipelines.length = 0;
+        expectTypeOf(get("alpha")).toEqualTypeOf<typeof alpha>();
+        if (false) {
+          // @ts-expect-error Factories retain the project's literal pipeline ids.
+          get("missing");
+          // @ts-expect-error Required type-only inputs still require explicit CLI params.
+          definePipelineCommand(get("alpha"));
+        }
+        return [definePipelineCommand(get("alpha"), { params: { value: { type: "string" } } })];
+      },
+    });
+    expect(project.pipelineIds).toEqual(["alpha"]);
+    expect(project.commands[0]?.id).toBe("alpha");
+  });
+
   it("keeps pipelines discoverable by their literal ids", async () => {
     const project = defineProject("example", [alpha, beta]);
 
@@ -92,7 +146,7 @@ describe("pipeline project", () => {
   );
 
   it.each(["", " ", null, 42])("rejects invalid presentation text %j", (value) => {
-    for (const field of ["name", "description"] as const) {
+    for (const field of ["name", "description", "cwd"] as const) {
       expect(() => defineProject("example", [alpha], { [field]: value })).toThrow(
         `Project ${field} must be a non-empty string.`
       );
@@ -157,5 +211,9 @@ describe("pipeline project", () => {
     expect(() => defineProject("invalid", document, registry, { name: " " })).toThrow(
       "Project name must be a non-empty string."
     );
+    const executable = defineProject("yaml-cli", document, registry, {
+      commands: (get) => [definePipelineCommand(get("greeting"), { params: {}, reporter: false })],
+    });
+    await expect(executable.commands[0]?.run([])).resolves.toBe("hello");
   });
 });

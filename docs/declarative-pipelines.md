@@ -83,17 +83,34 @@ const project = defineProject("data-jobs", document, registry, {
 
 Overrides apply per field; omitted or `undefined` fields retain the document value.
 Project metadata is immutable. Document `authors` and `date` remain document-only.
-Studio command labels still come from explicit command registrations; document
+Studio command labels come from `definePipelineCommand` adapters; document
 metadata does not override labels, IDs, options, or run timestamps.
+
+For custom CLI inputs on compiled pipelines, the `commands` option can be a
+factory. It receives the project's `get` function after compilation, so adapters
+wrap the same pipeline objects that application code retrieves:
+
+```ts
+import { definePipelineCommand } from "tubeless/cli";
+
+export default defineProject("yaml-jobs", document, registry, {
+  commands: (get) => [
+    definePipelineCommand(get("yaml-import"), {
+      params: { lines: { type: "string" } },
+      mapOptions: ({ lines }) => ({ lines: lines.split(",") }),
+    }),
+  ],
+});
+```
 
 ## Try the example
 
 From the repository root, use the registered examples:
 
 ```sh
-bunx tubeless plan --project examples/catalog/tubeless.project.ts yaml-import --target normalize --explain
-bunx tubeless run --project examples/catalog/tubeless.project.ts yaml-import -- --lines " Alpha , Beta , "
-bunx tubeless ui examples/catalog/tubeless.project.ts
+bunx tubeless plan --project examples/project/tubeless.project.ts yaml-import --target normalize --explain
+bunx tubeless run --project examples/project/tubeless.project.ts yaml-import -- --lines " Alpha , Beta , "
+bunx tubeless ui examples/project/tubeless.project.ts
 ```
 
 Studio lists **Import rows from YAML** and **Preview rows from YAML**. Their
@@ -141,13 +158,13 @@ returns a partial summary so dry runs and target selection do not require a
 published start list. Option and rider-output schemas validate the dynamic
 document boundaries.
 
-Open `make ui STUDIO=examples/catalog/tubeless.project.ts` and select
+Open `make ui STUDIO=examples/project/tubeless.project.ts` and select
 **Peloton from YAML** to use the same demo in Studio. Its form exposes delay,
 inspection concurrency, and both failure switches. Keep a nonzero delay to
 watch progress or try cancellation. Plan without running any handlers:
 
 ```sh
-make plan FILE=yaml-peloton PROJECT=examples/catalog/tubeless.project.ts ARGS="--target publish-start-list --explain"
+make plan FILE=yaml-peloton PROJECT=examples/project/tubeless.project.ts ARGS="--target publish-start-list --explain"
 ```
 
 The publication target selects the tech gate and its prerequisites, but omits

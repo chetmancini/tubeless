@@ -1,3 +1,5 @@
+import { pipelineForCommand } from "../utilities/pipeline-command-marker.js";
+import type { PipelineCommand } from "../cli/cli-pipeline-command.js";
 import type { Pipeline } from "../core/pipeline.js";
 import { compileValidatedPipelineDocument, type ProjectRegistry } from "./project-compiler.js";
 import { validatePipelineDocument } from "./project-document.js";
@@ -26,12 +28,22 @@ type PipelineById<
       : TPipeline
   : never;
 
-/** Optional project presentation; neither field changes pipeline identity or execution. */
-export interface ProjectMetadata {
+/** Optional project presentation and CLI adapters. */
+export interface ProjectOptions<
+  TPipelines extends readonly AnyProjectPipeline[] = readonly AnyProjectPipeline[],
+> {
   /** Display name; defaults to the project id. */
   readonly name?: string;
   /** Human-readable purpose of the project. */
   readonly description?: string;
+  /** Execution directory for CLI and Studio, relative to the project file. */
+  readonly cwd?: string;
+  /** Explicit adapters, or a factory using project.get (useful for compiled documents). */
+  readonly commands?:
+    | readonly PipelineCommand<{}, unknown>[]
+    | ((
+        get: PipelineProject<string, TPipelines>["get"]
+      ) => readonly PipelineCommand<{}, unknown>[]);
 }
 
 /** Immutable named pipeline collection, preserving each pipeline's exact type by id. */
@@ -42,6 +54,8 @@ export interface PipelineProject<
   readonly id: TProjectId;
   readonly name: string;
   readonly description?: string;
+  readonly cwd?: string;
+  readonly commands: readonly PipelineCommand<{}, unknown>[];
   readonly pipelines: Readonly<TPipelines>;
   readonly pipelineIds: PipelineIds<TPipelines>;
   get<const TId extends PipelineId<TPipelines>>(id: TId): PipelineById<TPipelines[number], TId>;
@@ -54,36 +68,36 @@ export function defineProject<
 >(
   id: TProjectId,
   pipelines: TPipelines,
-  metadata?: ProjectMetadata
+  options?: ProjectOptions<NoInfer<TPipelines>>
 ): PipelineProject<TProjectId, TPipelines>;
 export function defineProject<const TProjectId extends string>(
   id: TProjectId,
   document: unknown,
   registry: ProjectRegistry,
-  metadata?: ProjectMetadata
+  options?: ProjectOptions
 ): PipelineProject<TProjectId, readonly AnyProjectPipeline[]>;
 export function defineProject(
   id: string,
   pipelinesOrDocument: unknown,
-  registryOrMetadata?: ProjectRegistry | ProjectMetadata,
-  metadata?: ProjectMetadata
+  registryOrOptions?: ProjectRegistry | ProjectOptions,
+  options?: ProjectOptions
 ): PipelineProject<string, readonly AnyProjectPipeline[]> {
   if (typeof id !== "string" || id.trim().length === 0) {
     throw new Error("Project id must be a non-empty string.");
   }
   let pipelines: readonly AnyProjectPipeline[];
-  let documentMetadata: ProjectMetadata | undefined;
+  let documentMetadata: ProjectOptions | undefined;
   if (
-    registryOrMetadata !== null &&
-    typeof registryOrMetadata === "object" &&
-    "steps" in registryOrMetadata
+    registryOrOptions !== null &&
+    typeof registryOrOptions === "object" &&
+    "steps" in registryOrOptions
   ) {
     const document = validatePipelineDocument(pipelinesOrDocument);
     documentMetadata = document.metadata;
-    pipelines = [...compileValidatedPipelineDocument(document, registryOrMetadata).values()];
+    pipelines = [...compileValidatedPipelineDocument(document, registryOrOptions).values()];
   } else if (Array.isArray(pipelinesOrDocument)) {
     pipelines = pipelinesOrDocument;
-    metadata = registryOrMetadata;
+    options = registryOrOptions;
   } else {
     throw new TypeError(
       "defineProject expects an array of pipelines, or a parsed pipeline document and registry."
@@ -91,22 +105,24 @@ export function defineProject(
   }
 
   if (
-    metadata !== undefined &&
-    (typeof metadata !== "object" || metadata === null || Array.isArray(metadata))
+    options !== undefined &&
+    (typeof options !== "object" || options === null || Array.isArray(options))
   ) {
-    throw new TypeError("Project metadata must be an object.");
+    throw new TypeError("Project options must be an object.");
   }
-  for (const field of ["name", "description"] as const) {
-    const value = metadata?.[field];
+  for (const field of ["name", "description", "cwd"] as const) {
+    const value = options?.[field];
     if (value !== undefined && (typeof value !== "string" || value.trim().length === 0)) {
       throw new Error(`Project ${field} must be a non-empty string.`);
     }
   }
-  const name = metadata?.name ?? documentMetadata?.name ?? id;
-  const description = metadata?.description ?? documentMetadata?.description;
+  const name = options?.name ?? documentMetadata?.name ?? id;
+  const description = options?.description ?? documentMetadata?.description;
+  const cwd = options?.cwd;
 
+  const snapshot: readonly AnyProjectPipeline[] = Object.freeze([...pipelines]);
   const byId = new Map<string, AnyProjectPipeline>();
-  for (const pipeline of pipelines) {
+  for (const pipeline of snapshot) {
     if (byId.has(pipeline.id)) {
       throw new Error(
         `Project pipeline id ${JSON.stringify(pipeline.id)} is declared more than once.`
@@ -115,18 +131,38 @@ export function defineProject(
     byId.set(pipeline.id, pipeline);
   }
 
-  const snapshot: readonly AnyProjectPipeline[] = Object.freeze([...pipelines]);
+  const get: PipelineProject<string, readonly AnyProjectPipeline[]>["get"] = (id) => {
+    const pipeline = byId.get(id);
+    if (!pipeline) throw new Error(`Project does not define pipeline ${JSON.stringify(id)}.`);
+    return pipeline;
+  };
+  const commands =
+    typeof options?.commands === "function" ? options.commands(get) : (options?.commands ?? []);
+  if (!Array.isArray(commands)) {
+    throw new TypeError("Project commands must be an array of definePipelineCommand adapters.");
+  }
+  const commandIds = new Set<string>();
+  for (const command of commands) {
+    if (!command || !byId.has(command.id) || byId.get(command.id) !== pipelineForCommand(command)) {
+      throw new Error("Each project command must wrap a pipeline in the project.");
+    }
+    if (commandIds.has(command.id)) {
+      throw new Error(
+        `Project command for ${JSON.stringify(command.id)} is declared more than once.`
+      );
+    }
+    commandIds.add(command.id);
+  }
+
   const project: PipelineProject<string, readonly AnyProjectPipeline[]> = {
     id,
     name,
     ...(description === undefined ? {} : { description }),
+    ...(cwd === undefined ? {} : { cwd }),
+    commands: Object.freeze([...commands]),
     pipelines: snapshot,
     pipelineIds: Object.freeze(snapshot.map((pipeline) => pipeline.id)),
-    get(id) {
-      const pipeline = byId.get(id);
-      if (!pipeline) throw new Error(`Project does not define pipeline ${JSON.stringify(id)}.`);
-      return pipeline;
-    },
+    get,
   };
   Object.defineProperty(project, PIPELINE_PROJECT_MARKER, { value: true });
   return Object.freeze(project);

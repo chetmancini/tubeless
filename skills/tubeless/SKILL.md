@@ -102,12 +102,15 @@ Read the corresponding package recipe before using these features:
   redeclare built-in flags. Read `docs/cli.md` for option mapping.
   Export `defineProject(id, pipelines)` from `tubeless.project.ts` to expose
   schema-backed pipelines directly to the CLI and optional Studio. Use
-  explicit command `params` and a catalog for schema-less pipelines, even with no
-  inputs: automatic project commands require Standard JSON Schema input metadata. Use
-  `defineCommand` for standalone scripts and `defineCommandCatalog` only for
-  advanced custom command adapters.
-  Default-export the project or catalog to select it for CLI and Studio. Without
-  a default, exactly one distinct project or catalog may be exported; aliases are allowed.
+  explicit adapters in the project's `commands` option for schema-less pipelines,
+  even with no inputs: automatic project commands require Standard JSON Schema
+  input metadata. Declare custom `params`, `mapOptions`, and display names on
+  `definePipelineCommand`; each adapter uses its pipeline's ID. Project `cwd`
+  controls CLI/Studio execution relative to the project file. Use `defineCommand`
+  for standalone scripts. For compiled documents, use `commands: (get) => [...]`
+  to create explicit adapters after compilation.
+  Default-export the project to select it for CLI and Studio. Without a default,
+  exactly one distinct project may be exported; aliases are allowed.
 - Use `pipelines/<name>.ts` for definitions. Add `scripts/<name>.ts` command
   wrappers only when explicit `params`, `mapOptions`, or presentation overrides
   are needed. Preserve existing consumer conventions.

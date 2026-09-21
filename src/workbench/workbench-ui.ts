@@ -134,8 +134,8 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           if ("exitCode" in loaded) return loaded.exitCode;
           const descriptor: PipelineRunStudioCommand = {
             canPlan: true,
-            id: source.id ?? `${source.source}#${loaded.exportName}`,
-            name: source.name ?? loaded.command.descriptor.name,
+            id: loaded.command.id,
+            name: loaded.command.descriptor.name,
             parameters: loaded.command.descriptor.parameters,
           };
           if (loaded.command.descriptor.description !== undefined) {

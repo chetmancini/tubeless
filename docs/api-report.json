@@ -85,11 +85,7 @@
         "CliPathParam",
         "CliStringParam",
         "CliValidationError",
-        "CommandCatalog",
-        "CommandCatalogEntry",
-        "CommandCatalogInput",
         "defineCommand",
-        "defineCommandCatalog",
         "definePipelineCommand",
         "DefinePipelineCommandConfig",
         "PipelineCliParseResult",
@@ -104,7 +100,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "73311e98bfc8077883dad8e7410a17a1d58aaca3e4a8fec645246cc3c49d417f",
+      "sha256": "590705b173c90603b47ea71c2d22ee24016d9f3ba3d76540f057621be760e19f",
       "specifier": "tubeless/cli"
     },
     {
@@ -157,10 +153,10 @@
         "defineProject",
         "PipelineDocumentError",
         "PipelineProject",
-        "ProjectMetadata",
+        "ProjectOptions",
         "ProjectRegistry"
       ],
-      "sha256": "be723f131911e84d3787e544d05a16252c6ee9df5566779f06aee0edb43bffc8",
+      "sha256": "8de75f0962ccf6ff7d1247a27b6a3022d47c3dad8c6580e9dd26748dbc502e40",
       "specifier": "tubeless/project"
     },
     {

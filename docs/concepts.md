@@ -491,7 +491,7 @@ command. Keep module imports free of side effects.
 For a direct command file, `tubeless run` requires a `definePipelineCommand` export.
 Pipelines in `tubeless.project.ts` are addressable by pipeline ID and wrapped
 automatically. A raw pipeline outside a project can be invoked from application
-code through `run` or `runOrThrow`. The [command catalog example](../examples/catalog/tubeless.project.ts)
+code through `run` or `runOrThrow`. The [project example](../examples/project/tubeless.project.ts)
 shows the advanced custom-adapter layout; the [Studio guide](./studio.md) shows both paths.
 
 ### Map command arguments to pipeline inputs

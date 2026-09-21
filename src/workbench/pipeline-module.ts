@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 import type { CliCommandDescriptor, CliContext } from "../cli/cli.js";
-import { isMarkedPipelineCommand } from "../cli/pipeline-command-marker.js";
+import { pipelineForCommand } from "../utilities/pipeline-command-marker.js";
 import type {
   PipelineMermaidOptions,
   PipelinePlan,
@@ -51,7 +51,7 @@ export type SelectUniqueExportOptions = {
 };
 
 function isWorkbenchPipeline(value: unknown): value is WorkbenchPipeline {
-  if (isMarkedPipelineCommand(value)) return false;
+  if (pipelineForCommand(value)) return false;
   return (
     (typeof value === "object" || typeof value === "function") &&
     value !== null &&
@@ -68,9 +68,9 @@ function isWorkbenchPipeline(value: unknown): value is WorkbenchPipeline {
   );
 }
 
-function isWorkbenchPipelineCommand(value: unknown): value is WorkbenchPipelineCommand {
-  if (!isMarkedPipelineCommand(value)) return false;
-  // SAFETY: isMarkedPipelineCommand established value is a non-null object or
+export function isWorkbenchPipelineCommand(value: unknown): value is WorkbenchPipelineCommand {
+  if (!pipelineForCommand(value)) return false;
+  // SAFETY: pipelineForCommand established value is a non-null object or
   // function, so this single cast only widens to a shape we probe with `in`.
   const candidate = value as object;
   return (

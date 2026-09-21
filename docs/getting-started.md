@@ -14,7 +14,7 @@ npm install tubeless
 The same package works with `pnpm add tubeless`, `yarn add tubeless`, and
 `bun add tubeless`. The README quick start is a complete first program.
 
-Add `tubeless/cli` for terminal commands and optional command catalogs, and
+Add `tubeless/cli` for terminal commands, and
 `tubeless/project` for pipeline projects. Neither import loads storage or Studio;
 the executable supplies those optional tools.
 The executable requires Bun 1.3.14 or later:
@@ -46,14 +46,14 @@ bunx tubeless run --project examples/tubeless.project.ts validated-import -- --s
 ```
 
 The project contains only pipelines. The workbench derives `--source` from the
-pipeline's input schema; there is no command wrapper or catalog.
+pipeline's input schema; there is no command wrapper.
 
 In your app, export `defineProject("my-app", [MyPipeline])` from
 `tubeless.project.ts`, then run `bunx tubeless list` with no `--project`.
 Pipelines whose options schema exposes Standard JSON Schema input metadata get
-their flags automatically. Use the catalog example only for custom command inputs
+their flags automatically. Use the project commands option for custom command inputs
 or presentation. See [`examples/automatic-cli.ts`](../examples/automatic-cli.ts),
-[`examples/catalog/tubeless.project.ts`](../examples/catalog/tubeless.project.ts),
+[`examples/project/tubeless.project.ts`](../examples/project/tubeless.project.ts),
 and [the CLI](./cli.md).
 
 ## 1. Define domain options

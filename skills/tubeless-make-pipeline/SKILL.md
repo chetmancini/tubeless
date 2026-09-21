@@ -106,7 +106,7 @@ a missing required output to an empty array, `false`, or a fake success value.
 Respect the project's layout. If it has no convention, use
 `pipelines/<name>.ts` and export `<Name>Pipeline`. Add a
 `definePipelineCommand` wrapper only for a CLI workflow, following the CLI
-recipe; register it in an existing project catalog when appropriate. Keep
+recipe; pass it in an existing project’s commands option when appropriate. Keep
 storage, Studio, telemetry exporters, and remote engines optional.
 
 ## Prove the conversion

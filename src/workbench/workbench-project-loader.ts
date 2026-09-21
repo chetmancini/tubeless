@@ -2,12 +2,12 @@ import { stat } from "node:fs/promises";
 import * as path from "node:path";
 import {
   importModuleNamespace,
+  isWorkbenchPipelineCommand,
   selectUniqueExport,
   type WorkbenchPipeline,
   type WorkbenchPipelineCommand,
 } from "./pipeline-module.js";
 import { definePipelineCommand } from "../cli/cli-pipeline-command.js";
-import { isCommandCatalog, type CommandCatalogEntry } from "../cli/command-catalog.js";
 import { isPipelineProject, type AnyProjectPipeline } from "../project/pipeline-project.js";
 import {
   errorMessage,
@@ -29,19 +29,12 @@ export interface WorkbenchRegistration {
   readonly identity: string;
   readonly source: string;
   readonly cwd: string;
-  /** Stable project/catalog id; direct modules acquire their Studio id after loading. */
+  /** Pipeline id when available before loading the source. */
   readonly id?: string;
-  readonly name?: string;
-  readonly listing: string;
-  loadPlan(
-    io: WorkbenchCliIo
-  ): Promise<{ view: WorkbenchPipeline; commandId?: string } | LoadFailure>;
+  loadPlan(io: WorkbenchCliIo): Promise<{ view: WorkbenchPipeline } | LoadFailure>;
   loadCommand(
     io: WorkbenchCliIo
-  ): Promise<
-    | { command: WorkbenchPipelineCommand; commandIo: WorkbenchCliIo; exportName: string }
-    | LoadFailure
-  >;
+  ): Promise<{ command: WorkbenchPipelineCommand; commandIo: WorkbenchCliIo } | LoadFailure>;
 }
 
 interface WorkbenchProjectFile {
@@ -50,29 +43,22 @@ interface WorkbenchProjectFile {
   inventory: Record<string, unknown>;
 }
 
-/** Keep module imports lazy, including direct files and catalog entries. */
+/** Defer direct module loading until a plan or command is needed. */
 export function createModuleRegistration(
   filePath: string,
   cwd: string,
-  exportName?: string,
-  entry?: CommandCatalogEntry
+  exportName?: string
 ): WorkbenchRegistration {
   filePath = path.resolve(cwd, filePath);
   return {
     identity: `${filePath}\0${exportName ?? ""}`,
     source: filePath,
     cwd,
-    id: entry?.id,
-    name: entry?.name,
-    listing: entry
-      ? `${entry.id}\t${entry.file}${exportName ? `#${exportName}` : ""}${entry.name ? `\t${entry.name}` : ""}`
-      : filePath,
     async loadPlan(io) {
       const loaded = await loadPlanSource(filePath, exportName, { ...io, cwd });
       if ("exitCode" in loaded) return loaded;
       return {
         view: loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline,
-        commandId: entry?.id,
       };
     },
     async loadCommand(io) {
@@ -85,15 +71,15 @@ export function createModuleRegistration(
 
 function createPipelineRegistration(
   pipeline: AnyProjectPipeline,
-  filePath: string
+  filePath: string,
+  cwd: string,
+  command?: WorkbenchPipelineCommand
 ): WorkbenchRegistration {
-  const cwd = path.dirname(filePath);
   return {
     identity: `project-pipeline\0${filePath}\0${pipeline.id}`,
     source: pipeline.id,
     cwd,
     id: pipeline.id,
-    listing: pipeline.id,
     async loadPlan() {
       return { view: pipeline };
     },
@@ -101,16 +87,15 @@ function createPipelineRegistration(
       try {
         // Project registration erases option types, so absence of a schema cannot
         // establish that the pipeline has no required domain inputs.
-        if (pipeline.optionsSchema === undefined) {
+        if (!command && pipeline.optionsSchema === undefined) {
           throw new Error(
             "Automatic project commands require Standard JSON Schema input metadata. " +
-              "Use createSteps(schema), or register a definePipelineCommand with explicit params through defineCommandCatalog."
+              "Use createSteps(schema), or pass a definePipelineCommand with explicit params in the project commands option."
           );
         }
         return {
-          command: definePipelineCommand(pipeline),
+          command: command ?? definePipelineCommand(pipeline),
           commandIo: { ...io, cwd },
-          exportName: pipeline.id,
         };
       } catch (error) {
         io.stderr.write(
@@ -131,7 +116,7 @@ async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
-/** Select one root and normalize it without importing catalog command modules. */
+/** Select the project once and normalize its pipelines for every workbench consumer. */
 export async function loadPipelineProjectFile(
   fileArgument: string,
   io: WorkbenchCliIo
@@ -141,48 +126,30 @@ export async function loadPipelineProjectFile(
     const root = selectUniqueExport(
       moduleExports,
       Object.hasOwn(moduleExports, "default") ? "default" : undefined,
-      (value) => isPipelineProject(value) || isCommandCatalog(value),
-      "project or command catalog",
+      isPipelineProject,
+      "project",
       { hintExport: false }
     ).value;
-    if (isPipelineProject(root)) {
-      return {
-        filePath,
-        registrations: root.pipelines.map((pipeline) =>
-          createPipelineRegistration(pipeline, filePath)
-        ),
-        inventory: {
-          id: root.id,
-          name: root.name,
-          description: root.description,
-          pipelines: root.pipelineIds,
-          project: filePath,
-        },
-      };
-    }
-
-    const directory = path.dirname(filePath);
-    const cwd = path.resolve(directory, root.cwd ?? ".");
-    const registrations = root.commands.map((entry) =>
-      createModuleRegistration(path.resolve(directory, entry.file), cwd, entry.export, entry)
-    );
-    const identities = new Set<string>();
-    for (const registration of registrations) {
-      if (identities.has(registration.identity)) {
-        throw new Error(
-          `Command catalog entry ${JSON.stringify(registration.source)} resolves to a duplicate module registration.`
-        );
+    const cwd = path.resolve(path.dirname(filePath), root.cwd ?? ".");
+    const commands = new Map<string, WorkbenchPipelineCommand>();
+    for (const command of root.commands) {
+      if (!isWorkbenchPipelineCommand(command)) {
+        throw new Error("Project commands must be created with definePipelineCommand.");
       }
-      identities.add(registration.identity);
+      commands.set(command.id, command);
     }
     return {
       filePath,
-      registrations,
+      registrations: root.pipelines.map((pipeline) =>
+        createPipelineRegistration(pipeline, filePath, cwd, commands.get(pipeline.id))
+      ),
       inventory: {
-        commands: root.commands,
-        cwd: root.cwd ?? ".",
-        manifest: filePath,
-        version: root.version,
+        id: root.id,
+        name: root.name,
+        description: root.description,
+        pipelines: root.pipelineIds,
+        project: filePath,
+        cwd,
       },
     };
   });
@@ -235,7 +202,7 @@ export async function resolveWorkbenchRegistration(
   const registration = loaded.registrations.find(({ id }) => id === target);
   if (registration) return registration;
   io.stderr.write(
-    `Error: Project file ${loaded.filePath} does not register pipeline or command ${JSON.stringify(target)}.\n`
+    `Error: Project file ${loaded.filePath} does not define pipeline ${JSON.stringify(target)}.\n`
   );
   return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load };
 }

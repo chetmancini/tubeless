@@ -7,6 +7,7 @@ const pipeline = defineProject("yaml-peloton", document, pelotonRegistry).get("y
 export const YamlPelotonPipeline = pipeline;
 
 export const YamlPelotonCommand = definePipelineCommand(YamlPelotonPipeline, {
+  name: "Peloton from YAML",
   description:
     "YAML road-race demo: progress, concurrent inspections, retries, dry runs, and failure gates. All I/O is simulated.",
   params: {

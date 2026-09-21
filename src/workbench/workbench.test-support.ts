@@ -141,6 +141,7 @@ export async function writeActualPipelineCommandModule(): Promise<{
       finalize: requireOutputs([work], ({ work }) => work),
     });
     export const FixtureCommand = definePipelineCommand(CommandPipeline, {
+      name: "Studio fixture",
       params: {
         message: { type: "string", description: "Message to process." },
         mode: {
@@ -157,25 +158,19 @@ export async function writeActualPipelineCommandModule(): Promise<{
 
 export async function writeStudioConfig(
   directory: string,
-  command: { exportName?: string; name?: string } = {}
+  exportName = "FixtureCommand"
 ): Promise<void> {
-  const exportName = command.exportName ?? "FixtureCommand";
-  const name = command.name ?? "Studio fixture";
-  const cliModuleUrl = pathToFileURL(path.resolve("dist/cli/cli.js")).href;
+  const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project.js")).href;
   const configDirectory = path.join(directory, "config");
   await mkdir(configDirectory);
   await writeFile(
     path.join(configDirectory, "tubeless.project.mjs"),
     `
-      import { defineCommandCatalog } from ${JSON.stringify(cliModuleUrl)};
-      export default defineCommandCatalog({
+      import { defineProject } from ${JSON.stringify(projectModuleUrl)};
+      import { CommandPipeline, ${exportName} } from "../pipeline.mjs";
+      export default defineProject("studio", [CommandPipeline], {
         cwd: "..",
-        commands: [{
-          id: "fixture",
-          file: "../pipeline.mjs",
-          export: ${JSON.stringify(exportName)},
-          name: ${JSON.stringify(name)},
-        }],
+        commands: [${exportName}],
       });
     `
   );
@@ -195,14 +190,14 @@ export async function writeGatedPipelineCommandModule(options: {
       description: "No-op gated command.",
       run: () => undefined,
     });
-    export const GatedCommand = definePipelineCommand(
-      definePipeline({
-        id: "gated-fixture",
-        steps: [work],
-        targets: [work],
-        finalize: () => undefined,
-      }),
-      {
+    export const CommandPipeline = definePipeline({
+      id: "gated-fixture",
+      steps: [work],
+      targets: [work],
+      finalize: () => undefined,
+    });
+    export const GatedCommand = definePipelineCommand(CommandPipeline, {
+        name: "Gated fixture",
         params: { message: { type: "string" } },
         mapOptions: ${options.mapOptionsSource},
         reporter: false,

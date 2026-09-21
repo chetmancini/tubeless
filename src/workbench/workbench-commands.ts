@@ -92,7 +92,7 @@ export async function runList(argv: readonly string[], io: WorkbenchCliIo): Prom
           commandIo.stdout.write(`${JSON.stringify(loaded.inventory, null, 2)}\n`);
         } else {
           for (const registration of loaded.registrations) {
-            commandIo.stdout.write(`${registration.listing}\n`);
+            commandIo.stdout.write(`${registration.id}\n`);
           }
         }
         return TUBELESS_WORKBENCH_EXIT_CODE.success;
@@ -195,7 +195,6 @@ function formatIdList(values: readonly string[]): string {
 }
 
 interface WorkbenchInspection {
-  commandId?: string;
   pipelineId: string;
   plan: PipelinePlan;
   stepIds: string[];
@@ -230,14 +229,12 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
             stepIds: [...view.stepIds],
             plan,
           };
-          if (loaded.commandId !== undefined) inspection.commandId = loaded.commandId;
           commandIo.stdout.write(`${JSON.stringify(inspection, null, 2)}\n`);
           return TUBELESS_WORKBENCH_EXIT_CODE.success;
         }
 
         commandIo.stdout.write(
           [
-            ...(loaded.commandId !== undefined ? [`Command ${loaded.commandId}`] : []),
             `Pipeline ${view.id}`,
             `Targets: ${formatIdList(view.targetIds)}`,
             `Exact steps: ${formatIdList(view.stepIds)}`,

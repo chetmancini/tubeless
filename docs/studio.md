@@ -77,13 +77,12 @@ bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.project.ts
 ```
 
 Studio derives the same form fields that the CLI derives as flags. No command
-wrapper or catalog is needed. Automatic registration requires Standard JSON Schema
-input metadata; schema-less pipelines fail to load. Register those pipelines as
-explicit commands with `params` through a command catalog instead.
+wrapper is needed. Automatic registration requires Standard JSON Schema input
+metadata. Supply explicit adapters in the project commands option for schema-less
+pipelines or custom CLI inputs.
 
-The project file's default export selects the project or command catalog for
-Studio. Without a default, exactly one distinct project or catalog must be
-exported; mixed or multiple roots are ambiguous. An invalid default is a load error.
+The project file's default export selects the project for Studio. Without a
+default, exactly one distinct project must be exported; multiple projects are ambiguous. An invalid default is a load error.
 
 ## Register custom commands for browser execution
 
@@ -109,40 +108,34 @@ Pipeline command forms include
 **Max Concurrency**, a positive integer defaulting to `1`, under execution controls;
 it has the same behavior as the CLI's `--max-concurrency` flag.
 
-## Advanced: checked-in command catalog
+## Custom adapters in a project
 
-Use a command catalog when pipelines need custom CLI inputs, option mapping,
-display names, or aliases. It registers those command adapters once for both the CLI and Studio:
+Use the same project for typed lookup, CLI, and Studio. Add explicit command
+adapters when pipelines need custom parameters, option mapping, or display names:
 
 ```ts
 // tubeless.project.ts
-import { defineCommandCatalog } from "tubeless/cli";
+import { defineProject } from "tubeless/project";
+import { ImportPipeline } from "./pipelines/import.ts";
+import { ImportCommand } from "./scripts/import.ts";
 
-export default defineCommandCatalog({
-  cwd: ".",
-  commands: [
-    {
-      id: "import-rows",
-      file: "./scripts/import.ts",
-      export: "ImportCommand",
-      name: "Import rows",
-    },
-    { id: "publish", file: "./scripts/publish.ts", export: "PublishCommand" },
-  ],
+export default defineProject("data-jobs", [ImportPipeline], {
+  commands: [ImportCommand],
 });
 ```
 
 ```sh
 bunx tubeless list
-bunx tubeless inspect import-rows
-bunx tubeless run import-rows -- --source rows.txt
+bunx tubeless inspect import
+bunx tubeless run import -- --source rows.txt
 bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.project.ts
 ```
 
-Command paths and `cwd` are relative to the catalog file. Empty or duplicate
-IDs and duplicate module registrations fail when the catalog loads. The
-optional `name` changes a display label, not the registered command ID or the
-pipeline's own ID.
+CLI and Studio use the pipeline's ID. Set `name` on `definePipelineCommand` for
+a display label. The optional project `cwd` is relative to the project file and
+defaults to its directory. Duplicate adapters or adapters for pipelines outside
+the project fail during project definition. See the
+[complete project example](../examples/project/tubeless.project.ts).
 
 ## Storage behavior
 

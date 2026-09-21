@@ -11,7 +11,7 @@ function cli(...args: string[]) {
 }
 
 describe("public YAML recipe", () => {
-  const project = ["--project", "examples/catalog/tubeless.project.ts"];
+  const project = ["--project", "examples/project/tubeless.project.ts"];
 
   it("loads real YAML through public package imports and plans registered targets", () => {
     const output = cli("plan", ...project, "yaml-import", "--target", "normalize", "--explain");

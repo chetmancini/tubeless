@@ -18,10 +18,10 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
    [project example](../examples/tubeless.project.ts) as the minimal reference.
    Schema-backed project pipelines are directly available to the CLI and Studio.
    Automatic commands require Standard JSON Schema input metadata; schema-less
-   pipelines need explicit command `params` and a command catalog, even with no inputs.
-   Add a separate command catalog only for custom CLI inputs, mapping, or presentation.
-   Use a default export to select the project or catalog for CLI and Studio.
-   Without a default, exactly one distinct project or catalog may be exported.
+   pipelines need explicit command `params`, even with no inputs. Pass custom
+   adapters in the project's `commands` option for CLI inputs, mapping, or presentation.
+   Use a default export to select the project for CLI and Studio.
+   Without a default, exactly one distinct project may be exported.
 3. Declare stable IDs and operational descriptions. Add `name` only when printed
    output needs a friendlier display name.
 4. Model data dependencies before failure policy or CLI concerns.
@@ -131,6 +131,12 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Pass optional `{ name, description }` as the third argument for typed pipelines,
   or fourth after the registry for documents. Document metadata supplies defaults;
   explicit fields override them. The immutable `project.name` defaults to its ID.
+  `ProjectOptions<TPipelines>` names the configuration type. Its optional `commands` accepts
+  adapters created with `definePipelineCommand`; duplicate adapters and commands
+  for pipelines outside the project are rejected. `cwd` controls CLI/Studio execution
+  relative to the project file. For compiled documents, `commands: (get) => [...]`
+  creates adapters after compilation using the project lookup. Pipeline IDs remain
+  the single selection identity.
   Import `PipelineProject<TProjectId, TPipelines>` from `tubeless/project` when
   annotating a shared project factory or a function that accepts a project.
 - Use `definePipelineCommand(pipeline)` from `tubeless/cli` for scripts centered on
@@ -150,13 +156,13 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Use `command.plan()` or `tubeless plan` for a selection-only preview. Do not
   simulate planning with `--plan`.
 - Use `defineCommand` from `tubeless/cli` for standalone scripts. A
-  `defineProject` export is the normal shared CLI and Studio inventory. Declare
-  a command catalog with `defineCommandCatalog` only when pipelines need explicit
-  command adapters or presentation overrides. Keep application-specific prompts
+  `defineProject` export is the normal shared CLI and Studio inventory. Pass
+  explicit adapters in the project's `commands` option when pipelines need custom
+  parameters, option mapping, or presentation. Each adapter uses its pipeline's ID. Keep application-specific prompts
   in the consumer.
 - Use `pipeline.toMermaid()` or `command.toMermaid()` when documentation needs
   the static graph; do not duplicate dependency edges by hand.
-- Use `tubeless list` for the project pipeline or advanced command inventory. Use
+- Use `tubeless list` for the project pipeline inventory. Use
   `tubeless inspect <pipeline-id>` for a project pipeline inventory,
   `tubeless plan` to preview selection without domain options or execution, and
   `tubeless graph` when generating documentation. `inspect`, `plan`, and `graph`
@@ -172,7 +178,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   recorded runs from SQLite, or pass `--trace` to inspect a finished NDJSON
   artifact without importing it.
   Filter shared history with `--pipeline <recorded-pipeline-id>` in any output
-  mode. This is the pipeline definition's ID, not its registered command ID.
+  mode. Use the pipeline definition’s ID.
 
 ## Runtime rules
 
@@ -283,8 +289,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   external job or workflow. `runId` is package-generated for every execution;
   pass a known execution `runId` as `parentRunId` only to link that parent.
 - Use `tubeless ui` to inspect local recordings and launch pipelines from a
-  checked-in `defineProject`. Use `defineCommandCatalog` only for explicit
-  `definePipelineCommand` adapters; never infer executable modules from observed history.
+  checked-in `defineProject`. Supply explicit `definePipelineCommand` adapters in
+  its `commands` option; never infer executable modules from observed history.
   Keep the default loopback binding; Studio's internal HTTP protocol is not an
   application API. Cancel a live top-level launch from the running detail pane;
   that abort is process-local, leaves sibling launches running, and is not
@@ -309,13 +315,13 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Read [core concepts](./concepts.md) for skip, failure, or selection changes.
 - Read [the CLI](./cli.md) for list, inspect, plan, graph, run, history, and exit codes.
 - Read [the studio](./studio.md) before changing `tubeless ui` or
-  `defineCommandCatalog`.
+  project command adapters.
 - Read [child composition](./child-pipeline-composition.md) before changing child
   propagation, progress, or parent/child selection.
 - Read the relevant executable example linked from the
   [recipe index](./recipes.md) before writing new usage.
 - Adapt advanced custom command adapters from the
-  [command catalog example](../examples/catalog/tubeless.project.ts).
+  [project with custom adapters](../examples/project/tubeless.project.ts).
 - Use the [generated API inventory](./api-reference.md) only to verify exports;
   it is not implementation guidance.
 

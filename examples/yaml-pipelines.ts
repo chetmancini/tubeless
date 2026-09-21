@@ -16,6 +16,7 @@ const params = {
 function command(id: string) {
   const pipeline = project.get(id);
   return definePipelineCommand(pipeline, {
+    name: id === "yaml-import" ? "Import rows from YAML" : "Preview rows from YAML",
     description: `Run ${id} from the YAML document.`,
     params,
     mapOptions: ({ lines }) => ({ lines: lines.split(",") }),

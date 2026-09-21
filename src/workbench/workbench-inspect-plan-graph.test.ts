@@ -195,7 +195,9 @@ describe("workbench inspect, plan, and graph", () => {
   });
 
   it("prefers a marked command when a module exports both a pipeline and a command", async () => {
-    const markerModuleUrl = pathToFileURL(path.resolve("dist/cli/pipeline-command-marker.js")).href;
+    const markerModuleUrl = pathToFileURL(
+      path.resolve("dist/utilities/pipeline-command-marker.js")
+    ).href;
     const { directory } = await writeModule(`
       import { markPipelineCommand } from ${JSON.stringify(markerModuleUrl)};
       export const PlanningPipeline = {
@@ -228,7 +230,7 @@ describe("workbench inspect, plan, and graph", () => {
         execute: async () => undefined,
         run: async () => undefined,
         toMermaid: () => "flowchart TD",
-      });
+      }, {});
     `);
     const io = captureIo(directory);
 
@@ -308,7 +310,9 @@ describe("workbench inspect, plan, and graph", () => {
   });
 
   it("prefers a marked command for inspect and graph when a module exports both", async () => {
-    const markerModuleUrl = pathToFileURL(path.resolve("dist/cli/pipeline-command-marker.js")).href;
+    const markerModuleUrl = pathToFileURL(
+      path.resolve("dist/utilities/pipeline-command-marker.js")
+    ).href;
     const { directory } = await writeModule(`
       import { markPipelineCommand } from ${JSON.stringify(markerModuleUrl)};
       export const PlanningPipeline = {
@@ -341,7 +345,7 @@ describe("workbench inspect, plan, and graph", () => {
         execute: async () => undefined,
         run: async () => undefined,
         toMermaid: () => "flowchart TD\\n  from-command",
-      });
+      }, {});
     `);
     const inspectIo = captureIo(directory);
     const graphIo = captureIo(directory);

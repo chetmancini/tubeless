@@ -54,14 +54,14 @@ async function writeCommandFixture(): Promise<{ directory: string; filePath: str
       const work = step("work", {
         run: (_inputs, context) => context.options.message,
       });
-      export const FixtureCommand = definePipelineCommand(
-        definePipeline({
-          id: "command-fixture",
-          steps: [work],
-          targets: [work],
-          finalize: requireOutputs([work], ({ work }) => work),
-        }),
-        {
+      export const CommandPipeline = definePipeline({
+        id: "command-fixture",
+        steps: [work],
+        targets: [work],
+        finalize: requireOutputs([work], ({ work }) => work),
+      });
+      export const FixtureCommand = definePipelineCommand(CommandPipeline, {
+          name: "Studio fixture",
           params: {
             message: { type: "string", description: "Message to process." },
           },
@@ -74,24 +74,20 @@ async function writeCommandFixture(): Promise<{ directory: string; filePath: str
 }
 
 async function writeStudioConfig(directory: string): Promise<string> {
-  const cliModuleUrl = pathToFileURL(path.resolve("dist/cli/cli.js")).href;
+  const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project.js")).href;
   const configDirectory = path.join(directory, "config");
   await mkdir(configDirectory);
   const filePath = path.join(configDirectory, "tubeless.project.mjs");
   await writeFile(
     filePath,
     `
-      import { defineCommandCatalog } from ${JSON.stringify(cliModuleUrl)};
-      export default defineCommandCatalog({
-        cwd: "..",
-        commands: [{
-          id: "fixture",
-          file: "../pipeline.mjs",
-          export: "FixtureCommand",
-          name: "Studio fixture",
-        }],
-      });
-    `
+    import { defineProject } from ${JSON.stringify(projectModuleUrl)};
+    import { CommandPipeline, FixtureCommand } from "../pipeline.mjs";
+    export default defineProject("studio", [CommandPipeline], {
+      cwd: "..",
+      commands: [FixtureCommand],
+    });
+  `
   );
   return filePath;
 }
@@ -275,7 +271,7 @@ describe("runUi", () => {
         commands: [
           expect.objectContaining({
             canPlan: true,
-            id: "fixture",
+            id: "command-fixture",
             name: "Studio fixture",
           }),
         ],
@@ -331,14 +327,11 @@ describe("runUi", () => {
           throw new Error("intentional launch failure");
         },
       });
-      export const FixtureCommand = definePipelineCommand(
-        definePipeline({
-          id: "failing-fixture",
-          steps: [work],
-          targets: [work],
-          finalize: requireOutputs([work], ({ work }) => work),
-        }),
-        {
+      export const CommandPipeline = definePipeline({
+        id: "failing-fixture", steps: [work], targets: [work],
+        finalize: requireOutputs([work], ({ work }) => work),
+      });
+      export const FixtureCommand = definePipelineCommand(CommandPipeline, {
           params: {
             message: { type: "string", description: "Message to process." },
           },
@@ -385,7 +378,7 @@ describe("runUi", () => {
         const payload = (await response.json()) as { commands: { id: string }[] };
         return payload.commands[0]?.id;
       });
-      expect(commandId).toBe("fixture");
+      expect(commandId).toBe("failing-fixture");
       const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
         body: JSON.stringify({ values: { message: "boom" } }),
         headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },

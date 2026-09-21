@@ -149,11 +149,11 @@ try {
     "docs/recipes.md",
     "docs/studio.md",
     "examples/typed-import.ts",
-    "examples/catalog/tubeless.project.ts",
-    "examples/catalog/pipelines/import.ts",
-    "examples/catalog/pipelines/enrich.ts",
-    "examples/catalog/scripts/import.ts",
-    "examples/catalog/scripts/enrich.ts",
+    "examples/project/tubeless.project.ts",
+    "examples/project/pipelines/import.ts",
+    "examples/project/pipelines/enrich.ts",
+    "examples/project/scripts/import.ts",
+    "examples/project/scripts/enrich.ts",
   ]) {
     if (!existsSync(join(installedPackage, relativePath))) {
       throw new Error(`Packed tubeless artifact is missing ${relativePath}`);

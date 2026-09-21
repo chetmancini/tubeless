@@ -2,7 +2,7 @@
 
 Keep one dependency-free runtime with focused public entrypoints. `tubeless`
 owns pipeline execution; `tubeless/cli` owns terminal command declarations;
-`tubeless/cli` also owns optional command catalogs; `tubeless/project` owns typed
+`tubeless/project` owns typed
 pipeline collections and declarative compilation.
 Each public API has one entrypoint. Studio and storage are optional integrations
 behind the bundled executable; their implementation modules are not public subpaths.
@@ -37,12 +37,13 @@ their source files.
   execution or a concrete storage adapter itself.
 - CLI adapts pipelines with Node helpers and terminal reporters. It must not load
   workbench, storage or Studio, including through lazy imports.
-- Command catalogs do not load their command modules. The project compiler consumes
+- The project compiler consumes
   core to build pipelines from parsed documents; it performs no parsing or I/O.
-  The project entrypoint stays independent of CLI, workbench, storage and Studio.
+  Project options accept explicit command adapters through type-only references;
+  the project entrypoint has no runtime dependency on CLI, workbench, storage or Studio.
 - Workbench is internal executable integration: it loads modules, selects storage
   adapters and supplies Studio launch capabilities. The public project API loads none of these.
-  Normalize project pipelines, catalog entries, and direct files into workbench
+  Normalize project pipelines and direct files into workbench
   registrations at loading boundaries. Commands and Studio use their lazy plan
   and command loaders rather than branching on the source kind.
 - Type-only imports can share contracts without loading their implementation.

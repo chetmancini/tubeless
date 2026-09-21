@@ -86,7 +86,7 @@ export const USE_CASES = [
     ],
     boundary: "Your application handles permissions and credentials. If a run stops after making some changes, it also needs to handle cleanup or recovery; cancellation doesn’t roll those changes back.",
     recipes: [
-      { label: "Shared project catalog", file: "catalog/tubeless.project.ts" },
+      { label: "Project with custom adapters", file: "project/tubeless.project.ts" },
       { label: "Cancellation and testing", file: "cancellation-and-testing.ts" },
     ],
     guide: { label: "Studio documentation", path: "studio" },

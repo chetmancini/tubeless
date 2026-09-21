@@ -1,5 +1,5 @@
 import { createSteps, definePipeline } from "tubeless";
-import { defineProject, type PipelineProject, type ProjectMetadata } from "tubeless/project";
+import { defineProject, type PipelineProject, type ProjectOptions } from "tubeless/project";
 import {
   definePipelineCommand,
   type CliContext,
@@ -44,7 +44,11 @@ command.parse([], { env });
 type EchoProject = PipelineProject<"packed-project", readonly [typeof pipeline]>;
 
 function createEchoProject(): EchoProject {
-  const metadata: ProjectMetadata = { name: "Echo jobs", description: "Echo a message." };
+  const metadata: ProjectOptions<readonly [typeof pipeline]> = {
+    name: "Echo jobs",
+    description: "Echo a message.",
+    commands: [command],
+  };
   return defineProject("packed-project", [pipeline], metadata);
 }
 

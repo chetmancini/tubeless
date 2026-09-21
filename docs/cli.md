@@ -37,7 +37,7 @@ schema, option mapper, reporter setup, or type imports are needed. See the
 
 Put `defineProject(id, pipelines)` from `tubeless/project` in `tubeless.project.ts`.
 The CLI and Studio discover those pipelines by ID and call `definePipelineCommand`
-for you, so a schema-backed pipeline needs no command wrapper or catalog:
+for you, so a schema-backed pipeline needs no command wrapper:
 
 ```ts
 import { defineProject } from "tubeless/project";
@@ -55,16 +55,39 @@ strings when supplied and are immutable on the returned project. `list --json`
 includes these fields alongside the stable project ID and pipeline IDs. Project
 metadata does not rename individual pipelines or their command labels.
 
-Use `defineCommandCatalog` only when commands need explicit `params`, `mapOptions`,
-custom presentation, or IDs that differ from their pipelines. A catalog registers
-those advanced command modules for both the terminal and Studio.
+For custom parameters, option mapping, or command presentation, pass ordinary
+`definePipelineCommand` adapters in the project's `commands` option:
+
+```ts
+import { definePipelineCommand } from "tubeless/cli";
+import { defineProject } from "tubeless/project";
+import { ImportPipeline } from "./pipelines.js";
+
+const ImportCommand = definePipelineCommand(ImportPipeline, {
+  params: { lines: { type: "string", multiple: true } },
+  name: "Import rows",
+});
+
+export default defineProject("data-jobs", [ImportPipeline], {
+  commands: [ImportCommand],
+});
+```
+
+The optional `commands` factory receives project lookup after construction; use
+`commands: (get) => [...]` for [compiled documents](./declarative-pipelines.md).
+Each adapter must wrap the exact pipeline object in the project, with at most one adapter per
+pipeline ID. Pipeline IDs are also the CLI and Studio IDs; `name` only changes a
+display label. `ProjectOptions<TPipelines>` names the optional configuration contract. Its
+`cwd` sets the CLI and Studio execution directory relative to the project file;
+omitting it uses the project's directory. Application calls to `project.get(id)`
+still return the original pipeline and use its ordinary execution context.
 
 Automatic project commands require Standard JSON Schema input metadata, even
 for pipelines with no domain inputs: erased TypeScript types cannot prove that
 inputs are optional. Schema-less project pipelines remain available to application
-code and `list`, `inspect`, `plan`, and `graph`, but `run` and Studio reject them
-with a load error. Supply an options schema or register an explicit command through
-`defineCommandCatalog` (`params: {}` is sufficient when there are no domain inputs).
+code and `list`, `inspect`, `plan`, and `graph`. For CLI execution and Studio,
+supply an options schema or an explicit adapter in `commands` (`params: {}` is
+sufficient when there are no domain inputs).
 
 | Pipeline input                | Generated CLI                                   |
 | ----------------------------- | ----------------------------------------------- |
@@ -143,25 +166,25 @@ existence checks are explicit overrides, never guesses based on an option's name
 Do not combine `params` with `overrides`.
 
 `defineCommand` is the lower-level alternative for standalone scripts that do
-not have a pipeline. A single script does not need a project or catalog.
+not have a pipeline. A single script does not need a project.
 
 The exported CLI configuration, parameter, parse-result, hook, and reporter types
 are reference tools for shared configuration and adapter authors. Ordinary command
 wrappers rely on inference and do not need to import them. `DefinePipelineCommandConfig`
 describes the advanced explicit-parameter form. `descriptor`, `parseValues`, and
-`execute` support UI adapters; neither CLI declarations nor catalogs load storage
+`execute` support UI adapters; neither CLI declarations nor projects load storage
 or Studio. Optional Node helpers live in `tubeless/node`.
 
 ### Executable commands
 
 | Command             | Accepts                          | Does                                                                |
 | ------------------- | -------------------------------- | ------------------------------------------------------------------- |
-| `tubeless list`     | A project file                   | Lists project pipeline IDs or advanced catalog command IDs          |
+| `tubeless list`     | A project file                   | Lists project pipeline IDs                                          |
 | `tubeless validate` | A YAML or JSON pipeline document | Checks document structure and metadata without loading handlers     |
 | `tubeless inspect`  | A pipeline or command export     | Shows the pipeline ID, available targets, steps, and default plan   |
 | `tubeless plan`     | A pipeline or command export     | Previews selection without executing or requiring domain options    |
 | `tubeless graph`    | A pipeline or command export     | Writes Mermaid flowchart source                                     |
-| `tubeless run`      | A project ID or command export   | Infers or validates command arguments and runs the pipeline         |
+| `tubeless run`      | A pipeline ID or command export  | Infers or validates command arguments and runs the pipeline         |
 | `tubeless history`  | An optional run id               | Lists or shows recorded runs from SQLite or a finished NDJSON trace |
 | `tubeless ui`       | An optional project file         | Serves the local run studio; see [studio](./studio.md)              |
 
@@ -174,10 +197,10 @@ Use a checked-in `tubeless.project.ts` to address pipelines by stable ID:
 
 ```sh
 bunx tubeless list
-bunx tubeless inspect import-rows
-bunx tubeless plan import-rows --target normalized-import --explain
-bunx tubeless graph import-rows --markdown
-bunx tubeless run import-rows -- --source ../rows.txt --target normalized-import
+bunx tubeless inspect import
+bunx tubeless plan import --target normalized-import --explain
+bunx tubeless graph import --markdown
+bunx tubeless run import -- --source ../rows.txt --target normalized-import
 ```
 
 By default, Tubeless looks for `tubeless.project.ts` in the current directory.
@@ -185,27 +208,26 @@ It does not search parent directories. Pass `--project <path>` when the project 
 has another name or location.
 
 In a project file, the default export is authoritative and must be a
-`defineProject` or `defineCommandCatalog` result. Other named exports do not
+`defineProject` result. Other named exports do not
 change selection. Without a default export, the file must expose exactly one
-distinct project or catalog; aliases of the same object are allowed. Multiple
-roots, including a project alongside a catalog, fail as ambiguous. Add a default
+distinct project; aliases of the same object are allowed. Multiple projects
+fail as ambiguous. Add a default
 export to select one explicitly. An invalid default fails instead of falling back
 to a named export. These rules apply to every CLI operation and Studio.
 
 Without `--project`, an argument naming an existing file is treated as a file.
-Otherwise, a bare name can match a pipeline or command ID in the default
+Otherwise, a bare name can match a pipeline ID in the default
 project file. Arguments containing `/`, starting with `.`, or having an extension
 are always treated as paths. `--export` applies only when loading a file
-directly; a project selection already identifies the pipeline or command.
+directly; a project selection already identifies the pipeline.
 
 For a directly loaded pipeline or command file, the CLI selects its only matching export automatically. Pass
 `--export Name` when the file exports more than one. `inspect`, `plan`, and
 `graph` prefer a marked command when a module exports both a pipeline and a
 command.
 
-`inspect` reports `pipelineId` for every source. Its additional `commandId` field
-and `Command` heading identify a command catalog registration only; project
-pipelines and directly loaded files do not receive a catalog command identity.
+`inspect` reports the pipeline identity, whether it is loaded from a project or
+a standalone module.
 
 ```sh
 bunx tubeless inspect ./scripts/import.ts
@@ -236,31 +258,29 @@ tubeless list [options]
 ```
 
 - `-p, --project <path>` selects the project file (default `./tubeless.project.ts`)
-- `--json` emits project metadata, pipeline IDs, and the resolved project path;
-  command catalogs emit their version, resolved path, `cwd`, and registrations
+- `--json` emits project metadata, pipeline IDs, and resolved project and `cwd` paths
 
-`list` evaluates the selected project file, including its pipeline imports.
-Catalog command modules remain unloaded. It never scans the filesystem or run
-history for executables.
+`list` evaluates the selected project file and its imports, but never executes
+pipeline handlers. It never scans the filesystem or run history for executables.
 
 ## Inspect
 
 ```
-tubeless inspect [options] <pipeline-id-or-command-id-or-file>
+tubeless inspect [options] <pipeline-id-or-file>
 ```
 
 - `-e, --export <name>` selects a pipeline or command export
-- `-p, --project <path>` looks up the pipeline or command ID in the selected project file
+- `-p, --project <path>` looks up the pipeline ID in the selected project file
 - `--json` emits identity and the default plan as JSON
 
 ## Plan
 
 ```
-tubeless plan [options] <pipeline-id-or-command-id-or-file>
+tubeless plan [options] <pipeline-id-or-file>
 ```
 
 - `-e, --export <name>` selects a pipeline or command export
-- `-p, --project <path>` looks up the pipeline or command ID in the selected project file
+- `-p, --project <path>` looks up the pipeline ID in the selected project file
 - `-t, --target <id>` selects a declared target and its prerequisites (repeatable)
 - `-s, --step <id>` selects exact internal steps (repeatable)
 - `--dry-run` shows whether each step would run, skip, or use a preview handler
@@ -275,11 +295,11 @@ step handlers. Use `command.plan()` or `tubeless plan`; there is no command
 ## Graph
 
 ```
-tubeless graph [options] <pipeline-id-or-command-id-or-file>
+tubeless graph [options] <pipeline-id-or-file>
 ```
 
 - `-e, --export <name>` selects a pipeline or command export
-- `-p, --project <path>` looks up the pipeline or command ID in the selected project file
+- `-p, --project <path>` looks up the pipeline ID in the selected project file
 - `-d, --direction <value>` is `BT`, `LR`, `RL`, `TB`, or `TD` (default `TD`)
 - `--descriptions` includes step descriptions in node labels
 - `--markdown` wraps the result in a fenced Mermaid block
@@ -290,11 +310,11 @@ The same graph is available in process as `pipeline.toMermaid()` or
 ## Run
 
 ```
-tubeless run [options] <pipeline-id-or-command-id-or-file> [-- <command-args...>]
+tubeless run [options] <pipeline-id-or-file> [-- <command-args...>]
 ```
 
 - `-e, --export <name>` selects a command export
-- `-p, --project <path>` looks up the pipeline or command ID in the selected project file
+- `-p, --project <path>` looks up the pipeline ID in the selected project file
 - `--store <path>` appends run events to a local SQLite database
 - `--trace <path>` writes NDJSON traces to a file, or `-` for stdout
 
@@ -305,10 +325,10 @@ stderr so stdout stays valid NDJSON. To send events to OpenTelemetry or another 
 shows JSON and OpenTelemetry adapters. Use `composeTraceExporters` from `tubeless/tracing` for multiple
 destinations; a failed exporter does not stop the others or fail the pipeline.
 
-`run` accepts a pipeline ID from `defineProject`, a registered command ID, or a
-file exporting `definePipelineCommand`. Project pipelines are wrapped automatically
-using their Standard JSON Schema input metadata; directly loaded files must export
-a command. In each case, the command adapter owns parsing, validation, option
+`run` accepts a pipeline ID from `defineProject` or a file exporting
+`definePipelineCommand`. Project pipelines use their explicit adapter when supplied,
+otherwise they are wrapped automatically using Standard JSON Schema input metadata.
+Directly loaded files must export a command. In each case, the command adapter owns parsing, validation, option
 mapping, reporting, and the result summary. For custom commands, omit `mapOptions`
 when validated flags already satisfy same-name pipeline options; keep it when
 names, types, defaults, or derived values differ. `--step` and `--target` stay
@@ -331,7 +351,7 @@ Pass these flags after `--`, alongside the command's own arguments:
 | `--max-concurrency <number>` | Limits simultaneous steps in this run; positive integer, defaults to `1` |
 | `--continue-on-error`        | Continues independent work after failure; the run still fails            |
 
-For example, `bunx tubeless run import-rows -- --source rows.txt --max-concurrency 4`
+For example, `bunx tubeless run import -- --source rows.txt --max-concurrency 4`
 allows up to four ready steps at once. Async skip predicates and output validation
 occupy the step's slot. Fail-fast stops new dispatch and waits for active work;
 `--continue-on-error` keeps eligible branches running. Child runs have separate
@@ -342,8 +362,8 @@ Repeat `--target` or `--step` to select multiple IDs, but do not combine them.
 Check command help for any additional controls and application parameters:
 
 ```sh
-bunx tubeless run import-rows -- --help
-bunx tubeless run import-rows -- --source rows.txt --dry-run
+bunx tubeless run import -- --help
+bunx tubeless run import -- --source rows.txt --dry-run
 ```
 
 A dry run executes safe handlers and custom previews. To inspect selection
@@ -405,7 +425,7 @@ tubeless history [options] [run-id]
 
 - `--store <path>` selects the SQLite database (default `.tubeless/runs.sqlite`)
 - `--trace <path>` selects a finished NDJSON trace artifact
-- `--pipeline <id>` filters by the exact recorded pipeline ID, not a registered command ID
+- `--pipeline <id>` filters by the exact recorded pipeline ID
 - `--json` emits the projected run list, or one projected run when `run-id` is set
 - `--events` emits raw store events as NDJSON (run-scoped when `run-id` is set)
 
