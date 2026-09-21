@@ -90,7 +90,7 @@ function createPipelineRegistration(
         if (!command && pipeline.optionsSchema === undefined) {
           throw new Error(
             "Automatic project commands require Standard JSON Schema input metadata. " +
-              "Use createSteps(schema), or pass a definePipelineCommand with explicit params in the project commands option."
+              "Use createSteps(schema), or register a definePipelineCommand with explicit params in the project entry list."
           );
         }
         return {

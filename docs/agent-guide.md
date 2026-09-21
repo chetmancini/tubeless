@@ -19,7 +19,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
    Schema-backed project pipelines are directly available to the CLI and Studio.
    Automatic commands require Standard JSON Schema input metadata; schema-less
    pipelines need explicit command `params`, even with no inputs. Pass custom
-   adapters in the project's `commands` option for CLI inputs, mapping, or presentation.
+   adapters directly in the project's entry list for CLI inputs, mapping, or presentation.
    Use a default export to select the project for CLI and Studio.
    Without a default, exactly one distinct project may be exported.
 3. Declare stable IDs and operational descriptions. Add pipeline `name` only when
@@ -42,7 +42,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Register only the pipelines you want to expose; compiled children need no separate
   project entry. Export the project for CLI and Studio: Standard JSON Schema input metadata enables
   automatic commands; custom or schema-less inputs need explicit adapters in the
-  project's `commands` option. Unknown fields and references fail compilation;
+  project's entry list. Unknown fields and references fail compilation;
   plans still do not validate domain inputs. Dynamic wiring does not infer
   TypeScript output types, so validate or narrow unknown values in handlers.
   Use [YAML Peloton](../examples/yaml-peloton.ts) for a larger example with
@@ -149,11 +149,12 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   `compiled.metadata` before explicit overrides. Metadata and its authors are immutable
   snapshots; authors/date stay descriptive. Project ID and cwd belong to registration.
   The immutable `project.name` defaults to its ID.
-  `ProjectOptions<TPipelines>` names the configuration type. Its optional `commands` accepts
-  adapters created with `definePipelineCommand`; duplicate adapters and commands
-  for pipelines outside the project are rejected. `cwd` controls CLI/Studio execution
-  relative to the project file. For compiled documents, build adapters from
-  `compiled.get(id)` and pass them in `commands: [...]`. Pipeline IDs remain
+  `ProjectOptions` names the configuration type. Register each pipeline exactly once,
+  directly or through a `definePipelineCommand` entry: `[pipelineA, commandB]`.
+  Duplicate pipeline IDs fail regardless of entry form; children are not registered
+  recursively. `pipelines`, `pipelineIds`, and `commands` are derived read-only views.
+  `cwd` controls CLI/Studio execution relative to the project file. For compiled
+  documents, build adapters from `compiled.get(id)` and register them in the list. Pipeline IDs remain
   the single selection identity.
   Import `PipelineProject<TProjectId, TPipelines>` from `tubeless/project` when
   annotating a shared project factory or a function that accepts a project.
@@ -184,7 +185,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   simulate planning with `--plan`.
 - Use `defineCommand` from `tubeless/cli` for standalone scripts. A
   `defineProject` export is the normal shared CLI and Studio inventory. Pass
-  explicit adapters in the project's `commands` option when pipelines need custom
+  explicit adapters in the project's entry list when pipelines need custom
   parameters, option mapping, or presentation. Each adapter uses its pipeline's ID. Keep application-specific prompts
   in the consumer.
 - Use `pipeline.toMermaid()` or `command.toMermaid()` when documentation needs
@@ -317,7 +318,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   pass a known execution `runId` as `parentRunId` only to link that parent.
 - Use `tubeless ui` to inspect local recordings and launch pipelines from a
   checked-in `defineProject`. Supply explicit `definePipelineCommand` adapters in
-  its `commands` option; never infer executable modules from observed history.
+  its entry list; never infer executable modules from observed history.
   Keep the default loopback binding; Studio's internal HTTP protocol is not an
   application API. Cancel a live top-level launch from the running detail pane;
   that abort is process-local, leaves sibling launches running, and is not

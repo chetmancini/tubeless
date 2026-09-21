@@ -82,10 +82,9 @@ async function writeStudioConfig(directory: string): Promise<string> {
     filePath,
     `
     import { defineProject } from ${JSON.stringify(projectModuleUrl)};
-    import { CommandPipeline, FixtureCommand } from "../pipeline.mjs";
-    export default defineProject("studio", [CommandPipeline], {
+    import { FixtureCommand } from "../pipeline.mjs";
+    export default defineProject("studio", [FixtureCommand], {
       cwd: "..",
-      commands: [FixtureCommand],
     });
   `
   );

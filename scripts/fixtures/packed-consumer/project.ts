@@ -29,9 +29,8 @@ const command = definePipelineCommand(pipeline, {
   mapOptions: ({ message }) => ({ message }),
   reporter: false,
 });
-const project = defineProject("packed-document", [pipeline], {
+const project = defineProject("packed-document", [command], {
   name: metadata?.name,
-  commands: [command],
 });
 if (project.get("echo") !== pipeline || compiled.pipelines[0] !== pipeline) {
   throw new Error("Compilation and registration must preserve pipeline instances");

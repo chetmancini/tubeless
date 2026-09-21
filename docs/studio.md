@@ -81,7 +81,7 @@ bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.project.ts
 
 Studio derives the same form fields that the CLI derives as flags. No command
 wrapper is needed. Automatic registration requires Standard JSON Schema input
-metadata. Supply explicit adapters in the project commands option for schema-less
+metadata. Register explicit adapters in the project entry list for schema-less
 pipelines or custom CLI inputs.
 
 The project file's default export selects the project for Studio. Without a
@@ -119,12 +119,9 @@ adapters when pipelines need custom parameters, option mapping, or display names
 ```ts
 // tubeless.project.ts
 import { defineProject } from "tubeless/project";
-import { ImportPipeline } from "./pipelines/import.ts";
 import { ImportCommand } from "./scripts/import.ts";
 
-export default defineProject("data-jobs", [ImportPipeline], {
-  commands: [ImportCommand],
-});
+export default defineProject("data-jobs", [ImportCommand]);
 ```
 
 ```sh
@@ -136,8 +133,8 @@ bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.project.ts
 
 CLI and Studio use the pipeline's ID. Set `name` on `definePipelineCommand` for
 a display label. The optional project `cwd` is relative to the project file and
-defaults to its directory. Duplicate adapters or adapters for pipelines outside
-the project fail during project definition. See the
+defaults to its directory. Each command registers its underlying pipeline;
+duplicate pipeline IDs fail regardless of entry form. See the
 [complete project example](../examples/project/tubeless.project.ts).
 
 ## Storage behavior

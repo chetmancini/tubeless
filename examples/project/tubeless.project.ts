@@ -2,11 +2,8 @@ import { definePipelineCommand } from "tubeless/cli";
 import { defineProject } from "tubeless/project";
 import { ValidatedPipeline } from "../validated-boundaries.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
-import { YamlPelotonPipeline, YamlPelotonCommand } from "../yaml-peloton.ts";
-import { EnrichPipeline } from "./pipelines/enrich.ts";
-import { ImportPipeline } from "./pipelines/import.ts";
+import { YamlPelotonCommand } from "../yaml-peloton.ts";
 import { NormalizePipeline } from "./pipelines/normalize.ts";
-import { PublishPipeline } from "./pipelines/publish.ts";
 import { EnrichCommand } from "./scripts/enrich.ts";
 import { ImportCommand } from "./scripts/import.ts";
 import { PublishCommand } from "./scripts/publish.ts";
@@ -19,27 +16,18 @@ export default defineProject(
   [
     ValidatedPipeline,
     // Register the entry pipelines; their compiled children remain implementation details.
-    YamlImportCommand.pipeline,
-    YamlPreviewCommand.pipeline,
-    YamlPelotonPipeline,
-    NormalizePipeline,
-    ImportPipeline,
-    EnrichPipeline,
-    PublishPipeline,
+    YamlImportCommand,
+    YamlPreviewCommand,
+    YamlPelotonCommand,
+    definePipelineCommand(NormalizePipeline, {
+      params: { rows: { type: "string", multiple: true } },
+    }),
+    ImportCommand,
+    EnrichCommand,
+    PublishCommand,
   ],
   {
     name: "Example jobs",
     description: "Import, enrich, and publish row datasets.",
-    commands: [
-      YamlImportCommand,
-      YamlPreviewCommand,
-      YamlPelotonCommand,
-      definePipelineCommand(NormalizePipeline, {
-        params: { rows: { type: "string", multiple: true } },
-      }),
-      ImportCommand,
-      EnrichCommand,
-      PublishCommand,
-    ],
   }
 );

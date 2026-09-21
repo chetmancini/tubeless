@@ -20,3 +20,15 @@ export const ImportPipeline = definePipeline({
   id: "import",
   steps: [load, normalize],
 });`;
+
+export const PROJECT_SAMPLE = `import { definePipelineCommand } from "tubeless/cli";
+import { defineProject } from "tubeless/project";
+import { ImportPipeline } from "./pipeline.js";
+
+export default defineProject("data-jobs", [
+  definePipelineCommand(ImportPipeline, {
+    params: { lines: { type: "string", multiple: true } },
+  }),
+], {
+  name: "Data jobs",
+});`;

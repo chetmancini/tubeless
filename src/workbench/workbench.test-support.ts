@@ -167,10 +167,9 @@ export async function writeStudioConfig(
     path.join(configDirectory, "tubeless.project.mjs"),
     `
       import { defineProject } from ${JSON.stringify(projectModuleUrl)};
-      import { CommandPipeline, ${exportName} } from "../pipeline.mjs";
-      export default defineProject("studio", [CommandPipeline], {
+      import { ${exportName} } from "../pipeline.mjs";
+      export default defineProject("studio", [${exportName}], {
         cwd: "..",
-        commands: [${exportName}],
       });
     `
   );
