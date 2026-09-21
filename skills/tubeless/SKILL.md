@@ -83,7 +83,12 @@ Read the corresponding package recipe before using these features:
 - `createSteps(optionsSchema)`, `outputSchema`, or `resultSchema` for runtime
   validation at untrusted boundaries. Reuse the project's Standard Schema
   implementation; core needs no schema dependency.
-- `definePipelineCommand` from `tubeless/cli` for pipeline-backed scripts.
+- `definePipelineCommand(pipeline)` from `tubeless/cli` for pipeline-backed scripts.
+  Start with `examples/automatic-cli.ts`: Standard JSON Schema input metadata on
+  the options schema supplies flags automatically. Use `overrides` only for names,
+  aliases, descriptions or environment fallbacks. Explicit `params` replaces
+  inference for type-only pipelines or custom CLI inputs; `mapOptions` is only
+  needed when their shapes differ.
   Built-in `--step` / `--target` flags map to `stepIds` / `targets`. Do not
   redeclare built-in flags. Read `docs/cli.md` for option mapping.
   Use `defineCommand` from `tubeless/cli` for standalone scripts and

@@ -15,7 +15,7 @@ export const USE_CASES = [
     boundary: "The pipeline runs inside a CI job. Runners, secrets, triggers, and approvals stay in your CI configuration.",
     recipes: [
       { label: "Publication with failure gates", file: "publish-with-gates.ts" },
-      { label: "Pipeline-backed CLI", file: "cli-job.ts" },
+      { label: "Pipeline-backed CLI", file: "automatic-cli.ts" },
     ],
     guide: { label: "CLI documentation", path: "cli" },
   },

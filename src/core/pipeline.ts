@@ -12,6 +12,7 @@ import type {
   PipelineDefinition,
   StepIds,
   StepsInputOptions,
+  StepsOptionsSchema,
   TargetIds,
 } from "./pipeline-definition.js";
 import { PipelineDefinitionError } from "./pipeline-errors.js";
@@ -140,7 +141,10 @@ export function definePipeline<
   TResultSchema extends StandardSchemaV1 ? InferSchemaOutput<TResultSchema> : TResult,
   StepIds<TSteps>,
   TargetIds<TTargets>
-> & { readonly definition: PipelineDefinitionSnapshot } {
+> & {
+  readonly definition: PipelineDefinitionSnapshot;
+  readonly optionsSchema: StepsOptionsSchema<TSteps>;
+} {
   const compiled = compilePipeline<TSteps, TResult, TTargets, TResultSchema>(definition);
   type TInputOptions = StepsInputOptions<TSteps>;
   type TPipelineResult = TResultSchema extends StandardSchemaV1
@@ -201,6 +205,9 @@ export function definePipeline<
   const pipeline = {
     id: compiled.id,
     definition: compiled.definition,
+    // SAFETY: compilation verifies that every step belongs to the same options schema.
+    optionsSchema: compiled.optionsSchema as StepsOptionsSchema<TSteps> &
+      (StandardSchemaV1 | undefined),
     stepIds,
     targetIds,
     plan,

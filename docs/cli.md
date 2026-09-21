@@ -15,49 +15,106 @@ on Node.js 22 or later without Bun.
 
 ## Commands
 
-### Authoring API
+### Turn a pipeline into a CLI
 
-Import terminal commands from `tubeless/cli` and project declarations from
-`tubeless/project`:
+Start with one import and one call:
 
 ```ts
-import { defineCommand, definePipelineCommand } from "tubeless/cli";
-import { definePipelineProject } from "tubeless/project";
+import { definePipelineCommand } from "tubeless/cli";
+import { pipeline } from "./pipeline.js";
+
+export const command = definePipelineCommand(pipeline);
+
+if (import.meta.main) void command.main();
 ```
 
-Use `defineCommand` for a standalone script and `definePipelineCommand` for a
-pipeline-backed command with built-in selection, dry runs and terminal reporting.
-Both expose typed parsing, validation, descriptors and execution. Their public
-configuration, parameter, result and hook types live on the CLI subpath.
-Import `PipelineReporterConfig` from `tubeless/cli` to share reporter settings
-between commands. Its mode, output stream, color, symbols and terminal-capability
-types are exported there too. CLI declarations do not require `@types/node`;
-`CliContext.env` accepts a record of string or undefined values.
+The pipeline's options schema is the source of truth. When the schema passed to
+`createSteps(schema)` exposes [Standard JSON Schema](https://standardschema.dev/json-schema)
+input metadata, the command derives domain flags automatically. No CLI parameter
+schema, option mapper, reporter setup, or type imports are needed. See the
+[executable example](../examples/automatic-cli.ts) and its
+[pipeline schema](../examples/validated-boundaries.ts).
 
-Use `definePipelineProject` in `tubeless.project.ts` to register command modules
-with stable IDs. A project catalog is shared by the terminal and Studio; declaring
-one does not load its command modules or start either interface.
+| Pipeline input                | Generated CLI                                   |
+| ----------------------------- | ----------------------------------------------- |
+| `displayName: string`         | Required `--display-name <value>`               |
+| Optional string or number     | Optional flag                                   |
+| String enum                   | Flag with checked choices and help text         |
+| Number or integer             | Numeric flag, with minimum/maximum checks       |
+| Boolean                       | `--enabled` / `--no-enabled`; defaults to false |
+| String or number array        | Repeatable flag; defaults to `[]`               |
+| Scalar default or description | Default value or help text                      |
 
-| Layer   | Public entry       | Responsibility                                                       |
-| ------- | ------------------ | -------------------------------------------------------------------- |
-| Core    | `tubeless`         | Typed graphs, planning, execution, hooks and run reports             |
-| CLI     | `tubeless/cli`     | Standalone and pipeline commands, typed flags and terminal execution |
-| Project | `tubeless/project` | Project catalogs, command IDs and module registrations               |
-| Studio  | `tubeless ui`      | Optional browser interface for recorded runs and registered commands |
+The command also supplies `--help`, `--dry-run`, `--step`, `--target` (when the
+pipeline declares targets), `--continue-on-error`, `--max-concurrency`, automatic
+terminal reporting, cancellation, and exit codes. Its name defaults to the pipeline
+ID. `command.main()` owns a script entrypoint; `command.run(argv)` returns the
+result to application code. Use `command.plan()` for a selection-only preview.
+The same inferred descriptor drives Studio forms.
 
-Users interact with a project through the `tubeless` executable: `list` shows its
-commands, `plan` previews work, and `run` executes a command. `ui` opens Studio
-against the same catalog. There is no separate workbench application to start.
-Core pipelines and standalone CLI commands do not need a project catalog.
+Inference reads the schema's **input**, so transformations run exactly once during
+pipeline execution. Parsing checks flag types, choices and numeric bounds;
+the pipeline still performs full domain validation, including async refinements,
+before running steps. Help and planning never validate domain input or run steps.
+Boolean and array flags use CLI defaults (`false` and `[]`); scalar schema defaults
+take precedence. JSON Schema conversion uses the `draft-2020-12` target.
 
-Each authoring API has one public entrypoint. Neither the CLI nor the project
-catalog import loads storage or Studio. The executable supplies those optional
-integrations. Storage readers, Studio's server/protocol, terminal renderer
-internals and argument-parser internals remain private.
+TypeScript types alone have no runtime fields to inspect. A pipeline created with
+`createSteps<MyOptions>()` needs explicit `params` for its domain inputs. Pipelines
+with no domain inputs work with the one-argument call. Validation-only schemas,
+nested objects, nullable/union inputs, tuples, array defaults, and numeric or boolean
+`enum`/`const` constraints require explicit
+parameters; unsupported schema shapes fail at command creation with guidance.
+Local JSON Schema references are resolved automatically.
 
-Import optional filesystem, environment and checkpoint helpers from `tubeless/node`;
-see the [Node helpers recipe](./recipes.md#node-helpers). Application-specific
-selection prompts belong in the application.
+### Advanced: override a flag's presentation
+
+Use `overrides` only when a derived flag needs a different name, short alias,
+environment fallback, or help text. The type and validation still come from the
+pipeline schema:
+
+```ts
+const command = definePipelineCommand(pipeline, {
+  overrides: {
+    source: { short: "s", env: "IMPORT_SOURCE", description: "Input source." },
+  },
+});
+```
+
+Explicit arguments take precedence over environment fallbacks. Other optional
+settings include `name`, `description`, `positionals`, `summarize`, `hooks`,
+`checkpoint`, and `reporter`. Most commands need none of these; reporting already
+chooses interactive or plain output automatically.
+
+### Advanced: custom CLI inputs
+
+Use `params` for a type-only pipeline or when command inputs intentionally differ
+from pipeline options. It replaces inference completely. Add `mapOptions` only
+when those inputs need renaming, conversion, I/O, or derived values:
+
+```ts
+const command = definePipelineCommand(pipeline, {
+  params: { source: { type: "path", mustExist: true, kind: "file" } },
+  mapOptions: (values) => ({ lines: readFileSync(values.source, "utf8").split("\n") }),
+});
+```
+
+See [`cli-job.ts`](../examples/cli-job.ts) for the complete file-to-rows mapping.
+For same-name compatible parameters, omit `mapOptions`. Path resolution and
+existence checks are explicit overrides, never guesses based on an option's name.
+Do not combine `params` with `overrides`.
+
+`defineCommand` is the lower-level alternative for standalone scripts that do
+not have a pipeline. `definePipelineProject` from `tubeless/project` registers
+command modules under stable IDs when a project needs a shared CLI/Studio catalog;
+a single script does not need a catalog.
+
+The exported CLI configuration, parameter, parse-result, hook, and reporter types
+are reference tools for shared configuration and adapter authors. Ordinary command
+wrappers rely on inference and do not need to import them. `DefinePipelineCommandConfig`
+describes the advanced explicit-parameter form. `descriptor`, `parseValues`, and
+`execute` support UI adapters; neither CLI declarations nor catalogs load storage
+or Studio. Optional Node helpers live in `tubeless/node`.
 
 ### Executable commands
 
@@ -206,7 +263,8 @@ the flag names; the parsed keys are `stepIds` and `targets`.
 `--max-concurrency` becomes the numeric `maxConcurrency` control, available to
 `mapOptions` and hooks but excluded from the default domain-option mapping.
 
-Start with [`cli-job.ts`](../examples/cli-job.ts) to implement a command.
+Start with [`automatic-cli.ts`](../examples/automatic-cli.ts). Use
+[`cli-job.ts`](../examples/cli-job.ts) only when inputs need a custom mapping.
 
 ### Pipeline controls
 
