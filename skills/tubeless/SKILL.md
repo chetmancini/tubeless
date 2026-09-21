@@ -44,8 +44,10 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 - Use `dependsOn` for required outputs, `optionalDependsOn` for expected
   absence, and `skipAfterFailureOf` for a failure gate without a required value.
   Keep publication dependent on successful validation.
-- Add `skip` to a step definition for an intentional successful omission. Handle
-  its `T | undefined` output explicitly; do not turn exceptions into skips.
+- Add `skip` to a step definition for an intentional successful omission. A
+  string or `{ reason }` result produces `T | undefined`; handle that absence
+  explicitly. If every skip branch returns `{ reason, value }`, the output
+  remains `T`. Do not turn exceptions into skips.
 - Set `dryRun: "skip"` on writes and other external side effects, or supply a
   side-effect-free typed preview handler. Unmarked steps still run in dry runs.
 - A single-goal `definePipeline` can be `{ id, steps }`: the last step in execution order

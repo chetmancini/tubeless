@@ -53,9 +53,13 @@ Fail-fast is the default: a failure stops new work. Set `continueOnError` to
 allow independent steps to proceed. The run still reports failure, and
 `runOrThrow` still throws. Use `run` to inspect any partial result.
 
-Adding `skip` to a step definition makes it skippable. Its output is always
-typed as `T | undefined`, even if all current skip paths return a value.
-Dependent steps must handle that possible absence.
+Adding `skip` to a step definition makes it skippable. A string result or
+`{ reason }` publishes no value, so the output is typed as `T | undefined`.
+When every skip branch returns `{ reason, value }`, the output remains `T` and
+dependents do not need an absence guard. For a schema-backed step, the fallback
+must satisfy the schema input type and dependents receive the transformed output.
+Structural skips still publish no output and prevent required dependents from
+running, so they do not widen the input type seen by a dependent that does run.
 
 ## Execution controls
 

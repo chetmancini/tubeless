@@ -98,12 +98,15 @@ Add `skip` to a `fromPipeline` or `forEachPipeline` definition when the entire
 child step may be intentionally omitted. The callback returns `false` to proceed,
 a non-empty reason string to skip, or `{ reason, value }` to skip with an output.
 A skip without a value publishes `undefined`. Policy skips allow required
-dependents to run, so those dependents must handle `undefined` explicitly.
+dependents to run, so those dependents must handle `undefined` when any skip
+branch omits its value.
 
 Without `skip`, `fromPipeline` returns `T` and `forEachPipeline` returns
-`readonly T[]`. Adding `skip` widens those types to `T | undefined` and
-`readonly T[] | undefined`. For fan-out, the skip value is the complete result
-array. Skipping does not call `items`, run children, or apply `mapResult`.
+`readonly T[]`. A skip that can omit its value widens those types to
+`T | undefined` and `readonly T[] | undefined`. When every skip branch supplies
+a value, the original type is preserved. For fan-out, the skip value is the
+complete result array. Skipping does not call `items`, run children, or apply
+`mapResult`.
 
 ## Planning and execution controls
 

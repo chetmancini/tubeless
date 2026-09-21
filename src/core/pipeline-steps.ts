@@ -220,10 +220,17 @@ type StepSkipPredicate<
   TDeps extends readonly AnyStep<TOptions>[],
   TOptionalDeps extends readonly AnyStep<TOptions>[],
   TOut,
+  TDecision extends StepSkipDecision<TOut> = StepSkipDecision<TOut>,
 > = (
   inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
   context: PipelineExecutionContext<TOptions>
-) => StepSkipDecision<TOut> | Promise<StepSkipDecision<TOut>>;
+) => TDecision | Promise<TDecision>;
+
+type PolicySkippedOutput<TOut, TDecision> = [
+  Exclude<Awaited<TDecision>, false | null | undefined>,
+] extends [{ reason: string; value: unknown }]
+  ? TOut
+  : TOut | undefined;
 
 type StepDryRunPolicy<
   TOptions extends object,
@@ -345,16 +352,19 @@ function createStepFactory<
     TSchema extends StandardSchemaV1,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
+    TDecision extends StepSkipDecision<InferSchemaInput<TSchema>> = StepSkipDecision<
+      InferSchemaInput<TSchema>
+    >,
   >(
     id: TId,
     definition: SchemaStepFields<TOptions, TDeps, TOptionalDeps, TSchema> & {
       skip:
-        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>>
+        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>, TDecision>
         | undefined;
     }
   ): BuiltStep<
     TId,
-    InferSchemaOutput<TSchema> | undefined,
+    PolicySkippedOutput<InferSchemaOutput<TSchema>, TDecision>,
     TOptions,
     TInputOptions,
     InferSchemaInput<TSchema>
@@ -364,12 +374,13 @@ function createStepFactory<
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
     TOut = unknown,
+    TDecision extends StepSkipDecision<NoInfer<TOut>> = StepSkipDecision<NoInfer<TOut>>,
   >(
     id: TId,
     definition: PlainStepFields<TOptions, TDeps, TOptionalDeps, TOut> & {
-      skip: StepSkipPredicate<TOptions, TDeps, TOptionalDeps, TOut> | undefined;
+      skip: StepSkipPredicate<TOptions, TDeps, TOptionalDeps, NoInfer<TOut>, TDecision> | undefined;
     }
-  ): BuiltStep<TId, TOut | undefined, TOptions, TInputOptions>;
+  ): BuiltStep<TId, PolicySkippedOutput<TOut, TDecision>, TOptions, TInputOptions>;
   function step<
     TId extends string,
     TSchema extends StandardSchemaV1,
@@ -470,32 +481,51 @@ function createStepFactory<
     TChildPipeline extends Pipeline<object, unknown>,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
+    TDecision extends StepSkipDecision<PipelineResultOf<TChildPipeline>> = StepSkipDecision<
+      PipelineResultOf<TChildPipeline>
+    >,
   >(
     id: TId,
     definition: ChildPipelineStepDefinitionBase<TOptions, TDeps, TOptionalDeps, TChildPipeline> & {
       skip:
-        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, PipelineResultOf<TChildPipeline>>
+        | StepSkipPredicate<
+            TOptions,
+            TDeps,
+            TOptionalDeps,
+            PipelineResultOf<TChildPipeline>,
+            TDecision
+          >
         | undefined;
       mapResult?: undefined;
     }
-  ): BuiltStep<TId, PipelineResultOf<TChildPipeline> | undefined, TOptions, TInputOptions>;
+  ): BuiltStep<
+    TId,
+    PolicySkippedOutput<PipelineResultOf<TChildPipeline>, TDecision>,
+    TOptions,
+    TInputOptions
+  >;
   function fromPipeline<
     TId extends string,
     TChildPipeline extends Pipeline<object, unknown>,
     TOut,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
+    TDecision extends StepSkipDecision<NoInfer<Awaited<TOut>>> = StepSkipDecision<
+      NoInfer<Awaited<TOut>>
+    >,
   >(
     id: TId,
     definition: ChildPipelineStepDefinitionBase<TOptions, TDeps, TOptionalDeps, TChildPipeline> & {
-      skip: StepSkipPredicate<TOptions, TDeps, TOptionalDeps, NoInfer<Awaited<TOut>>> | undefined;
+      skip:
+        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, NoInfer<Awaited<TOut>>, TDecision>
+        | undefined;
       mapResult(
         value: PipelineResultOf<TChildPipeline>,
         result: PipelineRun<PipelineResultOf<TChildPipeline>>,
         context: PipelineStepContext<TOptions>
       ): TOut;
     }
-  ): BuiltStep<TId, Awaited<TOut> | undefined, TOptions, TInputOptions>;
+  ): BuiltStep<TId, PolicySkippedOutput<Awaited<TOut>, TDecision>, TOptions, TInputOptions>;
   function fromPipeline(
     id: string,
     definition: Parameters<typeof buildPipelineStep>[1]
@@ -562,16 +592,19 @@ function createStepFactory<
     TPayload,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
+    TDecision extends StepSkipDecision<InferSchemaInput<TSchema>> = StepSkipDecision<
+      InferSchemaInput<TSchema>
+    >,
   >(
     id: TId,
     definition: RemoteStepDefinitionBase<TOptions, TDeps, TOptionalDeps, TPayload, TSchema> & {
       skip:
-        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>>
+        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>, TDecision>
         | undefined;
     }
   ): BuiltStep<
     TId,
-    InferSchemaOutput<TSchema> | undefined,
+    PolicySkippedOutput<InferSchemaOutput<TSchema>, TDecision>,
     TOptions,
     TInputOptions,
     InferSchemaInput<TSchema>
@@ -683,6 +716,8 @@ function createStepFactory<
     TItem,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
+    TDecision extends StepSkipDecision<readonly PipelineResultOf<TChildPipeline>[]> =
+      StepSkipDecision<readonly PipelineResultOf<TChildPipeline>[]>,
   >(
     id: TId,
     definition: MappedChildPipelineStepDefinition<
@@ -697,14 +732,15 @@ function createStepFactory<
             TOptions,
             TDeps,
             TOptionalDeps,
-            readonly PipelineResultOf<TChildPipeline>[]
+            readonly PipelineResultOf<TChildPipeline>[],
+            TDecision
           >
         | undefined;
       mapResult?: undefined;
     }
   ): BuiltStep<
     TId,
-    readonly PipelineResultOf<TChildPipeline>[] | undefined,
+    PolicySkippedOutput<readonly PipelineResultOf<TChildPipeline>[], TDecision>,
     TOptions,
     TInputOptions
   >;
@@ -715,6 +751,9 @@ function createStepFactory<
     TOut,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
+    TDecision extends StepSkipDecision<NoInfer<readonly TOut[]>> = StepSkipDecision<
+      NoInfer<readonly TOut[]>
+    >,
   >(
     id: TId,
     definition: MappedChildPipelineStepDefinition<
@@ -724,7 +763,9 @@ function createStepFactory<
       TChildPipeline,
       TItem
     > & {
-      skip: StepSkipPredicate<TOptions, TDeps, TOptionalDeps, NoInfer<readonly TOut[]>> | undefined;
+      skip:
+        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, NoInfer<readonly TOut[]>, TDecision>
+        | undefined;
       mapResult(
         value: PipelineResultOf<TChildPipeline>,
         result: PipelineRun<PipelineResultOf<TChildPipeline>>,
@@ -733,7 +774,7 @@ function createStepFactory<
         context: PipelineStepContext<TOptions>
       ): TOut;
     }
-  ): BuiltStep<TId, readonly TOut[] | undefined, TOptions, TInputOptions>;
+  ): BuiltStep<TId, PolicySkippedOutput<readonly TOut[], TDecision>, TOptions, TInputOptions>;
   function forEachPipeline(
     id: string,
     definition: Parameters<typeof buildMappedPipelineStep>[1]

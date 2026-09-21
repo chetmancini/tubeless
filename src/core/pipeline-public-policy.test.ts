@@ -21,9 +21,13 @@ describe("definePipeline runtime policies", () => {
         return "written";
       },
     });
+    expectTypeOf(write).toEqualTypeOf<Step<"write", string, Options>>();
     const after = step("after", {
       dependsOn: [write],
-      run: (inputs) => `after:${inputs.write}`,
+      run: (inputs) => {
+        expectTypeOf(inputs.write).toEqualTypeOf<string>();
+        return `after:${inputs.write}`;
+      },
     });
     const pipeline = definePipeline({
       id: "policy-skip",
@@ -441,7 +445,7 @@ describe("definePipeline runtime policies", () => {
     ]);
   });
 
-  it("types skippable steps as TOut | undefined for dependents", () => {
+  it("preserves outputs only when every policy skip supplies a value", () => {
     const { step } = createSteps();
 
     const plain = step("plain", { run: () => "ok" as const });
@@ -461,6 +465,62 @@ describe("definePipeline runtime policies", () => {
       },
     });
     expectTypeOf(dependent).toEqualTypeOf<Step<"dependent", "ok" | "fallback", {}>>();
+
+    const withFallback = step("with-fallback", {
+      skip: () => (Math.random() > 0.5 ? { reason: "disabled", value: "ok" as const } : false),
+      run: () => "ok" as const,
+    });
+    expectTypeOf(withFallback).toEqualTypeOf<Step<"with-fallback", "ok", {}>>();
+
+    const fallbackDependent = step("fallback-dependent", {
+      dependsOn: [withFallback],
+      run: (inputs) => {
+        expectTypeOf(inputs["with-fallback"]).toEqualTypeOf<"ok">();
+        return inputs["with-fallback"];
+      },
+    });
+    expectTypeOf(fallbackDependent).toEqualTypeOf<Step<"fallback-dependent", "ok", {}>>();
+
+    const structurallySkippableFallback = step("structurally-skippable-fallback", {
+      dryRun: "skip",
+      skip: () => ({ reason: "cached", value: "ok" as const }),
+      run: () => "ok" as const,
+    });
+    expectTypeOf(structurallySkippableFallback).toEqualTypeOf<
+      Step<"structurally-skippable-fallback", "ok", {}>
+    >();
+
+    const asyncFallback = step("async-fallback", {
+      skip: async () => ({ reason: "cached", value: "ok" as const }),
+      run: () => "ok" as const,
+    });
+    expectTypeOf(asyncFallback).toEqualTypeOf<Step<"async-fallback", "ok", {}>>();
+
+    const reusableFallbackDefinition = {
+      skip: () => ({ reason: "cached", value: "ok" as const }),
+      run: () => "ok" as const,
+    };
+    const reusableFallback = step("reusable-fallback", reusableFallbackDefinition);
+    expectTypeOf(reusableFallback).toEqualTypeOf<Step<"reusable-fallback", "ok", {}>>();
+
+    step("invalid-fallback", {
+      // @ts-expect-error Skip values must satisfy the normal handler's output type.
+      skip: () => ({ reason: "cached", value: 1 }),
+      run: () => "ok" as const,
+    });
+
+    const reasonOnly = step("reason-only", {
+      skip: () => ({ reason: "disabled" }),
+      run: () => "ok" as const,
+    });
+    expectTypeOf(reasonOnly).toEqualTypeOf<Step<"reason-only", "ok" | undefined, {}>>();
+
+    const mixedSkip = step("mixed-skip", {
+      skip: () =>
+        Math.random() > 0.5 ? { reason: "cached", value: "ok" as const } : { reason: "disabled" },
+      run: () => "ok" as const,
+    });
+    expectTypeOf(mixedSkip).toEqualTypeOf<Step<"mixed-skip", "ok" | undefined, {}>>();
 
     // Config-gated: `skip: predicate | undefined` stays explicit and widens.
     const enableSkip = false as boolean;
@@ -505,5 +565,25 @@ describe("definePipeline runtime policies", () => {
       },
     });
     expectTypeOf(transformedDependent).toEqualTypeOf<Step<"transformed-dependent", number, {}>>();
+
+    const transformedFallback = step("transformed-fallback", {
+      outputSchema: transformingSchema,
+      skip: () => ({ reason: "cached", value: "fallback" }),
+      run: () => "value",
+    });
+    expectTypeOf(transformedFallback).toEqualTypeOf<
+      Step<"transformed-fallback", { length: number }, {}, {}, string>
+    >();
+
+    const transformedFallbackDependent = step("transformed-fallback-dependent", {
+      dependsOn: [transformedFallback],
+      run: (inputs) => {
+        expectTypeOf(inputs["transformed-fallback"]).toEqualTypeOf<{ length: number }>();
+        return inputs["transformed-fallback"].length;
+      },
+    });
+    expectTypeOf(transformedFallbackDependent).toEqualTypeOf<
+      Step<"transformed-fallback-dependent", number, {}>
+    >();
   });
 });

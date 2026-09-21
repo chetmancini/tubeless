@@ -370,10 +370,10 @@ export type PipelineStepSkipReason =
  * - `{ reason, value? }` → skip and optionally publish `value` for dependents
  *   (`value` may be intentionally `undefined` if passed explicitly)
  *
- * Policy skips unlock required dependents. Because a bare-string skip (or a
- * `{ reason }` without `value`) publishes `undefined`, any step that declares
- * `skip` is typed so dependents see `TOut | undefined`. Prefer returning
- * `{ reason, value }` on every skip path when dependents need a real output.
+ * Policy skips unlock required dependents. A bare-string skip (or a `{ reason }`
+ * without `value`) makes dependents see `TOut | undefined`. When every skip
+ * branch returns `{ reason, value }`, the step retains `TOut`; schema-backed
+ * values use the schema input type and publish its transformed output type.
  */
 export type StepSkipDecision<TOut = unknown> =
   | false

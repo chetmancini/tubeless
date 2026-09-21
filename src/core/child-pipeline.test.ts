@@ -24,16 +24,16 @@ describe("child-pipeline composition", () => {
     });
     expectTypeOf(mapped).toEqualTypeOf<Step<"mapped", { count: number }, { skipChild: boolean }>>();
     expectTypeOf(skippable).toEqualTypeOf<
-      Step<"skippable", { count: number } | undefined, { skipChild: boolean }>
+      Step<"skippable", { count: number }, { skipChild: boolean }>
     >();
     const consume = step("consume", {
       dependsOn: [mapped, skippable],
       run: ({ mapped, skippable }) => {
         expectTypeOf(mapped).toEqualTypeOf<{ count: number }>();
-        expectTypeOf(skippable).toEqualTypeOf<{ count: number } | undefined>();
+        expectTypeOf(skippable).toEqualTypeOf<{ count: number }>();
         // @ts-expect-error Async mapResult publishes its resolved value, not a Promise.
         expectTypeOf(mapped.then).toBeAny();
-        return mapped.count + (skippable?.count ?? 0);
+        return mapped.count + skippable.count;
       },
     });
     const parent = definePipeline({

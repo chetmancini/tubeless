@@ -19,12 +19,8 @@ const resolveValue = step("resolve-value", {
 const formatValue = step("format-value", {
   dependsOn: [resolveValue],
   description: "Format the resolved value for the caller",
-  run: ({ "resolve-value": value }) => {
-    // A skippable step is always typed as T | undefined, even when this
-    // policy skip publishes a value. Keep absence handling explicit.
-    if (value === undefined) throw new Error("resolve-value produced no value");
-    return value.toUpperCase();
-  },
+  // Every policy-skip branch above supplies a string, so `value` stays `string`.
+  run: ({ "resolve-value": value }) => value.toUpperCase(),
 });
 
 export const ConditionalCachePipeline = definePipeline({

@@ -83,14 +83,17 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   email, and other steps whose normal `run` must not execute in a dry run. Use a
   typed `dryRun` handler when the step should produce a preview value instead.
 - Add `skip` to a step definition only for an intentional successful outcome.
-  Handle its resulting `T | undefined` output type explicitly.
+  A string or `{ reason }` result makes its output `T | undefined`; handle that
+  absence explicitly. If every skip branch returns `{ reason, value }`, the
+  output remains `T`.
 - Use `fromPipeline` for one independently useful child workflow and
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
   Keep `mapOptions` exclusively about child domain inputs. Put child `targets`,
   `stepIds`, concurrency, failure policy, and optional dry-run opt-in in the separate
   `controls` value or callback. A child cannot disable its parent's dry run.
-  Add `skip` only when the whole fan-out may be intentionally omitted; handle
-  its `readonly T[] | undefined` output explicitly.
+  Add `skip` only when the whole fan-out may be intentionally omitted. A skip
+  without a value produces `readonly T[] | undefined`; value-bearing skip paths
+  preserve `readonly T[]`.
   Async `fromPipeline` result mappings publish resolved values; use that resolved
   shape for dependent inputs and policy-skip values.
   Parent plans show one wrapper step and expose `nestedPipeline` with the child
