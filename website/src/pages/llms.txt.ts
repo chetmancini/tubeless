@@ -26,7 +26,7 @@ This static site provides explicit Markdown URLs; Accept negotiation is not avai
 
 - [Typed imports and ETL](${absUrl("docs/recipes.md")}): Choose the smallest matching executable recipe for ingestion, enrichment, or export jobs.
 - [Validation and publication workflows](${absUrl("docs/agent-guide.md")}): Model required dependencies and failure gates; never publish after unsuccessful validation.
-- [Pipeline-backed CLI programs](${absUrl("docs/cli.md")}): Use definePipelineCommand, tubeless list, tubeless inspect <registered-id>, and tubeless plan <registered-id>. Run with tubeless run <registered-id> -- <command-args> only when execution is intended.
+- [Pipeline-backed CLI programs](${absUrl("docs/cli.md")}): Export defineProject to expose schema-backed pipelines to tubeless list, tubeless inspect <pipeline-id>, and tubeless plan <pipeline-id>. Run with tubeless run <pipeline-id> -- <command-args> only when execution is intended. Use definePipelineCommand for custom CLI adapters.
 - [Choosing an execution model](${absUrl("docs/comparison.md")}): See how Tubeless fits next to other tools and frameworks.
 
 ## Documentation
@@ -42,7 +42,7 @@ ${DOC_NAV.map(({ slug, label, blurb }) => `- [${label}](${absUrl(`docs/${slug}.m
 - [Skill pack](${absUrl("docs/agent-skills.md")}): Install with npx skills add chetmancini/tubeless; use tubeless-make-pipeline to convert existing code.
 - [Authoring skill](${GITHUB_BLOB}/skills/tubeless/SKILL.md): Write and review pipelines in your project.
 - [Code conversion skill](${GITHUB_BLOB}/skills/tubeless-make-pipeline/SKILL.md): Convert existing code into a pipeline while preserving its behavior.
-- [Project manifest](${GITHUB_BLOB}/examples/catalog/tubeless.project.ts): File layout, stable registered IDs, and exports.
+- [Pipeline project](${GITHUB_BLOB}/examples/tubeless.project.ts): Group pipelines with defineProject for typed lookup, CLI, and Studio.
 - [API report](${absUrl("api-report.json")}): Machine-readable public declarations.
 - [Pipeline document JSON Schema v1](${absUrl("schemas/pipeline-document-v1.schema.json")}): Validate YAML or JSON document structure and metadata without importing handlers.
 

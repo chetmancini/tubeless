@@ -121,7 +121,7 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function loadWorkbenchModule<T>(
+export async function loadWorkbenchModule<T>(
   fileArgument: string,
   io: WorkbenchCliIo,
   load: (filePath: string) => Promise<T>

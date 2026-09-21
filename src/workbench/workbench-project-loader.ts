@@ -13,6 +13,7 @@ import {
   errorMessage,
   loadPipelineCommand,
   loadPlanSource,
+  loadWorkbenchModule,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
   type WorkbenchCliIo,
@@ -135,10 +136,7 @@ export async function loadPipelineProjectFile(
   fileArgument: string,
   io: WorkbenchCliIo
 ): Promise<WorkbenchProjectFile | LoadFailure> {
-  const filePath = path.resolve(io.cwd, fileArgument);
-  try {
-    const fileStat = await stat(filePath);
-    if (!fileStat.isFile()) throw new Error(`${filePath} is not a file.`);
+  return loadWorkbenchModule(fileArgument, io, async (filePath) => {
     const moduleExports = await importModuleNamespace(filePath);
     const root = selectUniqueExport(
       moduleExports,
@@ -187,10 +185,7 @@ export async function loadPipelineProjectFile(
         version: root.version,
       },
     };
-  } catch (error) {
-    io.stderr.write(`Error: ${errorMessage(error)}\n`);
-    return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load };
-  }
+  });
 }
 
 function isPathLike(target: string): boolean {

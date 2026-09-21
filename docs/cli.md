@@ -235,30 +235,32 @@ tubeless run ./scripts/import.ts -- --help
 tubeless list [options]
 ```
 
-- `-p, --project <path>` selects the manifest (default `./tubeless.project.ts`)
-- `--json` emits its version, resolved manifest path, `cwd`, and registrations
+- `-p, --project <path>` selects the project file (default `./tubeless.project.ts`)
+- `--json` emits project metadata, pipeline IDs, and the resolved project path;
+  command catalogs emit their version, resolved path, `cwd`, and registrations
 
-`list` evaluates the explicit manifest but does not load any registered command
-module. It never scans the filesystem or run history for executables.
+`list` evaluates the selected project file, including its pipeline imports.
+Catalog command modules remain unloaded. It never scans the filesystem or run
+history for executables.
 
 ## Inspect
 
 ```
-tubeless inspect [options] <command-id-or-file>
+tubeless inspect [options] <pipeline-id-or-command-id-or-file>
 ```
 
 - `-e, --export <name>` selects a pipeline or command export
-- `-p, --project <path>` looks up the command ID in the selected manifest
+- `-p, --project <path>` looks up the pipeline or command ID in the selected project file
 - `--json` emits identity and the default plan as JSON
 
 ## Plan
 
 ```
-tubeless plan [options] <command-id-or-file>
+tubeless plan [options] <pipeline-id-or-command-id-or-file>
 ```
 
 - `-e, --export <name>` selects a pipeline or command export
-- `-p, --project <path>` looks up the command ID in the selected manifest
+- `-p, --project <path>` looks up the pipeline or command ID in the selected project file
 - `-t, --target <id>` selects a declared target and its prerequisites (repeatable)
 - `-s, --step <id>` selects exact internal steps (repeatable)
 - `--dry-run` shows whether each step would run, skip, or use a preview handler
@@ -273,11 +275,11 @@ step handlers. Use `command.plan()` or `tubeless plan`; there is no command
 ## Graph
 
 ```
-tubeless graph [options] <command-id-or-file>
+tubeless graph [options] <pipeline-id-or-command-id-or-file>
 ```
 
 - `-e, --export <name>` selects a pipeline or command export
-- `-p, --project <path>` looks up the command ID in the selected manifest
+- `-p, --project <path>` looks up the pipeline or command ID in the selected project file
 - `-d, --direction <value>` is `BT`, `LR`, `RL`, `TB`, or `TD` (default `TD`)
 - `--descriptions` includes step descriptions in node labels
 - `--markdown` wraps the result in a fenced Mermaid block
@@ -288,11 +290,11 @@ The same graph is available in process as `pipeline.toMermaid()` or
 ## Run
 
 ```
-tubeless run [options] <command-id-or-file> [-- <command-args...>]
+tubeless run [options] <pipeline-id-or-command-id-or-file> [-- <command-args...>]
 ```
 
 - `-e, --export <name>` selects a command export
-- `-p, --project <path>` looks up the command ID in the selected manifest
+- `-p, --project <path>` looks up the pipeline or command ID in the selected project file
 - `--store <path>` appends run events to a local SQLite database
 - `--trace <path>` writes NDJSON traces to a file, or `-` for stdout
 
@@ -303,8 +305,11 @@ stderr so stdout stays valid NDJSON. To send events to OpenTelemetry or another 
 shows JSON and OpenTelemetry adapters. Use `composeTraceExporters` from `tubeless/tracing` for multiple
 destinations; a failed exporter does not stop the others or fail the pipeline.
 
-`run` accepts only a `definePipelineCommand` export. That export owns parsing,
-validation, option mapping, reporting, and the result summary. Omit `mapOptions`
+`run` accepts a pipeline ID from `defineProject`, a registered command ID, or a
+file exporting `definePipelineCommand`. Project pipelines are wrapped automatically
+using their Standard JSON Schema input metadata; directly loaded files must export
+a command. In each case, the command adapter owns parsing, validation, option
+mapping, reporting, and the result summary. For custom commands, omit `mapOptions`
 when validated flags already satisfy same-name pipeline options; keep it when
 names, types, defaults, or derived values differ. `--step` and `--target` stay
 the flag names; the parsed keys are `stepIds` and `targets`.

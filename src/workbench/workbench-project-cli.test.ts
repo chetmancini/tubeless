@@ -151,6 +151,40 @@ async function writeAutomaticProjectFixture(): Promise<{
 }
 
 describe("project file workbench", () => {
+  it.each(["list", "inspect", "plan", "graph", "run", "ui"])(
+    "preserves definition errors during project imports for %s",
+    async (operation) => {
+      const directory = await mkdtemp(path.join(tmpdir(), "tubeless-invalid-project-"));
+      directories.push(directory);
+      const pipelineModuleUrl = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
+      const projectModuleUrl = pathToFileURL(path.resolve("dist/project/project.js")).href;
+      const projectFile = path.join(directory, "tubeless.project.ts");
+      await writeFile(
+        projectFile,
+        `
+          import { createSteps, definePipeline } from ${JSON.stringify(pipelineModuleUrl)};
+          import { defineProject } from ${JSON.stringify(projectModuleUrl)};
+          const { step } = createSteps();
+          const work = step("work", { run: () => "done" });
+          export default defineProject("invalid-project", [
+            definePipeline({ id: "invalid", steps: [work, work] }),
+          ]);
+        `
+      );
+      const io = captureIo(directory);
+      const args =
+        operation === "ui"
+          ? [operation, projectFile]
+          : operation === "list"
+            ? [operation]
+            : [operation, "invalid"];
+
+      expect(await runWorkbenchCli(args, io)).toBe(TUBELESS_WORKBENCH_EXIT_CODE.definition);
+      expect(io.errors.join("")).toContain("work");
+      expect(io.output).toEqual([]);
+    }
+  );
+
   it.each([
     ["export { project, project as alias };", "project"],
     ["export { catalog, catalog as alias };", "catalog"],
