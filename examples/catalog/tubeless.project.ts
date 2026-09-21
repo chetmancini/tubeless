@@ -4,6 +4,7 @@ import { definePipelineProject } from "tubeless/project";
 // this directory. Adapt IDs and files to the consumer; keep registrations
 // explicit. Start with definePipelineCommand(pipeline) for schema-backed flags;
 // params/mapOptions are advanced input adapters. See ../automatic-cli.ts.
+// Numeric/boolean enum or const inputs require explicit params.
 // CLI argv still uses --step/--target; mapOptions and hooks
 // receive stepIds, targets, and maxConcurrency. Opt in to parallel DAG execution
 // with run(options, { maxConcurrency: 4 }) or --max-concurrency 4 in the CLI

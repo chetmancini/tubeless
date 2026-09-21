@@ -62,7 +62,8 @@ take precedence. JSON Schema conversion uses the `draft-2020-12` target.
 TypeScript types alone have no runtime fields to inspect. A pipeline created with
 `createSteps<MyOptions>()` needs explicit `params` for its domain inputs. Pipelines
 with no domain inputs work with the one-argument call. Validation-only schemas,
-nested objects, nullable/union inputs, tuples and array defaults require explicit
+nested objects, nullable/union inputs, tuples, array defaults, and numeric or boolean
+`enum`/`const` constraints require explicit
 parameters; unsupported schema shapes fail at command creation with guidance.
 Local JSON Schema references are resolved automatically.
 

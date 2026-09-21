@@ -87,6 +87,7 @@ pipeline does not require credentials.
    It infers flags from the options schema's Standard JSON Schema input metadata.
    Use `overrides` for presentation only; explicit `params` and `mapOptions` are
    advanced options for type-only pipelines or custom input shapes.
+   Non-string `enum`/`const` constraints also require explicit parameters.
    Use `defineCommand` from the same entrypoint for standalone scripts and
    `definePipelineProject` from `tubeless/project` for project catalogs shared
    by terminal commands and Studio.

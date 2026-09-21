@@ -211,6 +211,62 @@ describe("inferred pipeline CLI", () => {
   });
 
   it.each([
+    { type: "number", enum: [1, 2] },
+    { type: "integer", enum: [1, 2] },
+    { type: "boolean", enum: [true] },
+    { type: "number", const: 0 },
+    { type: "integer", const: 0 },
+    { type: "boolean", const: false },
+    { enum: [1, 2] },
+    { enum: [true] },
+    { const: 0 },
+    { const: false },
+    { type: "array", items: { type: "number", enum: [1, 2] } },
+    { type: "array", items: { type: "integer", const: 0 } },
+    { $ref: "#/$defs/restricted" },
+  ])("rejects non-string choices before exposing an unrestricted flag: %j", (field) => {
+    const validate = vi.fn(() => ({ value: {} }));
+    const source = pipeline(
+      {
+        type: "object",
+        properties: { value: field },
+        $defs: { restricted: { type: "number", enum: [1, 2] } },
+      },
+      validate
+    );
+    expect(() => definePipelineCommand(source)).toThrow(
+      /Cannot infer CLI flags for value: non-string enum and const constraints.*Supply explicit params/
+    );
+    expect(validate).not.toHaveBeenCalled();
+    expect(() =>
+      definePipelineCommand(source, { params: {}, mapOptions: () => ({}) })
+    ).not.toThrow();
+  });
+
+  it.each([
+    { type: "string", const: "json" },
+    { const: "json" },
+    { type: "string", enum: ["json"] },
+    { enum: ["json"] },
+  ])("preserves string choices: %j", (field) => {
+    const source = pipeline<{ format: "json" }>(
+      {
+        type: "object",
+        properties: { format: field },
+        required: ["format"],
+      },
+      () => ({ value: { format: "json" } })
+    );
+    const command = definePipelineCommand(source);
+    expect(command.parse(["--format", "json"]).kind).toBe("values");
+    expect(command.parse(["--format", "text"]).kind).toBe("error");
+    expect(command.parseValues({ format: "text" }).kind).toBe("error");
+    expect(command.descriptor.parameters).toContainEqual(
+      expect.objectContaining({ key: "format", choices: ["json"] })
+    );
+  });
+
+  it.each([
     { type: "object", properties: { x: { type: "object" } } },
     { type: "object", properties: { x: { anyOf: [{ type: "string" }, { type: "null" }] } } },
     { type: "object", properties: { x: { type: "array", items: { type: "boolean" } } } },

@@ -117,7 +117,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   the schema passed to `createSteps(schema)`; see [automatic CLI](../examples/automatic-cli.ts).
   Use `overrides` only for aliases, flag names, descriptions or environment fallbacks.
   Type-only or validation-only schemas need explicit `params`; this replaces inference.
-  Nested/union inputs and array defaults need explicit parameters and, when shapes
+  Nested/union inputs, array defaults, and non-string `enum`/`const` constraints
+  need explicit parameters and, when shapes
   differ, `mapOptions`. Keep these advanced escape hatches out of ordinary wrappers. Do not parse `process.argv` manually or redeclare built-in dry-run,
   `--step`, or `--target` flags. `mapOptions`, validation, and hooks receive `stepIds` and `targets`,
   not `step` or `target`. Omit `mapOptions` when validated flags already satisfy

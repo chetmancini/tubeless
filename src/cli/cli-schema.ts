@@ -65,6 +65,9 @@ function scalarParam(schema: Record<string, unknown>, location: string): CliPara
   }
   const choices = schema.enum ?? (schema.const === undefined ? undefined : [schema.const]);
   const type = schema.type ?? (Array.isArray(choices) ? typeof choices[0] : undefined);
+  if (choices !== undefined && type !== "string") {
+    return unsupported(location, "non-string enum and const constraints need explicit parameters");
+  }
   switch (type) {
     case "string": {
       if (
