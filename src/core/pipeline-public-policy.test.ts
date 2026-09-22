@@ -180,7 +180,8 @@ describe("definePipeline runtime policies", () => {
     });
     expect(failEvents).toEqual(["gate"]);
     expect(skipEvents).not.toContain("gate");
-    expect(completedRun).toBe(result);
+    expect(completedRun).toEqual(result);
+    expect(completedRun).not.toBe(result);
   });
 
   it("records a skip-predicate abort as a cancelled PipelineRun and runOrThrow wraps it", async () => {

@@ -430,7 +430,10 @@ export type PipelineStepSkippedEvent = Extract<PipelineStepStatus, { status: "sk
 /** Lifecycle event emitted when a step completes successfully. */
 export type PipelineStepCompleteEvent = Extract<PipelineStepStatus, { status: "completed" }>;
 
-/** Optional callbacks for observing pipeline and step lifecycle events. */
+/**
+ * Optional lifecycle callbacks, each receiving its own metadata snapshot.
+ * Domain result values retain their identity; hooks must treat them as read-only.
+ */
 export interface PipelineHooks<TResult = unknown> {
   onFinalizeComplete?(event: { durationMs: number; pipelineId: string; value: TResult }): void;
   onFinalizeError?(event: { durationMs: number; error: PipelineError; pipelineId: string }): void;

@@ -263,6 +263,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   `onStepFail`. Their event metadata is already narrowed. Use additive
   `onStepStatus` only when one consumer genuinely needs the whole discriminated
   lifecycle, such as a status-aware renderer or event store.
+  Hook metadata is copied separately for each callback; mutations cannot change
+  execution, tracing, or other callbacks. Finalized domain values retain their
+  identity and must be treated as read-only by hooks.
 - Use `createPipelineTestRuntime` from `tubeless/testing` for deterministic
   pipeline tests. Inspect its structured logs, statuses, and latest progress;
   keep test-framework matchers outside the package.

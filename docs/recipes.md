@@ -34,6 +34,7 @@ one of these recipes.
 | Map custom command inputs to pipeline options | [`cli-job.ts`](../examples/cli-job.ts)                                   | `definePipelineCommand`, conditional `mapOptions`, `tubeless run`                  |
 | Handle cancellation and deterministic testing | [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts) | `createPipelineTestRuntime`, captured status/progress                              |
 | Export lifecycle events                       | [`tracing.ts`](../examples/tracing.ts)                                   | app-owned JSON / OTel adapters, composition, `onExporterError`                     |
+| Observe lifecycle without changing execution  | [Lifecycle hooks](./concepts.md#step-statuses-and-structured-errors)     | per-callback metadata snapshots; treat domain result values as read-only           |
 | Watch many primitives in one run              | [`peloton.ts`](../examples/peloton.ts)                                   | delays, logs, children, fan-out, retry, gates, test runtime                        |
 | Watch an advanced YAML pipeline               | [`yaml-peloton.ts`](../examples/yaml-peloton.ts)                         | declarative graph, concurrent handlers, retries, progress, dry runs, gates         |
 | Expose a project to CLI and Studio            | [`tubeless.project.ts`](../examples/tubeless.project.ts)                 | `defineProject`, inferred flags, `tubeless list`                                   |
