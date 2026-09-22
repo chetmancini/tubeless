@@ -169,6 +169,13 @@ Neither default limits an unfiltered run: it still selects all declared steps.
 Set `targets: []` to expose no public goals.
 An explicit finalizer retains its own result and can use `requireOutputs`.
 
+Use `finalize: count` to require and return one declared step's output with its
+exact type. For example, a string-producing `load` followed by a number-producing
+`count` returns `number` with `finalize: count`, rather than the default
+`string | number | undefined`. This is shorthand for
+`requireOutputs([count], ({ count }) => count)` and does not change targets or
+selection. See the [precise result recipe](../examples/precise-result.ts).
+
 Pipeline definitions can declare different downstream goals with step references:
 
 ```ts
@@ -176,7 +183,7 @@ definePipeline({
   id: "publish",
   steps: [build, validate, publish],
   targets: [publish],
-  finalize: requireOutputs([publish], ({ publish }) => publish),
+  finalize: publish,
 });
 ```
 
@@ -213,7 +220,8 @@ the workbench already renders the same data through `tubeless plan`.
 ### Required final outputs
 
 A finalizer may receive only some step outputs: dry runs, exact step filters,
-and failures can leave others missing. Use
+and failures can leave others missing. Use `finalize: step` for one unchanged
+output, or use
 `requireOutputs([stepA, stepB], callback)` when a valid result needs those
 outputs. It checks their presence and makes them required properties in the
 callback. If an output is missing, finalization fails and reports its step ID.
@@ -222,7 +230,8 @@ is different from a step that never supplied one.
 
 Tubeless also checks declared targets, including the implicit last-step target,
 against these requirements. Each target
-must include all steps needed by `requireOutputs`, either directly or through
+must include the step selected by `finalize: step`, or all steps needed by
+`requireOutputs`, either directly or through
 its dependencies and failure gates. Use a plain finalizer when different
 selected goals are allowed to return partial results. The default finalizer
 reads only the last step in execution order; it never falls back to an earlier output.

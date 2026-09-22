@@ -287,6 +287,11 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   the full graph's topological order and do not limit an unfiltered run. `resultSchema` still
   validates the value, including absent output. See the
   [minimal recipe](../examples/minimal-pipeline.ts).
+- Use `finalize: step` to require and return a declared step's exact output type.
+  It preserves output-schema transformations and valid `undefined` values;
+  missing outputs fail finalization. It does not change targets or selection.
+  Add `resultSchema` to validate or transform that output. See the
+  [precise result recipe](../examples/precise-result.ts).
 - Wrap explicit finalizers in `requireOutputs` when a valid result requires
   specific step outputs. Use a plain finalizer only when partial output is a
   valid domain result.

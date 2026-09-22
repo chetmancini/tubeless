@@ -10,14 +10,14 @@ Package: `tubeless`
 
 | Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless`            | `./dist/core/pipeline.d.ts`        | `b36a3a57249847a1230e290c1e570ca9992632bf7b7dea600d0908e183bf089b` |               59 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `6293cae31a37eee786b9e3936cbd57b26d8d33c9329d4b9d8f577b3f61f7db45` |               31 |
+| `tubeless`            | `./dist/core/pipeline.d.ts`        | `1ad74135679e209479fb2219860973acf47547beb1ff1b39d7f1d59b1cc902b7` |               59 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `8ec75fab06b0ace53646ba715e42c07dd3a7ebe75d1763e65af4edd0773d0ff0` |               31 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `7dbfbd4d894f2e9cc737b5373d1f654f5f08e8b5b5cce27511ef876779713656` |                6 |
-| `tubeless/node`       | `./dist/node/node.d.ts`            | `c3a4a0ac6a1920d1ef60f9545020f842d27c5b693ad845ebc67bf4b646c4fbce` |               12 |
+| `tubeless/node`       | `./dist/node/node.d.ts`            | `217500d7346718d4ea29a379e089582e2a8b66526fbc6eb72093993890f11651` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `b3805ef558fc66ce940b6d34987315db17cadf589d9c79c40b589fd427a2e7f6` |                8 |
-| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `81194db8a42127b61c34c28858e7551304857af6449edd5bb7d22d8b09f18e19` |                7 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `5b3e0f62ed612dd20ab2ba6a23408bf352874a9842f223f6f53b7f360d604823` |                8 |
+| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `2ee09c1f71642fabfdf9c94107ac15417e02aaad024d34ac6e7f53f53be5693b` |                7 |
 | `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `bde2a6b18d95b6d6311fec6ae8719ff432208e650803635c9355ec1af62dad27` |                3 |
 
 ## Symbols
@@ -33,7 +33,7 @@ Package: `tubeless`
 | [`Pipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L522)                        | Compiled pipeline that can be planned, executed, and rendered as a graph.                   |
 | [`PIPELINE_ERROR_CODES`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L167)            | Ordered catalog of every stable package-owned pipeline error code.                          |
 | [`PipelineContext`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L35)                  | Caller-supplied services and metadata shared by one pipeline execution.                     |
-| [`PipelineDefinition`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-definition.ts#L69)          | Declarative configuration for compiling a typed pipeline.                                   |
+| [`PipelineDefinition`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-definition.ts#L85)          | Declarative configuration for compiling a typed pipeline.                                   |
 | [`PipelineDefinitionError`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-errors.ts#L21)         | Programmer error raised immediately when a pipeline graph is invalid.                       |
 | [`PipelineDefinitionIdentity`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L7)        | Versioned graph identity, separate from the optional handler implementation version.        |
 | [`PipelineDefinitionSnapshot`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L13)       | Immutable snapshot of the compiled pipeline definition recorded for inspection and tracing. |
@@ -80,7 +80,7 @@ Package: `tubeless`
 | [`PipelineStepStatus`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L396)              | One observable status in a step's planned → running → terminal lifecycle.                   |
 | [`PipelineValidationIssue`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L180)         | One dependency-free Standard Schema issue normalized for reports and traces.                |
 | [`RemoteStepAdapter`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L152)               | Adapter that invokes one step on an external execution engine.                              |
-| [`requireOutputs`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-finalizer.ts#L31)               | Build a finalizer that only runs when every listed step published an output.                |
+| [`requireOutputs`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-finalizer.ts#L37)               | Build a finalizer that only runs when every listed step published an output.                |
 | [`RUN_MODEL_VERSION`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-ids.ts#L2)                   | Current persisted run-record schema version.                                                |
 | [`StandardSchemaV1`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L226)                | Dependency-free subset of the Standard Schema V1 protocol.                                  |
 | [`Step`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L74)                             | Typed pipeline step carrying its stable ID, output, and option types.                       |
