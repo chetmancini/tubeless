@@ -16,8 +16,9 @@ export interface CompiledPipeline<
 > {
   readonly definition: PipelineDefinitionSnapshot;
   readonly declaredTargets: readonly AnyStep<StepsOptions<TSteps>>[];
-  readonly finalize: NonNullable<
-    PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>["finalize"]
+  readonly finalize: Extract<
+    NonNullable<PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>["finalize"]>,
+    (...args: never[]) => unknown
   >;
   readonly id: string;
   readonly optionsSchema: StandardSchemaV1 | undefined;
@@ -60,7 +61,7 @@ export function compilePipeline<
   type Finalizer = CompiledPipeline<TSteps, TResult, TTargets, TResultSchema>["finalize"];
   const compiledFinalize = finalizerMetadata
     ? finalizerMetadata.compile(compiledRequiredFinalizerSteps!.map((step) => step.id))
-    : authoredFinalize
+    : typeof authoredFinalize === "function"
       ? (outputs: Parameters<Finalizer>[0], context: Parameters<Finalizer>[1]) =>
           authoredFinalize.call(definition, outputs, context)
       : (outputs: Record<string, unknown>) =>

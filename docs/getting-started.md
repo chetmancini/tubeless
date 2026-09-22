@@ -186,6 +186,11 @@ work. For YAML or JSON, call `compilePipelineDocument(document, registry)` first
 then use `compiled.get(id)` directly or register selected compiled pipelines;
 see [declarative pipelines](./declarative-pipelines.md).
 
+Use `finalize: normalize` when the pipeline should require and return that step's
+output unchanged. The result keeps the step's exact output type; filtering it out
+or structurally skipping it makes finalization fail. See the
+[precise result recipe](../examples/precise-result.ts).
+
 Let `definePipeline` infer its type arguments to preserve literal IDs. If you need
 an explicit result contract, annotate the finalizer's return type:
 

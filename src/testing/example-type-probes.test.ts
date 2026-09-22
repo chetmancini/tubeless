@@ -6,6 +6,8 @@ import { NormalizePipeline } from "../../examples/child-pipeline.js";
 import { ImportPipeline as CliImportPipeline } from "../../examples/cli-job.js";
 import { ImportPipeline } from "../../examples/typed-import.js";
 import { ValidatedPipeline } from "../../examples/validated-boundaries.js";
+import { CountPipeline, runPreciseResultExample } from "../../examples/precise-result.js";
+import { defineProject } from "tubeless/project";
 
 function standardSchema<TInput, TOutput>(
   validate: StandardSchemaV1<TInput, TOutput>["~standard"]["validate"]
@@ -20,6 +22,20 @@ function standardSchema<TInput, TOutput>(
 }
 
 describe("example type probes", () => {
+  it("preserves a step finalizer's exact result through public APIs and project lookup", async () => {
+    const command = definePipelineCommand(CountPipeline, {
+      params: { text: { type: "string", required: true } },
+    });
+    const project = defineProject("counts", [command]);
+    expectTypeOf(CountPipeline.runOrThrow).returns.resolves.toEqualTypeOf<number>();
+    expectTypeOf(
+      project.get("count-characters").runOrThrow
+    ).returns.resolves.toEqualTypeOf<number>();
+    await expect(runPreciseResultExample()).resolves.toBe(5);
+    await expect(
+      CountPipeline.runOrThrow({ text: "hello" }, { stepIds: ["load"] })
+    ).rejects.toThrow();
+  });
   it("narrows partial concurrency results through the public package import", async () => {
     for (const input of [1, -1]) {
       const partial = await runConcurrentPartial([input], {}, async (item) => {

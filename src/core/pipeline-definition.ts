@@ -59,10 +59,26 @@ type PipelineFinalizer<
   | (TResultSchema extends StandardSchemaV1 ? InferSchemaInput<TResultSchema> : TResult)
   | Promise<TResultSchema extends StandardSchemaV1 ? InferSchemaInput<TResultSchema> : TResult>;
 
+type PipelineFinalizerSource<
+  TSteps extends readonly AnyStep[],
+  TResult,
+  TResultSchema extends StandardSchemaV1 | undefined,
+> =
+  | PipelineFinalizer<TSteps, TResult, TResultSchema>
+  | (TSteps[number] &
+      Step<
+        string,
+        TResultSchema extends StandardSchemaV1 ? InferSchemaInput<TResultSchema> : TResult,
+        StepsOptions<TSteps>,
+        StepsInputOptions<TSteps>,
+        unknown
+      >);
+
 /**
  * Declarative configuration for compiling a typed pipeline.
  *
  * A pipeline may omit finalize when its final step in execution order supplies the result.
+ * Set finalize to a declared step to require and return its precisely typed output.
  * The default emits undefined if that step published no output. If its output cannot
  * satisfy an explicit result type or schema input, a compatible finalizer is required.
  */
@@ -86,8 +102,8 @@ export type PipelineDefinition<
   resultSchema?: TResultSchema;
 } & (TResultSchema extends StandardSchemaV1
   ? [DefaultStepOutput<TSteps>] extends [InferSchemaInput<TResultSchema>]
-    ? { finalize?: PipelineFinalizer<TSteps, TResult, TResultSchema> }
-    : { finalize: PipelineFinalizer<TSteps, TResult, TResultSchema> }
+    ? { finalize?: PipelineFinalizerSource<TSteps, TResult, TResultSchema> }
+    : { finalize: PipelineFinalizerSource<TSteps, TResult, TResultSchema> }
   : [DefaultPipelineResult<TSteps>] extends [TResult]
-    ? { finalize?: PipelineFinalizer<TSteps, TResult, TResultSchema> }
-    : { finalize: PipelineFinalizer<TSteps, TResult, TResultSchema> });
+    ? { finalize?: PipelineFinalizerSource<TSteps, TResult, TResultSchema> }
+    : { finalize: PipelineFinalizerSource<TSteps, TResult, TResultSchema> });

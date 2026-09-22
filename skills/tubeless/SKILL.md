@@ -55,6 +55,10 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 - A single-goal `definePipeline` can be `{ id, steps }`: the last step in execution order
   is the default public target and supplies the result, or `undefined` if absent.
   Use `targets: []` to expose no targets. Unfiltered runs still execute all steps.
+- Use `finalize: step` to require and return one declared step's exact output type.
+  Missing outputs fail finalization; a published `undefined` remains valid.
+  Targets and selection remain independent. `resultSchema` can validate or transform
+  the selected output. See `examples/precise-result.ts`.
 - Use `requireOutputs` when the final result requires specific outputs. A plain
   finalizer is appropriate when partial results are valid domain results.
 - Use `runOrThrow` for callers expecting a successful value, `run` for callers

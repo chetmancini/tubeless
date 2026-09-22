@@ -1,6 +1,7 @@
 import { definePipelineCommand } from "tubeless/cli";
 import { defineProject } from "tubeless/project";
 import { ValidatedPipeline } from "../validated-boundaries.ts";
+import { CountPipeline } from "../precise-result.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
 import { YamlPelotonCommand } from "../yaml-peloton.ts";
 import { NormalizePipeline } from "./pipelines/normalize.ts";
@@ -15,6 +16,9 @@ export default defineProject(
   "example-jobs",
   [
     ValidatedPipeline,
+    definePipelineCommand(CountPipeline, {
+      params: { text: { type: "string", required: true } },
+    }),
     // Register the entry pipelines; their compiled children remain implementation details.
     YamlImportCommand,
     YamlPreviewCommand,

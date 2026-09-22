@@ -1,4 +1,4 @@
-import { createSteps, definePipeline, requireOutputs } from "tubeless";
+import { createSteps, definePipeline } from "tubeless";
 
 interface NormalizeOptions {
   rows: readonly string[];
@@ -16,5 +16,5 @@ export const NormalizePipeline = definePipeline({
   id: "normalize",
   steps: [normalizeRows],
   targets: [normalizeRows],
-  finalize: requireOutputs([normalizeRows], (outputs) => outputs["normalize-rows"]),
+  finalize: normalizeRows,
 });
