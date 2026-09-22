@@ -49,31 +49,35 @@ export interface PipelineContext {
   tracing?: PipelineTracingOptions;
 }
 
-/** Built-in controls for selecting and scheduling work in a pipeline run. */
-export interface PipelineRunControls<
+/** Built-in run controls. Choose targets or stepIds, or omit both to run every step. */
+export type PipelineRunControls<
   TStepId extends string = string,
   TTargetId extends string = string,
-> {
+> = {
   /** Maximum simultaneous steps, including skip predicates and output validation. Defaults to 1. */
   maxConcurrency?: number;
   /** Continue eligible branches after failure; otherwise stop dispatch and drain active steps. */
   continueOnError?: boolean;
   dryRun?: boolean;
-  /**
-   * Run only these steps, without adding prerequisites. Omit both stepIds and
-   * targets to run every step. An empty array
-   * is invalid and fails planning/execution instead of silently running nothing.
-   */
-  stepIds?: readonly TStepId[];
-  /**
-   * Run these declared pipeline targets and the upstream work required to
-   * reach them. Required inputs and failure gates are included recursively;
-   * optional-only inputs are not. Cannot be combined with exact `stepIds`
-   * filtering. Omit both targets and stepIds to run every step; no target is
-   * selected automatically.
-   */
-  targets?: readonly TTargetId[];
-}
+} & (
+  | {
+      /**
+       * Run only these steps, without adding prerequisites. Omit both stepIds and
+       * targets to run every step. An empty array is invalid and fails planning.
+       */
+      stepIds?: readonly TStepId[];
+      targets?: undefined;
+    }
+  | {
+      stepIds?: undefined;
+      /**
+       * Run these declared targets and their required inputs and failure gates,
+       * recursively; optional-only inputs are not included. Omit both targets
+       * and stepIds to run every step; no target is selected automatically.
+       */
+      targets?: readonly TTargetId[];
+    }
+);
 
 /** Resolved caller context. Core fills `now` and `sleep` before execution. */
 export interface PipelineRuntime extends PipelineContext {

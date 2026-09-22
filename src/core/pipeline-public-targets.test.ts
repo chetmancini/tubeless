@@ -93,6 +93,7 @@ describe("definePipeline targets and definitions", () => {
       kind: "selection",
       phase: "planning",
     });
+    // @ts-expect-error Dynamic callers still receive a planning diagnostic for conflicting controls.
     expect(pipeline.plan({ stepIds: ["build"], targets: ["write"] }).errors[0]).toMatchObject({
       code: "TUBELESS_PLANNING_SELECTION_CONFLICT",
       kind: "selection",

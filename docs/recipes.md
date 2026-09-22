@@ -135,7 +135,8 @@ pipeline does not require credentials.
    `checkpoint` support or sets `resume: true` and handles the value itself.
    Automatic project commands omit the flag.
 7. Declare public goals with `targets: [step]` on the pipeline, select their IDs
-   for goal-oriented execution, and use `stepIds` only for an exact filter. Without
+   for goal-oriented execution, and use `stepIds` only for an exact filter. The
+   control type rejects using both selections together. Without
    run selection controls, every step is selected. Omitted definition `targets`
    exposes the last step in execution order as a selectable goal; `targets: []`
    exposes none. These declarations do not select work for a run. Omitted

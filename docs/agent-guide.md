@@ -255,7 +255,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Omitted definition `targets` exposes the last step in execution order as a
   selectable goal; `targets: []` exposes none. An explicit run target selects its
   required inputs and failure gates recursively. Use `stepIds` only when
-  exact low-level filtering of any step is intentional; never combine the two.
+  exact low-level filtering of any step is intentional. `PipelineRunControls`
+  rejects both selections together at compile time; dynamic inputs retain the
+  runtime planning check. Omitted or `undefined` selectors remain valid.
 - Read `PipelinePlanStep.selectionReasons` when explaining selection. It already
   includes originating targets and immediate dependents; do not reconstruct
   selection reasons by walking dependency arrays in application code. The

@@ -432,6 +432,7 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
     phase: "planning",
     kind: "selection",
     emit: () =>
+      // @ts-expect-error Exercise the runtime backstop for callers without type checking.
       firstError(selectionPipeline().plan({ stepIds: ["build"], targets: ["write"] }).errors),
   },
   TUBELESS_PLANNING_STEP_SELECTION_DUPLICATE: {

@@ -346,6 +346,7 @@ describe("definePipelineCommand", () => {
     expect(empty.errors[0]?.code).toBe("TUBELESS_PLANNING_STEP_SELECTION_EMPTY");
     expect(empty.errors[0]?.code).toBe(pipeline.plan({ stepIds: [] }).errors[0]?.code);
 
+    // @ts-expect-error Dynamic callers still receive the planner's selection conflict.
     const conflict = command.plan({ stepIds: ["first"], targets: ["second"] });
     expect(conflict.errors[0]?.code).toBe("TUBELESS_PLANNING_SELECTION_CONFLICT");
   });

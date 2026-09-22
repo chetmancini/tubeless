@@ -79,7 +79,10 @@ await pipeline.runOrThrow(options, { targets: ["publish"] });
 | `targets`         | All steps | Selects declared goals and their required dependencies and failure gates   |
 | `stepIds`         | All steps | Selects exactly the listed steps, without adding dependencies              |
 
-`targets` and `stepIds` cannot be combined. Use `pipeline.plan(controls)` to
+`targets` and `stepIds` cannot be combined. `PipelineRunControls` enforces this
+with a union type, including child controls and command plans. Omitted fields or
+explicit `undefined` mean no selection. Dynamic inputs still receive a planning
+error if both fields are supplied with arrays. Use `pipeline.plan(controls)` to
 check selection before running. Planning requires no business inputs and does
 not call step handlers or schema validators.
 
