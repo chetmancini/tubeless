@@ -16,6 +16,15 @@
 - Repository CI is defined by `scripts/check-pipeline.ts`; keep its check
   graph, `package.json`, and `.github/workflows/check.yml` aligned.
 
+## API design philosophy
+
+- Keep public APIs simple and clear, with natural, deterministic defaults such as
+  the last logical step as the default target. Infer types and avoid redundant setup.
+- Keep internal APIs modular and encapsulated, with explicit ownership and
+  validated boundaries. Convenience must never compromise correctness.
+- Align types with runtime behavior; test invariants and failure, cancellation,
+  dry-run, and concurrency edge cases. Prefer fewer concepts over more knobs.
+
 ## Source organization
 
 - Follow [`src/README.md`](./src/README.md) for module ownership and dependency
