@@ -51,4 +51,23 @@ describe("pipeline planning", () => {
       ],
     });
   });
+
+  it("normalizes controls once before validating a plan", () => {
+    const { step } = createSteps();
+    const pipeline = definePipeline({ id: "controls", steps: [step("work", { run: () => true })] });
+    let reads = 0;
+
+    const plan = pipeline.plan({
+      get maxConcurrency() {
+        reads += 1;
+        return 0;
+      },
+    });
+
+    expect(reads).toBe(1);
+    expect(plan.errors[0]).toMatchObject({
+      code: "TUBELESS_RUN_CONCURRENCY_INVALID",
+      phase: "planning",
+    });
+  });
 });

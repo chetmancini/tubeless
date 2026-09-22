@@ -29,6 +29,8 @@ the installed declarations before using them; do not silently upgrade Tubeless.
   constructor it needs: `step`, `fromPipeline`, `fromRemote`, and/or
   `forEachPipeline`. Domain options contain business inputs; pass built-in
   controls separately to `run(options, controls?)`.
+- Use `plan(controls)` to validate static controls and selection without invoking
+  domain schemas or handlers. Runs reuse the same control validation.
 - Opt in to independent DAG parallelism with `run(options, { maxConcurrency: 4 })`;
   the default is `1`. All dependency edge types wait for terminal prerequisites.
   Declare edges for side-effect ordering; child runs have their own concurrency limit.

@@ -88,8 +88,9 @@ the event loop. For CPU parallelism in Node, explicitly use a
 [worker-thread adapter](./remote-step-composition.md#cpu-work-in-node-worker-threads)
 through `fromRemote`.
 
-`maxConcurrency` must be a positive finite integer. Invalid values fail the run
-with `TUBELESS_RUN_CONCURRENCY_INVALID` before options validation or step execution.
+`maxConcurrency` must be a positive finite integer. `plan()` rejects invalid values
+with `TUBELESS_RUN_CONCURRENCY_INVALID`; runs reuse that plan validation before
+options validation or step execution.
 The default of `1` preserves existing serial execution, including the ordering
 of independent side effects. Opt in only when independent steps can safely overlap.
 Declare ordering constraints as graph edges when side effects must run in sequence.

@@ -115,7 +115,7 @@ type CheckedStepTuple<TSteps extends readonly AnyStep[]> =
           readonly __duplicateStepIds: DuplicateStepIds<TSteps>;
         };
 
-function snapshotRunControls<TStepId extends string, TTargetId extends string>(
+function normalizeRunControls<TStepId extends string, TTargetId extends string>(
   controls: PipelineRunControls<TStepId, TTargetId>
 ): PipelineRunControls<TStepId, TTargetId> {
   const { continueOnError, dryRun, maxConcurrency, stepIds, targets } = controls;
@@ -165,8 +165,19 @@ export function definePipeline<
   // SAFETY: each compiled target id is a string key of `TTargets`.
   const targetIds = compiled.targetIds as readonly TTargetId[];
 
+  function prepareRun(controls: PipelineRunControls<TStepId, TTargetId>): {
+    controls: PipelineRunControls<TStepId, TTargetId>;
+    plan: PipelinePlan;
+  } {
+    const normalizedControls = normalizeRunControls(controls);
+    return {
+      controls: normalizedControls,
+      plan: buildPipelinePlan(compiled, normalizedControls),
+    };
+  }
+
   function plan(controls: PipelineRunControls<TStepId, TTargetId> = {}): PipelinePlan {
-    return buildPipelinePlan(compiled, controls);
+    return prepareRun(controls).plan;
   }
 
   function toMermaid(options: PipelineMermaidOptions = {}): string {
@@ -193,8 +204,8 @@ export function definePipeline<
     controls: PipelineRunControls<TStepId, TTargetId> = {},
     context: Partial<PipelineContext> = defaultPipelineContext()
   ): Promise<PipelineRun<TPipelineResult>> {
-    const runControls = snapshotRunControls(controls);
-    return executeCompiled(plan(runControls), options, runControls, context);
+    const prepared = prepareRun(controls);
+    return executeCompiled(prepared.plan, options, prepared.controls, context);
   }
 
   async function runOrThrow(

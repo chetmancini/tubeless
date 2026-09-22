@@ -62,6 +62,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   callers pass those options and optional built-in controls to
   `run(options, controls?)`, while `plan(controls)` accepts controls alone.
 - Opt in to parallel independent steps with `run(options, { maxConcurrency: 4 })`.
+  `plan(controls)` validates this and all other static controls before execution;
+  it still does not invoke domain schemas.
   Pipeline commands expose the same control as `--max-concurrency 4`, including
   Studio forms. The default is `1` to preserve side-effect order. Required inputs, optional inputs,
   and failure gates all wait for terminal prerequisites. Skip predicates and output

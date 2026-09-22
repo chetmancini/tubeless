@@ -11,7 +11,7 @@ one of these recipes.
 | Intent                                        | Executable recipe                                                        | Main primitives                                                                    |
 | --------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
 | Single goal with default target and result    | [`minimal-pipeline.ts`](../examples/minimal-pipeline.ts)                 | `definePipeline({ id, steps })`                                                    |
-| Run independent DAG branches concurrently     | [`parallel-dag.ts`](../examples/parallel-dag.ts)                         | `maxConcurrency` / CLI `--max-concurrency`, dependency joins, stable final reports |
+| Run independent DAG branches concurrently     | [`parallel-dag.ts`](../examples/parallel-dag.ts)                         | `maxConcurrency`, `plan()` checks controls, dependency joins, stable final reports |
 | CPU parallelism on Node worker threads        | [`worker-threads.ts`](../examples/worker-threads.ts)                     | `createWorkerThreadAdapter`, `fromRemote`, structured clone, pool ownership        |
 | Sequential import or ETL                      | [`typed-import.ts`](../examples/typed-import.ts)                         | `createSteps`, `dependsOn`, `requireOutputs`, `targets`                            |
 | Define and compose pipelines in YAML or JSON  | [`yaml-pipelines.ts`](../examples/yaml-pipelines.ts)                     | `compilePipelineDocument(document, registry)`, adapters, skips, child fan-out      |

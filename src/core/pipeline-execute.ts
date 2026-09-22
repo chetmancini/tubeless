@@ -277,17 +277,6 @@ export async function executePlannedRun<
   }
 
   const maxConcurrency = controls.maxConcurrency ?? 1;
-  if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1) {
-    state.recordRunErrors([
-      {
-        code: "TUBELESS_RUN_CONCURRENCY_INVALID",
-        kind: "validation",
-        phase: "execution",
-        message: "maxConcurrency must be a positive finite integer",
-      },
-    ]);
-    return state.finish();
-  }
 
   // SAFETY: `domainOptions` is the user-supplied options object; if a schema
   // is present it is re-validated below before assignment to `pipelineOptions`.

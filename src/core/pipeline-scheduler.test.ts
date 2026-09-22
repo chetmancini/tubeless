@@ -510,14 +510,23 @@ describe("parallel DAG scheduling", () => {
   });
 
   it.each([0, -1, 1.5, NaN, Infinity])(
-    "rejects invalid concurrency %s before any user code",
+    "rejects invalid concurrency %s during planning before any user code",
     async (maxConcurrency) => {
       const validate = vi.fn((value: unknown) => ({ value: value as object }));
       const { step } = createSteps(standardSchema<object, object>(validate));
       const runStep = vi.fn();
       const pipeline = definePipeline({ id: "invalid", steps: [step("work", { run: runStep })] });
+      const plan = pipeline.plan({ maxConcurrency });
+      expect(plan.ok).toBe(false);
+      expect(plan.errors[0]).toMatchObject({
+        code: "TUBELESS_RUN_CONCURRENCY_INVALID",
+        kind: "validation",
+        phase: "planning",
+      });
+      expect(plan.steps).toEqual([]);
+
       const result = await pipeline.run({}, { maxConcurrency });
-      expect(result.errors[0]).toMatchObject({ code: "TUBELESS_RUN_CONCURRENCY_INVALID" });
+      expect(result.errors[0]).toEqual(plan.errors[0]);
       expect(result.steps).toEqual([]);
       expect(validate).not.toHaveBeenCalled();
       expect(runStep).not.toHaveBeenCalled();

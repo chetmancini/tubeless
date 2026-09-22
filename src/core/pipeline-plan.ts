@@ -129,6 +129,17 @@ export function buildPipelinePlan<
   const declaredTargetIds = new Set(compiled.declaredTargets.map((target) => target.id));
   const requestedStepIds = controls.stepIds ?? [];
   const requestedTargets = controls.targets ?? [];
+  const maxConcurrency = controls.maxConcurrency ?? 1;
+  if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1) {
+    errors.push(
+      pipelineDiagnostic(
+        "TUBELESS_RUN_CONCURRENCY_INVALID",
+        "planning",
+        "validation",
+        "maxConcurrency must be a positive finite integer"
+      )
+    );
+  }
   if (controls.stepIds !== undefined && controls.targets !== undefined) {
     errors.push(
       pipelineDiagnostic(
