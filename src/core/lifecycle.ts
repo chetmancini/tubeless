@@ -53,6 +53,14 @@ function emitHook(runtime: PipelineRuntime, emit: (hooks: PipelineHooks) => void
   }
 }
 
+function snapshotRun(result: PipelineRun<unknown>): PipelineRun<unknown> {
+  if (!result.finalized) return structuredClone(result);
+  // Domain results may contain functions or class instances. Only lifecycle
+  // metadata belongs to Tubeless; preserve the domain value's identity.
+  const { value, ...metadata } = result;
+  return { ...structuredClone(metadata), value };
+}
+
 export function createPipelineLifecycleObserver(
   pipelineId: string,
   runtime: PipelineRuntime,
@@ -60,41 +68,43 @@ export function createPipelineLifecycleObserver(
 ): PipelineLifecycleObserver {
   return {
     pipelineStart(plan, targetIds) {
-      emitHook(runtime, (hooks) => hooks.onPipelineStart?.(plan));
+      emitHook(runtime, (hooks) => hooks.onPipelineStart?.(structuredClone(plan)));
       trace?.pipelineStart(plan, targetIds);
     },
     stepStatus(event, traceStatus = true) {
-      emitHook(runtime, (hooks) => hooks.onStepStatus?.(event));
+      emitHook(runtime, (hooks) => hooks.onStepStatus?.(structuredClone(event)));
       switch (event.status) {
         case "planned":
-          emitHook(runtime, (hooks) => hooks.onStepPlan?.(event));
+          emitHook(runtime, (hooks) => hooks.onStepPlan?.(structuredClone(event)));
           break;
         case "running":
           if (event.progress) {
             const progress = event.progress;
-            emitHook(runtime, (hooks) => hooks.onStepProgress?.({ ...event, progress }));
+            emitHook(runtime, (hooks) =>
+              hooks.onStepProgress?.(structuredClone({ ...event, progress }))
+            );
           } else {
             emitHook(runtime, (hooks) =>
               hooks.onStepStart?.({
                 attemptId: event.attemptId,
                 pipelineId: event.pipelineId,
                 status: "running",
-                step: event.step,
+                step: structuredClone(event.step),
               })
             );
           }
           break;
         case "cancelled":
-          emitHook(runtime, (hooks) => hooks.onStepCancel?.(event));
+          emitHook(runtime, (hooks) => hooks.onStepCancel?.(structuredClone(event)));
           break;
         case "failed":
-          emitHook(runtime, (hooks) => hooks.onStepFail?.(event));
+          emitHook(runtime, (hooks) => hooks.onStepFail?.(structuredClone(event)));
           break;
         case "skipped":
-          emitHook(runtime, (hooks) => hooks.onStepSkip?.(event));
+          emitHook(runtime, (hooks) => hooks.onStepSkip?.(structuredClone(event)));
           break;
         case "completed":
-          emitHook(runtime, (hooks) => hooks.onStepComplete?.(event));
+          emitHook(runtime, (hooks) => hooks.onStepComplete?.(structuredClone(event)));
           break;
       }
       if (traceStatus) trace?.stepStatus(event);
@@ -112,11 +122,13 @@ export function createPipelineLifecycleObserver(
       trace?.finalizeComplete(durationMs);
     },
     finalizeError(error, durationMs) {
-      emitHook(runtime, (hooks) => hooks.onFinalizeError?.({ durationMs, error, pipelineId }));
+      emitHook(runtime, (hooks) =>
+        hooks.onFinalizeError?.({ durationMs, error: structuredClone(error), pipelineId })
+      );
       trace?.finalizeError(error, durationMs);
     },
     pipelineComplete(result) {
-      emitHook(runtime, (hooks) => hooks.onPipelineComplete?.(result));
+      emitHook(runtime, (hooks) => hooks.onPipelineComplete?.(snapshotRun(result)));
       trace?.pipelineComplete(result);
     },
     flush: () => trace?.flush() ?? Promise.resolve(),

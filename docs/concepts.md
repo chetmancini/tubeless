@@ -249,6 +249,13 @@ Use `onStepPlan` to observe planning. Use `onStepStatus` when one listener
 needs every status, for example to update a progress display. It runs in
 addition to any specific hooks you register.
 
+Each hook receives its own copy of lifecycle metadata, including nested plan,
+progress, error, and report fields. Mutating that copy does not change execution,
+traces, returned reports, or other hooks. The domain `value` supplied to
+`onFinalizeComplete` and `onPipelineComplete` retains its original identity and
+is not cloned or frozen; treat that value as read-only. Hook exceptions are logged
+and do not stop subsequent hooks or fail the run.
+
 A `running` status may be published repeatedly as progress changes. Every
 selected step ends in exactly one terminal report; cancellation is distinct
 from failure, including selected steps that were cancelled before they started.
