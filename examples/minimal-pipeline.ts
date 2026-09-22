@@ -13,7 +13,8 @@ const normalize = step("normalize", {
   run: ({ load }) => load.map((row) => row.trim()).filter(Boolean),
 });
 
-// The last step in execution order is both the public target and the default result.
+// Unfiltered runs select all steps. The last step supplies the default result
+// and is exposed as a public goal callers can explicitly select.
 export const MinimalPipeline = definePipeline({
   id: "minimal",
   steps: [load, normalize],

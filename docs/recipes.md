@@ -10,7 +10,7 @@ one of these recipes.
 
 | Intent                                        | Executable recipe                                                        | Main primitives                                                                    |
 | --------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| Single goal with default target and result    | [`minimal-pipeline.ts`](../examples/minimal-pipeline.ts)                 | `definePipeline({ id, steps })`                                                    |
+| Run all steps with a default result           | [`minimal-pipeline.ts`](../examples/minimal-pipeline.ts)                 | `definePipeline({ id, steps })`                                                    |
 | Return one step's exact result type           | [`precise-result.ts`](../examples/precise-result.ts)                     | `finalize: step`, required output, inferred result type                            |
 | Run independent DAG branches concurrently     | [`parallel-dag.ts`](../examples/parallel-dag.ts)                         | `maxConcurrency`, `plan()` checks controls, dependency joins, stable final reports |
 | CPU parallelism on Node worker threads        | [`worker-threads.ts`](../examples/worker-threads.ts)                     | `createWorkerThreadAdapter`, `fromRemote`, structured clone, pool ownership        |
@@ -135,8 +135,10 @@ pipeline does not require credentials.
    `checkpoint` support or sets `resume: true` and handles the value itself.
    Automatic project commands omit the flag.
 7. Declare public goals with `targets: [step]` on the pipeline, select their IDs
-   for goal-oriented execution, and use `stepIds` only for an exact filter. Omitted
-   `targets` exposes the last step in execution order; `targets: []` opts out. Omitted
+   for goal-oriented execution, and use `stepIds` only for an exact filter. Without
+   run selection controls, every step is selected. Omitted definition `targets`
+   exposes the last step in execution order as a selectable goal; `targets: []`
+   exposes none. These declarations do not select work for a run. Omitted
    `finalize` returns that step's output or `undefined` if absent. Use
    `requireOutputs` when the final domain result is not meaningful without
    specific step outputs. Read plan `selectionReasons` instead of recreating

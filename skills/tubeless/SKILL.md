@@ -52,9 +52,11 @@ the installed declarations before using them; do not silently upgrade Tubeless.
   remains `T`. Do not turn exceptions into skips.
 - Set `dryRun: "skip"` on writes and other external side effects, or supply a
   side-effect-free typed preview handler. Unmarked steps still run in dry runs.
-- A single-goal `definePipeline` can be `{ id, steps }`: the last step in execution order
-  is the default public target and supplies the result, or `undefined` if absent.
-  Use `targets: []` to expose no targets. Unfiltered runs still execute all steps.
+- A `definePipeline` can be `{ id, steps }`: unfiltered runs select every step.
+  Explicit run `targets` select only those goals and their required prerequisites.
+  Omitted definition `targets` exposes the last step in execution order as a
+  selectable goal; it is never selected automatically. Use `targets: []` to expose
+  none. Omitted `finalize` returns that last step's output, or `undefined` if absent.
 - Use `finalize: step` to require and return one declared step's exact output type.
   Missing outputs fail finalization; a published `undefined` remains valid.
   Targets and selection remain independent. `resultSchema` can validate or transform

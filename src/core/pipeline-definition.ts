@@ -96,7 +96,9 @@ export type PipelineDefinition<
   /** Author- or build-supplied version of handlers, mappings, schemas, and finalizer (1–256 characters). */
   implementationVersion?: string;
   steps: TSteps;
-  /** Public goals; defaults to the last step in execution order. Use `[]` to expose none. */
+  /** Selectable public goals; omitted exposes the last step in execution order.
+   * This declaration never filters a run. Use `[]` to expose no goals.
+   */
   targets?: TTargets;
   /** Optional Standard Schema for the finalized result. */
   resultSchema?: TResultSchema;

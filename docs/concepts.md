@@ -150,9 +150,26 @@ is a possible future extension; neither edge exists today.
 
 ## Selection and finalization
 
-A pipeline with a single goal can be `definePipeline({ id, steps })`. Omitted
-`targets` exposes the last step in execution order; omitted `finalize` emits that step's
-output, or `undefined` when the run did not publish it. These defaults use the complete graph's
+**Without selection controls, run the whole pipeline.** Tubeless does not
+automatically select a target.
+
+| Run controls               | Selected work                                                    |
+| -------------------------- | ---------------------------------------------------------------- |
+| Omitted                    | All declared steps                                               |
+| `{ targets: ["publish"] }` | `publish` and its required inputs and failure gates, recursively |
+| `{ stepIds: ["build"] }`   | Exactly `build`, without adding prerequisites                    |
+
+Selection determines eligible work; dry-run policies, skips, failures, and
+cancellation still govern whether each selected step executes.
+
+The `targets` field on **`definePipeline`** declares which goals callers may
+select. It does not select work for a run. When that field is omitted, the last
+step in execution order is exposed as a selectable public goal; `targets: []`
+exposes none. Neither declaration restricts an unfiltered run.
+
+A pipeline can be `definePipeline({ id, steps })`. Omitted `finalize` returns the
+last step's output, or `undefined` when the run did not publish it. The inferred
+public goal and default result use the complete graph's
 **topological execution order**, so a downstream step remains the goal even if
 listed before its prerequisites. Required dependencies, optional inputs, and
 failure gates all affect that order. When several steps are ready, the scheduler
@@ -165,8 +182,6 @@ output types plus `undefined`. Runtime exposes only the final execution-order
 target and rejects other IDs. Use explicit `targets` or `finalize` when you need
 narrower types.
 
-Neither default limits an unfiltered run: it still selects all declared steps.
-Set `targets: []` to expose no public goals.
 An explicit finalizer retains its own result and can use `requireOutputs`.
 
 Use `finalize: count` to require and return one declared step's output with its

@@ -110,8 +110,11 @@ const ImportPipeline = definePipeline({
 });
 ```
 
-Omitted `targets` exposes the last step in execution order, `normalize`, as a public goal.
-Selecting it also selects `load`, because normalization requires its output.
+Running without selection controls selects every step. Omitted definition
+`targets` exposes the last step in execution order, `normalize`, as a public goal
+callers can explicitly select. Running with `{ targets: ["normalize"] }` selects
+it and `load`, because normalization requires its output; unrelated steps would
+be excluded.
 Omitted `finalize` returns that step's output. Its type includes all possible step
 outputs plus `undefined`; here, callers can read it as `readonly string[] | undefined`.
 If a dry run or filter leaves the output absent, the result is `undefined`.

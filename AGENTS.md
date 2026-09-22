@@ -19,7 +19,8 @@
 ## API design philosophy
 
 - Keep public APIs simple and clear, with natural, deterministic defaults such as
-  the last logical step as the default target. Infer types and avoid redundant setup.
+  running all steps unless explicitly filtered and returning the last logical step's
+  output. Infer types and avoid redundant setup.
 - Keep internal APIs modular and encapsulated, with explicit ownership and
   validated boundaries. Convenience must never compromise correctness.
 - Align types with runtime behavior; test invariants and failure, cancellation,

@@ -250,9 +250,11 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   do not fail the run; pass `onExporterError` to observe the first drop. Use
   `plan` when nothing may run.
 - Declare supported downstream goals with `targets: [step]` on
-  `definePipeline`, then select their literal IDs through run controls. Omitted
-  `targets` exposes the last step in execution order; `targets: []` exposes none. Required
-  inputs and failure gates are selected recursively. Use `stepIds` only when
+  `definePipeline`, then explicitly select their literal IDs through run controls.
+  Without selection controls, run every step; no target is selected automatically.
+  Omitted definition `targets` exposes the last step in execution order as a
+  selectable goal; `targets: []` exposes none. An explicit run target selects its
+  required inputs and failure gates recursively. Use `stepIds` only when
   exact low-level filtering of any step is intentional; never combine the two.
 - Read `PipelinePlanStep.selectionReasons` when explaining selection. It already
   includes originating targets and immediate dependents; do not reconstruct

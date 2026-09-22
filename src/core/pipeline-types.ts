@@ -60,7 +60,8 @@ export interface PipelineRunControls<
   continueOnError?: boolean;
   dryRun?: boolean;
   /**
-   * Run only these steps; omitted or undefined runs every step. An empty array
+   * Run only these steps, without adding prerequisites. Omit both stepIds and
+   * targets to run every step. An empty array
    * is invalid and fails planning/execution instead of silently running nothing.
    */
   stepIds?: readonly TStepId[];
@@ -68,7 +69,8 @@ export interface PipelineRunControls<
    * Run these declared pipeline targets and the upstream work required to
    * reach them. Required inputs and failure gates are included recursively;
    * optional-only inputs are not. Cannot be combined with exact `stepIds`
-   * filtering.
+   * filtering. Omit both targets and stepIds to run every step; no target is
+   * selected automatically.
    */
   targets?: readonly TTargetId[];
 }

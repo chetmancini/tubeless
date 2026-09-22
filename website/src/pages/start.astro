@@ -42,7 +42,8 @@ import { href } from "../lib/paths";
       </p>
       <CodeBlock code={FIRST_PIPELINE_SAMPLE} lang="ts" />
       <p class="lede">
-        The last step in execution order is the default target and supplies the result.
+        With no selection controls, every step runs. An explicit target selects only that
+        goal and its required prerequisites. The last step in execution order supplies the default result.
         Here, that is <code>normalize</code>. If it produces no output, the result is
         <code>undefined</code>. Add a finalizer with <code>requireOutputs</code> when missing
         output should fail the run.
