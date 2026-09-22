@@ -57,7 +57,7 @@ describe("declarative pipelines", () => {
     expectTypeOf(pipeline).toEqualTypeOf<Pipeline<object, unknown>>();
     expectTypeOf(pipeline.id).toEqualTypeOf<string>();
     expectTypeOf(pipeline.runOrThrow).returns.toEqualTypeOf<Promise<unknown>>();
-    expectTypeOf(pipeline.runOrThrow).parameter(0).toEqualTypeOf<object>();
+    expectTypeOf(pipeline.runOrThrow).parameter(0).toEqualTypeOf<object | undefined>();
     expect(compiled.get("import")).toBe(pipeline);
     expect(compiled.pipelines).toEqual([pipeline]);
     expect(compiled.pipelines[0]).toBe(pipeline);

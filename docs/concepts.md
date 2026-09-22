@@ -71,6 +71,15 @@ await pipeline.run(options, { maxConcurrency: 4 });
 await pipeline.runOrThrow(options, { targets: ["publish"] });
 ```
 
+When the input type has no required fields, use `pipeline.run()` or
+`pipeline.runOrThrow()`. Omitted or `undefined` input becomes a fresh `{}` on each
+run and still passes through the input schema, including validation and defaults.
+Required input fields remain required at compile time. To supply controls or
+context while omitting input, use `run(undefined, controls, context)`; the first
+argument always represents domain input. `PipelineInput<typeof pipeline>` remains
+the domain object type, without the call's optional `undefined`.
+See the [inherited inputs recipe](../examples/inherited-inputs.ts).
+
 | Control           | Default   | Effect                                                                     |
 | ----------------- | --------- | -------------------------------------------------------------------------- |
 | `dryRun`          | `false`   | Applies each step's dry-run policy; unmarked steps still run               |

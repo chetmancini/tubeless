@@ -61,6 +61,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   option types contain domain input only;
   callers pass those options and optional built-in controls to
   `run(options, controls?)`, while `plan(controls)` accepts controls alone.
+  Omit options with `run()` or `runOrThrow()` when no input fields are required;
+  each call supplies a fresh `{}` to schema validation. Pass `undefined` as the
+  first argument when supplying controls without input.
 - Opt in to parallel independent steps with `run(options, { maxConcurrency: 4 })`.
   `plan(controls)` validates this and all other static controls before execution;
   it still does not invoke domain schemas.
@@ -93,6 +96,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   output remains `T`.
 - Use `fromPipeline` for one independently useful child workflow and
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
+  Omit `fromPipeline.mapOptions` when the parent's validated domain options satisfy
+  the child's input type; those options are forwarded unchanged and validated by
+  the child. Otherwise provide a mapper. Fan-out still requires per-item mapping.
   Keep `mapOptions` exclusively about child domain inputs. Put child `targets`,
   `stepIds`, concurrency, failure policy, and optional dry-run opt-in in the separate
   `controls` value or callback. A child cannot disable its parent's dry run.

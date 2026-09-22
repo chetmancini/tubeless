@@ -15,9 +15,24 @@ Start with the [single-child example](../examples/child-pipeline.ts) or the
 
 ## Run a child pipeline
 
-Use `fromPipeline` with `pipeline` and `mapOptions`. The mapper receives the
-parent step's dependency outputs and context, and returns the inputs the child
-needs. Add `mapResult` if the parent needs a different result shape.
+Use `fromPipeline` with `pipeline`. When the parent's domain options satisfy the
+child's input type, omit `mapOptions` to forward `context.options` unchanged:
+
+```ts
+const { fromPipeline } = createSteps<NormalizeOptions>();
+const normalize = fromPipeline("normalize", { pipeline: NormalizePipeline });
+```
+
+Inherited options are the parent's validated, transformed options. The child
+still validates them through its own input schema. All parent fields are forwarded;
+use an explicit mapper to remove extra fields if the child schema rejects them.
+Execution controls are separate and are never merged into these options. See the
+[inherited inputs example](../examples/inherited-inputs.ts).
+
+When the input types differ, `mapOptions` is required. It receives the parent
+step's dependency outputs and context, and returns the inputs the child needs.
+You can also supply it to override otherwise compatible inputs. Add `mapResult`
+if the parent needs a different result shape.
 
 ```ts
 const { fromPipeline } = createSteps<ImportOptions>();
@@ -37,7 +52,8 @@ same `(inputs, context)` arguments as `mapOptions`.
 ## Run a child for each item
 
 Use `items` to return the list to process, `key` for stable item IDs, and
-`concurrency` to limit simultaneous child runs:
+`concurrency` to limit simultaneous child runs. `forEachPipeline` always requires
+an explicit per-item `mapOptions`:
 
 ```ts
 const { forEachPipeline } = createSteps<ParentOptions>();
@@ -115,8 +131,8 @@ The parent plan contains one step for the child workflow. This is what
 The parent's `nestedPipeline` metadata still identifies the child pipeline,
 its declared step IDs, and whether it runs once or for multiple items.
 
-Selecting the parent step runs the child using the values returned by
-`mapOptions`. Parent and child step IDs are separate. A parent target does not
+Selecting the parent step runs the child using mapped inputs, or inherited parent
+options for `fromPipeline` without a mapper. Parent and child step IDs are separate. A parent target does not
 select an identically named child step, and `parent.child-step` selection is
 not supported.
 

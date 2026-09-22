@@ -200,16 +200,19 @@ export function definePipeline<
   }
 
   async function run(
-    options: TInputOptions,
+    options?: TInputOptions,
     controls: PipelineRunControls<TStepId, TTargetId> = {},
     context: Partial<PipelineContext> = defaultPipelineContext()
   ): Promise<PipelineRun<TPipelineResult>> {
     const prepared = prepareRun(controls);
-    return executeCompiled(prepared.plan, options, prepared.controls, context);
+    // SAFETY: the public signature permits omission only when {} satisfies the
+    // input type. Schemas still validate the default object during execution.
+    const input = options === undefined ? ({} as TInputOptions) : options;
+    return executeCompiled(prepared.plan, input, prepared.controls, context);
   }
 
   async function runOrThrow(
-    options: TInputOptions,
+    options?: TInputOptions,
     controls: PipelineRunControls<TStepId, TTargetId> = {},
     context: Partial<PipelineContext> = defaultPipelineContext()
   ): Promise<TPipelineResult> {

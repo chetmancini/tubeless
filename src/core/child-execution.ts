@@ -137,7 +137,7 @@ export interface SingleChildExecutionConfig<TParentOptions extends object> {
         inputs: ChildInputs,
         context: PipelineExecutionContext<TParentOptions>
       ) => PipelineRunControls);
-  mapOptions(inputs: ChildInputs, context: PipelineExecutionContext<TParentOptions>): object;
+  mapOptions?(inputs: ChildInputs, context: PipelineExecutionContext<TParentOptions>): object;
   mapResult?(
     value: unknown,
     result: PipelineRun<unknown>,
@@ -274,7 +274,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
   config: SingleChildExecutionConfig<TParentOptions>
 ): (inputs: ChildInputs, context: PipelineStepContext<TParentOptions>) => Promise<unknown> {
   return async (inputs, context) => {
-    const domainOptions = config.mapOptions(inputs, context);
+    const domainOptions = config.mapOptions ? config.mapOptions(inputs, context) : context.options;
     const configuredControls =
       typeof config.controls === "function" ? config.controls(inputs, context) : config.controls;
     const controls = childRunControls(configuredControls, context.dryRun);

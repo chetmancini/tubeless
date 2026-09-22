@@ -148,11 +148,19 @@ type ChildPipelineStepDefinitionBase<
         inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
         context: PipelineExecutionContext<TParentOptions>
       ) => PipelineRunControlsOf<TChildPipeline>);
-  mapOptions(
-    inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-    context: PipelineExecutionContext<TParentOptions>
-  ): PipelineOptionsOf<TChildPipeline>;
-};
+} & ([TParentOptions] extends [PipelineOptionsOf<NoInfer<TChildPipeline>>]
+  ? {
+      mapOptions?(
+        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
+        context: PipelineExecutionContext<TParentOptions>
+      ): PipelineOptionsOf<TChildPipeline>;
+    }
+  : {
+      mapOptions(
+        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
+        context: PipelineExecutionContext<TParentOptions>
+      ): PipelineOptionsOf<TChildPipeline>;
+    });
 
 /** Child step without policy skip (dependents see the full child result type). */
 type ChildPipelineStepDefinition<

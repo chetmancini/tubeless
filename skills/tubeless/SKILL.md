@@ -29,6 +29,9 @@ the installed declarations before using them; do not silently upgrade Tubeless.
   constructor it needs: `step`, `fromPipeline`, `fromRemote`, and/or
   `forEachPipeline`. Domain options contain business inputs; pass built-in
   controls separately to `run(options, controls?)`.
+  Use `run()` or `runOrThrow()` when all input fields are optional; omitted input
+  becomes a fresh `{}` and still undergoes schema validation. Supply controls with
+  `run(undefined, controls)` in that case.
 - Use `plan(controls)` to validate static controls and selection without invoking
   domain schemas or handlers. Runs reuse the same control validation.
 - Opt in to independent DAG parallelism with `run(options, { maxConcurrency: 4 })`;
@@ -116,7 +119,10 @@ Read the corresponding package recipe before using these features:
 
 - `fromPipeline` for an independently useful child workflow;
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
-  Keep `mapOptions` limited to child domain input. Supply child execution controls
+  Omit `fromPipeline.mapOptions` when the parent's validated options satisfy the
+  child's input type; it forwards them unchanged through child validation. Fan-out
+  still requires explicit per-item mapping. Keep `mapOptions` limited to child
+  domain input. Supply child execution controls
   separately through `controls`, either as a typed value or a callback. A child's
   `dryRun: false` never disables a dry-running parent.
   Use ordinary helpers or `runConcurrent` for lightweight work without child

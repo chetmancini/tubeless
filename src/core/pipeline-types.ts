@@ -524,6 +524,22 @@ export interface PipelineMermaidOptions {
   includeDescriptions?: boolean;
 }
 
+type PipelineRunArguments<
+  TOptions,
+  TStepId extends string,
+  TTargetId extends string,
+> = {} extends TOptions
+  ? [
+      options?: TOptions,
+      controls?: PipelineRunControls<TStepId, TTargetId>,
+      context?: Partial<PipelineContext>,
+    ]
+  : [
+      options: TOptions,
+      controls?: PipelineRunControls<TStepId, TTargetId>,
+      context?: Partial<PipelineContext>,
+    ];
+
 /** Compiled pipeline that can be planned, executed, and rendered as a graph. */
 export interface Pipeline<
   TOptions extends object,
@@ -546,24 +562,28 @@ export interface Pipeline<
   /** Stable declared goal ids that support dependency-aware target execution. */
   readonly targetIds: readonly TTargetId[];
   plan(controls?: PipelineRunControls<TStepId, TTargetId>): PipelinePlan;
+  /** Omitted options default to {} when the input type has no required fields. */
   run(
     options: TOptions,
     controls?: PipelineRunControls<TStepId, TTargetId>,
     context?: Partial<PipelineContext>
   ): Promise<PipelineRun<TResult>>;
+  run(...args: PipelineRunArguments<TOptions, TStepId, TTargetId>): Promise<PipelineRun<TResult>>;
   runOrThrow(
     options: TOptions,
     controls?: PipelineRunControls<TStepId, TTargetId>,
     context?: Partial<PipelineContext>
   ): Promise<TResult>;
+  runOrThrow(...args: PipelineRunArguments<TOptions, TStepId, TTargetId>): Promise<TResult>;
   /** Generate a static Mermaid flowchart without running or planning the pipeline. */
   toMermaid(options?: PipelineMermaidOptions): string;
 }
 
 /** Input accepted by a pipeline run before any options schema transformation. */
-export type PipelineInput<TPipeline extends Pipeline<object, unknown>> = Parameters<
-  TPipeline["run"]
->[0];
+export type PipelineInput<TPipeline extends Pipeline<object, unknown>> = Exclude<
+  Parameters<TPipeline["run"]>[0],
+  undefined
+>;
 
 /** Successful result produced by a pipeline run. */
 export type PipelineResult<TPipeline extends Pipeline<object, unknown>> = Awaited<

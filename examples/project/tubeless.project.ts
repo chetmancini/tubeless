@@ -2,6 +2,7 @@ import { definePipelineCommand } from "tubeless/cli";
 import { defineProject } from "tubeless/project";
 import { ValidatedPipeline } from "../validated-boundaries.ts";
 import { CountPipeline } from "../precise-result.ts";
+import { WelcomePipeline } from "../inherited-inputs.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
 import { YamlPelotonCommand } from "../yaml-peloton.ts";
 import { NormalizePipeline } from "./pipelines/normalize.ts";
@@ -16,6 +17,9 @@ export default defineProject(
   "example-jobs",
   [
     ValidatedPipeline,
+    definePipelineCommand(WelcomePipeline, {
+      params: { name: { type: "string" } },
+    }),
     definePipelineCommand(CountPipeline, {
       params: { text: { type: "string", required: true } },
     }),

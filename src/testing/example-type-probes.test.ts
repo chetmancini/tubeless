@@ -8,6 +8,7 @@ import { ImportPipeline } from "../../examples/typed-import.js";
 import { ValidatedPipeline } from "../../examples/validated-boundaries.js";
 import { CountPipeline, runPreciseResultExample } from "../../examples/precise-result.js";
 import { defineProject } from "tubeless/project";
+import { WelcomePipeline, runInheritedInputsExample } from "../../examples/inherited-inputs.js";
 
 function standardSchema<TInput, TOutput>(
   validate: StandardSchemaV1<TInput, TOutput>["~standard"]["validate"]
@@ -22,6 +23,16 @@ function standardSchema<TInput, TOutput>(
 }
 
 describe("example type probes", () => {
+  it("uses optional inputs and inherited child options through the public package", async () => {
+    const command = definePipelineCommand(WelcomePipeline, {
+      params: { name: { type: "string" } },
+    });
+    const project = defineProject("welcome-project", [command]);
+    expectTypeOf(project.get("welcome").runOrThrow).returns.resolves.toEqualTypeOf<string>();
+    await expect(runInheritedInputsExample()).resolves.toBe("Hello, world!");
+    await expect(project.get("welcome").runOrThrow({ name: "Chet" })).resolves.toBe("Hello, Chet!");
+    await expect(project.get("welcome").runOrThrow()).resolves.toBe("Hello, world!");
+  });
   it("preserves a step finalizer's exact result through public APIs and project lookup", async () => {
     const command = definePipelineCommand(CountPipeline, {
       params: { text: { type: "string", required: true } },
