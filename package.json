@@ -67,6 +67,7 @@
     "pack:verify": "node scripts/verify-packed-artifact.mjs"
   },
   "devDependencies": {
+    "@dagster-io/dagster-pipes": "0.1.0",
     "@temporalio/activity": "1.24.0",
     "@temporalio/client": "1.24.0",
     "@temporalio/testing": "1.24.0",

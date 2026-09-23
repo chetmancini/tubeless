@@ -138,6 +138,11 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   heartbeat during long waits, forward cancellation, and preserve Temporal's
   cancellation failure when Tubeless wraps an abort. Activity retries replay the
   whole pipeline; heartbeat progress alone does not resume its steps.
+  For Dagster, follow [the Pipes example](./dagster.md): keep the pipeline free
+  of host imports, report materializations only after successful publication,
+  require explicit Pipes materializations, and preview locally. Forward termination to
+  Tubeless, correlate retries by host run and asset, and retain raw trace events
+  for Studio. Dagster retries the entire asset invocation.
 - For actual CPU parallelism, use `createWorkerThreadAdapter` from `tubeless/node`
   through `fromRemote`; never serialize arbitrary handler closures. Supply an explicit
   module URL/export and cloneable payload, keep `outputSchema` on the parent step,

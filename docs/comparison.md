@@ -62,3 +62,7 @@ validate the returned XCom before continuing locally.
 The [Temporal guide](./temporal.md) hosts a pipeline inside an Activity and keeps
 its execution outside replayed Workflow code, with Activity-owned retries,
 heartbeats, and cancellation.
+
+The [Dagster guide](./dagster.md) materializes an asset through Dagster Pipes,
+with progress logs, content data versions, and a trace for Tubeless Studio.
+Dagster owns retries of the asset; Tubeless owns execution of its internal steps.

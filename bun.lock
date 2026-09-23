@@ -5,6 +5,7 @@
     "": {
       "name": "tubeless",
       "devDependencies": {
+        "@dagster-io/dagster-pipes": "0.1.0",
         "@temporalio/activity": "1.24.0",
         "@temporalio/client": "1.24.0",
         "@temporalio/testing": "1.24.0",
@@ -22,6 +23,8 @@
     },
   },
   "packages": {
+    "@dagster-io/dagster-pipes": ["@dagster-io/dagster-pipes@0.1.0", "", {}, "sha512-zIJ+AQIzAq/YSRjunHVF9Chom0q8kzs7KHkC41Yq4Lqg27fWTpfaqoXDMCQWkLqUYDIUPV4gfbftAS3w+WJK2Q=="],
+
     "@emnapi/core": ["@emnapi/core@1.11.2", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA=="],
 
     "@emnapi/runtime": ["@emnapi/runtime@1.11.2", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-kyOl3X0DuTiT1h2ft8r2fYO8JYtU9a9Xis/zBSiGArNaagCOWx90N1k2wxp18czFDH+OgcWGb5ZP/XMt3dcyPA=="],

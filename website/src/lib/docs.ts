@@ -27,6 +27,7 @@ export const DOC_NAV = [
   { slug: "remote-step-composition", label: "Remote steps", blurb: "Call remote services and invoke pipelines from workers." },
   { slug: "airflow", label: "Tubeless ↔ Airflow", blurb: "Invoke Airflow DAGs and run Tubeless pipelines inside Airflow tasks." },
   { slug: "temporal", label: "Tubeless on Temporal", blurb: "Run pipelines inside Temporal Activities with retries, heartbeats, and cancellation." },
+  { slug: "dagster", label: "Tubeless on Dagster", blurb: "Materialize assets through Dagster Pipes with progress, data versions, and traces." },
   { slug: "agent-guide", label: "Agent guide", blurb: "Rules for generating pipeline code." },
   { slug: "agent-skills", label: "Agent skills", blurb: "Install the skill pack and convert existing code into pipelines." },
   { slug: "api-reference", label: "API reference", blurb: "Public exports and TypeScript signatures, generated from the package." },

@@ -39,6 +39,7 @@ For agent or editor validation, use the [pipeline document JSON Schema](./pipeli
 | [Remote-step composition](./remote-step-composition.md)       | Calling remote services and running inside workers                         |
 | [Tubeless ↔ Airflow](./airflow.md)                            | Calling an Airflow DAG or running a pipeline inside an Airflow task        |
 | [Tubeless on Temporal](./temporal.md)                         | Hosting pipelines in Activities with retries, heartbeats, and cancellation |
+| [Tubeless on Dagster](./dagster.md)                           | Materializing assets with Pipes, progress logs, data versions, and traces  |
 | [Generated API inventory](./api-reference.md)                 | Entrypoints, exported symbols, and surface hashes                          |
 | [Machine-readable API report](./api-report.json)              | Automated public-surface review                                            |
 | [LLM index](./llms.txt)                                       | Documentation links for coding agents                                      |

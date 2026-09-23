@@ -60,6 +60,7 @@ Advanced:
 - Remote steps: ./remote-step-composition.md
 - Tubeless and Airflow: ./airflow.md
 - Tubeless on Temporal: ./temporal.md
+- Tubeless on Dagster: ./dagster.md
 - Public exports: ./api-reference.md
 - Machine-readable surface: ./api-report.json
 Executable examples:
@@ -84,6 +85,10 @@ Executable examples:
 - ../examples/temporal/workflows.ts
 - ../examples/temporal/worker.ts
 - ../examples/temporal/client.ts
+- ../examples/dagster/pipeline.ts
+- ../examples/dagster/hosted.ts
+- ../examples/dagster/worker.ts
+- ../examples/dagster/definitions.py
 - ../examples/fan-out-progress.ts
 - ../examples/resumable-enrichment.ts
 - ../examples/cli-job.ts

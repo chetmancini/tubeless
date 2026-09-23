@@ -8,7 +8,8 @@
     "scripts/check-pipeline.ts",
     "examples/temporal/client.ts",
     "examples/temporal/worker.ts",
-    "examples/temporal/workflows.ts"
+    "examples/temporal/workflows.ts",
+    "examples/dagster/worker.ts"
   ],
   "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{js,mjs,ts}", "!scripts/fixtures/**"],
   "ignoreExportsUsedInFile": {
