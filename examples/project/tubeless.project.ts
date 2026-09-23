@@ -6,6 +6,7 @@ import { WelcomePipeline } from "../inherited-inputs.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
 import { YamlPelotonCommand } from "../yaml-peloton.ts";
 import { AirflowRemoteCommand } from "../airflow/remote.ts";
+import { TemporalPipeline } from "../temporal/pipeline.ts";
 import { NormalizePipeline } from "./pipelines/normalize.ts";
 import { EnrichCommand } from "./scripts/enrich.ts";
 import { ImportCommand } from "./scripts/import.ts";
@@ -29,6 +30,10 @@ export default defineProject(
     YamlPreviewCommand,
     YamlPelotonCommand,
     AirflowRemoteCommand,
+    // Local execution of the same pipeline hosted by the Temporal Activity.
+    definePipelineCommand(TemporalPipeline, {
+      params: { lines: { type: "string", multiple: true } },
+    }),
     definePipelineCommand(NormalizePipeline, {
       params: { rows: { type: "string", multiple: true } },
     }),

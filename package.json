@@ -67,6 +67,11 @@
     "pack:verify": "node scripts/verify-packed-artifact.mjs"
   },
   "devDependencies": {
+    "@temporalio/activity": "1.24.0",
+    "@temporalio/client": "1.24.0",
+    "@temporalio/testing": "1.24.0",
+    "@temporalio/worker": "1.24.0",
+    "@temporalio/workflow": "1.24.0",
     "@types/node": "26.6.2",
     "knip": "6.38.0",
     "oxfmt": "0.70.0",

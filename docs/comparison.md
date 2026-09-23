@@ -58,3 +58,7 @@ exit; if that is required, the host must provide it.
 The [Tubeless ↔ Airflow guide](./airflow.md) connects both patterns in one example:
 submit a DAG through `fromRemote`, run a Tubeless pipeline inside its task, and
 validate the returned XCom before continuing locally.
+
+The [Temporal guide](./temporal.md) hosts a pipeline inside an Activity and keeps
+its execution outside replayed Workflow code, with Activity-owned retries,
+heartbeats, and cancellation.

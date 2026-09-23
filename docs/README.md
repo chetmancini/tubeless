@@ -33,14 +33,15 @@ Install the [agent skill pack](./agent-skills.md) to author pipelines or convert
 
 For agent or editor validation, use the [pipeline document JSON Schema](./pipeline-document.schema.json).
 
-| Document                                                      | Use it for                                                          |
-| ------------------------------------------------------------- | ------------------------------------------------------------------- |
-| [Child-pipeline composition](./child-pipeline-composition.md) | Running a reusable pipeline once or for many items                  |
-| [Remote-step composition](./remote-step-composition.md)       | Calling remote services and running inside workers                  |
-| [Tubeless ↔ Airflow](./airflow.md)                            | Calling an Airflow DAG or running a pipeline inside an Airflow task |
-| [Generated API inventory](./api-reference.md)                 | Entrypoints, exported symbols, and surface hashes                   |
-| [Machine-readable API report](./api-report.json)              | Automated public-surface review                                     |
-| [LLM index](./llms.txt)                                       | Documentation links for coding agents                               |
+| Document                                                      | Use it for                                                                 |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [Child-pipeline composition](./child-pipeline-composition.md) | Running a reusable pipeline once or for many items                         |
+| [Remote-step composition](./remote-step-composition.md)       | Calling remote services and running inside workers                         |
+| [Tubeless ↔ Airflow](./airflow.md)                            | Calling an Airflow DAG or running a pipeline inside an Airflow task        |
+| [Tubeless on Temporal](./temporal.md)                         | Hosting pipelines in Activities with retries, heartbeats, and cancellation |
+| [Generated API inventory](./api-reference.md)                 | Entrypoints, exported symbols, and surface hashes                          |
+| [Machine-readable API report](./api-report.json)              | Automated public-surface review                                            |
+| [LLM index](./llms.txt)                                       | Documentation links for coding agents                                      |
 
 Use the recipe index to choose an implementation pattern. Use the generated
 API inventory to check exported names and signatures.
