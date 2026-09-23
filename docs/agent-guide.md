@@ -129,6 +129,10 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   unknown JSON and forwarding the signal. Use
   [`host-embedding.ts`](../examples/host-embedding.ts) for host-owned invocation;
   correlation IDs do not provide persistence or checkpoint/resume.
+  For Airflow 3, adapt [the paired Airflow examples](./airflow.md): use the public
+  REST API at the application edge, keep submission out of dry runs, verify inputs
+  before reattaching to a stable DAG run ID, and validate XCom results. Airflow owns
+  retries of hosted pipelines; a cancelled HTTP wait does not cancel a remote DAG.
 - For actual CPU parallelism, use `createWorkerThreadAdapter` from `tubeless/node`
   through `fromRemote`; never serialize arbitrary handler closures. Supply an explicit
   module URL/export and cloneable payload, keep `outputSchema` on the parent step,

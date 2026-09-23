@@ -5,6 +5,7 @@ import { CountPipeline } from "../precise-result.ts";
 import { WelcomePipeline } from "../inherited-inputs.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
 import { YamlPelotonCommand } from "../yaml-peloton.ts";
+import { AirflowRemoteCommand } from "../airflow/remote.ts";
 import { NormalizePipeline } from "./pipelines/normalize.ts";
 import { EnrichCommand } from "./scripts/enrich.ts";
 import { ImportCommand } from "./scripts/import.ts";
@@ -27,6 +28,7 @@ export default defineProject(
     YamlImportCommand,
     YamlPreviewCommand,
     YamlPelotonCommand,
+    AirflowRemoteCommand,
     definePipelineCommand(NormalizePipeline, {
       params: { rows: { type: "string", multiple: true } },
     }),

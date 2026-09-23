@@ -58,6 +58,7 @@ Advanced:
 
 - Child pipelines: ./child-pipeline-composition.md
 - Remote steps: ./remote-step-composition.md
+- Tubeless and Airflow: ./airflow.md
 - Public exports: ./api-reference.md
 - Machine-readable surface: ./api-report.json
 Executable examples:
@@ -74,6 +75,9 @@ Executable examples:
 - ../examples/best-effort.ts
 - ../examples/child-pipeline.ts
 - ../examples/remote-steps.ts
+- ../examples/airflow/remote.ts
+- ../examples/airflow/hosted.ts
+- ../examples/airflow/tubeless_example.py
 - ../examples/fan-out-progress.ts
 - ../examples/resumable-enrichment.ts
 - ../examples/cli-job.ts
