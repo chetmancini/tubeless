@@ -11,6 +11,7 @@
         "@temporalio/testing": "1.24.0",
         "@temporalio/worker": "1.24.0",
         "@temporalio/workflow": "1.24.0",
+        "@types/aws-lambda": "8.10.163",
         "@types/node": "26.6.2",
         "knip": "6.38.0",
         "oxfmt": "0.70.0",
@@ -328,6 +329,8 @@
     "@temporalio/workflow": ["@temporalio/workflow@1.24.0", "", { "dependencies": { "@temporalio/common": "1.24.0", "@temporalio/proto": "1.24.0", "nexus-rpc": "^0.0.3" } }, "sha512-pIA9nxkDCCbBnNuMSffQ44HWHYe3zXFfrDpDLwzh/FUSx8uLbsBM8jwf5oUMf+5eV/qVW9PknZhOu9IFO4XnPA=="],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg=="],
+
+    "@types/aws-lambda": ["@types/aws-lambda@8.10.163", "", {}, "sha512-+4zuoEB3S8RIhimtOFT7zAEk2SbpwrKjjGl9CyYnQR6k08uynxfauIIB0pDU1ssr05F8oyGiETwpn+8eXZMqPw=="],
 
     "@types/chai": ["@types/chai@5.2.3", "", { "dependencies": { "@types/deep-eql": "*", "assertion-error": "^2.0.1" } }, "sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA=="],
 

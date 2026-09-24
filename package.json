@@ -73,6 +73,7 @@
     "@temporalio/testing": "1.24.0",
     "@temporalio/worker": "1.24.0",
     "@temporalio/workflow": "1.24.0",
+    "@types/aws-lambda": "8.10.163",
     "@types/node": "26.6.2",
     "knip": "6.38.0",
     "oxfmt": "0.70.0",

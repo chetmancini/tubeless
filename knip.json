@@ -9,7 +9,8 @@
     "examples/temporal/client.ts",
     "examples/temporal/worker.ts",
     "examples/temporal/workflows.ts",
-    "examples/dagster/worker.ts"
+    "examples/dagster/worker.ts",
+    "examples/step-functions/handler.ts"
   ],
   "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{js,mjs,ts}", "!scripts/fixtures/**"],
   "ignoreExportsUsedInFile": {

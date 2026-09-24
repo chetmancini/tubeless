@@ -143,6 +143,11 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   require explicit Pipes materializations, and preview locally. Forward termination to
   Tubeless, correlate retries by host run and asset, and retain raw trace events
   for Studio. Dagster retries the entire asset invocation.
+  For AWS Step Functions, follow [the Lambda example](./step-functions.md):
+  invoke Tubeless within a synchronous Lambda Task, validate the incoming job,
+  correlate by execution and state, and let thrown failures reach Step Functions.
+  Clear deadline timers after each invocation. Host retries repeat the whole
+  pipeline; stopping a workflow does not cancel an already-running Lambda.
 - For actual CPU parallelism, use `createWorkerThreadAdapter` from `tubeless/node`
   through `fromRemote`; never serialize arbitrary handler closures. Supply an explicit
   module URL/export and cloneable payload, keep `outputSchema` on the parent step,

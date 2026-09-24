@@ -61,6 +61,7 @@ Advanced:
 - Tubeless and Airflow: ./airflow.md
 - Tubeless on Temporal: ./temporal.md
 - Tubeless on Dagster: ./dagster.md
+- Tubeless on AWS Step Functions: ./step-functions.md
 - Public exports: ./api-reference.md
 - Machine-readable surface: ./api-report.json
 Executable examples:
@@ -89,6 +90,10 @@ Executable examples:
 - ../examples/dagster/hosted.ts
 - ../examples/dagster/worker.ts
 - ../examples/dagster/definitions.py
+- ../examples/step-functions/pipeline.ts
+- ../examples/step-functions/handler.ts
+- ../examples/step-functions/state-machine.asl.json
+- ../examples/step-functions/template.json
 - ../examples/fan-out-progress.ts
 - ../examples/resumable-enrichment.ts
 - ../examples/cli-job.ts

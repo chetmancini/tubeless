@@ -1,0 +1,42 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Transform": "AWS::Serverless-2016-10-31",
+  "Description": "Run a Tubeless pipeline on AWS Step Functions through Lambda.",
+  "Resources": {
+    "PipelineFunction": {
+      "Type": "AWS::Serverless::Function",
+      "Properties": {
+        "CodeUri": "../../.context/step-functions/",
+        "Handler": "handler.handler",
+        "Runtime": "nodejs22.x",
+        "Timeout": 30,
+        "MemorySize": 256,
+        "LoggingConfig": { "LogFormat": "JSON" }
+      }
+    },
+    "PipelineLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": { "Fn::Sub": "/aws/lambda/${PipelineFunction}" },
+        "RetentionInDays": 7
+      }
+    },
+    "PipelineStateMachine": {
+      "Type": "AWS::Serverless::StateMachine",
+      "Properties": {
+        "Type": "STANDARD",
+        "DefinitionUri": "state-machine.asl.json",
+        "DefinitionSubstitutions": {
+          "Partition": { "Ref": "AWS::Partition" },
+          "PipelineFunctionArn": { "Fn::GetAtt": ["PipelineFunction", "Arn"] }
+        },
+        "Policies": [{ "LambdaInvokePolicy": { "FunctionName": { "Ref": "PipelineFunction" } } }]
+      }
+    }
+  },
+  "Outputs": {
+    "StateMachineArn": { "Value": { "Ref": "PipelineStateMachine" } },
+    "FunctionName": { "Value": { "Ref": "PipelineFunction" } },
+    "LogGroupName": { "Value": { "Ref": "PipelineLogGroup" } }
+  }
+}

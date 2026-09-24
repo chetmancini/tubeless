@@ -66,3 +66,7 @@ heartbeats, and cancellation.
 The [Dagster guide](./dagster.md) materializes an asset through Dagster Pipes,
 with progress logs, content data versions, and a trace for Tubeless Studio.
 Dagster owns retries of the asset; Tubeless owns execution of its internal steps.
+
+The [Step Functions guide](./step-functions.md) invokes a pipeline inside a Lambda
+Task and includes a SAM deployment. Step Functions owns workflow recovery;
+Tubeless supplies typed steps and progress within each Lambda invocation.

@@ -3,6 +3,7 @@
 For a complete engine integration in both directions, see [Tubeless ↔ Airflow](./airflow.md).
 For durable hosting in an Activity, see [Tubeless on Temporal](./temporal.md).
 For asset materialization through Dagster Pipes, see [Tubeless on Dagster](./dagster.md).
+For Lambda hosting in a state machine, see [Tubeless on AWS Step Functions](./step-functions.md).
 
 Use `fromRemote` when a pipeline step needs to call a service or execution
 engine outside the local handler, including a Node worker thread. The step sends input through an adapter,

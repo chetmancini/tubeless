@@ -8,6 +8,7 @@ import { YamlPelotonCommand } from "../yaml-peloton.ts";
 import { AirflowRemoteCommand } from "../airflow/remote.ts";
 import { TemporalPipeline } from "../temporal/pipeline.ts";
 import { DagsterPipeline } from "../dagster/pipeline.ts";
+import { StepFunctionsPipeline } from "../step-functions/pipeline.ts";
 import { NormalizePipeline } from "./pipelines/normalize.ts";
 import { EnrichCommand } from "./scripts/enrich.ts";
 import { ImportCommand } from "./scripts/import.ts";
@@ -40,6 +41,9 @@ export default defineProject(
         lines: { type: "string", multiple: true },
         outputPath: { type: "path", required: true },
       },
+    }),
+    definePipelineCommand(StepFunctionsPipeline, {
+      params: { lines: { type: "string", multiple: true } },
     }),
     definePipelineCommand(NormalizePipeline, {
       params: { rows: { type: "string", multiple: true } },

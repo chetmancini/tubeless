@@ -1,0 +1,41 @@
+{
+  "Comment": "Step Functions owns retries; each Lambda attempt runs the entire Tubeless pipeline.",
+  "QueryLanguage": "JSONPath",
+  "StartAt": "RunPipeline",
+  "TimeoutSeconds": 120,
+  "States": {
+    "RunPipeline": {
+      "Type": "Task",
+      "Resource": "arn:${Partition}:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${PipelineFunctionArn}",
+        "Payload": {
+          "job.$": "$",
+          "host": {
+            "executionArn.$": "$$.Execution.Id",
+            "stateName.$": "$$.State.Name",
+            "retryCount.$": "$$.State.RetryCount"
+          }
+        }
+      },
+      "TimeoutSeconds": 35,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "PipelineExecutionError"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "OutputPath": "$.Payload",
+      "End": true
+    }
+  }
+}
