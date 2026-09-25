@@ -10,14 +10,14 @@ Package: `tubeless`
 
 | Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless`            | `./dist/core/pipeline.d.ts`        | `53afa8330a5403caec68c88aac341de42bf057421721fe40d978635260615db8` |               59 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `69978854bc4e2796935636c7f0e5cd912bdd5d4519e563aad9b42d262d172318` |               31 |
+| `tubeless`            | `./dist/core/pipeline.d.ts`        | `305a3720f2349b56e942f867e3f8d8b5a5d74cbe9aa642e3fb8721fa6b774e3e` |               59 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `bc4ff1c9a2378c85527d306b2df61c9d53c44eca4efc935a17a0d4304c887bd4` |               31 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `7dbfbd4d894f2e9cc737b5373d1f654f5f08e8b5b5cce27511ef876779713656` |                6 |
-| `tubeless/node`       | `./dist/node/node.d.ts`            | `24461d789a0449a25aadc0e1150c3307581162af692223ca829250684c21428f` |               12 |
+| `tubeless/node`       | `./dist/node/node.d.ts`            | `9c38afe5b38eeb9d7df4e7b0875d4a6dd0479ea5628e891b36078e21eb2bd787` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `049b1488810e664e4a46638195861db2f1589006a34d486e8b90d651ac92a02b` |                8 |
-| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `586298e4d141586955569a195aeec12deaf1e811bddf7310c66d3db31afdcbf7` |                7 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `e45dbab9150dc03d29d08ad0bf1bb2041b37a67c33b5a9657014a96e20e8615d` |                8 |
+| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `4accf35e89736f80e32095899a6be145b0d16450440538f5b0ac6ca53de917ad` |                7 |
 | `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `bde2a6b18d95b6d6311fec6ae8719ff432208e650803635c9355ec1af62dad27` |                3 |
 
 ## Symbols
@@ -43,7 +43,7 @@ Package: `tubeless`
 | [`PipelineErrorKind`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L170)                | Broad category of a structured pipeline error.                                              |
 | [`PipelineErrorPhase`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L167)               | Pipeline lifecycle phase in which an error occurred.                                        |
 | [`PipelineExecutionContext`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L89)          | Resolved execution context provided to pipeline handlers.                                   |
-| [`PipelineExecutionError`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-execute.ts#L75)          | Error thrown by `runOrThrow` when a pipeline run does not complete successfully.            |
+| [`PipelineExecutionError`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-execution-error.ts#L51)  | Error thrown by `runOrThrow` when a pipeline run does not complete successfully.            |
 | [`PipelineFanOutDiagnostics`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L203)        | Bounded diagnostics collected from a failed or cancelled fan-out step.                      |
 | [`PipelineFanOutFailure`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L192)            | Bounded diagnostics for a failed or cancelled runtime fan-out.                              |
 | [`PipelineHooks`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L443)                    | Optional lifecycle callbacks, each receiving its own metadata snapshot.                     |

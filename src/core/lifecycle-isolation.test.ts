@@ -1,10 +1,81 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { createSteps, definePipeline } from "./pipeline.js";
+import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import type { PipelinePlan, PipelineRun, PipelineStepProgress } from "./pipeline-types.js";
 import { makePipeline } from "./pipeline.test-support.js";
 
 describe("lifecycle observation isolation", () => {
+  it.each([false, true])("attributes nested logs once with tracing=%s", async (tracing) => {
+    const events: PipelineTraceEvent[] = [];
+    const log = { error: vi.fn(), log: vi.fn(), warn: vi.fn() };
+    const { step, fromPipeline, forEachPipeline } = createSteps();
+    const leaf = definePipeline({
+      id: "leaf",
+      steps: [
+        step("work", {
+          run: (_inputs, context) => {
+            context.log.log("working", 42);
+            context.log.warn("warning");
+            context.log.error("diagnostic");
+          },
+        }),
+      ],
+      finalize: (_outputs, context) => context.log.log("finalized"),
+    });
+    const middle = definePipeline({
+      id: "middle",
+      steps: [fromPipeline("child", { pipeline: leaf })],
+    });
+    const root = definePipeline({
+      id: "root",
+      steps: [
+        forEachPipeline("children", {
+          pipeline: middle,
+          items: () => ["first", "second"],
+          key: (item) => item,
+          mapOptions: () => ({}),
+          concurrency: 2,
+        }),
+      ],
+    });
+    await root.runOrThrow(undefined, undefined, {
+      log,
+      tracing: tracing ? { exporter: { export: (event) => void events.push(event) } } : undefined,
+    });
+
+    expect(log.log.mock.calls.filter(([message]) => message === "working")).toEqual([
+      ["working", 42],
+      ["working", 42],
+    ]);
+    expect(log.log.mock.calls.filter(([message]) => message === "finalized")).toHaveLength(2);
+    expect(log.warn.mock.calls).toEqual([["warning"], ["warning"]]);
+    expect(log.error.mock.calls).toEqual([["diagnostic"], ["diagnostic"]]);
+    const logs = events.filter((event) => event.name === "pipeline.log");
+    expect(logs).toHaveLength(tracing ? 8 : 0);
+    for (const event of logs) {
+      expect(event.pipelineId).toBe("leaf");
+      const completed = events.find(
+        (candidate) => candidate.name === "pipeline.completed" && candidate.runId === event.runId
+      );
+      expect(completed).toBeDefined();
+      if (event.payload.message === "finalized") {
+        expect(event.stepId).toBe(PIPELINE_FINALIZE_STEP_ID);
+        expect(event.attemptId).toBeUndefined();
+      } else {
+        expect(event.stepId).toBe("work");
+        expect(event.attemptId).toBeDefined();
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            name: "step.running",
+            runId: event.runId,
+            attemptId: event.attemptId,
+          })
+        );
+      }
+    }
+  });
+
   it("isolates plans and step metadata from every hook and the executor", async () => {
     const events: PipelineTraceEvent[] = [];
     const planned: string[] = [];

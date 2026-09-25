@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { PipelineChildError } from "./child-execution.js";
+import { PipelineChildError } from "./pipeline-execution-error.js";
 import { createSteps, definePipeline, PipelineExecutionError } from "./pipeline.js";
 import { defer, rejectWhenAborted } from "./child-pipeline.test-support.js";
 

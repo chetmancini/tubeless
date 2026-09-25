@@ -1,3 +1,4 @@
+import { isCancellationOnly } from "./pipeline-execution-error.js";
 import type { PipelineLifecycleObserver } from "./lifecycle.js";
 import { RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import type {
@@ -31,10 +32,6 @@ type StepTransitionEffects = {
 type PipelineFinalization<TResult> =
   | { finalized: false; value: undefined }
   | { finalized: true; value: TResult };
-
-export function isCancellationOnly(errors: readonly PipelineError[]): boolean {
-  return errors.length > 0 && errors.every(({ kind }) => kind === "cancellation");
-}
 
 function terminalRunStatus(errors: readonly PipelineError[]): PipelineRunStatus {
   if (errors.length === 0) return "completed";
@@ -110,7 +107,16 @@ export class PipelineRunState<TResult> {
     readonly startedAtMs: number,
     readonly identity: { correlationId?: string; parentRunId?: string; runId: string },
     readonly now: () => number,
-    readonly lifecycle: PipelineLifecycleObserver
+    readonly lifecycle: Pick<
+      PipelineLifecycleObserver,
+      | "pipelineStart"
+      | "stepStatus"
+      | "finalizeStart"
+      | "finalizeComplete"
+      | "finalizeError"
+      | "pipelineComplete"
+      | "flush"
+    >
   ) {}
 
   get errors(): readonly PipelineError[] {

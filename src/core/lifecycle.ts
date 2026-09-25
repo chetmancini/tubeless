@@ -1,15 +1,13 @@
 import type {
   PipelineError,
   PipelineHooks,
+  PipelineLogger,
   PipelinePlan,
   PipelineRun,
   PipelineRuntime,
   PipelineStepStatus,
 } from "./pipeline-types.js";
-import {
-  createPipelineTraceEmitter,
-  type PipelineTraceEmitter,
-} from "../tracing/tracing-internal.js";
+import { createPipelineTraceEmitter } from "../tracing/tracing-internal.js";
 import type {
   PipelineTraceAttributes,
   PipelineTraceContext,
@@ -17,17 +15,12 @@ import type {
 
 /** Internal canonical lifecycle stream. Hooks and tracing are projections of it. */
 export interface PipelineLifecycleObserver {
+  readonly traceContext: PipelineTraceContext | undefined;
   finalizeComplete(durationMs: number, value: unknown): void;
   finalizeError(error: PipelineError, durationMs: number): void;
   finalizeStart(): void;
   flush(): Promise<void>;
-  log(
-    level: "error" | "log" | "warn",
-    message: unknown,
-    params?: readonly unknown[],
-    stepId?: string,
-    attemptId?: string
-  ): void;
+  logger(stepId?: string, attemptId?: string): PipelineLogger;
   pipelineComplete(result: PipelineRun<unknown>): void;
   pipelineStart(plan: PipelinePlan, targetIds: readonly string[]): void;
   reportAttempt(
@@ -37,6 +30,15 @@ export interface PipelineLifecycleObserver {
     attemptId?: string
   ): void;
   stepStatus(event: PipelineStepStatus, trace?: boolean): void;
+}
+
+const PIPELINE_LOGGER_BASE = Symbol("pipelineLoggerBase");
+
+type TracedPipelineLogger = PipelineLogger & { [PIPELINE_LOGGER_BASE]?: PipelineLogger };
+
+function basePipelineLogger(log: PipelineLogger): PipelineLogger {
+  // SAFETY: the optional symbol exists only on loggers created by this module.
+  return (log as TracedPipelineLogger)[PIPELINE_LOGGER_BASE] ?? log;
 }
 
 function emitHook(runtime: PipelineRuntime, emit: (hooks: PipelineHooks) => void): void {
@@ -64,9 +66,38 @@ function snapshotRun(result: PipelineRun<unknown>): PipelineRun<unknown> {
 export function createPipelineLifecycleObserver(
   pipelineId: string,
   runtime: PipelineRuntime,
-  trace: PipelineTraceEmitter | undefined
+  identity: PipelineTraceContext
 ): PipelineLifecycleObserver {
+  const base = basePipelineLogger(runtime.log);
+  const trace = createPipelineTraceEmitter(
+    pipelineId,
+    runtime.tracing,
+    base,
+    identity,
+    runtime.now
+  );
   return {
+    traceContext: trace?.context,
+    logger(stepId, attemptId) {
+      if (!trace) return runtime.log;
+      // A child run inherits its parent's logger, but owns its own trace events.
+      const log: TracedPipelineLogger = {
+        error: (message, ...params) => {
+          trace.log("error", message, params, stepId, attemptId);
+          base.error(message, ...params);
+        },
+        log: (message, ...params) => {
+          trace.log("log", message, params, stepId, attemptId);
+          base.log(message, ...params);
+        },
+        warn: (message, ...params) => {
+          trace.log("warn", message, params, stepId, attemptId);
+          base.warn(message, ...params);
+        },
+      };
+      log[PIPELINE_LOGGER_BASE] = base;
+      return log;
+    },
     pipelineStart(plan, targetIds) {
       emitHook(runtime, (hooks) => hooks.onPipelineStart?.(structuredClone(plan)));
       trace?.pipelineStart(plan, targetIds);
@@ -111,8 +142,6 @@ export function createPipelineLifecycleObserver(
     },
     reportAttempt: (stepId, attempt, attributes, attemptId) =>
       trace?.reportAttempt(stepId, attempt, attributes, attemptId),
-    log: (level, message, params, stepId, attemptId) =>
-      trace?.log(level, message, params, stepId, attemptId),
     finalizeStart() {
       emitHook(runtime, (hooks) => hooks.onFinalizeStart?.({ pipelineId }));
       trace?.finalizeStart();
@@ -147,11 +176,7 @@ export async function emitRejectedPlanLifecycle(
   if (result.correlationId !== undefined) identity.correlationId = result.correlationId;
   if (result.parentRunId) identity.parentRunId = result.parentRunId;
   if (runtime.tracing?.itemKey) identity.itemKey = runtime.tracing.itemKey;
-  const lifecycle = createPipelineLifecycleObserver(
-    pipelineId,
-    runtime,
-    createPipelineTraceEmitter(pipelineId, runtime.tracing, runtime.log, identity, runtime.now)
-  );
+  const lifecycle = createPipelineLifecycleObserver(pipelineId, runtime, identity);
   lifecycle.pipelineStart(plan, targetIds);
   lifecycle.pipelineComplete(result);
   await lifecycle.flush();

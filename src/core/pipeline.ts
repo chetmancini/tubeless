@@ -1,7 +1,7 @@
+import { PipelineExecutionError } from "./pipeline-execution-error.js";
 import {
   defaultPipelineContext,
   executePlannedRun,
-  PipelineExecutionError,
   resolvePipelineRuntime,
 } from "./pipeline-execute.js";
 import { RUN_MODEL_VERSION } from "./pipeline-ids.js";
