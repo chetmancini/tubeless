@@ -1,4 +1,7 @@
+import type { AnyStep } from "../core/pipeline-steps.js";
 import { throwIfAborted } from "../utilities/abort.js";
+import { EXECUTE_TEST_RUN, isCompiledPipeline } from "../core/pipeline-identity.js";
+import { PipelineExecutionError } from "../core/pipeline-execution-error.js";
 import type {
   Pipeline,
   PipelineContext,
@@ -11,6 +14,71 @@ import type {
   PipelineStepStatus,
 } from "../core/pipeline.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
+
+const overrideValue: unique symbol = Symbol("pipelineTestOverride");
+
+/** A typed step/value pair created by overrideStep; only accepted by test runs. */
+export interface PipelineTestOverride {
+  readonly [overrideValue]: { readonly step: AnyStep; readonly value: unknown };
+}
+
+/** Supply a resolved handler output, before the step's outputSchema validation/transformation. */
+export function overrideStep<TStep extends AnyStep>(
+  step: TStep,
+  value: NoInfer<Awaited<ReturnType<TStep["run"]>>>
+): PipelineTestOverride {
+  return Object.freeze({ [overrideValue]: Object.freeze({ step, value }) });
+}
+
+/** Test-only controls. Overrides never select steps or propagate into child runs. */
+export type PipelineTestRunControls<
+  TStepId extends string = string,
+  TTargetId extends string = string,
+> = PipelineRunControls<TStepId, TTargetId> & {
+  overrides?: readonly PipelineTestOverride[];
+};
+
+type TestExecutable<
+  TOptions extends object,
+  TResult,
+  TStepId extends string,
+  TTargetId extends string,
+> = {
+  [EXECUTE_TEST_RUN](
+    options: TOptions,
+    controls: PipelineRunControls<TStepId, TTargetId>,
+    context: PipelineContext,
+    overrides: ReadonlyMap<AnyStep, unknown>
+  ): Promise<PipelineRun<TResult>>;
+};
+
+async function runWithOverrides<
+  TOptions extends object,
+  TResult,
+  TStepId extends string,
+  TTargetId extends string,
+>(
+  pipeline: Pipeline<TOptions, TResult, TStepId, TTargetId>,
+  options: TOptions,
+  controls: PipelineTestRunControls<TStepId, TTargetId> | undefined,
+  context: PipelineContext
+): Promise<PipelineRun<TResult>> {
+  if (!controls?.overrides?.length) return pipeline.run(options, controls, context);
+  if (!isCompiledPipeline(pipeline))
+    throw new TypeError("Step overrides require a pipeline returned by definePipeline");
+  const overrides = new Map<AnyStep, unknown>();
+  for (const entry of controls.overrides) {
+    const pair = entry?.[overrideValue];
+    if (!pair) throw new TypeError("Step overrides must be created by overrideStep");
+    if (overrides.has(pair.step))
+      throw new TypeError(`Duplicate override for step ${pair.step.id}`);
+    overrides.set(pair.step, pair.value);
+  }
+  // SAFETY: definePipeline brands the exact object and installs this internal entrypoint.
+  const executable = pipeline as typeof pipeline &
+    TestExecutable<TOptions, TResult, TStepId, TTargetId>;
+  return executable[EXECUTE_TEST_RUN](options, controls, context, overrides);
+}
 
 /** Log levels captured by a pipeline test runtime. */
 export type PipelineTestLogLevel = "error" | "log" | "warn";
@@ -62,12 +130,12 @@ export interface PipelineTestRuntime {
   run<TOptions extends object, TResult, TStepId extends string, TTargetId extends string>(
     pipeline: Pipeline<TOptions, TResult, TStepId, TTargetId>,
     options: TOptions,
-    controls?: PipelineRunControls<TStepId, TTargetId>
+    controls?: PipelineTestRunControls<TStepId, TTargetId>
   ): Promise<PipelineRun<TResult>>;
   runOrThrow<TOptions extends object, TResult, TStepId extends string, TTargetId extends string>(
     pipeline: Pipeline<TOptions, TResult, TStepId, TTargetId>,
     options: TOptions,
-    controls?: PipelineRunControls<TStepId, TTargetId>
+    controls?: PipelineTestRunControls<TStepId, TTargetId>
   ): Promise<TResult>;
 }
 
@@ -155,8 +223,14 @@ export function createPipelineTestRuntime(
       else abortController.abort(reason);
     },
     plan: (pipeline, controls) => pipeline.plan(controls),
-    run: (pipeline, runOptions, controls) => pipeline.run(runOptions, controls, context),
-    runOrThrow: (pipeline, runOptions, controls) =>
-      pipeline.runOrThrow(runOptions, controls, context),
+    run: (pipeline, runOptions, controls) =>
+      runWithOverrides(pipeline, runOptions, controls, context),
+    runOrThrow: async (pipeline, runOptions, controls) => {
+      if (!controls?.overrides?.length) return pipeline.runOrThrow(runOptions, controls, context);
+      const result = await runWithOverrides(pipeline, runOptions, controls, context);
+      if (result.status !== "completed") throw new PipelineExecutionError(result);
+      // SAFETY: a successful run always finalized its typed result.
+      return result.value as Awaited<ReturnType<typeof pipeline.runOrThrow>>;
+    },
   };
 }

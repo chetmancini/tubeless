@@ -4,6 +4,7 @@ import { ValidatedPipeline } from "../validated-boundaries.ts";
 import { OrderChecksPipeline } from "../parameterized-steps.ts";
 import { CountPipeline } from "../precise-result.ts";
 import { WelcomePipeline } from "../inherited-inputs.ts";
+import { OverrideExamplePipeline } from "../step-output-overrides.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
 import { YamlPelotonCommand } from "../yaml-peloton.ts";
 import { AirflowRemoteCommand } from "../airflow/remote.ts";
@@ -23,6 +24,10 @@ export default defineProject(
   "example-jobs",
   [
     ValidatedPipeline,
+    // Ordinary execution of the override recipe; supplied outputs are testing-only.
+    definePipelineCommand(OverrideExamplePipeline, {
+      params: { lines: { type: "string", multiple: true } },
+    }),
     definePipelineCommand(WelcomePipeline, {
       params: { name: { type: "string" } },
     }),

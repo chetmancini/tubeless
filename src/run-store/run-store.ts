@@ -69,6 +69,7 @@ export interface StoredPipelineLog {
 }
 
 export interface StoredPipelineAttempt {
+  outputSource?: "override";
   attemptId: string;
   durationMs?: number;
   finishedAtMs?: number;
@@ -78,6 +79,7 @@ export interface StoredPipelineAttempt {
 }
 
 export interface StoredPipelineStep {
+  outputSource?: "override";
   /** One execution attempt; `retries` carries `reportAttempt` telemetry. */
   attempt?: StoredPipelineAttempt;
   description?: string;

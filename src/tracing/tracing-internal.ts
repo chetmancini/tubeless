@@ -112,6 +112,7 @@ function traceProgress(
   for (const detail of details.slice(0, PIPELINE_TRACE_LIST_LIMIT)) {
     const row: PipelineStepProgressDetail = { id: boundTraceString(detail.id) };
     if (detail.name) row.name = boundTraceString(detail.name);
+    if (detail.outputSource === "override") row.outputSource = "override";
     for (const key of ["depth", "completed", "total"] as const) {
       if (Number.isFinite(detail[key])) row[key] = detail[key];
     }
@@ -331,16 +332,19 @@ export function createPipelineTraceEmitter(
       if (event.status === "running") {
         emit({
           name: "step.running",
-          payload: event.progress
-            ? {
-                progress: {
-                  completed: event.progress.completed,
-                  ...(traceProgress(event.progress.details) ?? {}),
-                  message: event.progress.message,
-                  total: event.progress.total,
-                },
-              }
-            : {},
+          payload: {
+            ...(event.outputSource ? { outputSource: event.outputSource } : {}),
+            ...(event.progress
+              ? {
+                  progress: {
+                    completed: event.progress.completed,
+                    ...(traceProgress(event.progress.details) ?? {}),
+                    message: event.progress.message,
+                    total: event.progress.total,
+                  },
+                }
+              : {}),
+          },
           attemptId: event.attemptId,
           pipelineId,
           stepId: event.step.id,
@@ -350,7 +354,10 @@ export function createPipelineTraceEmitter(
       if (event.status === "completed") {
         const fields: Extract<PipelineTraceEmission, { name: "step.complete" }> = {
           name: "step.complete",
-          payload: { status: event.status },
+          payload: {
+            status: event.status,
+            ...(event.outputSource ? { outputSource: event.outputSource } : {}),
+          },
           durationMs: elapsedMs(event),
           pipelineId,
           stepId: event.id,
@@ -366,6 +373,7 @@ export function createPipelineTraceEmitter(
             dependencyId: event.dependencyId,
             message: event.message,
             reason: event.reason,
+            ...(event.outputSource ? { outputSource: event.outputSource } : {}),
             status: event.status,
           },
           durationMs: elapsedMs(event),
@@ -381,7 +389,10 @@ export function createPipelineTraceEmitter(
       if (event.status === "cancelled") {
         const fields: Extract<PipelineTraceEmission, { name: "step.cancelled" }> = {
           name: "step.cancelled",
-          payload: { status: "cancelled" },
+          payload: {
+            status: "cancelled",
+            ...(event.outputSource ? { outputSource: event.outputSource } : {}),
+          },
           durationMs: elapsedMs(event),
           error,
           pipelineId,
@@ -393,7 +404,10 @@ export function createPipelineTraceEmitter(
       }
       const fields: Extract<PipelineTraceEmission, { name: "step.failed" }> = {
         name: "step.failed",
-        payload: { status: "failed" },
+        payload: {
+          status: "failed",
+          ...(event.outputSource ? { outputSource: event.outputSource } : {}),
+        },
         durationMs: elapsedMs(event),
         error,
         pipelineId,

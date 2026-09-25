@@ -51,6 +51,7 @@ export async function executePlannedRun<
   domainOptions: object;
   plan: PipelinePlan;
   runtime: PipelineRuntime;
+  overrides?: ReadonlyMap<AnyStep, unknown>;
 }): Promise<
   PipelineRun<TResultSchema extends StandardSchemaV1 ? InferSchemaOutput<TResultSchema> : TResult>
 > {
@@ -229,6 +230,22 @@ export async function executePlannedRun<
   const executeOneStep = async (step: AnyStep<TOptions>): Promise<void> => {
     const plannedStep = plannedStepFor(step);
     if (cancelBeforeStepStart(step)) return;
+
+    if (plannedStep.selected && input.overrides?.has(step)) {
+      const attempt = state.beginAttempt(plannedStep, runtime.now(), "override");
+      try {
+        const output = await validateStepOutput(
+          step,
+          input.overrides.get(step),
+          `Pipeline ${compiled.id} step ${step.id} override output`
+        );
+        throwIfAborted(runtime);
+        state.completeStep(plannedStep, attempt, output);
+      } catch (error) {
+        recordStepExecutionFailure(error, plannedStep, attempt);
+      }
+      return;
+    }
 
     const graph = compiledStepGraph(compiled, step);
     const disposition = decideStepDisposition({

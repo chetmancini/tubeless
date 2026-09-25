@@ -193,8 +193,14 @@ Read the corresponding package recipe before using these features:
 
 Typecheck the consumer and run focused tests. Use `createPipelineTestRuntime`
 from `tubeless/testing` for deterministic observation and cancellation, with
-fake I/O for side effects. Check failure gates, skipped outputs, and dry-run
-behavior. Generate diagrams with `pipeline.toMermaid()` when useful.
+fake I/O for side effects. Supply intermediate values with `overrideStep(step, value)`
+and test-run `{ overrides: [...] }` controls. Overrides validate through `outputSchema`
+and use normal lifecycle states and hooks with `outputSource: "override"` metadata,
+including failed or cancelled validation attempts. Their normal, skip, dry-run, child,
+and remote handlers never execute. Select overridden steps explicitly when using exact `stepIds`, and exclude
+upstream steps to avoid their I/O. See `examples/step-output-overrides.ts` and
+`docs/concepts.md` for selection and failure semantics. Check failure gates, skipped
+outputs, and dry-run behavior. Generate diagrams with `pipeline.toMermaid()` when useful.
 
 Within the Tubeless source repository, also follow its `AGENTS.md` and run
 `make check`.

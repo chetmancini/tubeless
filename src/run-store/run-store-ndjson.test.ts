@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { openNdjsonPipelineRunStore } from "./run-store-ndjson.js";
 import { createSteps, definePipeline } from "tubeless";
+import { createPipelineTestRuntime, overrideStep } from "tubeless/testing";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite.js";
 import { projectPipelineRunStore } from "./run-store.js";
 import type { PipelineTraceEvent, PipelineTraceExporter } from "../tracing/tracing.js";
@@ -443,3 +444,67 @@ describe("recorded fan-out diagnostics", () => {
     await expect(openNdjsonPipelineRunStore(filename)).rejects.toThrow("line 1 is invalid");
   });
 });
+
+it.each(["completed", "failed", "cancelled"] as const)(
+  "round-trips %s override provenance through NDJSON and SQLite",
+  async (status) => {
+    const { step } = createSteps();
+    const test = createPipelineTestRuntime();
+    const load = step("load", {
+      run: () => "real",
+      outputSchema: {
+        "~standard": {
+          version: 1,
+          vendor: "test",
+          types: undefined as { input: string; output: string } | undefined,
+          validate: (value) => {
+            if (status === "cancelled") test.abort();
+            return status === "failed"
+              ? { issues: [{ message: "Invalid fixture" }] }
+              : { value: String(value) };
+          },
+        },
+      },
+    });
+    const pipeline = definePipeline({ id: "override-history", steps: [load], finalize: load });
+    const lines: string[] = [];
+    test.context.tracing = { exporter: captureJson(lines) };
+    const result = await test.run(
+      pipeline,
+      {},
+      { overrides: [overrideStep(load, "private supplied value")] }
+    );
+    expect(lines.join("\n")).not.toContain("private supplied value");
+    expect(result.steps[0]).toMatchObject({ status, outputSource: "override" });
+    const filename = await tempFile(lines.join("\n"));
+    const ndjson = await openNdjsonPipelineRunStore(filename);
+    const sqlite = await openSqlitePipelineRunStore(
+      path.join(path.dirname(filename), "overrides.sqlite")
+    );
+    try {
+      const events = await ndjson.listEvents();
+      expect(
+        events.find(
+          (event) => event.name === (status === "completed" ? "step.complete" : `step.${status}`)
+        )
+      ).toMatchObject({
+        payload: { status, outputSource: "override" },
+        stepId: "load",
+        attemptId: expect.any(String),
+      });
+      for (const event of events) await sqlite.export(event);
+      await sqlite.flush?.();
+      for (const reader of [ndjson, sqlite]) {
+        expect(projectPipelineRunStore(await reader.listEvents()).runs[0]?.steps[0]).toMatchObject({
+          id: "load",
+          status,
+          outputSource: "override",
+          attempt: { status, outputSource: "override" },
+        });
+      }
+    } finally {
+      await ndjson.close();
+      await sqlite.close();
+    }
+  }
+);

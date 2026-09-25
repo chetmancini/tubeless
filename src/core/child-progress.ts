@@ -44,7 +44,8 @@ function sameChildProgress(
           Object.is(row.completed, other.completed) &&
           Object.is(row.total, other.total) &&
           row.label === other.label &&
-          row.status === other.status)
+          row.status === other.status &&
+          row.outputSource === other.outputSource)
       );
     })
   );
@@ -53,7 +54,7 @@ function sameChildProgress(
 function sameChildStatus(left: PipelineStepStatus, right: PipelineStepStatus): boolean {
   if (left.status !== right.status) return false;
   if (left.status === "planned" || right.status === "planned") return true;
-  if (left.attemptId !== right.attemptId) return false;
+  if (left.attemptId !== right.attemptId || left.outputSource !== right.outputSource) return false;
   if (left.status === "running" || right.status === "running") {
     return (
       left.status === "running" &&
@@ -145,6 +146,9 @@ function createChildProgress(plan: PipelinePlan) {
           errorLabel = event.error.message;
           break;
       }
+      if (event.outputSource === "override") {
+        message += " (overridden)";
+      }
       const previous = terminalSteps.size;
       if (event.status !== "running") terminalSteps.add(event.step.id);
       const latest = progress.get(event.step.id);
@@ -152,6 +156,7 @@ function createChildProgress(plan: PipelinePlan) {
         id: event.step.id,
         name: event.step.name,
         status: event.status,
+        ...(event.outputSource ? { outputSource: event.outputSource } : {}),
       };
       if (latest) {
         row.completed = latest.completed;

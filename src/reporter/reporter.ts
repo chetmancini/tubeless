@@ -161,8 +161,9 @@ export function createRunReporter<TResult = unknown>(
   const lastProgressMessage = new Map<string, string>();
   const progressLogIntervalMs = 750;
   const ellipsis = unicodeEnabled ? "…" : "...";
-  const displayName = (step: { id: string; name?: string }): string =>
-    safeTerminalText(step.name ?? step.id);
+  const displayName = (step: { id: string; name?: string; outputSource?: "override" }): string =>
+    safeTerminalText(step.name ?? step.id) +
+    (step.outputSource === "override" ? " (overridden)" : "");
   const clearProgress = (stepId: string): void => {
     lastProgressLogAt.delete(stepId);
     lastProgressMessage.delete(stepId);
@@ -177,11 +178,13 @@ export function createRunReporter<TResult = unknown>(
         )
       );
     },
-    onStepStart: ({ step }) => {
+    onStepStart: ({ step, outputSource }) => {
       const description = step.description
         ? ` - ${styled.description(safeTerminalText(step.description))}`
         : "";
-      log.log(`  ${styled.start(symbols.start)} ${displayName(step)}${description}`);
+      log.log(
+        `  ${styled.start(symbols.start)} ${displayName({ ...step, outputSource })}${description}`
+      );
     },
     onStepProgress: ({ progress, step }) => {
       // Ignore empty/non-visible progress snapshots (no message, total, or work count).
@@ -225,19 +228,19 @@ export function createRunReporter<TResult = unknown>(
           : (event.message ?? event.reason)
       );
       log.log(
-        `  ${styled.skip(symbols.skip)} ${displayName(event.step)} ${styled.duration(`(${detail})`)}`
+        `  ${styled.skip(symbols.skip)} ${displayName(event)} ${styled.duration(`(${detail})`)}`
       );
     },
     onStepCancel: (event) => {
       clearProgress(event.id);
       log.warn(
-        `  ${styled.skip(symbols.skip)} ${displayName(event.step)}: cancelled: ${safeTerminalText(event.error.message)}`
+        `  ${styled.skip(symbols.skip)} ${displayName(event)}: cancelled: ${safeTerminalText(event.error.message)}`
       );
     },
     onStepFail: (event) => {
       clearProgress(event.id);
       log.error(
-        `  ${styled.fail(symbols.fail)} ${displayName(event.step)}: ${safeTerminalText(event.error.message)}`
+        `  ${styled.fail(symbols.fail)} ${displayName(event)}: ${safeTerminalText(event.error.message)}`
       );
     },
     onFinalizeStart: () => {

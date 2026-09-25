@@ -138,7 +138,9 @@ function renderProgressDetail(
             ? theme.styled.description(theme.symbols.pending)
             : theme.styled.start(spinner);
   const id = safeTerminalText(detail.name ?? detail.id);
-  const label = detail.label ? safeTerminalText(detail.label) : "";
+  const label =
+    (detail.label ? safeTerminalText(detail.label) : "") +
+    (detail.outputSource === "override" ? " (overridden)" : "");
   const labelText = status === "cancelled" ? `cancelled${label ? `: ${label}` : ""}` : label;
   const running = status === "running";
   const body = labelText ? `${id} ${labelText}` : id;
@@ -165,7 +167,9 @@ function renderStep(
   progressBarWidth: number
 ): string[] {
   const { step } = state;
-  const displayName = safeTerminalText(step.name ?? step.id);
+  const displayName =
+    safeTerminalText(step.name ?? step.id) +
+    (state.status !== "planned" && state.outputSource === "override" ? " (overridden)" : "");
   switch (state.status) {
     case "running": {
       const progress =

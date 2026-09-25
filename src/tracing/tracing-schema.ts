@@ -278,6 +278,7 @@ const pipelineTraceErrorRefSchema = wireRefine(pipelineTraceErrorSchema, () => u
 });
 
 const progressDetailSchema = wireObject({
+  outputSource: wireOptional(wireLiteral("override")),
   completed: wireOptional(finiteNumber),
   depth: wireOptional(finiteNumber),
   id: wireString({ maxLength: PIPELINE_TRACE_STRING_LIMIT }),
@@ -547,14 +548,20 @@ export const pipelineTraceEventSchemas = {
     ...traceStepShape,
     error: pipelineTraceErrorRefSchema,
     name: wireLiteral("step.cancelled"),
-    payload: wireObject({ status: wireLiteral("cancelled") }),
+    payload: wireObject({
+      status: wireLiteral("cancelled"),
+      outputSource: wireOptional(wireLiteral("override")),
+    }),
   }),
   "step.complete": wireObject({
     ...traceBaseShape,
     ...traceAttemptShape,
     ...traceStepShape,
     name: wireLiteral("step.complete"),
-    payload: wireObject({ status: wireLiteral("completed") }),
+    payload: wireObject({
+      status: wireLiteral("completed"),
+      outputSource: wireOptional(wireLiteral("override")),
+    }),
   }),
   "step.failed": wireObject({
     ...traceBaseShape,
@@ -562,7 +569,10 @@ export const pipelineTraceEventSchemas = {
     ...traceStepShape,
     error: pipelineTraceErrorRefSchema,
     name: wireLiteral("step.failed"),
-    payload: wireObject({ status: wireLiteral("failed") }),
+    payload: wireObject({
+      status: wireLiteral("failed"),
+      outputSource: wireOptional(wireLiteral("override")),
+    }),
   }),
   "step.planned": wireObject({
     ...traceBaseShape,
@@ -590,7 +600,10 @@ export const pipelineTraceEventSchemas = {
     ...traceStepShape,
     attemptId: requiredString,
     name: wireLiteral("step.running"),
-    payload: wireObject({ progress: wireOptional(progressSchema) }),
+    payload: wireObject({
+      progress: wireOptional(progressSchema),
+      outputSource: wireOptional(wireLiteral("override")),
+    }),
   }),
   "step.skipped": wireObject({
     ...traceBaseShape,
@@ -602,6 +615,7 @@ export const pipelineTraceEventSchemas = {
       message: wireOptional(openString),
       reason: wireEnum(PIPELINE_STEP_SKIP_REASONS),
       status: wireLiteral("skipped"),
+      outputSource: wireOptional(wireLiteral("override")),
     }),
   }),
 } as const satisfies Readonly<Record<string, WireSchema<unknown>>>;

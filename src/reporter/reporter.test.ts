@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createPipelineTestRuntime, overrideStep } from "../testing/testing.js";
 import { createSteps, definePipeline, type PipelineLogger } from "../core/pipeline.js";
 import { createRunReporter, formatDurationMs } from "./reporter.js";
 
@@ -247,4 +248,15 @@ describe("formatDurationMs", () => {
     expect(formatDurationMs(119_499)).toBe("1m59s");
     expect(formatDurationMs(119_500)).toBe("2m");
   });
+});
+
+it("labels supplied step outputs as overridden instead of successful handler executions", async () => {
+  const { step } = createSteps();
+  const load = step("load", { run: () => 1 });
+  const pipeline = definePipeline({ id: "reported-override", steps: [load] });
+  const { logger, messages } = capturingLogger();
+  const test = createPipelineTestRuntime();
+  test.context.hooks = createRunReporter({ color: "never", log: logger, symbols: "ascii" });
+  await test.run(pipeline, {}, { overrides: [overrideStep(load, 2)] });
+  expect(messages.log.join("\n")).toContain("ok load (overridden)");
 });

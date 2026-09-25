@@ -118,6 +118,7 @@ export function createPipelineLifecycleObserver(
             emitHook(runtime, (hooks) =>
               hooks.onStepStart?.({
                 attemptId: event.attemptId,
+                ...(event.outputSource ? { outputSource: event.outputSource } : {}),
                 pipelineId: event.pipelineId,
                 status: "running",
                 step: structuredClone(event.step),

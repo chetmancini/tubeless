@@ -40,6 +40,9 @@ The run list shows active runs first, followed by history. Child runs appear
 beneath their parent, and caller-owned correlation IDs remain searchable and
 visible separately from package-generated run IDs. Open a run to inspect its
 steps, progress, logs, and errors.
+Test-runtime recordings retain ordinary step statuses and annotate supplied
+outputs as `completed (overridden)`, `failed (overridden)`, or `cancelled (overridden)`. The supplied values are not recorded. Studio launch forms
+do not accept overrides; see [testing overrides](./concepts.md#supplying-step-outputs).
 Nested steps show the child pipeline and its declared steps. Recorded progress
 includes the most recent per-item details; when details are truncated, Studio
 shows how many were omitted.
