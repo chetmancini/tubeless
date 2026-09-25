@@ -68,6 +68,7 @@
   },
   "devDependencies": {
     "@dagster-io/dagster-pipes": "0.1.0",
+    "@inngest/test": "1.0.0",
     "@temporalio/activity": "1.24.0",
     "@temporalio/client": "1.24.0",
     "@temporalio/testing": "1.24.0",
@@ -75,6 +76,7 @@
     "@temporalio/workflow": "1.24.0",
     "@types/aws-lambda": "8.10.163",
     "@types/node": "26.6.2",
+    "inngest": "4.21.0",
     "knip": "6.38.0",
     "oxfmt": "0.70.0",
     "oxlint": "1.85.0",

@@ -60,6 +60,7 @@ Advanced:
 - Remote steps: ./remote-step-composition.md
 - Tubeless and Airflow: ./airflow.md
 - Tubeless on Temporal: ./temporal.md
+- Tubeless on Inngest: ./inngest.md
 - Tubeless on Dagster: ./dagster.md
 - Tubeless on AWS Step Functions: ./step-functions.md
 - Public exports: ./api-reference.md
@@ -81,6 +82,11 @@ Executable examples:
 - ../examples/airflow/remote.ts
 - ../examples/airflow/hosted.ts
 - ../examples/airflow/tubeless_example.py
+- ../examples/inngest/pipeline.ts
+- ../examples/inngest/functions.ts
+- ../examples/inngest/client.ts
+- ../examples/inngest/server.ts
+- ../examples/inngest/send.ts
 - ../examples/temporal/pipeline.ts
 - ../examples/temporal/activities.ts
 - ../examples/temporal/workflows.ts

@@ -138,6 +138,11 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   heartbeat during long waits, forward cancellation, and preserve Temporal's
   cancellation failure when Tubeless wraps an abort. Activity retries replay the
   whole pipeline; heartbeat progress alone does not resume its steps.
+  For Inngest, follow [the durable step example](./inngest.md): call `runOrThrow`
+  inside `step.run`, validate events before Tubeless can wrap a `NonRetriableError`,
+  and return JSON-safe values. Failed attempts repeat the whole pipeline; completed
+  durable steps reuse their saved result. Keep Inngest step tools outside Tubeless
+  handlers. Host cancellation does not abort an already executing step.
   For Dagster, follow [the Pipes example](./dagster.md): keep the pipeline free
   of host imports, report materializations only after successful publication,
   require explicit Pipes materializations, and preview locally. Forward termination to

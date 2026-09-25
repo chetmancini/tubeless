@@ -63,6 +63,10 @@ The [Temporal guide](./temporal.md) hosts a pipeline inside an Activity and keep
 its execution outside replayed Workflow code, with Activity-owned retries,
 heartbeats, and cancellation.
 
+The [Inngest guide](./inngest.md) hosts a pipeline inside `step.run`. Inngest
+saves the successful result and retries failed attempts; each attempt executes
+the whole Tubeless pipeline. The example includes an event sender and local server.
+
 The [Dagster guide](./dagster.md) materializes an asset through Dagster Pipes,
 with progress logs, content data versions, and a trace for Tubeless Studio.
 Dagster owns retries of the asset; Tubeless owns execution of its internal steps.

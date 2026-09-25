@@ -6,6 +6,8 @@
     "src/studio/run-store-ui-client-browser.ts",
     "src/**/*.test.tsx",
     "scripts/check-pipeline.ts",
+    "examples/inngest/server.ts",
+    "examples/inngest/send.ts",
     "examples/temporal/client.ts",
     "examples/temporal/worker.ts",
     "examples/temporal/workflows.ts",

@@ -1,6 +1,7 @@
 # Remote-step composition
 
 For a complete engine integration in both directions, see [Tubeless ↔ Airflow](./airflow.md).
+For durable hosting in an Inngest step, see [Tubeless on Inngest](./inngest.md).
 For durable hosting in an Activity, see [Tubeless on Temporal](./temporal.md).
 For asset materialization through Dagster Pipes, see [Tubeless on Dagster](./dagster.md).
 For Lambda hosting in a state machine, see [Tubeless on AWS Step Functions](./step-functions.md).
