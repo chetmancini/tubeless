@@ -1,5 +1,4 @@
 import type { PipelineContext } from "../core/pipeline.js";
-import type { PipelineRunEventStore } from "../run-store/run-store.js";
 import type { PipelineRunStudioLaunchResult } from "../studio/run-store-ui.js";
 import type { PipelineTraceEvent, PipelineTraceExporter } from "../tracing/tracing.js";
 
@@ -15,7 +14,7 @@ interface WorkbenchLaunchSessionOptions {
   readonly onRunRecorded: (runId: string) => void;
   readonly signal: AbortSignal;
   readonly stopping: Promise<void>;
-  readonly store: PipelineRunEventStore;
+  readonly store: PipelineTraceExporter;
 }
 
 interface TrackedWorkbenchLaunch {
@@ -31,7 +30,7 @@ export class WorkbenchLaunchSession {
   readonly #recordedStart: Promise<StartSettlement>;
   readonly #signal: AbortSignal;
   readonly #stopping: Promise<void>;
-  readonly #store: PipelineRunEventStore;
+  readonly #store: PipelineTraceExporter;
   #recordStart!: (settlement: StartSettlement) => void;
   #runId: string | undefined;
   #startObserved = false;

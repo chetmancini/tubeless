@@ -102,6 +102,32 @@ describe("module runtime boundaries", () => {
     expect(visited.size).toBeGreaterThan(1);
   });
 
+  it("keeps Studio launch execution independent of command entrypoints and concrete adapters", () => {
+    const pending = [resolve(dist, "workbench/workbench-studio-launcher.js")];
+    const visited = new Set<string>();
+    const workbenchInternals = new Set([
+      "workbench/workbench-studio-launcher.js",
+      "workbench/workbench-launch-session.js",
+      "workbench/workbench-command-execution.js",
+      "workbench/workbench-shared.js",
+      "workbench/pipeline-module.js",
+    ]);
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      const name = relative(dist, file).split(sep).join("/");
+      expect(
+        ["cli", "core", "node", "reporter", "render", "tracing", "utilities"].includes(
+          moduleName(file)
+        ) || workbenchInternals.has(name),
+        `Studio launch execution reaches an entrypoint or concrete adapter: ${name}`
+      ).toBe(true);
+      pending.push(...dependencies(file));
+    }
+    expect(visited.size).toBeGreaterThan(1);
+  });
+
   it("keeps CLI authoring independent of workbench, storage and Studio", () => {
     const pending = [resolve(dist, "cli/cli.js")];
     const visited = new Set<string>();

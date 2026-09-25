@@ -69,6 +69,25 @@ Run `make check` after changes; it builds before checking these boundaries.
   It consumes only the lifecycle notifications it emits, without requiring logger
   or trace capabilities.
 
+## Workbench execution ownership
+
+- `workbench/workbench-run.ts` owns the `run` command's arguments and trace destinations.
+- `workbench/workbench-command-execution.ts` executes command arguments or validated
+  values and translates failures into terminal output and exit codes. Both `run`
+  and Studio use it; it does not open stores or trace files.
+- `workbench/workbench-ui.ts` loads and validates registrations, opens the chosen
+  store, starts the HTTP server and closes these resources.
+- `workbench/workbench-studio-launcher.ts` owns the collection of admitted launches,
+  live run IDs, cancellation and busy state. Stop admission and release pending
+  launch responses before closing the server, then drain executions before closing
+  storage. The launcher and individual launch sessions receive only a trace exporter;
+  they cannot query, clear or close the store.
+- `workbench/workbench-launch-session.ts` owns one launch's acknowledgement after
+  its start event is persisted, and tracks execution settlement and late failures.
+
+The runtime graph check keeps launch execution independent of command entrypoints,
+the HTTP server and concrete storage adapters.
+
 ## Moving files
 
 Update package export targets and the binary target when moving their implementations;
