@@ -6,6 +6,7 @@ import { WelcomePipeline } from "../inherited-inputs.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
 import { YamlPelotonCommand } from "../yaml-peloton.ts";
 import { AirflowRemoteCommand } from "../airflow/remote.ts";
+import { InngestPipeline } from "../inngest/pipeline.ts";
 import { TemporalPipeline } from "../temporal/pipeline.ts";
 import { DagsterPipeline } from "../dagster/pipeline.ts";
 import { StepFunctionsPipeline } from "../step-functions/pipeline.ts";
@@ -34,6 +35,10 @@ export default defineProject(
     AirflowRemoteCommand,
     // Local execution of the same pipeline hosted by the Temporal Activity.
     definePipelineCommand(TemporalPipeline, {
+      params: { lines: { type: "string", multiple: true } },
+    }),
+    // Local execution; no Inngest event is sent.
+    definePipelineCommand(InngestPipeline, {
       params: { lines: { type: "string", multiple: true } },
     }),
     definePipelineCommand(DagsterPipeline, {
