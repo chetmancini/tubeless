@@ -9,13 +9,8 @@ import type {
   PipelineStepStatus,
 } from "../core/pipeline.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
-import {
-  createLiveTicker,
-  elapsedToken,
-  shimmerToken,
-  SPINNER_TOKEN,
-  type LiveTicker,
-} from "./live-ticker.js";
+import { elapsedToken, shimmerToken, SPINNER_TOKEN } from "./live-ticker-frame.js";
+import { createLiveTicker, type LiveTicker } from "./live-ticker.js";
 import {
   createReporterTheme,
   createRunReporter,

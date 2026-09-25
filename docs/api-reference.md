@@ -115,10 +115,10 @@ Package: `tubeless`
 | [`PipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L55)              | Typed CLI facade over a pipeline with planning and graph helpers.                   |
 | [`PipelineCommandHookConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L95)    | Static or lazily constructed lifecycle hooks for a pipeline command.                |
 | [`PipelineCommandHookContext`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L86)   | Parsed values and CLI services passed to a pipeline hook factory.                   |
-| [`PipelineReporterConfig`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L47)  | Rendering and output settings for automatic, plain, or interactive reporting.       |
-| [`PipelineReporterMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L29)    | Rendering mode selected for pipeline lifecycle reporting.                           |
+| [`PipelineReporterConfig`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L42)  | Rendering and output settings for automatic, plain, or interactive reporting.       |
+| [`PipelineReporterMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L24)    | Rendering mode selected for pipeline lifecycle reporting.                           |
 | [`ReporterColorMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L6)                    | Policy for ANSI color in terminal reporter output.                                  |
-| [`ReporterOutput`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L33)          | Writable terminal-like destination used by the interactive reporter.                |
+| [`ReporterOutput`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L28)          | Writable terminal-like destination used by the interactive reporter.                |
 | [`ReporterSymbolMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L8)                   | Symbol set used for step lifecycle markers in reporter output.                      |
 | [`ReporterTerminalCapabilities`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L11)        | Detected or caller-overridden terminal rendering capabilities.                      |
 

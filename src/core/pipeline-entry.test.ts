@@ -35,6 +35,28 @@ function moduleName(file: string): string {
 }
 
 describe("module runtime boundaries", () => {
+  it("keeps ticker workers independent of reporter orchestration and worker creation", () => {
+    const allowed = new Set([
+      "reporter/live-ticker-worker.js",
+      "reporter/live-ticker-frame.js",
+      "reporter/live-ticker-protocol.js",
+      "reporter/reporter.js",
+      "reporter/terminal-text.js",
+      "core/progress.js",
+    ]);
+    const pending = [resolve(dist, "reporter/live-ticker-worker.js")];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      const name = relative(dist, file).split(sep).join("/");
+      expect(allowed.has(name), `Ticker worker reaches ${name}`).toBe(true);
+      pending.push(...dependencies(file));
+    }
+    expect(visited.size).toBe(allowed.size);
+  });
+
   it("keeps project registry validation independent of pipeline construction", () => {
     const allowed = new Set(["project/project-registry.js", "project/project-document.js"]);
     const pending = [resolve(dist, "project/project-registry.js")];

@@ -101,6 +101,24 @@ Run `make check` after changes; it builds before checking these boundaries.
 The runtime graph check keeps launch execution independent of command entrypoints,
 the HTTP server and concrete storage adapters.
 
+## Terminal reporting ownership
+
+- `reporter/interactive-reporter.ts` owns lifecycle state, redraw scheduling and
+  terminal event listeners.
+- `reporter/live-ticker.ts` owns worker startup, inline fallback, pending log replay
+  and shutdown. It transfers output ownership before adopting the worker's last
+  frame, so fallback can clear the rows already on screen.
+- `reporter/live-ticker-frame.ts` owns animation tokens, line layout, width handling
+  and cursor/frame painting through an injected writer. It does not start workers
+  or timers. The inline ticker and worker use the same renderer.
+- `reporter/live-ticker-protocol.ts` owns worker messages and shared-memory state:
+  log acknowledgements, shutdown completion and exclusive output ownership.
+  A takeover request revokes future worker writes even when acquiring the lock
+  times out. Only a worker exit permits clearing an abandoned lock.
+
+The emitted runtime graph check keeps the worker independent of ticker startup
+and interactive reporter orchestration.
+
 ## History and Studio ownership
 
 - `run-store/run-store.ts` defines the storage and snapshot contracts and coordinates
