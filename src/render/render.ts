@@ -92,7 +92,7 @@ function renderHumanPlan(plan: PipelinePlan, options: HumanPlanRenderOptions): s
       annotations.length > 0 ? ` (${annotations.join("; ")})` : ""
     }`;
     const nested = step.nestedPipeline
-      ? ` -> ${step.nestedPipeline.mode === "for-each" ? "fan-out" : "child"} pipeline ${step.nestedPipeline.pipelineId} (${step.nestedPipeline.stepIds.length} declared steps)`
+      ? ` -> ${step.nestedPipeline.mode === "iterate" ? `iteration (at most ${step.nestedPipeline.maxIterations})` : step.nestedPipeline.mode === "for-each" ? "fan-out" : "child"} pipeline ${step.nestedPipeline.pipelineId} (${step.nestedPipeline.stepIds.length} declared steps)`
       : "";
     const remote = describeRemote(step, plan.dryRun);
     lines.push(

@@ -48,7 +48,8 @@ export interface PipelineRunEventStore extends PipelineRunEventReader, PipelineT
 export type StoredPipelineRunStatus = PipelineRunStatus | "running";
 
 export interface StoredNestedPipeline {
-  mode: "for-each" | "single";
+  mode: "for-each" | "single" | "iterate";
+  maxIterations?: number;
   pipelineId: string;
   stepCount: number;
   stepIds: string[];
@@ -110,6 +111,7 @@ export interface StoredPipelineStep {
 }
 
 export interface StoredPipelineRun {
+  iteration?: PipelineTraceEvent["iteration"];
   definitionIdentity?: PipelineDefinitionIdentity;
   correlationId?: string;
   dryRun: boolean;

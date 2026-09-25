@@ -56,7 +56,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   `inspect` or `plan` on a compiled command still checks graph semantics.
 
 - Use `createSteps<TDomainOptions>()` once per pipeline and destructure every
-  constructor that pipeline uses: `step`, `fromPipeline`, `fromRemote`, and/or
+  constructor that pipeline uses: `step`, `fromPipeline`, `fromRemote`, `iteratePipeline`, and/or
   `forEachPipeline`. Use `definePipeline` once after declaring the steps. Domain
   option types contain domain input only;
   callers pass those options and optional built-in controls to
@@ -133,6 +133,14 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   hooks or duplicate this bookkeeping in consumers. Fan-out progress displays up to
   32 live item groups by default and emit the full retained tree once at completion.
   Set `progress.detailLimit` to override that live cap and cap the final snapshot.
+- Use `iteratePipeline` to repeat a child with per-invocation state and a required
+  positive `maxIterations`. Return `{ kind: "next", state }` or
+  `{ kind: "finish", result }` from `transition`; use `IterationDecision<State, Result>`
+  for an explicit contract. Finishing at the bound succeeds; continuing at the
+  bound fails without another child. Keep state read-only and initialize it fresh
+  for each run. Child controls are static; parent dry-run and cancellation propagate.
+  Plans show the bounded region, while traces identify each actual child run.
+  See [pagination](../examples/iteration.ts) and [iteration semantics](./child-pipeline-composition.md#repeat-a-child-with-bounded-state-transitions).
 - Use `fromRemote` for a unit of work that lives on another engine. Required
   fields are `adapter`, `mapInput`, and `outputSchema`. Omitting `dryRun`
   contacts the engine during a pipeline dry run; the adapter and remote
@@ -370,7 +378,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   refuses a store with a live writer or multiple hard links. A crash can lose
   buffered events from a live writer; `tubeless run --store` flushes at
   completion so finished runs are durable. Do not make pipeline
-  definitions depend on storage or the studio. Version 2 trace events are a
+  definitions depend on storage or the studio. Version 3 trace events are a
   discriminated union keyed by `name`; use their typed `payload` rather than
   parsing scalar attributes. Recorded history keeps the last `reportProgress` `details`
   plus `detailCount`, and child wrapper steps keep `nestedPipeline` with the
@@ -378,8 +386,12 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   snapshots; it does not flatten child DAGs into the parent step.
   Compiled pipelines expose immutable `definition` metadata. Set `implementationVersion`
   on `definePipeline` to a release/source/build identity for handlers, schemas, mappings,
-  and finalizers; a structural fingerprint alone never proves code equality. Version 2
-  `pipeline.started` records carry a version 1 definition identity and a bounded snapshot.
+  and finalizers; a structural fingerprint alone never proves code equality.
+  `pipeline.started` records carry a definition identity and a bounded snapshot.
+  Ordinary definitions retain identity version 1; iteration and its ancestors use
+  version 2, including the bound and static child controls in their fingerprints.
+  Repeated child runs carry an `iteration` relation to the owning run, step,
+  attempt, and one-based index; each child still has a fresh execution ID.
   Studio retains versions, groups their runs, and compares complete snapshots. Legacy
   recordings have unknown identity; oversized snapshots retain identity but cannot be
   compared. Storage rejects complete snapshots whose contents, including recorded child
@@ -388,7 +400,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Legacy observed definitions pick the latest `pipeline.started` by `timestampMs`, then
   store-local id. Storage readers, projections, and Studio embedding are
   workbench internals rather than application extension points.
-  The version 2 event and NDJSON formats remain compatible with saved recordings;
+  Readers accept saved version 2 recordings as well as new version 3 events;
   concrete exporter entrypoints are not part of that durability contract.
 - Pass caller-owned `correlationId` through `PipelineContext` when joining an
   external job or workflow. `runId` is package-generated for every execution;

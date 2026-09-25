@@ -12,6 +12,8 @@
         "createSteps",
         "definePipeline",
         "isPipelineErrorCode",
+        "IterationDecision",
+        "IterationState",
         "MappedChildProgressOptions",
         "Pipeline",
         "PIPELINE_ERROR_CODES",
@@ -69,7 +71,7 @@
         "Step",
         "StepSkipDecision"
       ],
-      "sha256": "7901ea04ec6410e43d4d275078dbf1659e4dc028fdfae57dabc3ff3f4ea7f8e1",
+      "sha256": "44e8a90b693f692f9cf70d2e604c25f7d9266252f025024f2bb23f6a29056d20",
       "specifier": "tubeless"
     },
     {
@@ -107,7 +109,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "e318fcb89caa96ec387b54429a67729e9791ffaeb94678c6540fd5d7bbce6f53",
+      "sha256": "3710a0188965fe8210310bbc0f8b876f470ea80c7f492fcb6632d59b068bd164",
       "specifier": "tubeless/cli"
     },
     {
@@ -139,7 +141,7 @@
         "WorkerThreadContext",
         "writeJson"
       ],
-      "sha256": "c818464e3a9de6d63e140f23218fa103d9dd580064032f7a74870552dad48716",
+      "sha256": "e625b8bab0c5a4841e746612741a342c15cb207df274d161bfe5e2847d1c3d94",
       "specifier": "tubeless/node"
     },
     {
@@ -166,7 +168,7 @@
         "ProjectOptions",
         "ProjectRegistry"
       ],
-      "sha256": "6db112d2a1f96eec5d07d1c253d21ac152357ead2a2ab358aef824fe8617882c",
+      "sha256": "eb33f6e86280e1ef66847592d968d9d693de41e7ea9804d4bfaebe3aaa32c0ce",
       "specifier": "tubeless/project"
     },
     {
@@ -183,13 +185,13 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "a7a78fb290d26d5e0d0dc0d64b28ffd80dcfdc526ec3ba37c405e85cc013db76",
+      "sha256": "94caa840c1a4a43b3caa7c977a9b9ebffc5f61be5d25f262bc8eaf7132e26e26",
       "specifier": "tubeless/testing"
     },
     {
       "declaration": "./dist/tracing/tracing.d.ts",
       "exports": ["composeTraceExporters", "PipelineTraceEvent", "PipelineTraceExporter"],
-      "sha256": "3142abef6f7843e30111973ef33ab4b3d35a38e6b9c0801343b2e49254656db8",
+      "sha256": "6b972c2e867261e8600f44d7bef0fe992a6add947684e6dab1333768ff913840",
       "specifier": "tubeless/tracing"
     }
   ],

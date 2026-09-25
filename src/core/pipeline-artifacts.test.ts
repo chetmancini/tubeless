@@ -225,7 +225,7 @@ describe("artifact steps", () => {
       { operation: "write", preview: false, artifact: { id: "output", byteSize: 43 } },
     ]);
     for (const event of trace.artifacts()) {
-      expect(event.version).toBe(2);
+      expect(event.version).toBe(3);
       expect(event.attemptId).toBeTruthy();
       expect(event.runId).toBeTruthy();
       expect(event.payload).not.toHaveProperty("value");

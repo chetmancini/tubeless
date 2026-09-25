@@ -40,6 +40,7 @@ import type {
 export { PipelineExecutionError, RUN_MODEL_VERSION };
 export { isPipelineErrorCode, PIPELINE_ERROR_CODES } from "./pipeline-types.js";
 export { createSteps } from "./pipeline-steps.js";
+export type { IterationDecision, IterationState } from "./iteration.js";
 export { PipelineDefinitionError, requireOutputs };
 export type {
   PipelineDefinitionIdentity,

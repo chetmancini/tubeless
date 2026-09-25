@@ -8,6 +8,9 @@ export function decodeStoredTraceEvent(value: unknown): PipelineTraceEvent {
   if (event.name === "pipeline.started" && event.payload.definitionSnapshot) {
     const snapshot = event.payload.definitionSnapshot;
     const expected = createDefinitionIdentity(snapshot, snapshot.identity.implementationVersion);
+    if (snapshot.identity.version !== expected.version) {
+      throw new Error("Definition snapshot identity version does not match its contents");
+    }
     if (snapshot.identity.structuralFingerprint !== expected.structuralFingerprint) {
       throw new Error("Definition snapshot structural fingerprint does not match its contents");
     }

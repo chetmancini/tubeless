@@ -4,6 +4,7 @@ import {
   type ArtifactResult,
 } from "./pipeline-artifacts.js";
 import { createMappedChildRunner, createSingleChildRunner } from "./child-execution.js";
+import { createIterationRunner, type IterationDecision, type IterationState } from "./iteration.js";
 import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.js";
 import {
   STEP_NESTED_PIPELINE,
@@ -861,6 +862,76 @@ function createStepFactory<
     return buildMappedPipelineStep(id, definition);
   }
 
+  function iteratePipeline<
+    const TId extends string,
+    TChild extends Pipeline<object, unknown>,
+    TState,
+    TResult,
+    const TDeps extends readonly AnyStep<TOptions>[] = [],
+  >(
+    id: TId,
+    definition: {
+      pipeline: TChild;
+      name?: string;
+      description?: string;
+      dependsOn?: TDeps;
+      maxIterations: number;
+      dryRun?: "skip";
+      controls?: PipelineRunControlsOf<TChild>;
+      initialState(
+        inputs: RequiredInputs<TDeps>,
+        context: PipelineExecutionContext<TOptions>
+      ): TState;
+      mapOptions(
+        state: IterationState<NoInfer<TState>>,
+        inputs: RequiredInputs<TDeps>,
+        context: PipelineExecutionContext<TOptions>
+      ): PipelineOptionsOf<TChild>;
+      transition(
+        result: PipelineResultOf<TChild>,
+        state: IterationState<NoInfer<TState>>,
+        context: PipelineExecutionContext<TOptions>
+      ):
+        | IterationDecision<NoInfer<TState>, TResult>
+        | Promise<IterationDecision<NoInfer<TState>, TResult>>;
+    }
+  ): BuiltStep<TId, Awaited<TResult>, TOptions, TInputOptions>;
+  function iteratePipeline(
+    id: string,
+    definition: Omit<Parameters<typeof createIterationRunner<TOptions>>[0], "stepId"> & {
+      name?: string;
+      description?: string;
+      dependsOn?: readonly AnyStep<TOptions>[];
+      dryRun?: "skip";
+    }
+  ): AnyStep<TOptions> {
+    if (!Number.isSafeInteger(definition.maxIterations) || definition.maxIterations < 1) {
+      throw new RangeError("iteratePipeline maxIterations must be a positive safe integer");
+    }
+    const controls = definition.controls ? structuredClone(definition.controls) : undefined;
+    if (controls) {
+      if (controls.targets) Object.freeze(controls.targets);
+      if (controls.stepIds) Object.freeze(controls.stepIds);
+      Object.freeze(controls);
+    }
+    const config = { ...definition, stepId: id, controls };
+    return buildStep(id, {
+      [STEP_NESTED_PIPELINE]: {
+        mode: "iterate",
+        maxIterations: config.maxIterations,
+        controls: config.controls,
+        pipelineId: config.pipeline.id,
+        identity: config.pipeline.definition?.identity,
+        stepIds: config.pipeline.stepIds,
+      },
+      name: config.name,
+      description: config.description,
+      dependsOn: config.dependsOn,
+      dryRun: config.dryRun,
+      run: createIterationRunner(config),
+    });
+  }
+
   const factory = {
     step,
     loadArtifact,
@@ -868,6 +939,7 @@ function createStepFactory<
     fromPipeline,
     fromRemote,
     forEachPipeline,
+    iteratePipeline,
   };
 
   return factory;

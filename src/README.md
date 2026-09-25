@@ -56,6 +56,10 @@ Run `make check` after changes; it builds before checking these boundaries.
 
 ## Execution ownership
 
+- `core/iteration.ts` owns bounded state transitions and retained iteration
+  progress. It invokes the existing child runner; it does not reschedule the
+  parent DAG or own a separate lifecycle engine.
+
 - `core/pipeline-execute.ts` coordinates a run: options validation, scheduling,
   step attempts, stop policy and finalization.
 - `core/pipeline-execution-error.ts` owns execution and child error classes,

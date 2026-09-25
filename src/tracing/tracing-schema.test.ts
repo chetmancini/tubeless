@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createSteps, definePipeline, PIPELINE_ERROR_CODES } from "../core/pipeline.js";
-import { pipelineTraceEventSchemas, pipelineTraceOpenApiSchemas } from "./tracing-schema.js";
+import {
+  pipelineTraceEventSchema,
+  pipelineTraceEventSchemas,
+  pipelineTraceOpenApiSchemas,
+} from "./tracing-schema.js";
 import { wireDiscriminatedUnion, wireEnum, wireObject } from "./wire-schema.js";
 
 describe("pipeline trace schema", () => {
@@ -16,6 +20,8 @@ describe("pipeline trace schema", () => {
     expect(pipelineTraceOpenApiSchemas.StoredPipelineEvent.oneOf).toHaveLength(entries.length);
     for (const [index, [name]] of entries.entries()) {
       expect(pipelineTraceOpenApiSchemas.StoredPipelineEvent.oneOf[index]).toMatchObject({
+        if: { properties: { version: { const: 2 } } },
+        then: { properties: { iteration: false } },
         properties: {
           id: { minimum: 0, type: "integer" },
           name: { const: name },
@@ -72,14 +78,17 @@ describe("definition trace compatibility", () => {
     timestampMs: 0,
     payload: { dryRun: false, planOk: true, stepCount: 1, targetIds: [] },
   };
-  const decode = (payload: object) =>
-    pipelineTraceEventSchemas["pipeline.started"].decode(
+  const decode = (payload: object) => {
+    const event = pipelineTraceEventSchema.decode(
       { ...started, payload: { ...started.payload, ...payload } },
       "event"
     );
+    if (event.name !== "pipeline.started") throw new Error("Expected pipeline.started");
+    return event;
+  };
 
   it("accepts legacy starts and identity-only recordings", () => {
-    expect(decode({}).payload.definitionIdentity).toBeUndefined();
+    expect(decode({})).toMatchObject({ name: "pipeline.started", payload: { dryRun: false } });
     expect(
       decode({ definitionIdentity: definition.identity }).payload.definitionSnapshot
     ).toBeUndefined();
@@ -87,7 +96,7 @@ describe("definition trace compatibility", () => {
 
   it("rejects unsupported versions, invalid fingerprints, and mismatched snapshots", () => {
     expect(() => decode({ definitionIdentity: { ...definition.identity, version: 2 } })).toThrow(
-      "must be 1"
+      "requires identity version 1"
     );
     expect(() =>
       decode({ definitionIdentity: { ...definition.identity, definitionId: "invalid" } })

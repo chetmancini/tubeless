@@ -3,6 +3,7 @@ import { expectTypeOf } from "vitest";
 import {
   createSteps,
   definePipeline,
+  type IterationDecision,
   type PipelineInput,
   type PipelineResult,
   type StandardSchemaV1,
@@ -10,7 +11,6 @@ import {
 import { definePipelineCommand } from "tubeless/cli";
 import { defineProject } from "tubeless/project";
 import {
-  createSteps as proposedCreateSteps,
   defineAgent,
   defineTool,
   pipelineTool,
@@ -18,7 +18,6 @@ import {
   type AgentCall,
   type AgentDecision,
   type AgentOutcome,
-  type IterationDecision,
 } from "./agent-harness.prototype.js";
 
 // These declared schemas represent application-owned validators, not fake runtime validators.
@@ -316,7 +315,7 @@ defineAgent({
 });
 
 // Generic iteration: ordinary child output is translated to next(state) or finish(result).
-const proposed = proposedCreateSteps(questionSchema);
+const proposed = createSteps(questionSchema);
 const seed = createSteps(questionSchema).step("seed", {
   run: (_inputs, context) => context.options.limit,
 });
@@ -356,7 +355,7 @@ const mixedTransition: IterationDecision<number, string> = {
 };
 void mixedTransition;
 
-const { iteratePipeline } = proposedCreateSteps<{ text: string }>();
+const { iteratePipeline } = createSteps<{ text: string }>();
 const finishWithoutValue = iteratePipeline("finish-without-value", {
   pipeline: counter,
   maxIterations: 1,

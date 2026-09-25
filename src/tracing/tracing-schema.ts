@@ -328,14 +328,20 @@ const progressSchema = wireTransform(
       : progress
 );
 
+const positiveInteger = wireNumber({ integer: true, minimum: 1 });
+const nestedModes = ["for-each", "single", "iterate"] as const;
 const nestedPipelineSchema = wireRefine(
   wireObject({
-    mode: wireEnum(["for-each", "single"] as const, (path) => `${path} must be for-each or single`),
+    mode: wireEnum(nestedModes),
+    maxIterations: wireOptional(positiveInteger),
     pipelineId: requiredString,
     stepCount: nonnegativeInteger,
     stepIds: boundedStringList,
   }),
   (nested, path) => {
+    if ((nested.mode === "iterate") !== (nested.maxIterations !== undefined)) {
+      throw new Error(`${path}: only iterate requires maxIterations`);
+    }
     if (nested.stepCount < nested.stepIds.length) {
       throw new Error(`${path}.stepCount must be at least the retained stepIds length`);
     }
@@ -347,10 +353,10 @@ const remoteSchema = wireObject({
   target: wireOptional(boundedString),
 });
 
-/** Additive v2 metadata; its own version fixes the fingerprint semantics. */
+/** Definition metadata has its own version to fix fingerprint semantics. */
 export const pipelineDefinitionIdentitySchema = wireRefine(
   wireObject({
-    version: wireLiteral(1),
+    version: wireUnion([wireLiteral(1), wireLiteral(2)]),
     definitionId: wireString({ maxLength: 80 }),
     structuralFingerprint: wireString({ maxLength: 80 }),
     implementationVersion: wireOptional(wireString({ maxLength: 256 })),
@@ -374,6 +380,13 @@ export const pipelineDefinitionIdentitySchema = wireRefine(
 
 const definitionString = wireString({ maxLength: 4096 });
 const definitionStrings = wireArray(definitionString, { maxItems: 4096 });
+const iterationControlsSchema = wireObject({
+  dryRun: wireOptional(wireBoolean()),
+  continueOnError: wireOptional(wireBoolean()),
+  maxConcurrency: wireOptional(finiteNumber),
+  targets: wireOptional(definitionStrings),
+  stepIds: wireOptional(definitionStrings),
+});
 const definitionStepSchema = wireObject({
   id: definitionString,
   dependencies: definitionStrings,
@@ -385,7 +398,9 @@ const definitionStepSchema = wireObject({
   nestedPipeline: wireOptional(
     wireObject({
       pipelineId: definitionString,
-      mode: wireEnum(["single", "for-each"] as const),
+      mode: wireEnum(nestedModes),
+      maxIterations: wireOptional(positiveInteger),
+      controls: wireOptional(iterationControlsSchema),
       identity: wireOptional(pipelineDefinitionIdentitySchema),
       stepIds: definitionStrings,
       concurrency: wireOptional(wireUnion([finiteNumber, wireLiteral("dynamic")])),
@@ -404,6 +419,22 @@ export const pipelineDefinitionSnapshotSchema = wireRefine(
     resultValidated: wireBoolean(),
   }),
   (value, path) => {
+    for (const step of value.steps) {
+      const nested = step.nestedPipeline;
+      if (!nested) continue;
+      if (
+        (nested.mode === "iterate") !== (nested.maxIterations !== undefined) ||
+        (nested.controls !== undefined && nested.mode !== "iterate")
+      ) {
+        throw new Error(`${path}: invalid iteration metadata`);
+      }
+      if (
+        value.identity.version === 1 &&
+        (nested.mode === "iterate" || nested.identity?.version === 2)
+      ) {
+        throw new Error(`${path}: iteration requires identity version 2`);
+      }
+    }
     if (new TextEncoder().encode(JSON.stringify(value)).byteLength > 256 * 1024) {
       throw new Error(`${path} exceeds the 262144-byte definition limit`);
     }
@@ -456,7 +487,15 @@ const traceBaseShape = {
   pipelineId: requiredString,
   runId: requiredString,
   timestampMs: finiteNumber,
-  version: wireLiteral(PIPELINE_TRACE_VERSION),
+  version: wireUnion([wireLiteral(2), wireLiteral(PIPELINE_TRACE_VERSION)]),
+  iteration: wireOptional(
+    wireObject({
+      runId: requiredString,
+      stepId: requiredString,
+      attemptId: requiredString,
+      index: positiveInteger,
+    })
+  ),
 } as const;
 const traceAttemptShape = {
   attemptId: wireOptional(openString),
@@ -632,7 +671,40 @@ export const pipelineTraceEventSchemas = {
   }),
 } as const satisfies Readonly<Record<string, WireSchema<unknown>>>;
 
-export const pipelineTraceEventSchema = wireDiscriminatedUnion("name", pipelineTraceEventSchemas);
+// Version 2 keeps its original wire contract even when consumed through OpenAPI.
+const traceVersionConstraint = {
+  if: { properties: { version: { const: 2 } }, required: ["version"] },
+  then: {
+    properties: {
+      iteration: false,
+      payload: {
+        properties: {
+          definitionIdentity: { properties: { version: { const: 1 } } },
+          nestedPipeline: {
+            properties: { mode: { enum: ["single", "for-each"] }, maxIterations: false },
+          },
+        },
+      },
+    },
+  },
+} as const;
+const traceEventUnion = wireDiscriminatedUnion("name", pipelineTraceEventSchemas);
+export const pipelineTraceEventSchema = wireRefine(
+  traceEventUnion,
+  (event) => {
+    if (event.version !== 2) return;
+    if (
+      event.iteration !== undefined ||
+      (event.name === "step.planned" && event.payload.nestedPipeline?.mode === "iterate")
+    ) {
+      throw new Error("Iteration metadata requires trace version 3");
+    }
+    if (event.name === "pipeline.started" && event.payload.definitionIdentity?.version === 2) {
+      throw new Error("Trace version 2 requires identity version 1");
+    }
+  },
+  { ...traceEventUnion.jsonSchema, ...traceVersionConstraint }
+);
 
 export type PipelineErrorKindContract = (typeof PIPELINE_ERROR_KINDS)[number];
 export type PipelineErrorPhaseContract = (typeof PIPELINE_ERROR_PHASES)[number];
@@ -683,6 +755,7 @@ export const pipelineTraceOpenApiSchemas = {
       };
       return {
         ...eventJson,
+        ...traceVersionConstraint,
         properties: {
           ...eventJson.properties,
           id: { minimum: 0, type: "integer" },

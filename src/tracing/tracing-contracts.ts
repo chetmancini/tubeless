@@ -21,7 +21,7 @@ export type PipelineTraceAttributes = Extract<
 
 export type PipelineTraceContext = Pick<
   PipelineTraceEvent,
-  "correlationId" | "itemKey" | "parentRunId" | "runId"
+  "correlationId" | "itemKey" | "parentRunId" | "runId" | "iteration"
 >;
 
 export type PipelineTraceError = PipelineTraceErrorContract;
@@ -41,6 +41,8 @@ export type PipelineTraceProgress = NonNullable<
 export interface PipelineTracingOptions {
   exporter: PipelineTraceExporter;
   itemKey?: string;
+  /** Origin of a repeated child invocation; inherited by its descendants. */
+  iteration?: PipelineTraceContext["iteration"];
   /** Called once on the first exporter failure without failing the run. */
   readonly onExporterError?: (error: unknown) => void;
 }

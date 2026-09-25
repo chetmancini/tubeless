@@ -1,17 +1,75 @@
 # Child-pipeline composition
 
 Use a child pipeline when part of a workflow is useful on its own and should
-also run inside a larger pipeline. Tubeless provides two step builders:
+also run inside a larger pipeline. Tubeless provides three step builders:
 
 | Builder           | Use it to                                       | Step output                              |
 | ----------------- | ----------------------------------------------- | ---------------------------------------- |
 | `fromPipeline`    | Run one child pipeline                          | The child's final result                 |
 | `forEachPipeline` | Run the same child pipeline for a list of items | An array of child results in input order |
+| `iteratePipeline` | Repeat a child until a transition finishes      | The transition's final result            |
 
-Both builders infer the child options and result types. They forward the
+All three builders infer the child options and result types. They forward the
 parent's runtime context and report child progress through the parent step.
 Start with the [single-child example](../examples/child-pipeline.ts) or the
 [fan-out example](../examples/fan-out-progress.ts).
+
+## Repeat a child with bounded state transitions
+
+Use `iteratePipeline` when the next child input depends on the previous result.
+The [pagination example](../examples/iteration.ts) collects pages without an LLM:
+
+```ts
+const { iteratePipeline } = createSteps<Options>();
+const pages = iteratePipeline("pages", {
+  pipeline: PagePipeline,
+  maxIterations: 100,
+  initialState: () => ({ offset: 0 }),
+  mapOptions: (state, _inputs, context) => ({
+    source: context.options.source,
+    offset: state.offset,
+  }),
+  transition: (page) =>
+    page.done
+      ? { kind: "finish", result: page.rows }
+      : { kind: "next", state: { offset: page.nextOffset } },
+});
+```
+
+`initialState(inputs, context)` runs once per selected invocation. Required
+`dependsOn` outputs are available to initialization and mapping. Each child
+finishes before `transition(result, state, context)` runs; transitions may be
+asynchronous. State is read-only in mapping and transition types. Return fresh
+state from initialization and `next`, and treat shared domain values as
+read-only; generic iteration does not clone or serialize application state.
+
+Return exactly `{ kind: "next", state }` or `{ kind: "finish", result }`.
+The finish result, including a published `undefined`, is the step output.
+Use `IterationDecision<State, Result>` for an explicit transition contract and
+`finalize: pages` to require that exact result. Validate the final domain result
+with the enclosing pipeline's `resultSchema` when needed.
+
+`maxIterations` is a required positive safe integer, checked during authoring.
+A finish on the last allowed child run succeeds. A next decision at the bound
+fails the wrapper with `sourceCode: "TUBELESS_ITERATION_LIMIT_REACHED"`; no extra
+child starts. Invalid transition data uses
+`sourceCode: "TUBELESS_ITERATION_INVALID_DECISION"`. Child failures retain normal
+child-error behavior and never reach the transition callback.
+
+Static child `controls` use the existing child targets, selection, concurrency,
+and failure policy. A parent's dry-run flag is always inherited. Omit the wrapper
+dry-run policy to use child previews, or set `dryRun: "skip"` to skip the entire
+iteration. A child whose required final result is structurally skipped fails
+normally. Cancellation stops new iterations and drains the active child before
+returning. Initializers, mappings, transitions, and domain schemas do not run
+during `plan()` or graph rendering.
+
+Plans retain one wrapper with `nestedPipeline.mode: "iterate"`, the declared
+child steps, static controls, and the maximum iteration count. Future iterations
+are not selectable step IDs. Each actual child gets a fresh run ID and a trace
+relation containing the owning run, wrapper step/attempt, and one-based iteration
+index. Live progress retains the latest 32 iteration groups plus an omitted-count
+row; traces preserve each child lifecycle. Iteration adds no crash recovery.
 
 ## Run a child pipeline
 

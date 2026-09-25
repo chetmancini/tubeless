@@ -20,7 +20,32 @@ function freezeSnapshot<T>(value: T): T {
   return value;
 }
 
-/** Canonical v1 semantics. Execution order matters; dependency and target sets do not. */
+function iterationFields(
+  nested: NonNullable<PipelineDefinitionSnapshot["steps"][number]["nestedPipeline"]>
+) {
+  if (nested.mode !== "iterate") return {};
+  const controls = nested.controls;
+  return {
+    maxIterations: nested.maxIterations,
+    ...(controls
+      ? {
+          controls: {
+            ...(controls.dryRun !== undefined ? { dryRun: controls.dryRun } : {}),
+            ...(controls.continueOnError !== undefined
+              ? { continueOnError: controls.continueOnError }
+              : {}),
+            ...(controls.maxConcurrency !== undefined
+              ? { maxConcurrency: controls.maxConcurrency }
+              : {}),
+            ...(controls.targets !== undefined ? { targets: [...controls.targets].sort() } : {}),
+            ...(controls.stepIds !== undefined ? { stepIds: [...controls.stepIds].sort() } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/** Canonical snapshot. Execution order matters; dependency and target sets do not. */
 export function compileDefinitionSnapshot(input: {
   orderedSteps: readonly AnyStep[];
   stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph>;
@@ -51,6 +76,7 @@ export function compileDefinitionSnapshot(input: {
             nestedPipeline: {
               pipelineId: nested.pipelineId,
               mode: nested.mode,
+              ...iterationFields(nested),
               stepIds: [...nested.stepIds],
               ...(nested.identity ? { identity: { ...nested.identity } } : {}),
               ...(nested.concurrency !== undefined ? { concurrency: nested.concurrency } : {}),
@@ -82,14 +108,20 @@ export function compileDefinitionSnapshot(input: {
   });
 }
 
-/** Rebuild v1 hashes from explicit fields, independent of JSON object property order. */
+/** Preserve v1 hashes; extended child semantics use v2, including their ancestors. */
 export function createDefinitionIdentity(
   input: Omit<PipelineDefinitionSnapshot, "identity">,
   implementationVersion: string | undefined
 ): PipelineDefinitionIdentity {
+  const version = input.steps.some(
+    (step) =>
+      step.nestedPipeline?.mode === "iterate" || step.nestedPipeline?.identity?.version === 2
+  )
+    ? 2
+    : 1;
   // Child handler versions participate in the combined identity, never the graph fingerprint.
   const structuralFingerprint = fingerprint({
-    version: 1,
+    version,
     steps: input.steps.map((step) => ({
       id: step.id,
       dependencies: [...step.dependencies].sort(),
@@ -103,6 +135,7 @@ export function createDefinitionIdentity(
             nestedPipeline: {
               pipelineId: step.nestedPipeline.pipelineId,
               mode: step.nestedPipeline.mode,
+              ...iterationFields(step.nestedPipeline),
               stepIds: [...step.nestedPipeline.stepIds],
               ...(step.nestedPipeline.identity
                 ? {
@@ -135,11 +168,11 @@ export function createDefinitionIdentity(
     resultValidated: input.resultValidated,
   });
   return {
-    version: 1,
+    version,
     structuralFingerprint,
     ...(implementationVersion !== undefined ? { implementationVersion } : {}),
     definitionId: fingerprint({
-      version: 1,
+      version,
       structuralFingerprint,
       implementationVersion,
       children: input.steps.map((step) => {

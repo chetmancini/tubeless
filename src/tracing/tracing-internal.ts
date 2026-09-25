@@ -138,6 +138,7 @@ function traceNestedPipeline(
   if (!nested) return undefined;
   return {
     mode: nested.mode,
+    ...(nested.maxIterations !== undefined ? { maxIterations: nested.maxIterations } : {}),
     pipelineId: nested.pipelineId,
     stepCount: nested.stepIds.length,
     stepIds: nested.stepIds.slice(0, PIPELINE_TRACE_LIST_LIMIT),
