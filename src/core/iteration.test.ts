@@ -121,6 +121,64 @@ describe("bounded child iteration", () => {
     expect(await createPipelineTestRuntime().runOrThrow(pipeline, {})).toBe(1);
   });
 
+  it.each([
+    { rejects: false, aborts: false, status: "completed" },
+    { rejects: true, aborts: false, status: "failed" },
+    { rejects: false, aborts: true, status: "cancelled" },
+    { rejects: true, aborts: true, status: "cancelled" },
+  ] as const)(
+    "settles finish progress as $status (rejects=$rejects, aborts=$aborts)",
+    async ({ rejects, aborts, status }) => {
+      const started = defer();
+      const released = defer();
+      const runtime = createPipelineTestRuntime();
+      const { child, execute } = fixture();
+      const { iteratePipeline } = createSteps();
+      const repeat = iteratePipeline("repeat", {
+        pipeline: child,
+        maxIterations: 3,
+        initialState: () => 0,
+        mapOptions: (value) => ({ value }),
+        transition: (result) => ({
+          kind: "finish",
+          result: (async () => {
+            started.resolve();
+            await released.promise;
+            if (rejects) throw aborts ? runtime.context.signal?.reason : new Error("finish failed");
+            return result;
+          })(),
+        }),
+      });
+      const pipeline = definePipeline({ id: "pending-finish", steps: [repeat] });
+      const running = runtime.run(pipeline, {});
+      await started.promise;
+      await Promise.resolve();
+      const pendingStatus = runtime.latestProgress.get("repeat")?.details?.[0]?.status;
+      if (aborts) runtime.abort();
+      released.resolve();
+      const run = await running;
+      expect(pendingStatus).toBe("running");
+      expect(run.status).toBe(status);
+      expect(execute).toHaveBeenCalledOnce();
+      expect(runtime.latestProgress.get("repeat")).toMatchObject({
+        completed: status === "completed" ? 1 : 0,
+        details: [
+          { id: "iteration-1", status },
+          { id: "iteration-1/compute", status: "completed" },
+        ],
+      });
+      if (status === "completed") expect(run.value).toBe(1);
+      else {
+        expect(
+          runtime.statuses.some(
+            (event) =>
+              event.status === "running" && event.progress?.details?.[0]?.status === "completed"
+          )
+        ).toBe(false);
+      }
+    }
+  );
+
   it.each([0, -1, 1.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1])(
     "rejects invalid bound %s during authoring",
     (maxIterations) => {

@@ -129,7 +129,13 @@ export function createIterationRunner<TOptions extends object>(config: Iteration
         throwIfAborted(context.signal, "Pipeline iteration");
         const next = decision(await config.transition(value, state, context));
         throwIfAborted(context.signal, "Pipeline iteration");
-        if (next.kind === "next" && index === config.maxIterations) {
+        if (next.kind === "finish") {
+          const result = await next.result;
+          throwIfAborted(context.signal, "Pipeline iteration");
+          publish("completed");
+          return result;
+        }
+        if (index === config.maxIterations) {
           throw Object.assign(
             new Error(
               `Pipeline iteration reached maxIterations=${config.maxIterations} after ${config.maxIterations} child runs`
@@ -138,7 +144,6 @@ export function createIterationRunner<TOptions extends object>(config: Iteration
           );
         }
         publish("completed");
-        if (next.kind === "finish") return next.result;
         state = next.state;
         retained.unshift(rows("completed"));
         // Keep at most 32 iteration groups in progress; child traces retain full history.

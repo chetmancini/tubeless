@@ -206,6 +206,30 @@ describe("iteration recording compatibility", () => {
     expect(pipeline.toMermaid()).toContain("at most 3 iterations");
   });
 
+  it("records failed iteration progress when the finish result rejects", async () => {
+    const { iteratePipeline } = createSteps();
+    const repeat = iteratePipeline("repeat", {
+      pipeline: child,
+      maxIterations: 2,
+      initialState: () => 0,
+      mapOptions: (page) => ({ page }),
+      transition: () => ({ kind: "finish", result: Promise.reject(new Error("finish failed")) }),
+    });
+    const { events, run } = await record(
+      definePipeline({ id: "rejected-finish", steps: [repeat] })
+    );
+    expect(run.status).toBe("failed");
+    const stored = projectPipelineRunStore(events).runs.find((entry) => entry.runId === run.runId)!;
+    expect(stored.status).toBe("failed");
+    expect(stored.steps[0]!.progress).toMatchObject({
+      completed: 0,
+      details: [
+        { id: "iteration-1", status: "failed" },
+        { id: "iteration-1/page", status: "completed" },
+      ],
+    });
+  });
+
   it("retains v1 fingerprints and promotes only extended definitions and their parents", () => {
     const { step, fromPipeline } = createSteps();
     const legacy = definePipeline({ id: "fixture", steps: [step("work", { run: () => 1 })] });

@@ -1,7 +1,12 @@
 import { createDefinitionIdentity } from "./pipeline-definition-identity.js";
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
-import { createSteps, definePipeline, requireOutputs } from "./pipeline.js";
+import {
+  createSteps,
+  definePipeline,
+  requireOutputs,
+  type PipelineRunControls,
+} from "./pipeline.js";
 import { createPipelineTestRuntime } from "../testing/testing.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
@@ -196,6 +201,58 @@ describe("compiled definition identity", () => {
     expect(fanout(1).identity.structuralFingerprint).not.toBe(
       fanout(2).identity.structuralFingerprint
     );
+  });
+
+  it("omits empty iteration controls while retaining defined fields", () => {
+    const { iteratePipeline } = createSteps();
+    const build = (controls?: PipelineRunControls<"a", "a">) => {
+      const repeat = iteratePipeline("repeat", {
+        pipeline: pipeline(),
+        maxIterations: 1,
+        controls,
+        initialState: () => 0,
+        mapOptions: () => ({}),
+        transition: (result) => ({ kind: "finish", result }),
+      });
+      return definePipeline({ id: "parent", steps: [repeat] }).definition;
+    };
+    const omitted = build();
+    for (const controls of [
+      {},
+      {
+        dryRun: undefined,
+        continueOnError: undefined,
+        maxConcurrency: undefined,
+        targets: undefined,
+        stepIds: undefined,
+      },
+    ]) {
+      const snapshot = build(controls);
+      expect(snapshot.steps[0]!.nestedPipeline).not.toHaveProperty("controls");
+      expect(snapshot).toEqual(omitted);
+      const unnormalized = {
+        ...snapshot,
+        steps: snapshot.steps.map((step) => ({
+          ...step,
+          nestedPipeline: { ...step.nestedPipeline!, controls },
+        })),
+      };
+      expect(createDefinitionIdentity(unnormalized, undefined)).toEqual(omitted.identity);
+    }
+    for (const controls of [
+      { dryRun: false },
+      { continueOnError: false },
+      { maxConcurrency: 2 },
+      { targets: [] },
+      { stepIds: [] },
+    ]) {
+      const snapshot = build(controls);
+      expect(snapshot.steps[0]!.nestedPipeline!.controls).toEqual(controls);
+      expect(snapshot.identity.structuralFingerprint).not.toBe(
+        omitted.identity.structuralFingerprint
+      );
+    }
+    expect(build({ dryRun: true, maxConcurrency: undefined })).toEqual(build({ dryRun: true }));
   });
 
   it.each([undefined, "child-release"])(

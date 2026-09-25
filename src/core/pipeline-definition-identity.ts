@@ -25,23 +25,18 @@ function iterationFields(
 ) {
   if (nested.mode !== "iterate") return {};
   const controls = nested.controls;
+  const normalizedControls = {
+    ...(controls?.dryRun !== undefined ? { dryRun: controls.dryRun } : {}),
+    ...(controls?.continueOnError !== undefined
+      ? { continueOnError: controls.continueOnError }
+      : {}),
+    ...(controls?.maxConcurrency !== undefined ? { maxConcurrency: controls.maxConcurrency } : {}),
+    ...(controls?.targets !== undefined ? { targets: [...controls.targets].sort() } : {}),
+    ...(controls?.stepIds !== undefined ? { stepIds: [...controls.stepIds].sort() } : {}),
+  };
   return {
     maxIterations: nested.maxIterations,
-    ...(controls
-      ? {
-          controls: {
-            ...(controls.dryRun !== undefined ? { dryRun: controls.dryRun } : {}),
-            ...(controls.continueOnError !== undefined
-              ? { continueOnError: controls.continueOnError }
-              : {}),
-            ...(controls.maxConcurrency !== undefined
-              ? { maxConcurrency: controls.maxConcurrency }
-              : {}),
-            ...(controls.targets !== undefined ? { targets: [...controls.targets].sort() } : {}),
-            ...(controls.stepIds !== undefined ? { stepIds: [...controls.stepIds].sort() } : {}),
-          },
-        }
-      : {}),
+    ...(Object.keys(normalizedControls).length > 0 ? { controls: normalizedControls } : {}),
   };
 }
 
