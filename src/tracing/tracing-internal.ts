@@ -1,3 +1,4 @@
+import type { ArtifactRecord } from "./artifact-metadata.js";
 import { pipelineDefinitionSnapshotSchema } from "./tracing-schema.js";
 import type {
   PipelineError,
@@ -42,6 +43,7 @@ function traceDefinition(plan: PipelinePlan) {
 /** Runtime trace writer used internally by the pipeline executor. */
 export interface PipelineTraceEmitter {
   readonly context: PipelineTraceContext;
+  artifact(stepId: string, attemptId: string, record: ArtifactRecord, preview: boolean): void;
   flush(): Promise<void>;
   log(
     level: "error" | "log" | "warn",
@@ -267,6 +269,14 @@ export function createPipelineTraceEmitter(
 
   return {
     context,
+    artifact: (stepId, attemptId, record, preview) =>
+      emit({
+        name: "step.artifact",
+        pipelineId,
+        stepId,
+        attemptId,
+        payload: { ...record, preview },
+      }),
     pipelineStart: (plan, targetIds = []) =>
       emit({
         name: "pipeline.started",

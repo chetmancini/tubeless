@@ -78,7 +78,16 @@ export interface StoredPipelineAttempt {
   status: Exclude<PipelineStepLifecycleStatus, "planned">;
 }
 
+export type StoredPipelineArtifact = Extract<
+  PipelineTraceEvent,
+  { name: "step.artifact" }
+>["payload"] & {
+  attemptId: string;
+  timestampMs: number;
+};
+
 export interface StoredPipelineStep {
+  artifacts?: StoredPipelineArtifact[];
   outputSource?: "override";
   /** One execution attempt; `retries` carries `reportAttempt` telemetry. */
   attempt?: StoredPipelineAttempt;

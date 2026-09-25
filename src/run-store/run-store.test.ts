@@ -37,6 +37,7 @@ function event(
     "pipeline.finalize.started": {},
     "pipeline.log": { level: "log", message: "" },
     "pipeline.started": { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+    "step.artifact": { operation: "read", preview: false, artifact: { id: "fixture" } },
     "step.attempted": { attempt: 1, attributes: {} },
     "step.cancelled": { status: "cancelled" },
     "step.complete": { status: "completed" },

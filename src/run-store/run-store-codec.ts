@@ -1,3 +1,4 @@
+import { artifactRecordSchema } from "../tracing/artifact-metadata.js";
 import {
   pipelineDefinitionIdentitySchema,
   pipelineDefinitionSnapshotSchema,
@@ -27,6 +28,16 @@ import { decodePipelineTraceError } from "../tracing/tracing-codec.js";
 export function isPipelineTraceError(value: unknown): boolean {
   try {
     decodePipelineTraceError(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Validate artifact metadata received in a Studio step projection. */
+export function isArtifactRecord(value: unknown): boolean {
+  try {
+    artifactRecordSchema.decode(value, "artifact record");
     return true;
   } catch {
     return false;

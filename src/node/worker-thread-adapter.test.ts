@@ -36,6 +36,7 @@ function context(
     sleep: async () => {},
     reportAttempt: () => {},
     reportProgress: vi.fn(),
+    recordArtifact: vi.fn(),
     ...overrides,
   };
 }

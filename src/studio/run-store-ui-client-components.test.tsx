@@ -63,6 +63,51 @@ describe("Studio components", () => {
     expect(markup).not.toContain("<checked>");
   });
 
+  it("shows artifact lineage and escapes metadata without making URIs executable", () => {
+    const root = run({
+      steps: [
+        {
+          id: "save",
+          status: "completed",
+          artifacts: [
+            {
+              operation: "reuse",
+              preview: true,
+              attemptId: "attempt",
+              timestampMs: 1,
+              artifact: {
+                id: "<model>",
+                uri: "javascript:alert(1)",
+                version: "v2",
+                metadata: { tag: "<script>" },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const index = createStudioRunIndex([root]);
+    const markup = renderToString(
+      <RunsView
+        canCancel={false}
+        cancelling={false}
+        liveRunIds={[]}
+        nowMs={2000}
+        onCancel={() => {}}
+        onSelect={() => {}}
+        roots={index.roots}
+        runIndex={index}
+        selectedRun={root}
+        selectedRunId={root.runId}
+        totalRunCount={1}
+      />
+    );
+    expect(markup).toContain("Preview reuse: &lt;model>");
+    expect(markup).toContain("v2");
+    expect(markup).not.toContain("<script>");
+    expect(markup).not.toContain('href="javascript:');
+  });
+
   it("renders run hierarchy from explicit data only", () => {
     const root = run();
     const index = createStudioRunIndex([root]);

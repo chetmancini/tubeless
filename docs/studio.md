@@ -45,7 +45,11 @@ outputs as `completed (overridden)`, `failed (overridden)`, or `cancelled (overr
 do not accept overrides; see [testing overrides](./concepts.md#supplying-step-outputs).
 Nested steps show the child pipeline and its declared steps. Recorded progress
 includes the most recent per-item details; when details are truncated, Studio
-shows how many were omitted.
+shows how many were omitted. Artifact steps show recorded reads, writes, verified reuse, and
+explicit dry-run previews. Completed I/O records remain visible when a later batch
+or step fails; their presence does not imply the whole run succeeded. Expand an artifact to see its identifier, location,
+version, and application metadata. These records belong to the displayed run,
+step, and execution attempt; see [artifact lineage](./artifacts.md).
 
 When several steps in a run are active, the run list shows a count such as
 “3 steps running” and the first three names, with a remaining count for larger groups.

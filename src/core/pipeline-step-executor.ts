@@ -1,3 +1,4 @@
+import { artifactRecordSchema, type ArtifactRecord } from "../tracing/artifact-metadata.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import type {
   PipelineExecutionContext,
@@ -52,20 +53,28 @@ export async function executeStepAttempt<TOptions extends object>(input: {
   dryRun: boolean;
   inputs: Record<string, unknown>;
   log: PipelineLogger;
+  onArtifact?(record: ArtifactRecord, preview: boolean): void;
   onProgress(progress: PipelineStepProgress): void;
   onReportAttempt(attempt: number, attributes?: PipelineTraceAttributes): void;
   outputBoundary: string;
   step: AnyStep<TOptions>;
 }): Promise<unknown> {
   const { step } = input;
-  let acceptsProgress = true;
+  let acceptsReports = true;
   const stepContext = {
     ...input.context,
+    recordArtifact: (record: ArtifactRecord) => {
+      if (!acceptsReports) return;
+      const snapshot = artifactRecordSchema.decode(record, "artifact record");
+      const preview =
+        input.dryRun && (typeof step.dryRun === "function" || snapshot.operation === "write");
+      input.onArtifact?.(snapshot, preview);
+    },
     attemptId: input.attemptId,
     log: input.log,
     reportAttempt: input.onReportAttempt,
     reportProgress: (progress: PipelineStepProgress) => {
-      if (acceptsProgress) input.onProgress(progress);
+      if (acceptsReports) input.onProgress(progress);
     },
   };
   let output: unknown;
@@ -75,7 +84,7 @@ export async function executeStepAttempt<TOptions extends object>(input: {
         ? await step.dryRun(input.inputs, stepContext)
         : await step.run(input.inputs, stepContext);
   } finally {
-    acceptsProgress = false;
+    acceptsReports = false;
   }
   return validateStepOutput(step, output, input.outputBoundary);
 }

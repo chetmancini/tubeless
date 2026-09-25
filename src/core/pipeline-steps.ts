@@ -1,3 +1,8 @@
+import {
+  type ArtifactLoader,
+  type ArtifactSaver,
+  type ArtifactResult,
+} from "./pipeline-artifacts.js";
 import { createMappedChildRunner, createSingleChildRunner } from "./child-execution.js";
 import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.js";
 import {
@@ -411,6 +416,72 @@ function createStepFactory<
     return buildStep(id, definition);
   }
 
+  /** Read an artifact as an ordinary step, publishing only its typed value. */
+  function loadArtifact<
+    TId extends string,
+    const TDeps extends readonly AnyStep<TOptions>[] = [],
+    const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
+    TValue = unknown,
+  >(
+    id: TId,
+    definition: Omit<
+      PlainStepFields<TOptions, TDeps, TOptionalDeps, ArtifactResult<TValue>>,
+      "run"
+    > & {
+      load: ArtifactLoader<RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>, TValue, TOptions>;
+    }
+  ): BuiltStep<TId, TValue, TOptions, TInputOptions> {
+    const { load, dryRun, ...fields } = definition;
+    const wrap =
+      (handler: typeof load) =>
+      async (
+        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
+        context: PipelineStepContext<TOptions>
+      ) => {
+        const loaded = await handler(inputs, context);
+        context.recordArtifact({ operation: "read", artifact: loaded.artifact });
+        return loaded.value;
+      };
+    return step(id, {
+      ...fields,
+      run: wrap(load),
+      dryRun: typeof dryRun === "function" ? wrap(dryRun) : dryRun,
+    });
+  }
+
+  /** Write an artifact as an ordinary step. Dry runs skip unless a preview is supplied. */
+  function saveArtifact<
+    TId extends string,
+    const TDeps extends readonly AnyStep<TOptions>[] = [],
+    const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
+    TValue = unknown,
+  >(
+    id: TId,
+    definition: Omit<
+      PlainStepFields<TOptions, TDeps, TOptionalDeps, ArtifactResult<TValue>>,
+      "run"
+    > & {
+      save: ArtifactSaver<RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>, TValue, TOptions>;
+    }
+  ): BuiltStep<TId, TValue, TOptions, TInputOptions> {
+    const { save, dryRun, ...fields } = definition;
+    const wrap =
+      (handler: typeof save) =>
+      async (
+        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
+        context: PipelineStepContext<TOptions>
+      ) => {
+        const saved = await handler(inputs, context);
+        context.recordArtifact({ operation: "write", artifact: saved.artifact });
+        return saved.value;
+      };
+    return step(id, {
+      ...fields,
+      run: wrap(save),
+      dryRun: typeof dryRun === "function" ? wrap(dryRun) : "skip",
+    });
+  }
+
   const buildPipelineStep = (
     id: string,
     config: ChildPipelineStepDefinitionBase<
@@ -792,6 +863,8 @@ function createStepFactory<
 
   const factory = {
     step,
+    loadArtifact,
+    saveArtifact,
     fromPipeline,
     fromRemote,
     forEachPipeline,

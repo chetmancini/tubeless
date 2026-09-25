@@ -100,6 +100,18 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   A string or `{ reason }` result makes its output `T | undefined`; handle that
   absence explicitly. If every skip branch returns `{ reason, value }`, the
   output remains `T`.
+- Record explicit I/O with `context.recordArtifact({ operation, artifact })` inside
+  ordinary steps; use `read`, `write`, or `reuse` according to what actually happened.
+  Domain results stay separate from trace metadata. Report each successful batch
+  after persistence; prior records survive later failure or cancellation. Keep
+  checkpoint advancement and atomic promotion application-owned.
+  `loadArtifact` and `saveArtifact` from `createSteps` are conveniences for one read
+  or unconditional write. Both return `{ value, artifact }` and publish the typed
+  value. Savers default to `dryRun: "skip"`; custom handlers produce previews.
+  Loaders that populate caches also need dry-run safety. Forward cancellation into
+  adapters. Read [artifact contracts](./artifacts.md) and adapt
+  [artifact lineage](../examples/artifact-lineage.ts). Keep manifests in artifacts,
+  omit secrets from metadata, and preserve domain validation outside tracing.
 - Use `fromPipeline` for one independently useful child workflow and
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
   Omit `fromPipeline.mapOptions` when the parent's validated domain options satisfy

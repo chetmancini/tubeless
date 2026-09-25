@@ -123,6 +123,14 @@ export class RunProjection {
       if (event.payload.remote) step.remote = { ...event.payload.remote };
       return;
     }
+    if (event.name === "step.artifact") {
+      (step.artifacts ??= []).push({
+        ...structuredClone(event.payload),
+        attemptId: event.attemptId,
+        timestampMs: event.timestampMs,
+      });
+      return;
+    }
     if ("outputSource" in event.payload && event.payload.outputSource === "override") {
       step.outputSource = "override";
     }

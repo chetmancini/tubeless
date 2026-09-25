@@ -233,6 +233,7 @@ describe("module runtime boundaries", () => {
     const visited = new Set<string>();
     const tracingInternals = new Set([
       "tracing/tracing.js",
+      "tracing/artifact-metadata.js",
       "tracing/tracing-codec.js",
       "tracing/tracing-constants.js",
       "tracing/tracing-internal.js",

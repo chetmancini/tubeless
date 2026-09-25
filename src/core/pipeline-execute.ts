@@ -294,6 +294,8 @@ export async function executePlannedRun<
         dryRun,
         inputs: stepInputs,
         log: lifecycle.logger(step.id, attempt.attemptId),
+        onArtifact: (record, preview) =>
+          lifecycle.recordArtifact(step.id, attempt.attemptId, record, preview),
         onProgress: (progress) => state.reportProgress(plannedStep, attempt, progress),
         onReportAttempt: (number, attributes) =>
           lifecycle.reportAttempt(step.id, number, attributes, attempt.attemptId),

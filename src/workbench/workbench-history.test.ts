@@ -236,6 +236,42 @@ describe("runHistory", () => {
     );
   });
 
+  it("shows artifact identity and preview status in terminal and JSON history", async () => {
+    const cwd = await tempDir();
+    const filename = path.join(cwd, "artifacts.ndjson");
+    const artifactEvent = event("step.artifact", {
+      stepId: "load",
+      attemptId: "attempt-1",
+      payload: {
+        operation: "read",
+        preview: true,
+        artifact: { id: "dataset", uri: "app:source", version: "revision-1" },
+      },
+    });
+    await writeFile(
+      filename,
+      [...failedRunEvents, artifactEvent].map((entry) => JSON.stringify(entry)).join("\n")
+    );
+    const io = captureIo(cwd);
+    expect(await runHistory(["--trace", filename, "run-failed"], io)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(io.output.join("")).toContain('preview read  {"');
+    expect(io.output.join("")).toContain('"id":"dataset"');
+    const json = captureIo(cwd);
+    expect(await runHistory(["--trace", filename, "--json", "run-failed"], json)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(JSON.parse(json.output.join("")).steps[0].artifacts).toMatchObject([
+      {
+        operation: "read",
+        preview: true,
+        artifact: { id: "dataset", version: "revision-1" },
+        attemptId: "attempt-1",
+      },
+    ]);
+  });
+
   it("shows steps, logs, and error sections for a run id", async () => {
     const directory = await tempDir();
     const storePath = path.join(directory, "runs.sqlite");

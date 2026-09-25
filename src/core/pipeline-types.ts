@@ -1,3 +1,4 @@
+import type { ArtifactRecord } from "../tracing/artifact-metadata.js";
 import type {
   PipelineDefinitionIdentityContract,
   PipelineDefinitionSnapshotContract,
@@ -150,6 +151,8 @@ export interface PipelineStepContext<
 > extends PipelineExecutionContext<TOptions> {
   /** Stable identity for this execution of the current step. */
   attemptId: string;
+  /** Record completed I/O without changing the step output. Calls after the handler settles are ignored. */
+  recordArtifact(record: ArtifactRecord): void;
   /** Emit a retry/attempt trace event for this step when tracing is enabled. */
   reportAttempt(attempt: number, attributes?: PipelineTraceAttributes): void;
   /** Publish the latest progress snapshot for this step. */
