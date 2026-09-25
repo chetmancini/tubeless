@@ -70,6 +70,7 @@ export async function executePlannedRun<
   const lifecycle = createPipelineLifecycleObserver(compiled.id, runtime, {
     ...identity,
     itemKey: runtime.tracing?.itemKey,
+    iteration: runtime.tracing?.iteration,
   });
   const state = new PipelineRunState<TPipelineResult>(
     compiled.id,

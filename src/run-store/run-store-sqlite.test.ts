@@ -17,6 +17,9 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite.js";
+import { createSteps, definePipeline } from "../core/pipeline.js";
+import { createPipelineTestRuntime } from "../testing/testing.js";
+import { projectPipelineRunStore, type StoredPipelineEvent } from "./run-store.js";
 
 const directories: string[] = [];
 
@@ -44,6 +47,61 @@ function startedEvent(runId: string, timestampMs: number, pipelineId = "import")
 }
 
 describe("SQLite pipeline run store", () => {
+  it("preserves iteration relations and projected history after closing and reopening", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-iteration-store-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(filename);
+    const { step } = createSteps<{ count: number }>();
+    const work = step("work", { run: (_inputs, context) => context.options.count + 1 });
+    const child = definePipeline({ id: "child", steps: [work], finalize: work });
+    const repeat = createSteps().iteratePipeline("repeat", {
+      pipeline: child,
+      maxIterations: 2,
+      initialState: () => 0,
+      mapOptions: (count) => ({ count }),
+      transition: (result) =>
+        result === 2 ? { kind: "finish", result } : { kind: "next", state: result },
+    });
+    const parent = definePipeline({ id: "parent", steps: [repeat], finalize: repeat });
+    const captured: StoredPipelineEvent[] = [];
+    const runtime = createPipelineTestRuntime();
+    try {
+      expect(
+        await parent.runOrThrow(
+          {},
+          {},
+          {
+            ...runtime.context,
+            tracing: {
+              exporter: {
+                export: async (event) => {
+                  captured.push({ ...event, id: captured.length + 1 });
+                  await store.export(event);
+                },
+              },
+            },
+          }
+        )
+      ).toBe(2);
+    } finally {
+      await store.close();
+    }
+    expect(runtime.logs.filter((entry) => entry.level === "warn")).toEqual([]);
+    const reopened = await openSqlitePipelineRunStore(filename, { readOnly: true });
+    try {
+      const persisted = await reopened.listEvents();
+      const children = persisted.filter(
+        (event) => event.name === "pipeline.started" && event.pipelineId === "child"
+      );
+      expect(children.map((event) => event.iteration?.index)).toEqual([1, 2]);
+      expect(persisted).toEqual(captured);
+      expect(projectPipelineRunStore(persisted, 0)).toEqual(projectPipelineRunStore(captured, 0));
+    } finally {
+      await reopened.close();
+    }
+  });
+
   it("persists ordered events and rejects mutation", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
     directories.push(directory);
@@ -94,7 +152,67 @@ describe("SQLite pipeline run store", () => {
     await reopened.close();
   });
 
-  it.each([1, 2, 4])("refuses unsupported store schema version %i", async (storeVersion) => {
+  it.each([true, false])(
+    "reads legacy stores without writing and migrates writable opens (initialize=%s)",
+    async (initialize) => {
+      const directory = await mkdtemp(path.join(tmpdir(), "tubeless-legacy-iteration-store-"));
+      directories.push(directory);
+      const filename = path.join(directory, "runs.sqlite");
+      const original = await openSqlitePipelineRunStore(filename);
+      const legacy = startedEvent("run-1", 10);
+      await original.export(legacy);
+      await original.close();
+      const database = new DatabaseSync(filename);
+      // Recreate the previous table layout while retaining its events, indexes and triggers.
+      database.exec(
+        "ALTER TABLE pipeline_run_events DROP COLUMN iteration_json; PRAGMA user_version = 3;"
+      );
+      database.close();
+      const before = await readFile(filename);
+      const reader = await openSqlitePipelineRunStore(filename, { readOnly: true });
+      try {
+        expect(await reader.listEvents()).toEqual([{ ...legacy, id: 1 }]);
+        expect(() => reader.export(legacy)).toThrow("read-only");
+      } finally {
+        await reader.close();
+      }
+      expect(await readFile(filename)).toEqual(before);
+
+      const iteration = { runId: "run-1", stepId: "repeat", attemptId: "repeat-attempt", index: 1 };
+      const child = {
+        ...startedEvent("child-run", 11, "child"),
+        parentRunId: "run-1",
+        iteration,
+        version: 3 as const,
+      };
+      const writer = await openSqlitePipelineRunStore(filename, { initialize });
+      try {
+        await writer.export(child);
+      } finally {
+        await writer.close();
+      }
+      const reopened = await openSqlitePipelineRunStore(filename, { readOnly: true });
+      try {
+        expect(await reopened.listEvents()).toEqual([
+          { ...legacy, id: 1 },
+          { ...child, id: 2 },
+        ]);
+      } finally {
+        await reopened.close();
+      }
+      const migrated = new DatabaseSync(filename);
+      try {
+        expect(migrated.prepare("PRAGMA user_version").get()).toMatchObject({ user_version: 4 });
+        expect(() =>
+          migrated.exec("UPDATE pipeline_run_events SET pipeline_id = 'changed'")
+        ).toThrow("append-only");
+      } finally {
+        migrated.close();
+      }
+    }
+  );
+
+  it.each([1, 2, 5])("refuses unsupported store schema version %i", async (storeVersion) => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-version-"));
     directories.push(directory);
     const filename = path.join(directory, "runs.sqlite");

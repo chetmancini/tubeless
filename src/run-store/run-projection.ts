@@ -44,7 +44,7 @@ export class RunProjection {
   #eventCount = 0;
   readonly #identity: Pick<
     StoredPipelineEvent,
-    "pipelineId" | "runId" | "correlationId" | "parentRunId"
+    "pipelineId" | "runId" | "correlationId" | "parentRunId" | "iteration"
   >;
   #logCount = 0;
   readonly #logs: StoredPipelineLog[] = [];
@@ -66,6 +66,7 @@ export class RunProjection {
       runId: event.runId,
       correlationId: event.correlationId,
       parentRunId: event.parentRunId,
+      iteration: event.iteration ? { ...event.iteration } : undefined,
     };
     this.#startedAtMs = event.timestampMs;
     this.append(event);
@@ -202,6 +203,7 @@ export class RunProjection {
     if (completed?.error) run.error = structuredClone(completed.error);
     if (completed) run.finishedAtMs = completed.timestampMs;
     if (this.#identity.parentRunId) run.parentRunId = this.#identity.parentRunId;
+    if (this.#identity.iteration) run.iteration = { ...this.#identity.iteration };
     return run;
   }
 }

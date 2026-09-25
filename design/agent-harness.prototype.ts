@@ -5,12 +5,10 @@
 import type {
   Pipeline,
   PipelineDefinitionSnapshot,
-  PipelineExecutionContext,
   PipelineInput,
   PipelineResult,
   PipelineStepContext,
   StandardSchemaV1,
-  Step,
 } from "tubeless";
 
 type Awaitable<T> = T | Promise<T>;
@@ -18,67 +16,6 @@ type Input<S extends StandardSchemaV1> = NonNullable<S["~standard"]["types"]>["i
 type Output<S extends StandardSchemaV1> = NonNullable<S["~standard"]["types"]>["output"];
 type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> };
 type AnyPipeline = Pipeline<object, unknown>;
-type DependencyInputs<D extends readonly Step<string, unknown, object, object>[]> = {
-  [S in D[number] as S["id"]]: S extends Step<
-    string,
-    infer Value,
-    infer _Options,
-    infer _Input,
-    infer _RunValue,
-    infer _Schema
-  >
-    ? Value
-    : never;
-};
-
-export type IterationDecision<State, Result> =
-  | { readonly kind: "next"; readonly state: State; readonly result?: never }
-  | { readonly kind: "finish"; readonly result: Result; readonly state?: never };
-
-interface IterationFactory<Options extends object, RawOptions extends object, Schema> {
-  iteratePipeline<
-    const Id extends string,
-    Child extends AnyPipeline,
-    State,
-    Result,
-    const Dependencies extends readonly Step<string, unknown, Options, object>[] = readonly [],
-  >(
-    id: Id,
-    definition: {
-      readonly pipeline: Child;
-      readonly description?: string;
-      readonly dependsOn?: Dependencies;
-      readonly maxIterations: number;
-      readonly dryRun?: "skip";
-      readonly controls?: Parameters<Child["plan"]>[0];
-      initialState(
-        inputs: DependencyInputs<Dependencies>,
-        context: PipelineExecutionContext<Options>
-      ): State;
-      mapOptions(
-        state: DeepReadonly<NoInfer<State>>,
-        inputs: DependencyInputs<Dependencies>,
-        context: PipelineExecutionContext<Options>
-      ): PipelineInput<Child>;
-      transition(
-        result: PipelineResult<Child>,
-        state: DeepReadonly<NoInfer<State>>,
-        context: PipelineExecutionContext<Options>
-      ): Awaitable<IterationDecision<NoInfer<State>, Result>>;
-    }
-  ): Step<Id, Result, Options, RawOptions, Result, Schema & (StandardSchemaV1 | undefined)>;
-}
-
-/** Partial prototype: only the proposed addition to createSteps is declared here. */
-export declare function createSteps<Options extends object = {}>(): IterationFactory<
-  Options,
-  Options,
-  undefined
->;
-export declare function createSteps<const Schema extends StandardSchemaV1<object, object>>(
-  schema: Schema
-): IterationFactory<Output<Schema>, Input<Schema>, Schema>;
-
 declare const capabilityTypes: unique symbol;
 
 /** Opaque descriptor, created by defineTool or pipelineTool; never a raw model value. */

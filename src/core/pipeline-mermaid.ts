@@ -1,5 +1,6 @@
 import { liveStepGraph, stepEdges, type CompiledStepGraph } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
+import { STEP_NESTED_PIPELINE } from "./pipeline-step-metadata.js";
 import { PIPELINE_MERMAID_DIRECTIONS, type PipelineMermaidOptions } from "./pipeline-types.js";
 
 function escapeMermaidLabel(value: string): string {
@@ -32,7 +33,10 @@ export function renderPipelineMermaid<TOptions extends object>(
       options.includeDescriptions && step.description
         ? `${displayName} — ${step.description}`
         : displayName;
-    lines.push(`  ${nodeId}["${escapeMermaidLabel(label)}"]`);
+    const nested = step[STEP_NESTED_PIPELINE];
+    const iteration =
+      nested?.mode === "iterate" ? ` (at most ${nested.maxIterations} iterations)` : "";
+    lines.push(`  ${nodeId}["${escapeMermaidLabel(label + iteration)}"]`);
   }
 
   const edgeLines: string[] = [];

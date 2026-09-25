@@ -41,6 +41,8 @@ interface StoredEventRow {
   event_name: string;
   id: number | bigint;
   item_key: string | null;
+  /** Absent when inspecting a legacy version 3 store without migrating it. */
+  iteration_json?: string | null;
   parent_run_id: string | null;
   payload_json: string;
   pipeline_id: string;
@@ -50,7 +52,7 @@ interface StoredEventRow {
   version: number;
 }
 
-const RUN_EVENT_STORE_VERSION = 3;
+const RUN_EVENT_STORE_VERSION = 4;
 /** Larger batches mean fewer commits but more tail loss on crash. */
 const EXPORT_BATCH_SIZE = 64;
 
@@ -68,6 +70,7 @@ type EventRow = readonly [
   durationMs: number | null,
   payloadJson: string,
   errorJson: string | null,
+  iterationJson: string | null,
 ];
 
 function eventRow(event: PipelineTraceEvent): EventRow {
@@ -86,6 +89,7 @@ function eventRow(event: PipelineTraceEvent): EventRow {
     "durationMs" in canonical ? (canonical.durationMs ?? null) : null,
     JSON.stringify(canonical.payload),
     "error" in canonical && canonical.error ? JSON.stringify(canonical.error) : null,
+    canonical.iteration ? JSON.stringify(canonical.iteration) : null,
   ];
 }
 
@@ -122,7 +126,8 @@ const RUN_EVENT_STORE_SCHEMA = `
     timestamp_ms INTEGER NOT NULL,
     duration_ms REAL,
     payload_json TEXT NOT NULL,
-    error_json TEXT
+    error_json TEXT,
+    iteration_json TEXT
   );
 
   CREATE INDEX IF NOT EXISTS pipeline_run_events_run_id_idx
@@ -300,6 +305,7 @@ function mapRow(row: StoredEventRow): StoredPipelineEvent {
   if (row.duration_ms !== null) encoded.durationMs = Number(row.duration_ms);
   if (row.error_json) encoded.error = JSON.parse(row.error_json);
   if (row.item_key) encoded.itemKey = row.item_key;
+  if (row.iteration_json) encoded.iteration = JSON.parse(row.iteration_json);
   if (row.parent_run_id) encoded.parentRunId = row.parent_run_id;
   if (row.step_id) encoded.stepId = row.step_id;
   return { ...decodeStoredTraceEvent(encoded), id: Number(row.id) };
@@ -353,13 +359,21 @@ export async function openSqlitePipelineRunStore(
   const database = await openDatabase(resolvedFilename, { create: initialize, readOnly });
   try {
     const version = readStoreVersion(database);
-    if (version !== 0 && version !== RUN_EVENT_STORE_VERSION) {
+    if (version !== 0 && version !== 3 && version !== RUN_EVENT_STORE_VERSION) {
       throw new Error(
         `Unsupported pipeline run store schema version ${version}; expected ${RUN_EVENT_STORE_VERSION}.`
       );
     }
     if (!initialize && version === 0) {
       throw new Error(`${resolvedFilename} is not a pipeline run store.`);
+    }
+    if (!readOnly && version === 3) {
+      database.exec(`
+        BEGIN IMMEDIATE;
+        ALTER TABLE pipeline_run_events ADD COLUMN iteration_json TEXT;
+        PRAGMA user_version = ${RUN_EVENT_STORE_VERSION};
+        COMMIT;
+      `);
     }
     if (initialize) {
       database.exec(RUN_EVENT_STORE_SCHEMA);
@@ -369,19 +383,21 @@ export async function openSqlitePipelineRunStore(
     database.close();
     throw error;
   }
-  const insert = statement(
-    database,
-    `INSERT INTO pipeline_run_events (
+  const insert = readOnly
+    ? undefined
+    : statement(
+        database,
+        `INSERT INTO pipeline_run_events (
           version, run_id, correlation_id, parent_run_id, pipeline_id, step_id, attempt_id,
-          item_key, event_name, timestamp_ms, duration_ms, payload_json, error_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
+          item_key, event_name, timestamp_ms, duration_ms, payload_json, error_json, iteration_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
   let closed = false;
   let exportError: Error | undefined;
   const pending: EventRow[] = [];
 
   function drain(): void {
-    if (pending.length === 0) return;
+    if (!insert || pending.length === 0) return;
     try {
       database.exec("BEGIN IMMEDIATE");
       for (const row of pending) insert.run(...row);
@@ -399,6 +415,7 @@ export async function openSqlitePipelineRunStore(
   return {
     export(event) {
       if (closed) throw new Error("Cannot append to a closed pipeline run store.");
+      if (!insert) throw new Error("Cannot append to a read-only pipeline run store.");
       if (exportError) throw exportError;
       try {
         pending.push(eventRow(event));

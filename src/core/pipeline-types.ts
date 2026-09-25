@@ -487,8 +487,12 @@ export interface PipelinePlanStep {
   name?: string;
   /** Static child structure when this opaque step executes another pipeline. */
   nestedPipeline?: {
-    /** One child execution or one child execution per runtime item. */
-    mode: "single" | "for-each";
+    /** One child, runtime fan-out, or bounded sequential iteration. */
+    mode: "single" | "for-each" | "iterate";
+    /** Upper bound for a dynamically repeated child. */
+    maxIterations?: number;
+    /** Static child controls, recorded for iteration identity and inspection. */
+    controls?: PipelineRunControls;
     identity?: PipelineDefinitionIdentity;
     concurrency?: number | "dynamic";
     pipelineId: string;

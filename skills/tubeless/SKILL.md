@@ -26,7 +26,7 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 ## Authoring decisions
 
 - Use `createSteps<TDomainOptions>()` per pipeline and destructure every
-  constructor it needs: `step`, `fromPipeline`, `fromRemote`, and/or
+  constructor it needs: `step`, `fromPipeline`, `fromRemote`, `iteratePipeline`, and/or
   `forEachPipeline`. Domain options contain business inputs; pass built-in
   controls separately to `run(options, controls?)`.
   Use `run()` or `runOrThrow()` when all input fields are optional; omitted input
@@ -137,6 +137,13 @@ Read the corresponding package recipe before using these features:
   be `undefined`. Both helpers stop admitting work after failure or cancellation,
   drain active workers, and preserve input-order results without cancelling
   siblings. Invalid concurrency throws rather than returning an execution outcome.
+- `iteratePipeline` for bounded repeated child execution. Supply fresh `initialState`,
+  `mapOptions`, a positive safe-integer `maxIterations`, and `transition` returning
+  `{ kind: "next", state }` or `{ kind: "finish", result }`. State is read-only
+  by contract; required dependencies feed initialization/mapping. Static child
+  controls remain separate from domain input. Cancellation drains the active child;
+  dry-run propagates. Plans show the bounded region, not future execution IDs.
+  Read `docs/child-pipeline-composition.md` and `examples/iteration.ts`.
 - `createSteps(optionsSchema)`, `outputSchema`, or `resultSchema` for runtime
   validation at untrusted boundaries. Reuse the project's Standard Schema
   implementation; core needs no schema dependency.

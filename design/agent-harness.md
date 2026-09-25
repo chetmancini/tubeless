@@ -1,13 +1,14 @@
-# Structured agent harness: stage 1 contract
+# Structured agent harness contract
 
-Status: API design and compile-time probes. The harness is not implemented or
-exported. The first release will execute in process; crash-safe resume follows
-in a later release.
+Status: stage 2 implements generic bounded iteration in core. The agent harness
+remains an API design with compile-time probes; it is not implemented or exported.
+The first agent release will execute in process; crash-safe resume follows later.
 
 The [prototype declarations](./agent-harness.prototype.ts) and
-[type probes](./agent-harness.probes.ts) fix the proposed boundaries before
-runtime implementation. They are checked by `bun run typecheck` and `make check`.
-They have no runtime implementation and must not be executed. `design/` is
+[type probes](./agent-harness.probes.ts) fix the proposed agent boundaries before
+runtime implementation and exercise the real public iteration API. They are
+checked by `bun run typecheck` and `make check`. The agent declarations have no
+runtime implementation; these probes must not be executed. `design/` is
 excluded from the npm artifact; the packed-artifact check enforces that boundary.
 
 ## API decisions
@@ -24,9 +25,8 @@ and trace emission. Core stays independent of the agent entrypoint, model SDKs,
 storage, CLI, and Studio. Model prompting and provider request/response mapping
 remain application-owned.
 
-`createSteps` gains one generic constructor, `iteratePipeline`. The prototype
-declares only this addition; probes use the real public factory for existing
-constructors. The constructor takes a child pipeline, `initialState`,
+`createSteps` includes the generic constructor `iteratePipeline`. The probes use
+the real public factory for all core constructors. It takes a child pipeline, `initialState`,
 `mapOptions`, `transition`, and a required finite `maxIterations`. It supports
 required dependencies, a static set of child controls, and whole-step dry-run
 skip. Other composition conveniences can follow a demonstrated need.
@@ -232,15 +232,15 @@ inventory. They do not invent future steps or accept future call IDs as static
 `--step` targets. Runtime traces describe actual expansions and outcomes.
 Bounded progress rows are presentation; they are not the complete history.
 
-The proposed compatibility change is explicit: keep identity v1 hashing and
-its old test vectors unchanged; add identity v2 for extended iteration/agent
-semantics and parents that contain them. Ordinary unchanged definitions retain
-their v1 identity. Introduce trace v3 for new writes with typed iteration/call
-relations and decision/limit summaries; readers continue accepting trace v2.
+Stage 2 preserves identity v1 hashing and its old test vectors, and adds identity
+v2 for iteration semantics and parents that contain them. Ordinary unchanged
+definitions retain their v1 identity. New writes use trace v3 with typed iteration
+relations; readers continue accepting trace v2. Agent call relations and
+decision/limit summaries follow with agent execution.
 The run report stays at its existing version unless its shape changes. Do not
 silently widen the v2 wire enum for nested modes or reinterpret old hashes.
 
-Stage 2 must update plan metadata, definition compilation, schemas/codecs,
+Stage 2 updates plan metadata, definition compilation, schemas/codecs,
 decoders, and storage projections together before emitting the new records.
 Stages 3–4 fill agent-specific records as execution lands; stage 5 completes
 presentation. Old records may lack relationships and remain inspectable with
@@ -261,9 +261,9 @@ lookups, and dynamic IDs used as static targets. Iteration probes preserve
 transformed dependency outputs, raw parent inputs, schema-backed CLI inference,
 schema-less explicit CLI parameters, and a precise `undefined` finish result.
 
-This is compile-time evidence. It does not prove scheduling, isolation,
-cancellation, recovery, validation counts, or successful execution of a declared
-prototype. The first runtime PR is stage 2: implement bounded iteration using
-ordinary child execution, with deterministic tests for transitions, limits,
-run isolation, selection, cancellation, dry-run, and saved-record compatibility.
-Stages 3–4 then convert the agent probes into executable public-package examples.
+The agent probes remain compile-time evidence; they do not prove agent scheduling,
+isolation, validation counts, or recovery. Core iteration now uses ordinary child
+execution, with deterministic tests for transitions, limits, run isolation,
+selection, cancellation, dry-run, and saved-record compatibility. The public
+[pagination example](../examples/iteration.ts) runs without a model or credentials.
+Stages 3–4 convert the agent probes into executable public-package examples.

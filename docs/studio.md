@@ -154,6 +154,10 @@ deletes are blocked by database triggers. `clearHistory()` is a separate
 maintenance operation that clears the complete history, compacts the database,
 and restores the triggers in one transaction.
 
+New SQLite stores use schema version 4 to persist iteration relations. Version 3
+stores remain readable without modification; a writable open upgrades them
+transactionally while preserving existing events and append-only protection.
+
 The SQLite writer buffers events in batches of 64. `export()` can return before
 an event reaches disk. Pending events become visible to other connections after
 a batch fills, `flush()` runs, the writer calls its own `listEvents` or
@@ -174,14 +178,19 @@ supplies one; use `isBusy()` to report other known active writers.
 NDJSON readers validate a finished file, assign event IDs in file order, and
 close the file. They do not modify the artifact or copy it into SQLite. The
 [CLI guide](./cli.md#history) lists file-size, event-size, and event-count limits.
-Trace files contain version 2 events with unique execution IDs and separate
-reusable correlation IDs.
+New trace files contain version 3 events with unique execution IDs and separate
+reusable correlation IDs. Readers also accept version 2 recordings. Repeated
+children retain an `iteration` relation with the owning run, wrapper step and
+attempt, and one-based index. Live progress retains up to 32 iteration groups;
+the child-run history retains every recorded iteration.
 
 ## Definition history and comparison
 
-Every compiled pipeline exposes `pipeline.definition`: an immutable, version 1
-snapshot with a structural fingerprint and a combined definition ID. Both use
-SHA-256. Stable pipeline and step IDs remain the human-facing identity.
+Every compiled pipeline exposes `pipeline.definition`: an immutable snapshot
+with a structural fingerprint and a combined definition ID. Both use SHA-256.
+Ordinary definitions retain identity version 1 and their existing hashes.
+Iteration definitions and their ancestors use identity version 2. Stable pipeline
+and step IDs remain the human-facing identity.
 
 Set `implementationVersion` on `definePipeline` to identify handlers, schemas,
 mappings, predicates, and the finalizer. Supply a release tag, source revision,
@@ -193,7 +202,9 @@ The structural fingerprint includes compiled execution order, step IDs, required
 and optional edges, failure gates, targets, dry-run and skip policies, schema
 presence, required finalizer steps, child composition and concurrency, and remote
 engine/target metadata. Dependency, target, and required-finalizer sets are sorted. Names, descriptions,
-progress presentation, inputs, run controls, and handler code are excluded.
+progress presentation, inputs, per-run controls, and handler code are excluded.
+Iteration bounds and declared static child controls are included in identity
+version 2; selector sets are sorted.
 Changing the implementation version changes the combined definition ID without
 changing the structural fingerprint. Child structural identities propagate into
 the parent's fingerprint; child implementation identities propagate only into its
@@ -213,7 +224,7 @@ child/remote metadata, and implementation versions. Child steps stay opaque wrap
 compare the child's own recorded definitions for its internal graph changes.
 Run details show the identity that actually produced that run.
 
-The version 2 `pipeline.started` payload adds optional `definitionIdentity` and
+The `pipeline.started` payload includes optional `definitionIdentity` and
 `definitionSnapshot` fields. The identity is retained even when selection or input
 validation fails before step events. A snapshot is limited to 256 KiB of UTF-8 JSON,
 4,096 steps or entries per list, 4,096 code units per identifier, and the existing
@@ -225,10 +236,11 @@ snapshot is unavailable. These limits affect recording, not pipeline execution.
 Existing version 2 recordings remain readable. Runs without these optional fields
 are labeled legacy, with no invented identity. Their latest planned-step graph is
 still retained per pipeline using the start timestamp and store-local event ID.
-The trace version stays at 2; the definition identity's own version fixes fingerprint
-semantics. Unsupported identity versions are rejected by current readers. Older
-Tubeless readers ignore the new optional fields; external strict schema validators
-must update their schema before consuming them.
+Trace version 3 admits iteration metadata and both identity versions. Version 2
+recordings remain restricted to their original metadata and identity version 1.
+The definition identity's own version fixes fingerprint semantics. Unsupported
+trace or identity versions are rejected. Older readers and external strict schema
+validators must update before consuming new version 3 recordings.
 
 NDJSON and SQLite readers recompute both hashes from each complete definition
 snapshot and reject mismatches before projecting history. SQLite also checks writes.

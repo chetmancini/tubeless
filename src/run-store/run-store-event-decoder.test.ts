@@ -8,6 +8,7 @@ import { decodeStoredTraceEvent } from "./run-store-event-decoder.js";
 import { openNdjsonPipelineRunStore } from "./run-store-ndjson.js";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite.js";
 import type { PipelineTraceEvent } from "../tracing/tracing-contracts.js";
+import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
 
 const { step, fromPipeline, forEachPipeline, fromRemote } = createSteps();
 const work = step("work-界", { run: () => 1 });
@@ -196,6 +197,34 @@ describe("persisted definition verification", () => {
       } finally {
         await reader.close();
       }
+    }
+  );
+});
+
+describe("persisted iteration verification", () => {
+  it.each([undefined, "run-b"])(
+    "rejects an iteration origin with parentRunId=%s before persistence",
+    async (parentRunId) => {
+      const valid = {
+        ...started(),
+        version: 3 as const,
+        parentRunId: "run-a",
+        iteration: { runId: "run-a", stepId: "repeat", attemptId: "attempt-1", index: 1 },
+      };
+      expect(decodeStoredTraceEvent(valid)).toEqual(valid);
+      const invalid = { ...valid, parentRunId };
+      const error = "iteration.runId must match parentRunId";
+      expect(() => decodePipelineTraceEvent(invalid)).toThrow(error);
+      expect(() => decodeStoredTraceEvent(invalid)).toThrow(error);
+      const directory = await mkdtemp(join(tmpdir(), "tubeless-iteration-validation-"));
+      directories.push(directory);
+      const trace = join(directory, "run.ndjson");
+      await writeFile(trace, JSON.stringify(invalid));
+      await expect(openNdjsonPipelineRunStore(trace)).rejects.toThrow(error);
+      const store = await openSqlitePipelineRunStore(join(directory, "runs.sqlite"));
+      expect(() => store.export(invalid)).toThrow(error);
+      expect(await store.listEvents()).toEqual([]);
+      expect(() => store.close()).toThrow(error);
     }
   );
 });

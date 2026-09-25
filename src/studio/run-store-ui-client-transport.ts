@@ -150,7 +150,10 @@ function isStoredStep(value: unknown): value is StoredPipelineStep {
   if (value.nestedPipeline !== undefined) {
     if (
       !isRecord(value.nestedPipeline) ||
-      (value.nestedPipeline.mode !== "single" && value.nestedPipeline.mode !== "for-each") ||
+      !["single", "for-each", "iterate"].includes(String(value.nestedPipeline.mode)) ||
+      (value.nestedPipeline.mode === "iterate" &&
+        (!Number.isSafeInteger(value.nestedPipeline.maxIterations) ||
+          Number(value.nestedPipeline.maxIterations) < 1)) ||
       typeof value.nestedPipeline.pipelineId !== "string" ||
       !isFiniteNumber(value.nestedPipeline.stepCount) ||
       !isStringArray(value.nestedPipeline.stepIds)
@@ -190,6 +193,13 @@ function isStoredStudioRun(value: unknown): value is StoredPipelineRun {
     isFiniteNumber(value.version) &&
     isOptionalString(value.correlationId) &&
     isOptionalString(value.parentRunId) &&
+    (value.iteration === undefined ||
+      (isRecord(value.iteration) &&
+        typeof value.iteration.runId === "string" &&
+        typeof value.iteration.stepId === "string" &&
+        typeof value.iteration.attemptId === "string" &&
+        Number.isSafeInteger(value.iteration.index) &&
+        Number(value.iteration.index) > 0)) &&
     (value.error === undefined || isPipelineTraceError(value.error))
   );
 }
@@ -274,7 +284,10 @@ function isStudioPlanPayload(value: unknown): value is { plan: PipelinePlan } {
     if (
       step.nestedPipeline !== undefined &&
       (!isRecord(step.nestedPipeline) ||
-        (step.nestedPipeline.mode !== "single" && step.nestedPipeline.mode !== "for-each") ||
+        !["single", "for-each", "iterate"].includes(String(step.nestedPipeline.mode)) ||
+        (step.nestedPipeline.mode === "iterate" &&
+          (!Number.isSafeInteger(step.nestedPipeline.maxIterations) ||
+            Number(step.nestedPipeline.maxIterations) < 1)) ||
         typeof step.nestedPipeline.pipelineId !== "string" ||
         !isStringArray(step.nestedPipeline.stepIds))
     ) {

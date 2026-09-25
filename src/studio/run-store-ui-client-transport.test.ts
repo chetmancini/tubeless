@@ -123,6 +123,40 @@ describe("Studio API response parsing", () => {
     ).toBeUndefined();
   });
 
+  it("accepts iteration metadata and rejects invalid bounds or relationships", () => {
+    const iteration = { runId: "parent", stepId: "repeat", attemptId: "attempt", index: 1 };
+    const nestedPipeline = {
+      mode: "iterate" as const,
+      pipelineId: "child",
+      maxIterations: 3,
+      stepCount: 1,
+      stepIds: ["work"],
+    };
+    const recorded = run({
+      iteration,
+      steps: [{ id: "repeat", status: "completed", nestedPipeline }],
+    });
+    expect(parseStudioSnapshot(snapshot([recorded]))?.runs[0]?.iteration).toEqual(iteration);
+    expect(
+      parseStudioSnapshot(snapshot([{ ...recorded, iteration: { ...iteration, index: 0 } }]))
+    ).toBeUndefined();
+    expect(
+      parseStudioSnapshot(
+        snapshot([
+          run({
+            steps: [
+              {
+                id: "repeat",
+                status: "completed",
+                nestedPipeline: { ...nestedPipeline, maxIterations: 0 },
+              },
+            ],
+          }),
+        ])
+      )
+    ).toBeUndefined();
+  });
+
   it("rejects invalid successful payloads instead of exposing them to client state", async () => {
     const fetcher: typeof fetch = vi.fn(async () => jsonResponse({ runs: "not-an-array" }));
     const api = createStudioApi(fetcher);

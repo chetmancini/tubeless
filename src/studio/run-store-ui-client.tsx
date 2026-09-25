@@ -647,9 +647,11 @@ export function PlanView({ plan }: { plan: PipelinePlan }) {
           const kind = remote
             ? "Remote step"
             : nested
-              ? nested.mode === "for-each"
-                ? "Pipeline fan-out"
-                : "Nested pipeline"
+              ? nested.mode === "iterate"
+                ? "Pipeline iteration"
+                : nested.mode === "for-each"
+                  ? "Pipeline fan-out"
+                  : "Nested pipeline"
               : "Step";
           return (
             <div class="plan-step" key={step.id}>
@@ -665,7 +667,11 @@ export function PlanView({ plan }: { plan: PipelinePlan }) {
                 <NestedDetail
                   label={nested.pipelineId}
                   secondary={`${nested.stepIds.length} declared steps${
-                    nested.mode === "for-each" ? " per runtime item" : ""
+                    nested.mode === "iterate"
+                      ? ` per iteration, at most ${nested.maxIterations} iterations`
+                      : nested.mode === "for-each"
+                        ? " per runtime item"
+                        : ""
                   }`}
                   stepIds={nested.stepIds}
                 />
@@ -848,7 +854,7 @@ function StepRow({ step }: { step: StoredPipelineStep }) {
       {nested && (
         <NestedDetail
           label={nested.pipelineId}
-          secondary={`${nestedCountLabel}${nested.mode === "for-each" ? " per runtime item" : ""}`}
+          secondary={`${nestedCountLabel}${nested.mode === "iterate" ? ` per iteration, at most ${nested.maxIterations} iterations` : nested.mode === "for-each" ? " per runtime item" : ""}`}
           stepIds={nested.stepIds}
         />
       )}
