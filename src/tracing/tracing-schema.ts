@@ -692,6 +692,9 @@ const traceEventUnion = wireDiscriminatedUnion("name", pipelineTraceEventSchemas
 export const pipelineTraceEventSchema = wireRefine(
   traceEventUnion,
   (event) => {
+    if (event.iteration !== undefined && event.iteration.runId !== event.parentRunId) {
+      throw new Error("iteration.runId must match parentRunId");
+    }
     if (event.version !== 2) return;
     if (
       event.iteration !== undefined ||
