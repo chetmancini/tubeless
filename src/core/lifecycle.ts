@@ -1,3 +1,4 @@
+import type { ArtifactRecord } from "../tracing/artifact-metadata.js";
 import type {
   PipelineError,
   PipelineHooks,
@@ -23,6 +24,7 @@ export interface PipelineLifecycleObserver {
   logger(stepId?: string, attemptId?: string): PipelineLogger;
   pipelineComplete(result: PipelineRun<unknown>): void;
   pipelineStart(plan: PipelinePlan, targetIds: readonly string[]): void;
+  recordArtifact(stepId: string, attemptId: string, record: ArtifactRecord, preview: boolean): void;
   reportAttempt(
     stepId: string,
     attempt: number,
@@ -141,6 +143,8 @@ export function createPipelineLifecycleObserver(
       }
       if (traceStatus) trace?.stepStatus(event);
     },
+    recordArtifact: (stepId, attemptId, record, preview) =>
+      trace?.artifact(stepId, attemptId, record, preview),
     reportAttempt: (stepId, attempt, attributes, attemptId) =>
       trace?.reportAttempt(stepId, attempt, attributes, attemptId),
     finalizeStart() {

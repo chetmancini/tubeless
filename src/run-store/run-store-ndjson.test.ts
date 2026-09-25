@@ -41,6 +41,98 @@ function captureJson(lines: string[]): PipelineTraceExporter {
 }
 
 describe("openNdjsonPipelineRunStore", () => {
+  it("persists reuse and completed writes even when a later batch fails", async () => {
+    const { step } = createSteps();
+    const lines: string[] = [];
+    const release = step("release", {
+      dryRun: "skip",
+      run: (_inputs, context) => {
+        context.recordArtifact({ operation: "reuse", artifact: { id: "edition", version: "one" } });
+        context.recordArtifact({ operation: "write", artifact: { id: "batch", version: "two" } });
+        throw new Error("next batch failed");
+      },
+    });
+    await definePipeline({ id: "partial-artifacts", steps: [release] }).run(
+      {},
+      {},
+      { tracing: { exporter: captureJson(lines) } }
+    );
+    const filename = await tempFile(lines.join("\n"));
+    const ndjson = await openNdjsonPipelineRunStore(filename);
+    const sqlite = await openSqlitePipelineRunStore(
+      path.join(path.dirname(filename), "partial.sqlite")
+    );
+    try {
+      for (const event of await ndjson.listEvents()) await sqlite.export(event);
+      await sqlite.flush?.();
+      for (const reader of [ndjson, sqlite]) {
+        const run = projectPipelineRunStore(await reader.listEvents()).runs[0];
+        expect(run.status).toBe("failed");
+        expect(run.steps[0].artifacts?.map((record) => record.operation)).toEqual([
+          "reuse",
+          "write",
+        ]);
+        expect(run.steps[0].artifacts?.every((record) => record.preview === false)).toBe(true);
+      }
+    } finally {
+      await ndjson.close();
+      await sqlite.close();
+    }
+  });
+
+  it("retains artifact lineage through NDJSON and reopened SQLite history", async () => {
+    const { loadArtifact, saveArtifact } = createSteps();
+    const load = loadArtifact("load", {
+      load: () => ({ value: "hello", artifact: { id: "source", version: "1" } }),
+    });
+    const save = saveArtifact("save", {
+      dependsOn: [load],
+      save: ({ load: value }) => ({
+        value,
+        artifact: { id: "destination", byteSize: value.length },
+      }),
+      dryRun: () => ({ value: "preview", artifact: { id: "preview-destination" } }),
+    });
+    const lines: string[] = [];
+    const pipeline = definePipeline({ id: "artifacts", steps: [load, save] });
+    for (const dryRun of [false, true])
+      await pipeline.run({}, { dryRun }, { tracing: { exporter: captureJson(lines) } });
+    const filename = await tempFile(lines.join("\n"));
+    const ndjson = await openNdjsonPipelineRunStore(filename);
+    const sqlitePath = path.join(path.dirname(filename), "artifacts.sqlite");
+    const writer = await openSqlitePipelineRunStore(sqlitePath);
+    for (const event of await ndjson.listEvents()) await writer.export(event);
+    await writer.close();
+    const reopened = await openSqlitePipelineRunStore(sqlitePath);
+    try {
+      for (const reader of [ndjson, reopened]) {
+        const snapshot = projectPipelineRunStore(await reader.listEvents());
+        expect(snapshot.runs).toHaveLength(2);
+        for (const run of snapshot.runs) {
+          expect(run.steps[0].artifacts).toMatchObject([
+            {
+              operation: "read",
+              preview: false,
+              artifact: { id: "source", version: "1" },
+              attemptId: run.steps[0].attempt?.attemptId,
+            },
+          ]);
+          expect(run.steps[1].artifacts).toMatchObject([
+            {
+              operation: "write",
+              preview: run.dryRun,
+              artifact: { id: run.dryRun ? "preview-destination" : "destination" },
+              attemptId: run.steps[1].attempt?.attemptId,
+            },
+          ]);
+        }
+      }
+    } finally {
+      await ndjson.close();
+      await reopened.close();
+    }
+  });
+
   it("retains definition versions after reopening SQLite and NDJSON artifacts", async () => {
     const lines: string[] = [];
     const definitions = [];

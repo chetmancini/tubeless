@@ -16,6 +16,7 @@ export const DOC_NAV = [
   { slug: "recipes", label: "Recipes", blurb: "Examples by use case." },
   { slug: "concepts", label: "Concepts", blurb: "Understand dependencies, results, failures, and execution controls." },
   { slug: "cli", label: "CLI", blurb: "Select and run commands, record results, and inspect history." },
+  { slug: "artifacts", label: "Artifacts", blurb: "Load, save, and trace typed artifacts with dry-run safety." },
   { slug: "studio", label: "Studio", blurb: "Inspect recorded runs and launch commands in your browser." },
   {
     slug: "declarative-pipelines",

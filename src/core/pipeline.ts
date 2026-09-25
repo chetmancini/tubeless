@@ -275,3 +275,10 @@ export function definePipeline<
   brandCompiledPipeline(pipeline);
   return pipeline;
 }
+
+export type {
+  ArtifactJsonValue,
+  ArtifactMetadata,
+  ArtifactRecord,
+} from "../tracing/artifact-metadata.js";
+export type { ArtifactLoader, ArtifactSaver, ArtifactResult } from "./pipeline-artifacts.js";

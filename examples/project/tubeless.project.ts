@@ -2,6 +2,7 @@ import { definePipelineCommand } from "tubeless/cli";
 import { defineProject } from "tubeless/project";
 import { ValidatedPipeline } from "../validated-boundaries.ts";
 import { OrderChecksPipeline } from "../parameterized-steps.ts";
+import { ArtifactLineagePipeline } from "../artifact-lineage.ts";
 import { CountPipeline } from "../precise-result.ts";
 import { WelcomePipeline } from "../inherited-inputs.ts";
 import { OverrideExamplePipeline } from "../step-output-overrides.ts";
@@ -27,6 +28,12 @@ export default defineProject(
     // Ordinary execution of the override recipe; supplied outputs are testing-only.
     definePipelineCommand(OverrideExamplePipeline, {
       params: { lines: { type: "string", multiple: true } },
+    }),
+    definePipelineCommand(ArtifactLineagePipeline, {
+      params: {
+        source: { type: "path", required: true },
+        destination: { type: "string", required: true },
+      },
     }),
     definePipelineCommand(WelcomePipeline, {
       params: { name: { type: "string" } },

@@ -27,6 +27,7 @@ Install the [agent skill pack](./agent-skills.md) to author pipelines or convert
 | ----------------------------------------------------- | --------------------------------------------------------------------- |
 | [CLI](./cli.md)                                       | `list`, `inspect`, `plan`, `graph`, `run`, `history`, and exit codes  |
 | [Local studio](./studio.md)                           | Optional run history, `tubeless ui`, and project commands             |
+| [Artifacts](./artifacts.md)                           | Typed loaders, savers, metadata, and recorded lineage                 |
 | [YAML and JSON pipelines](./declarative-pipelines.md) | Compile documents with registered handlers, skips, and child adapters |
 
 ## Deeper reference

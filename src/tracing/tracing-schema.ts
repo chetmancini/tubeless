@@ -1,3 +1,4 @@
+import { artifactMetadataSchema, artifactOperationSchema } from "./artifact-metadata.js";
 import {
   wireArray,
   wireBoolean,
@@ -465,6 +466,17 @@ const traceStepShape = { stepId: requiredString } as const;
 const emptyPayloadSchema = wireObject({});
 
 export const pipelineTraceEventSchemas = {
+  "step.artifact": wireObject({
+    ...traceBaseShape,
+    ...traceStepShape,
+    attemptId: requiredString,
+    name: wireLiteral("step.artifact"),
+    payload: wireObject({
+      operation: artifactOperationSchema,
+      preview: wireBoolean(),
+      artifact: artifactMetadataSchema,
+    }),
+  }),
   "pipeline.completed": wireObject({
     ...traceBaseShape,
     durationMs: wireOptional(finiteNumber),

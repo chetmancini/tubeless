@@ -1,3 +1,4 @@
+import { isArtifactRecord } from "../run-store/run-store-codec.js";
 import type { PipelinePlan, PipelineRunControls } from "../core/pipeline.js";
 import type {
   PipelineRunStoreSnapshot,
@@ -109,6 +110,19 @@ function isStoredStep(value: unknown): value is StoredPipelineStep {
       return false;
     }
   }
+  if (
+    value.artifacts !== undefined &&
+    (!Array.isArray(value.artifacts) ||
+      !value.artifacts.every(
+        (entry) =>
+          isRecord(entry) &&
+          typeof entry.attemptId === "string" &&
+          isFiniteNumber(entry.timestampMs) &&
+          typeof entry.preview === "boolean" &&
+          isArtifactRecord(entry)
+      ))
+  )
+    return false;
   if (value.progress !== undefined) {
     if (!isRecord(value.progress) || !isFiniteNumber(value.progress.completed)) return false;
     if (

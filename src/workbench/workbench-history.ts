@@ -95,6 +95,11 @@ function formatRunDetail(run: StoredPipelineRun): string {
   for (const step of run.steps) {
     const duration = step.durationMs === undefined ? "" : `  ${step.durationMs}ms`;
     lines.push(`  ${terminalSafeText(step.id)}  ${step.status}${duration}`);
+    for (const entry of step.artifacts ?? []) {
+      lines.push(
+        `    ${entry.preview ? "preview " : ""}${entry.operation}  ${terminalSafeText(JSON.stringify(entry.artifact))}`
+      );
+    }
   }
   lines.push("", "Logs:");
   for (const log of run.logs) {

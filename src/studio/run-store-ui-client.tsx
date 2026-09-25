@@ -865,6 +865,15 @@ function StepRow({ step }: { step: StoredPipelineStep }) {
           </span>
         </div>
       )}
+      {step.artifacts?.map((entry, index) => (
+        <details class="execution" key={index}>
+          <summary>
+            {entry.preview ? "Preview " : "Artifact "}
+            {entry.operation}: {entry.artifact.id || entry.artifact.uri}
+          </summary>
+          <pre>{JSON.stringify(entry.artifact, null, 2)}</pre>
+        </details>
+      ))}
       {step.progress && (
         <>
           <div class="progress">

@@ -44,6 +44,32 @@ function jsonResponse(value: unknown, init?: ResponseInit) {
 }
 
 describe("Studio API response parsing", () => {
+  it("validates artifact metadata and operation fields on recorded steps", () => {
+    const entry = {
+      operation: "read" as const,
+      preview: false,
+      attemptId: "attempt",
+      timestampMs: 1,
+      artifact: { id: "input" },
+    };
+    const read = (artifact: unknown) =>
+      parseStudioSnapshot(
+        snapshot([
+          run({ steps: [{ id: "load", status: "completed", artifacts: [artifact as never] }] }),
+        ])
+      );
+    expect(read(entry)).toBeDefined();
+    expect(read({ ...entry, operation: "reuse" })).toBeDefined();
+    for (const invalid of [
+      { ...entry, preview: "false" },
+      { ...entry, operation: "delete" },
+      { ...entry, artifact: {} },
+      { ...entry, artifact: { id: "input", metadata: { value: Infinity } } },
+      { ...entry, artifact: { id: "input", metadata: { value: "a".repeat(17000) } } },
+    ])
+      expect(read(invalid)).toBeUndefined();
+  });
+
   it("accepts a complete snapshot and rejects malformed nested run data", () => {
     expect(parseStudioSnapshot(snapshot())?.runs[0]?.runId).toBe("run-1");
     expect(parseStudioSnapshot(snapshot([run({ correlationId: 42 as never })]))).toBeUndefined();

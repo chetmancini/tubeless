@@ -701,6 +701,58 @@ describe("local pipeline run studio", () => {
     );
   });
 
+  it("loads batch artifacts only in selected run details as workspace history grows", async () => {
+    const stored: StoredPipelineEvent[] = [];
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(stored) });
+    servers.push(server);
+    for (const batchCount of [1, 128]) {
+      for (const runId of ["run-1", "run-2"]) {
+        for (let batch = 0; batch < batchCount; batch += 1) {
+          stored.push(
+            storedEvent({
+              id: stored.length + 1,
+              name: "step.artifact",
+              pipelineId: "batch-writer",
+              runId,
+              stepId: "write",
+              attemptId: `${runId}-attempt`,
+              timestampMs: stored.length,
+              version: 2,
+              payload: {
+                operation: "write",
+                preview: false,
+                artifact: {
+                  id: `${runId}-artifact-${batch}`,
+                  metadata: { text: "x".repeat(4096) },
+                },
+              },
+            })
+          );
+        }
+      }
+      const snapshot = await fetch(`${server.url}/api/snapshot`).then((response) =>
+        response.json()
+      );
+      expect(snapshot.runs).toHaveLength(2);
+      for (const run of snapshot.runs) {
+        expect(run.steps).toEqual([{ id: "write", status: "planned" }]);
+      }
+      expect(JSON.stringify(snapshot).length).toBeLessThan(2000);
+      const detail = await fetch(`${server.url}/api/runs/run-1`).then((response) =>
+        response.json()
+      );
+      expect(detail.run.steps[0].artifacts).toEqual(
+        stored
+          .filter((event) => event.runId === "run-1" && event.name === "step.artifact")
+          .map((event) => ({
+            ...event.payload,
+            attemptId: event.attemptId,
+            timestampMs: event.timestampMs,
+          }))
+      );
+    }
+  });
+
   it("includes a first store event whose id is zero in snapshots", async () => {
     const store = memoryStore([
       storedEvent({

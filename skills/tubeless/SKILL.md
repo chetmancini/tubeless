@@ -173,6 +173,15 @@ Read the corresponding package recipe before using these features:
   are needed. Preserve existing consumer conventions.
 - Keep storage and Studio optional. Read `docs/studio.md` before adding them;
   read the composition guides before adding child or remote execution.
+- Use `context.recordArtifact({ operation, artifact })` within ordinary steps to
+  record successful reads, writes, or verified reuse without changing domain outputs.
+  Multiple reports support batches; earlier reports survive later failure. Keep
+  checkpoint advancement and atomic promotion application-owned. `loadArtifact` and
+  `saveArtifact` are conveniences for one read or unconditional write: both return
+  `{ value, artifact }` and publish the typed value. Savers skip dry runs by default;
+  loaders that populate caches also need a safe dry-run policy. Forward cancellation
+  into adapters. Metadata must be bounded plain JSON with `id` or `uri`; omit secrets.
+  See `docs/artifacts.md` and `examples/artifact-lineage.ts`.
 - Use `tubeless/node` for cwd-relative path factories, JSON artifacts, required
   environment values and checkpoints. Call `definePaths` factories with
   `context.cwd`; keep `writeJson` and `resetDir` inside dry-run-safe steps.

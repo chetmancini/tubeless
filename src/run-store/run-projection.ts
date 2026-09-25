@@ -56,7 +56,10 @@ export class RunProjection {
 
   constructor(
     event: StoredPipelineEvent,
-    private readonly retainLogs = true
+    private readonly options: {
+      readonly retainLogs?: boolean;
+      readonly retainArtifacts?: boolean;
+    } = {}
   ) {
     this.#identity = {
       pipelineId: event.pipelineId,
@@ -92,7 +95,7 @@ export class RunProjection {
     }
     if (event.name === "pipeline.log") {
       this.#logCount += 1;
-      if (!this.retainLogs) return;
+      if (this.options.retainLogs === false) return;
       const log: StoredPipelineLog = {
         id: event.id,
         level: event.payload.level,
@@ -121,6 +124,15 @@ export class RunProjection {
         };
       }
       if (event.payload.remote) step.remote = { ...event.payload.remote };
+      return;
+    }
+    if (event.name === "step.artifact") {
+      if (this.options.retainArtifacts === false) return;
+      (step.artifacts ??= []).push({
+        ...structuredClone(event.payload),
+        attemptId: event.attemptId,
+        timestampMs: event.timestampMs,
+      });
       return;
     }
     if ("outputSource" in event.payload && event.payload.outputSource === "override") {
@@ -175,7 +187,7 @@ export class RunProjection {
       dryRun: this.#dryRun,
       eventCount: this.#eventCount,
       logCount: this.#logCount,
-      logs: this.retainLogs ? this.#logs.map((log) => ({ ...log })) : [],
+      logs: this.options.retainLogs === false ? [] : this.#logs.map((log) => ({ ...log })),
       pipelineId: this.#identity.pipelineId,
       runId: this.#identity.runId,
       startedAtMs: this.#startedAtMs,
