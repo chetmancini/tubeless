@@ -58,6 +58,7 @@ Agent instructions:
 
 Advanced:
 
+- In-process agents: ./agents.md (handler tools, per-invocation limits, no subagents or crash resume yet)
 - Child pipelines: ./child-pipeline-composition.md
 - Remote steps: ./remote-step-composition.md
 - Tubeless and Airflow: ./airflow.md

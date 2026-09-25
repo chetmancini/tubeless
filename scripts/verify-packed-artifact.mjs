@@ -148,6 +148,8 @@ try {
     "docs/api-report.json",
     "docs/pipeline-document.schema.json",
     "docs/child-pipeline-composition.md",
+    "docs/agents.md",
+    "examples/agent.ts",
     "docs/remote-step-composition.md",
     "docs/cli.md",
     "docs/concepts.md",

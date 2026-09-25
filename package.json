@@ -86,6 +86,11 @@
     "vitest": "5.0.2"
   },
   "exports": {
+    "./agent": {
+      "types": "./dist/agent/agent.d.ts",
+      "import": "./dist/agent/agent.js",
+      "default": "./dist/agent/agent.js"
+    },
     ".": {
       "types": "./dist/core/pipeline.d.ts",
       "import": "./dist/core/pipeline.js",

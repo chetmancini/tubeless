@@ -102,6 +102,15 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 
 Read the corresponding package recipe before using these features:
 
+- `defineAgent` and `defineTool` from `tubeless/agent` for bounded in-process
+  decisions over registered handler tools. Read `docs/agents.md` and
+  `examples/agent.ts`. Keep provider calls application-owned, validate raw
+  decisions and all schema boundaries, and reduce ordered outcomes into owned
+  plain-data state. Handler-originated `ToolError` is recoverable; validation and
+  unclassified failures are fatal. Dry-run decisions and tools need explicit
+  previews. Limits are per invocation in this slice; pipeline tools, delegation,
+  tree-wide budgets, and crash resume are not yet implemented.
+
 - For YAML or JSON authoring, read `docs/declarative-pipelines.md` and
   `examples/yaml-pipelines.ts`. Use `compilePipelineDocument(document, registry)` from
   `tubeless/project` on parsed data with explicitly registered handlers,

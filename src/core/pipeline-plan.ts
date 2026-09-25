@@ -5,7 +5,7 @@ import { decideStepDisposition } from "./pipeline-disposition.js";
 import { pipelineDiagnostic } from "./pipeline-errors.js";
 import { compiledStepGraph, liveStepGraph, type CompiledStepGraph } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
-import { STEP_NESTED_PIPELINE, STEP_REMOTE } from "./pipeline-step-metadata.js";
+import { STEP_NESTED_PIPELINE, STEP_REMOTE, STEP_AGENT } from "./pipeline-step-metadata.js";
 import type {
   PipelineError,
   PipelinePlan,
@@ -48,6 +48,7 @@ export function stepToPlanStep<TOptions extends object>(
   if (step[STEP_REMOTE]) {
     planStep.remote = { ...step[STEP_REMOTE] };
   }
+  if (step[STEP_AGENT]) planStep.agent = step[STEP_AGENT];
   return planStep;
 }
 

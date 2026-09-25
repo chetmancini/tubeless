@@ -1,4 +1,4 @@
-/** Compile-only API probes. Do not execute: prototype imports have no implementation. */
+/** Compile-only probes: schemas are declared and pipelineTool awaits stage 4. */
 import { expectTypeOf } from "vitest";
 import {
   createSteps,
@@ -113,7 +113,7 @@ const researcher = defineAgent({
   inputSchema: questionSchema,
   resultSchema: answerSchema,
   tools,
-  limits: { maxTurns: 3, maxCalls: 4, maxDecisions: 3, maxDepth: 0, maxConcurrency: 2 },
+  limits: { maxTurns: 3, maxCalls: 4, maxDecisions: 3, maxConcurrency: 2 },
   initialState: ({ question }): ResearchState => ({ question, observations: [] }),
   decide(state, context) {
     expectTypeOf(context.options.limit).toEqualTypeOf<number>();
