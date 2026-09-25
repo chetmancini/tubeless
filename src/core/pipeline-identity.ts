@@ -1,4 +1,5 @@
 export const EXECUTE_COMPILED_RUN: unique symbol = Symbol("tubeless.executeCompiledRun");
+export const EXECUTE_TEST_RUN: unique symbol = Symbol("tubeless.executeTestRun");
 
 const compiledPipelines = new WeakSet<object>();
 

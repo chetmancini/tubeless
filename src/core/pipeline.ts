@@ -17,7 +17,11 @@ import type {
 } from "./pipeline-definition.js";
 import { PipelineDefinitionError } from "./pipeline-errors.js";
 import { requireOutputs } from "./pipeline-finalizer.js";
-import { brandCompiledPipeline, EXECUTE_COMPILED_RUN } from "./pipeline-identity.js";
+import {
+  brandCompiledPipeline,
+  EXECUTE_COMPILED_RUN,
+  EXECUTE_TEST_RUN,
+} from "./pipeline-identity.js";
 import { renderPipelineMermaid } from "./pipeline-mermaid.js";
 import { buildPipelinePlan } from "./pipeline-plan.js";
 import type { AnyStep } from "./pipeline-steps.js";
@@ -188,7 +192,8 @@ export function definePipeline<
     runPlan: PipelinePlan,
     options: TInputOptions,
     controls: PipelineRunControls<TStepId, TTargetId>,
-    context: Partial<PipelineContext> = defaultPipelineContext()
+    context: Partial<PipelineContext> = defaultPipelineContext(),
+    overrides?: ReadonlyMap<AnyStep, unknown>
   ): Promise<PipelineRun<TPipelineResult>> {
     return executePlannedRun({
       compiled,
@@ -196,6 +201,7 @@ export function definePipeline<
       domainOptions: options,
       plan: runPlan,
       runtime: resolvePipelineRuntime(context),
+      overrides,
     });
   }
 
@@ -240,6 +246,26 @@ export function definePipeline<
     toMermaid,
   };
   Object.defineProperty(pipeline, EXECUTE_COMPILED_RUN, { value: executeCompiled });
+  Object.defineProperty(pipeline, EXECUTE_TEST_RUN, {
+    value: (
+      options: TInputOptions,
+      controls: PipelineRunControls<TStepId, TTargetId>,
+      context: Partial<PipelineContext>,
+      overrides: ReadonlyMap<AnyStep, unknown>
+    ) => {
+      const resolved = new Map<AnyStep, unknown>();
+      for (const [step, value] of overrides) {
+        const compiledStep = compiled.compiledByAuthorStep.get(step);
+        if (!compiledStep)
+          throw new TypeError(
+            `Override step ${step.id} does not belong to pipeline ${compiled.id}`
+          );
+        resolved.set(compiledStep, value);
+      }
+      const prepared = prepareRun(controls);
+      return executeCompiled(prepared.plan, options, prepared.controls, context, resolved);
+    },
+  });
   brandCompiledPipeline(pipeline);
   return pipeline;
 }

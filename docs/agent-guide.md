@@ -308,7 +308,16 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   identity and must be treated as read-only by hooks.
 - Use `createPipelineTestRuntime` from `tubeless/testing` for deterministic
   pipeline tests. Inspect its structured logs, statuses, and latest progress;
-  keep test-framework matchers outside the package.
+  keep test-framework matchers outside the package. Supply typed intermediate values
+  with `overrideStep(step, value)` and test-run `{ overrides: [...] }` controls.
+  Values use the handler output type before `outputSchema` validation/transformation;
+  successful substitution reports `completed` and emits `onStepComplete` with
+  `outputSource: "override"`. This provenance also survives failed or cancelled
+  validation attempts. Overrides apply only to selected steps, bypassing their handlers,
+  skip predicates, dependency gates, and dry-run policies. Use exact `stepIds` to
+  exclude upstream I/O; overrides do not prune the graph or propagate into children.
+  Ordinary pipeline, CLI, and Studio launch controls do not accept overrides. See
+  [the override recipe](../examples/step-output-overrides.ts).
 - Branch on `PipelineError.code`, `phase`, and `kind`, never message prose.
   Underlying thrown codes live in `sourceCode`. Failed and cancelled reports
   expose the structured error under `error`; skipped reports expose `reason`,

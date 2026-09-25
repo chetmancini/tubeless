@@ -157,3 +157,9 @@ describe("Studio components", () => {
     expect(isoTime(Number.POSITIVE_INFINITY)).toBe("");
   });
 });
+
+it.each(["completed", "failed", "cancelled"])("renders %s with override provenance", (status) => {
+  const markup = renderToString(<Status value={status} outputSource="override" />);
+  expect(markup).toContain(`${status} (overridden)`);
+  expect(markup).toContain(`status ${status}`);
+});

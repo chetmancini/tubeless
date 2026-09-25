@@ -624,6 +624,73 @@ interleave, or advance time differently; call `test.abort()` to exercise the
 normal cancellation path. Use your test framework to assert on the results. Replace external I/O yourself;
 the test runtime does not mock network or filesystem operations.
 
+### Supplying step outputs
+
+Use `overrideStep` from `tubeless/testing` to supply a typed intermediate value
+without modifying the pipeline definition:
+
+```ts
+const test = createPipelineTestRuntime();
+const run = await test.run(pipeline, options, {
+  stepIds: ["load", "summarize"],
+  overrides: [overrideStep(load, ["alice", "bob"])],
+});
+```
+
+Each override pairs an actual step reference with a resolved handler output.
+For schema-backed steps, supply the **schema input** type: `outputSchema` still
+validates and transforms it, and dependents receive the transformed output.
+Invalid values fail with `TUBELESS_STEP_OUTPUT_VALIDATION_FAILED`. An explicit
+`undefined` is a published value when the step's type and schema allow it.
+Functions can be domain values; they are never called as lazy factories.
+Await asynchronous fixture setup before constructing overrides.
+
+A selected overridden step never calls its `run`, `skip`, or custom `dryRun`
+handler. It bypasses required-input and failure-gate checks and `dryRun: "skip"`,
+since the supplied value replaces its entire computation. Overriding a child,
+fan-out, or remote wrapper also bypasses item enumeration, mappings, adapter
+calls, and child launches. Overrides belong to this run only and do not flow
+into children. Duplicate overrides and foreign references (including same-named
+steps from another graph) reject before execution. Custom pipeline wrappers
+are unsupported; use the object returned by `definePipeline`.
+
+Selection and scheduling remain explicit:
+
+- Overrides do not select steps, prune ancestors, or change target closure.
+  A filtered step stays filtered and does not validate or publish its override.
+  To isolate a downstream branch, use exact `stepIds` including the supplied
+  intermediate and its dependents, excluding upstream I/O. Plans describe the
+  ordinary graph and do not apply overrides.
+- Scheduling still waits for all prerequisite steps to reach terminal states.
+  Override validation occupies a concurrency slot. Fail-fast can prevent an
+  override from starting; `continueOnError` allows it to publish after upstream
+  failure, while the run retains that failure.
+- Cancellation prevents unstarted overrides and is checked again after async
+  output validation. Successfully overridden steps unlock required dependents
+  and failure gates and supply optional inputs normally.
+- Finalization and `resultSchema` use the supplied outputs through the usual
+  boundaries, including required finalizers and the default last-step result.
+
+An override uses the normal lifecycle: `running`, then `completed`, `failed`,
+or `cancelled`. From the start of its validation attempt, reports and hooks
+carry `outputSource: "override"`. The same metadata survives validation failure
+or cancellation. Successful overrides emit `onStepComplete`, so tests exercise
+the same completion callbacks and dependency rules as handler-produced outputs.
+There is no separate override status or hook.
+
+Traces use the existing `step.running`, `step.complete`, `step.failed`, and
+`step.cancelled` events with `payload.outputSource: "override"`; they do not
+record the supplied value. Both CLI reporters and Studio show the ordinary
+status with an override annotation, such as **completed (overridden)** or
+**failed (overridden)**. Existing recordings remain readable. Ordinary runs omit
+this metadata, as do filtered overrides and overrides cancelled before their
+validation attempt starts; absence does not prove a handler ran.
+
+Overrides are available only through the test runtime's `run` and `runOrThrow`.
+Ordinary pipeline controls, CLI flags, and Studio launch forms do not expose
+them, and trace recordings cannot automatically be replayed as override values.
+See the [executable override recipe](../examples/step-output-overrides.ts).
+
 ## Implementation guidelines
 
 - Keep step IDs stable, use `name` only for a friendlier display label, and keep

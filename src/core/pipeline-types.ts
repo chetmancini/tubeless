@@ -111,6 +111,8 @@ export type PipelineStepProgressDetailStatus =
 
 /** One optional nested row in a step progress snapshot. */
 export interface PipelineStepProgressDetail {
+  /** Provenance of a supplied test output, independent of the row status. */
+  outputSource?: "override";
   /** Stable identity for the row (item key, path, job id, …). */
   id: string;
   /** Optional display name; identity remains `id`. */
@@ -279,6 +281,8 @@ export interface PipelineErrorCause {
 }
 
 interface PipelineStepReportBase {
+  /** Present once a supplied test output enters validation, including failed/cancelled attempts. */
+  outputSource?: "override";
   /** Present when the step started an execution attempt. */
   attemptId?: string;
   id: string;
@@ -404,6 +408,8 @@ export type PipelineStepStatus =
   | {
       attemptId: string;
       pipelineId: string;
+      /** Supplied test output; the normal step handler is not executing. */
+      outputSource?: "override";
       progress?: PipelineStepProgress;
       status: "running";
       step: PipelinePlanStep;

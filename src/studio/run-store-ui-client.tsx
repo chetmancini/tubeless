@@ -331,13 +331,14 @@ function statusMark(value: string): string {
             : "";
 }
 
-export function Status({ value }: { value: string }) {
+export function Status({ value, outputSource }: { value: string; outputSource?: "override" }) {
   return (
     <span class={`status ${value}`}>
       <i class="status-mark" aria-hidden="true">
         {statusMark(value)}
       </i>
       {value}
+      {outputSource === "override" && " (overridden)"}
     </span>
   );
 }
@@ -837,6 +838,9 @@ function StepRow({ step }: { step: StoredPipelineStep }) {
       <StepStatusIcon value={step.status} />
       <div class="step-head">
         <strong>{step.name || step.id}</strong>
+        {step.outputSource === "override" && (
+          <Status value={step.status} outputSource={step.outputSource} />
+        )}
         {step.name && <code>{step.id}</code>}
         <span class="step-duration">{duration(step.durationMs)}</span>
       </div>
@@ -852,7 +856,8 @@ function StepRow({ step }: { step: StoredPipelineStep }) {
       {step.attempt && (
         <div class="execution">
           <span class="execution-summary" title={step.attempt.attemptId}>
-            <b>Execution</b> · {shortId(step.attempt.attemptId)}
+            <b>{step.attempt.outputSource === "override" ? "Override validation" : "Execution"}</b>{" "}
+            · {shortId(step.attempt.attemptId)}
             {step.attempt.retries.length > 0 &&
               ` · ${step.attempt.retries.length} retr${
                 step.attempt.retries.length === 1 ? "y" : "ies"
@@ -875,6 +880,7 @@ function StepRow({ step }: { step: StoredPipelineStep }) {
                 <div class={`progress-detail ${detail.status || "running"}`} key={detail.id}>
                   <b>{detail.id}</b>
                   {detail.label && <span>{detail.label}</span>}
+                  {detail.outputSource === "override" && <span>(overridden)</span>}
                 </div>
               ))}
               {detailCount && step.progress.details.length < detailCount ? (

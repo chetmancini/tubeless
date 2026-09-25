@@ -45,6 +45,38 @@ describe("canonical child progress projection", () => {
     finishedAtMs: 1,
   };
 
+  it("keeps provenance changes when reconciling focused and status hooks", () => {
+    const snapshots: PipelineStepProgress[] = [];
+    const hooks = createSingleChildProgress(plan, (progress) => snapshots.push(progress));
+    hooks.onStepStatus!(running);
+    hooks.onStepStart!({ ...running, progress: undefined, outputSource: "override" });
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots.at(-1)?.details).toContainEqual(
+      expect.objectContaining({ id: "work", status: "running", outputSource: "override" })
+    );
+    const progress: PipelineStepProgress = {
+      completed: 1,
+      details: [{ id: "nested", status: "completed" }],
+    };
+    hooks.onStepStatus!({ ...running, progress });
+    hooks.onStepProgress!({
+      ...running,
+      progress: {
+        ...progress,
+        details: [{ id: "nested", status: "completed", outputSource: "override" }],
+      },
+    });
+    expect(snapshots).toHaveLength(4);
+    expect(snapshots.at(-1)?.details).toContainEqual(
+      expect.objectContaining({ id: "nested", status: "completed", outputSource: "override" })
+    );
+    hooks.onStepComplete!({ ...complete, outputSource: "override" });
+    expect(snapshots.at(-1)).toMatchObject({ completed: 1 });
+    expect(snapshots.at(-1)?.details).toContainEqual(
+      expect.objectContaining({ id: "work", status: "completed", outputSource: "override" })
+    );
+  });
+
   it.each(["single", "mapped"] as const)(
     "%s consumes each status once and counts selected terminal steps once",
     (kind) => {

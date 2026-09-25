@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createPipelineTestRuntime, overrideStep } from "../testing/testing.js";
 import { createPipelineReporter, type ReporterOutput } from "./interactive-reporter.js";
 import { createSteps, definePipeline, type PipelineLogger } from "../core/pipeline.js";
 
@@ -957,4 +958,29 @@ describe("createPipelineReporter", () => {
     expect(output.chunks.length).toBe(writesAfterDispose);
     expect(output.chunks.join("")).not.toContain("8/10 records");
   });
+});
+
+it("retains an explicit overridden row in the final interactive frame", async () => {
+  const output = captureOutput();
+  const reporter = createPipelineReporter({
+    mode: "interactive",
+    output,
+    log: captureLog(),
+    symbols: "ascii",
+    color: "never",
+  });
+  const { step } = createSteps();
+  const load = step("load", { run: () => 1 });
+  const test = createPipelineTestRuntime();
+  test.context.hooks = reporter.hooks;
+  try {
+    await test.run(
+      definePipeline({ id: "interactive-override", steps: [load] }),
+      {},
+      { overrides: [overrideStep(load, 2)] }
+    );
+    expect(output.chunks.join("")).toContain("ok load (overridden)");
+  } finally {
+    reporter.dispose();
+  }
 });

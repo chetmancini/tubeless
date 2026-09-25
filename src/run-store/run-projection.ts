@@ -123,6 +123,9 @@ export class RunProjection {
       if (event.payload.remote) step.remote = { ...event.payload.remote };
       return;
     }
+    if ("outputSource" in event.payload && event.payload.outputSource === "override") {
+      step.outputSource = "override";
+    }
     if (event.attemptId) {
       let attempt = step.attempt;
       if (!attempt) {
@@ -134,6 +137,7 @@ export class RunProjection {
         };
         step.attempt = attempt;
       }
+      if (step.outputSource) attempt.outputSource = step.outputSource;
       if (event.name === "step.attempted") {
         attempt.retries.push(event.payload.attempt);
       }

@@ -23,6 +23,7 @@ export interface CompiledPipeline<
   readonly id: string;
   readonly optionsSchema: StandardSchemaV1 | undefined;
   readonly orderedSteps: readonly AnyStep<StepsOptions<TSteps>>[];
+  readonly compiledByAuthorStep: ReadonlyMap<AnyStep, AnyStep>;
   readonly requiredFinalizerSteps: readonly AnyStep<StepsOptions<TSteps>>[] | undefined;
   readonly stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph>;
   readonly resultSchema: TResultSchema | undefined;
@@ -91,6 +92,7 @@ export function compilePipeline<
         ? undefined
         : compiledByAuthorStep.get(definition.steps[0]!)?.[STEP_OPTIONS_SCHEMA],
     orderedSteps: Object.freeze([...orderedSteps]),
+    compiledByAuthorStep,
     stepGraph,
     requiredFinalizerSteps: compiledRequiredFinalizerSteps
       ? Object.freeze(compiledRequiredFinalizerSteps)

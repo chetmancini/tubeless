@@ -18,6 +18,7 @@ import type {
 } from "./pipeline-types.js";
 
 export interface PipelineStepAttempt {
+  outputSource?: "override";
   attemptId: string;
   startedAtMs: number;
 }
@@ -46,6 +47,7 @@ function stepReportFromStatus(
     name: event.name,
     description: event.description,
     finishedAtMs: event.finishedAtMs,
+    ...(event.outputSource ? { outputSource: event.outputSource } : {}),
   };
   switch (event.status) {
     case "completed":
@@ -143,13 +145,19 @@ export class PipelineRunState<TResult> {
     this.#applyStepStatus({ pipelineId: this.pipelineId, status: "planned", step });
   }
 
-  beginAttempt(step: PipelinePlanStep, startedAtMs = this.now()): PipelineStepAttempt {
+  beginAttempt(
+    step: PipelinePlanStep,
+    startedAtMs = this.now(),
+    outputSource?: "override"
+  ): PipelineStepAttempt {
     const attempt = {
       attemptId: `${this.identity.runId}:attempt:${(this.#nextAttemptSequence += 1).toString(36)}`,
       startedAtMs,
+      ...(outputSource ? { outputSource } : {}),
     };
     this.#applyStepStatus({
       attemptId: attempt.attemptId,
+      ...(attempt.outputSource ? { outputSource: attempt.outputSource } : {}),
       pipelineId: this.pipelineId,
       status: "running",
       step,
@@ -164,6 +172,7 @@ export class PipelineRunState<TResult> {
   ): void {
     this.#applyStepStatus({
       attemptId: attempt.attemptId,
+      ...(attempt.outputSource ? { outputSource: attempt.outputSource } : {}),
       pipelineId: this.pipelineId,
       progress,
       status: "running",
@@ -174,6 +183,7 @@ export class PipelineRunState<TResult> {
   completeStep(step: PipelinePlanStep, attempt: PipelineStepAttempt, value: unknown): void {
     const report: PipelineStepCompleteReport = {
       attemptId: attempt.attemptId,
+      ...(attempt.outputSource ? { outputSource: attempt.outputSource } : {}),
       id: step.id,
       name: step.name,
       description: step.description,
@@ -205,6 +215,7 @@ export class PipelineRunState<TResult> {
     if (input.attempt) {
       report.attemptId = input.attempt.attemptId;
       report.startedAtMs = input.attempt.startedAtMs;
+      if (input.attempt.outputSource) report.outputSource = input.attempt.outputSource;
     }
     if (input.dependencyId) report.dependencyId = input.dependencyId;
     if (input.message) report.message = input.message;
@@ -221,6 +232,7 @@ export class PipelineRunState<TResult> {
     }
     const report: PipelineStepFailedReport = {
       attemptId: attempt.attemptId,
+      ...(attempt.outputSource ? { outputSource: attempt.outputSource } : {}),
       id: step.id,
       name: step.name,
       description: step.description,
@@ -252,6 +264,7 @@ export class PipelineRunState<TResult> {
     if (attempt) {
       report.attemptId = attempt.attemptId;
       report.startedAtMs = attempt.startedAtMs;
+      if (attempt.outputSource) report.outputSource = attempt.outputSource;
     }
     this.#applyStepStatus(
       { ...report, pipelineId: this.pipelineId, step },
