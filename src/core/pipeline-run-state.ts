@@ -182,13 +182,11 @@ export class PipelineRunState<TResult> {
 
   completeStep(step: PipelinePlanStep, attempt: PipelineStepAttempt, value: unknown): void {
     const report: PipelineStepCompleteReport = {
-      attemptId: attempt.attemptId,
-      ...(attempt.outputSource ? { outputSource: attempt.outputSource } : {}),
+      ...attempt,
       id: step.id,
       name: step.name,
       description: step.description,
       finishedAtMs: this.now(),
-      startedAtMs: attempt.startedAtMs,
       status: "completed",
     };
     this.#applyStepStatus({ ...report, pipelineId: this.pipelineId, step }, { output: { value } });
@@ -205,6 +203,7 @@ export class PipelineRunState<TResult> {
     }
   ): void {
     const report: PipelineStepSkippedReport = {
+      ...input.attempt,
       id: step.id,
       name: step.name,
       description: step.description,
@@ -212,11 +211,6 @@ export class PipelineRunState<TResult> {
       reason: input.reason,
       status: "skipped",
     };
-    if (input.attempt) {
-      report.attemptId = input.attempt.attemptId;
-      report.startedAtMs = input.attempt.startedAtMs;
-      if (input.attempt.outputSource) report.outputSource = input.attempt.outputSource;
-    }
     if (input.dependencyId) report.dependencyId = input.dependencyId;
     if (input.message) report.message = input.message;
     this.#applyStepStatus(
@@ -231,14 +225,12 @@ export class PipelineRunState<TResult> {
       return;
     }
     const report: PipelineStepFailedReport = {
-      attemptId: attempt.attemptId,
-      ...(attempt.outputSource ? { outputSource: attempt.outputSource } : {}),
+      ...attempt,
       id: step.id,
       name: step.name,
       description: step.description,
       error,
       finishedAtMs: this.now(),
-      startedAtMs: attempt.startedAtMs,
       status: "failed",
     };
     this.#applyStepStatus(
@@ -254,6 +246,7 @@ export class PipelineRunState<TResult> {
     attempt?: PipelineStepAttempt
   ): void {
     const report: PipelineStepCancelledReport = {
+      ...attempt,
       id: step.id,
       name: step.name,
       description: step.description,
@@ -261,11 +254,6 @@ export class PipelineRunState<TResult> {
       finishedAtMs: this.now(),
       status: "cancelled",
     };
-    if (attempt) {
-      report.attemptId = attempt.attemptId;
-      report.startedAtMs = attempt.startedAtMs;
-      if (attempt.outputSource) report.outputSource = attempt.outputSource;
-    }
     this.#applyStepStatus(
       { ...report, pipelineId: this.pipelineId, step },
       { error: { record: recordError, value: error } }
