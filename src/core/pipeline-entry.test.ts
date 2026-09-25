@@ -35,6 +35,57 @@ function moduleName(file: string): string {
 }
 
 describe("module runtime boundaries", () => {
+  it("keeps runtime dependencies acyclic, including lazy imports and re-exports", () => {
+    const visited = new Set<string>();
+    const active: string[] = [];
+    const visit = (file: string): void => {
+      const cycleStart = active.indexOf(file);
+      if (cycleStart !== -1) {
+        throw new Error(
+          `Runtime import cycle: ${[...active.slice(cycleStart), file]
+            .map((entry) => relative(dist, entry))
+            .join(" -> ")}`
+        );
+      }
+      if (visited.has(file)) return;
+      visited.add(file);
+      active.push(file);
+      for (const dependency of dependencies(file)) visit(dependency);
+      active.pop();
+    };
+    for (const name of readdirSync(dist, { recursive: true, encoding: "utf8" })) {
+      if (name.endsWith(".js")) visit(resolve(dist, name));
+    }
+    expect(visited.size).toBeGreaterThan(1);
+  });
+
+  it("encapsulates execution errors and lifecycle emission below orchestration", () => {
+    const contracts: Record<string, readonly string[]> = {
+      "core/pipeline-execution-error.js": [
+        "core/pipeline-diagnostics.js",
+        "core/pipeline-step-metadata.js",
+        "core/pipeline-validation.js",
+        "utilities/abort.js",
+        "utilities/tubeless-error.js",
+      ],
+      "core/lifecycle.js": ["tracing/tracing-internal.js"],
+    };
+    for (const [entry, allowed] of Object.entries(contracts)) {
+      for (const dependency of dependencies(resolve(dist, entry))) {
+        expect(allowed, `${entry} reaches ${relative(dist, dependency)}`).toContain(
+          relative(dist, dependency).split(sep).join("/")
+        );
+      }
+    }
+    for (const name of readdirSync(resolve(dist, "core"))) {
+      if (!name.endsWith(".js") || name === "lifecycle.js") continue;
+      expect(
+        dependencies(resolve(dist, "core", name)),
+        `${name} bypasses lifecycle trace ownership`
+      ).not.toContain(resolve(dist, "tracing/tracing-internal.js"));
+    }
+  });
+
   it("keeps project declarations independent of executable integrations", () => {
     const pending = [resolve(dist, "project/project.js")];
     const visited = new Set<string>();

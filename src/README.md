@@ -50,8 +50,24 @@ their source files.
   Avoid creating new cross-module contracts unless the consumer needs them.
 
 `core/pipeline-entry.test.ts` checks the emitted runtime graph, including re-exports
-and lazy imports. Keep its allowed dependency list narrow when adding modules.
+and lazy imports, and rejects runtime import cycles. Keep its allowed dependency
+list narrow when adding modules.
 Run `make check` after changes; it builds before checking these boundaries.
+
+## Execution ownership
+
+- `core/pipeline-execute.ts` coordinates a run: options validation, scheduling,
+  step attempts, stop policy and finalization.
+- `core/pipeline-execution-error.ts` owns execution and child error classes,
+  cancellation classification, bounded diagnostics and original cause retention.
+  Parent and child execution consume it; it imports neither executor nor run state.
+- `core/lifecycle.ts` owns hook delivery, trace creation, scoped loggers and flushing.
+  Executors pass run identity and consume lifecycle operations; only lifecycle
+  imports the internal trace emitter. Nested loggers unwrap to the original sink
+  so each child log is attributed once to its own run.
+- `core/pipeline-run-state.ts` owns state transitions, outputs and terminal reports.
+  It consumes only the lifecycle notifications it emits, without requiring logger
+  or trace capabilities.
 
 ## Moving files
 

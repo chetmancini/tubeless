@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
-import type { PipelineLifecycleObserver } from "./lifecycle.js";
 import { PipelineRunState } from "./pipeline-run-state.js";
 import type {
   PipelineError,
@@ -36,16 +35,14 @@ function testError(
 
 function setup(ids: string[]) {
   const statuses: PipelineStepStatus[] = [];
-  const lifecycle: PipelineLifecycleObserver = {
+  const lifecycle = {
     finalizeComplete: vi.fn(),
     finalizeError: vi.fn(),
     finalizeStart: vi.fn(),
     flush: vi.fn(() => Promise.resolve()),
-    log: vi.fn(),
     pipelineComplete: vi.fn(),
     pipelineStart: vi.fn(),
-    reportAttempt: vi.fn(),
-    stepStatus: (event) => statuses.push(event),
+    stepStatus: (event: PipelineStepStatus) => statuses.push(event),
   };
   let timestamp = 100;
   const steps = ids.map(plannedStep);

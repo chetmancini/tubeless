@@ -1,12 +1,5 @@
-import {
-  abortableSleep,
-  isAbortError,
-  throwIfAborted as throwIfSignalAborted,
-} from "../utilities/abort.js";
-import { PipelineChildError } from "./child-execution.js";
-import { brandTubelessError } from "../utilities/tubeless-error.js";
+import { abortableSleep, throwIfAborted as throwIfSignalAborted } from "../utilities/abort.js";
 import { createPipelineLifecycleObserver } from "./lifecycle.js";
-import { formatPipelineError } from "./pipeline-diagnostics.js";
 import { createRunId } from "./pipeline-ids.js";
 import type { CompiledPipeline } from "./pipeline-compiler.js";
 import type { StepsOptions } from "./pipeline-definition.js";
@@ -14,11 +7,7 @@ import { decideStepDisposition } from "./pipeline-disposition.js";
 import { schedulePipelineSteps } from "./pipeline-scheduler.js";
 import { compiledStepGraph } from "./pipeline-graph.js";
 import { planStepById, stepToPlanStep } from "./pipeline-plan.js";
-import {
-  PipelineRunState,
-  isCancellationOnly,
-  type PipelineStepAttempt,
-} from "./pipeline-run-state.js";
+import { PipelineRunState, type PipelineStepAttempt } from "./pipeline-run-state.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import {
@@ -30,9 +19,7 @@ import type {
   InferSchemaOutput,
   PipelineContext,
   PipelineError,
-  PipelineErrorCause,
   PipelineExecutionContext,
-  PipelineLogger,
   PipelinePlan,
   PipelinePlanStep,
   PipelineRun,
@@ -41,165 +28,11 @@ import type {
   StandardSchemaV1,
 } from "./pipeline-types.js";
 import { PipelineBoundaryValidationError, validateStandardSchema } from "./pipeline-validation.js";
-import { createPipelineTraceEmitter } from "../tracing/tracing-internal.js";
-
-const PIPELINE_LOGGER_BASE = Symbol("pipelineLoggerBase");
-
-type TracedPipelineLogger = PipelineLogger & { [PIPELINE_LOGGER_BASE]?: PipelineLogger };
-
-function basePipelineLogger(log: PipelineLogger): PipelineLogger {
-  // SAFETY: `TracedPipelineLogger` only adds the optional symbol-keyed base
-  // property; reading it off any `PipelineLogger` is safe because the property
-  // is absent unless a tracing wrapper installed it.
-  return (log as TracedPipelineLogger)[PIPELINE_LOGGER_BASE] ?? log;
-}
-
-const originalPipelineErrors = new WeakMap<PipelineError, unknown>();
-
-function defaultExecutionErrorMessage(result: PipelineRun<unknown>): string {
-  const firstError = result.errors[0];
-  const disposition = isCancellationOnly(result.errors) ? "cancelled" : "failed";
-  return firstError
-    ? `Pipeline ${result.pipelineId} ${disposition}: ${formatPipelineError(firstError)}`
-    : `Pipeline ${result.pipelineId} ${disposition}`;
-}
-
-function firstOriginalPipelineError(errors: readonly PipelineError[]): unknown {
-  for (const error of errors) {
-    if (originalPipelineErrors.has(error)) return originalPipelineErrors.get(error);
-  }
-  return undefined;
-}
-
-/** Error thrown by `runOrThrow` when a pipeline run does not complete successfully. */
-export class PipelineExecutionError extends Error {
-  constructor(
-    readonly result: PipelineRun<unknown>,
-    message = defaultExecutionErrorMessage(result)
-  ) {
-    const cause = firstOriginalPipelineError(result.errors);
-    super(message, cause === undefined ? undefined : { cause });
-    this.name = "PipelineExecutionError";
-    brandTubelessError(this, "pipeline-execution");
-  }
-}
-
-const MAX_PIPELINE_CAUSE_DEPTH = 8;
-
-function readErrorField(value: object, field: "cause" | "code" | "message" | "name"): unknown {
-  try {
-    // SAFETY: any object may be probed for an optional string-keyed field; a
-    // getter that throws is caught below, so the cast only enables the lookup.
-    return (value as Record<string, unknown>)[field];
-  } catch {
-    return undefined;
-  }
-}
-
-function safeErrorMessage(value: unknown): string {
-  try {
-    return String(value);
-  } catch {
-    return "Unknown thrown value";
-  }
-}
-
-function normalizePipelineCause(
-  value: unknown,
-  seen: WeakSet<object>,
-  depth = 0
-): PipelineErrorCause {
-  if (depth >= MAX_PIPELINE_CAUSE_DEPTH) {
-    return { message: "Cause chain truncated" };
-  }
-  if (typeof value !== "object" || value === null) {
-    return { message: safeErrorMessage(value) };
-  }
-  if (seen.has(value)) {
-    return { message: "Circular cause" };
-  }
-  seen.add(value);
-
-  const message = readErrorField(value, "message");
-  const name = readErrorField(value, "name");
-  const sourceCode = readErrorField(value, "code");
-  const nested = readErrorField(value, "cause");
-  const cause: PipelineErrorCause = {
-    message: typeof message === "string" ? message : safeErrorMessage(value),
-  };
-  if (typeof name === "string") cause.name = name;
-  if (typeof sourceCode === "string") cause.sourceCode = sourceCode;
-  if (nested !== undefined) cause.cause = normalizePipelineCause(nested, seen, depth + 1);
-  return cause;
-}
-
-// Fan-out snapshots bound every string as well as cause depth and item count.
-function fanOutCause(error: unknown): PipelineErrorCause {
-  const cause = normalizePipelineCause(error, new WeakSet<object>());
-  let current: PipelineErrorCause | undefined = cause;
-  while (current) {
-    current.message = current.message.slice(0, 1024);
-    if (current.name) current.name = current.name.slice(0, 1024);
-    if (current.sourceCode) current.sourceCode = current.sourceCode.slice(0, 1024);
-    current = current.cause;
-  }
-  return cause;
-}
-
-function normalizedNestedCause(error: unknown): PipelineErrorCause | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-  const cause = readErrorField(error, "cause");
-  if (cause === undefined) return undefined;
-  const seen = new WeakSet<object>();
-  seen.add(error);
-  return normalizePipelineCause(cause, seen);
-}
-
-function toPipelineError(
-  error: unknown,
-  classification: Omit<PipelineError, "cause" | "message" | "sourceCode" | "stack">
-): PipelineError {
-  const sourceCode =
-    typeof error === "object" && error !== null ? readErrorField(error, "code") : undefined;
-  const cause = normalizedNestedCause(error);
-  const pipelineError: PipelineError = {
-    ...classification,
-    message: error instanceof Error ? error.message : safeErrorMessage(error),
-  };
-  if (error instanceof Error && error.stack) pipelineError.stack = error.stack;
-  if (typeof sourceCode === "string") pipelineError.sourceCode = sourceCode;
-  if (cause) pipelineError.cause = cause;
-  if (error instanceof PipelineBoundaryValidationError) pipelineError.issues = error.issues;
-  if (error instanceof PipelineChildError && error.fanOut) {
-    const { failures, failureCount, schedulerError } = error.fanOut;
-    pipelineError.fanOut = {
-      failures: failures.map(({ error: itemError, key, index, cancelled }) => ({
-        index,
-        key: key.slice(0, 1024),
-        keyTruncated: key.length > 1024,
-        cancelled,
-        error: fanOutCause(itemError),
-      })),
-      failureCount,
-      omittedFailureCount: failureCount - failures.length,
-    };
-    if (schedulerError !== undefined)
-      pipelineError.fanOut.schedulerError = fanOutCause(schedulerError);
-  }
-  originalPipelineErrors.set(pipelineError, error);
-  return pipelineError;
-}
-
-export function isPipelineCancellation(error: unknown, runtime: PipelineRuntime): boolean {
-  if (isAbortError(error)) return true;
-  if (runtime.signal?.aborted === true && error === runtime.signal.reason) return true;
-  if (error instanceof PipelineChildError) return error.cancelled;
-  return error instanceof PipelineExecutionError && isCancelledResult(error.result);
-}
-
-function isCancelledResult(result: PipelineRun<unknown>): boolean {
-  return result.status === "cancelled";
-}
+import {
+  finalizationError,
+  stepExecutionError,
+  toPipelineError,
+} from "./pipeline-execution-error.js";
 
 type PipelineRunIdentity = { correlationId?: string; parentRunId?: string; runId: string };
 
@@ -233,34 +66,10 @@ export async function executePlannedRun<
   if (correlationId !== undefined) identity.correlationId = correlationId;
   if (runtime.parentRunId) identity.parentRunId = runtime.parentRunId;
   const dryRun = controls.dryRun === true;
-  const trace = createPipelineTraceEmitter(
-    compiled.id,
-    runtime.tracing,
-    basePipelineLogger(runtime.log),
-    { ...identity, itemKey: runtime.tracing?.itemKey },
-    runtime.now
-  );
-  const lifecycle = createPipelineLifecycleObserver(compiled.id, runtime, trace);
-  const tracedLogger = (stepId?: string, attemptId?: string): PipelineLogger => {
-    if (!trace) return runtime.log;
-    const base = basePipelineLogger(runtime.log);
-    const log: TracedPipelineLogger = {
-      error: (message, ...params) => {
-        lifecycle.log("error", message, params, stepId, attemptId);
-        base.error(message, ...params);
-      },
-      log: (message, ...params) => {
-        lifecycle.log("log", message, params, stepId, attemptId);
-        base.log(message, ...params);
-      },
-      warn: (message, ...params) => {
-        lifecycle.log("warn", message, params, stepId, attemptId);
-        base.warn(message, ...params);
-      },
-    };
-    log[PIPELINE_LOGGER_BASE] = base;
-    return log;
-  };
+  const lifecycle = createPipelineLifecycleObserver(compiled.id, runtime, {
+    ...identity,
+    itemKey: runtime.tracing?.itemKey,
+  });
   const state = new PipelineRunState<TPipelineResult>(
     compiled.id,
     dryRun,
@@ -314,10 +123,10 @@ export async function executePlannedRun<
   const executionContext: PipelineExecutionContext<TOptions> = {
     ...runtime,
     dryRun,
-    log: tracedLogger(),
+    log: lifecycle.logger(),
     options: pipelineOptions,
     runId,
-    trace: trace?.context,
+    trace: lifecycle.traceContext,
   };
 
   const plannedSteps = planStepById(input.plan);
@@ -384,28 +193,7 @@ export async function executePlannedRun<
     plannedStep: PipelinePlanStep,
     attempt: PipelineStepAttempt
   ): void => {
-    const cancelled = isPipelineCancellation(error, runtime);
-    const childFailure =
-      error instanceof PipelineExecutionError || error instanceof PipelineChildError;
-    const validationFailure = error instanceof PipelineBoundaryValidationError;
-    const pipelineError = toPipelineError(error, {
-      code: cancelled
-        ? "TUBELESS_RUN_CANCELLED"
-        : validationFailure
-          ? "TUBELESS_STEP_OUTPUT_VALIDATION_FAILED"
-          : childFailure
-            ? "TUBELESS_CHILD_FAILED"
-            : "TUBELESS_STEP_FAILED",
-      kind: cancelled
-        ? "cancellation"
-        : validationFailure
-          ? "validation"
-          : childFailure
-            ? "child"
-            : "step",
-      phase: "execution",
-      stepId: plannedStep.id,
-    });
+    const pipelineError = stepExecutionError(error, runtime, plannedStep.id);
     state.failStep(plannedStep, attempt, pipelineError);
     if (!controls.continueOnError) stopError ??= pipelineError;
   };
@@ -467,7 +255,7 @@ export async function executePlannedRun<
       try {
         skipDecision = await evaluateStepSkip(step, stepInputs, {
           ...executionContext,
-          log: tracedLogger(step.id),
+          log: lifecycle.logger(step.id),
         });
       } catch (error) {
         const attempt = state.beginAttempt(plannedStep);
@@ -488,7 +276,7 @@ export async function executePlannedRun<
         context: executionContext,
         dryRun,
         inputs: stepInputs,
-        log: tracedLogger(step.id, attempt.attemptId),
+        log: lifecycle.logger(step.id, attempt.attemptId),
         onProgress: (progress) => state.reportProgress(plannedStep, attempt, progress),
         onReportAttempt: (number, attributes) =>
           lifecycle.reportAttempt(step.id, number, attributes, attempt.attemptId),
@@ -528,7 +316,7 @@ export async function executePlannedRun<
       >[0];
       const finalizedValue = await compiled.finalize(finalOutputs, {
         ...executionContext,
-        log: tracedLogger(PIPELINE_FINALIZE_STEP_ID),
+        log: lifecycle.logger(PIPELINE_FINALIZE_STEP_ID),
       });
       // SAFETY: with a result schema the value is validated against
       // `TPipelineResult`; without one the finalizer's declared return type
@@ -542,18 +330,7 @@ export async function executePlannedRun<
         : (finalizedValue as TPipelineResult);
       state.completeFinalization(value, runtime.now() - finalizeStartedAt);
     } catch (error) {
-      const cancelled = isPipelineCancellation(error, runtime);
-      const validationFailure = error instanceof PipelineBoundaryValidationError;
-      const pipelineError = toPipelineError(error, {
-        code: cancelled
-          ? "TUBELESS_FINALIZATION_CANCELLED"
-          : validationFailure
-            ? "TUBELESS_FINAL_RESULT_VALIDATION_FAILED"
-            : "TUBELESS_FINALIZATION_FAILED",
-        kind: cancelled ? "cancellation" : validationFailure ? "validation" : "finalization",
-        phase: "finalization",
-        stepId: PIPELINE_FINALIZE_STEP_ID,
-      });
+      const pipelineError = finalizationError(error, runtime);
       state.failFinalization(pipelineError, runtime.now() - finalizeStartedAt);
     }
   }

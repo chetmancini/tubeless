@@ -1,7 +1,11 @@
 import { throwIfAborted } from "../utilities/abort.js";
 import { emitRejectedPlanLifecycle } from "./lifecycle.js";
 import { runConcurrentPartial } from "../utilities/batch.js";
-import { isPipelineCancellation, PipelineExecutionError } from "./pipeline-execute.js";
+import {
+  isPipelineCancellation,
+  PipelineChildError,
+  PipelineExecutionError,
+} from "./pipeline-execution-error.js";
 import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { duplicateValues } from "../utilities/collections.js";
@@ -19,22 +23,6 @@ import type {
   PipelineStepContext,
 } from "./pipeline-types.js";
 import type { PipelineTracingOptions } from "../tracing/tracing-contracts.js";
-
-export class PipelineChildError extends Error {
-  constructor(
-    message: string,
-    readonly cancelled = false,
-    cause?: unknown,
-    readonly fanOut?: {
-      failures: readonly { error: Error; key: string; index: number; cancelled: boolean }[];
-      failureCount: number;
-      schedulerError?: Error;
-    }
-  ) {
-    super(message, cause === undefined ? undefined : { cause });
-    this.name = "PipelineChildError";
-  }
-}
 
 type ChildPipeline = Pipeline<object, unknown, string, string>;
 
