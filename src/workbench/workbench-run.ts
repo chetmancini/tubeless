@@ -2,21 +2,12 @@ import { createWriteStream, type WriteStream } from "node:fs";
 import { mkdir, readlink, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import { isAbortError } from "../utilities/abort.js";
-import type { PipelineContext } from "../core/pipeline.js";
-import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
-import { renderPipelineError } from "../render/render.js";
 import type { PipelineRunEventStore } from "../run-store/run-store.js";
 import { composeTraceExporters, type PipelineTraceExporter } from "../tracing/tracing.js";
-import {
-  isCliHelpRequested,
-  isCliValidationError,
-  isPipelineExecutionError,
-  toExitCode,
-} from "../cli/cli-exit.js";
+import { toExitCode } from "../cli/cli-exit.js";
+import { executePipelineCommand } from "./workbench-command-execution.js";
 import { resolveWorkbenchRegistration } from "./workbench-project-loader.js";
 import {
-  commandContext,
   errorMessage,
   manageWorkbenchSignal,
   TUBELESS_WORKBENCH_EXIT_CODE,
@@ -60,75 +51,6 @@ function parseRunArgs(argv: readonly string[]) {
       strict: true,
     }),
   };
-}
-
-async function executePipelineCommand(
-  command: WorkbenchPipelineCommand,
-  args: readonly string[],
-  io: WorkbenchCliIo,
-  signal: AbortSignal,
-  pipelineContext?: Omit<PipelineContext, "cwd" | "log" | "signal">
-): Promise<number> {
-  return executePipelineCommandOperation(
-    async () => {
-      await command.run(args, commandContext(io, signal, pipelineContext));
-    },
-    io,
-    signal
-  );
-}
-
-/** Execute already validated structured command values through the normal workbench errors. */
-export async function executePipelineCommandValues(
-  command: WorkbenchPipelineCommand,
-  values: Record<string, unknown>,
-  io: WorkbenchCliIo,
-  signal: AbortSignal,
-  pipelineContext?: Omit<PipelineContext, "cwd" | "log" | "signal">
-): Promise<number> {
-  return executePipelineCommandOperation(
-    async () => {
-      await command.execute(values, commandContext(io, signal, pipelineContext));
-    },
-    io,
-    signal
-  );
-}
-
-async function executePipelineCommandOperation(
-  operation: () => Promise<void>,
-  io: WorkbenchCliIo,
-  signal: AbortSignal
-): Promise<number> {
-  try {
-    await operation();
-    return signal.aborted
-      ? TUBELESS_WORKBENCH_EXIT_CODE.cancellation
-      : TUBELESS_WORKBENCH_EXIT_CODE.success;
-  } catch (error) {
-    if (isCliHelpRequested(error)) {
-      io.stdout.write(`${error.helpText.replace(/\n+$/, "")}\n`);
-      return toExitCode(error);
-    }
-    if (isCliValidationError(error)) {
-      for (const validationError of error.errors) {
-        io.stderr.write(`Error: ${validationError}\n`);
-      }
-      io.stderr.write(`\n${error.helpText.replace(/\n+$/, "")}\n`);
-      return toExitCode(error);
-    }
-    if (isPipelineExecutionError(error)) {
-      for (const pipelineError of error.result.errors) {
-        io.stderr.write(`Error: ${renderPipelineError(pipelineError)}\n`);
-      }
-      return toExitCode(error);
-    }
-    if (signal.aborted && isAbortError(error)) {
-      return TUBELESS_WORKBENCH_EXIT_CODE.cancellation;
-    }
-    io.stderr.write(`Error: ${errorMessage(error)}\n`);
-    return toExitCode(error);
-  }
 }
 
 export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {

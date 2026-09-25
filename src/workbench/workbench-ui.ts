@@ -1,17 +1,14 @@
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import { loadPipelineProjectFile, createModuleRegistration } from "./workbench-project-loader.js";
 import type { PipelineRunEventReader } from "../run-store/run-store.js";
-import type {
-  PipelineRunStudioCommand,
-  PipelineRunStudioLauncher,
-} from "../studio/run-store-ui.js";
-import { WorkbenchLaunchSession } from "./workbench-launch-session.js";
-import { executePipelineCommandValues } from "./workbench-run.js";
+import type { PipelineRunStudioCommand } from "../studio/run-store-ui.js";
 import {
-  commandContext,
+  WorkbenchStudioLauncher,
+  type WorkbenchStudioRegistration,
+} from "./workbench-studio-launcher.js";
+import {
   DEFAULT_PIPELINE_RUN_STORE,
   errorMessage,
   onFirstProcessSignal,
@@ -117,18 +114,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           );
         }
 
-        const studioStopController = new AbortController();
-        const launchSessions = new Map<string, WorkbenchLaunchSession>();
-        const activeLaunches = new Set<Promise<void>>();
-        let markStudioStopping = (): void => undefined;
-        const studioStopping = new Promise<void>((resolve) => {
-          markStudioStopping = resolve;
-        });
-        const registrations: {
-          command: WorkbenchPipelineCommand;
-          commandIo: WorkbenchCliIo;
-          descriptor: PipelineRunStudioCommand;
-        }[] = [];
+        const registrations: WorkbenchStudioRegistration[] = [];
         for (const source of sources) {
           const loaded = await source.loadCommand(io);
           if ("exitCode" in loaded) return loaded.exitCode;
@@ -169,6 +155,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           | Awaited<ReturnType<typeof import("../studio/run-store-ui.js").startPipelineRunStudio>>
           | undefined;
         let disposeProcessSignals: (() => void) | undefined;
+        let launcher: WorkbenchStudioLauncher | undefined;
         let storeOpened = false;
         try {
           const { startPipelineRunStudio } = await import("../studio/run-store-ui.js");
@@ -181,89 +168,9 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
             store = writableStore;
           }
           storeOpened = true;
-          const commandById = new Map(
-            registrations.map((registration) => [registration.descriptor.id, registration] as const)
-          );
-          const launcher: PipelineRunStudioLauncher | undefined =
-            registrations.length === 0
-              ? undefined
-              : {
-                  commands: registrations.map(({ descriptor }) => descriptor),
-                  plan(commandId, input) {
-                    const registration = commandById.get(commandId);
-                    if (!registration?.command.plan) {
-                      throw new Error("Pipeline planning is not available for this command.");
-                    }
-                    return registration.command.plan(input);
-                  },
-                  async launch(commandId, values) {
-                    const registration = commandById.get(commandId);
-                    if (!registration)
-                      return { accepted: false, errors: ["Pipeline command not found."] };
-                    let session!: WorkbenchLaunchSession;
-                    session = new WorkbenchLaunchSession({
-                      onRunRecorded(runId) {
-                        launchSessions.set(runId, session);
-                      },
-                      signal: studioStopController.signal,
-                      stopping: studioStopping,
-                      store: writableStore!,
-                    });
-                    let parsedCommand: ReturnType<WorkbenchPipelineCommand["parseValues"]>;
-                    try {
-                      parsedCommand = registration.command.parseValues(
-                        values,
-                        commandContext(
-                          registration.commandIo,
-                          session.signal,
-                          session.pipelineContext
-                        )
-                      );
-                    } catch (error) {
-                      return { accepted: false, errors: [errorMessage(error)] };
-                    }
-                    if (parsedCommand.kind === "error") {
-                      return { accepted: false, errors: parsedCommand.errors };
-                    }
-                    if (parsedCommand.kind === "help") {
-                      return { accepted: false, errors: ["Help is not a launchable value set."] };
-                    }
-                    const execution = executePipelineCommandValues(
-                      registration.command,
-                      parsedCommand.values,
-                      registration.commandIo,
-                      session.signal,
-                      session.pipelineContext
-                    );
-                    const tracked = session.track(execution, (error) => {
-                      try {
-                        registration.commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
-                      } catch {
-                        console.error(
-                          error instanceof Error ? (error.stack ?? error.message) : error
-                        );
-                      }
-                    });
-                    activeLaunches.add(tracked.settled);
-                    void tracked.settled.then(() => {
-                      activeLaunches.delete(tracked.settled);
-                      const runId = session.runId;
-                      if (runId && launchSessions.get(runId) === session) {
-                        launchSessions.delete(runId);
-                      }
-                    });
-                    return tracked.acknowledgement;
-                  },
-                  cancel(runId) {
-                    const session = launchSessions.get(runId);
-                    if (!session) return { cancelled: false };
-                    session.abort(new DOMException("The run was cancelled.", "AbortError"));
-                    return { cancelled: true, runId };
-                  },
-                  liveRunIds() {
-                    return [...launchSessions.keys()];
-                  },
-                };
+          if (registrations.length > 0 && writableStore) {
+            launcher = new WorkbenchStudioLauncher(registrations, writableStore);
+          }
           const studioOptions: Parameters<typeof startPipelineRunStudio>[0] = {
             host,
             launcher,
@@ -273,7 +180,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           if (isLoopbackHost && writableStore) {
             studioOptions.history = {
               clear: () => writableStore!.clearHistory(),
-              isBusy: () => activeLaunches.size > 0,
+              isBusy: () => launcher?.isBusy() ?? false,
             };
           }
           server = await startPipelineRunStudio(studioOptions);
@@ -288,7 +195,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
 
           await new Promise<void>((resolve) => {
             const stop = (): void => {
-              markStudioStopping();
+              launcher?.stop();
               resolve();
             };
             if (io.signal?.aborted) {
@@ -308,12 +215,9 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
             ? TUBELESS_WORKBENCH_EXIT_CODE.load
             : TUBELESS_WORKBENCH_EXIT_CODE.execution;
         } finally {
-          markStudioStopping();
-          studioStopController.abort(
-            new DOMException("The local studio is stopping.", "AbortError")
-          );
+          launcher?.stop();
           await server?.close();
-          await Promise.allSettled(activeLaunches);
+          await launcher?.drain();
           await store?.close();
           disposeProcessSignals?.();
         }
