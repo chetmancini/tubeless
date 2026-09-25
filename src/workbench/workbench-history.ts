@@ -8,6 +8,7 @@ import {
   type StoredPipelineEvent,
   type StoredPipelineRun,
 } from "../run-store/run-store.js";
+import { readPipelineEventPages } from "../run-store/run-store-reader.js";
 import {
   DEFAULT_PIPELINE_RUN_STORE,
   errorMessage,
@@ -31,8 +32,6 @@ Options:
   -h, --help            Show this help
 `;
 
-const EVENT_PAGE_SIZE = 20_000;
-
 function parseHistoryArgs(argv: readonly string[]) {
   return parseArgs({
     args: [...argv],
@@ -47,24 +46,6 @@ function parseHistoryArgs(argv: readonly string[]) {
     },
     strict: true,
   });
-}
-
-async function forEachEventPage(
-  store: PipelineRunEventReader,
-  query: PipelineRunEventQuery,
-  onPage: (page: readonly StoredPipelineEvent[]) => void | Promise<void>
-): Promise<number> {
-  let afterId: number | undefined;
-  let eventCount = 0;
-  while (true) {
-    const page = await store.listEvents({ ...query, afterId, limit: EVENT_PAGE_SIZE });
-    if (page.length === 0) break;
-    eventCount += page.length;
-    await onPage(page);
-    afterId = page[page.length - 1]!.id;
-    if (page.length < EVENT_PAGE_SIZE) break;
-  }
-  return eventCount;
 }
 
 interface HistoryRunSummary {
@@ -184,9 +165,11 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
         if (parsed.values.pipeline !== undefined) query.pipelineId = parsed.values.pipeline;
         try {
           if (parsed.values.events) {
-            const eventCount = await forEachEventPage(store, query, (page) =>
-              writeEvents(commandIo, page)
-            );
+            let eventCount = 0;
+            for await (const page of readPipelineEventPages(store, query)) {
+              await writeEvents(commandIo, page);
+              eventCount += page.length;
+            }
             if (runId !== undefined && eventCount === 0) {
               return writeUsageError(
                 commandIo,
@@ -198,7 +181,7 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
           }
 
           const projector = createPipelineRunProjector({ retainLogs: runId !== undefined });
-          await forEachEventPage(store, query, (page) => projector.append(page));
+          for await (const page of readPipelineEventPages(store, query)) projector.append(page);
           const snapshot = projector.snapshot();
           if (runId !== undefined) {
             const run = snapshot.runs.find((candidate) => candidate.runId === runId);

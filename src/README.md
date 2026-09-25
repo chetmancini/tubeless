@@ -88,6 +88,30 @@ Run `make check` after changes; it builds before checking these boundaries.
 The runtime graph check keeps launch execution independent of command entrypoints,
 the HTTP server and concrete storage adapters.
 
+## History and Studio ownership
+
+- `run-store/run-store.ts` defines the storage and snapshot contracts and coordinates
+  incremental projection and caching. It groups runs by definition without reaching
+  into a projection's mutable state.
+- `run-store/run-projection.ts` owns one run's metadata, attempts, progress and logs.
+  It retains only required fields and copies retained identities and errors at the
+  boundary. `run-store/definition-projection.ts` owns definition replacement and
+  per-run start metadata, including timestamp and event-ID tie breaking.
+- `run-store/run-store-reader.ts` owns cursor pagination for both CLI history and
+  Studio. It orders and deduplicates pages, advances through short pages, enforces
+  query filters and stops when the cursor cannot advance. Consumers control
+  backpressure and retain responsibility for closing the reader.
+- `studio/run-store-ui-state.ts` serializes reads and history clearing; it consumes
+  only the reader's `listEvents` capability.
+- `studio/run-store-ui-api.ts` owns route behavior, command validation and API state.
+  `studio/run-store-ui-http.ts` owns HTTP parsing, response formatting and authority
+  helpers. `studio/run-store-ui.ts` owns the listener, trusted-host enforcement,
+  page assets, CSP and server closure. Keep API handling behind the listener's
+  host check.
+
+History projection and API routes do not load pipeline execution, concrete storage
+adapters or page assets. The emitted runtime graph test enforces this boundary.
+
 ## Moving files
 
 Update package export targets and the binary target when moving their implementations;

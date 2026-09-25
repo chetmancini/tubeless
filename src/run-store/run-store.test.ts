@@ -622,6 +622,44 @@ describe("incremental pipeline run projector", () => {
     expect(refreshed.lastEventId).toBe(first.lastEventId);
   });
 
+  it("owns retained run metadata and errors independently of producers and snapshots", () => {
+    const started = event(0, "pipeline.started", { correlationId: "original" });
+    const completed = event(1, "pipeline.completed", {
+      payload: { status: "failed", errorCount: 1 },
+      error: {
+        code: "TUBELESS_STEP_FAILED",
+        kind: "step",
+        phase: "execution",
+        message: "original failure",
+        cause: { message: "original cause" },
+      },
+    });
+    const projector = createPipelineRunProjector();
+    projector.append([started, completed]);
+    started.timestampMs = 900;
+    started.correlationId = "changed";
+    if (started.name === "pipeline.started") started.payload.dryRun = true;
+    completed.error!.message = "producer changed";
+    completed.error!.cause!.message = "producer changed cause";
+
+    const first = projector.snapshot(10).runs[0]!;
+    expect(first).toMatchObject({
+      correlationId: "original",
+      dryRun: false,
+      startedAtMs: 100,
+      error: { message: "original failure", cause: { message: "original cause" } },
+    });
+    first.error!.cause!.message = "consumer changed cause";
+    // A new snapshot must be derived from private projection state, not the old output.
+    projector.append([event(2, "pipeline.log", { payload: { message: "late log" } })]);
+    const next = projector.snapshot(20).runs[0]!;
+    expect(next.error).toMatchObject({
+      message: "original failure",
+      cause: { message: "original cause" },
+    });
+    expect(next.logCount).toBe(1);
+  });
+
   it("counts logs without retaining bodies when retainLogs is false", () => {
     const projector = createPipelineRunProjector({ retainLogs: false });
     projector.append([

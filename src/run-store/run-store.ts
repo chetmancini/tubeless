@@ -1,17 +1,19 @@
-import {
+import type {
   RUN_MODEL_VERSION,
-  type PipelineRunStatus,
-  type PipelineDefinitionIdentity,
-  type PipelineDefinitionSnapshot,
-  type PipelineStepLifecycleStatus,
-  type PipelineStepProgressDetail,
+  PipelineRunStatus,
+  PipelineDefinitionIdentity,
+  PipelineDefinitionSnapshot,
+  PipelineStepLifecycleStatus,
+  PipelineStepProgressDetail,
 } from "../core/pipeline.js";
-import { hasVisibleStepProgress } from "../core/progress.js";
 import type {
   PipelineTraceError,
   PipelineTraceEvent,
   PipelineTraceExporter,
 } from "../tracing/tracing-contracts.js";
+import { RunProjection } from "./run-projection.js";
+import { DefinitionProjection } from "./definition-projection.js";
+export { projectPipelineRun } from "./run-projection.js";
 
 /** One trace event after it has been appended to a durable local store. */
 export type StoredPipelineEvent = PipelineTraceEvent & {
@@ -151,271 +153,8 @@ export interface PipelineRunStoreSnapshot {
   runs: StoredPipelineRun[];
 }
 
-function terminalStepStatus(event: StoredPipelineEvent): StoredPipelineStep["status"] | undefined {
-  switch (event.name) {
-    case "step.cancelled":
-      return "cancelled";
-    case "step.complete":
-      // Shipped trace name; projected snapshot uses the live success token.
-      return "completed";
-    case "step.failed":
-      return "failed";
-    case "step.skipped":
-      return "skipped";
-    default:
-      return undefined;
-  }
-}
-
-function attemptStatus(status: StoredPipelineStep["status"]): StoredPipelineAttempt["status"] {
-  return status === "planned" ? "running" : status;
-}
-
-interface MutableRunProjection {
-  completed: StoredPipelineEvent | undefined;
-  eventCount: number;
-  first: StoredPipelineEvent;
-  logCount: number;
-  logs: StoredPipelineLog[];
-  retainLogs: boolean;
-  started: StoredPipelineEvent;
-  stepOrder: string[];
-  steps: Map<string, StoredPipelineStep>;
-}
-
-interface MutablePipelineProjection {
-  snapshot?: PipelineDefinitionSnapshot;
-  definitionRunId: string | undefined;
-  definitionRunStartedAtMs: number;
-  definitionRunStartedEventId: number;
-  firstSeenAtMs: number;
-  lastSeenAtMs: number;
-  latestSteps: Map<string, StoredPipelineDefinitionStep>;
-  runStartedAtMs: Map<string, number>;
-  runStartedEventIds: Map<string, number>;
-  runTargetIds: Map<string, string[]>;
-  targetIds: string[];
-}
-
-function applyRunEvent(projection: MutableRunProjection, event: StoredPipelineEvent): void {
-  projection.eventCount += 1;
-  if (event.name === "pipeline.started" && projection.started.name !== "pipeline.started") {
-    projection.started = event;
-  }
-  if (event.name === "pipeline.completed") projection.completed = event;
-  if (event.name === "pipeline.log") {
-    projection.logCount += 1;
-    if (!projection.retainLogs) return;
-    const log: StoredPipelineLog = {
-      id: event.id,
-      level: event.payload.level,
-      message: event.payload.message,
-      timestampMs: event.timestampMs,
-    };
-    if (event.attemptId) log.attemptId = event.attemptId;
-    if (event.stepId) log.stepId = event.stepId;
-    projection.logs.push(log);
-    return;
-  }
-  if (!event.stepId || !event.name.startsWith("step.")) return;
-
-  let step = projection.steps.get(event.stepId);
-  if (!step) {
-    step = { id: event.stepId, status: "planned" };
-    projection.steps.set(event.stepId, step);
-    projection.stepOrder.push(event.stepId);
-  }
-  if (event.name === "step.planned") {
-    step.name = event.payload.name;
-    step.description = event.payload.description;
-    if (event.payload.nestedPipeline) {
-      step.nestedPipeline = {
-        ...event.payload.nestedPipeline,
-        stepIds: [...event.payload.nestedPipeline.stepIds],
-      };
-    }
-    if (event.payload.remote) step.remote = { ...event.payload.remote };
-    return;
-  }
-  if (event.attemptId) {
-    let attempt = step.attempt;
-    if (!attempt) {
-      attempt = {
-        attemptId: event.attemptId,
-        retries: [],
-        startedAtMs: event.timestampMs,
-        status: "running",
-      };
-      step.attempt = attempt;
-    }
-    if (event.name === "step.attempted") {
-      attempt.retries.push(event.payload.attempt);
-    }
-    const terminal = terminalStepStatus(event);
-    if (terminal) {
-      attempt.status = attemptStatus(terminal);
-      attempt.finishedAtMs = event.timestampMs;
-      attempt.durationMs = event.durationMs;
-    }
-  }
-  if (event.name === "step.running") {
-    step.status = "running";
-    step.startedAtMs ??= event.timestampMs;
-    if (event.payload.progress) {
-      const progress: StoredPipelineStep["progress"] = {
-        ...event.payload.progress,
-        details: event.payload.progress.details?.map((detail) => ({ ...detail })),
-      };
-      if (!step.progress || hasVisibleStepProgress(progress)) step.progress = progress;
-    }
-    return;
-  }
-  const terminal = terminalStepStatus(event);
-  if (terminal) {
-    step.status = terminal;
-    step.finishedAtMs = event.timestampMs;
-    step.durationMs = event.durationMs;
-    if (event.durationMs !== undefined) step.startedAtMs = event.timestampMs - event.durationMs;
-  }
-}
-
-function createRunProjection(event: StoredPipelineEvent, retainLogs = true): MutableRunProjection {
-  const projection: MutableRunProjection = {
-    completed: undefined,
-    eventCount: 0,
-    first: event,
-    logCount: 0,
-    logs: [],
-    retainLogs,
-    started: event,
-    stepOrder: [],
-    steps: new Map(),
-  };
-  applyRunEvent(projection, event);
-  return projection;
-}
-
-function materializeRun(projection: MutableRunProjection): StoredPipelineRun {
-  const { completed, eventCount, first, logs, started, stepOrder, steps } = projection;
-  const statusValue =
-    completed?.name === "pipeline.completed" ? completed.payload.status : undefined;
-  const status: StoredPipelineRunStatus =
-    statusValue === "cancelled" || statusValue === "completed" || statusValue === "failed"
-      ? statusValue
-      : "running";
-
-  const run: StoredPipelineRun = {
-    dryRun: started.name === "pipeline.started" ? started.payload.dryRun : false,
-    eventCount,
-    logCount: projection.logCount,
-    logs: projection.retainLogs ? logs.map((log) => ({ ...log })) : [],
-    pipelineId: first.pipelineId,
-    runId: first.runId,
-    startedAtMs: started.timestampMs,
-    status,
-    steps: stepOrder.map((stepId) => structuredClone(steps.get(stepId)!)),
-    version: RUN_MODEL_VERSION,
-  };
-  if (started.name === "pipeline.started" && started.payload.definitionIdentity) {
-    run.definitionIdentity = { ...started.payload.definitionIdentity };
-  }
-  if (first.correlationId !== undefined) run.correlationId = first.correlationId;
-  if (completed?.durationMs !== undefined) run.durationMs = completed.durationMs;
-  if (completed?.error) run.error = completed.error;
-  if (completed) run.finishedAtMs = completed.timestampMs;
-  if (first.parentRunId) run.parentRunId = first.parentRunId;
-  return run;
-}
-
-/** Fold one run's append-only events into a UI-friendly current snapshot. */
-export function projectPipelineRun(events: readonly StoredPipelineEvent[]): StoredPipelineRun {
-  if (events.length === 0) throw new Error("Cannot project an empty pipeline run event list.");
-  const ordered = [...events].sort((left, right) => left.id - right.id);
-  const projection = createRunProjection(ordered[0]!);
-  for (const event of ordered.slice(1)) applyRunEvent(projection, event);
-  return materializeRun(projection);
-}
-
-function definitionStep(
-  event: Extract<StoredPipelineEvent, { name: "step.planned" }>
-): StoredPipelineDefinitionStep {
-  const step: StoredPipelineDefinitionStep = {
-    dependencies: [...event.payload.dependencies],
-    dryRun: event.payload.dryRun,
-    id: event.stepId,
-    optionalDependencies: [...event.payload.optionalDependencies],
-    runtimeSkipPossible: event.payload.runtimeSkipPossible,
-    skipAfterFailureOf: [...event.payload.skipAfterFailureOf],
-  };
-  const description = event.payload.description;
-  if (description) step.description = description;
-  const name = event.payload.name;
-  if (name) step.name = name;
-  if (event.payload.nestedPipeline) {
-    step.nestedPipeline = {
-      ...event.payload.nestedPipeline,
-      stepIds: [...event.payload.nestedPipeline.stepIds],
-    };
-  }
-  if (event.payload.remote) step.remote = { ...event.payload.remote };
-  return step;
-}
-
-function createPipelineProjection(event: StoredPipelineEvent): MutablePipelineProjection {
-  const projection: MutablePipelineProjection = {
-    definitionRunId: undefined,
-    definitionRunStartedAtMs: Number.NEGATIVE_INFINITY,
-    definitionRunStartedEventId: -1,
-    firstSeenAtMs: event.timestampMs,
-    lastSeenAtMs: event.timestampMs,
-    latestSteps: new Map(),
-    runStartedAtMs: new Map(),
-    runStartedEventIds: new Map(),
-    runTargetIds: new Map(),
-    targetIds: [],
-  };
-  applyPipelineEvent(projection, event);
-  return projection;
-}
-
-function isNewerObservedDefinition(
-  startedAtMs: number,
-  startedEventId: number,
-  projection: MutablePipelineProjection
-): boolean {
-  if (startedAtMs !== projection.definitionRunStartedAtMs) {
-    return startedAtMs > projection.definitionRunStartedAtMs;
-  }
-  return startedEventId > projection.definitionRunStartedEventId;
-}
-
-function applyPipelineEvent(
-  projection: MutablePipelineProjection,
-  event: StoredPipelineEvent
-): void {
-  projection.firstSeenAtMs = Math.min(projection.firstSeenAtMs, event.timestampMs);
-  projection.lastSeenAtMs = Math.max(projection.lastSeenAtMs, event.timestampMs);
-  if (event.name === "pipeline.started") {
-    if (event.payload.definitionSnapshot)
-      projection.snapshot = structuredClone(event.payload.definitionSnapshot);
-    projection.runStartedAtMs.set(event.runId, event.timestampMs);
-    projection.runStartedEventIds.set(event.runId, event.id);
-    projection.runTargetIds.set(event.runId, [...event.payload.targetIds]);
-  }
-  if (event.name !== "step.planned" || !event.stepId) return;
-  const runStartedEventId = projection.runStartedEventIds.get(event.runId);
-  const runStartedAtMs = projection.runStartedAtMs.get(event.runId);
-  if (runStartedEventId === undefined || runStartedAtMs === undefined) return;
-  if (isNewerObservedDefinition(runStartedAtMs, runStartedEventId, projection)) {
-    projection.definitionRunId = event.runId;
-    projection.definitionRunStartedAtMs = runStartedAtMs;
-    projection.definitionRunStartedEventId = runStartedEventId;
-    projection.latestSteps.clear();
-    projection.targetIds = projection.runTargetIds.get(event.runId) ?? [];
-  }
-  if (event.runId === projection.definitionRunId) {
-    projection.latestSteps.set(event.stepId, definitionStep(event));
-  }
+function definitionKey(pipelineId: string, definitionId: string | undefined): string {
+  return JSON.stringify([pipelineId, definitionId ?? null]);
 }
 
 export interface PipelineRunProjector {
@@ -432,52 +171,36 @@ export function createPipelineRunProjector(
   options: { readonly retainLogs?: boolean } = {}
 ): PipelineRunProjector {
   const retainLogs = options.retainLogs !== false;
-  const pipelines = new Map<string, MutablePipelineProjection>();
-  const runs = new Map<string, MutableRunProjection>();
+  const pipelines = new Map<string, DefinitionProjection>();
+  const runs = new Map<string, RunProjection>();
   let cached: PipelineRunStoreSnapshot | undefined;
   let lastAcceptedId: number | undefined;
 
   function applyEvent(event: StoredPipelineEvent): void {
     const run = runs.get(event.runId);
-    if (run) applyRunEvent(run, event);
-    else runs.set(event.runId, createRunProjection(event, retainLogs));
+    if (run) run.append(event);
+    else runs.set(event.runId, new RunProjection(event, retainLogs));
 
-    const started = runs.get(event.runId)!.started;
-    const identity =
-      started.name === "pipeline.started" ? started.payload.definitionIdentity : undefined;
-    const key = JSON.stringify([event.pipelineId, identity?.definitionId ?? null]);
+    const key = definitionKey(event.pipelineId, runs.get(event.runId)!.definitionId);
     const pipeline = pipelines.get(key);
-    if (pipeline) applyPipelineEvent(pipeline, event);
-    else pipelines.set(key, createPipelineProjection(event));
+    if (pipeline) pipeline.append(event);
+    else pipelines.set(key, new DefinitionProjection(event));
   }
 
   function materialize(generatedAtMs: number): PipelineRunStoreSnapshot {
     const projectedRuns = [...runs.values()]
-      .map(materializeRun)
+      .map((run) => run.snapshot())
       .sort((left, right) => right.startedAtMs - left.startedAtMs);
     const runsByPipeline = new Map<string, StoredPipelineRun[]>();
     for (const run of projectedRuns) {
-      const key = JSON.stringify([run.pipelineId, run.definitionIdentity?.definitionId ?? null]);
+      const key = definitionKey(run.pipelineId, run.definitionIdentity?.definitionId);
       const pipelineRuns = runsByPipeline.get(key) ?? [];
       pipelineRuns.push(run);
       runsByPipeline.set(key, pipelineRuns);
     }
     const definitions = [...runsByPipeline.entries()]
       .map(([key, pipelineRuns]): StoredPipelineDefinition => {
-        const pipeline = pipelines.get(key)!;
-        const identity = pipelineRuns[0]!.definitionIdentity;
-        const snapshot = pipeline.snapshot;
-        return {
-          activeRuns: pipelineRuns.filter(({ status }) => status === "running").length,
-          firstSeenAtMs: pipeline.firstSeenAtMs,
-          lastSeenAtMs: pipeline.lastSeenAtMs,
-          pipelineId: pipelineRuns[0]!.pipelineId,
-          ...(identity ? { identity: { ...identity } } : {}),
-          ...(snapshot ? { snapshot: structuredClone(snapshot) } : {}),
-          runCount: pipelineRuns.length,
-          steps: [...pipeline.latestSteps.values()].map((step) => structuredClone(step)),
-          targetIds: [...(snapshot?.targetIds ?? pipeline.targetIds)],
-        };
+        return pipelines.get(key)!.snapshot(pipelineRuns);
       })
       .sort((left, right) => right.lastSeenAtMs - left.lastSeenAtMs);
 

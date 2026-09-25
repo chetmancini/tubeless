@@ -35,6 +35,35 @@ function moduleName(file: string): string {
 }
 
 describe("module runtime boundaries", () => {
+  it("keeps history projection and Studio API routes free of execution, adapters and page assets", () => {
+    const allowed = new Set([
+      "core/pipeline-ids.js",
+      "core/progress.js",
+      "run-store/run-store.js",
+      "run-store/run-projection.js",
+      "run-store/definition-projection.js",
+      "run-store/run-store-reader.js",
+      "studio/run-store-ui-api.js",
+      "studio/run-store-ui-http.js",
+      "studio/run-store-ui-protocol.js",
+      "studio/run-store-ui-state.js",
+    ]);
+    const pending = [
+      resolve(dist, "studio/run-store-ui-api.js"),
+      resolve(dist, "run-store/run-store.js"),
+    ];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      const name = relative(dist, file).split(sep).join("/");
+      expect(allowed.has(name), `History/API boundary reaches ${name}`).toBe(true);
+      pending.push(...dependencies(file));
+    }
+    expect(visited.size).toBeGreaterThan(1);
+  });
+
   it("keeps runtime dependencies acyclic, including lazy imports and re-exports", () => {
     const visited = new Set<string>();
     const active: string[] = [];

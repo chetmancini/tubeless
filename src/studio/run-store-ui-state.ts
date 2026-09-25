@@ -1,10 +1,10 @@
 import {
   createPipelineRunProjector,
-  type PipelineRunEventQuery,
   type PipelineRunEventReader,
   type PipelineRunStoreSnapshot,
   type StoredPipelineEvent,
 } from "../run-store/run-store.js";
+import { readPipelineEventPages } from "../run-store/run-store-reader.js";
 
 export interface PipelineRunStudioHistoryMaintenance {
   clear(): void | Promise<void>;
@@ -24,7 +24,7 @@ export class PipelineRunStudioEventState {
   #operation: Promise<void> = Promise.resolve();
   #projector = createPipelineRunProjector({ retainLogs: false });
 
-  constructor(private readonly store: PipelineRunEventReader) {}
+  constructor(private readonly store: Pick<PipelineRunEventReader, "listEvents">) {}
 
   #serialize<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.#operation.then(operation, operation);
@@ -36,34 +36,19 @@ export class PipelineRunStudioEventState {
   }
 
   async #appendNewEvents(): Promise<void> {
-    let cursor = this.#lastEventId;
-    for (;;) {
-      const query: PipelineRunEventQuery = { limit: 100_000 };
-      if (cursor !== undefined) query.afterId = cursor;
-      const page = await this.store.listEvents(query);
-      const next = [...page]
-        .filter((event) => cursor === undefined || event.id > cursor)
-        .sort((left, right) => left.id - right.id);
-      if (next.length === 0) break;
-      this.#projector.append(next);
-      cursor = next.at(-1)!.id;
+    for await (const page of readPipelineEventPages(this.store, {
+      afterId: this.#lastEventId,
+      limit: 100_000,
+    })) {
+      this.#projector.append(page);
+      this.#lastEventId = page.at(-1)!.id;
     }
-    this.#lastEventId = cursor;
   }
 
   async #listRunEvents(runId: string): Promise<readonly StoredPipelineEvent[]> {
     const events: StoredPipelineEvent[] = [];
-    let cursor: number | undefined;
-    for (;;) {
-      const query: PipelineRunEventQuery = { limit: 100_000, runId };
-      if (cursor !== undefined) query.afterId = cursor;
-      const page = await this.store.listEvents(query);
-      const next = [...page]
-        .filter((event) => event.runId === runId && (cursor === undefined || event.id > cursor))
-        .sort((left, right) => left.id - right.id);
-      if (next.length === 0) break;
-      events.push(...next);
-      cursor = next.at(-1)!.id;
+    for await (const page of readPipelineEventPages(this.store, { limit: 100_000, runId })) {
+      events.push(...page);
     }
     return events;
   }
