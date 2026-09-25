@@ -14,6 +14,7 @@ one of these recipes.
 | Return one step's exact result type           | [`precise-result.ts`](../examples/precise-result.ts)                                                                           | `finalize: step`, required output, inferred result type                               |
 | Omit empty inputs and identity child mapping  | [`inherited-inputs.ts`](../examples/inherited-inputs.ts)                                                                       | `runOrThrow()`, compatible parent inputs through `fromPipeline`                       |
 | Run independent DAG branches concurrently     | [`parallel-dag.ts`](../examples/parallel-dag.ts)                                                                               | `maxConcurrency`, `plan()` checks controls, dependency joins, stable final reports    |
+| Declare a static family of checks             | [`parameterized-steps.ts`](../examples/parameterized-steps.ts)                                                                 | Recipe-local tuple helper, literal IDs, explicit dependencies                         |
 | CPU parallelism on Node worker threads        | [`worker-threads.ts`](../examples/worker-threads.ts)                                                                           | `createWorkerThreadAdapter`, `fromRemote`, structured clone, pool ownership           |
 | Sequential import or ETL                      | [`typed-import.ts`](../examples/typed-import.ts)                                                                               | `createSteps`, `dependsOn`, `requireOutputs`, `targets`                               |
 | Define and compose pipelines in YAML or JSON  | [`yaml-pipelines.ts`](../examples/yaml-pipelines.ts)                                                                           | `compilePipelineDocument(document, registry)`, adapters, skips, child fan-out         |
@@ -47,6 +48,45 @@ one of these recipes.
 | Watch an advanced YAML pipeline               | [`yaml-peloton.ts`](../examples/yaml-peloton.ts)                                                                               | declarative graph, concurrent handlers, retries, progress, dry runs, gates            |
 | Expose a project to CLI and Studio            | [`tubeless.project.ts`](../examples/tubeless.project.ts)                                                                       | `defineProject`, inferred flags, `tubeless list`                                      |
 | Register custom command adapters              | [`project/tubeless.project.ts`](../examples/project/tubeless.project.ts)                                                       | `defineProject`, explicit command adapters, custom mappings                           |
+
+## Static step families
+
+Use [`parameterized-steps.ts`](../examples/parameterized-steps.ts) when several
+statically known steps share an implementation. Its `defineRangeChecks` helper
+accepts a readonly tuple of specifications and returns an ordered tuple of ordinary
+steps. Each specification names a stable ID, description, source step, and bounds.
+The example checks positive quantities, fulfillment limits, and catalog prices.
+
+The helper expands the whole family synchronously at module load. Spread it into
+`steps` and, when each check should be selectable, `targets`. Pass the tuple to
+`dependsOn` to join all checks, or use an individual tuple member to depend on one.
+Plans, traces, Mermaid diagrams, and Studio show each check as an ordinary step.
+`definePipeline` still validates duplicate IDs and missing dependencies.
+
+This is a recipe-local pattern, not a new package export. Adapt the concrete
+factory and specification type to your domain. Every check in this example
+returns a number; sources must publish numeric arrays. The mapped tuple type
+preserves each position's literal ID. Its one assertion accounts for `Array.map`
+losing tuple positions, and is justified by the factory always using the supplied
+ID and returning the same output type. Do not reuse that assertion for a factory
+whose output type varies by specification. Prefer explicit declarations for
+heterogeneous steps unless you can prove their mapping separately.
+
+Pass an inline tuple as shown, or retain literal IDs with `as const` on a separate
+specification list. An already widened array cannot recover exact positions or
+literal IDs. The tuple is enough for ordered expansion and destructuring; no
+second ID-keyed container is needed. Use `forEachPipeline` for items discovered
+during execution. Step families only describe a graph known before a run starts.
+
+The example has no side effects, so its checks also execute during dry runs. If
+you adapt the factory to write data, declare its ordinary `dryRun` policy there.
+
+Run the registered recipe:
+
+```sh
+bun run tubeless -- run --project examples/project/tubeless.project.ts order-checks -- --quantities 2 --quantities 3 --prices 10 --prices 5
+bun run tubeless -- plan --project examples/project/tubeless.project.ts order-checks --target valid-prices
+```
 
 ## Node helpers
 

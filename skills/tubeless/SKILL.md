@@ -40,6 +40,11 @@ the installed declarations before using them; do not silently upgrade Tubeless.
   Fail-fast stops dispatch without cancelling active work. External cancellation
   stops dispatch in either error mode and drains active work. Final reports and
   step errors use plan order; hooks and traces use event order.
+- For repeated steps known before execution, adapt the recipe-local helper in
+  `examples/parameterized-steps.ts`. Use explicit IDs and source step references,
+  expand synchronously, then spread the tuple into the ordinary pipeline. Preserve
+  each literal ID and the shared output type; do not generalize its tuple assertion
+  to factories with varying output types. Use `forEachPipeline` for runtime items.
 - Give steps stable kebab-case IDs and descriptions of their domain work.
   `name` is an optional display label. Return values from steps and consume
   inferred dependency outputs instead of sharing mutable state.

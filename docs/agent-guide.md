@@ -78,6 +78,12 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Child runs have separate limits, supplied through the child `controls` field. Parent and
   fan-out limits multiply: four fan-out steps at eight children each allow 32 active
   children. Do not share a semaphore between waiting parents and their children. See [the parallel DAG recipe](../examples/parallel-dag.ts).
+- For a static family sharing one implementation, adapt the recipe-local tuple
+  helper in [parameterized steps](../examples/parameterized-steps.ts). Keep IDs,
+  constants, and source step references explicit; expand synchronously before
+  `definePipeline`. Preserve literal IDs and the factory's output type. The recipe
+  uses one common output type, not an arbitrary heterogeneous callback. Use
+  `forEachPipeline` for runtime items. See [static step families](./recipes.md#static-step-families).
 - Treat a `PipelineDefinitionError` during module loading as an authoring bug;
   static graph mistakes are rejected when `definePipeline` is called.
 - Use `dependsOn` when the output is required, `optionalDependsOn` when absence
