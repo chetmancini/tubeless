@@ -263,7 +263,13 @@ export function definePipeline<
         resolved.set(compiledStep, value);
       }
       const prepared = prepareRun(controls);
-      return executeCompiled(prepared.plan, options, prepared.controls, context, resolved);
+      return executeCompiled(
+        prepared.plan,
+        options === undefined ? ({} as TInputOptions) : options,
+        prepared.controls,
+        context,
+        resolved
+      );
     },
   });
   brandCompiledPipeline(pipeline);

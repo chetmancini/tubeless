@@ -90,6 +90,40 @@ describe("typed step overrides", () => {
     void pipeline.run({}, { overrides: [overrideStep(text, "fake")] });
   });
 
+  it("validates fresh default options for overridden run and runOrThrow calls", async () => {
+    const inputs: unknown[] = [];
+    const optionsSchema: StandardSchemaV1<{}, { limit: number }> = {
+      "~standard": {
+        version: 1,
+        vendor: "test",
+        validate: (value) => {
+          inputs.push(value);
+          return typeof value === "object" && value !== null
+            ? { value: { limit: 10 } }
+            : { issues: [{ message: "Expected options object" }] };
+        },
+      },
+    };
+    const { step } = createSteps(optionsSchema);
+    const load = step("load", { run: vi.fn(() => 1) });
+    const finish = step("finish", {
+      dependsOn: [load],
+      run: ({ load }, context) => load + context.options.limit,
+    });
+    const pipeline = definePipeline({ id: "default-options", steps: [load, finish] });
+    const test = createPipelineTestRuntime();
+    const controls = { overrides: [overrideStep(load, 2)] };
+    // Exercise JavaScript callers; the test runtime's typed API requires options.
+    await expect(test.run(pipeline, undefined as never, controls)).resolves.toMatchObject({
+      status: "completed",
+      value: 12,
+    });
+    await expect(test.runOrThrow(pipeline, undefined as never, controls)).resolves.toBe(12);
+    expect(inputs).toEqual([{}, {}]);
+    expect(inputs[0]).not.toBe(inputs[1]);
+    expect(load.run).not.toHaveBeenCalled();
+  });
+
   it("supports exact selection beyond a supplied intermediate without upstream I/O", async () => {
     const { step } = createSteps();
     const upstream = step("upstream", { run: vi.fn(() => "network") });
@@ -116,9 +150,13 @@ describe("typed step overrides", () => {
     const filtered = await test.run(
       pipeline,
       {},
-      { stepIds: [], overrides: [overrideStep(middle, 9)] }
+      { stepIds: ["finish"], overrides: [overrideStep(middle, 9)] }
     );
-    expect(filtered.steps.every((report) => report.status === "skipped")).toBe(true);
+    expect(filtered.steps).toMatchObject([
+      { id: "upstream", status: "skipped", reason: "filtered" },
+      { id: "middle", status: "skipped", reason: "filtered" },
+      { id: "finish", status: "skipped", reason: "unmet-dependency" },
+    ]);
     expect(filtered.steps.every((report) => report.outputSource === undefined)).toBe(true);
     expect(filtered.finalized).toBe(false);
     await test.run(pipeline, {}, { targets: ["finish"], overrides: [overrideStep(middle, 9)] });
