@@ -35,6 +35,21 @@ function moduleName(file: string): string {
 }
 
 describe("module runtime boundaries", () => {
+  it("keeps project registry validation independent of pipeline construction", () => {
+    const allowed = new Set(["project/project-registry.js", "project/project-document.js"]);
+    const pending = [resolve(dist, "project/project-registry.js")];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      const name = relative(dist, file).split(sep).join("/");
+      expect(allowed.has(name), `Project registry validation reaches ${name}`).toBe(true);
+      pending.push(...dependencies(file));
+    }
+    expect(visited.size).toBe(allowed.size);
+  });
+
   it("keeps history projection and Studio API routes free of execution, adapters and page assets", () => {
     const allowed = new Set([
       "core/pipeline-ids.js",

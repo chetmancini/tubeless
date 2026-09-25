@@ -414,6 +414,80 @@ describe("declarative pipelines", () => {
     );
   });
 
+  describe.each(["fromPipeline", "forEachPipeline"] as const)("%s registry boundary", (mode) => {
+    function source(): PipelineDocument {
+      const reference = { pipeline: "leaf", adapter: "child" };
+      return {
+        version: 1,
+        pipelines: {
+          parent: {
+            steps: [
+              mode === "fromPipeline"
+                ? { id: "child", fromPipeline: reference }
+                : { id: "child", forEachPipeline: reference },
+            ],
+            finalize: { run: "result", requireOutputs: ["child"] },
+          },
+          leaf: { steps: [{ id: "work", run: "work" }], finalize: { run: "result" } },
+        },
+      };
+    }
+
+    function wiring(adapter: unknown): ProjectRegistry {
+      return {
+        steps: { work: () => "leaf" },
+        finalizers: { result: ({ child, work }) => child ?? work },
+        [`${mode}Adapters`]: { child: adapter },
+      };
+    }
+
+    it("retains resolved callbacks when the application replaces adapter fields", async () => {
+      const adapter = {
+        items: vi.fn(() => ["item"]),
+        key: vi.fn(() => "key"),
+        concurrency: vi.fn(() => 1),
+        controls: vi.fn(() => ({})),
+        mapOptions: vi.fn(() => ({})),
+        mapResult: vi.fn(() => "original"),
+      };
+      const callbacks = Object.values(adapter);
+      const pipeline = compilePipelineDocument(source(), wiring(adapter)).get("parent");
+      for (const callback of callbacks) expect(callback).not.toHaveBeenCalled();
+      const replacement = vi.fn(() => {
+        throw new Error("replacement callback must not be used");
+      });
+      Object.assign(adapter, {
+        items: replacement,
+        key: replacement,
+        concurrency: replacement,
+        controls: replacement,
+        mapOptions: replacement,
+        mapResult: replacement,
+      });
+      await expect(
+        pipeline.runOrThrow({}, {}, createPipelineTestRuntime().context)
+      ).resolves.toEqual(mode === "fromPipeline" ? "original" : ["original"]);
+      expect(replacement).not.toHaveBeenCalled();
+    });
+
+    it.each<[unknown, string]>([
+      [null, "Expected a registered adapter object"],
+      [[], "Expected a registered adapter object"],
+      [
+        { items: () => [], key: () => "key", mapOptions: () => ({}), controls: null },
+        "Expected adapter controls to be an object or function",
+      ],
+      [
+        { items: () => [], key: () => "key", mapOptions: () => ({}), mapResult: "invalid" },
+        "Expected adapter mapResult to be a function",
+      ],
+    ])("rejects invalid adapter %j at its document reference", (adapter, message) => {
+      expect(() => compilePipelineDocument(source(), wiring(adapter))).toThrow(
+        new PipelineDocumentError(`$.pipelines["parent"].steps[0].${mode}.adapter`, message)
+      );
+    });
+  });
+
   it("uses core dry-run skips, dependency blocking, and required finalizers", async () => {
     const source = document();
     source.pipelines.import.steps[1].dryRun = "skip";

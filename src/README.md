@@ -69,6 +69,19 @@ Run `make check` after changes; it builds before checking these boundaries.
   It consumes only the lifecycle notifications it emits, without requiring logger
   or trace capabilities.
 
+## Project compilation ownership
+
+- `project/project-document.ts` validates document structure and owns path-aware
+  document errors. It does not resolve application wiring or build pipelines.
+- `project/project-registry.ts` owns registry contracts and validates named
+  handlers, schemas and child adapters without invoking them. It has no runtime
+  dependency on core or the compiler.
+- `project/project-step-graph.ts` builds one pipeline's steps and links forward
+  references. Mutable dependency arrays stay inside this module; child pipeline
+  references go through the compiler's resolver. Core still validates graph semantics.
+- `project/project-compiler.ts` owns document-wide composition, shared child
+  instances, composition cycle detection and immutable collection metadata.
+
 ## Workbench execution ownership
 
 - `workbench/workbench-run.ts` owns the `run` command's arguments and trace destinations.
