@@ -26,6 +26,7 @@ Agent instructions:
 - Minimal project: ../examples/tubeless.project.ts
 - Project with custom adapters: ../examples/project/tubeless.project.ts
 - Maintain stable step IDs.
+- For static parameterized step families, keep expansion synchronous and preserve literal IDs with the recipe-local tuple helper in ../examples/parameterized-steps.ts
 - Use optional step names only as display overrides; dependencies and selection use IDs.
 - Use pipeline.toMermaid() to generate static graph documentation.
 - Use tubeless list to enumerate pipelines from defineProject. Use stable pipeline IDs with inspect, plan, graph, and run; no command modules are discovered from the filesystem or history.

@@ -1,6 +1,7 @@
 import { definePipelineCommand } from "tubeless/cli";
 import { defineProject } from "tubeless/project";
 import { ValidatedPipeline } from "../validated-boundaries.ts";
+import { OrderChecksPipeline } from "../parameterized-steps.ts";
 import { CountPipeline } from "../precise-result.ts";
 import { WelcomePipeline } from "../inherited-inputs.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
@@ -27,6 +28,12 @@ export default defineProject(
     }),
     definePipelineCommand(CountPipeline, {
       params: { text: { type: "string", required: true } },
+    }),
+    definePipelineCommand(OrderChecksPipeline, {
+      params: {
+        quantities: { type: "number", multiple: true },
+        prices: { type: "number", multiple: true },
+      },
     }),
     // Register the entry pipelines; their compiled children remain implementation details.
     YamlImportCommand,
