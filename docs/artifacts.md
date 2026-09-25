@@ -166,7 +166,8 @@ already made survive a later handler, step, or finalizer failure. This is observ
 
 SQLite and NDJSON retain these events. History JSON exposes them under each
 step's `artifacts`; `history <run-id>` and Studio show reads, writes, reuse, and previews
-on that step. Expand an artifact in Studio to inspect its metadata. Join logical
+on that step. Studio loads artifact metadata with the selected run's details,
+keeping workspace refreshes independent of the number of artifact records. Expand an artifact in Studio to inspect its metadata. Join logical
 IDs and content versions across recorded runs when tracing provenance; there is
 no automatic cross-run artifact catalog or cache. Saved version 2 recordings
 without artifact events remain readable.

@@ -177,11 +177,11 @@ export interface PipelineRunProjector {
 /**
  * Incrementally fold accepted store events into the current run-history snapshot.
  * `{ retainLogs: false }` keeps `logCount` without retaining or cloning log bodies.
+ * `{ retainArtifacts: false }` omits artifact metadata for workspace summaries.
  */
 export function createPipelineRunProjector(
-  options: { readonly retainLogs?: boolean } = {}
+  options: { readonly retainLogs?: boolean; readonly retainArtifacts?: boolean } = {}
 ): PipelineRunProjector {
-  const retainLogs = options.retainLogs !== false;
   const pipelines = new Map<string, DefinitionProjection>();
   const runs = new Map<string, RunProjection>();
   let cached: PipelineRunStoreSnapshot | undefined;
@@ -190,7 +190,7 @@ export function createPipelineRunProjector(
   function applyEvent(event: StoredPipelineEvent): void {
     const run = runs.get(event.runId);
     if (run) run.append(event);
-    else runs.set(event.runId, new RunProjection(event, retainLogs));
+    else runs.set(event.runId, new RunProjection(event, options));
 
     const key = definitionKey(event.pipelineId, runs.get(event.runId)!.definitionId);
     const pipeline = pipelines.get(key);

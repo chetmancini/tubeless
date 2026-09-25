@@ -13,14 +13,14 @@ interface Options {
 // Adapters remain application-owned and can be reused by other pipelines.
 const readLines: ArtifactLoader<string, readonly string[], Options> = async (filename, context) => {
   const path = resolve(context.cwd, filename);
-  const text = await readFile(path, { encoding: "utf8", signal: context.signal });
+  const bytes = await readFile(path, { signal: context.signal });
   return {
-    value: text.split(/\r?\n/),
+    value: bytes.toString("utf8").split(/\r?\n/),
     artifact: {
       uri: pathToFileURL(path).href,
       mediaType: "text/plain",
-      checksum: `sha256:${createHash("sha256").update(text).digest("hex")}`,
-      byteSize: Buffer.byteLength(text),
+      checksum: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+      byteSize: bytes.byteLength,
     },
   };
 };

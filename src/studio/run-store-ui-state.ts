@@ -22,7 +22,7 @@ export class PipelineRunStudioHistoryBusyError extends Error {
 export class PipelineRunStudioEventState {
   #lastEventId: number | undefined;
   #operation: Promise<void> = Promise.resolve();
-  #projector = createPipelineRunProjector({ retainLogs: false });
+  #projector = createPipelineRunProjector({ retainLogs: false, retainArtifacts: false });
 
   constructor(private readonly store: Pick<PipelineRunEventReader, "listEvents">) {}
 

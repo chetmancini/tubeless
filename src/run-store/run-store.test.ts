@@ -661,6 +661,33 @@ describe("incremental pipeline run projector", () => {
     expect(next.logCount).toBe(1);
   });
 
+  it("can omit artifact metadata while preserving step state and event counts", () => {
+    const events = [
+      event(1, "pipeline.started"),
+      event(2, "step.running", { stepId: "write", attemptId: "attempt" }),
+      event(3, "step.artifact", { stepId: "write", attemptId: "attempt" }),
+      event(4, "step.failed", {
+        stepId: "write",
+        attemptId: "attempt",
+        error: {
+          code: "TUBELESS_STEP_FAILED",
+          kind: "step",
+          phase: "execution",
+          message: "later batch failed",
+        },
+      }),
+    ];
+    const projector = createPipelineRunProjector({ retainArtifacts: false });
+    projector.append(events);
+    const summary = projector.snapshot(1).runs[0]!;
+    const full = projectPipelineRunStore(events, 1).runs[0]!;
+    expect(full.steps[0]!.artifacts).toHaveLength(1);
+    const { artifacts: _artifacts, ...step } = full.steps[0]!;
+    expect(summary).toEqual({ ...full, steps: [step] });
+    expect(summary.steps[0]!.status).toBe("failed");
+    expect(summary.eventCount).toBe(4);
+  });
+
   it("counts logs without retaining bodies when retainLogs is false", () => {
     const projector = createPipelineRunProjector({ retainLogs: false });
     projector.append([

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -39,6 +40,44 @@ it("previews without writing, then records the artifacts from the executable rec
       ["write", false],
     ]);
     expect(artifacts[0].payload.artifact.checksum).toMatch(/^sha256:[a-f0-9]{64}$/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+it("identifies source bytes even when distinct invalid UTF-8 inputs decode alike", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "tubeless-artifact-bytes-"));
+  const artifacts: Extract<PipelineTraceEvent, { name: "step.artifact" }>[] = [];
+  const sources = [Buffer.from([0x80, 0x0a]), Buffer.from([0x81, 0x0a])];
+  expect(sources[0]!.toString("utf8")).toBe(sources[1]!.toString("utf8"));
+  try {
+    for (const bytes of sources) {
+      await writeFile(join(cwd, "rows.txt"), bytes);
+      await ArtifactLineagePipeline.runOrThrow(
+        { source: "rows.txt", destination: "rows.json" },
+        { dryRun: true },
+        {
+          cwd,
+          tracing: {
+            exporter: {
+              export(event) {
+                if (event.name === "step.artifact" && event.payload.operation === "read") {
+                  artifacts.push(event);
+                }
+              },
+            },
+          },
+        }
+      );
+    }
+    expect(artifacts).toHaveLength(2);
+    expect(artifacts.map(({ payload }) => payload.artifact.byteSize)).toEqual([2, 2]);
+    expect(artifacts.map(({ payload }) => payload.artifact.checksum)).toEqual(
+      sources.map((bytes) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`)
+    );
+    expect(artifacts[0]!.payload.artifact.checksum).not.toBe(
+      artifacts[1]!.payload.artifact.checksum
+    );
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
