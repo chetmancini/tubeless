@@ -67,7 +67,13 @@ deduplicate separate submissions.
 `INNGEST_DEV=1` selects local development for both server and sender. For a
 deployment, host the endpoint where Inngest can reach it, remove that setting,
 configure `INNGEST_SIGNING_KEY` and `INNGEST_EVENT_KEY` through your host's secret
-configuration, and sync the app. The loopback example is for local development.
+configuration, and sync the app. The example server always binds to
+`127.0.0.1:3000`. To reuse it in production, run a reverse proxy on the same host
+and forward your public HTTPS `/api/inngest` endpoint to
+`http://127.0.0.1:3000/api/inngest`, preserving the request method, body, and
+headers. Sync the public URL with Inngest. If your deployment cannot proxy to
+that loopback listener, register `normalizeFunction` using your application's
+Inngest framework adapter instead of running `server.ts`.
 See [serving functions](https://www.inngest.com/docs/reference/typescript/serve)
 and [client configuration](https://www.inngest.com/docs/reference/typescript/client/create).
 
@@ -147,8 +153,11 @@ bun run tubeless -- run --project examples/project/tubeless.project.ts inngest-n
 `make check` compiles the examples against the real SDK and uses
 [`InngestTestEngine`](https://www.inngest.com/docs/reference/typescript/v4/testing)
 to exercise the durable step with the real Tubeless pipeline. Tests cover JSON
-results, progress and traces, invalid input, dry runs, supplied saved step state,
-and a failed execution followed by a fresh attempt with stable correlation.
-These tests need no service or credentials and do not test server-side retry
-scheduling. Use the local server flow above to verify event delivery and inspect
-the run; test deployment authentication and side-effect idempotency separately.
+results, progress and traces, invalid input, dry runs, and mocked durable step
+output. The mocked-output test checks that the function returns the supplied
+value without calling the pipeline; it does not test persisted-state recovery.
+A separate test substitutes a real two-step Tubeless pipeline with fake storage
+I/O: its save handler fails once, then a fresh attempt reruns both load and save
+with stable correlation. These tests need no service or credentials and do not
+test server-side persistence or retry scheduling. Use the local server flow above
+to verify event delivery and inspect the run; test deployment authentication and side-effect idempotency separately.

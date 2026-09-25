@@ -10,6 +10,8 @@ const server = createServer((request, response) => {
   }
   response.writeHead(404).end();
 });
+// Local listener; deployment requires a same-host reverse proxy or a framework
+// adapter mounted in your application. See docs/inngest.md.
 server.listen(3000, "127.0.0.1", () => {
   console.log("Inngest endpoint: http://127.0.0.1:3000/api/inngest");
 });

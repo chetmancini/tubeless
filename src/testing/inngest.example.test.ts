@@ -1,4 +1,5 @@
 import { InngestTestEngine, mockCtx } from "@inngest/test";
+import { createSteps, definePipeline, requireOutputs } from "tubeless";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { inngest } from "../../examples/inngest/client.js";
 import { normalizeFunction } from "../../examples/inngest/functions.js";
@@ -53,10 +54,11 @@ describe("Inngest durable step recipe", () => {
     });
   });
 
-  it("returns saved durable step output without starting another pipeline", async () => {
+  it("returns mocked durable step output without starting another pipeline", async () => {
     const { engine } = environment();
     const { result: saved } = await engine.executeStep("run-pipeline");
     const execute = vi.spyOn(InngestPipeline, "runOrThrow");
+    // The test engine supplies mocked state; this does not test service persistence.
     const { result } = await engine.execute({
       steps: [{ id: "run-pipeline", handler: () => saved }],
     });
@@ -89,24 +91,50 @@ describe("Inngest durable step recipe", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it("lets a real execution failure escape and reruns all steps on the next attempt", async () => {
-    const first = environment();
-    // Fail the second domain step after normalization has completed.
-    first.logger.info.mockImplementation((message) => {
-      if (message === "Normalized 2 distinct rows") throw new Error("Temporary host failure");
+  it("reruns completed domain work after a later handler fails", async () => {
+    // Substitute a real two-step pipeline with controllable domain I/O at the
+    // host boundary. The sample pipeline itself has only pure transformations.
+    const { step } = createSteps<{ lines: readonly string[] }>();
+    const loadRows = vi.fn(() => ["alpha", "beta"]);
+    const saveRows = vi
+      .fn(async (rows: string[]) => rows)
+      .mockRejectedValueOnce(new Error("Temporary storage failure"));
+    const load = step("load", { run: loadRows });
+    const save = step("save", {
+      dependsOn: [load],
+      dryRun: "skip",
+      run: ({ load }) => saveRows(load),
     });
+    const pipeline = definePipeline({
+      id: "retry-fixture",
+      steps: [load, save],
+      finalize: requireOutputs([save], ({ save }, context) => ({
+        rows: save,
+        count: save.length,
+        runId: context.runId,
+        preview: context.dryRun,
+      })),
+    });
+    vi.spyOn(InngestPipeline, "runOrThrow").mockImplementation((options, controls, context) =>
+      pipeline.runOrThrow(options, { dryRun: controls?.dryRun }, context)
+    );
+
+    const first = environment();
     const { error } = await first.engine.executeStep("run-pipeline");
     expect(error).toMatchObject({ name: "PipelineExecutionError" });
+    expect(loadRows).toHaveBeenCalledTimes(1);
+    expect(saveRows).toHaveBeenCalledTimes(1);
+    expect(first.logger.info).toHaveBeenCalledWith("Tubeless event", {
+      event: expect.objectContaining({ name: "step.failed", stepId: "save" }),
+    });
 
     const second = environment(job, 1);
     const { result } = await second.engine.execute();
     expect(result).toMatchObject({ rows: ["alpha", "beta"] });
-    for (const { logger } of [first, second]) {
-      expect(logger.info).toHaveBeenCalledWith(
-        "Tubeless progress",
-        expect.objectContaining({ stepId: "normalize", completed: 4 })
-      );
-    }
+    expect(loadRows).toHaveBeenCalledTimes(2);
+    expect(saveRows).toHaveBeenCalledTimes(2);
+    expect(saveRows).toHaveBeenNthCalledWith(1, ["alpha", "beta"]);
+    expect(saveRows).toHaveBeenNthCalledWith(2, ["alpha", "beta"]);
     const start = (logger: typeof first.logger) =>
       logger.info.mock.calls.find(
         ([message, metadata]) =>
