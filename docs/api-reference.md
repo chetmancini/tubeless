@@ -10,15 +10,15 @@ Package: `tubeless`
 
 | Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless`            | `./dist/core/pipeline.d.ts`        | `44e8a90b693f692f9cf70d2e604c25f7d9266252f025024f2bb23f6a29056d20` |               67 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `3710a0188965fe8210310bbc0f8b876f470ea80c7f492fcb6632d59b068bd164` |               31 |
+| `tubeless`            | `./dist/core/pipeline.d.ts`        | `bfecdc213e5a175a0369bb694794bb7f5ac642d4907558cba636e8603a3f7e42` |               67 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `9c71a1677af0be842413ed740db5d3fee86eb7e560d6f717fa8f3fd954c94e81` |               31 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `7dbfbd4d894f2e9cc737b5373d1f654f5f08e8b5b5cce27511ef876779713656` |                6 |
-| `tubeless/node`       | `./dist/node/node.d.ts`            | `e625b8bab0c5a4841e746612741a342c15cb207df274d161bfe5e2847d1c3d94` |               12 |
+| `tubeless/node`       | `./dist/node/node.d.ts`            | `c7d842c03acc37ef7d8fd7f23e79113c2879563d9504b12746a464cb3a6641c2` |               12 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `eb33f6e86280e1ef66847592d968d9d693de41e7ea9804d4bfaebe3aaa32c0ce` |                8 |
-| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `94caa840c1a4a43b3caa7c977a9b9ebffc5f61be5d25f262bc8eaf7132e26e26` |               10 |
-| `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `6b972c2e867261e8600f44d7bef0fe992a6add947684e6dab1333768ff913840` |                3 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `f9bb7d74b054c939a4c13cd62dc0ab236a437e00f220077ab345190cef4d8009` |                8 |
+| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `f0629b94c88a7eecf149f35e341e65bdfd1888df1c8bf0bf78d456cf86038caf` |               10 |
+| `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `34e0c217888a8157eea3097d0445bdb8e8f487614040759b800590dd5ff9f950` |                3 |
 
 ## Symbols
 

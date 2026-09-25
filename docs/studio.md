@@ -154,6 +154,10 @@ deletes are blocked by database triggers. `clearHistory()` is a separate
 maintenance operation that clears the complete history, compacts the database,
 and restores the triggers in one transaction.
 
+New SQLite stores use schema version 4 to persist iteration relations. Version 3
+stores remain readable without modification; a writable open upgrades them
+transactionally while preserving existing events and append-only protection.
+
 The SQLite writer buffers events in batches of 64. `export()` can return before
 an event reaches disk. Pending events become visible to other connections after
 a batch fills, `flush()` runs, the writer calls its own `listEvents` or

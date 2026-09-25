@@ -41,7 +41,7 @@ export type PipelineTraceProgress = NonNullable<
 export interface PipelineTracingOptions {
   exporter: PipelineTraceExporter;
   itemKey?: string;
-  /** Origin of a repeated child invocation; inherited by its descendants. */
+  /** Origin of this repeated child invocation; descendants use their own parent links. */
   iteration?: PipelineTraceContext["iteration"];
   /** Called once on the first exporter failure without failing the run. */
   readonly onExporterError?: (error: unknown) => void;

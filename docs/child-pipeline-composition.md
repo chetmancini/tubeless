@@ -55,6 +55,7 @@ fails the wrapper with `sourceCode: "TUBELESS_ITERATION_LIMIT_REACHED"`; no extr
 child starts. Invalid transition data uses
 `sourceCode: "TUBELESS_ITERATION_INVALID_DECISION"`. Child failures retain normal
 child-error behavior and never reach the transition callback.
+An exhausted iteration reports failed progress even though its child completed.
 
 Static child `controls` use the existing child targets, selection, concurrency,
 and failure policy. A parent's dry-run flag is always inherited. Omit the wrapper
@@ -68,8 +69,12 @@ Plans retain one wrapper with `nestedPipeline.mode: "iterate"`, the declared
 child steps, static controls, and the maximum iteration count. Future iterations
 are not selectable step IDs. Each actual child gets a fresh run ID and a trace
 relation containing the owning run, wrapper step/attempt, and one-based iteration
-index. Live progress retains the latest 32 iteration groups plus an omitted-count
-row; traces preserve each child lifecycle. Iteration adds no crash recovery.
+index. This relation belongs only to the directly repeated child; descendants
+keep their `parentRunId` links, and nested iterations supply their own relation.
+Live progress retains the latest 32 iteration groups, newest first, plus
+an omitted-count row. The current iteration stays first so recorded progress
+retains it when detail rows are truncated; traces preserve each child lifecycle.
+Iteration adds no crash recovery.
 
 ## Run a child pipeline
 

@@ -171,7 +171,14 @@ function childTracingOptions(
   context: PipelineExecutionContext<object>,
   itemKey = context.trace?.itemKey
 ): PipelineTracingOptions | undefined {
-  return context.tracing ? { ...context.tracing, itemKey } : undefined;
+  const tracing = context.tracing;
+  if (!tracing) return undefined;
+  return {
+    ...tracing,
+    itemKey,
+    // A relation injected by this wrapper belongs to its next child, not descendants.
+    iteration: tracing.iteration?.runId === context.runId ? tracing.iteration : undefined,
+  };
 }
 
 function childRunControls(

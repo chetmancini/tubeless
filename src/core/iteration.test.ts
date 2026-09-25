@@ -78,7 +78,7 @@ describe("bounded child iteration", () => {
         .get("repeat")
         ?.details?.filter((row) => row.depth === undefined)
         .map((row) => row.id)
-    ).toEqual(["iteration-1", "iteration-2", "iteration-3"]);
+    ).toEqual(["iteration-3", "iteration-2", "iteration-1"]);
   });
 
   it("returns a precise undefined result on the first iteration", async () => {
@@ -130,7 +130,8 @@ describe("bounded child iteration", () => {
 
   it("stops at the bound without starting an extra child", async () => {
     const { pipeline, execute } = fixture({ maxIterations: 2 });
-    const run = await createPipelineTestRuntime().run(pipeline, {});
+    const runtime = createPipelineTestRuntime();
+    const run = await runtime.run(pipeline, {});
     expect(run.status).toBe("failed");
     expect(run.finalized).toBe(false);
     expect(run.errors[0]).toMatchObject({
@@ -138,6 +139,9 @@ describe("bounded child iteration", () => {
       stepId: "repeat",
     });
     expect(execute).toHaveBeenCalledTimes(2);
+    expect(
+      runtime.latestProgress.get("repeat")?.details?.find((row) => row.id === "iteration-2")?.status
+    ).toBe("failed");
     await expect(createPipelineTestRuntime().runOrThrow(pipeline, {})).rejects.toThrow(
       "maxIterations=2"
     );
@@ -436,6 +440,7 @@ describe("bounded child iteration", () => {
     const progress = runtime.latestProgress.get("repeat")!;
     expect(progress.completed).toBe(40);
     expect(progress.details?.filter((row) => row.depth === undefined)).toHaveLength(33);
-    expect(progress.details?.[0]?.id).toBe("8 earlier iterations");
+    expect(progress.details?.[0]?.id).toBe("iteration-40");
+    expect(progress.details?.at(-1)?.id).toBe("8 earlier iterations");
   });
 });
