@@ -1,6 +1,23 @@
 {
   "modules": [
     {
+      "declaration": "./dist/agent/agent.d.ts",
+      "exports": [
+        "AgentCall",
+        "AgentDecision",
+        "AgentDecisionContext",
+        "AgentLimits",
+        "AgentOutcome",
+        "AgentState",
+        "AgentTool",
+        "defineAgent",
+        "defineTool",
+        "ToolError"
+      ],
+      "sha256": "e488b4ac94e9913c9ffbbc194d436caa8b60e7f72c7a8899d3c5d2092bfd884d",
+      "specifier": "tubeless/agent"
+    },
+    {
       "declaration": "./dist/core/pipeline.d.ts",
       "exports": [
         "ArtifactJsonValue",
@@ -82,7 +99,7 @@
         "StepCacheStore",
         "StepSkipDecision"
       ],
-      "sha256": "17a6a864e86bcd3e72adaf39acb3f2b70d493d18d1598182db8ddc3173a689ef",
+      "sha256": "1891b7f2dc225f9059196785a3d61c0f129e0d61903f2e77e650e72c5c523647",
       "specifier": "tubeless"
     },
     {
@@ -120,7 +137,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "82a8f268b27832bedfd40be9d450f90a296e647d29d9820363a4f018f2729dc4",
+      "sha256": "48ad27ebd0e040b726eccba8da22158bdf2c0d293ed238dd82061e47c0120878",
       "specifier": "tubeless/cli"
     },
     {
@@ -155,7 +172,7 @@
         "WorkerThreadContext",
         "writeJson"
       ],
-      "sha256": "df40b5f9eb5ac0fcb7afc0e4f172bf939b047485282b4d72a69e8d853bef54ad",
+      "sha256": "b3fc3831a4c5d084593e7c25a9f350d7fcb5ef0698187f46eff5792a0ab146b9",
       "specifier": "tubeless/node"
     },
     {
@@ -189,7 +206,7 @@
         "ProjectOptions",
         "ProjectRegistry"
       ],
-      "sha256": "e4b8d6cca58ed526a74fb98b4494802458c9eefb0a29c71a52490ded6a600391",
+      "sha256": "fa791103c5f41ed3e8e34c7ac09be9259c5cee6a5b7ecf638dd358f7bfa2459f",
       "specifier": "tubeless/project"
     },
     {
@@ -206,13 +223,13 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "91bbe308a31a9506413bb0d0ee2280ec1904cc92b2ebe1f3a7a640c13479b0db",
+      "sha256": "b0d1274db88dcafb6e8f12c030a14d680ed416d6eb59ecc9ded271a28d04347c",
       "specifier": "tubeless/testing"
     },
     {
       "declaration": "./dist/tracing/tracing.d.ts",
       "exports": ["composeTraceExporters", "PipelineTraceEvent", "PipelineTraceExporter"],
-      "sha256": "b2e8241e02bc96b73e64d07584eaa4b0e24dc7d82717a2976c12038421ebcadf",
+      "sha256": "950f6c0aeee873861b2a302d9ebc8217b55a373c879fbd9e1b5248c1aeb39181",
       "specifier": "tubeless/tracing"
     }
   ],

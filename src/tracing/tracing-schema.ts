@@ -384,6 +384,28 @@ export const pipelineDefinitionIdentitySchema = wireRefine(
 
 const definitionString = wireString({ maxLength: 4096 });
 const definitionStrings = wireArray(definitionString, { maxItems: 4096 });
+const schemaFingerprint = wireRefine(wireString({ maxLength: 80 }), (value, path) => {
+  if (!/^sha256:[a-f0-9]{64}$/.test(value))
+    throw new Error(`${path} must be a SHA-256 fingerprint`);
+});
+const agentMetadataSchema = wireObject({
+  limits: wireObject({
+    maxTurns: positiveInteger,
+    maxCalls: nonnegativeInteger,
+    maxDecisions: positiveInteger,
+    maxConcurrency: positiveInteger,
+  }),
+  resultSchemaFingerprint: schemaFingerprint,
+  capabilities: wireArray(
+    wireObject({
+      name: definitionString,
+      description: definitionString,
+      inputSchemaFingerprint: schemaFingerprint,
+      identity: pipelineDefinitionIdentitySchema,
+    }),
+    { maxItems: 4096 }
+  ),
+});
 const iterationControlsSchema = wireObject({
   cache: wireOptional(wireEnum(["use", "recompute", "bypass"])),
   dryRun: wireOptional(wireBoolean()),
@@ -394,6 +416,7 @@ const iterationControlsSchema = wireObject({
 });
 const definitionStepSchema = wireObject({
   metadata: wireOptional(pipelineMetadataSchema),
+  agent: wireOptional(agentMetadataSchema),
   id: definitionString,
   dependencies: definitionStrings,
   optionalDependencies: definitionStrings,
@@ -442,6 +465,8 @@ export const pipelineDefinitionSnapshotSchema = wireRefine(
     )
       throw new Error(`${path}: metadata requires identity version 3`);
     for (const step of value.steps) {
+      if (step.agent && value.identity.version === 1)
+        throw new Error(`${path}: agent requires identity version 2`);
       const nested = step.nestedPipeline;
       if (!nested) continue;
       if (

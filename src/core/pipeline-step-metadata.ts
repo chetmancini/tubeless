@@ -5,3 +5,4 @@ export const STEP_NESTED_PIPELINE: unique symbol = Symbol("tubeless.stepNestedPi
 export const STEP_REMOTE: unique symbol = Symbol("tubeless.stepRemote");
 
 export const STEP_CACHE: unique symbol = Symbol("tubeless.stepCache");
+export const STEP_AGENT: unique symbol = Symbol("tubeless.stepAgent");

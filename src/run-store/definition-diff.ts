@@ -17,6 +17,7 @@ const STEP_FIELDS = {
   runtimeSkipPossible: "Skip policy",
   outputValidated: "Output validation",
   cache: "Cache settings",
+  agent: "Agent capabilities and limits",
   nestedPipeline: "Child pipeline",
   remote: "Remote adapter",
 } satisfies Record<

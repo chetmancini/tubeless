@@ -10,17 +10,33 @@ Package: `tubeless`
 
 | Entrypoint            | Declaration                        | Surface hash                                                       | Exported symbols |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless`            | `./dist/core/pipeline.d.ts`        | `17a6a864e86bcd3e72adaf39acb3f2b70d493d18d1598182db8ddc3173a689ef` |               78 |
-| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `82a8f268b27832bedfd40be9d450f90a296e647d29d9820363a4f018f2729dc4` |               31 |
+| `tubeless/agent`      | `./dist/agent/agent.d.ts`          | `e488b4ac94e9913c9ffbbc194d436caa8b60e7f72c7a8899d3c5d2092bfd884d` |               10 |
+| `tubeless`            | `./dist/core/pipeline.d.ts`        | `1891b7f2dc225f9059196785a3d61c0f129e0d61903f2e77e650e72c5c523647` |               78 |
+| `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `48ad27ebd0e040b726eccba8da22158bdf2c0d293ed238dd82061e47c0120878` |               31 |
 | `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `a09125c6849bb91b4bbba2f76c4248452d5288cf0c70671461de5846b1d17037` |                7 |
-| `tubeless/node`       | `./dist/node/node.d.ts`            | `df40b5f9eb5ac0fcb7afc0e4f172bf939b047485282b4d72a69e8d853bef54ad` |               14 |
+| `tubeless/node`       | `./dist/node/node.d.ts`            | `b3fc3831a4c5d084593e7c25a9f350d7fcb5ef0698187f46eff5792a0ab146b9` |               14 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `86e98c33f7e91ee1b34eff817ef6075f6583b9a57037a1ad2394dcf3f372bbcf` |                6 |
-| `tubeless/project`    | `./dist/project/project.d.ts`      | `e4b8d6cca58ed526a74fb98b4494802458c9eefb0a29c71a52490ded6a600391` |                8 |
-| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `91bbe308a31a9506413bb0d0ee2280ec1904cc92b2ebe1f3a7a640c13479b0db` |               10 |
-| `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `b2e8241e02bc96b73e64d07584eaa4b0e24dc7d82717a2976c12038421ebcadf` |                3 |
+| `tubeless/project`    | `./dist/project/project.d.ts`      | `fa791103c5f41ed3e8e34c7ac09be9259c5cee6a5b7ecf638dd358f7bfa2459f` |                8 |
+| `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `b0d1274db88dcafb6e8f12c030a14d680ed416d6eb59ecc9ded271a28d04347c` |               10 |
+| `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `950f6c0aeee873861b2a302d9ebc8217b55a373c879fbd9e1b5248c1aeb39181` |                3 |
 
 ## Symbols
+
+### `tubeless/agent`
+
+| Symbol                                                                                                   | Description                                                                          |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| [`AgentCall`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L18)            | One registered call with raw, pre-validation model arguments.                        |
+| [`AgentDecision`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L35)        | A nonempty batch of independent calls, or the raw input to the final-result schema.  |
+| [`AgentDecisionContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L56) | Model-facing descriptors and ordinary step services, without executable tools.       |
+| [`AgentLimits`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L44)          | Finite admission and active-execution limits for one agent invocation.               |
+| [`AgentOutcome`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L27)         | Input-order result or deliberately recoverable handler failure.                      |
+| [`AgentState`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L7)            | Deeply read-only view of the owned plain-data state supplied to agent callbacks.     |
+| [`AgentTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L11)            | Opaque capability created by defineTool; model decisions contain data only.          |
+| [`defineAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent.ts#L32)                | Build a bounded in-process agent as an ordinary pipeline with one target, agent.     |
+| [`defineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L40)                 | Declare a validated handler capability; tools skip live work in dry runs by default. |
+| [`ToolError`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L7)                   | A handler may throw this error to return a recoverable observation to its agent.     |
 
 ### `tubeless`
 
@@ -32,13 +48,13 @@ Package: `tubeless`
 | [`ArtifactRecord`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/artifact-metadata.ts#L140)             | A completed artifact operation recorded by a step; reuse does not claim a new write.                 |
 | [`ArtifactResult`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-artifacts.ts#L5)                 | Adapter result: the value flows to dependents; only artifact metadata is recorded.                   |
 | [`ArtifactSaver`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-artifacts.ts#L17)                 | Application-owned write boundary returning a typed receipt and separate trace metadata.              |
-| [`createSteps`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L338)                      | Create typed step constructors for one pipeline definition.                                          |
+| [`createSteps`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L340)                      | Create typed step constructors for one pipeline definition.                                          |
 | [`definePipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline.ts#L152)                         | Compile a typed step graph into a validated, executable pipeline.                                    |
 | [`isPipelineErrorCode`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L193)              | Return whether an unknown value is a stable package-owned pipeline error code.                       |
 | [`IterationDecision`](https://github.com/chetmancini/tubeless/blob/main/src/core/iteration.ts#L17)                      | Continue with a new state or publish the iteration step's final output.                              |
 | [`IterationState`](https://github.com/chetmancini/tubeless/blob/main/src/core/iteration.ts#L14)                         | Read-only state supplied to an iteration's mapping and transition callbacks.                         |
-| [`MappedChildProgressOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L192)       | Presentation options for opaque `forEachPipeline` progress.                                          |
-| [`Pipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L569)                         | Compiled pipeline that can be planned, executed, and rendered as a graph.                            |
+| [`MappedChildProgressOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L194)       | Presentation options for opaque `forEachPipeline` progress.                                          |
+| [`Pipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L571)                         | Compiled pipeline that can be planned, executed, and rendered as a graph.                            |
 | [`PIPELINE_ERROR_CODES`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L185)             | Ordered catalog of every stable package-owned pipeline error code.                                   |
 | [`PipelineCacheOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-cache.ts#L57)              | Defaults for opted-in steps; configuring defaults does not make other steps cacheable.               |
 | [`PipelineContext`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L39)                   | Caller-supplied services and metadata shared by one pipeline execution.                              |
@@ -56,15 +72,15 @@ Package: `tubeless`
 | [`PipelineFanOutDiagnostics`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L215)        | Bounded diagnostics collected from a failed or cancelled fan-out step.                               |
 | [`PipelineFanOutFailure`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L204)            | Bounded diagnostics for a failed or cancelled runtime fan-out.                                       |
 | [`PipelineHooks`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L459)                    | Optional lifecycle callbacks, each receiving its own metadata snapshot.                              |
-| [`PipelineInput`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L609)                    | Input accepted by a pipeline run before any options schema transformation.                           |
+| [`PipelineInput`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L611)                    | Input accepted by a pipeline run before any options schema transformation.                           |
 | [`PipelineLogger`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L32)                    | Minimal logger used by pipeline execution, reporters, and CLI adapters.                              |
-| [`PipelineMermaidDirection`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L538)         | Supported Mermaid flowchart direction.                                                               |
-| [`PipelineMermaidOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L541)           | Rendering options for a pipeline Mermaid flowchart.                                                  |
+| [`PipelineMermaidDirection`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L540)         | Supported Mermaid flowchart direction.                                                               |
+| [`PipelineMermaidOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L543)           | Rendering options for a pipeline Mermaid flowchart.                                                  |
 | [`PipelineMetadata`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/graph-metadata.ts#L8)                | Descriptive only.                                                                                    |
 | [`PipelineMetadataValue`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/graph-metadata.ts#L5)           | Bounded JSON values for descriptive pipeline and step annotations.                                   |
-| [`PipelinePlan`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L526)                     | Side-effect-free validation and selection result for a pipeline run.                                 |
+| [`PipelinePlan`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L528)                     | Side-effect-free validation and selection result for a pipeline run.                                 |
 | [`PipelinePlanStep`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L487)                 | Planned representation of one declared step and its selection state.                                 |
-| [`PipelineResult`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L615)                   | Successful result produced by a pipeline run.                                                        |
+| [`PipelineResult`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L617)                   | Successful result produced by a pipeline run.                                                        |
 | [`PipelineRun`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L371)                      | Versioned public record returned for one pipeline execution.                                         |
 | [`PipelineRunControls`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L57)               | Built-in run controls.                                                                               |
 | [`PipelineRunStatus`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L350)                | Terminal disposition of a completed run record.                                                      |
@@ -96,7 +112,7 @@ Package: `tubeless`
 | [`requireOutputs`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-finalizer.ts#L37)                | Build a finalizer that only runs when every listed step published an output.                         |
 | [`RUN_MODEL_VERSION`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-ids.ts#L2)                    | Current persisted run-record schema version.                                                         |
 | [`StandardSchemaV1`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L244)                 | Dependency-free subset of the Standard Schema V1 protocol.                                           |
-| [`Step`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L87)                              | Typed pipeline step carrying its stable ID, output, and option types.                                |
+| [`Step`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L89)                              | Typed pipeline step carrying its stable ID, output, and option types.                                |
 | [`StepCache`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-cache.ts#L70)                         | Opt a deterministic ordinary step into caching, with optional overrides of pipeline defaults.        |
 | [`StepCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-cache.ts#L41)                    | Encode a detached snapshot; decode must produce a fresh handler-result value.                        |
 | [`StepCacheContext`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-cache.ts#L14)                  | Cache I/O is cancellable and independent of pipeline scheduling.                                     |
