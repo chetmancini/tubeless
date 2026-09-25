@@ -38,7 +38,11 @@ assert(
   `README.md is ${readmeLines} lines; keep the entrypoint at 120 or fewer`
 );
 
-for (const filePath of [readmePath, ...filesUnder(join(packageRoot, "docs"), ".md")]) {
+for (const filePath of [
+  readmePath,
+  ...filesUnder(join(packageRoot, "docs"), ".md"),
+  ...filesUnder(join(packageRoot, "design"), ".md"),
+]) {
   validateMarkdownLinks(filePath);
 }
 

@@ -169,6 +169,9 @@ try {
   if (existsSync(join(installedPackage, "docs", "superpowers"))) {
     throw new Error("Packed tubeless artifact must not include docs/superpowers");
   }
+  if (existsSync(join(installedPackage, "design"))) {
+    throw new Error("Packed tubeless artifact must not include design prototypes");
+  }
   assertPackedSourceMaps(installedPackage);
   assertPackedDocumentationLinks(installedPackage);
 

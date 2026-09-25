@@ -19,7 +19,7 @@ const knip = checkStep("knip", "Reject unused files, dependencies, and exports."
 const format = checkStep("format", "Verify repository formatting.", "format:check");
 const typecheck = checkStep(
   "typecheck",
-  "Type-check the package, examples, and automation.",
+  "Type-check the package, examples, automation, and design probes.",
   "typecheck:run"
 );
 const docs = checkStep("docs", "Validate the documentation learning surface.", "docs:check");
