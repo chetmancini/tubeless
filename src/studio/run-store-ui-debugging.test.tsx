@@ -1,6 +1,12 @@
 import { renderToString } from "preact-render-to-string";
-import { describe, expect, it } from "vitest";
-import type { StoredPipelineLog, StoredPipelineRun } from "../run-store/run-store.js";
+import { describe, expect, it, vi } from "vitest";
+import { createSteps, definePipeline, type StandardSchemaV1 } from "../core/pipeline.js";
+import {
+  projectPipelineRunStore,
+  type StoredPipelineLog,
+  type StoredPipelineRun,
+} from "../run-store/run-store.js";
+import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import {
   ErrorDiagnostics,
   filterRunLogs,
@@ -36,6 +42,39 @@ describe("Studio run debugging", () => {
     expect(markup).toContain("Source code: E_REMOTE");
     expect(markup).not.toContain("<remote failure>");
     expect(formatValidationPath([])).toBe("$");
+  });
+
+  it("preserves root validation paths from the schema through the recorded run", async () => {
+    const schema: StandardSchemaV1<object, object> = {
+      "~standard": {
+        vendor: "test",
+        version: 1,
+        validate: () => ({
+          issues: [{ message: "Invalid root", path: [] }, { message: "No location supplied" }],
+        }),
+      },
+    };
+    const { step } = createSteps(schema);
+    const pipeline = definePipeline({
+      id: "root-validation-diagnostics",
+      steps: [step("never", { run: () => true })],
+    });
+    const events: PipelineTraceEvent[] = [];
+
+    await pipeline.run({}, undefined, {
+      tracing: { exporter: { export: (event) => void events.push(event) } },
+    });
+
+    const error = projectPipelineRunStore(events.map((event, id) => ({ ...event, id }))).runs[0]
+      ?.error;
+    expect(error?.issues).toEqual([
+      { message: "Invalid root", path: [] },
+      { message: "No location supplied" },
+    ]);
+    if (!error) throw new Error("Missing recorded validation error");
+    const markup = renderToString(<ErrorDiagnostics error={error} />);
+    expect(markup).toContain("$</code><span>Invalid root");
+    expect(markup).toContain("Path unavailable</code><span>No location supplied");
   });
 
   it("shows failed fan-out items, scheduler errors, and omitted diagnostics", () => {
@@ -82,5 +121,22 @@ describe("Studio run debugging", () => {
     expect(markup).toContain("All levels");
     expect(markup).toContain("No step");
     expect(markup).toContain('value="step:all"');
+  });
+
+  it("searches uppercase ASCII logs consistently under a Turkish browser locale", () => {
+    const localeLower = String.prototype.toLocaleLowerCase;
+    const spy = vi.spyOn(String.prototype, "toLocaleLowerCase").mockImplementation(function (
+      this: string
+    ) {
+      return localeLower.call(this, "tr");
+    });
+    try {
+      const logs: StoredPipelineLog[] = [
+        { id: 1, level: "log", message: "TIMEOUT", timestampMs: 1000 },
+      ];
+      expect(filterRunLogs(logs, "timeout", "all", "all")).toEqual(logs);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

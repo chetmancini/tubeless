@@ -26,7 +26,7 @@ export function filterRunLogs(
   level: LogLevel,
   stepFilter: LogStepFilter
 ): StoredPipelineLog[] {
-  const needle = query.trim().toLocaleLowerCase();
+  const needle = query.trim().toLowerCase();
   return logs.filter(
     (log) =>
       (level === "all" || log.level === level) &&
@@ -34,7 +34,7 @@ export function filterRunLogs(
         (stepFilter === "unattributed"
           ? !log.stepId
           : log.stepId === stepFilter.slice("step:".length))) &&
-      (!needle || log.message.toLocaleLowerCase().includes(needle))
+      (!needle || log.message.toLowerCase().includes(needle))
   );
 }
 
