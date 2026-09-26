@@ -333,7 +333,7 @@ export const PIPELINE_RUN_STUDIO_HTML =
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light" />
-  <title>Tubeless — Local Studio</title>
+  <title>Tubeless — Studio</title>
   <style>` +
   PIPELINE_RUN_STUDIO_STYLE +
   String.raw`</style>

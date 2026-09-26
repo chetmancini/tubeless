@@ -195,7 +195,7 @@ describe("local pipeline run studio", () => {
     expect(page.status).toBe(200);
     expect(page.headers.get("content-security-policy")).toContain("default-src 'none'");
     const html = await page.text();
-    expect(html).toContain("Tubeless — Local Studio");
+    expect(html).toContain("<title>Tubeless — Studio</title>");
     expect(html).toContain("nested work stays with its parent");
     expect(html).toContain("/api/runs/");
     expect(html).not.toContain('data-view="active"');
