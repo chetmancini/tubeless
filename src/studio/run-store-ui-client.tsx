@@ -1,6 +1,7 @@
 import { MetadataDetails, MetadataExplorer } from "./run-store-ui-metadata.js";
 import { StepArtifacts } from "./run-store-ui-artifacts.js";
 import { DefinitionHistory } from "./run-store-ui-definitions.js";
+import { ErrorDiagnostics, RunLogs } from "./run-store-ui-debugging.js";
 import type { ComponentChildren, TargetedEvent } from "preact";
 import { render } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
@@ -288,15 +289,6 @@ function duration(ms: number | null | undefined): string {
       : ms < 60000
         ? (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + " s"
         : Math.floor(ms / 60000) + "m " + Math.round((ms % 60000) / 1000) + "s";
-}
-
-function clock(ms: number): string {
-  if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return "";
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(ms);
 }
 
 function dateTime(ms: number): string {
@@ -1061,6 +1053,15 @@ function RunDetail({
             </div>
           </>
         )}
+        {run.error && (
+          <>
+            <div class="section-title">
+              <span>Error diagnostics</span>
+            </div>
+            <ErrorDiagnostics error={run.error} />
+          </>
+        )}
+        {run.logs.length > 0 && <RunLogs key={run.runId} logs={run.logs} />}
         <div class="section-title">
           <span>Step timeline</span>
           <span>{stepSummary(run)}</span>
@@ -1076,43 +1077,6 @@ function RunDetail({
             title="No planned steps"
             copy="This run ended before a step plan was recorded."
           />
-        )}
-        {run.error && (
-          <>
-            <div class="section-title">
-              <span>Error</span>
-            </div>
-            <div class="error-card">
-              <div class="error-code">
-                {run.error.code} · {run.error.phase}
-              </div>
-              <div class="error-message">{run.error.message}</div>
-            </div>
-          </>
-        )}
-        {run.logs.length > 0 && (
-          <>
-            <div class="section-title">
-              <span>Logs</span>
-              <span>{run.logs.length}</span>
-            </div>
-            <div class="logs">
-              {run.logs.map((log) => (
-                <div class="log-line" key={log.id}>
-                  <time class="log-time">{clock(log.timestampMs)}</time>
-                  <span class={`log-level ${log.level}`}>{log.level}</span>
-                  <span class="log-message">
-                    {log.stepId && (
-                      <>
-                        <b>{log.stepId}</b> ·{" "}
-                      </>
-                    )}
-                    {log.message}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </>
         )}
       </div>
     </article>
