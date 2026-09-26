@@ -25,6 +25,7 @@ export const DOC_NAV = [
   },
   { slug: "comparison", label: "Comparison", blurb: "Compare Tubeless with Hamilton, Prefect, Temporal, and other job runners." },
   { slug: "child-pipeline-composition", label: "Child pipelines", blurb: "Reuse a workflow once or run it for a list of items." },
+  { slug: "agents", label: "In-process agents", blurb: "Run bounded decisions, validated tools, and owned state transitions." },
   { slug: "remote-step-composition", label: "Remote steps", blurb: "Call remote services and invoke pipelines from workers." },
   { slug: "airflow", label: "Tubeless ↔ Airflow", blurb: "Invoke Airflow DAGs and run Tubeless pipelines inside Airflow tasks." },
   { slug: "temporal", label: "Tubeless on Temporal", blurb: "Run pipelines inside Temporal Activities with retries, heartbeats, and cancellation." },

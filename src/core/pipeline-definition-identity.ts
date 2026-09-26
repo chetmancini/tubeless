@@ -5,6 +5,7 @@ import {
   STEP_NESTED_PIPELINE,
   STEP_OPTIONS_SCHEMA,
   STEP_REMOTE,
+  STEP_AGENT,
 } from "./pipeline-step-metadata.js";
 import type { PipelineDefinitionIdentity, PipelineDefinitionSnapshot } from "./pipeline-types.js";
 
@@ -40,6 +41,33 @@ function iterationFields(
   };
 }
 
+function agentFields(agent: NonNullable<PipelineDefinitionSnapshot["steps"][number]["agent"]>) {
+  return {
+    limits: {
+      maxTurns: agent.limits.maxTurns,
+      maxCalls: agent.limits.maxCalls,
+      maxDecisions: agent.limits.maxDecisions,
+      maxConcurrency: agent.limits.maxConcurrency,
+    },
+    resultSchemaFingerprint: agent.resultSchemaFingerprint,
+    capabilities: [...agent.capabilities]
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+      .map((capability) => ({
+        name: capability.name,
+        description: capability.description,
+        inputSchemaFingerprint: capability.inputSchemaFingerprint,
+        identity: {
+          version: capability.identity.version,
+          structuralFingerprint: capability.identity.structuralFingerprint,
+          ...(capability.identity.implementationVersion !== undefined
+            ? { implementationVersion: capability.identity.implementationVersion }
+            : {}),
+          definitionId: capability.identity.definitionId,
+        },
+      })),
+  };
+}
+
 /** Canonical snapshot. Execution order matters; dependency and target sets do not. */
 export function compileDefinitionSnapshot(input: {
   orderedSteps: readonly AnyStep[];
@@ -66,6 +94,7 @@ export function compileDefinitionSnapshot(input: {
             : ("run" as const),
       runtimeSkipPossible: step.skip !== undefined,
       outputValidated: step.outputSchema !== undefined,
+      ...(step[STEP_AGENT] ? { agent: agentFields(step[STEP_AGENT]) } : {}),
       ...(nested
         ? {
             nestedPipeline: {
@@ -110,7 +139,9 @@ export function createDefinitionIdentity(
 ): PipelineDefinitionIdentity {
   const version = input.steps.some(
     (step) =>
-      step.nestedPipeline?.mode === "iterate" || step.nestedPipeline?.identity?.version === 2
+      step.agent !== undefined ||
+      step.nestedPipeline?.mode === "iterate" ||
+      step.nestedPipeline?.identity?.version === 2
   )
     ? 2
     : 1;
@@ -125,6 +156,22 @@ export function createDefinitionIdentity(
       dryRun: step.dryRun,
       runtimeSkipPossible: step.runtimeSkipPossible,
       outputValidated: step.outputValidated,
+      ...(step.agent
+        ? {
+            agent: {
+              ...agentFields(step.agent),
+              capabilities: agentFields(step.agent).capabilities.map(
+                ({ identity, ...capability }) => ({
+                  ...capability,
+                  identity: {
+                    version: identity.version,
+                    structuralFingerprint: identity.structuralFingerprint,
+                  },
+                })
+              ),
+            },
+          }
+        : {}),
       ...(step.nestedPipeline
         ? {
             nestedPipeline: {
@@ -172,6 +219,20 @@ export function createDefinitionIdentity(
       implementationVersion,
       children: input.steps.map((step) => {
         const child = step.nestedPipeline?.identity;
+        if (step.agent)
+          return {
+            child: child
+              ? {
+                  version: child.version,
+                  structuralFingerprint: child.structuralFingerprint,
+                  ...(child.implementationVersion !== undefined
+                    ? { implementationVersion: child.implementationVersion }
+                    : {}),
+                  definitionId: child.definitionId,
+                }
+              : undefined,
+            capabilities: agentFields(step.agent).capabilities.map(({ identity }) => identity),
+          };
         if (!child) return null;
         // Bind every recorded child identity field, not just its opaque definition ID.
         return {

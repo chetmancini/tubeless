@@ -7,6 +7,7 @@ import { CountPipeline } from "../precise-result.ts";
 import { WelcomePipeline } from "../inherited-inputs.ts";
 import { OverrideExamplePipeline } from "../step-output-overrides.ts";
 import { PaginatedPipeline } from "../iteration.ts";
+import { ScriptedAgent } from "../agent.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
 import { YamlPelotonCommand } from "../yaml-peloton.ts";
 import { AirflowRemoteCommand } from "../airflow/remote.ts";
@@ -26,6 +27,7 @@ export default defineProject(
   "example-jobs",
   [
     ValidatedPipeline,
+    ScriptedAgent,
     definePipelineCommand(PaginatedPipeline, {
       params: { rows: { type: "string", multiple: true } },
     }),

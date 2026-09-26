@@ -12,6 +12,7 @@ their source files.
 | Directory    | Responsibility                                                                                |
 | ------------ | --------------------------------------------------------------------------------------------- |
 | `core/`      | Pipeline definitions, graph planning, execution, lifecycle and progress                       |
+| `agent/`     | In-process decision validation, handler tools, owned state, bounded turn execution            |
 | `tracing/`   | Trace contracts, internal emission and exporter composition                                   |
 | `utilities/` | Domain-independent cancellation, collections, batching, retry, rate limits and error branding |
 | `cli/`       | Argument parsing, command declarations and pipeline adaptation                                |
@@ -25,6 +26,11 @@ their source files.
 | `testing/`   | Test runtime and executable-example integration tests                                         |
 
 ## Dependency direction
+
+- Agent execution composes core pipelines and utilities. The root entrypoint and
+  core never import agent code, providers, storage, or presentation. Handler
+  tools validate arguments before dispatch and use private one-step pipelines;
+  the internal child invocation boundary returns full reports for classification.
 
 - Core uses utilities and internal trace emission. Its complete runtime import graph
   must stay independent of exporters, storage, UI, command parsing and presentation.

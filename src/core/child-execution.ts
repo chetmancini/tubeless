@@ -181,6 +181,28 @@ function childTracingOptions(
   };
 }
 
+/** Internal full-report boundary for dispatchers that classify failed child runs. */
+export function invokeChildPipeline(
+  pipeline: ChildPipeline,
+  options: object,
+  context: PipelineStepContext<object>,
+  invocation: { plan: PipelinePlan; hooks: PipelineHooks; itemKey: string }
+): Promise<PipelineRun<unknown>> {
+  const controls = childRunControls(undefined, context.dryRun);
+  const runtime: PipelineContext = {
+    correlationId: context.correlationId,
+    cwd: context.cwd,
+    log: context.log,
+    now: context.now,
+    parentRunId: context.runId,
+    signal: context.signal,
+    sleep: context.sleep,
+    tracing: childTracingOptions(context, invocation.itemKey),
+    hooks: invocation.hooks,
+  };
+  return executeCompiledChild(pipeline, invocation.plan, options, controls, runtime);
+}
+
 function childRunControls(
   controls: PipelineRunControls | undefined,
   parentDryRun: boolean

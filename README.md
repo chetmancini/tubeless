@@ -93,8 +93,8 @@ flags after `--`. Record runs with `--store` or `--trace`, then inspect them wit
 
 - Start with a [typed import](./examples/typed-import.ts) or add
   [dry runs and write gates](./examples/publish-with-gates.ts) to a publishing job.
-- Build a larger workflow with [child pipelines](./examples/child-pipeline.ts)
-  and [fan-out](./examples/fan-out-progress.ts).
+- Build workflows with [child pipelines](./examples/child-pipeline.ts) and [fan-out](./examples/fan-out-progress.ts).
+- Run bounded model decisions and validated tools with [in-process agents](./docs/agents.md).
 - Optional: the [peloton example](./examples/peloton.ts) is a cycling-themed kitchen sink for the live TUI.
 
 The [recipe index](./docs/recipes.md) covers validation, retries, tracing, testing,
@@ -106,7 +106,7 @@ and more. For help authoring pipelines with a coding agent, install the
 [Website](https://tubeless.io/) · [Getting started](./docs/getting-started.md) · [CLI](./docs/cli.md) ·
 [Studio](./docs/studio.md) · [Concepts](./docs/concepts.md) ·
 [Comparison](./docs/comparison.md) · [API](./docs/api-reference.md) ·
-[Agents](./docs/agent-guide.md)
+[Agent authoring guide](./docs/agent-guide.md)
 
 ## Contributing
 

@@ -32,6 +32,16 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 ## Choose pipeline features
 
+- Use `defineAgent` and `defineTool` from `tubeless/agent` for an in-process
+  decision loop over registered handler tools. Read [agents](./agents.md) and
+  adapt the credential-free [scripted recipe](../examples/agent.ts). Keep model
+  requests and prompts in `decide`; validate every tool input/output and the final
+  result. Return `continue` with a nonempty batch or `finish` with a raw result.
+  State is copied and frozen per initialization/reduction. Limits currently apply
+  to one invocation; pipeline tools, subagents, shared tree budgets, and durable
+  resume are later stages. Dry runs skip decisions and tools unless both provide
+  preview handlers. Agents remain ordinary pipelines for projects and CLI use.
+
 - For YAML or JSON authoring, read [declarative pipelines](./declarative-pipelines.md)
   and adapt [the YAML recipe](../examples/yaml-pipelines.ts). Parse at the
   application edge, then use `compilePipelineDocument(document, registry)` from

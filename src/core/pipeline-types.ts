@@ -478,6 +478,8 @@ export type PipelineStepSelectionReason =
 
 /** Planned representation of one declared step and its selection state. */
 export interface PipelinePlanStep {
+  /** Declared agent capabilities and limits; future calls are not static steps. */
+  agent?: PipelineDefinitionSnapshot["steps"][number]["agent"];
   dependencies: string[];
   description?: string;
   /** How this step behaves when the pipeline is run with `dryRun: true`. */
