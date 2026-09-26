@@ -7,6 +7,7 @@ import { ArtifactLineagePipeline } from "../artifact-lineage.ts";
 import { CountPipeline } from "../precise-result.ts";
 import { WelcomePipeline } from "../inherited-inputs.ts";
 import { OverrideExamplePipeline } from "../step-output-overrides.ts";
+import { CachedCountCommand } from "../step-output-cache.ts";
 import { PaginatedPipeline } from "../iteration.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
 import { YamlPelotonCommand } from "../yaml-peloton.ts";
@@ -28,6 +29,8 @@ export default defineProject(
   [
     ValidatedPipeline,
     definePipelineCommand(MetadataPipeline, { params: {} }),
+    // Plain cached results and their receipts appear in history and Studio.
+    CachedCountCommand,
     definePipelineCommand(PaginatedPipeline, {
       params: { rows: { type: "string", multiple: true } },
     }),

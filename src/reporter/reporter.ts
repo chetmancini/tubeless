@@ -148,6 +148,10 @@ export function createReporterTheme(config: RunReporterConfig = {}): ReporterThe
   };
 }
 
+export function outputSourceSuffix(source?: "override" | "cache"): string {
+  return source === "override" ? " (overridden)" : source === "cache" ? " (cached)" : "";
+}
+
 /** Create concise, append-only lifecycle logging for a pipeline run. */
 export function createRunReporter<TResult = unknown>(
   options: RunReporterOptions
@@ -161,9 +165,11 @@ export function createRunReporter<TResult = unknown>(
   const lastProgressMessage = new Map<string, string>();
   const progressLogIntervalMs = 750;
   const ellipsis = unicodeEnabled ? "…" : "...";
-  const displayName = (step: { id: string; name?: string; outputSource?: "override" }): string =>
-    safeTerminalText(step.name ?? step.id) +
-    (step.outputSource === "override" ? " (overridden)" : "");
+  const displayName = (step: {
+    id: string;
+    name?: string;
+    outputSource?: "override" | "cache";
+  }): string => safeTerminalText(step.name ?? step.id) + outputSourceSuffix(step.outputSource);
   const clearProgress = (stepId: string): void => {
     lastProgressLogAt.delete(stepId);
     lastProgressMessage.delete(stepId);

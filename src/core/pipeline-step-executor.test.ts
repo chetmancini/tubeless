@@ -43,6 +43,7 @@ describe("pipeline step executor", () => {
 
     const output = await executeStepAttempt({
       attemptId: "attempt-1",
+      pipelineId: "test",
       context,
       dryRun: false,
       inputs: {},
@@ -66,6 +67,7 @@ describe("pipeline step executor", () => {
 
     const output = await executeStepAttempt({
       attemptId: "attempt-1",
+      pipelineId: "test",
       context: { ...context, dryRun: true },
       dryRun: true,
       inputs: {},

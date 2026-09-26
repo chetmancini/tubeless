@@ -13,6 +13,7 @@ Start:
 - CLI: ./cli.md
 - Local studio: ./studio.md
 - Graph metadata and discovery: ./graph-metadata.md
+- Step output caching: ./step-output-cache.md
 - Artifacts and lineage: ./artifacts.md
 - YAML and JSON pipelines: ./declarative-pipelines.md
 - Pipeline document JSON Schema v1: ./pipeline-document.schema.json

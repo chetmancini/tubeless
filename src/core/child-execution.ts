@@ -183,9 +183,12 @@ function childTracingOptions(
 
 function childRunControls(
   controls: PipelineRunControls | undefined,
-  parentDryRun: boolean
+  parentDryRun: boolean,
+  cachePolicy: PipelineRunControls["cache"]
 ): PipelineRunControls {
   const resolved: PipelineRunControls = {};
+  if (cachePolicy !== undefined || controls?.cache !== undefined)
+    resolved.cache = cachePolicy ?? controls?.cache;
   if (controls?.continueOnError !== undefined) {
     resolved.continueOnError = controls.continueOnError;
   }
@@ -272,7 +275,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
     const domainOptions = config.mapOptions ? config.mapOptions(inputs, context) : context.options;
     const configuredControls =
       typeof config.controls === "function" ? config.controls(inputs, context) : config.controls;
-    const controls = childRunControls(configuredControls, context.dryRun);
+    const controls = childRunControls(configuredControls, context.dryRun, context.cachePolicy);
     const baseChildContext: PipelineContext = {
       correlationId: context.correlationId,
       cwd: context.cwd,
@@ -345,7 +348,11 @@ export function createMappedChildRunner<TParentOptions extends object>(
             typeof config.controls === "function"
               ? config.controls(item, itemIndex, inputs, context)
               : config.controls;
-          const controls = childRunControls(configuredControls, context.dryRun);
+          const controls = childRunControls(
+            configuredControls,
+            context.dryRun,
+            context.cachePolicy
+          );
           // Plan once per mapped-options bag for progress and execution.
           const childPlan = config.pipeline.plan(controls);
           const childHooks = progress?.plan(key, childPlan) ?? {};

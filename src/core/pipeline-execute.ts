@@ -127,6 +127,7 @@ export async function executePlannedRun<
     dryRun,
     log: lifecycle.logger(),
     options: pipelineOptions,
+    cachePolicy: controls.cache,
     runId,
     trace: lifecycle.traceContext,
   };
@@ -291,6 +292,10 @@ export async function executePlannedRun<
     try {
       const output = await executeStepAttempt({
         attemptId: attempt.attemptId,
+        pipelineId: compiled.id,
+        onCacheHit: () => {
+          attempt.outputSource = "cache";
+        },
         context: executionContext,
         dryRun,
         inputs: stepInputs,

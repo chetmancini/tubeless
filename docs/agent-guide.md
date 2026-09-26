@@ -108,6 +108,21 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   A string or `{ reason }` result makes its output `T | undefined`; handle that
   absence explicitly. If every skip branch returns `{ reason, value }`, the
   output remains `T`.
+- Opt ordinary deterministic steps into caching with `cache: { version: "v1" }`,
+  or `cache: true` to inherit the pipeline's `implementationVersion`. Defaults hash
+  dependency inputs and validated options and store results under the run cwd's
+  `.cache/<pipeline-id>/<step-id>/`. Set pipeline `cache.maxAge: "30 days"` with
+  optional step overrides; numeric ages use milliseconds. Custom keys, stores, and
+  codecs are overrides. Run `{ cache: "recompute" }` or `{ cache: "bypass" }` applies
+  to child runs too; CLI/Studio supply the built-in `--cache` control. Keep it out
+  of domain options. Dry runs, policy skips, and test overrides bypass caching.
+  Hits validate raw results through `outputSchema` and carry `outputSource: "cache"`.
+  Cache writes and validated hits automatically record write/reuse artifacts; history
+  and Studio label these Cached output. Hits never replay application artifact records.
+  The default codec rejects lossy round trips, including class instances; supply
+  a reconstructing codec or return plain data. Artifact helpers reject cache options.
+  Cache errors fail the step. See [cache contracts](./step-output-cache.md) and the
+  [cache recipe](../examples/step-output-cache.ts).
 - Record explicit I/O with `context.recordArtifact({ operation, artifact })` inside
   ordinary steps; use `read`, `write`, or `reuse` according to what actually happened.
   Domain results stay separate from trace metadata. Report each successful batch

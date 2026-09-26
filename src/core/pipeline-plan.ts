@@ -130,6 +130,16 @@ export function buildPipelinePlan<
   const declaredTargetIds = new Set(compiled.declaredTargets.map((target) => target.id));
   const requestedStepIds = controls.stepIds ?? [];
   const requestedTargets = controls.targets ?? [];
+  if (controls.cache !== undefined && !["use", "recompute", "bypass"].includes(controls.cache)) {
+    errors.push(
+      pipelineDiagnostic(
+        "TUBELESS_RUN_CACHE_INVALID",
+        "planning",
+        "validation",
+        "cache must be use, recompute, or bypass"
+      )
+    );
+  }
   const maxConcurrency = controls.maxConcurrency ?? 1;
   if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1) {
     errors.push(

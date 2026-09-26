@@ -15,6 +15,7 @@ import {
   createReporterTheme,
   createRunReporter,
   formatDurationMs,
+  outputSourceSuffix,
   type ReporterTheme,
   type RunReporterConfig,
 } from "./reporter.js";
@@ -139,8 +140,7 @@ function renderProgressDetail(
             : theme.styled.start(spinner);
   const id = safeTerminalText(detail.name ?? detail.id);
   const label =
-    (detail.label ? safeTerminalText(detail.label) : "") +
-    (detail.outputSource === "override" ? " (overridden)" : "");
+    (detail.label ? safeTerminalText(detail.label) : "") + outputSourceSuffix(detail.outputSource);
   const labelText = status === "cancelled" ? `cancelled${label ? `: ${label}` : ""}` : label;
   const running = status === "running";
   const body = labelText ? `${id} ${labelText}` : id;
@@ -169,7 +169,7 @@ function renderStep(
   const { step } = state;
   const displayName =
     safeTerminalText(step.name ?? step.id) +
-    (state.status !== "planned" && state.outputSource === "override" ? " (overridden)" : "");
+    (state.status === "planned" ? "" : outputSourceSuffix(state.outputSource));
   switch (state.status) {
     case "running": {
       const progress =

@@ -272,6 +272,36 @@ describe("runHistory", () => {
     ]);
   });
 
+  it("labels cache artifact operations in history", async () => {
+    const cwd = await tempDir();
+    const filename = path.join(cwd, "cache.ndjson");
+    await writeFile(
+      filename,
+      [
+        ...failedRunEvents,
+        event("step.artifact", {
+          stepId: "load",
+          attemptId: "attempt-1",
+          payload: {
+            operation: "reuse",
+            preview: false,
+            artifact: {
+              id: "cache-entry",
+              metadata: {
+                tubelessCache: { implementationVersion: "v1", createdAtMs: 1000, ageMs: 500 },
+              },
+            },
+          },
+        }),
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n")
+    );
+    const io = captureIo(cwd);
+    expect(await runHistory(["--trace", filename, "run-failed"], io)).toBe(0);
+    expect(io.output.join("")).toContain("Cached output reuse");
+  });
+
   it("shows steps, logs, and error sections for a run id", async () => {
     const directory = await tempDir();
     const storePath = path.join(directory, "runs.sqlite");

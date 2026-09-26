@@ -220,7 +220,11 @@ describe("module runtime boundaries", () => {
       for (const dependency of dependencies(file)) {
         expect(existsSync(dependency), `Missing dependency: ${dependency}`).toBe(true);
         const target = moduleName(dependency);
-        if (owner !== target && !allowedDependencies[owner].includes(target)) {
+        // The Node entrypoint exposes the same standalone cache utility used lazily by core.
+        const cacheExport =
+          name === "node/node.js" &&
+          relative(dist, dependency).split(sep).join("/") === "utilities/cache-storage.js";
+        if (owner !== target && !allowedDependencies[owner].includes(target) && !cacheExport) {
           violations.push(`${name} -> ${relative(dist, dependency)}`);
         }
       }

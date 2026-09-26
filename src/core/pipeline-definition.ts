@@ -1,4 +1,5 @@
 import type { PipelineMetadata } from "../tracing/graph-metadata.js";
+import type { PipelineCacheOptions } from "./pipeline-cache.js";
 import type { AnyStep, Step, StepOutput } from "./pipeline-steps.js";
 import type {
   InferSchemaInput,
@@ -99,6 +100,8 @@ export type PipelineDefinition<
   /** Author- or build-supplied version of handlers, mappings, schemas, and finalizer (1–256 characters). */
   implementationVersion?: string;
   steps: TSteps;
+  /** Defaults for explicitly cacheable steps. */
+  cache?: PipelineCacheOptions;
   /** Selectable public goals; omitted exposes the last step in execution order.
    * This declaration never filters a run. Use `[]` to expose no goals.
    */

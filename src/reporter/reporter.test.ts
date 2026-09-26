@@ -1,3 +1,4 @@
+import { v8StepCacheCodec } from "../utilities/cache-storage.js";
 import { describe, expect, it } from "vitest";
 import { createPipelineTestRuntime, overrideStep } from "../testing/testing.js";
 import { createSteps, definePipeline, type PipelineLogger } from "../core/pipeline.js";
@@ -250,13 +251,33 @@ describe("formatDurationMs", () => {
   });
 });
 
-it("labels supplied step outputs as overridden instead of successful handler executions", async () => {
-  const { step } = createSteps();
-  const load = step("load", { run: () => 1 });
-  const pipeline = definePipeline({ id: "reported-override", steps: [load] });
-  const { logger, messages } = capturingLogger();
-  const test = createPipelineTestRuntime();
-  test.context.hooks = createRunReporter({ color: "never", log: logger, symbols: "ascii" });
-  await test.run(pipeline, {}, { overrides: [overrideStep(load, 2)] });
-  expect(messages.log.join("\n")).toContain("ok load (overridden)");
-});
+it.each(["override", "cache"] as const)(
+  "labels %s outputs in the line reporter",
+  async (source) => {
+    const { step } = createSteps();
+    const load = step("load", {
+      run: () => 1,
+      cache: {
+        version: "1",
+        key: () => "key",
+        codec: v8StepCacheCodec,
+        store: {
+          get: async () => ({ value: await v8StepCacheCodec.encode(2), createdAtMs: 0 }),
+          set: () => {},
+        },
+      },
+    });
+    const pipeline = definePipeline({ id: "reported-override", steps: [load] });
+    const { logger, messages } = capturingLogger();
+    const test = createPipelineTestRuntime();
+    test.context.hooks = createRunReporter({ color: "never", log: logger, symbols: "ascii" });
+    await test.run(
+      pipeline,
+      {},
+      source === "override" ? { overrides: [overrideStep(load, 2)] } : {}
+    );
+    expect(messages.log.join("\n")).toContain(
+      `ok load (${source === "override" ? "overridden" : "cached"})`
+    );
+  }
+);

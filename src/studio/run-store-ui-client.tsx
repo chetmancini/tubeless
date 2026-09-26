@@ -1,4 +1,5 @@
 import { MetadataDetails, MetadataExplorer } from "./run-store-ui-metadata.js";
+import { StepArtifacts } from "./run-store-ui-artifacts.js";
 import { DefinitionHistory } from "./run-store-ui-definitions.js";
 import type { ComponentChildren, TargetedEvent } from "preact";
 import { render } from "preact";
@@ -332,7 +333,13 @@ function statusMark(value: string): string {
             : "";
 }
 
-export function Status({ value, outputSource }: { value: string; outputSource?: "override" }) {
+export function Status({
+  value,
+  outputSource,
+}: {
+  value: string;
+  outputSource?: "override" | "cache";
+}) {
   return (
     <span class={`status ${value}`}>
       <i class="status-mark" aria-hidden="true">
@@ -340,6 +347,7 @@ export function Status({ value, outputSource }: { value: string; outputSource?: 
       </i>
       {value}
       {outputSource === "override" && " (overridden)"}
+      {outputSource === "cache" && " (cached)"}
     </span>
   );
 }
@@ -848,9 +856,7 @@ function StepRow({ step }: { step: StoredPipelineStep }) {
       <StepStatusIcon value={step.status} />
       <div class="step-head">
         <strong>{step.name || step.id}</strong>
-        {step.outputSource === "override" && (
-          <Status value={step.status} outputSource={step.outputSource} />
-        )}
+        {step.outputSource && <Status value={step.status} outputSource={step.outputSource} />}
         {step.name && <code>{step.id}</code>}
         <span class="step-duration">{duration(step.durationMs)}</span>
       </div>
@@ -866,7 +872,13 @@ function StepRow({ step }: { step: StoredPipelineStep }) {
       {step.attempt && (
         <div class="execution">
           <span class="execution-summary" title={step.attempt.attemptId}>
-            <b>{step.attempt.outputSource === "override" ? "Override validation" : "Execution"}</b>{" "}
+            <b>
+              {step.attempt.outputSource === "override"
+                ? "Override validation"
+                : step.attempt.outputSource === "cache"
+                  ? "Cache validation"
+                  : "Execution"}
+            </b>{" "}
             · {shortId(step.attempt.attemptId)}
             {step.attempt.retries.length > 0 &&
               ` · ${step.attempt.retries.length} retr${
@@ -875,15 +887,7 @@ function StepRow({ step }: { step: StoredPipelineStep }) {
           </span>
         </div>
       )}
-      {step.artifacts?.map((entry, index) => (
-        <details class="execution" key={index}>
-          <summary>
-            {entry.preview ? "Preview " : "Artifact "}
-            {entry.operation}: {entry.artifact.id || entry.artifact.uri}
-          </summary>
-          <pre>{JSON.stringify(entry.artifact, null, 2)}</pre>
-        </details>
-      ))}
+      {step.artifacts && <StepArtifacts artifacts={step.artifacts} stepId={step.id} />}
       {step.progress && (
         <>
           <div class="progress">
@@ -900,6 +904,7 @@ function StepRow({ step }: { step: StoredPipelineStep }) {
                   <b>{detail.id}</b>
                   {detail.label && <span>{detail.label}</span>}
                   {detail.outputSource === "override" && <span>(overridden)</span>}
+                  {detail.outputSource === "cache" && <span>(cached)</span>}
                 </div>
               ))}
               {detailCount && step.progress.details.length < detailCount ? (

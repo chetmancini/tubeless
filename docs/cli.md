@@ -488,3 +488,12 @@ Use `inspect --tag <tag> --owner <owner> --domain <domain>` for metadata discove
 The same filters work with `graph`; add `--metadata` to include annotations in
 node labels. Filters combine with AND and never change execution selection.
 See [graph metadata](./graph-metadata.md) for complete semantics.
+
+## Cache policy
+
+Pipeline commands expose `--cache use|recompute|bypass` as an optional execution
+control, also available in Studio. It affects only steps explicitly opted into
+caching and propagates to child pipelines. Omission respects step policies;
+`recompute` refreshes entries and `bypass` avoids all cache I/O. Dry runs always
+bypass caching. The control is separate from domain options and does not change
+default keys. See [step output caching](./step-output-cache.md).

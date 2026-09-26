@@ -43,6 +43,11 @@ steps, progress, logs, and errors.
 Test-runtime recordings retain ordinary step statuses and annotate supplied
 outputs as `completed (overridden)`, `failed (overridden)`, or `cancelled (overridden)`. The supplied values are not recorded. Studio launch forms
 do not accept overrides; see [testing overrides](./concepts.md#supplying-step-outputs).
+The Cache execution control overrides policy with `use`, `recompute`, or `bypass`
+for opted-in steps, including children.
+Cache hits retain ordinary statuses with a `(cached)` annotation, including
+failed or cancelled cache validation. Keys and values are not recorded. See
+[step output caching](./step-output-cache.md).
 Nested steps show the child pipeline and its declared steps. Recorded progress
 includes the most recent per-item details; when details are truncated, Studio
 shows how many were omitted. Artifact steps show recorded reads, writes, verified reuse, and
@@ -200,13 +205,14 @@ An omitted implementation version means **unknown**, even when fingerprints matc
 
 The structural fingerprint includes compiled execution order, step IDs, required
 and optional edges, failure gates, targets, dry-run and skip policies, schema
-presence, required finalizer steps, child composition and concurrency, and remote
+presence, cache opt-in/age/policy, required finalizer steps, child composition and concurrency, and remote
 engine/target metadata. Dependency, target, and required-finalizer sets are sorted. Names, descriptions,
 progress presentation, inputs, per-run controls, and handler code are excluded.
 Iteration bounds and declared static child controls are included in identity
 version 2; selector sets are sorted.
 Changing the implementation version changes the combined definition ID without
-changing the structural fingerprint. Child structural identities propagate into
+changing the structural fingerprint. Effective step cache versions likewise bind
+the combined definition ID, including versions inherited from the pipeline. Child structural identities propagate into
 the parent's fingerprint; child implementation identities propagate only into its
 combined ID. The combined ID binds every recorded child identity field, including
 its implementation version; changing that metadata while keeping the child's ID

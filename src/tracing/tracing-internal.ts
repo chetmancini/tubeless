@@ -114,7 +114,7 @@ function traceProgress(
   for (const detail of details.slice(0, PIPELINE_TRACE_LIST_LIMIT)) {
     const row: PipelineStepProgressDetail = { id: boundTraceString(detail.id) };
     if (detail.name) row.name = boundTraceString(detail.name);
-    if (detail.outputSource === "override") row.outputSource = "override";
+    if (detail.outputSource) row.outputSource = detail.outputSource;
     for (const key of ["depth", "completed", "total"] as const) {
       if (Number.isFinite(detail[key])) row[key] = detail[key];
     }

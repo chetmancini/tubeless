@@ -28,7 +28,8 @@ their source files.
 
 - Core uses utilities and internal trace emission. Its complete runtime import graph
   must stay independent of exporters, storage, UI, command parsing and presentation.
-- Utilities, Node helpers and tracing have no runtime imports from other modules.
+- Utilities and tracing have no runtime imports from other modules. Node helpers
+  are self-contained except for the cache utility re-export from their public entrypoint.
   Tracing shares type-only pipeline contracts with core.
 - Reporters and rendering consume core. Storage consumes core and trace contracts;
   storage never depends on the studio or workbench.
@@ -69,6 +70,13 @@ Run `make check` after changes; it builds before checking these boundaries.
   Executors pass run identity and consume lifecycle operations; only lifecycle
   imports the internal trace emitter. Nested loggers unwrap to the original sink
   so each child log is attributed once to its own run.
+- `core/pipeline-cache.ts` owns opt-in cache keys, policy, encoding, and storage
+  boundaries around ordinary handler execution. It imports no concrete stores or
+  codecs eagerly. `utilities/cache-storage.ts` supplies a lazily loaded file store
+  and V8 codec, also exposed by `tubeless/node`. Definition validation compiles
+  cache plans once; graph construction retains those validated snapshots. The
+  default codec checks round-trip equality before writing. The default-key and duration
+  utilities handle canonical data and fixed age limits.
 - `core/pipeline-run-state.ts` owns state transitions, outputs and terminal reports.
   It consumes only the lifecycle notifications it emits, without requiring logger
   or trace capabilities.
