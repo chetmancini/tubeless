@@ -1,3 +1,4 @@
+import type { PipelineMetadata } from "../tracing/graph-metadata.js";
 import {
   type ArtifactLoader,
   type ArtifactSaver,
@@ -54,6 +55,7 @@ export interface AnyStep<TOptions extends object = object> {
   /** Optional human-facing display name. Stable machine identity remains `id`. */
   readonly name?: string;
   readonly description?: string;
+  readonly metadata?: PipelineMetadata;
   /**
    * Dry-run policy. Omitted runs the normal handler, `"skip"` structurally
    * skips it, and a handler substitutes for `run` while preserving its output.
@@ -147,6 +149,7 @@ type ChildPipelineStepDefinitionBase<
   skipAfterFailureOf?: readonly AnyStep<TParentOptions>[];
   name?: string;
   description?: string;
+  metadata?: PipelineMetadata;
   dryRun?: "skip";
   controls?:
     | PipelineRunControlsOf<TChildPipeline>
@@ -196,6 +199,7 @@ type MappedChildPipelineStepDefinition<
   skipAfterFailureOf?: readonly AnyStep<TParentOptions>[];
   name?: string;
   description?: string;
+  metadata?: PipelineMetadata;
   dryRun?: "skip";
   items(
     inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
@@ -269,6 +273,7 @@ type PlainStepFields<
   skipAfterFailureOf?: readonly AnyStep<TOptions>[];
   name?: string;
   description?: string;
+  metadata?: PipelineMetadata;
   dryRun?: StepDryRunPolicy<TOptions, TDeps, TOptionalDeps, TOut>;
   outputSchema?: never;
   run(
@@ -307,6 +312,7 @@ type RemoteStepDefinitionBase<
   skipAfterFailureOf?: readonly AnyStep<TParentOptions>[];
   name?: string;
   description?: string;
+  metadata?: PipelineMetadata;
   dryRun?: StepDryRunPolicy<TParentOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>>;
 };
 
@@ -516,6 +522,7 @@ function createStepFactory<
       skipAfterFailureOf: config.skipAfterFailureOf,
       name: config.name,
       description: config.description,
+      metadata: config.metadata,
       dryRun: config.dryRun,
       run: createSingleChildRunner(config),
     };
@@ -624,6 +631,7 @@ function createStepFactory<
       skipAfterFailureOf?: readonly AnyStep<TOptions>[];
       name?: string;
       description?: string;
+      metadata?: PipelineMetadata;
       dryRun?: "skip" | AnyStepDryRunHandler<TOptions>;
       skip?: StepSkipPredicate<
         TOptions,
@@ -642,6 +650,7 @@ function createStepFactory<
       skipAfterFailureOf: config.skipAfterFailureOf,
       name: config.name,
       description: config.description,
+      metadata: config.metadata,
       dryRun: config.dryRun,
       outputSchema: config.outputSchema,
       run: (inputs: Record<string, unknown>, context: PipelineStepContext<TOptions>) =>
@@ -734,6 +743,7 @@ function createStepFactory<
       skipAfterFailureOf: config.skipAfterFailureOf,
       name: config.name,
       description: config.description,
+      metadata: config.metadata,
       dryRun: config.dryRun,
       run: createMappedChildRunner(config),
     };
@@ -874,6 +884,7 @@ function createStepFactory<
       pipeline: TChild;
       name?: string;
       description?: string;
+      metadata?: PipelineMetadata;
       dependsOn?: TDeps;
       maxIterations: number;
       dryRun?: "skip";
@@ -901,6 +912,7 @@ function createStepFactory<
     definition: Omit<Parameters<typeof createIterationRunner<TOptions>>[0], "stepId"> & {
       name?: string;
       description?: string;
+      metadata?: PipelineMetadata;
       dependsOn?: readonly AnyStep<TOptions>[];
       dryRun?: "skip";
     }
@@ -926,6 +938,7 @@ function createStepFactory<
       },
       name: config.name,
       description: config.description,
+      metadata: config.metadata,
       dependsOn: config.dependsOn,
       dryRun: config.dryRun,
       run: createIterationRunner(config),

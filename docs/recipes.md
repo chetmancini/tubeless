@@ -52,6 +52,10 @@ one of these recipes.
 | Expose a project to CLI and Studio             | [`tubeless.project.ts`](../examples/tubeless.project.ts)                                                                       | `defineProject`, inferred flags, `tubeless list`                                      |
 | Register custom command adapters               | [`project/tubeless.project.ts`](../examples/project/tubeless.project.ts)                                                       | `defineProject`, explicit command adapters, custom mappings                           |
 
+For ownership and governance discovery, adapt [graph-metadata.ts](../examples/graph-metadata.ts).
+Use `metadata`, `querySteps`, and `toMermaid({ query })`; read [graph metadata](./graph-metadata.md)
+for bounds, trace identity, and document compatibility.
+
 ## Static step families
 
 Use [`parameterized-steps.ts`](../examples/parameterized-steps.ts) when several

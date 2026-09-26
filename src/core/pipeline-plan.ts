@@ -29,6 +29,7 @@ export function stepToPlanStep<TOptions extends object>(
   const planStep: PipelinePlanStep = {
     dependencies: graph.dependsOn.map((dep) => dep.id),
     description: step.description,
+    ...(step.metadata === undefined ? {} : { metadata: step.metadata }),
     dryRun: step.dryRun === "skip" ? "skip" : step.dryRun !== undefined ? "custom" : "run",
     id: step.id,
     name: step.name,

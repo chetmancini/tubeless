@@ -1,3 +1,5 @@
+import type { PipelineMetadata } from "../tracing/graph-metadata.js";
+import type { PipelineStepQuery } from "./pipeline-query.js";
 import type { ArtifactRecord } from "../tracing/artifact-metadata.js";
 import type {
   PipelineDefinitionIdentityContract,
@@ -8,7 +10,7 @@ import type {
 export type PipelineDefinitionIdentity = Readonly<PipelineDefinitionIdentityContract>;
 /** Serializable compiled semantics; no handlers, inputs, or application imports. */
 type ReadonlyDefinition<T> = T extends object
-  ? { readonly [K in keyof T]: ReadonlyDefinition<T[K]> }
+  ? { readonly [K in keyof T]: K extends "metadata" ? T[K] : ReadonlyDefinition<T[K]> }
   : T;
 /** Immutable snapshot of the compiled pipeline definition recorded for inspection and tracing. */
 export type PipelineDefinitionSnapshot = ReadonlyDefinition<PipelineDefinitionSnapshotContract>;
@@ -478,6 +480,7 @@ export type PipelineStepSelectionReason =
 
 /** Planned representation of one declared step and its selection state. */
 export interface PipelinePlanStep {
+  metadata?: PipelineMetadata;
   dependencies: string[];
   description?: string;
   /** How this step behaves when the pipeline is run with `dryRun: true`. */
@@ -531,6 +534,10 @@ export type PipelineMermaidDirection = (typeof PIPELINE_MERMAID_DIRECTIONS)[numb
 
 /** Rendering options for a pipeline Mermaid flowchart. */
 export interface PipelineMermaidOptions {
+  /** Filter displayed steps only; edges to omitted steps are omitted. */
+  query?: PipelineStepQuery;
+  /** Include structured metadata in node labels. */
+  includeMetadata?: boolean;
   /** Mermaid flowchart direction. Defaults to top-down (`TD`). */
   direction?: PipelineMermaidDirection;
   /** Append each operational description to its node label. Defaults to false. */
@@ -566,6 +573,7 @@ export interface Pipeline<
   readonly name?: string;
   /** Human-readable purpose for command and discovery surfaces. */
   readonly description?: string;
+  readonly metadata?: PipelineMetadata;
   /** Compiled definition metadata. Absent only on externally implemented pipelines. */
   readonly definition?: PipelineDefinitionSnapshot;
   /** Runtime domain schema supplied to createSteps; CLI adapters can infer its input flags. */

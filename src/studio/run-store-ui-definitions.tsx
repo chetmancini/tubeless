@@ -1,3 +1,4 @@
+import { MetadataDetails, MetadataExplorer } from "./run-store-ui-metadata.js";
 import { useState } from "preact/hooks";
 import { compareDefinitions } from "../run-store/definition-diff.js";
 import type { StoredPipelineDefinition, StoredPipelineRun } from "../run-store/run-store.js";
@@ -74,6 +75,12 @@ export function DefinitionHistory({
             <br />
             Definition ID: <code>{selected.identity.definitionId}</code>
           </p>
+        )}
+        {selected.snapshot && (
+          <>
+            <MetadataDetails metadata={selected.snapshot.metadata} />
+            <MetadataExplorer key={key(selected)} steps={selected.snapshot.steps} />
+          </>
         )}
         <details>
           <summary>Runs with this definition ({groupedRuns.length})</summary>

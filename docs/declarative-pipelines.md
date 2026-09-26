@@ -344,3 +344,7 @@ CLI and Studio loading. Pipelines whose options schemas expose Standard JSON
 Schema input metadata receive automatic commands. Custom or schema-less inputs
 need `definePipelineCommand` adapters registered directly in the project's entry list.
 A YAML file alone does not grant execution access or define a new Studio protocol.
+
+Graph metadata on individual pipelines and steps is currently a TypeScript API
+feature. Document version 1 rejects those fields; its document-level metadata
+remains unchanged. See [graph metadata compatibility](./graph-metadata.md#recording-and-compatibility).

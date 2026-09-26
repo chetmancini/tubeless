@@ -1,3 +1,4 @@
+import { MetadataDetails, MetadataExplorer } from "./run-store-ui-metadata.js";
 import { DefinitionHistory } from "./run-store-ui-definitions.js";
 import type { ComponentChildren, TargetedEvent } from "preact";
 import { render } from "preact";
@@ -628,6 +629,8 @@ export function PlanView({ plan }: { plan: PipelinePlan }) {
           {selected} of {plan.steps.length} steps will run{plan.dryRun ? " · dry run" : ""}
         </span>
       </div>
+      <MetadataDetails metadata={plan.definition?.metadata} />
+      <MetadataExplorer steps={plan.steps} />
       <div class="plan-steps">
         {plan.steps.map((step) => {
           const disposition = !step.selected
@@ -660,6 +663,7 @@ export function PlanView({ plan }: { plan: PipelinePlan }) {
                 <span class={`plan-kind${nested ? " pipeline" : ""}`}>{kind}</span>
               </div>
               <small>{detail}</small>
+              <MetadataDetails metadata={step.metadata} />
               <span class={`plan-disposition${disposition === "Will run" ? "" : " skipped"}`}>
                 {disposition}
               </span>

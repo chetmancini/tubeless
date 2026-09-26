@@ -1,3 +1,4 @@
+import type { PipelineMetadata } from "../tracing/graph-metadata.js";
 import { createHash } from "node:crypto";
 import type { CompiledStepGraph } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
@@ -42,6 +43,7 @@ function iterationFields(
 
 /** Canonical snapshot. Execution order matters; dependency and target sets do not. */
 export function compileDefinitionSnapshot(input: {
+  metadata?: PipelineMetadata;
   orderedSteps: readonly AnyStep[];
   stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph>;
   targetIds: readonly string[];
@@ -55,6 +57,7 @@ export function compileDefinitionSnapshot(input: {
     const remote = step[STEP_REMOTE];
     return {
       id: step.id,
+      ...(step.metadata === undefined ? {} : { metadata: step.metadata }),
       dependencies: graph.dependsOn.map(({ id }) => id).sort(),
       optionalDependencies: graph.optionalDependsOn.map(({ id }) => id).sort(),
       skipAfterFailureOf: graph.skipAfterFailureOf.map(({ id }) => id).sort(),
@@ -89,6 +92,7 @@ export function compileDefinitionSnapshot(input: {
     };
   });
   const semantics = {
+    ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
     steps,
     targetIds: [...input.targetIds].sort(),
     ...(input.requiredFinalizerSteps
@@ -103,22 +107,43 @@ export function compileDefinitionSnapshot(input: {
   });
 }
 
-/** Preserve v1 hashes; extended child semantics use v2, including their ancestors. */
+function canonicalMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalMetadata);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, child]) => [key, canonicalMetadata(child)])
+    );
+  }
+  return value;
+}
+
+/** Preserve v1/v2 hashes; metadata and its ancestors use v3. */
 export function createDefinitionIdentity(
   input: Omit<PipelineDefinitionSnapshot, "identity">,
   implementationVersion: string | undefined
 ): PipelineDefinitionIdentity {
-  const version = input.steps.some(
-    (step) =>
-      step.nestedPipeline?.mode === "iterate" || step.nestedPipeline?.identity?.version === 2
-  )
-    ? 2
-    : 1;
+  const hasMetadata =
+    input.metadata !== undefined ||
+    input.steps.some(
+      (step) => step.metadata !== undefined || step.nestedPipeline?.identity?.version === 3
+    );
+  const version = hasMetadata
+    ? 3
+    : input.steps.some(
+          (step) =>
+            step.nestedPipeline?.mode === "iterate" || step.nestedPipeline?.identity?.version === 2
+        )
+      ? 2
+      : 1;
   // Child handler versions participate in the combined identity, never the graph fingerprint.
   const structuralFingerprint = fingerprint({
     version,
+    ...(input.metadata === undefined ? {} : { metadata: canonicalMetadata(input.metadata) }),
     steps: input.steps.map((step) => ({
       id: step.id,
+      ...(step.metadata === undefined ? {} : { metadata: canonicalMetadata(step.metadata) }),
       dependencies: [...step.dependencies].sort(),
       optionalDependencies: [...step.optionalDependencies].sort(),
       skipAfterFailureOf: [...step.skipAfterFailureOf].sort(),

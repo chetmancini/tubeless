@@ -235,6 +235,9 @@ export function definePipeline<
     id: definition.id,
     ...(definition.name === undefined ? {} : { name: definition.name }),
     ...(definition.description === undefined ? {} : { description: definition.description }),
+    ...(compiled.definition.metadata === undefined
+      ? {}
+      : { metadata: compiled.definition.metadata }),
     definition: compiled.definition,
     // SAFETY: compilation verifies that every step belongs to the same options schema.
     optionsSchema: compiled.optionsSchema as StepsOptionsSchema<TSteps> &
@@ -283,3 +286,7 @@ export type {
   ArtifactRecord,
 } from "../tracing/artifact-metadata.js";
 export type { ArtifactLoader, ArtifactSaver, ArtifactResult } from "./pipeline-artifacts.js";
+
+export { querySteps } from "./pipeline-query.js";
+export type { PipelineStepQuery } from "./pipeline-query.js";
+export type { PipelineMetadata, PipelineMetadataValue } from "../tracing/graph-metadata.js";

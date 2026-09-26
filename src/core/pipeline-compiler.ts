@@ -1,3 +1,4 @@
+import { snapshotPipelineMetadata } from "../tracing/graph-metadata.js";
 import { compileDefinitionSnapshot } from "./pipeline-definition-identity.js";
 import type { PipelineDefinition, StepsOptions } from "./pipeline-definition.js";
 import { validatePipelineDefinition } from "./pipeline-definition-validation.js";
@@ -72,6 +73,7 @@ export function compilePipeline<
   const snapshot = compileDefinitionSnapshot({
     orderedSteps,
     stepGraph,
+    metadata: snapshotPipelineMetadata(definition.metadata),
     targetIds: compiledTargets.map((step) => step.id),
     requiredFinalizerSteps: compiledRequiredFinalizerSteps,
     resultValidated: definition.resultSchema !== undefined,

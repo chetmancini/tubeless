@@ -483,3 +483,8 @@ bunx tubeless history --trace run.ndjson
 
 SIGINT is forwarded through the command context. Help (`--help` or a command's
 own help) exits `0`.
+
+Use `inspect --tag <tag> --owner <owner> --domain <domain>` for metadata discovery.
+The same filters work with `graph`; add `--metadata` to include annotations in
+node labels. Filters combine with AND and never change execution selection.
+See [graph metadata](./graph-metadata.md) for complete semantics.

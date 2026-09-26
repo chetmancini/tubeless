@@ -269,3 +269,6 @@ Keep the default loopback binding unless you intend to share that data. See
 Studio's HTTP server and browser protocol are internal workbench details, not a
 supported embedding API. Use the `tubeless ui` command instead of calling its
 local routes directly.
+
+Studio previews and observed definitions also expose [graph metadata](./graph-metadata.md).
+Expand **Explore steps** to search metadata and group by owner or domain.

@@ -10,6 +10,40 @@ import {
 } from "./workbench.test-support.js";
 
 describe("workbench inspect, plan, and graph", () => {
+  it("filters metadata discovery without executing handlers or rendering dangling edges", async () => {
+    const entry = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
+    const { directory } = await writeModule(`
+      import { createSteps, definePipeline } from ${JSON.stringify(entry)};
+      const { step } = createSteps();
+      const a = step("source", { run() { throw new Error("must not run"); } });
+      const b = step("sink", { dependsOn: [a], metadata: { tags: ["pii", "write"], owner: "data", domain: "billing" }, run() { throw new Error("must not run"); } });
+      export default definePipeline({ id: "metadata", metadata: { owner: "platform" }, steps: [a, b] });
+    `);
+    const io = captureIo(directory);
+    expect(
+      await runWorkbenchCli(
+        ["inspect", "--json", "--tag", "pii", "--tag", "write", "--owner", "data", "pipeline.mjs"],
+        io
+      )
+    ).toBe(0);
+    const result = JSON.parse(io.output.join(""));
+    expect(result.stepIds).toEqual(["sink"]);
+    expect(result.plan.steps).toHaveLength(1);
+    expect(result.plan.definition.metadata.owner).toBe("platform");
+    const graph = captureIo(directory);
+    expect(
+      await runWorkbenchCli(["graph", "--domain", "billing", "--metadata", "pipeline.mjs"], graph)
+    ).toBe(0);
+    expect(graph.output.join("")).toContain("pii");
+    expect(graph.output.join("")).not.toContain("-->");
+    expect(graph.errors).toEqual([]);
+    const noMatch = captureIo(directory);
+    expect(
+      await runWorkbenchCli(["inspect", "--json", "--owner", "unknown", "pipeline.mjs"], noMatch)
+    ).toBe(0);
+    expect(JSON.parse(noMatch.output.join("")).stepIds).toEqual([]);
+  });
+
   it("inspects pipeline identity, goals, dependencies, and policies without running it", async () => {
     const { directory } = await writeModule(fixturePipeline);
     const io = captureIo(directory);

@@ -48,6 +48,11 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 - Give steps stable kebab-case IDs and descriptions of their domain work.
   `name` is an optional display label. Return values from steps and consume
   inferred dependency outputs instead of sharing mutable state.
+- Use `metadata: { tags, owner, domain, annotations }` for descriptive discovery.
+  `querySteps(plan, query)` and `toMermaid({ query })` filter displayed steps only;
+  use targets for execution. Metadata is bounded JSON, snapshotted at compilation,
+  never inherited, and recorded in identity version 3. Document v1 does not accept
+  step or pipeline metadata. Read `docs/graph-metadata.md` and `examples/graph-metadata.ts`.
 - Give a pipeline optional `name` and `description` when CLI and Studio need
   presentation beyond its stable ID. Pipeline commands inherit both fields;
   command-level values are overrides for adapter-specific help.

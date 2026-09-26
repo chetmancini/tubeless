@@ -1,3 +1,4 @@
+import { querySteps } from "../core/pipeline.js";
 import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
@@ -186,6 +187,9 @@ Show a registered id or exported pipeline's identity plus the default structural
 Options:
   -e, --export <name>   Select a pipeline or command export when the file has more than one
   -p, --project <path>  Resolve a pipeline or command id from this project file
+      --tag <tag>       Require a step tag (repeatable; all must match)
+      --owner <owner>   Match step owner exactly
+      --domain <domain> Match step domain exactly
       --json            Emit identity and the default plan as JSON
   -h, --help            Show this help
 `;
@@ -203,6 +207,9 @@ interface WorkbenchInspection {
 
 function parseInspectArgs(argv: readonly string[]) {
   return parseSubcommandArgs(argv, {
+    tag: { type: "string", multiple: true },
+    owner: { type: "string" },
+    domain: { type: "string" },
     export: { type: "string", short: "e" },
     help: { type: "boolean", short: "h" },
     json: { type: "boolean" },
@@ -221,12 +228,26 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
         if ("exitCode" in loaded) return loaded.exitCode;
 
         const { view } = loaded;
-        const plan = view.plan();
+        const completePlan = view.plan();
+        const plan = {
+          ...completePlan,
+          steps: querySteps(completePlan, {
+            tags: parsed.values.tag,
+            owner: parsed.values.owner,
+            domain: parsed.values.domain,
+          }),
+        };
+        const filtered =
+          parsed.values.tag !== undefined ||
+          parsed.values.owner !== undefined ||
+          parsed.values.domain !== undefined;
+        const matchingIds = new Set(plan.steps.map((step) => step.id));
+        const stepIds = view.stepIds.filter((id) => !filtered || matchingIds.has(id));
         if (parsed.values.json) {
           const inspection: WorkbenchInspection = {
             pipelineId: view.id,
             targetIds: [...view.targetIds],
-            stepIds: [...view.stepIds],
+            stepIds,
             plan,
           };
           commandIo.stdout.write(`${JSON.stringify(inspection, null, 2)}\n`);
@@ -237,7 +258,13 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
           [
             `Pipeline ${view.id}`,
             `Targets: ${formatIdList(view.targetIds)}`,
-            `Exact steps: ${formatIdList(view.stepIds)}`,
+            `Exact steps: ${formatIdList(stepIds)}`,
+            ...(plan.definition?.metadata
+              ? [`Metadata: ${JSON.stringify(plan.definition.metadata)}`]
+              : []),
+            ...plan.steps
+              .filter((step) => step.metadata)
+              .map((step) => `${step.id} metadata: ${JSON.stringify(step.metadata)}`),
             renderPipelinePlan(plan, { explain: false }),
             "",
           ].join("\n")
@@ -322,6 +349,10 @@ Options:
   -e, --export <name>       Select a pipeline or command export when the file has more than one
   -p, --project <path>      Resolve a pipeline or command id from this project file
   -d, --direction <value>   Flowchart direction: BT, LR, RL, TB, or TD (default: TD)
+      --tag <tag>           Require a step tag (repeatable; all must match)
+      --owner <owner>       Match step owner exactly
+      --domain <domain>     Match step domain exactly
+      --metadata            Include step metadata in labels
       --descriptions        Include step descriptions in node labels
       --markdown            Wrap the result in a fenced Mermaid Markdown block
   -h, --help                Show this help
@@ -331,6 +362,10 @@ function parseGraphArgs(argv: readonly string[]) {
   return parseSubcommandArgs(argv, {
     descriptions: { type: "boolean" },
     direction: { type: "string", short: "d" },
+    tag: { type: "string", multiple: true },
+    owner: { type: "string" },
+    domain: { type: "string" },
+    metadata: { type: "boolean" },
     export: { type: "string", short: "e" },
     help: { type: "boolean", short: "h" },
     markdown: { type: "boolean" },
@@ -360,6 +395,12 @@ export async function runGraph(argv: readonly string[], io: WorkbenchCliIo): Pro
         const source = loaded.view.toMermaid({
           direction,
           includeDescriptions: parsed.values.descriptions,
+          includeMetadata: parsed.values.metadata,
+          query: {
+            tags: parsed.values.tag,
+            owner: parsed.values.owner,
+            domain: parsed.values.domain,
+          },
         });
         const terminatedSource = `${source.replace(/\n+$/, "")}\n`;
         commandIo.stdout.write(

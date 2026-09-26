@@ -1,3 +1,4 @@
+import { matchesStepQuery } from "./pipeline-query.js";
 import { liveStepGraph, stepEdges, type CompiledStepGraph } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { STEP_NESTED_PIPELINE } from "./pipeline-step-metadata.js";
@@ -19,6 +20,7 @@ export function renderPipelineMermaid<TOptions extends object>(
   options: PipelineMermaidOptions,
   stepGraph?: ReadonlyMap<AnyStep, CompiledStepGraph>
 ): string {
+  steps = steps.filter((step) => matchesStepQuery(step.metadata, options.query ?? {}));
   const direction = options.direction ?? "TD";
   if (!PIPELINE_MERMAID_DIRECTIONS.includes(direction)) {
     throw new Error(`Invalid Mermaid flowchart direction: ${direction}`);
@@ -29,10 +31,11 @@ export function renderPipelineMermaid<TOptions extends object>(
   for (const step of steps) {
     const nodeId = nodeIdByStep.get(step)!;
     const displayName = step.name ?? step.id;
-    const label =
+    let label =
       options.includeDescriptions && step.description
         ? `${displayName} — ${step.description}`
         : displayName;
+    if (options.includeMetadata && step.metadata) label += ` — ${JSON.stringify(step.metadata)}`;
     const nested = step[STEP_NESTED_PIPELINE];
     const iteration =
       nested?.mode === "iterate" ? ` (at most ${nested.maxIterations} iterations)` : "";
@@ -48,7 +51,8 @@ export function renderPipelineMermaid<TOptions extends object>(
     const failureGates = new Set(graph.skipAfterFailureOf);
 
     for (const dependency of stepEdges(step, graph)) {
-      const sourceId = nodeIdByStep.get(dependency)!;
+      const sourceId = nodeIdByStep.get(dependency);
+      if (sourceId === undefined) continue;
       if (required.has(dependency)) {
         edgeLines.push(`  ${sourceId} --> ${targetId}`);
         continue;
