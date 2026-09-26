@@ -31,32 +31,34 @@ export async function runPipelineCommand(
     signal: context.signal,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const completion = new Promise<void>((resolve, reject) => {
+  const completion = new Promise<{
+    code: number | null;
+    signal: NodeJS.Signals | null;
+    spawnError?: Error;
+  }>((resolve) => {
     let spawnError: Error | undefined;
     child.once("error", (error) => {
       spawnError = error;
     });
     child.once("close", (code, signal) => {
-      if (spawnError) {
-        reject(spawnError);
-        return;
-      }
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(
-        new Error(
-          signal === null
-            ? `${rendered} exited with code ${code ?? "unknown"}`
-            : `${rendered} was terminated by ${signal}`
-        )
-      );
+      resolve({ code, signal, spawnError });
     });
   });
-  await Promise.all([
+  const stderrLines: string[] = [];
+  const [outcome] = await Promise.all([
     completion,
     logLines(child.stdout, (line) => context.log.log(line)),
-    logLines(child.stderr, (line) => context.log.error(line)),
+    logLines(child.stderr, (line) => stderrLines.push(line)),
   ]);
+  const writeStderr =
+    outcome.code === 0 && !outcome.spawnError ? context.log.log : context.log.error;
+  for (const line of stderrLines) writeStderr(line);
+  if (outcome.spawnError) throw outcome.spawnError;
+  if (outcome.code !== 0) {
+    throw new Error(
+      outcome.signal === null
+        ? `${rendered} exited with code ${outcome.code ?? "unknown"}`
+        : `${rendered} was terminated by ${outcome.signal}`
+    );
+  }
 }

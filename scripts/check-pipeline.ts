@@ -8,7 +8,7 @@ function checkStep<const TId extends string>(id: TId, description: string, scrip
   return step(id, {
     description,
     run: async (_inputs, context) => {
-      await runPipelineCommand("bun", ["run", script], context);
+      await runPipelineCommand("bun", ["run", "--silent", script], context);
       return { script };
     },
   });

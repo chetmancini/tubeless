@@ -27,7 +27,7 @@ describe("parameterized step recipe", () => {
         expectTypeOf(inputs["bounded-quantities"]).toEqualTypeOf<number>();
         expectTypeOf(inputs["valid-prices"]).toEqualTypeOf<number>();
         // @ts-expect-error The family does not widen dependency keys to string.
-        inputs["typo"];
+        void inputs["typo"];
         return Object.values(inputs).reduce((sum, count) => sum + count, 0);
       },
     });
