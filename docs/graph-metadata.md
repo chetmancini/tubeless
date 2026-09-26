@@ -75,7 +75,9 @@ execution controls such as `--target` and `--step`.
 Studio plan previews and observed definitions show metadata. Expand **Explore
 steps** to search IDs and metadata (case-insensitive substring search), or group
 matches by owner or domain. Grouping preserves the order of first occurrence;
-steps without the selected field appear under **Unassigned**. These controls do
+steps without the selected field appear in a separate **Unassigned** group marked
+**No owner specified** or **No domain specified**, even when a supplied value is
+also named “Unassigned.” These controls do
 not affect launches.
 
 ## Recording and compatibility

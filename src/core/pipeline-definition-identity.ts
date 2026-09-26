@@ -1,3 +1,4 @@
+import { canonicalJsonValue } from "../utilities/canonical-json.js";
 import type { PipelineMetadata } from "../tracing/graph-metadata.js";
 import { createHash } from "node:crypto";
 import type { CompiledStepGraph } from "./pipeline-graph.js";
@@ -107,18 +108,6 @@ export function compileDefinitionSnapshot(input: {
   });
 }
 
-function canonicalMetadata(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalMetadata);
-  if (value !== null && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([key, child]) => [key, canonicalMetadata(child)])
-    );
-  }
-  return value;
-}
-
 /** Preserve v1/v2 hashes; metadata and its ancestors use v3. */
 export function createDefinitionIdentity(
   input: Omit<PipelineDefinitionSnapshot, "identity">,
@@ -140,10 +129,10 @@ export function createDefinitionIdentity(
   // Child handler versions participate in the combined identity, never the graph fingerprint.
   const structuralFingerprint = fingerprint({
     version,
-    ...(input.metadata === undefined ? {} : { metadata: canonicalMetadata(input.metadata) }),
+    ...(input.metadata === undefined ? {} : { metadata: canonicalJsonValue(input.metadata) }),
     steps: input.steps.map((step) => ({
       id: step.id,
-      ...(step.metadata === undefined ? {} : { metadata: canonicalMetadata(step.metadata) }),
+      ...(step.metadata === undefined ? {} : { metadata: canonicalJsonValue(step.metadata) }),
       dependencies: [...step.dependencies].sort(),
       optionalDependencies: [...step.optionalDependencies].sort(),
       skipAfterFailureOf: [...step.skipAfterFailureOf].sort(),

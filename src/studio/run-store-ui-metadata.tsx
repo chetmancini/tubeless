@@ -21,12 +21,12 @@ export function groupMetadataSteps(
   search: string,
   groupBy: "owner" | "domain" | "none"
 ) {
-  const groups = new Map<string, MetadataStep[]>();
+  const groups = new Map<string | undefined, MetadataStep[]>();
   const query = search.trim().toLowerCase();
   for (const step of steps) {
     if (!`${step.id} ${JSON.stringify(step.metadata ?? {})}`.toLowerCase().includes(query))
       continue;
-    const label = groupBy === "none" ? "Steps" : (step.metadata?.[groupBy] ?? "Unassigned");
+    const label = groupBy === "none" ? "Steps" : step.metadata?.[groupBy];
     const group = groups.get(label) ?? [];
     group.push(step);
     groups.set(label, group);
@@ -65,8 +65,9 @@ export function MetadataExplorer({ steps }: { steps: readonly MetadataStep[] }) 
       </label>
       {groups.size === 0 && <p>No matching steps.</p>}
       {[...groups].map(([label, members]) => (
-        <section key={label}>
-          <h4>{label}</h4>
+        <section key={JSON.stringify([label])}>
+          <h4>{label ?? "Unassigned"}</h4>
+          {label === undefined && <small>No {groupBy} specified</small>}
           <ul>
             {members.map((step) => (
               <li key={step.id}>

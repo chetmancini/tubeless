@@ -1,3 +1,4 @@
+import { canonicalJsonValue } from "../utilities/canonical-json.js";
 import type { PipelineDefinitionSnapshot } from "../core/pipeline.js";
 
 export interface DefinitionChange {
@@ -28,7 +29,7 @@ export function compareDefinitions(
     before.steps.map(({ id }) => id),
     after.steps.map(({ id }) => id)
   );
-  compare("Metadata", before.metadata, after.metadata);
+  compare("Metadata", canonicalJsonValue(before.metadata), canonicalJsonValue(after.metadata));
   compare("Targets", before.targetIds, after.targetIds);
   compare(
     "Required finalizer steps",
@@ -48,7 +49,12 @@ export function compareDefinitions(
       changes.push({ stepId: step.id, field: "Added step" });
       continue;
     }
-    compare("Metadata", old.metadata, step.metadata, step.id);
+    compare(
+      "Metadata",
+      canonicalJsonValue(old.metadata),
+      canonicalJsonValue(step.metadata),
+      step.id
+    );
     compare("Required edges", old.dependencies, step.dependencies, step.id);
     compare("Optional edges", old.optionalDependencies, step.optionalDependencies, step.id);
     compare("Failure gates", old.skipAfterFailureOf, step.skipAfterFailureOf, step.id);

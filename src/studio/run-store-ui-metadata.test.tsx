@@ -15,12 +15,30 @@ describe("Studio graph metadata", () => {
     ]);
     expect([...groupMetadataSteps(steps, "", "domain").keys()]).toEqual([
       "billing",
-      "Unassigned",
+      undefined,
       "storage",
     ]);
     expect([...groupMetadataSteps(steps, "plain", "none").values()]).toEqual([[steps[1]]]);
     expect(groupMetadataSteps(steps, "missing", "none").size).toBe(0);
   });
+
+  it.each(["owner", "domain"] as const)(
+    "keeps a literal Unassigned %s separate from missing values",
+    (field) => {
+      const named = { id: "named", metadata: { [field]: "Unassigned" } };
+      const missing = { id: "missing" };
+      const alsoMissing = { id: "also-missing", metadata: { tags: ["pii"] } };
+      const groups = groupMetadataSteps([named, missing, alsoMissing], "", field);
+      expect([...groups]).toEqual([
+        ["Unassigned", [named]],
+        [undefined, [missing, alsoMissing]],
+      ]);
+      expect([...groupMetadataSteps([missing, named], "", field).keys()]).toEqual([
+        undefined,
+        "Unassigned",
+      ]);
+    }
+  );
 
   it("renders search and grouping controls and escapes annotation contents", () => {
     const html = renderToString(<MetadataExplorer steps={steps} />);
