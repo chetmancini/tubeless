@@ -1607,7 +1607,12 @@ function ClearHistoryModal({ api, onCleared, onClose, snapshot }: ClearHistoryMo
 }
 
 type StudioView = "pipelines" | "runs";
-const defaultStudioApi = createStudioApi();
+const studioMount =
+  typeof document === "undefined"
+    ? ""
+    : (document.querySelector<HTMLMetaElement>('meta[name="tubeless-studio-mount"]')?.content ??
+      "");
+const defaultStudioApi = createStudioApi(fetch, studioMount);
 
 export function connectionPresentation(connected: boolean) {
   return {
@@ -1633,10 +1638,24 @@ export function resolveSelectedRunId(
   return selectedRunId ?? roots[0]?.runId ?? null;
 }
 
+export function StudioAccessNotice({ status, href }: { status: 401 | 403; href: string }) {
+  return (
+    <main class="workspace" role="alert">
+      <h1>{status === 401 ? "Sign in to continue" : "Access denied"}</h1>
+      <p>
+        {status === 401
+          ? "Your access has expired. Open Studio again to sign in through your application."
+          : "Your account cannot access this Studio. Open Studio again after your access is restored."}
+      </p>
+      <a href={href}>Open Studio again</a>
+    </main>
+  );
+}
+
 function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
   const dataController = useMemo(() => new StudioDataController(api), [api]);
   const [data, setData] = useState(() => dataController.getState());
-  const { connected, detail, manualRefreshing, snapshot } = data;
+  const { accessDenied, connected, detail, manualRefreshing, snapshot } = data;
   const [commands, setCommands] = useState<PipelineRunStudioCommand[]>([]);
   const [commandsLoaded, setCommandsLoaded] = useState(false);
   const [view, setView] = useState<StudioView>("runs");
@@ -1660,25 +1679,42 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
   useEffect(() => () => dataController.dispose(), [dataController]);
 
   useEffect(() => {
+    if (accessDenied) {
+      setCommands([]);
+      setCanCancel(false);
+      setCanClearHistory(false);
+      setLaunchCommandId(null);
+      setClearHistoryOpen(false);
+      setToast("");
+      return;
+    }
     void api
       .loadCommands()
       .then((loaded) => {
+        if (dataController.getState().accessDenied) return;
         setCommands(loaded);
         if (loaded.length && !runIdFromStudioUrl(window.location.href)) setView("pipelines");
       })
-      .catch(() => {})
-      .finally(() => setCommandsLoaded(true));
+      .catch((error) => {
+        if (!dataController.getState().accessDenied) setToast(errorMessage(error));
+      })
+      .finally(() => {
+        if (!dataController.getState().accessDenied) setCommandsLoaded(true);
+      });
     void api
       .loadCapabilities()
       .then((capabilities) => {
+        if (dataController.getState().accessDenied) return;
         setCanCancel(capabilities.canCancel);
         setCanClearHistory(capabilities.canClearHistory);
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (!dataController.getState().accessDenied) setToast(errorMessage(error));
+      });
     dataController.refresh();
     const interval = setInterval(() => dataController.refresh(), 1200);
     return () => clearInterval(interval);
-  }, [api, dataController]);
+  }, [accessDenied, api, dataController]);
 
   useEffect(() => {
     const onPopState = () => {
@@ -1721,8 +1757,11 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     dataController.selectRun(selectedRunId, selectedFingerprint);
   }, [dataController, selectedFingerprint, selectedRunId]);
 
-  const showToast = (message: string) => setToast(message);
+  const showToast = (message: string) => {
+    if (!dataController.getState().accessDenied) setToast(message);
+  };
   const selectRun = (runId: string) => {
+    if (dataController.getState().accessDenied) return;
     if (runId !== selectedRunId) {
       window.history.pushState(null, "", studioRunUrl(window.location.href, runId));
     }
@@ -1739,7 +1778,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     }
   };
   const cancelRun = async (runId: string) => {
-    if (!canCancel || cancelling) return;
+    if (dataController.getState().accessDenied || !canCancel || cancelling) return;
     setCancelling(true);
     try {
       await api.cancelRun(runId);
@@ -1758,6 +1797,9 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
       commandDescription(command).toLowerCase().includes(query.toLowerCase())
   );
   const isPipelines = view === "pipelines";
+
+  if (accessDenied) return <StudioAccessNotice status={accessDenied} href={window.location.href} />;
+
   const selectedRun = selectedSummary && detail?.run.runId === selectedRunId ? detail.run : null;
   const connection = connectionPresentation(connected);
 
@@ -1930,6 +1972,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
           commandId={launchCommandId}
           onClose={() => setLaunchCommandId(null)}
           onLaunched={(runId) => {
+            if (dataController.getState().accessDenied) return;
             selectRun(runId);
             setQuery("");
             setLaunchCommandId(null);
@@ -1944,6 +1987,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
           snapshot={snapshot}
           onClose={() => setClearHistoryOpen(false)}
           onCleared={(eventCount) => {
+            if (dataController.getState().accessDenied) return;
             setClearHistoryOpen(false);
             showToast("Cleared " + eventCount + " recorded event" + (eventCount === 1 ? "" : "s"));
             dataController.invalidate({ resetHistory: true });

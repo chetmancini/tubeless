@@ -277,3 +277,61 @@ describe("StudioDataController", () => {
     expect(controller.getState().detail?.run.runId).toBe("second");
   });
 });
+
+it.each([401, 403] as const)(
+  "clears retained data and retires reads, timers and invalidation after %s",
+  async (status) => {
+    vi.useFakeTimers();
+    const snapshots: Deferred<StudioSnapshot>[] = [];
+    const details: Deferred<StudioRunDetail | null>[] = [];
+    let deny!: (status: 401 | 403) => void;
+    const unsubscribe = vi.fn();
+    const service = api({
+      subscribeAccessDenied: (listener) => {
+        deny = listener;
+        return unsubscribe;
+      },
+      loadSnapshot: vi.fn(() => {
+        const request = deferred<StudioSnapshot>();
+        snapshots.push(request);
+        return request.promise;
+      }),
+      loadRunDetail: vi.fn(() => {
+        const request = deferred<StudioRunDetail | null>();
+        details.push(request);
+        return request.promise;
+      }),
+    });
+    const controller = new StudioDataController(service, 50);
+    controller.refresh();
+    snapshots[0]!.resolve(snapshot([run("secret")]));
+    controller.selectRun("secret", "secret:1");
+    details[0]!.resolve({ run: run("secret") });
+    await settle();
+    expect(controller.getState().snapshot?.runs).toHaveLength(1);
+    expect(controller.getState().detail?.run.runId).toBe("secret");
+    controller.refresh();
+    controller.refresh(true);
+    controller.selectRun("secret", "secret:2");
+    deny(status);
+    snapshots[1]!.resolve(snapshot([run("late")]));
+    details[1]!.resolve({ run: run("late") });
+    await settle();
+    controller.refresh(true);
+    controller.invalidate({ delayMs: 20 });
+    controller.selectRun("other", "other:1");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(controller.getState()).toEqual({
+      accessDenied: status,
+      connected: false,
+      detail: null,
+      manualRefreshing: false,
+      snapshot: null,
+    });
+    expect(service.loadSnapshot).toHaveBeenCalledTimes(2);
+    expect(service.loadRunDetail).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+    controller.dispose();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  }
+);

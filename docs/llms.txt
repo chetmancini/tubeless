@@ -58,6 +58,8 @@ Agent instructions:
   synchronous plan does not invoke schemas.
 - Run make check from the package root after package changes.
 
+- Hosted Studio: `tubeless ui --public-url` supports an authenticated application gateway and preserved URL mount. Requires a server-only `TUBELESS_STUDIO_GATEWAY_TOKEN`; application owns every-request admin authorization, fixed upstream, private transport, persistent SQLite, and supervision. One admin trust domain, process-local execution, no automatic mutation retries. See studio.md#host-studio-behind-an-application-gateway.
+
 Advanced:
 
 - Child pipelines: ./child-pipeline-composition.md

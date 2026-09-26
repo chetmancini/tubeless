@@ -52,6 +52,7 @@ one of these recipes.
 | Watch an advanced YAML pipeline                | [`yaml-peloton.ts`](../examples/yaml-peloton.ts)                                                                               | declarative graph, concurrent handlers, retries, progress, dry runs, gates            |
 | Expose a project to CLI and Studio             | [`tubeless.project.ts`](../examples/tubeless.project.ts)                                                                       | `defineProject`, inferred flags, `tubeless list`                                      |
 | Register custom command adapters               | [`project/tubeless.project.ts`](../examples/project/tubeless.project.ts)                                                       | `defineProject`, explicit command adapters, custom mappings                           |
+| Host Studio beneath a private admin URL        | [Gateway hosting](./studio.md#host-studio-behind-an-application-gateway)                                                       | `--public-url`, server-only gateway token, application-owned authorization            |
 
 For ownership and governance discovery, adapt [graph-metadata.ts](../examples/graph-metadata.ts).
 Use `metadata`, `querySteps`, and `toMermaid({ query })`; read [graph metadata](./graph-metadata.md)
@@ -219,3 +220,12 @@ Studio's [definition history](./studio.md#definition-history-and-comparison) gro
 runs by definition and compares observed versions. Complete recorded snapshots must
 match their hashes, including recorded child implementation identities, to be accepted
 by NDJSON or SQLite history.
+
+## Host Studio privately
+
+Use the [Studio gateway recipe](./studio.md#host-studio-behind-an-application-gateway)
+to mount a long-lived CLI process beneath an application's admin URL. Tubeless
+supplies prefix-aware pages/APIs and backend authentication; your application
+checks login and admin permission for every request and owns deployment/storage.
+Use an explicit deployed catalog, keep the backend token server-only, and never
+retry an uncertain launch. No framework adapter or server-internal imports are needed.

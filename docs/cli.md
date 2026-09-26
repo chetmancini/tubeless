@@ -468,6 +468,17 @@ bunx tubeless history --events <run-id>
 bunx tubeless history --trace run.ndjson
 ```
 
+## Studio
+
+`tubeless ui --public-url https://example.com/admin/pipelines` enables gateway mode
+and requires `TUBELESS_STUDIO_GATEWAY_TOKEN` from host secrets (64 hex characters
+representing 32 random bytes). It permits registered commands on a private
+non-loopback bind and disables history clearing. Preserve the mount prefix, set
+the upstream Host to the public authority, and replace browser credentials with
+the gateway credential after checking session/admin permission for every request.
+See the complete [hosting contract](./studio.md#host-studio-behind-an-application-gateway)
+for Origin, login expiry, readiness, persistence, and shutdown behavior.
+
 ## Exit codes
 
 | Code | Meaning      |

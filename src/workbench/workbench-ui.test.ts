@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -186,7 +186,7 @@ describe("runUi", () => {
       TUBELESS_WORKBENCH_EXIT_CODE.usage
     );
     expect(nonLoopback.errors.join("")).toContain(
-      "Error: Browser-triggered execution requires a loopback --host."
+      "Error: Browser-triggered execution requires a loopback --host or authenticated --public-url."
     );
   });
 
@@ -467,4 +467,38 @@ describe("runUi", () => {
     await expect(pending).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
     expect(unhandled).toEqual([]);
   });
+});
+
+it("rejects invalid hosting before importing modules or opening stores", async () => {
+  const directory = await tempDir();
+  const marker = path.join(directory, "imported");
+  const store = path.join(directory, "runs.sqlite");
+  await writeFile(
+    path.join(directory, "project.mjs"),
+    `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(marker)}, "imported"); export default {};`
+  );
+  const previous = process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
+  try {
+    for (const [url, token] of [
+      ["https://example.test/admin", undefined],
+      ["https://example.test/admin", "weak"],
+      ["https://example.test/a/../b", "a1".repeat(32)],
+      [undefined, "a1".repeat(32)],
+    ]) {
+      if (token === undefined) delete process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
+      else process.env.TUBELESS_STUDIO_GATEWAY_TOKEN = token;
+      const io = captureIo(directory);
+      expect(
+        await runUi(["--store", store, ...(url ? ["--public-url", url] : []), "project.mjs"], io)
+      ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+      expect(io.errors.join("")).toContain("--public-url");
+      if (token) expect(io.errors.join("")).not.toContain(token);
+      expect(io.output).toEqual([]);
+      await expect(access(marker)).rejects.toThrow();
+      await expect(access(store)).rejects.toThrow();
+    }
+  } finally {
+    if (previous === undefined) delete process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
+    else process.env.TUBELESS_STUDIO_GATEWAY_TOKEN = previous;
+  }
 });

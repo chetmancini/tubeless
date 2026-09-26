@@ -1,3 +1,4 @@
+import { parseStudioHosting } from "../studio/run-store-ui-hosting.js";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
@@ -31,6 +32,7 @@ Options:
       --trace <path>    Read a finished NDJSON trace artifact (history-only)
       --host <value>    Bind address (default: 127.0.0.1)
       --port <number>   HTTP port (default: 4317)
+      --public-url <url> Host behind an authenticated gateway (requires TUBELESS_STUDIO_GATEWAY_TOKEN)
   -h, --help            Show this help
 `;
 
@@ -44,6 +46,7 @@ function parseUiArgs(argv: readonly string[]) {
       help: { type: "boolean", short: "h" },
       host: { type: "string" },
       port: { type: "string" },
+      "public-url": { type: "string" },
       store: { type: "string" },
       trace: { type: "string" },
     },
@@ -84,6 +87,24 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           return writeUsageError(io, "--port must be an integer from 0 to 65535.", UI_USAGE);
         }
 
+        let hosting: ReturnType<typeof parseStudioHosting>;
+        try {
+          hosting = parseStudioHosting(
+            parsed.values["public-url"],
+            process.env.TUBELESS_STUDIO_GATEWAY_TOKEN
+          );
+        } catch (error) {
+          return writeUsageError(io, errorMessage(error), UI_USAGE);
+        }
+        const host = (parsed.values.host ?? "127.0.0.1").toLowerCase();
+        const isLoopbackHost = host === "127.0.0.1" || host === "::1" || host === "localhost";
+        if ((directCommandFiles.length > 0 || projectFile) && !isLoopbackHost && !hosting) {
+          return writeUsageError(
+            io,
+            "Browser-triggered execution requires a loopback --host or authenticated --public-url.",
+            UI_USAGE
+          );
+        }
         const sources = directCommandFiles.map((file) =>
           createModuleRegistration(file, io.cwd, parsed.values.export)
         );
@@ -102,16 +123,6 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
             );
           }
           identities.add(source.identity);
-        }
-
-        const host = (parsed.values.host ?? "127.0.0.1").toLowerCase();
-        const isLoopbackHost = host === "127.0.0.1" || host === "::1" || host === "localhost";
-        if (sources.length > 0 && !isLoopbackHost) {
-          return writeUsageError(
-            io,
-            "Browser-triggered execution requires a loopback --host.",
-            UI_USAGE
-          );
         }
 
         const registrations: WorkbenchStudioRegistration[] = [];
@@ -173,18 +184,19 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           }
           const studioOptions: Parameters<typeof startPipelineRunStudio>[0] = {
             host,
+            hosting,
             launcher,
             port,
             store,
           };
-          if (isLoopbackHost && writableStore) {
+          if (isLoopbackHost && writableStore && !hosting) {
             studioOptions.history = {
               clear: () => writableStore!.clearHistory(),
               isBusy: () => launcher?.isBusy() ?? false,
             };
           }
           server = await startPipelineRunStudio(studioOptions);
-          io.stdout.write(`Tubeless local studio: ${server.url}\n`);
+          io.stdout.write(`Tubeless ${hosting ? "gateway" : "local"} studio: ${server.url}\n`);
           io.stdout.write(`${parsed.values.trace ? "Trace artifact" : "Run store"}: ${filename}\n`);
           if (registrations.length > 0) {
             io.stdout.write(

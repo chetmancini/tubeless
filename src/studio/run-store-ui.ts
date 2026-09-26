@@ -8,14 +8,16 @@ import {
   normalizeHttpAuthority,
   parseHttpAuthority,
   writeError,
+  writeJson,
   writeUnexpectedStudioError,
 } from "./run-store-ui-http.js";
 import {
-  PIPELINE_RUN_STUDIO_HTML,
+  studioHtml,
   PIPELINE_RUN_STUDIO_SCRIPT,
   PIPELINE_RUN_STUDIO_STYLE,
 } from "./run-store-ui-page.js";
 import { createStudioApiHandler, type PipelineRunStudioApiOptions } from "./run-store-ui-api.js";
+import { hasStudioOrigin, studioRoute, type StudioHosting } from "./run-store-ui-hosting.js";
 export type {
   PipelineRunStudioCommand,
   PipelineRunStudioLaunchResult,
@@ -31,6 +33,7 @@ export interface PipelineRunStudioOptions extends PipelineRunStudioApiOptions {
   host?: string;
   /** HTTP port. Pass `0` to select an available port. Defaults to `4317`. */
   port?: number;
+  hosting?: StudioHosting;
 }
 
 export interface PipelineRunStudioServer {
@@ -58,13 +61,19 @@ export async function startPipelineRunStudio(
 ): Promise<PipelineRunStudioServer> {
   const host = options.host ?? "127.0.0.1";
   const requestedPort = options.port ?? 4317;
-  const handleApi = createStudioApiHandler(options);
+  const hosting = options.hosting;
+  const handleApi = createStudioApiHandler({
+    ...options,
+    history: hosting ? undefined : options.history,
+  });
+  let ready = true;
   let expectedAuthority: string | undefined;
   const wildcardBind = isUnspecifiedHttpHost(host);
   const isTrustedAuthority = (request: import("node:http").IncomingMessage): boolean => {
     const requestAuthority = normalizeHttpAuthority(request.headers.host);
     if (!requestAuthority || !expectedAuthority) return false;
-    if (requestAuthority === expectedAuthority) return true;
+    if (requestAuthority === expectedAuthority || hosting?.trustsAuthority(request.headers.host))
+      return true;
     if (!wildcardBind) return false;
     const requestParts = parseHttpAuthority(requestAuthority);
     const expectedParts = parseHttpAuthority(expectedAuthority);
@@ -77,7 +86,16 @@ export async function startPipelineRunStudio(
   };
   const server = createServer(async (request, response) => {
     try {
-      const url = new URL(request.url ?? "/", "http://studio.local");
+      if (hosting && !hosting.authenticates(request)) {
+        writeError(
+          response,
+          401,
+          "gateway_authentication_required",
+          "Gateway authentication failed.",
+          "Check the application gateway configuration."
+        );
+        return;
+      }
       if (!isTrustedAuthority(request)) {
         writeError(
           response,
@@ -88,14 +106,52 @@ export async function startPipelineRunStudio(
         );
         return;
       }
-      if (request.method === "GET" && url.pathname === "/") {
+      if (
+        hosting &&
+        (request.method === "POST" || request.method === "DELETE") &&
+        !hasStudioOrigin(request, hosting)
+      ) {
+        writeError(
+          response,
+          403,
+          "untrusted_origin",
+          "The request origin is not trusted.",
+          "Send mutations from the configured Studio origin."
+        );
+        return;
+      }
+      const route = studioRoute(request.url ?? "/", hosting?.mount ?? "");
+      if (!route) {
+        writeError(
+          response,
+          404,
+          "not_found",
+          "Studio route not found.",
+          "Use the configured Studio URL."
+        );
+        return;
+      }
+      if (route.path === "" && (request.method === "GET" || request.method === "HEAD")) {
+        response.writeHead(308, {
+          "cache-control": "no-store",
+          location: hosting!.mount + "/" + route.search,
+        });
+        response.end();
+        return;
+      }
+      const url = new URL(route.path + route.search, "http://studio.local");
+      if (request.method === "GET" && url.pathname === "/api/health") {
+        writeJson(response, { ready }, ready ? 200 : 503);
+        return;
+      }
+      if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/") {
         response.writeHead(200, {
           "cache-control": "no-store",
           "content-security-policy": studioPageCsp,
           "content-type": "text/html; charset=utf-8",
           "x-content-type-options": "nosniff",
         });
-        response.end(PIPELINE_RUN_STUDIO_HTML);
+        response.end(request.method === "HEAD" ? undefined : studioHtml(hosting?.mount ?? ""));
         return;
       }
       await handleApi(request, response, url);
@@ -127,7 +183,10 @@ export async function startPipelineRunStudio(
   return {
     host,
     port,
-    url: `http://${authority}`,
-    close: () => closeServer(server),
+    url: hosting?.publicUrl ?? `http://${authority}`,
+    close: () => {
+      ready = false;
+      return closeServer(server);
+    },
   };
 }

@@ -34,7 +34,19 @@ interface StudioClearResult {
   eventCount: number;
 }
 
+export type StudioAccessDenied = 401 | 403;
+
+class StudioHttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
 export interface StudioApi {
+  subscribeAccessDenied?(listener: (status: StudioAccessDenied) => void): () => void;
   cancelRun(runId: string): Promise<void>;
   clearHistory(): Promise<StudioClearResult>;
   loadCapabilities(): Promise<StudioCapabilities>;
@@ -315,20 +327,12 @@ function parseStudioPlan(value: unknown): PipelinePlan | undefined {
   return isStudioPlanPayload(value) ? value.plan : undefined;
 }
 
-function responseError(value: unknown, fallback: string): Error {
-  if (!isRecord(value)) return new Error(fallback);
+function responseError(value: unknown, fallback: string, status: number): Error {
+  if (!isRecord(value)) return new StudioHttpError(status, fallback);
   if (Array.isArray(value.errors) && value.errors.every((item) => typeof item === "string")) {
-    return new Error(value.errors.join("\n"));
+    return new StudioHttpError(status, value.errors.join("\n"));
   }
-  return new Error(typeof value.message === "string" ? value.message : fallback);
-}
-
-async function readJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch {
-    throw new Error("Studio API returned invalid JSON.");
-  }
+  return new StudioHttpError(status, typeof value.message === "string" ? value.message : fallback);
 }
 
 function invalidResponse(endpoint: string): Error {
@@ -336,38 +340,72 @@ function invalidResponse(endpoint: string): Error {
 }
 
 /** Same-origin Studio transport. Every successful payload is validated before use. */
-export function createStudioApi(fetcher: typeof fetch = fetch): StudioApi {
+export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): StudioApi {
+  const listeners = new Set<(status: StudioAccessDenied) => void>();
+  let denied: StudioAccessDenied | undefined;
+  const assertAccess = () => {
+    if (denied)
+      throw new StudioHttpError(denied, denied === 401 ? "Sign in to continue." : "Access denied.");
+  };
+  const request: typeof fetch = async (input, init) => {
+    assertAccess();
+    const response = await fetcher(mount + String(input), init);
+    if (!denied && (response.status === 401 || response.status === 403)) {
+      denied = response.status;
+      for (const listener of listeners) listener(denied);
+    }
+    assertAccess();
+    return response;
+  };
+  const readJson = async (response: Response): Promise<unknown> => {
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      assertAccess();
+      throw new StudioHttpError(response.status, "Studio API returned invalid JSON.");
+    }
+    assertAccess();
+    return payload;
+  };
   return {
+    subscribeAccessDenied(listener) {
+      listeners.add(listener);
+      if (denied) listener(denied);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     async loadSnapshot() {
-      const response = await fetcher("/api/snapshot", { cache: "no-store" });
+      const response = await request("/api/snapshot", { cache: "no-store" });
       const payload = await readJson(response);
-      if (!response.ok) throw responseError(payload, "Snapshot request failed.");
+      if (!response.ok) throw responseError(payload, "Snapshot request failed.", response.status);
       const snapshot = parseStudioSnapshot(payload);
       if (!snapshot) throw invalidResponse("snapshot");
       return snapshot;
     },
     async loadRunDetail(runId) {
-      const response = await fetcher("/api/runs/" + encodeURIComponent(runId), {
+      const response = await request("/api/runs/" + encodeURIComponent(runId), {
         cache: "no-store",
       });
       const payload = await readJson(response);
       if (response.status === 404) return null;
-      if (!response.ok) throw responseError(payload, "Run detail request failed.");
+      if (!response.ok) throw responseError(payload, "Run detail request failed.", response.status);
       if (!isRecord(payload) || !isStoredStudioRun(payload.run)) {
         throw invalidResponse("run detail");
       }
       return { run: payload.run };
     },
     async loadCommands() {
-      const response = await fetcher("/api/commands", { cache: "no-store" });
+      const response = await request("/api/commands", { cache: "no-store" });
       const payload = await readJson(response);
-      if (!response.ok) throw responseError(payload, "Commands request failed.");
+      if (!response.ok) throw responseError(payload, "Commands request failed.", response.status);
       const commands = parseStudioCommands(payload);
       if (!commands) throw invalidResponse("commands");
       return commands;
     },
     async loadCapabilities() {
-      const response = await fetcher("/api/capabilities", { cache: "no-store" });
+      const response = await request("/api/capabilities", { cache: "no-store" });
       const payload = await readJson(response);
       if (
         !response.ok ||
@@ -375,7 +413,8 @@ export function createStudioApi(fetcher: typeof fetch = fetch): StudioApi {
         typeof payload.canCancel !== "boolean" ||
         typeof payload.canClearHistory !== "boolean"
       ) {
-        if (!response.ok) throw responseError(payload, "Capabilities request failed.");
+        if (!response.ok)
+          throw responseError(payload, "Capabilities request failed.", response.status);
         throw invalidResponse("capabilities");
       }
       return {
@@ -384,48 +423,50 @@ export function createStudioApi(fetcher: typeof fetch = fetch): StudioApi {
       };
     },
     async clearHistory() {
-      const response = await fetcher("/api/history", {
+      const response = await request("/api/history", {
         method: "DELETE",
         headers: { "x-tubeless-studio-clear-history": "1" },
       });
       const payload = await readJson(response);
-      if (!response.ok) throw responseError(payload, "History could not be cleared.");
+      if (!response.ok)
+        throw responseError(payload, "History could not be cleared.", response.status);
       if (!isRecord(payload) || payload.cleared !== true || !isFiniteNumber(payload.eventCount)) {
         throw invalidResponse("clear history");
       }
       return { eventCount: payload.eventCount };
     },
     async previewPlan(commandId, input) {
-      const response = await fetcher("/api/commands/" + encodeURIComponent(commandId) + "/plan", {
+      const response = await request("/api/commands/" + encodeURIComponent(commandId) + "/plan", {
         method: "POST",
         headers: { "content-type": "application/json", "x-tubeless-studio-plan": "1" },
         body: JSON.stringify(input),
       });
       const payload = await readJson(response);
-      if (!response.ok) throw responseError(payload, "Plan request failed.");
+      if (!response.ok) throw responseError(payload, "Plan request failed.", response.status);
       const plan = parseStudioPlan(payload);
       if (!plan) throw invalidResponse("plan");
       return plan;
     },
     async cancelRun(runId) {
-      const response = await fetcher("/api/runs/" + encodeURIComponent(runId) + "/cancel", {
+      const response = await request("/api/runs/" + encodeURIComponent(runId) + "/cancel", {
         method: "POST",
         headers: { "x-tubeless-studio-cancel": "1" },
       });
       const payload = await readJson(response);
-      if (!response.ok) throw responseError(payload, "Run could not be cancelled.");
+      if (!response.ok)
+        throw responseError(payload, "Run could not be cancelled.", response.status);
       if (!isRecord(payload) || payload.cancelled !== true || payload.runId !== runId) {
         throw invalidResponse("cancel run");
       }
     },
     async launch(commandId, values) {
-      const response = await fetcher("/api/commands/" + encodeURIComponent(commandId) + "/runs", {
+      const response = await request("/api/commands/" + encodeURIComponent(commandId) + "/runs", {
         method: "POST",
         headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
         body: JSON.stringify({ values }),
       });
       const payload = await readJson(response);
-      if (!response.ok) throw responseError(payload, "Launch failed.");
+      if (!response.ok) throw responseError(payload, "Launch failed.", response.status);
       if (
         !isRecord(payload) ||
         payload.accepted !== true ||

@@ -150,7 +150,10 @@ and interactive reporter orchestration.
   `studio/run-store-ui-http.ts` owns HTTP parsing, response formatting and authority
   helpers. `studio/run-store-ui.ts` owns the listener, trusted-host enforcement,
   page assets, CSP and server closure. Keep API handling behind the listener's
-  host check.
+  host and gateway checks. `studio/run-store-ui-hosting.ts` validates operator
+  configuration, raw mount paths, gateway credentials, and browser Origin without
+  loading stores or execution. Only the nonsecret mount enters page metadata;
+  authentication remains outside core and the browser import graph.
 
 History projection and API routes do not load pipeline execution, concrete storage
 adapters or page assets. The emitted runtime graph test enforces this boundary.

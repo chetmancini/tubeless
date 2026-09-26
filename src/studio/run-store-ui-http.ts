@@ -6,10 +6,13 @@ export function formatHttpUrlHost(host: string): string {
 }
 
 /** Normalize a bare HTTP authority, including omission of the default port. */
-export function normalizeHttpAuthority(authority: string | undefined): string | undefined {
+export function normalizeHttpAuthority(
+  authority: string | undefined,
+  protocol = "http:"
+): string | undefined {
   if (!authority || /[\s\\/@?#]/.test(authority)) return undefined;
   try {
-    const parsed = new URL(`http://${authority}/`);
+    const parsed = new URL(`${protocol}//${authority}/`);
     if (parsed.username || parsed.password || parsed.pathname !== "/") return undefined;
     return parsed.host.toLowerCase();
   } catch {

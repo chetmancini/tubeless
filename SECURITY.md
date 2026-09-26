@@ -15,28 +15,42 @@ act on, but there is no SLA.
 
 ## Scope
 
-In scope: the published `tubeless` library, the `tubeless` CLI, and the local
-studio as they ship from this repository.
+In scope: the published `tubeless` library, CLI, and Studio, including enforcement
+of the documented authenticated gateway boundary.
 
-Out of scope: pipelines, commands, and studio catalogs you or others write on
-top of Tubeless; leaked credentials in your own runs or stores; and
-non-loopback studio binding you enable yourself.
+Out of scope: application pipelines, commands, and catalogs; application login,
+authorization, proxy, and deployment configuration; leaked credentials in your own
+runs or stores; and deliberately shared unauthenticated read-only binding.
 
-## Local studio
+## Studio
 
-The studio is a local process. It is not an authenticated network service.
+`tubeless ui` binds `127.0.0.1` by default. Without gateway mode, browser execution
+requires loopback (`127.0.0.1`, `::1`, or `localhost`, case-insensitive), and history
+clearing is wired only on loopback. A non-loopback host without commands serves
+read-only history to anyone who can reach the port, including recorded logs.
 
-`tubeless ui` binds `127.0.0.1` by default. Browser-triggered plan, launch, and cancel
-are refused unless `--host` is `127.0.0.1`, `::1`, or `localhost` (compared
-case-insensitively). Clear-history is wired only on those same hosts.
+`--public-url` enables authenticated gateway mode and requires a secret
+`TUBELESS_STUDIO_GATEWAY_TOKEN` (32 random bytes encoded as 64 hex characters).
+Studio authenticates the gateway on every request, validates Host, and requires
+exact browser Origin for POST/DELETE in addition to existing custom-header guards.
+It never trusts forwarded identity or host headers. Gateway mode disables history
+clearing and permits registered execution on a private non-loopback listener.
 
-A non-loopback `--host` without registered commands serves a read-only view of
-the run store. Anyone who can reach that port can read recorded events,
-including log text your pipelines wrote. Binding `0.0.0.0` or a LAN address is
-out of scope; you enabled it.
+The application must authenticate and authorize every page/API request, replace
+browser credentials with the backend token, and forward to a fixed private
+upstream with the configured public Host and original checked Origin. Expose only
+the application gateway publicly; protect the backend transport appropriately.
+Bearer authentication does not encrypt HTTP. There is one admin trust domain:
+admitted users can access the entire configured store and command catalog.
 
-Studio applies host and same-origin request guards, but those checks are not
-authentication. Its HTTP server and browser protocol are internal workbench
-details. Do not expose Studio to a network you do not trust.
+Tokens never belong in HTML, browser requests, URLs, argv, or logs. Recorded
+pipeline data is not redacted. Preserve no-store and CSP response headers and
+exclude Studio from service-worker/shared caching. API login denials use JSON
+401/403; backend credential failures should become generic gateway 502 responses.
 
-See [the studio docs](./docs/studio.md).
+The CLI hosting flags and gateway forwarding rules are supported. Studio's JSON
+payloads and server internals remain bundled UI/server implementation details,
+not a public embedding or REST API. Execution is process-local, not a durable
+scheduler; never automatically retry uncertain launch requests.
+
+See [the Studio hosting contract](./docs/studio.md#host-studio-behind-an-application-gateway).
