@@ -252,14 +252,24 @@ export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
     .plan-result { min-height: 110px; max-height: 340px; margin: 2px 0 15px; border: 1px solid #ccd6f2; border-radius: 9px; overflow: auto; }
     .plan-placeholder { padding: 28px; color: var(--faint); font-size: 10px; text-align: center; }
     .plan-summary { padding: 10px 12px; border-bottom: 1px solid var(--line); background: #f8f9f5; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 10px; }
+    .plan-selection-mode { padding: 10px 12px; border-bottom: 1px solid #dce3f5; background: #f5f7ff; display: grid; gap: 3px; font-size: 9px; line-height: 1.45; }
+    .plan-selection-mode strong { color: #3153b8; font-size: 10px; }
+    .plan-selection-mode span { color: #536185; }
     .plan-steps { display: grid; }
     .plan-step { padding: 10px 12px; border-bottom: 1px solid #e9eae4; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 12px; }
     .plan-step:last-child { border-bottom: 0; }
     .plan-step-title { min-width: 0; display: flex; align-items: center; gap: 7px; }
     .plan-step-title strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 10px; white-space: nowrap; }
+    .plan-step-id { color: var(--faint); font: 9px var(--mono); overflow-wrap: anywhere; }
     .plan-kind { padding: 2px 5px; border: 1px solid var(--line); border-radius: 999px; color: var(--faint); background: #fff; font-size: 7px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
     .plan-kind.pipeline { border-color: #cad6fa; color: #3153b8; background: var(--blue-soft); }
     .plan-step > small { color: var(--faint); font-size: 9px; line-height: 1.4; }
+    .plan-explanation { grid-column: 1 / -1; margin: 2px 0 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+    .plan-explanation li { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px; color: var(--muted); font-size: 9px; line-height: 1.45; }
+    .plan-explanation li strong { color: var(--ink); font-weight: 700; }
+    .plan-references { display: inline-flex; flex-wrap: wrap; gap: 4px 7px; }
+    .plan-references > span { min-width: 0; overflow-wrap: anywhere; }
+    .plan-references code { font: 9px var(--mono); color: #3153b8; overflow-wrap: anywhere; }
     .plan-nested { grid-column: 1 / -1; padding: 8px 9px; border-radius: 6px; background: #f5f7ff; color: #4660ad; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 8px; }
     .plan-nested strong { margin-right: 3px; font: 650 9px var(--mono); }
     .plan-nested code { padding: 2px 4px; border: 1px solid #d8def2; border-radius: 4px; background: #fff; font: 8px var(--mono); }

@@ -223,8 +223,128 @@ describe("Studio components", () => {
       ],
     };
     const markup = renderToString(<PlanView plan={plan} />);
-    expect(markup).toContain("1 of 1 steps will run · dry run");
-    expect(markup).toContain("</small>");
+    expect(markup).toContain("1 of 1 steps planned to run · dry run");
+    expect(markup).toContain("Exact steps");
+    expect(markup).toContain("Explicitly listed in the exact step selection.");
+    expect(markup).toContain("<strong>Required inputs</strong><span>No required inputs.</span>");
+  });
+
+  it("explains target closure, shared prerequisites, and optional omissions", () => {
+    const plan: PipelinePlan = {
+      dryRun: false,
+      errors: [],
+      ok: true,
+      pipelineId: "publish",
+      steps: [
+        {
+          dependencies: [],
+          dryRun: "run",
+          id: "source",
+          optionalDependencies: [],
+          runtimeSkipPossible: false,
+          selected: true,
+          selectionReasons: [
+            { kind: "required-dependency", dependentId: "publish", targetId: "publish" },
+            { kind: "required-dependency", dependentId: "validate", targetId: "publish" },
+          ],
+          skipAfterFailureOf: [],
+        },
+        {
+          dependencies: [],
+          dryRun: "run",
+          id: "optional",
+          optionalDependencies: [],
+          runtimeSkipPossible: false,
+          selected: false,
+          selectionReasons: [
+            { kind: "optional-only", dependentId: "publish", targetId: "publish" },
+          ],
+          skipAfterFailureOf: [],
+          skipReason: "filtered",
+        },
+        {
+          dependencies: ["source"],
+          dryRun: "run",
+          id: "validate",
+          optionalDependencies: [],
+          runtimeSkipPossible: false,
+          selected: true,
+          selectionReasons: [{ kind: "failure-gate", dependentId: "publish", targetId: "publish" }],
+          skipAfterFailureOf: [],
+        },
+        {
+          dependencies: ["source"],
+          dryRun: "run",
+          id: "publish",
+          optionalDependencies: ["optional"],
+          runtimeSkipPossible: false,
+          selected: true,
+          selectionReasons: [{ kind: "target", targetId: "publish" }],
+          skipAfterFailureOf: ["validate"],
+        },
+        {
+          dependencies: [],
+          dryRun: "run",
+          id: "unrelated",
+          optionalDependencies: [],
+          runtimeSkipPossible: false,
+          selected: false,
+          selectionReasons: [{ kind: "outside-target-closure" }],
+          skipAfterFailureOf: [],
+          skipReason: "filtered",
+        },
+      ],
+    };
+    const markup = renderToString(<PlanView plan={plan} />);
+    expect(markup).toContain("Targets with prerequisites");
+    expect(markup).toContain("Required input for “publish” on the path to target “publish”.");
+    expect(markup).toContain("Required input for “validate” on the path to target “publish”.");
+    expect(markup).toContain("Failure gate for “publish” on the path to target “publish”.");
+    expect(markup).toContain(
+      "Optional input for “publish” on the path to target “publish”; this link does not select it."
+    );
+    expect(markup).toContain("Outside the selected targets and their prerequisite paths.");
+    expect(markup).toContain("<code>optional</code> (not selected)");
+    expect(markup).toContain("failure or cancellation skips this step");
+  });
+
+  it("shows that exact selection can leave required inputs unavailable", () => {
+    const plan: PipelinePlan = {
+      dryRun: true,
+      errors: [],
+      ok: true,
+      pipelineId: "exact",
+      steps: [
+        {
+          dependencies: [],
+          dryRun: "run",
+          id: "source",
+          optionalDependencies: [],
+          runtimeSkipPossible: false,
+          selected: false,
+          selectionReasons: [{ kind: "not-selected" }],
+          skipAfterFailureOf: [],
+          skipReason: "filtered",
+        },
+        {
+          dependencies: ["source"],
+          dryRun: "run",
+          id: "publish",
+          optionalDependencies: [],
+          runtimeSkipPossible: false,
+          selected: true,
+          selectionReasons: [{ kind: "exact" }],
+          skipAfterFailureOf: [],
+          skipReason: "unmet-dependency",
+        },
+      ],
+    };
+    const markup = renderToString(<PlanView plan={plan} />);
+    expect(markup).toContain("Exact steps");
+    expect(markup).toContain("Required inputs and failure gates are not added automatically");
+    expect(markup).toContain("<code>source</code> (not selected)");
+    expect(markup).toContain("A required input is unavailable in this selection or dry run.");
+    expect(markup).toContain("0 of 2 steps planned to run · dry run");
   });
 
   it("escapes status labels and rejects invalid dates", () => {

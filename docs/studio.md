@@ -84,7 +84,14 @@ A single active step keeps its progress message.
 
 Preview uses the form's dry-run and step/target controls. It does not validate
 business inputs; those are checked when you run the command. A preview is
-optional. Cancellation affects only a live launch owned by the current Studio
+optional. The preview identifies whether the selection runs all steps, exact
+steps, or targets with recursively included required inputs and failure gates.
+Each step lists why it was selected or omitted, its required and optional
+inputs, its failure gates, and any planned skip. Optional inputs alone do not
+bring a step into a target plan; exact step selection does not add prerequisites.
+Runtime skip policies and failures can still change what executes.
+
+Cancellation affects only a live launch owned by the current Studio
 process; it cannot resume or cancel work from an earlier crashed process.
 Studio renders `Resume` only when the command descriptor declares it through
 managed `checkpoint` support or explicit application-owned `resume: true`
