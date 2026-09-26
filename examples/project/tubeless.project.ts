@@ -1,3 +1,4 @@
+import { MetadataPipeline } from "../graph-metadata.ts";
 import { definePipelineCommand } from "tubeless/cli";
 import { defineProject } from "tubeless/project";
 import { ValidatedPipeline } from "../validated-boundaries.ts";
@@ -26,6 +27,7 @@ export default defineProject(
   "example-jobs",
   [
     ValidatedPipeline,
+    definePipelineCommand(MetadataPipeline, { params: {} }),
     definePipelineCommand(PaginatedPipeline, {
       params: { rows: { type: "string", multiple: true } },
     }),

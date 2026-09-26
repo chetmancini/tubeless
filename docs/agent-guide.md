@@ -32,6 +32,14 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 ## Choose pipeline features
 
+- Add inert `metadata` (`tags`, `owner`, `domain`, `annotations`) for discovery.
+  Use `querySteps(plan, query)`, `inspect --tag/--owner/--domain`, or
+  `toMermaid({ query })` to find steps; queries never select execution.
+  Metadata is bounded, copied, frozen, and isolated across child pipelines.
+  Definitions carrying metadata use identity version 3. Document v1 rejects
+  step/pipeline metadata. Read [graph metadata](./graph-metadata.md) and adapt
+  [the recipe](../examples/graph-metadata.ts).
+
 - For YAML or JSON authoring, read [declarative pipelines](./declarative-pipelines.md)
   and adapt [the YAML recipe](../examples/yaml-pipelines.ts). Parse at the
   application edge, then use `compilePipelineDocument(document, registry)` from

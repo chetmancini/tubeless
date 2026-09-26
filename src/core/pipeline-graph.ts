@@ -1,3 +1,4 @@
+import { snapshotPipelineMetadata } from "../tracing/graph-metadata.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import {
   STEP_NESTED_PIPELINE,
@@ -32,6 +33,7 @@ function compileStep<TOptions extends object>(step: AnyStep<TOptions>): Compiled
   const optionsSchema = step[STEP_OPTIONS_SCHEMA];
   const name = step.name;
   const description = step.description;
+  const metadata = snapshotPipelineMetadata(step.metadata);
   const dryRun = step.dryRun;
   const outputSchema = step.outputSchema;
   const skip = step.skip;
@@ -51,6 +53,7 @@ function compileStep<TOptions extends object>(step: AnyStep<TOptions>): Compiled
     Object.assign(compiled, { [STEP_REMOTE]: Object.freeze({ ...remote }) });
   if (optionsSchema !== undefined)
     Object.assign(compiled, { [STEP_OPTIONS_SCHEMA]: optionsSchema });
+  if (metadata !== undefined) Object.assign(compiled, { metadata });
   if (name !== undefined) Object.assign(compiled, { name });
   if (description !== undefined) Object.assign(compiled, { description });
   if (dryRun !== undefined) {

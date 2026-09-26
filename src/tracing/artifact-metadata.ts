@@ -34,7 +34,7 @@ const BYTE_LIMIT = 16_384;
 const encoder = new TextEncoder();
 
 // Validate before JSON serialization: never invoke toJSON/getters or silently lose values.
-function jsonSnapshot(value: unknown, path: string): ArtifactJsonValue {
+export function snapshotJsonMetadata(value: unknown, path: string): ArtifactJsonValue {
   let nodes = 0;
   let bytes = 0;
   const charge = (text: string) => {
@@ -110,7 +110,7 @@ const shape = wireObject({
 export const artifactMetadataSchema = wireCustom<ArtifactMetadata>(
   { ...shape.jsonSchema, anyOf: [{ required: ["id"] }, { required: ["uri"] }] },
   (value, path) => {
-    const snapshot = jsonSnapshot(value, path);
+    const snapshot = snapshotJsonMetadata(value, path);
     const decoded = shape.decode(snapshot, path);
     if (!decoded.id && !decoded.uri) throw new Error(`${path} requires id or uri`);
     const allowed = [

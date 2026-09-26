@@ -1,3 +1,4 @@
+import { pipelineMetadataSchema } from "./graph-metadata.js";
 import { artifactMetadataSchema, artifactOperationSchema } from "./artifact-metadata.js";
 import {
   wireArray,
@@ -356,7 +357,7 @@ const remoteSchema = wireObject({
 /** Definition metadata has its own version to fix fingerprint semantics. */
 export const pipelineDefinitionIdentitySchema = wireRefine(
   wireObject({
-    version: wireUnion([wireLiteral(1), wireLiteral(2)]),
+    version: wireUnion([wireLiteral(1), wireLiteral(2), wireLiteral(3)]),
     definitionId: wireString({ maxLength: 80 }),
     structuralFingerprint: wireString({ maxLength: 80 }),
     implementationVersion: wireOptional(wireString({ maxLength: 256 })),
@@ -388,6 +389,7 @@ const iterationControlsSchema = wireObject({
   stepIds: wireOptional(definitionStrings),
 });
 const definitionStepSchema = wireObject({
+  metadata: wireOptional(pipelineMetadataSchema),
   id: definitionString,
   dependencies: definitionStrings,
   optionalDependencies: definitionStrings,
@@ -412,6 +414,7 @@ const definitionStepSchema = wireObject({
 export const pipelineDefinitionSnapshotSchema = wireRefine(
   wireObject({
     identity: pipelineDefinitionIdentitySchema,
+    metadata: wireOptional(pipelineMetadataSchema),
     steps: wireArray(definitionStepSchema, { maxItems: 4096 }),
     targetIds: definitionStrings,
     requiredFinalizerStepIds: wireOptional(definitionStrings),
@@ -419,6 +422,14 @@ export const pipelineDefinitionSnapshotSchema = wireRefine(
     resultValidated: wireBoolean(),
   }),
   (value, path) => {
+    if (
+      value.identity.version !== 3 &&
+      (value.metadata !== undefined ||
+        value.steps.some(
+          (step) => step.metadata !== undefined || step.nestedPipeline?.identity?.version === 3
+        ))
+    )
+      throw new Error(`${path}: metadata requires identity version 3`);
     for (const step of value.steps) {
       const nested = step.nestedPipeline;
       if (!nested) continue;
@@ -702,7 +713,11 @@ export const pipelineTraceEventSchema = wireRefine(
     ) {
       throw new Error("Iteration metadata requires trace version 3");
     }
-    if (event.name === "pipeline.started" && event.payload.definitionIdentity?.version === 2) {
+    if (
+      event.name === "pipeline.started" &&
+      event.payload.definitionIdentity !== undefined &&
+      event.payload.definitionIdentity.version !== 1
+    ) {
       throw new Error("Trace version 2 requires identity version 1");
     }
   },

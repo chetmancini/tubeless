@@ -1,3 +1,4 @@
+import type { PipelineMetadata } from "../tracing/graph-metadata.js";
 import type { AnyStep, Step, StepOutput } from "./pipeline-steps.js";
 import type {
   InferSchemaInput,
@@ -93,6 +94,8 @@ export type PipelineDefinition<
   name?: string;
   /** Human-readable purpose shown by command and discovery surfaces. */
   description?: string;
+  /** Inert, bounded JSON metadata, snapshotted during compilation. */
+  metadata?: PipelineMetadata;
   /** Author- or build-supplied version of handlers, mappings, schemas, and finalizer (1–256 characters). */
   implementationVersion?: string;
   steps: TSteps;
