@@ -246,7 +246,7 @@ export async function executeWithStepCache<TOptions extends object>(input: {
       )
     );
   };
-  if (policy === "use") {
+  if (policy === "use" && cache.maxAge !== 0) {
     const entry = await cacheOperation("read", io, async () => {
       const found = await store.get(scopedKey, io);
       if (found === undefined) return undefined;

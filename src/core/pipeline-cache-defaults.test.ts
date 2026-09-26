@@ -106,6 +106,36 @@ it("supports shared defaults and step age overrides with store-independent expir
   ]);
 });
 
+it.each([
+  { maxAge: 0, stepCache: true },
+  { maxAge: "1 day", stepCache: { maxAge: "0 seconds" } },
+] as const)(
+  "skips zero-age reads while still recomputing and writing: %j",
+  async ({ maxAge, stepCache }) => {
+    const store = memoryStore();
+    store.get.mockImplementation(() => {
+      throw new Error("The cache must not be read");
+    });
+    const decode = vi.fn(v8StepCacheCodec.decode);
+    let executions = 0;
+    const run = vi.fn(() => ++executions);
+    const { step } = createSteps();
+    const work = step("work", { cache: stepCache, run });
+    const pipeline = definePipeline({
+      id: "zero-age",
+      steps: [work],
+      implementationVersion: "v1",
+      finalize: work,
+      cache: { maxAge, store, codec: { encode: v8StepCacheCodec.encode, decode } },
+    });
+    expect(await pipeline.runOrThrow()).toBe(1);
+    expect(await pipeline.runOrThrow({}, { cache: "use" })).toBe(2);
+    expect(store.get).not.toHaveBeenCalled();
+    expect(decode).not.toHaveBeenCalled();
+    expect(store.set).toHaveBeenCalledTimes(2);
+  }
+);
+
 it("keys validated domain options and inputs, preserving absence versus published undefined", async () => {
   const store = memoryStore();
   const run = vi.fn(() => 1);
