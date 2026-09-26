@@ -1,3 +1,4 @@
+import { v8StepCacheCodec } from "../utilities/cache-storage.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
@@ -77,6 +78,54 @@ describe("openNdjsonPipelineRunStore", () => {
     } finally {
       await ndjson.close();
       await sqlite.close();
+    }
+  });
+
+  it("retains automatic cache write and reuse receipts through NDJSON and reopened SQLite", async () => {
+    const filename = await tempFile("");
+    const cwd = path.dirname(filename);
+    const lines: string[] = [];
+    const { step } = createSteps();
+    const pipeline = definePipeline({
+      id: "cache-artifacts",
+      steps: [
+        step("count", {
+          cache: { version: "v1" },
+          run: () => 42,
+        }),
+      ],
+    });
+    for (let index = 0; index < 2; index++) {
+      await pipeline.runOrThrow({}, {}, { cwd, tracing: { exporter: captureJson(lines) } });
+    }
+    await writeFile(filename, lines.join("\n"));
+    const ndjson = await openNdjsonPipelineRunStore(filename);
+    const sqlitePath = path.join(cwd, "cache.sqlite");
+    const writer = await openSqlitePipelineRunStore(sqlitePath);
+    for (const event of await ndjson.listEvents()) await writer.export(event);
+    await writer.close();
+    const reopened = await openSqlitePipelineRunStore(sqlitePath);
+    try {
+      for (const reader of [ndjson, reopened]) {
+        const runs = projectPipelineRunStore(await reader.listEvents()).runs;
+        const artifacts = runs.flatMap((run) => run.steps[0].artifacts ?? []);
+        expect(artifacts.map((entry) => entry.operation).sort()).toEqual(["reuse", "write"]);
+        expect(new Set(artifacts.map((entry) => entry.artifact.id)).size).toBe(1);
+        for (const run of runs) {
+          expect(run.steps[0].artifacts?.[0]).toMatchObject({
+            attemptId: run.steps[0].attempt?.attemptId,
+            preview: false,
+            artifact: {
+              uri: expect.stringContaining("/.cache/cache-artifacts/count/"),
+              checksum: expect.stringMatching(/^sha256:/),
+              metadata: { tubelessCache: { implementationVersion: "v1" } },
+            },
+          });
+        }
+      }
+    } finally {
+      await ndjson.close();
+      await reopened.close();
     }
   });
 
@@ -537,13 +586,34 @@ describe("recorded fan-out diagnostics", () => {
   });
 });
 
-it.each(["completed", "failed", "cancelled"] as const)(
-  "round-trips %s override provenance through NDJSON and SQLite",
-  async (status) => {
+it.each(
+  (["override", "cache"] as const).flatMap((outputSource) =>
+    (["completed", "failed", "cancelled"] as const).map((status) => ({ outputSource, status }))
+  )
+)(
+  "round-trips $status $outputSource provenance through NDJSON and SQLite",
+  async ({ status, outputSource }) => {
     const { step } = createSteps();
     const test = createPipelineTestRuntime();
     const load = step("load", {
       run: () => "real",
+      cache:
+        outputSource === "cache"
+          ? {
+              version: "1",
+              key: () => "private key",
+              codec: v8StepCacheCodec,
+              store: {
+                get: async () => ({
+                  value: await v8StepCacheCodec.encode("private supplied value"),
+                  createdAtMs: 0,
+                }),
+                set: () => {
+                  throw new Error("unexpected write");
+                },
+              },
+            }
+          : undefined,
       outputSchema: {
         "~standard": {
           version: 1,
@@ -564,10 +634,13 @@ it.each(["completed", "failed", "cancelled"] as const)(
     const result = await test.run(
       pipeline,
       {},
-      { overrides: [overrideStep(load, "private supplied value")] }
+      outputSource === "override"
+        ? { overrides: [overrideStep(load, "private supplied value")] }
+        : {}
     );
     expect(lines.join("\n")).not.toContain("private supplied value");
-    expect(result.steps[0]).toMatchObject({ status, outputSource: "override" });
+    expect(lines.join("\n")).not.toContain("private key");
+    expect(result.steps[0]).toMatchObject({ status, outputSource });
     const filename = await tempFile(lines.join("\n"));
     const ndjson = await openNdjsonPipelineRunStore(filename);
     const sqlite = await openSqlitePipelineRunStore(
@@ -580,7 +653,7 @@ it.each(["completed", "failed", "cancelled"] as const)(
           (event) => event.name === (status === "completed" ? "step.complete" : `step.${status}`)
         )
       ).toMatchObject({
-        payload: { status, outputSource: "override" },
+        payload: { status, outputSource },
         stepId: "load",
         attemptId: expect.any(String),
       });
@@ -590,8 +663,8 @@ it.each(["completed", "failed", "cancelled"] as const)(
         expect(projectPipelineRunStore(await reader.listEvents()).runs[0]?.steps[0]).toMatchObject({
           id: "load",
           status,
-          outputSource: "override",
-          attempt: { status, outputSource: "override" },
+          outputSource,
+          attempt: { status, outputSource },
         });
       }
     } finally {

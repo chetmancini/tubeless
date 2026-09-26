@@ -1,3 +1,5 @@
+import { STEP_CACHE } from "./pipeline-step-metadata.js";
+import { executeWithStepCache } from "./pipeline-cache.js";
 import { artifactRecordSchema, type ArtifactRecord } from "../tracing/artifact-metadata.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import type {
@@ -49,6 +51,8 @@ export async function validateStepOutput<TOptions extends object>(
 
 export async function executeStepAttempt<TOptions extends object>(input: {
   attemptId: string;
+  pipelineId: string;
+  onCacheHit?(): void;
   context: PipelineExecutionContext<TOptions>;
   dryRun: boolean;
   inputs: Record<string, unknown>;
@@ -77,14 +81,27 @@ export async function executeStepAttempt<TOptions extends object>(input: {
       if (acceptsReports) input.onProgress(progress);
     },
   };
-  let output: unknown;
-  try {
-    output =
-      input.dryRun && typeof step.dryRun === "function"
+  const run = async () => {
+    try {
+      return input.dryRun && typeof step.dryRun === "function"
         ? await step.dryRun(input.inputs, stepContext)
         : await step.run(input.inputs, stepContext);
-  } finally {
-    acceptsReports = false;
-  }
-  return validateStepOutput(step, output, input.outputBoundary);
+    } finally {
+      acceptsReports = false;
+    }
+  };
+  return executeWithStepCache({
+    cache: step[STEP_CACHE],
+    pipelineId: input.pipelineId,
+    stepId: step.id,
+    inputs: input.inputs,
+    context: input.context,
+    run,
+    onArtifact: (record) => input.onArtifact?.(record, false),
+    validate: (value) => validateStepOutput(step, value, input.outputBoundary),
+    onHit: () => {
+      acceptsReports = false;
+      input.onCacheHit?.();
+    },
+  });
 }

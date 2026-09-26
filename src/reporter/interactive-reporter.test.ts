@@ -1,3 +1,4 @@
+import { v8StepCacheCodec } from "../utilities/cache-storage.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPipelineTestRuntime, overrideStep } from "../testing/testing.js";
 import { createPipelineReporter, type ReporterOutput } from "./interactive-reporter.js";
@@ -960,27 +961,43 @@ describe("createPipelineReporter", () => {
   });
 });
 
-it("retains an explicit overridden row in the final interactive frame", async () => {
-  const output = captureOutput();
-  const reporter = createPipelineReporter({
-    mode: "interactive",
-    output,
-    log: captureLog(),
-    symbols: "ascii",
-    color: "never",
-  });
-  const { step } = createSteps();
-  const load = step("load", { run: () => 1 });
-  const test = createPipelineTestRuntime();
-  test.context.hooks = reporter.hooks;
-  try {
-    await test.run(
-      definePipeline({ id: "interactive-override", steps: [load] }),
-      {},
-      { overrides: [overrideStep(load, 2)] }
-    );
-    expect(output.chunks.join("")).toContain("ok load (overridden)");
-  } finally {
-    reporter.dispose();
+it.each(["override", "cache"] as const)(
+  "retains %s provenance in the final interactive frame",
+  async (source) => {
+    const output = captureOutput();
+    const reporter = createPipelineReporter({
+      mode: "interactive",
+      output,
+      log: captureLog(),
+      symbols: "ascii",
+      color: "never",
+    });
+    const { step } = createSteps();
+    const load = step("load", {
+      run: () => 1,
+      cache: {
+        version: "1",
+        key: () => "key",
+        codec: v8StepCacheCodec,
+        store: {
+          get: async () => ({ value: await v8StepCacheCodec.encode(2), createdAtMs: 0 }),
+          set: () => {},
+        },
+      },
+    });
+    const test = createPipelineTestRuntime();
+    test.context.hooks = reporter.hooks;
+    try {
+      await test.run(
+        definePipeline({ id: "interactive-override", steps: [load] }),
+        {},
+        source === "override" ? { overrides: [overrideStep(load, 2)] } : {}
+      );
+      expect(output.chunks.join("")).toContain(
+        `ok load (${source === "override" ? "overridden" : "cached"})`
+      );
+    } finally {
+      reporter.dispose();
+    }
   }
-});
+);

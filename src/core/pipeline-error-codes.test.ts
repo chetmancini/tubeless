@@ -279,6 +279,30 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
       );
     },
   },
+  TUBELESS_DEFINITION_CACHE_INVALID: {
+    phase: "definition",
+    kind: "definition",
+    emit: () =>
+      definitionError(() =>
+        definePipeline({ id: "cache", steps: [], cache: { maxAge: "next month" } })
+      ),
+  },
+  TUBELESS_RUN_CACHE_INVALID: {
+    phase: "planning",
+    kind: "validation",
+    emit: () => firstError(selectionPipeline().plan({ cache: "invalid" as never }).errors),
+  },
+  TUBELESS_DEFINITION_STEP_CACHE_INVALID: {
+    phase: "definition",
+    kind: "definition",
+    emit: () =>
+      definitionError(() => {
+        const { step } = createSteps();
+        const value = step("value", { run: () => 1 });
+        Reflect.set(value, "cache", {});
+        return definePipeline({ id: "invalid-cache", steps: [value] });
+      }),
+  },
   TUBELESS_DEFINITION_STEP_NAME_BLANK: {
     phase: "definition",
     kind: "definition",

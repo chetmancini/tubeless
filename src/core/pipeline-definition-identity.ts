@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type { CompiledStepGraph } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import {
+  STEP_CACHE,
   STEP_NESTED_PIPELINE,
   STEP_OPTIONS_SCHEMA,
   STEP_REMOTE,
@@ -28,6 +29,7 @@ function iterationFields(
   if (nested.mode !== "iterate") return {};
   const controls = nested.controls;
   const normalizedControls = {
+    ...(controls?.cache !== undefined ? { cache: controls.cache } : {}),
     ...(controls?.dryRun !== undefined ? { dryRun: controls.dryRun } : {}),
     ...(controls?.continueOnError !== undefined
       ? { continueOnError: controls.continueOnError }
@@ -56,6 +58,7 @@ export function compileDefinitionSnapshot(input: {
     const graph = input.stepGraph.get(step)!;
     const nested = step[STEP_NESTED_PIPELINE];
     const remote = step[STEP_REMOTE];
+    const cache = step[STEP_CACHE];
     return {
       id: step.id,
       ...(step.metadata === undefined ? {} : { metadata: step.metadata }),
@@ -70,6 +73,18 @@ export function compileDefinitionSnapshot(input: {
             : ("run" as const),
       runtimeSkipPossible: step.skip !== undefined,
       outputValidated: step.outputSchema !== undefined,
+      ...(cache
+        ? {
+            cache: {
+              version: cache.version,
+              ...(cache.maxAge !== undefined ? { maxAgeMs: cache.maxAge } : {}),
+              policy:
+                typeof cache.policy === "function"
+                  ? ("dynamic" as const)
+                  : (cache.policy ?? ("use" as const)),
+            },
+          }
+        : {}),
       ...(nested
         ? {
             nestedPipeline: {
@@ -139,6 +154,14 @@ export function createDefinitionIdentity(
       dryRun: step.dryRun,
       runtimeSkipPossible: step.runtimeSkipPossible,
       outputValidated: step.outputValidated,
+      ...(step.cache
+        ? {
+            cache: {
+              policy: step.cache.policy,
+              ...(step.cache.maxAgeMs !== undefined ? { maxAgeMs: step.cache.maxAgeMs } : {}),
+            },
+          }
+        : {}),
       ...(step.nestedPipeline
         ? {
             nestedPipeline: {
@@ -184,6 +207,9 @@ export function createDefinitionIdentity(
       version,
       structuralFingerprint,
       implementationVersion,
+      ...(input.steps.some((step) => step.cache)
+        ? { cacheVersions: input.steps.map((step) => step.cache?.version ?? null) }
+        : {}),
       children: input.steps.map((step) => {
         const child = step.nestedPipeline?.identity;
         if (!child) return null;

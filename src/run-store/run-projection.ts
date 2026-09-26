@@ -136,8 +136,8 @@ export class RunProjection {
       });
       return;
     }
-    if ("outputSource" in event.payload && event.payload.outputSource === "override") {
-      step.outputSource = "override";
+    if ("outputSource" in event.payload && event.payload.outputSource) {
+      step.outputSource = event.payload.outputSource;
     }
     if (event.attemptId) {
       let attempt = step.attempt;

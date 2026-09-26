@@ -169,5 +169,9 @@ step's `artifacts`; `history <run-id>` and Studio show reads, writes, reuse, and
 on that step. Studio loads artifact metadata with the selected run's details,
 keeping workspace refreshes independent of the number of artifact records. Expand an artifact in Studio to inspect its metadata. Join logical
 IDs and content versions across recorded runs when tracing provenance; there is
-no automatic cross-run artifact catalog or cache. Saved version 2 recordings
-without artifact events remain readable.
+no automatic cross-run artifact catalog. [Step output caching](./step-output-cache.md)
+automatically records its own stored entries as write/reuse artifacts, shown as
+Cached output in history and Studio. Cache hits do not replay application artifact
+records or verify files referenced by the cached value. Cache receipts describe
+past operations, not current availability. Saved version 2 recordings without
+artifact events remain readable.

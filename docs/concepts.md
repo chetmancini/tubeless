@@ -160,6 +160,16 @@ appropriate dependency before increasing concurrency. An ordering-only `after` o
 `waitFor` edge, which supplies no data and allows work after a failed prerequisite,
 is a possible future extension; neither edge exists today.
 
+## Reusing deterministic step outputs
+
+An ordinary step can opt into caching with `cache: { version: "v1" }`, or
+`cache: true` to inherit the pipeline implementation version. Keys, local storage,
+and codecs have defaults; pipeline `cache.maxAge` accepts durations such as
+`"30 days"`. Only that step's raw handler result is reused;
+selection, dependencies, skip decisions, and output validation still apply.
+Cache hits carry `outputSource: "cache"` with an ordinary completion status.
+See [cache contracts and safety rules](./step-output-cache.md).
+
 ## Selection and finalization
 
 **Without selection controls, run the whole pipeline.** Tubeless does not

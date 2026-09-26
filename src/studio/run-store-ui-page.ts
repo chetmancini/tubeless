@@ -145,6 +145,14 @@ export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
     .step-duration { margin-left: auto; color: var(--muted); font: 10px var(--mono); }
     .step-description { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.45; }
     .execution { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
+    .artifact-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; font-size: 11px; color: var(--muted); }
+    .artifact-filter select { max-width: 100%; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: white; }
+    .artifact-detail { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; overflow-wrap: anywhere; }
+    .artifact-detail summary { cursor: pointer; }
+    .artifact-info { margin-top: 8px; font-size: 11px; line-height: 1.7; color: var(--muted); }
+    .artifact-note { color: var(--faint); margin: 6px 0; }
+    .artifact-receipt { margin-top: 8px; font-size: 11px; color: var(--muted); }
+    .artifact-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 10px/1.6 var(--mono); }
     .execution-summary { padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); background: #fbfbf8; font: 9px var(--mono); }
     .execution-summary b { color: var(--faint); font: 700 8px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
     .progress { height: 3px; margin-top: 10px; overflow: hidden; border-radius: 2px; background: #e7e9e2; }

@@ -18,7 +18,7 @@ import type {
 } from "./pipeline-types.js";
 
 export interface PipelineStepAttempt {
-  outputSource?: "override";
+  outputSource?: "override" | "cache";
   attemptId: string;
   startedAtMs: number;
 }
@@ -148,7 +148,7 @@ export class PipelineRunState<TResult> {
   beginAttempt(
     step: PipelinePlanStep,
     startedAtMs = this.now(),
-    outputSource?: "override"
+    outputSource?: "override" | "cache"
   ): PipelineStepAttempt {
     const attempt = {
       attemptId: `${this.identity.runId}:attempt:${(this.#nextAttemptSequence += 1).toString(36)}`,

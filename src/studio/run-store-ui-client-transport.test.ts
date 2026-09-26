@@ -196,30 +196,33 @@ describe("Studio API response parsing", () => {
   });
 });
 
-it("accepts overridden steps and attempts in recorded Studio runs", () => {
-  const recorded = snapshot([
-    run({
-      steps: [
-        {
-          id: "load",
-          status: "completed",
-          outputSource: "override",
-          attempt: {
-            attemptId: "override-1",
-            startedAtMs: 1,
-            finishedAtMs: 2,
-            retries: [],
+it.each(["override", "cache"] as const)(
+  "accepts %s steps and attempts in recorded Studio runs",
+  (outputSource) => {
+    const recorded = snapshot([
+      run({
+        steps: [
+          {
+            id: "load",
             status: "completed",
-            outputSource: "override",
+            outputSource,
+            attempt: {
+              attemptId: "override-1",
+              startedAtMs: 1,
+              finishedAtMs: 2,
+              retries: [],
+              status: "completed",
+              outputSource,
+            },
           },
-        },
-      ],
-    }),
-  ]);
-  expect(parseStudioSnapshot(recorded)?.runs[0]?.steps[0]).toMatchObject({
-    status: "completed",
-    outputSource: "override",
-  });
-  recorded.runs[0]!.steps[0]!.outputSource = "invalid" as never;
-  expect(parseStudioSnapshot(recorded)).toBeUndefined();
-});
+        ],
+      }),
+    ]);
+    expect(parseStudioSnapshot(recorded)?.runs[0]?.steps[0]).toMatchObject({
+      status: "completed",
+      outputSource,
+    });
+    recorded.runs[0]!.steps[0]!.outputSource = "invalid" as never;
+    expect(parseStudioSnapshot(recorded)).toBeUndefined();
+  }
+);

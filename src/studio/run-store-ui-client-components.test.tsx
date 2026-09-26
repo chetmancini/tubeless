@@ -1,3 +1,4 @@
+import { StepArtifacts } from "./run-store-ui-artifacts.js";
 import { renderToString } from "preact-render-to-string";
 import { describe, expect, it } from "vitest";
 import { RUN_MODEL_VERSION, type PipelinePlan } from "../core/pipeline.js";
@@ -207,4 +208,48 @@ it.each(["completed", "failed", "cancelled"])("renders %s with override provenan
   const markup = renderToString(<Status value={status} outputSource="override" />);
   expect(markup).toContain(`${status} (overridden)`);
   expect(markup).toContain(`status ${status}`);
+});
+
+it.each(["completed", "failed", "cancelled"])("renders %s with cache provenance", (status) => {
+  const markup = renderToString(<Status value={status} outputSource="cache" />);
+  expect(markup).toContain("(cached)");
+});
+
+it("distinguishes cached outputs from application artifacts and offers filters", () => {
+  const markup = renderToString(
+    <StepArtifacts
+      stepId="count"
+      artifacts={[
+        {
+          operation: "reuse",
+          preview: false,
+          timestampMs: 2000,
+          attemptId: "cache",
+          artifact: {
+            id: "cache-id",
+            uri: "file:///tmp/count.cache",
+            byteSize: 42,
+            metadata: {
+              tubelessCache: { implementationVersion: "v1", createdAtMs: 1000, ageMs: 1000 },
+            },
+          },
+        },
+        {
+          operation: "write",
+          preview: false,
+          timestampMs: 2000,
+          attemptId: "app",
+          artifact: { id: "application" },
+        },
+      ]}
+    />
+  );
+  expect(markup).toContain("Cached output reuse");
+  expect(markup).toContain("Created: 1970-01-01T00:00:01.000Z");
+  expect(markup).toContain("Age at reuse: 1000 ms");
+  expect(markup).toContain("Location: file:///tmp/count.cache");
+  expect(markup).toContain("Size: 42 bytes");
+  expect(markup).toContain("Application artifacts");
+  expect(markup).toContain("Artifact write: application");
+  expect(markup).toContain("current cache availability is not checked");
 });

@@ -81,7 +81,9 @@ function isStoredStep(value: unknown): value is StoredPipelineStep {
   if (!isRecord(value)) return false;
   if (
     typeof value.id !== "string" ||
-    (value.outputSource !== undefined && value.outputSource !== "override") ||
+    (value.outputSource !== undefined &&
+      value.outputSource !== "override" &&
+      value.outputSource !== "cache") ||
     !["cancelled", "completed", "failed", "planned", "running", "skipped"].includes(
       String(value.status)
     ) ||
@@ -102,7 +104,9 @@ function isStoredStep(value: unknown): value is StoredPipelineStep {
       !Array.isArray(value.attempt.retries) ||
       !value.attempt.retries.every(isFiniteNumber) ||
       !isFiniteNumber(value.attempt.startedAtMs) ||
-      (value.attempt.outputSource !== undefined && value.attempt.outputSource !== "override") ||
+      (value.attempt.outputSource !== undefined &&
+        value.attempt.outputSource !== "override" &&
+        value.attempt.outputSource !== "cache") ||
       !["cancelled", "completed", "failed", "running", "skipped"].includes(
         String(value.attempt.status)
       )
@@ -141,7 +145,9 @@ function isStoredStep(value: unknown): value is StoredPipelineStep {
             typeof detail.id === "string" &&
             isOptionalString(detail.label) &&
             isOptionalString(detail.status) &&
-            (detail.outputSource === undefined || detail.outputSource === "override")
+            (detail.outputSource === undefined ||
+              detail.outputSource === "override" ||
+              detail.outputSource === "cache")
         ))
     ) {
       return false;

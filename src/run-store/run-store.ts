@@ -70,7 +70,7 @@ export interface StoredPipelineLog {
 }
 
 export interface StoredPipelineAttempt {
-  outputSource?: "override";
+  outputSource?: "override" | "cache";
   attemptId: string;
   durationMs?: number;
   finishedAtMs?: number;
@@ -89,7 +89,7 @@ export type StoredPipelineArtifact = Extract<
 
 export interface StoredPipelineStep {
   artifacts?: StoredPipelineArtifact[];
-  outputSource?: "override";
+  outputSource?: "override" | "cache";
   /** One execution attempt; `retries` carries `reportAttempt` telemetry. */
   attempt?: StoredPipelineAttempt;
   description?: string;

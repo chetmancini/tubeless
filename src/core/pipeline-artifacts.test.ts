@@ -26,6 +26,24 @@ function capture() {
 }
 
 describe("artifact steps", () => {
+  it("rejects cache configuration on helpers, including structurally typed variables", () => {
+    const { loadArtifact, saveArtifact } = createSteps();
+    const load = vi.fn(() => ({ value: 1, artifact: { id: "input" } }));
+    const save = vi.fn(() => ({ value: 1, artifact: { id: "output" } }));
+    const loaderConfig = { cache: { version: "v1" }, load };
+    const saverConfig = { cache: { version: "v1" }, save };
+    expect(() => {
+      // @ts-expect-error A variable with cache must be rejected, not just an excess-property literal.
+      loadArtifact("load", loaderConfig);
+    }).toThrow("Artifact helpers cannot configure caching");
+    expect(() => {
+      // @ts-expect-error Cache cannot skip the helper's unconditional write.
+      saveArtifact("save", saverConfig);
+    }).toThrow("Artifact helpers cannot configure caching");
+    expect(load).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it.each(["failed", "cancelled"] as const)(
     "retains committed batches when a later batch is %s",
     async (status) => {

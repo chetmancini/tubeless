@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSteps, definePipeline } from "../core/pipeline.js";
+import { createSteps, definePipeline, type StepCache } from "../core/pipeline.js";
 import { createPipelineTestRuntime } from "../testing/testing.js";
 import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
 import {
@@ -109,6 +109,39 @@ describe("definition history", () => {
     expect(
       snapshot.runs.find((run) => run.runId === legacy.events[0]!.runId)?.definitionIdentity
     ).toBeUndefined();
+  });
+
+  it.each([
+    { version: "v2", maxAge: "1 day" },
+    { version: "v1", maxAge: "2 days" },
+    { version: "v1", maxAge: "1 day", policy: "bypass" },
+    false,
+  ] satisfies (StepCache<{}> | false)[])("compares cache settings: %j", (cache) => {
+    const { step } = createSteps();
+    const build = (cache: StepCache<{}> | false) =>
+      definePipeline({
+        id: "cache-history",
+        steps: [step("work", { cache, run: () => 1 })],
+      }).definition;
+    const before = build({ version: "v1", maxAge: "1 day" });
+    const after = build(cache);
+    expect(after.identity.definitionId).not.toBe(before.identity.definitionId);
+    expect(compareDefinitions(before, after)).toEqual([
+      {
+        stepId: "work",
+        field: "Cache settings",
+        before: JSON.stringify(before.steps[0].cache),
+        after: JSON.stringify(after.steps[0].cache),
+      },
+    ]);
+    expect(compareDefinitions(after, before)).toEqual([
+      {
+        stepId: "work",
+        field: "Cache settings",
+        before: JSON.stringify(after.steps[0].cache),
+        after: JSON.stringify(before.steps[0].cache),
+      },
+    ]);
   });
 
   it("shows implementation and policy changes independently", async () => {

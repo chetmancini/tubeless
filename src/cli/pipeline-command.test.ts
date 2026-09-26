@@ -186,7 +186,7 @@ describe("definePipelineCommand", () => {
       command.descriptor.parameters
         .filter((parameter) => parameter.group === "execution")
         .map((parameter) => parameter.key)
-    ).toEqual(["dryRun", "stepIds", "continueOnError", "maxConcurrency", "targets"]);
+    ).toEqual(["dryRun", "cache", "stepIds", "continueOnError", "maxConcurrency", "targets"]);
     expect(
       command.descriptor.parameters
         .filter((parameter) => parameter.exclusive === true)
@@ -954,4 +954,29 @@ describe("definePipelineCommand", () => {
       fs.rmSync(cwd, { recursive: true, force: true });
     }
   });
+});
+
+it("forwards --cache as a run control without including it in domain options or keys", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "cli-cache-"));
+  const { step } = createSteps<{ input: string }>();
+  const run = vi.fn((_inputs, context) => {
+    expect(context.options).toEqual({ input: "same" });
+    return 1;
+  });
+  const work = step("work", { cache: { version: "v1" }, run });
+  const command = definePipelineCommand(definePipeline({ id: "cli-cache", steps: [work] }), {
+    params: { input: { type: "string", required: true } },
+    reporter: false,
+  });
+  try {
+    const context = { cwd: directory, log: testLog() };
+    for (const args of [[], [], ["--cache", "recompute"], ["--cache", "bypass"], []]) {
+      expect(await command.run(["--input", "same", ...args], context)).toBe(1);
+    }
+    expect(run).toHaveBeenCalledTimes(3);
+    expect(command.parse(["--input", "same", "--cache", "invalid"]).kind).toBe("error");
+    expect(command.descriptor.parameters.find((p) => p.key === "cache")?.group).toBe("execution");
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });

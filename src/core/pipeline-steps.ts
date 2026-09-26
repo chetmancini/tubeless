@@ -1,4 +1,5 @@
 import type { PipelineMetadata } from "../tracing/graph-metadata.js";
+import type { CompiledStepCache, StepCache } from "./pipeline-cache.js";
 import {
   type ArtifactLoader,
   type ArtifactSaver,
@@ -8,6 +9,7 @@ import { createMappedChildRunner, createSingleChildRunner } from "./child-execut
 import { createIterationRunner, type IterationDecision, type IterationState } from "./iteration.js";
 import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.js";
 import {
+  STEP_CACHE,
   STEP_NESTED_PIPELINE,
   STEP_OPTIONS_SCHEMA,
   STEP_REMOTE,
@@ -63,6 +65,9 @@ export interface AnyStep<TOptions extends object = object> {
   readonly dryRun?: "skip" | AnyStepDryRunHandler<TOptions>;
   /** Optional Standard Schema for values published by this step. */
   readonly outputSchema?: StandardSchemaV1;
+  /** Explicit output caching for ordinary deterministic steps only. */
+  readonly cache?: boolean | StepCache<Record<string, unknown>, TOptions>;
+  readonly [STEP_CACHE]?: CompiledStepCache<TOptions>;
   /**
    * Optional runtime skip. Return a non-empty reason (or `{ reason, value }`) to
    * skip without calling `run`. Policy skips unlock dependents; structural skips
@@ -276,6 +281,7 @@ type PlainStepFields<
   metadata?: PipelineMetadata;
   dryRun?: StepDryRunPolicy<TOptions, TDeps, TOptionalDeps, TOut>;
   outputSchema?: never;
+  cache?: boolean | StepCache<RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>, TOptions>;
   run(
     inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
     context: PipelineStepContext<TOptions>
@@ -433,12 +439,14 @@ function createStepFactory<
     id: TId,
     definition: Omit<
       PlainStepFields<TOptions, TDeps, TOptionalDeps, ArtifactResult<TValue>>,
-      "run"
+      "run" | "cache"
     > & {
+      cache?: never;
       load: ArtifactLoader<RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>, TValue, TOptions>;
     }
   ): BuiltStep<TId, TValue, TOptions, TInputOptions> {
-    const { load, dryRun, ...fields } = definition;
+    const { cache, load, dryRun, ...fields } = definition;
+    if (cache !== undefined) throw new Error("Artifact helpers cannot configure caching");
     const wrap =
       (handler: typeof load) =>
       async (
@@ -466,12 +474,14 @@ function createStepFactory<
     id: TId,
     definition: Omit<
       PlainStepFields<TOptions, TDeps, TOptionalDeps, ArtifactResult<TValue>>,
-      "run"
+      "run" | "cache"
     > & {
+      cache?: never;
       save: ArtifactSaver<RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>, TValue, TOptions>;
     }
   ): BuiltStep<TId, TValue, TOptions, TInputOptions> {
-    const { save, dryRun, ...fields } = definition;
+    const { cache, save, dryRun, ...fields } = definition;
+    if (cache !== undefined) throw new Error("Artifact helpers cannot configure caching");
     const wrap =
       (handler: typeof save) =>
       async (

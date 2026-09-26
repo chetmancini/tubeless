@@ -1,6 +1,8 @@
 import { snapshotPipelineMetadata } from "../tracing/graph-metadata.js";
+import type { CompiledStepCache } from "./pipeline-cache.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import {
+  STEP_CACHE,
   STEP_NESTED_PIPELINE,
   STEP_OPTIONS_SCHEMA,
   STEP_REMOTE,
@@ -27,7 +29,10 @@ export function liveStepGraph<TOptions extends object>(
   };
 }
 
-function compileStep<TOptions extends object>(step: AnyStep<TOptions>): CompiledStep<TOptions> {
+function compileStep<TOptions extends object>(
+  step: AnyStep<TOptions>,
+  cache: CompiledStepCache<TOptions> | undefined
+): CompiledStep<TOptions> {
   const nestedPipeline = step[STEP_NESTED_PIPELINE];
   const remote = step[STEP_REMOTE];
   const optionsSchema = step[STEP_OPTIONS_SCHEMA];
@@ -61,6 +66,7 @@ function compileStep<TOptions extends object>(step: AnyStep<TOptions>): Compiled
       dryRun: typeof dryRun === "function" ? dryRun.bind(step) : dryRun,
     });
   }
+  if (cache) Object.assign(compiled, { [STEP_CACHE]: cache });
   if (outputSchema !== undefined) Object.assign(compiled, { outputSchema });
   if (skip !== undefined) Object.assign(compiled, { skip: skip.bind(step) });
   return Object.freeze(compiled);
@@ -169,11 +175,12 @@ export interface CompiledPipelineGraph<TOptions extends object> {
 }
 
 export function compilePipelineGraph<TOptions extends object>(
-  steps: readonly AnyStep<TOptions>[]
+  steps: readonly AnyStep<TOptions>[],
+  compiledCaches: ReadonlyMap<AnyStep, CompiledStepCache<TOptions>> = new Map()
 ): CompiledPipelineGraph<TOptions> {
   const orderedAuthorSteps = topologicalSort(steps)!;
   const compiledByAuthorStep = new Map<AnyStep<TOptions>, CompiledStep<TOptions>>(
-    orderedAuthorSteps.map((step) => [step, compileStep(step)])
+    orderedAuthorSteps.map((step) => [step, compileStep(step, compiledCaches.get(step))])
   );
   const orderedSteps = orderedAuthorSteps.map((step) => compiledByAuthorStep.get(step)!);
   const stepGraph = new Map<AnyStep, CompiledStepGraph>(

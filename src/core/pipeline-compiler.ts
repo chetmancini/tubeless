@@ -40,7 +40,7 @@ export function compilePipeline<
 >(
   definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>
 ): CompiledPipeline<TSteps, TResult, TTargets, TResultSchema> {
-  const errors = validatePipelineDefinition(definition);
+  const { errors, compiledCaches } = validatePipelineDefinition(definition);
   if (errors.length > 0) {
     throw new PipelineDefinitionError(definition.id, errors);
   }
@@ -48,7 +48,8 @@ export function compilePipeline<
   // SAFETY: `steps` is `TSteps extends readonly AnyStep[]`; the cast restores
   // the `TOptions` generic that the tuple erased, without changing the values.
   const { compiledByAuthorStep, orderedSteps, stepGraph } = compilePipelineGraph(
-    definition.steps as readonly AnyStep<TOptions>[]
+    definition.steps as readonly AnyStep<TOptions>[],
+    compiledCaches
   );
   const finalizerMetadata = requiredFinalizerMetadata<TOptions>(definition.finalize);
   const requiredFinalizerSteps = finalizerMetadata?.steps;

@@ -8,6 +8,22 @@ export interface DefinitionChange {
   after?: string;
 }
 
+// Every step semantic needs a comparison label; new snapshot fields must be handled here.
+const STEP_FIELDS = {
+  dependencies: "Required edges",
+  optionalDependencies: "Optional edges",
+  skipAfterFailureOf: "Failure gates",
+  dryRun: "Dry-run policy",
+  runtimeSkipPossible: "Skip policy",
+  outputValidated: "Output validation",
+  cache: "Cache settings",
+  nestedPipeline: "Child pipeline",
+  remote: "Remote adapter",
+} satisfies Record<
+  Exclude<keyof PipelineDefinitionSnapshot["steps"][number], "id" | "metadata">,
+  string
+>;
+
 /** Compare complete recorded semantics, without loading the application's modules. */
 export function compareDefinitions(
   before: PipelineDefinitionSnapshot,
@@ -55,14 +71,11 @@ export function compareDefinitions(
       canonicalJsonValue(step.metadata),
       step.id
     );
-    compare("Required edges", old.dependencies, step.dependencies, step.id);
-    compare("Optional edges", old.optionalDependencies, step.optionalDependencies, step.id);
-    compare("Failure gates", old.skipAfterFailureOf, step.skipAfterFailureOf, step.id);
-    compare("Dry-run policy", old.dryRun, step.dryRun, step.id);
-    compare("Skip policy", old.runtimeSkipPossible, step.runtimeSkipPossible, step.id);
-    compare("Output validation", old.outputValidated, step.outputValidated, step.id);
-    compare("Child pipeline", old.nestedPipeline, step.nestedPipeline, step.id);
-    compare("Remote adapter", old.remote, step.remote, step.id);
+    for (const field of Object.keys(STEP_FIELDS)) {
+      // SAFETY: keys come from the exhaustive, locally authored field map above.
+      const key = field as keyof typeof STEP_FIELDS;
+      compare(STEP_FIELDS[key], old[key], step[key], step.id);
+    }
   }
   return changes;
 }

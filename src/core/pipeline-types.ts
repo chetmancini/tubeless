@@ -1,5 +1,6 @@
 import type { PipelineMetadata } from "../tracing/graph-metadata.js";
 import type { PipelineStepQuery } from "./pipeline-query.js";
+import type { StepCachePolicy } from "./pipeline-cache.js";
 import type { ArtifactRecord } from "../tracing/artifact-metadata.js";
 import type {
   PipelineDefinitionIdentityContract,
@@ -59,6 +60,8 @@ export type PipelineRunControls<
 > = {
   /** Maximum simultaneous steps, including skip predicates and output validation. Defaults to 1. */
   maxConcurrency?: number;
+  /** Run-wide cache policy for opted-in steps, including children. */
+  cache?: StepCachePolicy;
   /** Continue eligible branches after failure; otherwise stop dispatch and drain active steps. */
   continueOnError?: boolean;
   dryRun?: boolean;
@@ -92,6 +95,8 @@ export interface PipelineRuntime extends PipelineContext {
 export interface PipelineExecutionContext<TOptions extends object> extends PipelineRuntime {
   dryRun: boolean;
   options: TOptions;
+  /** Explicit run-wide cache policy; absent uses each step's policy. */
+  cachePolicy?: StepCachePolicy;
   /** Stable identity for this execution, whether or not tracing is configured. */
   runId: string;
   /** Stable identities for this traced run; absent unless `context.tracing` is configured. */
@@ -114,8 +119,8 @@ export type PipelineStepProgressDetailStatus =
 
 /** One optional nested row in a step progress snapshot. */
 export interface PipelineStepProgressDetail {
-  /** Provenance of a supplied test output, independent of the row status. */
-  outputSource?: "override";
+  /** Provenance of a supplied test or cached output, independent of the row status. */
+  outputSource?: "override" | "cache";
   /** Stable identity for the row (item key, path, job id, …). */
   id: string;
   /** Optional display name; identity remains `id`. */
@@ -286,8 +291,8 @@ export interface PipelineErrorCause {
 }
 
 interface PipelineStepReportBase {
-  /** Present once a supplied test output enters validation, including failed/cancelled attempts. */
-  outputSource?: "override";
+  /** Present once a test or cached output is selected, including failed/cancelled validation. */
+  outputSource?: "override" | "cache";
   /** Present when the step started an execution attempt. */
   attemptId?: string;
   id: string;
@@ -414,7 +419,7 @@ export type PipelineStepStatus =
       attemptId: string;
       pipelineId: string;
       /** Supplied test output; the normal step handler is not executing. */
-      outputSource?: "override";
+      outputSource?: "override" | "cache";
       progress?: PipelineStepProgress;
       status: "running";
       step: PipelinePlanStep;

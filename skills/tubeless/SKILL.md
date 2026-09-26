@@ -81,6 +81,17 @@ the installed declarations before using them; do not silently upgrade Tubeless.
   no work should execute. Branch on `run.finalized` to narrow `run.value` to the
   exact result type; finalization is independent of success, and a finalized
   result may itself be `undefined`. Plans do not validate domain input.
+- Opt deterministic ordinary steps into `cache: { version: "v1" }`, or use
+  `cache: true` with a pipeline `implementationVersion`. Default keys hash inputs
+  and validated options; files live under the run cwd's `.cache/<pipeline>/<step>/`.
+  Set pipeline `cache.maxAge: "30 days"`, with optional step overrides. Custom keys,
+  stores, and codecs are optional. Run `{ cache: "recompute" }` or `--cache recompute`
+  refreshes opted-in steps and children. Dry runs, skips, and overrides bypass cache.
+  Cache writes and validated hits record cache artifacts automatically; hits do not
+  replay application artifact records or verify referenced files. The default codec
+  rejects lossy round trips, including class instances; use plain data or a custom
+  codec that reconstructs them. Artifact helpers reject cache configuration.
+  Read `docs/step-output-cache.md` and adapt `examples/step-output-cache.ts`.
 - Use `context.log`, forward `context.signal`, use `context.sleep` for waits,
   and report progress for long loops. Resolve relative paths from `context.cwd`.
 - Branch on structured error `code`, `phase`, and `kind`, not message text.

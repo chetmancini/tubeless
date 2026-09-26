@@ -1,3 +1,4 @@
+import { cacheArtifactMetadata } from "../run-store/cache-artifact.js";
 import { stat } from "node:fs/promises";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
@@ -97,7 +98,7 @@ function formatRunDetail(run: StoredPipelineRun): string {
     lines.push(`  ${terminalSafeText(step.id)}  ${step.status}${duration}`);
     for (const entry of step.artifacts ?? []) {
       lines.push(
-        `    ${entry.preview ? "preview " : ""}${entry.operation}  ${terminalSafeText(JSON.stringify(entry.artifact))}`
+        `    ${entry.preview ? "preview " : ""}${cacheArtifactMetadata(entry.artifact) ? "Cached output " : ""}${entry.operation}  ${terminalSafeText(JSON.stringify(entry.artifact))}`
       );
     }
   }

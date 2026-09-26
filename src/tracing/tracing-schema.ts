@@ -29,6 +29,7 @@ import {
 
 export const PIPELINE_ERROR_CODES = [
   "TUBELESS_CHILD_FAILED",
+  "TUBELESS_DEFINITION_CACHE_INVALID",
   "TUBELESS_DEFINITION_DEPENDENCY_CONTRADICTORY",
   "TUBELESS_DEFINITION_DEPENDENCY_CYCLE",
   "TUBELESS_DEFINITION_DEPENDENCY_DUPLICATE",
@@ -40,6 +41,7 @@ export const PIPELINE_ERROR_CODES = [
   "TUBELESS_DEFINITION_PIPELINE_DESCRIPTION_BLANK",
   "TUBELESS_DEFINITION_PIPELINE_ID_BLANK",
   "TUBELESS_DEFINITION_PIPELINE_NAME_BLANK",
+  "TUBELESS_DEFINITION_STEP_CACHE_INVALID",
   "TUBELESS_DEFINITION_STEP_ID_BLANK",
   "TUBELESS_DEFINITION_STEP_ID_RESERVED",
   "TUBELESS_DEFINITION_STEP_IDS_DUPLICATE",
@@ -61,6 +63,7 @@ export const PIPELINE_ERROR_CODES = [
   "TUBELESS_PLANNING_TARGET_UNKNOWN",
   "TUBELESS_RUN_CANCELLED",
   "TUBELESS_RUN_CONCURRENCY_INVALID",
+  "TUBELESS_RUN_CACHE_INVALID",
   "TUBELESS_STEP_OUTPUT_VALIDATION_FAILED",
   "TUBELESS_STEP_FAILED",
 ] as const;
@@ -280,7 +283,7 @@ const pipelineTraceErrorRefSchema = wireRefine(pipelineTraceErrorSchema, () => u
 });
 
 const progressDetailSchema = wireObject({
-  outputSource: wireOptional(wireLiteral("override")),
+  outputSource: wireOptional(wireEnum(["override", "cache"])),
   completed: wireOptional(finiteNumber),
   depth: wireOptional(finiteNumber),
   id: wireString({ maxLength: PIPELINE_TRACE_STRING_LIMIT }),
@@ -382,6 +385,7 @@ export const pipelineDefinitionIdentitySchema = wireRefine(
 const definitionString = wireString({ maxLength: 4096 });
 const definitionStrings = wireArray(definitionString, { maxItems: 4096 });
 const iterationControlsSchema = wireObject({
+  cache: wireOptional(wireEnum(["use", "recompute", "bypass"])),
   dryRun: wireOptional(wireBoolean()),
   continueOnError: wireOptional(wireBoolean()),
   maxConcurrency: wireOptional(finiteNumber),
@@ -397,6 +401,13 @@ const definitionStepSchema = wireObject({
   dryRun: wireEnum(["custom", "run", "skip"] as const),
   runtimeSkipPossible: wireBoolean(),
   outputValidated: wireBoolean(),
+  cache: wireOptional(
+    wireObject({
+      version: wireString({ maxLength: 256 }),
+      maxAgeMs: wireOptional(finiteNumber),
+      policy: wireEnum(["use", "recompute", "bypass", "dynamic"]),
+    })
+  ),
   nestedPipeline: wireOptional(
     wireObject({
       pipelineId: definitionString,
@@ -612,7 +623,7 @@ export const pipelineTraceEventSchemas = {
     name: wireLiteral("step.cancelled"),
     payload: wireObject({
       status: wireLiteral("cancelled"),
-      outputSource: wireOptional(wireLiteral("override")),
+      outputSource: wireOptional(wireEnum(["override", "cache"])),
     }),
   }),
   "step.complete": wireObject({
@@ -622,7 +633,7 @@ export const pipelineTraceEventSchemas = {
     name: wireLiteral("step.complete"),
     payload: wireObject({
       status: wireLiteral("completed"),
-      outputSource: wireOptional(wireLiteral("override")),
+      outputSource: wireOptional(wireEnum(["override", "cache"])),
     }),
   }),
   "step.failed": wireObject({
@@ -633,7 +644,7 @@ export const pipelineTraceEventSchemas = {
     name: wireLiteral("step.failed"),
     payload: wireObject({
       status: wireLiteral("failed"),
-      outputSource: wireOptional(wireLiteral("override")),
+      outputSource: wireOptional(wireEnum(["override", "cache"])),
     }),
   }),
   "step.planned": wireObject({
@@ -664,7 +675,7 @@ export const pipelineTraceEventSchemas = {
     name: wireLiteral("step.running"),
     payload: wireObject({
       progress: wireOptional(progressSchema),
-      outputSource: wireOptional(wireLiteral("override")),
+      outputSource: wireOptional(wireEnum(["override", "cache"])),
     }),
   }),
   "step.skipped": wireObject({
@@ -677,7 +688,7 @@ export const pipelineTraceEventSchemas = {
       message: wireOptional(openString),
       reason: wireEnum(PIPELINE_STEP_SKIP_REASONS),
       status: wireLiteral("skipped"),
-      outputSource: wireOptional(wireLiteral("override")),
+      outputSource: wireOptional(wireEnum(["override", "cache"])),
     }),
   }),
 } as const satisfies Readonly<Record<string, WireSchema<unknown>>>;

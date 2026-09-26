@@ -1,21 +1,33 @@
+import {
+  compileStepCache,
+  validatePipelineCache,
+  type CompiledStepCache,
+} from "./pipeline-cache.js";
 import { duplicateValues } from "../utilities/collections.js";
 import type { PipelineDefinition, StepsOptions } from "./pipeline-definition.js";
 import { requiredFinalizerMetadata } from "./pipeline-finalizer.js";
 import { stepEdges, targetClosure, topologicalSort } from "./pipeline-graph.js";
 import { pipelineDiagnostic } from "./pipeline-errors.js";
 import type { AnyStep } from "./pipeline-steps.js";
-import { PIPELINE_FINALIZE_STEP_ID, STEP_OPTIONS_SCHEMA } from "./pipeline-step-metadata.js";
+import {
+  PIPELINE_FINALIZE_STEP_ID,
+  STEP_OPTIONS_SCHEMA,
+  STEP_NESTED_PIPELINE,
+  STEP_REMOTE,
+} from "./pipeline-step-metadata.js";
 import type { PipelineError, StandardSchemaV1 } from "./pipeline-types.js";
 
+/** Validate author declarations and retain cache plans so graph construction never recompiles them. */
 export function validatePipelineDefinition<
   TSteps extends readonly AnyStep[],
   TResult,
   TTargets extends readonly TSteps[number][],
   TResultSchema extends StandardSchemaV1 | undefined,
->(definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>): PipelineError[] {
+>(definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>) {
   type TOptions = StepsOptions<TSteps>;
   const steps = definition.steps;
   const errors: PipelineError[] = [];
+  const compiledCaches = new Map<AnyStep, CompiledStepCache<TOptions>>();
   if (definition.id.trim().length === 0) {
     errors.push(
       pipelineDiagnostic(
@@ -70,6 +82,18 @@ export function validatePipelineDefinition<
       )
     );
   }
+  try {
+    validatePipelineCache(definition.cache);
+  } catch (error) {
+    errors.push(
+      pipelineDiagnostic(
+        "TUBELESS_DEFINITION_CACHE_INVALID",
+        "definition",
+        "definition",
+        error instanceof Error ? error.message : String(error)
+      )
+    );
+  }
   const stepIds = steps.map((step) => step.id);
   const duplicateStepIds = duplicateValues(stepIds);
   if (duplicateStepIds.length > 0) {
@@ -94,6 +118,27 @@ export function validatePipelineDefinition<
     );
   }
   for (const step of steps) {
+    try {
+      const configuredCache = step.cache;
+      if (configuredCache && (step[STEP_NESTED_PIPELINE] || step[STEP_REMOTE]))
+        throw new Error("Only ordinary steps can opt into caching");
+      const cache = compileStepCache(
+        configuredCache,
+        definition.cache,
+        definition.implementationVersion
+      );
+      if (cache) compiledCaches.set(step, cache);
+    } catch (error) {
+      errors.push(
+        pipelineDiagnostic(
+          "TUBELESS_DEFINITION_STEP_CACHE_INVALID",
+          "definition",
+          "definition",
+          `Pipeline ${definition.id} step ${step.id}: ${error instanceof Error ? error.message : String(error)}`,
+          { stepId: step.id }
+        )
+      );
+    }
     if (step.id.trim().length === 0) {
       errors.push(
         pipelineDiagnostic(
@@ -275,5 +320,5 @@ export function validatePipelineDefinition<
       )
     );
   }
-  return errors;
+  return { errors, compiledCaches };
 }

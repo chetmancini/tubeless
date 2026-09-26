@@ -40,6 +40,15 @@ import type {
 export { PipelineExecutionError, RUN_MODEL_VERSION };
 export { isPipelineErrorCode, PIPELINE_ERROR_CODES } from "./pipeline-types.js";
 export { createSteps } from "./pipeline-steps.js";
+export type {
+  PipelineCacheOptions,
+  StepCacheEntry,
+  StepCache,
+  StepCacheCodec,
+  StepCacheContext,
+  StepCachePolicy,
+  StepCacheStore,
+} from "./pipeline-cache.js";
 export type { IterationDecision, IterationState } from "./iteration.js";
 export { PipelineDefinitionError, requireOutputs };
 export type {
@@ -123,8 +132,9 @@ type CheckedStepTuple<TSteps extends readonly AnyStep[]> =
 function normalizeRunControls<TStepId extends string, TTargetId extends string>(
   controls: PipelineRunControls<TStepId, TTargetId>
 ): PipelineRunControls<TStepId, TTargetId> {
-  const { continueOnError, dryRun, maxConcurrency, stepIds, targets } = controls;
+  const { cache, continueOnError, dryRun, maxConcurrency, stepIds, targets } = controls;
   const snapshot: PipelineRunControls<TStepId, TTargetId> = {};
+  if (cache !== undefined) snapshot.cache = cache;
   if (continueOnError !== undefined) snapshot.continueOnError = continueOnError;
   if (dryRun !== undefined) snapshot.dryRun = dryRun;
   if (maxConcurrency !== undefined) snapshot.maxConcurrency = maxConcurrency;

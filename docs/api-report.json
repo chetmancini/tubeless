@@ -17,6 +17,7 @@
         "MappedChildProgressOptions",
         "Pipeline",
         "PIPELINE_ERROR_CODES",
+        "PipelineCacheOptions",
         "PipelineContext",
         "PipelineDefinition",
         "PipelineDefinitionError",
@@ -73,9 +74,15 @@
         "RUN_MODEL_VERSION",
         "StandardSchemaV1",
         "Step",
+        "StepCache",
+        "StepCacheCodec",
+        "StepCacheContext",
+        "StepCacheEntry",
+        "StepCachePolicy",
+        "StepCacheStore",
         "StepSkipDecision"
       ],
-      "sha256": "6a01078b9cdfae542e7b5ff301ce4108d01105b8126e0ea9a02a1ab150a4a460",
+      "sha256": "17a6a864e86bcd3e72adaf39acb3f2b70d493d18d1598182db8ddc3173a689ef",
       "specifier": "tubeless"
     },
     {
@@ -113,7 +120,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "c2438bb25f0c3854a8c1c770a4b3ff317818e52c64875f0b6c38032e9cb91382",
+      "sha256": "82a8f268b27832bedfd40be9d450f90a296e647d29d9820363a4f018f2729dc4",
       "specifier": "tubeless/cli"
     },
     {
@@ -133,19 +140,21 @@
       "declaration": "./dist/node/node.d.ts",
       "exports": [
         "CheckpointStore",
+        "createFileStepCache",
         "createWorkerThreadAdapter",
         "definePaths",
         "openCheckpoint",
         "readJson",
         "requireEnv",
         "resetDir",
+        "v8StepCacheCodec",
         "withCheckpointedBatch",
         "WorkerThreadAdapter",
         "WorkerThreadAdapterOptions",
         "WorkerThreadContext",
         "writeJson"
       ],
-      "sha256": "59a4bb7f4d1d1d4d99d9876c3846f23b777c4588c1d35642bf8a38c68b841f6a",
+      "sha256": "df40b5f9eb5ac0fcb7afc0e4f172bf939b047485282b4d72a69e8d853bef54ad",
       "specifier": "tubeless/node"
     },
     {
@@ -172,7 +181,7 @@
         "ProjectOptions",
         "ProjectRegistry"
       ],
-      "sha256": "39ad8542b8c09195c25985530a4e04bc98ef15926188df141ffa47b22b230f1c",
+      "sha256": "e4b8d6cca58ed526a74fb98b4494802458c9eefb0a29c71a52490ded6a600391",
       "specifier": "tubeless/project"
     },
     {
@@ -189,13 +198,13 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "5c0855726e6481720327d6c0890f9c56b465e4164f39bec1ed7cfe975bd33bcf",
+      "sha256": "91bbe308a31a9506413bb0d0ee2280ec1904cc92b2ebe1f3a7a640c13479b0db",
       "specifier": "tubeless/testing"
     },
     {
       "declaration": "./dist/tracing/tracing.d.ts",
       "exports": ["composeTraceExporters", "PipelineTraceEvent", "PipelineTraceExporter"],
-      "sha256": "25857f248ff3f15446e7657697747a656780b33957a3359e28aaedc138b580c4",
+      "sha256": "b2e8241e02bc96b73e64d07584eaa4b0e24dc7d82717a2976c12038421ebcadf",
       "specifier": "tubeless/tracing"
     }
   ],

@@ -8,3 +8,5 @@ export {
   type WorkerThreadAdapterOptions,
 } from "./worker-thread-adapter.js";
 export type { WorkerThreadContext } from "./worker-thread-protocol.js";
+
+export { createFileStepCache, v8StepCacheCodec } from "../utilities/cache-storage.js";

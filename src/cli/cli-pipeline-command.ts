@@ -22,6 +22,7 @@ import {
   type PipelineHooks,
   type PipelineInput,
   type PipelineMermaidOptions,
+  type StepCachePolicy,
   type PipelinePlan,
   type PipelineResult,
   type PipelineRunControls,
@@ -35,6 +36,7 @@ export type PipelineCliBuiltins = {
   targets: CliStringParam & { multiple: true };
   continueOnError: CliBooleanParam;
   maxConcurrency: CliNumberParam;
+  cache: CliStringParam & { choices: readonly ["use", "recompute", "bypass"]; optional: true };
 };
 
 /** Validated domain parameters plus the built-in pipeline execution controls. */
@@ -43,6 +45,7 @@ export type PipelineCliValues<TSchema extends CliParamsSchema> = CliParams<TSche
   targets: readonly string[];
   continueOnError: boolean;
   maxConcurrency: number;
+  cache?: StepCachePolicy;
 };
 
 /** Parse result returned by commands created with `definePipelineCommand`. */
@@ -103,7 +106,7 @@ type PipelineCommandMapOptions<TOptions extends object, TSchema extends CliParam
 
 type DefaultPipelineCommandOptions<TSchema extends CliParamsSchema> = Omit<
   PipelineCliValues<TSchema>,
-  "continueOnError" | "maxConcurrency" | "dryRun" | "resume" | "stepIds" | "targets"
+  "cache" | "continueOnError" | "maxConcurrency" | "dryRun" | "resume" | "stepIds" | "targets"
 >;
 
 type CanDefaultPipelineCommandOptions<TOptions extends object, TSchema extends CliParamsSchema> =
@@ -154,8 +157,20 @@ export type DefinePipelineCommandConfig<
         mapOptions: PipelineCommandMapOptions<TOptions, TSchema>;
       });
 
-const PIPELINE_COMMAND_KEYS = new Set(["continueOnError", "maxConcurrency", "stepIds", "targets"]);
-const PIPELINE_COMMAND_FLAGS = new Set(["continue-on-error", "max-concurrency", "step", "target"]);
+const PIPELINE_COMMAND_KEYS = new Set([
+  "cache",
+  "continueOnError",
+  "maxConcurrency",
+  "stepIds",
+  "targets",
+]);
+const PIPELINE_COMMAND_FLAGS = new Set([
+  "cache",
+  "continue-on-error",
+  "max-concurrency",
+  "step",
+  "target",
+]);
 
 function assertNoPipelineCommandConflicts(params: CliParamsSchema): void {
   for (const [key, param] of Object.entries(params)) {
@@ -192,6 +207,7 @@ function normalizePipelineCliValues<TSchema extends CliParamsSchema>(
 function pipelineRunControlsFromCliValues(values: {
   continueOnError: boolean;
   maxConcurrency: number;
+  cache?: StepCachePolicy;
   dryRun: boolean;
   stepIds: readonly string[];
   targets: readonly string[];
@@ -200,6 +216,7 @@ function pipelineRunControlsFromCliValues(values: {
     dryRun: values.dryRun,
     continueOnError: values.continueOnError,
     maxConcurrency: values.maxConcurrency,
+    ...(values.cache !== undefined ? { cache: values.cache } : {}),
   };
   if (values.stepIds.length > 0) controls.stepIds = values.stepIds;
   if (values.targets.length > 0) controls.targets = values.targets;
@@ -226,6 +243,7 @@ function defaultPipelineCommandOptions<TSchema extends CliParamsSchema>(
   values: PipelineCliValues<TSchema>
 ): DefaultPipelineCommandOptions<TSchema> {
   const {
+    cache: _cache,
     continueOnError: _continueOnError,
     maxConcurrency: _maxConcurrency,
     dryRun: _dryRun,
@@ -303,6 +321,13 @@ export function definePipelineCommand<
 
   const targetFlagEnabled = pipeline.targetIds.length > 0;
   const bridgeParams: CliParamsSchema = {
+    cache: {
+      type: "string",
+      choices: ["use", "recompute", "bypass"],
+      optional: true,
+      group: "execution",
+      description: "Override the cache policy for opted-in steps, including child pipelines.",
+    },
     stepIds: {
       type: "string",
       multiple: true,
@@ -373,6 +398,7 @@ export function definePipelineCommand<
         dryRun: values.dryRun,
         continueOnError: pipelineValues.continueOnError,
         maxConcurrency: pipelineValues.maxConcurrency,
+        cache: pipelineValues.cache,
         stepIds: pipelineValues.stepIds,
         targets: targetFlagEnabled ? pipelineValues.targets : [],
       });
