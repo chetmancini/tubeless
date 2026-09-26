@@ -226,3 +226,98 @@ it.each(["override", "cache"] as const)(
     expect(parseStudioSnapshot(recorded)).toBeUndefined();
   }
 );
+
+describe("mounted transport and access expiry", () => {
+  const calls = [
+    (api: ReturnType<typeof createStudioApi>) => api.loadSnapshot(),
+    (api: ReturnType<typeof createStudioApi>) => api.loadCommands(),
+    (api: ReturnType<typeof createStudioApi>) => api.loadCapabilities(),
+    (api: ReturnType<typeof createStudioApi>) => api.loadRunDetail("run/id"),
+    (api: ReturnType<typeof createStudioApi>) => api.launch("fixture/id", {}),
+    (api: ReturnType<typeof createStudioApi>) => api.previewPlan("fixture/id", {}),
+    (api: ReturnType<typeof createStudioApi>) => api.cancelRun("run/id"),
+    (api: ReturnType<typeof createStudioApi>) => api.clearHistory(),
+  ];
+  it("prefixes every endpoint and encodes IDs once without browser credentials", async () => {
+    const fetcher: typeof fetch = vi.fn(async () =>
+      jsonResponse({ message: "fixture" }, { status: 500 })
+    );
+    const api = createStudioApi(fetcher, "/admin/pipelines");
+    for (const call of calls) await expect(call(api)).rejects.toThrow("fixture");
+    expect(vi.mocked(fetcher).mock.calls.map(([url]) => url)).toEqual([
+      "/admin/pipelines/api/snapshot",
+      "/admin/pipelines/api/commands",
+      "/admin/pipelines/api/capabilities",
+      "/admin/pipelines/api/runs/run%2Fid",
+      "/admin/pipelines/api/commands/fixture%2Fid/runs",
+      "/admin/pipelines/api/commands/fixture%2Fid/plan",
+      "/admin/pipelines/api/runs/run%2Fid/cancel",
+      "/admin/pipelines/api/history",
+    ]);
+    for (const [, init] of vi.mocked(fetcher).mock.calls)
+      expect(new Headers(init?.headers).has("authorization")).toBe(false);
+  });
+  it.each([401, 403])(
+    "retires every API after %s before parsing a login HTML body",
+    async (status) => {
+      for (const call of calls) {
+        const fetcher: typeof fetch = vi.fn(
+          async () => new Response("<html>login</html>", { status })
+        );
+        const api = createStudioApi(fetcher);
+        const denied = vi.fn();
+        api.subscribeAccessDenied!(denied);
+        await expect(call(api)).rejects.toMatchObject({ status });
+        expect(denied).toHaveBeenCalledExactlyOnceWith(status);
+        for (const later of calls) await expect(later(api)).rejects.toMatchObject({ status });
+        expect(fetcher).toHaveBeenCalledTimes(1);
+      }
+    }
+  );
+  it("retires pending launch, command and snapshot responses when another request denies access", async () => {
+    const resolvers: ((value: Response) => void)[] = [];
+    const fetcher: typeof fetch = vi.fn(
+      () => new Promise<Response>((resolve) => resolvers.push(resolve))
+    );
+    const api = createStudioApi(fetcher);
+    const launch = api.launch("fixture", {});
+    const commands = api.loadCommands();
+    const snapshotPromise = api.loadSnapshot();
+    const denied = api.cancelRun("run");
+    const settled = Promise.allSettled([launch, commands, snapshotPromise, denied]);
+    resolvers[3]!(new Response("", { status: 401 }));
+    await Promise.resolve();
+    await Promise.resolve();
+    resolvers[0]!(jsonResponse({ accepted: true, runId: "late" }));
+    resolvers[1]!(jsonResponse({ commands: [] }));
+    resolvers[2]!(jsonResponse(snapshot()));
+    expect(await settled).toEqual(
+      Array.from({ length: 4 }, () => ({
+        status: "rejected",
+        reason: expect.objectContaining({ status: 401 }),
+      }))
+    );
+  });
+  it("does not mistake bad gateway responses or connection failures for logout", async () => {
+    for (const response of [
+      new Response("Bad gateway", { status: 502 }),
+      jsonResponse({ message: "broken" }, { status: 500 }),
+      new Response("bad JSON", { status: 200 }),
+    ]) {
+      const api = createStudioApi(vi.fn(async () => response));
+      const denied = vi.fn();
+      api.subscribeAccessDenied!(denied);
+      await expect(api.loadSnapshot()).rejects.toThrow();
+      expect(denied).not.toHaveBeenCalled();
+    }
+    const api = createStudioApi(
+      vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      })
+    );
+    const denied = vi.fn();
+    api.subscribeAccessDenied!(denied);
+    await expect(api.loadSnapshot()).rejects.toThrow("fetch failed");
+    expect(denied).not.toHaveBeenCalled();
+  });
+});

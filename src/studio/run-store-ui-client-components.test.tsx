@@ -11,6 +11,7 @@ import {
   PlanView,
   RunsView,
   Status,
+  StudioAccessNotice,
 } from "./run-store-ui-client.js";
 import type { PipelineRunStudioCommand } from "./run-store-ui-protocol.js";
 
@@ -404,3 +405,19 @@ it("distinguishes cached outputs from application artifacts and offers filters",
   expect(markup).toContain("Artifact write: application");
   expect(markup).toContain("current cache availability is not checked");
 });
+
+it.each([401, 403] as const)(
+  "renders an accessible %s notice with a full-page mounted return link",
+  (status) => {
+    const html = renderToString(
+      <StudioAccessNotice
+        status={status}
+        href="https://example.test/admin/pipelines/?run=selected"
+      />
+    );
+    expect(html).toContain('role="alert"');
+    expect(html).toContain(status === 401 ? "Sign in to continue" : "Access denied");
+    expect(html).toContain('href="https://example.test/admin/pipelines/?run=selected"');
+    expect(html).not.toContain("<button");
+  }
+);

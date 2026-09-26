@@ -333,7 +333,7 @@ export const PIPELINE_RUN_STUDIO_HTML =
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light" />
-  <title>Tubeless — Local Studio</title>
+  <title>Tubeless — Studio</title>
   <style>` +
   PIPELINE_RUN_STUDIO_STYLE +
   String.raw`</style>
@@ -345,3 +345,16 @@ export const PIPELINE_RUN_STUDIO_HTML =
   String.raw`</script>
 </body>
 </html>`;
+
+/** Only a validated, nonsecret mount is included; script and style bytes stay identical. */
+export function studioHtml(mount: string): string {
+  const escaped = mount
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+  return PIPELINE_RUN_STUDIO_HTML.replace(
+    '<meta charset="utf-8" />',
+    '<meta charset="utf-8" /><meta name="tubeless-studio-mount" content="' + escaped + '" />'
+  );
+}

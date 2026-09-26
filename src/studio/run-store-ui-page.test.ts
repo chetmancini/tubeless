@@ -22,7 +22,7 @@ describe("pipeline run studio page composition", () => {
   });
 
   it("keeps the studio shell tokens the existing tests rely on", () => {
-    expect(PIPELINE_RUN_STUDIO_HTML).toContain("Tubeless — Local Studio");
+    expect(PIPELINE_RUN_STUDIO_HTML).toContain("<title>Tubeless — Studio</title>");
     expect(PIPELINE_RUN_STUDIO_HTML).toContain('id="studio-root"');
     expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("data-run-id");
     expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("Pipeline runs");

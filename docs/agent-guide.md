@@ -431,8 +431,14 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - Use `tubeless ui` to inspect local recordings and launch pipelines from a
   checked-in `defineProject`. Supply explicit `definePipelineCommand` adapters in
   its entry list; never infer executable modules from observed history.
-  Keep the default loopback binding; Studio's internal HTTP protocol is not an
-  application API. Cancel a live top-level launch from the running detail pane;
+  Keep the default loopback binding for local use. For deployed Studio, follow the
+  [gateway hosting contract](./studio.md#host-studio-behind-an-application-gateway):
+  use `--public-url` with a server-only `TUBELESS_STUDIO_GATEWAY_TOKEN`, preserve the
+  mount, and require application session/admin checks on every forwarded request.
+  Studio owns gateway authentication and process-local execution; the application
+  owns identity, the explicit deployed catalog, private transport, supervision,
+  and persistent SQLite. Never retry uncertain launch requests. The internal JSON
+  protocol is version-coupled and is not a public application API. Cancel a live top-level launch from the running detail pane;
   that abort is process-local, leaves sibling launches running, and is not
   crash-resume.
 

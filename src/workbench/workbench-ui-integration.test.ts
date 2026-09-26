@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { existsSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import * as os from "node:os";
@@ -437,7 +438,7 @@ describe("workbench UI integration", () => {
       )
     ).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
     expect(commandIo.errors.join("")).toContain(
-      "Browser-triggered execution requires a loopback --host."
+      "Browser-triggered execution requires a loopback --host or authenticated --public-url."
     );
 
     await writeStudioConfig(directory);
@@ -449,7 +450,7 @@ describe("workbench UI integration", () => {
       )
     ).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
     expect(projectIo.errors.join("")).toContain(
-      "Browser-triggered execution requires a loopback --host."
+      "Browser-triggered execution requires a loopback --host or authenticated --public-url."
     );
   });
 
@@ -485,4 +486,161 @@ describe("workbench UI integration", () => {
     controller.abort();
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
   });
+});
+
+it("runs remote-bind commands in gateway mode and retains history without reviving live ownership", async () => {
+  const reserve = createServer();
+  await new Promise<void>((resolve) => reserve.listen(0, "127.0.0.1", resolve));
+  const address = reserve.address();
+  if (!address || typeof address === "string") throw new Error("Expected port");
+  const port = address.port;
+  await new Promise<void>((resolve) => reserve.close(() => resolve()));
+  const token = "a1".repeat(32);
+  const previous = process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
+  process.env.TUBELESS_STUDIO_GATEWAY_TOKEN = token;
+  try {
+    const { directory } = await writeActualPipelineCommandModule();
+    await writeStudioConfig(directory);
+    const publicUrl = `http://127.0.0.1:${port}/admin/pipelines`;
+    const args = [
+      "ui",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      String(port),
+      "--public-url",
+      publicUrl,
+      "--store",
+      path.join(directory, "runs.sqlite"),
+      "config/tubeless.project.mjs",
+    ];
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), signal: controller.signal };
+    const command = runWorkbenchCli(args, io);
+    const headers = { authorization: "Bearer " + token, origin: new URL(publicUrl).origin };
+    let runId = "";
+    try {
+      await vi.waitFor(() =>
+        expect(io.output.join("")).toContain("Tubeless gateway studio: " + publicUrl + "/")
+      );
+      expect(io.output.join("") + io.errors.join("")).not.toContain(token);
+      expect((await fetch(publicUrl + "/api/health")).status).toBe(401);
+      expect(
+        await fetch(publicUrl + "/api/capabilities", { headers }).then((response) =>
+          response.json()
+        )
+      ).toEqual({ canCancel: true, canClearHistory: false });
+      const response = await fetch(publicUrl + "/api/commands/command-fixture/runs", {
+        method: "POST",
+        headers: {
+          ...headers,
+          "content-type": "application/json",
+          "x-tubeless-studio-launch": "1",
+        },
+        body: JSON.stringify({ values: { message: "gateway", mode: "wait" } }),
+      });
+      expect(response.status).toBe(202);
+      runId = ((await response.json()) as { runId: string }).runId;
+    } finally {
+      controller.abort();
+      await expect(command).resolves.toBe(0);
+    }
+    const restartController = new AbortController();
+    const restartIo = { ...captureIo(directory), signal: restartController.signal };
+    const restart = runWorkbenchCli(args, restartIo);
+    try {
+      await vi.waitFor(() =>
+        expect(restartIo.output.join("")).toContain("Tubeless gateway studio:")
+      );
+      const snapshot = await fetch(publicUrl + "/api/snapshot", { headers }).then((response) =>
+        response.json()
+      );
+      expect(snapshot).toMatchObject({
+        liveRunIds: [],
+        runs: [expect.objectContaining({ runId, status: "cancelled" })],
+      });
+      expect(
+        (
+          await fetch(publicUrl + "/api/runs/" + encodeURIComponent(runId) + "/cancel", {
+            method: "POST",
+            headers: { ...headers, "x-tubeless-studio-cancel": "1" },
+          })
+        ).status
+      ).toBe(404);
+    } finally {
+      restartController.abort();
+      await expect(restart).resolves.toBe(0);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
+    else process.env.TUBELESS_STUDIO_GATEWAY_TOKEN = previous;
+  }
+});
+
+it("keeps hosted NDJSON history read-only for every mutation", async () => {
+  const reserve = createServer();
+  await new Promise<void>((resolve) => reserve.listen(0, "127.0.0.1", resolve));
+  const address = reserve.address();
+  if (!address || typeof address === "string") throw new Error("Expected port");
+  const port = address.port;
+  await new Promise<void>((resolve) => reserve.close(() => resolve()));
+  const previous = process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
+  const token = "a1".repeat(32);
+  process.env.TUBELESS_STUDIO_GATEWAY_TOKEN = token;
+  try {
+    const { directory } = await writeModule("export {};");
+    const trace = path.join(directory, "trace.ndjson");
+    await writeFile(trace, "");
+    const controller = new AbortController();
+    const io = { ...captureIo(directory), signal: controller.signal };
+    const publicUrl = `http://127.0.0.1:${port}/admin/pipelines`;
+    const command = runWorkbenchCli(
+      [
+        "ui",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        String(port),
+        "--public-url",
+        publicUrl,
+        "--trace",
+        trace,
+      ],
+      io
+    );
+    const headers = {
+      authorization: "Bearer " + token,
+      origin: new URL(publicUrl).origin,
+      "content-type": "application/json",
+      "x-tubeless-studio-launch": "1",
+      "x-tubeless-studio-plan": "1",
+      "x-tubeless-studio-cancel": "1",
+      "x-tubeless-studio-clear-history": "1",
+    };
+    try {
+      await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless gateway studio:"));
+      expect(
+        await fetch(publicUrl + "/api/capabilities", { headers }).then((response) =>
+          response.json()
+        )
+      ).toEqual({ canCancel: false, canClearHistory: false });
+      expect(
+        await fetch(publicUrl + "/api/commands", { headers }).then((response) => response.json())
+      ).toEqual({ commands: [] });
+      for (const [route, method] of [
+        ["commands/fixture/runs", "POST"],
+        ["runs/old/cancel", "POST"],
+        ["history", "DELETE"],
+      ])
+        expect(
+          (await fetch(publicUrl + "/api/" + route, { method, headers, body: "{}" })).status
+        ).toBe(405);
+    } finally {
+      controller.abort();
+      await expect(command).resolves.toBe(0);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
+    else process.env.TUBELESS_STUDIO_GATEWAY_TOKEN = previous;
+  }
 });

@@ -21,7 +21,7 @@ cycling kind of tubeless: no inner tube, and no extra runtime to keep the work r
 
 Pipelines run in your process with no runtime dependencies. You can preview
 execution, select a target and its dependencies, compose child pipelines, and
-track progress. An optional CLI and local studio help you run and inspect jobs.
+track progress. The optional CLI and [Studio](./docs/studio.md) run locally or behind your authenticated admin gateway.
 For scheduling or crash recovery, pair it with a [queue or workflow engine](./docs/comparison.md).
 
 ## Installation

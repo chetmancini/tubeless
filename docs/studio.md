@@ -1,6 +1,7 @@
-# Local studio
+# Studio
 
-Studio is a local browser interface for inspecting pipeline runs. It shows
+Studio is a browser interface for inspecting pipeline runs. It runs locally by default
+and can be hosted behind an authenticated application gateway. It shows
 step status, progress, logs, and errors from a SQLite run store or a saved NDJSON
 trace. You can also load a project or register pipeline commands to preview and launch them from
 the browser. Recording and Studio are optional; pipelines run without either.
@@ -50,7 +51,7 @@ the selected run. Open a nested run to inspect its own errors and logs.
 The selected run appears in the browser URL as `?run=<run-id>`. Selecting a run,
 including a nested run, adds a browser history entry, so Back and Forward restore
 earlier selections. The copy icon in run details has a **Copy run link** tooltip
-and copies the selected run's URL. Links work only with the same local Studio
+and copies the selected run's URL. Links work only with the same Studio mount
 and run store. If the run was deleted or belongs to another store, Studio shows
 an unavailable-run message and keeps the requested ID visible so you can choose
 another run.
@@ -78,7 +79,7 @@ A single active step keeps its progress message.
 | Control       | What it does                                                                      | When available                                                                       |
 | ------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Preview plan  | Shows the selected steps and dry-run behavior without starting or recording a run | A pipeline command is registered                                                     |
-| Run pipeline  | Validates the form values and starts the command                                  | A command is registered on a loopback host                                           |
+| Run pipeline  | Validates the form values and starts the command                                  | A command is registered locally or in gateway mode                                   |
 | Cancel run    | Aborts the selected live run without stopping Studio or sibling runs              | This Studio process owns the top-level launch                                        |
 | Clear history | Deletes all recorded SQLite events and compacts the database after confirmation   | Local SQLite mode with the maintenance capability enabled and no known active writer |
 
@@ -199,8 +200,7 @@ that cannot be read safely.
 
 The local CLI disables clearing while it knows a browser-launched run is active.
 Runs left active in history after a process interruption can be cleared after
-confirmation. An embedded Studio has no clearing capability unless its caller
-supplies one; use `isBusy()` to report other known active writers.
+confirmation. Gateway mode always disables clearing, including on loopback.
 
 NDJSON readers validate a finished file, assign event IDs in file order, and
 close the file. They do not modify the artifact or copy it into SQLite. The
@@ -284,19 +284,140 @@ progress retains its original `detailCount`.
 
 ## Network access
 
-Studio binds to `127.0.0.1` by default. Browser execution requires a loopback
-host: `127.0.0.1`, `::1`, or `localhost`. Binding to another host is rejected
-when commands are registered.
+Studio binds to `127.0.0.1` by default. Without gateway mode, browser execution
+requires `127.0.0.1`, `::1`, or `localhost`. A non-loopback `--host` without
+commands is read-only; anyone who can reach that port can read its history.
+Logs, errors, and event payloads are displayed without redaction.
 
-Without registered commands, a non-loopback `--host` is allowed but remains
-read-only and has no clear-history control. Anyone who can reach that port can
-read the store. Logs, errors, and event payloads are displayed without redaction.
-Keep the default loopback binding unless you intend to share that data. See
-[SECURITY.md](https://github.com/chetmancini/tubeless/blob/main/SECURITY.md).
+Studio's server and JSON payloads remain internal, version-coupled workbench
+details. Use the CLI hosting contract below, rather than importing server
+internals or building a client against its routes.
 
-Studio's HTTP server and browser protocol are internal workbench details, not a
-supported embedding API. Use the `tubeless ui` command instead of calling its
-local routes directly.
+## Host Studio behind an application gateway
 
+Use one long-lived Studio process behind your application's authenticated admin
+route. Tubeless owns the mount, gateway authentication, recorded history, and
+registered command execution. Your application owns login, sessions, admin
+permission checks, TLS, private networking, and which commands are registered.
+Every admitted user can access the entire store and command catalog. This is one
+admin trust domain, with no per-user isolation or user audit trail.
+
+Provision `TUBELESS_STUDIO_GATEWAY_TOKEN` through your host's secret management:
+32 cryptographically random bytes encoded as 64 hexadecimal characters. Share it
+only with the application gateway and Studio process. Never pass it in argv,
+browser code, URLs, logs, or cookies. Then start Studio:
+
+```sh
+tubeless ui --host 0.0.0.0 --port 4317 \
+  --public-url https://script.bible/admin/pipelines \
+  --store /data/tubeless/runs.sqlite ./pipes.studio.ts
+```
+
+`--public-url` enables gateway mode; the environment variable alone is an error.
+Missing or malformed configuration fails before user modules load or stores open.
+The URL must be absolute HTTPS. HTTP is allowed only for literal loopback
+`127.0.0.1`, `[::1]`, or `localhost` development URLs. Paths contain unreserved
+ASCII segments, without dot segments, encoded characters, or empty internal
+segments. Credentials, query strings, fragments, and backslashes are rejected.
+An optional trailing slash normalizes to the canonical page URL. Root mounts work.
+
+The gateway **preserves the complete mount prefix**: `/admin/pipelines/` serves the
+page, and `/admin/pipelines/api/...` serves browser requests. There is no
+prefix-stripping mode. Only GET/HEAD navigation to the mount without its trailing
+slash redirects; it preserves `?run=...`. Run links, reload, and Back/Forward retain
+the mount. Link to the complete Studio page from your admin navigation;
+`frame-ancestors 'none'` intentionally prevents iframe embedding.
+
+### Gateway request contract
+
+For every page and API request, before contacting Studio:
+
+1. Verify the application session and pipeline-admin permission in the request
+   handler. Protecting an admin page or layout alone is insufficient.
+2. Forward only to a fixed configured private upstream, never a browser-selected
+   URL. Replace incoming `Authorization` with `Bearer <backend-token>`; never
+   forward browser credentials or cookies to Studio.
+3. Set `Host` explicitly to the configured public authority, including a
+   nondefault port. For a private upstream such as `http://studio.private:4317`,
+   the TCP destination stays private while `Host` is `script.bible`. Studio
+   accepts that authority plus its existing bind-derived host policy. Forwarded
+   host, identity, and protocol headers cannot grant access.
+4. For POST/DELETE, independently verify the original browser `Origin` equals
+   the configured public origin, and preserve it when forwarding. Do not
+   manufacture an allowed Origin for an untrusted request. Missing, null,
+   malformed, duplicate, or foreign Origin is rejected by Studio. Preserve the
+   UI's JSON content type and `x-tubeless-studio-*` guards. There is no cross-origin
+   CORS mode. GET/HEAD navigation may omit Origin.
+5. Preserve response status, content type, CSP, and `Cache-Control: no-store`.
+   Exclude the entire mount from service-worker/PWA and shared-cache handling.
+   Do not retry launches or other mutations: an uncertain response may already
+   have produced side effects, and there is no idempotency/replay contract.
+
+Studio checks the backend credential on **all** routes, including pages, redirects,
+unknown paths, and readiness, before body parsing, store reads, or command effects.
+It uses a fixed-length timing-safe token comparison and rejects duplicate or
+malformed credentials. Host/Origin checks supplement authentication.
+
+Only the gateway should be publicly routed. In the same container, bind Studio to
+loopback. A separate private service may bind `0.0.0.0` with a private network rule
+allowing the gateway. Use appropriate authenticated/encrypted transport across
+that network; a bearer token does not encrypt HTTP. There is no disable-host-check
+option and private networking does not remove the token requirement.
+
+### Access expiry and failures
+
+The application gateway may redirect page navigation to its login flow. API
+requests must return JSON **401** when login is needed or **403** when permission
+is denied, never a 200 login HTML page. Studio clears displayed data and forms,
+suspends polling and retries, and disables actions after either status from any
+API call. **Open Studio again** performs a full navigation through the same gateway
+URL; your application handles login and return navigation. A full page reload
+starts a new access attempt.
+
+A backend credential denial is an integration failure: the gateway should map it
+to a generic **502**, rather than logging the user out. Network errors and 5xx
+responses show a connection/error state. They do not grant access or automatically
+retry a mutation.
+
+### Process, persistence, and readiness
+
+Use a persistent volume for the SQLite store and one active Studio writer process
+per store. The application owns supervision, backups, resource limits, and rollout
+coordination. NDJSON remains read-only in gateway mode. Clear history is always
+disabled in gateway mode, even with a loopback bind.
+
+Authenticated `GET <mount>/api/health` returns `200 {"ready":true}` after startup.
+Readiness turns false synchronously at the start of server close: requests still
+served during shutdown return `503 {"ready":false}`; a closed connection is also
+expected once the listener closes. The response exposes no store path or history.
+An exec probe must supply the backend credential, or the application can own a
+minimal health facade. There is no unauthenticated Studio health bypass.
+
+Launch acknowledgement follows persistence of the start event. It is not a durable
+job queue or a promise of completion after a crash. Browser disconnect does not
+cancel the run. Cancellation is cooperative and process-local; a restarted process
+can inspect older runs but cannot cancel or resume their previous execution.
+
+On shutdown, the CLI stops admission, settles pending launch responses, aborts
+active launches, closes the listener, drains executions, then flushes/closes storage.
+Handlers should observe the cancellation signal and finish cleanup. An
+uncooperative handler can prevent draining; the external supervisor owns the grace
+period and eventual forced termination. Forced termination can lose buffered events
+and leave incomplete history. Horizontal execution, shared multiwriter SQLite,
+scheduling, crash recovery, and per-user stores are outside this hosting contract.
+
+### Application handoff
+
+For Bible Search or another host application: upgrade to a tested Tubeless release
+containing this contract, implement session and admin permission checks in every
+forwarding handler, configure a fixed upstream and backend token, and register an
+explicit deployment-specific pipeline catalog. Provision persistent storage and a
+supervised process; coordinate sleeping/restarts with ongoing work. The local
+catalog may contain seeding or filesystem commands unsuitable for deployment.
+Keep framework, authentication-provider, and hosting-vendor configuration in the
+application. The repository proxy integration tests exercise the contract; they do
+not prove a consuming application's gateway is configured correctly.
+
+See [SECURITY.md](https://github.com/chetmancini/tubeless/blob/main/SECURITY.md).
 Studio previews and observed definitions also expose [graph metadata](./graph-metadata.md).
 Expand **Explore steps** to search metadata and group by owner or domain.

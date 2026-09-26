@@ -1,10 +1,12 @@
 import type {
   StudioApi,
+  StudioAccessDenied,
   StudioRunDetail,
   StudioSnapshot,
 } from "./run-store-ui-client-transport.js";
 
 export interface StudioDataState {
+  accessDenied?: StudioAccessDenied;
   connected: boolean;
   detail: StudioRunDetail | null;
   manualRefreshing: boolean;
@@ -36,6 +38,7 @@ function clearedSnapshot(snapshot: StudioSnapshot): StudioSnapshot {
 /** Owns Studio snapshot freshness and selection-scoped detail loading. */
 export class StudioDataController {
   readonly #api: StudioApi;
+  readonly #unsubscribeAccess: (() => void) | undefined;
   readonly #detailRetryMs: number;
   readonly #listeners = new Set<StudioDataListener>();
   #detailRequest: object | null = null;
@@ -58,6 +61,20 @@ export class StudioDataController {
   constructor(api: StudioApi, detailRetryMs = DEFAULT_DETAIL_RETRY_MS) {
     this.#api = api;
     this.#detailRetryMs = detailRetryMs;
+    this.#unsubscribeAccess = api.subscribeAccessDenied?.((status) => {
+      this.#snapshotEpoch += 1;
+      this.#resetDetail();
+      if (this.#invalidationTimeout) clearTimeout(this.#invalidationTimeout);
+      this.#invalidationTimeout = undefined;
+      this.#snapshotRefreshQueued = false;
+      this.#update({
+        accessDenied: status,
+        connected: false,
+        snapshot: null,
+        detail: null,
+        manualRefreshing: false,
+      });
+    });
   }
 
   getState(): StudioDataState {
@@ -70,7 +87,7 @@ export class StudioDataController {
   }
 
   refresh(manual = false): void {
-    if (this.#disposed) return;
+    if (this.#disposed || this.#state.accessDenied) return;
     if (manual) {
       this.#manualRefreshPending = true;
       this.#update({ manualRefreshing: true });
@@ -83,7 +100,7 @@ export class StudioDataController {
   }
 
   invalidate({ delayMs = 0, resetHistory = false }: StudioDataInvalidation = {}): void {
-    if (this.#disposed) return;
+    if (this.#disposed || this.#state.accessDenied) return;
     this.#snapshotEpoch += 1;
     if (resetHistory) {
       this.#resetDetail();
@@ -107,7 +124,7 @@ export class StudioDataController {
   }
 
   selectRun(runId: string | null, fingerprint: string | null): void {
-    if (this.#disposed) return;
+    if (this.#disposed || this.#state.accessDenied) return;
     if (
       this.#detailSelection.runId === runId &&
       this.#detailSelection.fingerprint === fingerprint
@@ -126,6 +143,7 @@ export class StudioDataController {
 
   dispose(): void {
     if (this.#disposed) return;
+    this.#unsubscribeAccess?.();
     this.#disposed = true;
     this.#snapshotEpoch += 1;
     this.#detailSelectionVersion += 1;
@@ -138,22 +156,22 @@ export class StudioDataController {
   }
 
   #startSnapshotRefresh(): void {
-    if (this.#disposed) return;
+    if (this.#disposed || this.#state.accessDenied) return;
     this.#snapshotRefreshActive = true;
     const epoch = this.#snapshotEpoch;
     this.#manualRefreshPending = false;
     void this.#api
       .loadSnapshot()
       .then((snapshot) => {
-        if (this.#disposed || epoch !== this.#snapshotEpoch) return;
+        if (this.#disposed || this.#state.accessDenied || epoch !== this.#snapshotEpoch) return;
         this.#update({ connected: true, snapshot });
       })
       .catch(() => {
-        if (this.#disposed || epoch !== this.#snapshotEpoch) return;
+        if (this.#disposed || this.#state.accessDenied || epoch !== this.#snapshotEpoch) return;
         this.#update({ connected: false });
       })
       .finally(() => {
-        if (this.#disposed) return;
+        if (this.#disposed || this.#state.accessDenied) return;
         this.#snapshotRefreshActive = false;
         if (this.#snapshotRefreshQueued) {
           this.#snapshotRefreshQueued = false;
@@ -168,6 +186,7 @@ export class StudioDataController {
     const { fingerprint, runId } = this.#detailSelection;
     if (
       this.#disposed ||
+      this.#state.accessDenied ||
       this.#detailRequest !== null ||
       this.#detailRetryTimeout !== undefined ||
       !runId ||
@@ -201,13 +220,19 @@ export class StudioDataController {
   #detailRequestIsCurrent(request: object, selectionVersion: number): boolean {
     return (
       !this.#disposed &&
+      !this.#state.accessDenied &&
       this.#detailRequest === request &&
       this.#detailSelectionVersion === selectionVersion
     );
   }
 
   #scheduleDetailRetry(selectionVersion: number): void {
-    if (this.#disposed || selectionVersion !== this.#detailSelectionVersion) return;
+    if (
+      this.#disposed ||
+      this.#state.accessDenied ||
+      selectionVersion !== this.#detailSelectionVersion
+    )
+      return;
     if (this.#detailRetryTimeout) clearTimeout(this.#detailRetryTimeout);
     this.#detailRetryTimeout = setTimeout(() => {
       this.#detailRetryTimeout = undefined;
@@ -244,6 +269,7 @@ export class StudioDataController {
   #update(update: Partial<StudioDataState>): void {
     const state = { ...this.#state, ...update };
     if (
+      state.accessDenied === this.#state.accessDenied &&
       state.connected === this.#state.connected &&
       state.detail === this.#state.detail &&
       state.manualRefreshing === this.#state.manualRefreshing &&
