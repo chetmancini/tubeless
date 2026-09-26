@@ -20,7 +20,7 @@ export class PipelineBoundaryValidationError extends Error {
 function normalizeValidationPath(
   path: StandardSchemaV1Issue["path"]
 ): readonly (number | string)[] | undefined {
-  if (!path || path.length === 0) return undefined;
+  if (!path) return undefined;
   return path.map((segment) => {
     const key = typeof segment === "object" && segment !== null ? segment.key : segment;
     return typeof key === "number" || typeof key === "string" ? key : String(key);

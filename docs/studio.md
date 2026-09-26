@@ -40,6 +40,13 @@ The run list shows active runs first, followed by history. Child runs appear
 beneath their parent, and caller-owned correlation IDs remain searchable and
 visible separately from package-generated run IDs. Open a run to inspect its
 steps, progress, logs, and errors.
+
+Run details put debugging information before the step timeline. Structured errors
+show validation issue paths, expandable cause chains, failed fan-out items, and any
+omitted failure count. Logs can be searched by message text and filtered by level
+and step; the count shows how many entries match. These diagnostics are limited to
+the selected run. Open a nested run to inspect its own errors and logs.
+
 Test-runtime recordings retain ordinary step statuses and annotate supplied
 outputs as `completed (overridden)`, `failed (overridden)`, or `cancelled (overridden)`. The supplied values are not recorded. Studio launch forms
 do not accept overrides; see [testing overrides](./concepts.md#supplying-step-outputs).

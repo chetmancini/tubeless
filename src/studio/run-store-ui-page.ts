@@ -171,7 +171,21 @@ export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
     .progress-detail-truncated { color: var(--faint); font: 9px/1.4 var(--mono); }
     .error-card { padding: 12px; border: 1px solid #efcbc8; border-radius: 8px; background: #fff8f7; }
     .error-code { color: var(--red); font: 10px var(--mono); }
-    .error-message { margin-top: 6px; font-size: 11px; line-height: 1.5; }
+    .error-message { margin-top: 6px; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+    .debug-group { margin-top: 12px; padding-top: 11px; border-top: 1px solid #efcbc8; font-size: 11px; }
+    .debug-group > strong { display: block; margin-bottom: 7px; font-size: 10px; }
+    .debug-issues { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+    .debug-issues li { display: flex; flex-wrap: wrap; gap: 4px 9px; line-height: 1.45; overflow-wrap: anywhere; }
+    .debug-issues code { color: var(--red); font: 10px var(--mono); overflow-wrap: anywhere; }
+    .debug-cause { padding: 7px 0; border-top: 1px solid #efcbc8; overflow-wrap: anywhere; }
+    .debug-cause:first-child { border-top: 0; }
+    .debug-cause summary { cursor: pointer; font-size: 10px; line-height: 1.5; }
+    .debug-cause-body { margin: 7px 0 0 15px; color: var(--muted); font: 10px/1.5 var(--mono); }
+    .debug-note { margin-top: 7px; color: var(--muted); font-size: 10px; }
+    .log-filters { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(90px, auto) minmax(110px, auto); gap: 8px; margin-bottom: 8px; }
+    .log-filters label { min-width: 0; display: grid; gap: 4px; color: var(--muted); font-size: 9px; }
+    .log-filters input, .log-filters select { min-width: 0; width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font-size: 10px; }
+    .log-empty { padding: 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font-size: 10px; }
     .logs { border: 1px solid var(--line); border-radius: 8px; background: #20221f; color: #dfe3da; overflow: auto; max-height: 220px; }
     .log-line { display: grid; grid-template-columns: 70px 42px minmax(0, 1fr); gap: 8px; padding: 7px 9px; border-bottom: 1px solid #30332e; font: 9px/1.45 var(--mono); }
     .log-line:last-child { border-bottom: 0; }
@@ -180,6 +194,7 @@ export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
     .log-level.error { color: #ff8c84; }
     .log-level.warn { color: #e8bd72; }
     .log-message { overflow-wrap: anywhere; }
+    @media (max-width: 900px) { .log-filters { grid-template-columns: 1fr 1fr; } .log-filters label:first-child { grid-column: 1 / -1; } }
     .empty { min-height: 330px; padding: 38px; display: grid; place-items: center; text-align: center; color: var(--muted); }
     .empty-icon { width: 44px; height: 44px; margin: 0 auto 13px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 12px; background: #fafbf8; }
     .empty strong { display: block; color: var(--ink); font-size: 13px; }
