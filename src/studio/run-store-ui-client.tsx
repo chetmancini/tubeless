@@ -762,15 +762,17 @@ export function PlanView({ plan }: { plan: PipelinePlan }) {
                     <span>{selectionReasonText(reason)}</span>
                   </li>
                 ))}
-                {step.dependencies.length > 0 && (
-                  <li>
-                    <strong>Required inputs</strong>
+                <li>
+                  <strong>Required inputs</strong>
+                  {step.dependencies.length > 0 ? (
                     <span>
                       <PlanReferences ids={step.dependencies} stepsById={stepsById} /> — unavailable
                       inputs skip this step.
                     </span>
-                  </li>
-                )}
+                  ) : (
+                    <span>No required inputs.</span>
+                  )}
+                </li>
                 {step.optionalDependencies.length > 0 && (
                   <li>
                     <strong>Optional inputs</strong>

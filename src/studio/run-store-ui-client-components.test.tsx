@@ -226,6 +226,7 @@ describe("Studio components", () => {
     expect(markup).toContain("1 of 1 steps planned to run · dry run");
     expect(markup).toContain("Exact steps");
     expect(markup).toContain("Explicitly listed in the exact step selection.");
+    expect(markup).toContain("<strong>Required inputs</strong><span>No required inputs.</span>");
   });
 
   it("explains target closure, shared prerequisites, and optional omissions", () => {
