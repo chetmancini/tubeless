@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { RUN_MODEL_VERSION } from "../core/pipeline.js";
-import { createStudioRunIndex, resolveSelectedRunId } from "./run-store-ui-client.js";
+import {
+  createStudioRunIndex,
+  resolveSelectedRunId,
+  runIdFromStudioUrl,
+  studioRunUrl,
+} from "./run-store-ui-client.js";
 import type { StoredPipelineRun, StoredPipelineRunStatus } from "../run-store/run-store.js";
 
 function run(
@@ -71,23 +76,28 @@ function renderLike(index: ReturnType<typeof createStudioRunIndex>, query = "") 
   return { active, historical, roots };
 }
 
+it("builds store-local run links without losing other URL state", () => {
+  const original = "http://127.0.0.1:4317/?view=runs&run=old#details";
+  const linked = studioRunUrl(original, "child/with spaces");
+  expect(linked).toBe("http://127.0.0.1:4317/?view=runs&run=child%2Fwith+spaces#details");
+  expect(runIdFromStudioUrl(linked)).toBe("child/with spaces");
+  expect(runIdFromStudioUrl("http://127.0.0.1:4317/")).toBeNull();
+  expect(runIdFromStudioUrl("http://127.0.0.1:4317/?run=")).toBeNull();
+});
+
 describe("createStudioRunIndex", () => {
-  it("preserves a pending launched run until it appears in the snapshot", () => {
+  it("preserves an explicitly selected or linked run even when it is unavailable", () => {
     const previous = run({ runId: "previous", startedAtMs: 1 });
     const currentIndex = createStudioRunIndex([previous]);
 
-    expect(resolveSelectedRunId("launched", "launched", currentIndex.roots, currentIndex)).toBe(
-      "launched"
-    );
-    expect(resolveSelectedRunId("missing", null, currentIndex.roots, currentIndex)).toBe(
-      "previous"
-    );
+    expect(resolveSelectedRunId("launched", currentIndex.roots)).toBe("launched");
+    expect(resolveSelectedRunId("missing", currentIndex.roots)).toBe("missing");
+    expect(resolveSelectedRunId(null, currentIndex.roots)).toBe("previous");
+    expect(resolveSelectedRunId(null, [])).toBeNull();
 
     const launched = run({ runId: "launched", startedAtMs: 2 });
     const refreshedIndex = createStudioRunIndex([previous, launched]);
-    expect(resolveSelectedRunId("launched", "launched", refreshedIndex.roots, refreshedIndex)).toBe(
-      "launched"
-    );
+    expect(resolveSelectedRunId("launched", refreshedIndex.roots)).toBe("launched");
   });
 
   it("returns empty lookups for empty history", () => {

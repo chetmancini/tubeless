@@ -66,6 +66,8 @@ export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
     .primary-button { height: 36px; padding: 0 13px; border: 1px solid #174ce2; border-radius: 8px; background: var(--blue); color: #fff; cursor: pointer; box-shadow: 0 1px 1px rgba(18,54,156,.18); font-size: 11px; font-weight: 700; }
     .primary-button:hover { background: #174fe8; }
     .primary-button:disabled { opacity: .55; cursor: wait; }
+    .secondary-button { padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); cursor: pointer; font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .secondary-button:hover { border-color: var(--line-strong); background: #fafbf8; }
     .danger-button { height: 36px; padding: 0 12px; border: 1px solid #e4c6c3; border-radius: 8px; background: #fffafa; color: #a53c36; cursor: pointer; font-size: 11px; font-weight: 700; }
     .danger-button:hover { border-color: #d8a9a5; background: var(--red-soft); }
     .danger-button:disabled { opacity: .45; cursor: not-allowed; }
@@ -116,7 +118,12 @@ export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
     .detail-body { padding: 18px; }
     .detail-heading { align-items: flex-start; }
     .detail-heading-copy { min-width: 0; }
-    .detail-heading-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .detail-heading-actions { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+    .detail-heading-actions .icon-button { flex: 0 0 36px; }
+    .unavailable-run { min-height: 330px; padding: 38px 24px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 10px; }
+    .unavailable-run strong { font-size: 13px; }
+    .unavailable-run p { max-width: 380px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .unavailable-run code { max-width: 100%; color: var(--faint); font: 10px var(--mono); overflow-wrap: anywhere; }
     .detail-heading h2 { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; font-size: 19px; letter-spacing: -.03em; white-space: nowrap; }
     .detail-heading .status { margin-top: 2px; }
     .detail-kicker { margin-bottom: 5px; color: var(--faint); font-size: 9px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }

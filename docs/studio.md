@@ -47,6 +47,14 @@ omitted failure count. Logs can be searched by message text and filtered by leve
 and step; the count shows how many entries match. These diagnostics are limited to
 the selected run. Open a nested run to inspect its own errors and logs.
 
+The selected run appears in the browser URL as `?run=<run-id>`. Selecting a run,
+including a nested run, adds a browser history entry, so Back and Forward restore
+earlier selections. The copy icon in run details has a **Copy run link** tooltip
+and copies the selected run's URL. Links work only with the same local Studio
+and run store. If the run was deleted or belongs to another store, Studio shows
+an unavailable-run message and keeps the requested ID visible so you can choose
+another run.
+
 Test-runtime recordings retain ordinary step statuses and annotate supplied
 outputs as `completed (overridden)`, `failed (overridden)`, or `cancelled (overridden)`. The supplied values are not recorded. Studio launch forms
 do not accept overrides; see [testing overrides](./concepts.md#supplying-step-outputs).

@@ -95,6 +95,7 @@ describe("Studio components", () => {
         liveRunIds={[]}
         nowMs={2000}
         onCancel={() => {}}
+        onCopyLink={() => {}}
         onSelect={() => {}}
         roots={index.roots}
         runIndex={index}
@@ -119,6 +120,7 @@ describe("Studio components", () => {
         liveRunIds={[root.runId]}
         nowMs={2_000}
         onCancel={() => {}}
+        onCopyLink={() => {}}
         onSelect={() => {}}
         roots={index.roots}
         runIndex={index}
@@ -129,7 +131,35 @@ describe("Studio components", () => {
     );
     expect(markup).toContain("Pipeline runs");
     expect(markup).toContain("Cancel run");
+    expect(markup).toContain('title="Copy run link"');
+    expect(markup).toContain('aria-label="Copy run link"');
+    expect(markup).not.toContain(">Copy run link</button>");
     expect(markup).toContain("1s ago");
+  });
+
+  it("distinguishes a missing linked run from a run whose details are loading", () => {
+    const root = run();
+    const index = createStudioRunIndex([root]);
+    const props = {
+      canCancel: false,
+      cancelling: false,
+      liveRunIds: [],
+      nowMs: 2_000,
+      onCancel: () => {},
+      onCopyLink: () => {},
+      onSelect: () => {},
+      roots: index.roots,
+      runIndex: index,
+      selectedRun: null,
+      totalRunCount: 1,
+    };
+    const missing = renderToString(<RunsView {...props} selectedRunId="deleted-run" />);
+    expect(missing).toContain("Run unavailable");
+    expect(missing).toContain("deleted-run");
+    expect(missing).toContain("Select latest run");
+    const loading = renderToString(<RunsView {...props} selectedRunId={root.runId} />);
+    expect(loading).toContain("Loading run");
+    expect(loading).not.toContain("Run unavailable");
   });
 
   it.each([0, 1, 3, 5])("summarizes %s running steps without completed names", (count) => {
@@ -152,6 +182,7 @@ describe("Studio components", () => {
         liveRunIds={[root.runId]}
         nowMs={2_000}
         onCancel={() => {}}
+        onCopyLink={() => {}}
         onSelect={() => {}}
         roots={index.roots}
         runIndex={index}
