@@ -99,6 +99,10 @@ describe("definePipeline targets and definitions", () => {
       kind: "selection",
       phase: "planning",
     });
+    // @ts-expect-error Both controls are present even when their arrays are empty.
+    expect(pipeline.plan({ stepIds: [], targets: [] }).errors[0]?.code).toBe(
+      "TUBELESS_PLANNING_SELECTION_CONFLICT"
+    );
   });
 
   it("exposes only declared targets and rejects internal steps as targets", () => {

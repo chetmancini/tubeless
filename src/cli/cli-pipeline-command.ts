@@ -17,6 +17,7 @@ import type {
   CliStringParam,
 } from "./cli-types.js";
 import { markPipelineCommand } from "../utilities/pipeline-command-marker.js";
+import { hasConflictingSelectionControls } from "../core/pipeline-plan.js";
 import {
   type Pipeline,
   type PipelineHooks,
@@ -204,14 +205,17 @@ function normalizePipelineCliValues<TSchema extends CliParamsSchema>(
   };
 }
 
-function pipelineRunControlsFromCliValues(values: {
-  continueOnError: boolean;
-  maxConcurrency: number;
-  cache?: StepCachePolicy;
-  dryRun: boolean;
-  stepIds: readonly string[];
-  targets: readonly string[];
-}): PipelineRunControls {
+function pipelineRunControlsFromCliValues(
+  values: {
+    continueOnError: boolean;
+    maxConcurrency: number;
+    cache?: StepCachePolicy;
+    dryRun: boolean;
+    stepIds: readonly string[];
+    targets: readonly string[];
+  },
+  targetFlagEnabled: boolean
+): PipelineRunControls {
   const controls: PipelineRunControls = {
     dryRun: values.dryRun,
     continueOnError: values.continueOnError,
@@ -219,7 +223,7 @@ function pipelineRunControlsFromCliValues(values: {
     ...(values.cache !== undefined ? { cache: values.cache } : {}),
   };
   if (values.stepIds.length > 0) controls.stepIds = values.stepIds;
-  if (values.targets.length > 0) controls.targets = values.targets;
+  if (targetFlagEnabled && values.targets.length > 0) controls.targets = values.targets;
   return controls;
 }
 
@@ -379,7 +383,11 @@ export function definePipelineCommand<
     validate: (values, context) => {
       const pipelineValues = normalizePipelineCliValues<TSchema>(values);
       const errors = config.validate?.(pipelineValues, context) ?? [];
-      if (pipelineValues.stepIds.length > 0 && pipelineValues.targets.length > 0) {
+      if (
+        hasConflictingSelectionControls(
+          pipelineRunControlsFromCliValues(pipelineValues, targetFlagEnabled)
+        )
+      ) {
         return ["--step and --target cannot be used together.", ...errors];
       }
       return errors.length > 0 ? errors : undefined;
@@ -394,14 +402,7 @@ export function definePipelineCommand<
         // `CanDefaultPipelineCommandOptions` constraint guarantees map to `TOptions`.
         mapped = defaultPipelineCommandOptions(pipelineValues) as TOptions;
       }
-      const controls = pipelineRunControlsFromCliValues({
-        dryRun: values.dryRun,
-        continueOnError: pipelineValues.continueOnError,
-        maxConcurrency: pipelineValues.maxConcurrency,
-        cache: pipelineValues.cache,
-        stepIds: pipelineValues.stepIds,
-        targets: targetFlagEnabled ? pipelineValues.targets : [],
-      });
+      const controls = pipelineRunControlsFromCliValues(pipelineValues, targetFlagEnabled);
 
       const reporter =
         config.reporter === false

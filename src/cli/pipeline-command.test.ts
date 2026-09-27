@@ -443,11 +443,17 @@ describe("definePipelineCommand", () => {
   it("rejects combining exact steps with dependency-aware targets", () => {
     const command = definePipelineCommand(makeMiniPipeline(), { mapOptions: () => ({}) });
     const result = command.parse(["--step", "first", "--target", "second"]);
+    const formResult = command.parseValues({ stepIds: ["first"], targets: ["second"] });
 
     expect(result.kind).toBe("error");
     expect(result.kind === "error" && result.errors).toContain(
       "--step and --target cannot be used together."
     );
+    expect(formResult.kind).toBe("error");
+    expect(formResult.kind === "error" && formResult.errors).toContain(
+      "--step and --target cannot be used together."
+    );
+    expect(command.parseValues({ stepIds: [], targets: [] }).kind).toBe("values");
   });
 
   it("forwards an explicit CLI signal into pipeline step contexts", async () => {
@@ -862,6 +868,10 @@ describe("definePipelineCommand", () => {
 
       process.exitCode = undefined;
       await command.main(["--bogus"], { log });
+      expect(process.exitCode).toBe(4);
+
+      process.exitCode = undefined;
+      await command.main(["--step", "first", "--target", "second"], { log });
       expect(process.exitCode).toBe(4);
 
       process.exitCode = undefined;

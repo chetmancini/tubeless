@@ -113,6 +113,14 @@ function selectsStep(reason: PipelineStepSelectionReason): boolean {
   return !["not-selected", "optional-only", "outside-target-closure"].includes(reason.kind);
 }
 
+/** Selection modes conflict when both controls are present, including empty arrays. */
+export function hasConflictingSelectionControls(controls: {
+  stepIds?: readonly string[];
+  targets?: readonly string[];
+}): boolean {
+  return controls.stepIds !== undefined && controls.targets !== undefined;
+}
+
 export function buildPipelinePlan<
   TSteps extends readonly AnyStep[],
   TResult,
@@ -151,7 +159,7 @@ export function buildPipelinePlan<
       )
     );
   }
-  if (controls.stepIds !== undefined && controls.targets !== undefined) {
+  if (hasConflictingSelectionControls(controls)) {
     errors.push(
       pipelineDiagnostic(
         "TUBELESS_PLANNING_SELECTION_CONFLICT",
