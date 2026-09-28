@@ -33,9 +33,7 @@ function keys(value: Record<string, unknown>, expected: readonly string[]): bool
 
 export function decisionEnvelope(
   value: unknown
-):
-  | { kind: "finish"; result: unknown }
-  | { kind: "continue"; calls: readonly { id: string; tool: string; input: unknown }[] } {
+): { kind: "finish"; result: unknown } | { kind: "continue"; calls: readonly unknown[] } {
   if (!record(value)) return invalid("Agent decision must be a plain object");
   if (value.kind === "finish" && keys(value, ["kind", "result"]))
     return { kind: "finish", result: value.result };
@@ -46,8 +44,17 @@ export function decisionEnvelope(
     value.calls.length === 0
   )
     return invalid("Agent decision must finish(result) or continue with a nonempty calls array");
+  // Leave call traversal to prepareCalls, after the turn admits the batch by length.
+  return { kind: "continue", calls: value.calls };
+}
+
+export async function prepareCalls(
+  values: readonly unknown[],
+  registry: ReadonlyMap<string, CompiledTool>,
+  context: PipelineStepContext<object>
+): Promise<PreparedCall[]> {
   const ids = new Set<string>();
-  const calls = Array.from(value.calls, (call: unknown) => {
+  const calls = Array.from(values, (call: unknown) => {
     if (
       !record(call) ||
       !keys(call, ["id", "tool", "input"]) ||
@@ -62,14 +69,6 @@ export function decisionEnvelope(
     ids.add(call.id);
     return { id: call.id, tool: call.tool, input: call.input };
   });
-  return { kind: "continue", calls };
-}
-
-export async function prepareCalls(
-  calls: readonly { id: string; tool: string; input: unknown }[],
-  registry: ReadonlyMap<string, CompiledTool>,
-  context: PipelineStepContext<object>
-): Promise<PreparedCall[]> {
   // Resolve the complete registry membership before invoking any argument validators.
   const entries = calls.map((call) => {
     const tool = registry.get(call.tool);

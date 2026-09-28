@@ -295,6 +295,47 @@ describe("single-agent execution", () => {
   });
 
   it.each([
+    { limits: { maxCalls: 1 }, priorBatches: 0, batchLength: 1_000_000 },
+    { limits: { maxCalls: 2 }, priorBatches: 1, batchLength: 2 },
+    { limits: { maxTurns: 1 }, priorBatches: 0, batchLength: 1 },
+  ])(
+    "rejects inadmissible batches before reading entries: %j",
+    async ({ limits, priorBatches, batchLength }) => {
+      const readCall = vi.fn(() => {
+        throw new Error("Rejected calls must not be read");
+      });
+      const calls: unknown[] = [];
+      calls.length = batchLength;
+      Object.defineProperty(calls, 0, { get: readCall });
+      const validate = vi.fn((input: unknown) => ({ value: Number(input) }));
+      const run = vi.fn((input: number) => input);
+      const reduce = vi.fn((state: number) => state);
+      const agent = defineAgent({
+        ...base,
+        limits,
+        tools: {
+          double: defineTool({
+            description: "Double",
+            inputSchema: schema<number>(validate),
+            outputSchema: numberSchema,
+            run,
+          }),
+        },
+        decide: (_state, context) =>
+          context.turn <= priorBatches ? batch : { kind: "continue", calls },
+        reduce,
+      });
+      const result = await createPipelineTestRuntime().run(agent, {});
+      expect(result.status).toBe("failed");
+      expect(JSON.stringify(result.errors)).toContain("TUBELESS_AGENT_LIMIT_REACHED");
+      expect(readCall).not.toHaveBeenCalled();
+      expect(validate).toHaveBeenCalledTimes(priorBatches);
+      expect(run).toHaveBeenCalledTimes(priorBatches);
+      expect(reduce).toHaveBeenCalledTimes(priorBatches);
+    }
+  );
+
+  it.each([
     { maxTurns: 0 },
     { maxCalls: -1 },
     { maxDecisions: 1.5 },
@@ -466,6 +507,8 @@ describe("single-agent execution", () => {
     expect(initialState).not.toHaveBeenCalled();
     expect(decide).not.toHaveBeenCalled();
     const second = createPipelineTestRuntime();
+    const readCall = vi.fn(() => call());
+    const calls = Object.defineProperty([call()], 0, { get: readCall });
     expect(
       (
         await second.run(
@@ -473,13 +516,14 @@ describe("single-agent execution", () => {
             ...base,
             decide: () => {
               second.abort();
-              return finish;
+              return { kind: "continue", calls };
             },
           }),
           {}
         )
       ).status
     ).toBe("cancelled");
+    expect(readCall).not.toHaveBeenCalled();
   });
 
   it.each([false, true])(

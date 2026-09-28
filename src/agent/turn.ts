@@ -85,10 +85,15 @@ export function createAgentTurn<
         "agent.stateVersion": stateVersion,
         "agent.callsAdmitted": calls,
       };
-      const decision = decisionEnvelope(
-        await callback(state, { ...context, options, turn, stateVersion, ...descriptors })
-      );
+      const response = await callback(state, {
+        ...context,
+        options,
+        turn,
+        stateVersion,
+        ...descriptors,
+      });
       throwIfAborted(context.signal, "Agent decision");
+      const decision = decisionEnvelope(response);
       context.reportAttempt(1, {
         ...attributes,
         "agent.decision": decision.kind,
