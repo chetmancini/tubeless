@@ -147,7 +147,9 @@ pipeline does not require credentials.
    dense input-order `readonly R[]` results; failure has sparse results and the
    first rejection or observed abort error. `completedIndexes` identifies
    successful outputs, including `undefined`; a rejection can also be `undefined`.
-   Invalid concurrency still throws, including for empty input.
+   Invalid concurrency still throws, including for empty input. `runBatched` and
+   `runBatchedPartial` apply that same throw-or-partial split to fixed-size
+   batches instead of individual items.
 
 6. Group application pipelines with `defineProject(id, [pipelineA, pipelineB])` from
    `tubeless/project`. Use `project.get(id)` to retain the selected pipeline's exact

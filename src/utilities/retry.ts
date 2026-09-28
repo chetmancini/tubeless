@@ -1,9 +1,16 @@
 import { abortableSleep, throwIfAborted as throwIfSignalAborted } from "./abort.js";
 
+/** Default `RetryOptions.maxAttempts` when omitted. */
+export const DEFAULT_MAX_ATTEMPTS = 3;
+/** Default `RetryOptions.baseDelayMs` when omitted. */
+export const DEFAULT_BASE_DELAY_MS = 100;
+
 /** Backoff, cancellation, and retry policy settings for `withRetry`. */
 export interface RetryOptions {
-  maxAttempts: number;
-  baseDelayMs: number;
+  /** Total attempts before giving up. Defaults to `DEFAULT_MAX_ATTEMPTS` (3). */
+  maxAttempts?: number;
+  /** Delay before the second attempt; doubles each attempt after. Defaults to `DEFAULT_BASE_DELAY_MS` (100). */
+  baseDelayMs?: number;
   maxDelayMs?: number;
   jitter?: boolean;
   random?: () => number;
@@ -30,8 +37,8 @@ export interface RetryAttemptContext {
 /** Operation invoked once per retry attempt until it succeeds or the policy stops. */
 export type RetryOperation<T> = (context: RetryAttemptContext) => Promise<T>;
 
-function computeDelayMs(attempt: number, options: RetryOptions): number {
-  const raw = options.baseDelayMs * 2 ** (attempt - 1);
+function computeDelayMs(attempt: number, baseDelayMs: number, options: RetryOptions): number {
+  const raw = baseDelayMs * 2 ** (attempt - 1);
   const capped = options.maxDelayMs === undefined ? raw : Math.min(raw, options.maxDelayMs);
   if (!options.jitter) {
     return capped;
@@ -57,14 +64,17 @@ async function sleepBeforeRetry(durationMs: number, options: RetryOptions): Prom
 /** Retry an asynchronous operation with exponential backoff and optional jitter. */
 export async function withRetry<T>(
   operation: RetryOperation<T>,
-  options: RetryOptions,
+  options: RetryOptions = {},
   onRetry?: (attempt: number, error: unknown, delayMs: number) => void
 ): Promise<T> {
-  if (!Number.isInteger(options.maxAttempts) || options.maxAttempts < 1) {
-    throw new Error(`maxAttempts must be a positive integer, got ${options.maxAttempts}`);
+  const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+  const baseDelayMs = options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
+
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+    throw new Error(`maxAttempts must be a positive integer, got ${maxAttempts}`);
   }
-  if (!Number.isFinite(options.baseDelayMs) || options.baseDelayMs < 0) {
-    throw new Error(`baseDelayMs must be a non-negative finite number, got ${options.baseDelayMs}`);
+  if (!Number.isFinite(baseDelayMs) || baseDelayMs < 0) {
+    throw new Error(`baseDelayMs must be a non-negative finite number, got ${baseDelayMs}`);
   }
   if (
     options.maxDelayMs !== undefined &&
@@ -75,23 +85,23 @@ export async function withRetry<T>(
 
   let lastError: unknown;
 
-  for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     throwIfAborted(options.signal);
     try {
       return await operation({
         attempt,
-        maxAttempts: options.maxAttempts,
+        maxAttempts,
         signal: options.signal,
       });
     } catch (error) {
       lastError = error;
-      if (attempt >= options.maxAttempts) {
+      if (attempt >= maxAttempts) {
         break;
       }
       if (options.shouldRetry && !options.shouldRetry(error, attempt)) {
         throw error;
       }
-      const delayMs = computeDelayMs(attempt, options);
+      const delayMs = computeDelayMs(attempt, baseDelayMs, options);
       onRetry?.(attempt, error, delayMs);
       await sleepBeforeRetry(delayMs, options);
     }

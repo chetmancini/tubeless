@@ -12,10 +12,10 @@ Package: `tubeless`
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
 | `tubeless`            | `./dist/core/pipeline.d.ts`        | `17a6a864e86bcd3e72adaf39acb3f2b70d493d18d1598182db8ddc3173a689ef` |               78 |
 | `tubeless/cli`        | `./dist/cli/cli.d.ts`              | `82a8f268b27832bedfd40be9d450f90a296e647d29d9820363a4f018f2729dc4` |               31 |
-| `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `7dbfbd4d894f2e9cc737b5373d1f654f5f08e8b5b5cce27511ef876779713656` |                6 |
+| `tubeless/batch`      | `./dist/utilities/batch.d.ts`      | `a09125c6849bb91b4bbba2f76c4248452d5288cf0c70671461de5846b1d17037` |                7 |
 | `tubeless/node`       | `./dist/node/node.d.ts`            | `df40b5f9eb5ac0fcb7afc0e4f172bf939b047485282b4d72a69e8d853bef54ad` |               14 |
 | `tubeless/rate-limit` | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
-| `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `55fca324a49d3c077f24c3a11c7392cfc2d48dd576fa481246623b6a75ecbe30` |                4 |
+| `tubeless/retry`      | `./dist/utilities/retry.d.ts`      | `86e98c33f7e91ee1b34eff817ef6075f6583b9a57037a1ad2394dcf3f372bbcf` |                6 |
 | `tubeless/project`    | `./dist/project/project.d.ts`      | `e4b8d6cca58ed526a74fb98b4494802458c9eefb0a29c71a52490ded6a600391` |                8 |
 | `tubeless/testing`    | `./dist/testing/testing.d.ts`      | `91bbe308a31a9506413bb0d0ee2280ec1904cc92b2ebe1f3a7a640c13479b0db` |               10 |
 | `tubeless/tracing`    | `./dist/tracing/tracing.d.ts`      | `b2e8241e02bc96b73e64d07584eaa4b0e24dc7d82717a2976c12038421ebcadf` |                3 |
@@ -143,14 +143,15 @@ Package: `tubeless`
 
 ### `tubeless/batch`
 
-| Symbol                                                                                                    | Description                                                                    |
-| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| [`ConcurrentPartialResult`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L34) | Execution outcome returned by `runConcurrentPartial`, discriminated by `ok`.   |
-| [`ConcurrentWorker`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L12)        | Asynchronous worker invoked for one input item by the concurrency helpers.     |
-| [`runBatched`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L147)             | Run fixed-size input batches with bounded concurrency and input-order results. |
-| [`runConcurrent`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L58)           | Run individual items with bounded, lazy scheduling and input-order results.    |
-| [`RunConcurrentOptions`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L4)     | Scheduling and cancellation settings for bounded concurrent work.              |
-| [`runConcurrentPartial`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L72)    | Return complete or partial results, discriminated by `ok`.                     |
+| Symbol                                                                                                    | Description                                                                                                                             |
+| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| [`ConcurrentPartialResult`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L34) | Execution outcome returned by `runConcurrentPartial`, discriminated by `ok`.                                                            |
+| [`ConcurrentWorker`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L12)        | Asynchronous worker invoked for one input item by the concurrency helpers.                                                              |
+| [`runBatched`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L147)             | Run fixed-size input batches with bounded concurrency and input-order results.                                                          |
+| [`runBatchedPartial`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L167)      | Run fixed-size input batches with bounded concurrency, returning complete or partial results discriminated by `ok` instead of throwing. |
+| [`runConcurrent`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L58)           | Run individual items with bounded, lazy scheduling and input-order results.                                                             |
+| [`RunConcurrentOptions`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L4)     | Scheduling and cancellation settings for bounded concurrent work.                                                                       |
+| [`runConcurrentPartial`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/batch.ts#L72)    | Return complete or partial results, discriminated by `ok`.                                                                              |
 
 ### `tubeless/node`
 
@@ -179,12 +180,14 @@ Package: `tubeless`
 
 ### `tubeless/retry`
 
-| Symbol                                                                                                | Description                                                                     |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [`RetryAttemptContext`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L21) | Metadata supplied to each retry operation attempt.                              |
-| [`RetryOperation`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L31)      | Operation invoked once per retry attempt until it succeeds or the policy stops. |
-| [`RetryOptions`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L4)         | Backoff, cancellation, and retry policy settings for `withRetry`.               |
-| [`withRetry`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L58)           | Retry an asynchronous operation with exponential backoff and optional jitter.   |
+| Symbol                                                                                                 | Description                                                                     |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| [`DEFAULT_BASE_DELAY_MS`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L6) | Default `RetryOptions.baseDelayMs` when omitted.                                |
+| [`DEFAULT_MAX_ATTEMPTS`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L4)  | Default `RetryOptions.maxAttempts` when omitted.                                |
+| [`RetryAttemptContext`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L28)  | Metadata supplied to each retry operation attempt.                              |
+| [`RetryOperation`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L38)       | Operation invoked once per retry attempt until it succeeds or the policy stops. |
+| [`RetryOptions`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L9)          | Backoff, cancellation, and retry policy settings for `withRetry`.               |
+| [`withRetry`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L65)            | Retry an asynchronous operation with exponential backoff and optional jitter.   |
 
 ### `tubeless/project`
 

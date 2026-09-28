@@ -1,7 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
-import { withRetry } from "./retry.js";
+import { DEFAULT_BASE_DELAY_MS, DEFAULT_MAX_ATTEMPTS, withRetry } from "./retry.js";
 
 describe("withRetry", () => {
+  it("uses DEFAULT_MAX_ATTEMPTS and DEFAULT_BASE_DELAY_MS when options are omitted", async () => {
+    vi.useFakeTimers();
+    const operation = vi.fn().mockRejectedValue(new Error("always fails"));
+
+    const promise = withRetry(operation);
+    const assertion = expect(promise).rejects.toThrow("always fails");
+    await vi.advanceTimersByTimeAsync(DEFAULT_BASE_DELAY_MS * 2 ** (DEFAULT_MAX_ATTEMPTS - 1));
+    await assertion;
+    expect(operation).toHaveBeenCalledTimes(DEFAULT_MAX_ATTEMPTS);
+    vi.useRealTimers();
+  });
+
+  it("falls back to defaults for whichever of maxAttempts/baseDelayMs is omitted", async () => {
+    const operation = vi.fn().mockResolvedValue("ok");
+    await expect(withRetry(operation, { maxAttempts: 5 })).resolves.toBe("ok");
+    await expect(withRetry(operation, { baseDelayMs: 10 })).resolves.toBe("ok");
+  });
+
   it("returns the result on first success without waiting", async () => {
     const operation = vi.fn().mockResolvedValue("ok");
     const result = await withRetry(operation, { maxAttempts: 3, baseDelayMs: 10 });

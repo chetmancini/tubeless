@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { runBatched, runConcurrent, runConcurrentPartial } from "./batch.js";
+import { runBatched, runBatchedPartial, runConcurrent, runConcurrentPartial } from "./batch.js";
 
 describe("runBatched", () => {
   it("returns an empty array without running the worker for empty input", async () => {
@@ -103,6 +103,43 @@ describe("runBatched", () => {
       })
     ).rejects.toThrow("Batch run aborted: stop");
     expect(seen).toEqual([0]);
+  });
+});
+
+describe("runBatchedPartial", () => {
+  it("chunks items and returns a successful, dense, input-order result", async () => {
+    const seen: number[][] = [];
+    const partial = await runBatchedPartial([1, 2, 3, 4, 5], { size: 2 }, async (batch) => {
+      seen.push(batch);
+      return batch.reduce((sum, value) => sum + value, 0);
+    });
+    expect(partial).toEqual({ ok: true, results: [3, 7, 5], completedIndexes: new Set([0, 1, 2]) });
+    expect(seen).toEqual([[1, 2], [3, 4], [5]]);
+  });
+
+  it("returns partial results plus the first failure without throwing", async () => {
+    const failure = new Error("batch 1 failed");
+    const partial = await runBatchedPartial(
+      [1, 2, 3, 4],
+      { size: 1, concurrency: 1 },
+      async (batch, index) => {
+        if (index === 1) throw failure;
+        return batch[0];
+      }
+    );
+    expect(partial.ok).toBe(false);
+    if (partial.ok) throw new Error("Expected a failed outcome");
+    expect(partial.failure).toBe(failure);
+    expect(partial.completedIndexes).toEqual(new Set([0]));
+    expect(partial.results[0]).toBe(1);
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity, -Infinity])("rejects invalid batch size %p", async (size) => {
+    const worker = vi.fn(async () => 0);
+    await expect(runBatchedPartial([1, 2, 3], { size }, worker)).rejects.toThrow(
+      /positive integer/
+    );
+    expect(worker).not.toHaveBeenCalled();
   });
 });
 

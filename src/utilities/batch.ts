@@ -157,3 +157,23 @@ export async function runBatched<T, R>(
     "Batch run"
   );
 }
+
+/**
+ * Run fixed-size input batches with bounded concurrency, returning complete or
+ * partial results discriminated by `ok` instead of throwing. Mirrors
+ * `runConcurrentPartial`'s draining behavior: the first observed batch failure
+ * or cancellation stops scheduling further batches while in-flight batches settle.
+ */
+export async function runBatchedPartial<T, R>(
+  items: readonly T[],
+  options: { size: number; concurrency?: number; signal?: AbortSignal },
+  worker: (batch: T[], batchIndex: number) => Promise<R>
+): Promise<ConcurrentPartialResult<R>> {
+  const batches = chunk(items, options.size);
+  return runConcurrentPartialWithLabel(
+    batches,
+    options,
+    (batch, index) => worker(batch, index),
+    "Batch run"
+  );
+}

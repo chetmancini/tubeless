@@ -218,6 +218,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   results and the original first rejection or observed abort error, which may be
   `undefined`. Use `completedIndexes` to distinguish successful `undefined`
   outputs from holes. Invalid concurrency still throws as an authoring error.
+  Use `runBatched` or `runBatchedPartial` for the same throw-or-partial split
+  over fixed-size batches instead of individual items.
 - Use `defineProject` from `tubeless/project` to collect typed pipelines. Pipeline IDs
   stay literal, duplicate IDs fail during project definition, and `get(id)` returns the
   exact pipeline type. Union or widened IDs retain all matching candidate pipeline
