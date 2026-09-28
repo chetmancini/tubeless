@@ -86,6 +86,10 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Child runs have separate limits, supplied through the child `controls` field. Parent and
   fan-out limits multiply: four fan-out steps at eight children each allow 32 active
   children. Do not share a semaphore between waiting parents and their children. See [the parallel DAG recipe](../examples/parallel-dag.ts).
+  `maxConcurrency` and fan-out `concurrency` are the same kind of bound (an
+  admission cap, not a guaranteed level) on different axes — DAG steps at run
+  time vs. one step's children at authoring time. See
+  [the full mapping](./child-pipeline-composition.md#planning-and-execution-controls).
 - For a static family sharing one implementation, adapt the recipe-local tuple
   helper in [parameterized steps](../examples/parameterized-steps.ts). Keep IDs,
   constants, and source step references explicit; expand synchronously before

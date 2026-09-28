@@ -227,6 +227,15 @@ children. Increasing each child's `maxConcurrency` can multiply active child ste
 again. The CLI's `--max-concurrency` controls the parent run only; it is not inherited
 by children. Set child controls explicitly with `controls` when needed.
 
+`maxConcurrency` and fan-out `concurrency` are a cap, not a guaranteed level, on different axes:
+
+- `maxConcurrency` (`run(options, { maxConcurrency })`, `controls.maxConcurrency`
+  on a child, or `--max-concurrency`) bounds steps in one DAG, set at run time.
+- `forEachPipeline`'s `concurrency` bounds one fan-out step's children, set at
+  authoring time.
+
+Tune both independently for end-to-end throughput; neither inherits the other.
+
 There is no shared parent/child semaphore. A parent holding a shared slot while
 waiting for children that need the same slots could deadlock.
 
