@@ -1,8 +1,9 @@
 import type { Context } from "aws-lambda";
 import { StepFunctionsPipeline } from "./pipeline.js";
+import { assertTubelessJob, type TubelessJob } from "../shared/tubeless-job.js";
 
 interface PipelineEvent {
-  job: { lines: string[]; dryRun?: boolean; parentRunId?: string };
+  job: TubelessJob;
   host: { executionArn: string; stateName: string; retryCount: number };
 }
 
@@ -19,18 +20,11 @@ function validateEvent(value: unknown): asserts value is PipelineEvent {
     throw new InvalidPipelineInput("Expected a job and Step Functions host context");
   }
   const { job, host } = value;
-  if (
-    typeof job !== "object" ||
-    job === null ||
-    !("lines" in job) ||
-    !Array.isArray(job.lines) ||
-    !job.lines.every((line: unknown) => typeof line === "string") ||
-    ("dryRun" in job && job.dryRun !== undefined && typeof job.dryRun !== "boolean") ||
-    ("parentRunId" in job &&
-      job.parentRunId !== undefined &&
-      (typeof job.parentRunId !== "string" || job.parentRunId.length === 0))
-  )
-    throw new InvalidPipelineInput("Expected string rows and optional dryRun/parentRunId");
+  try {
+    assertTubelessJob(job);
+  } catch (error) {
+    throw new InvalidPipelineInput(error instanceof Error ? error.message : String(error));
+  }
   if (
     typeof host !== "object" ||
     host === null ||

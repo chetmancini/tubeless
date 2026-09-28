@@ -1,27 +1,15 @@
 import { NonRetriableError } from "inngest";
 import { inngest } from "./client.js";
 import { InngestPipeline } from "./pipeline.js";
+import { assertTubelessJob, type TubelessJob } from "../shared/tubeless-job.js";
 
-export interface InngestJob {
-  lines: readonly string[];
-  dryRun?: boolean;
-  parentRunId?: string;
-}
+export type InngestJob = TubelessJob;
 
-// Event payloads need runtime validation even when their sender uses TypeScript.
 function validateJob(value: unknown): asserts value is InngestJob {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("lines" in value) ||
-    !Array.isArray(value.lines) ||
-    !value.lines.every((line: unknown) => typeof line === "string") ||
-    ("dryRun" in value && value.dryRun !== undefined && typeof value.dryRun !== "boolean") ||
-    ("parentRunId" in value &&
-      value.parentRunId !== undefined &&
-      (typeof value.parentRunId !== "string" || value.parentRunId.length === 0))
-  ) {
-    throw new NonRetriableError("Expected string rows and optional dryRun/parentRunId");
+  try {
+    assertTubelessJob(value);
+  } catch (error) {
+    throw new NonRetriableError(error instanceof Error ? error.message : String(error));
   }
 }
 

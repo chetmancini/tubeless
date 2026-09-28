@@ -1,27 +1,15 @@
 import { ApplicationFailure, Context } from "@temporalio/activity";
 import { TemporalPipeline } from "./pipeline.js";
+import { assertTubelessJob, type TubelessJob } from "../shared/tubeless-job.js";
 
-export interface TemporalJob {
-  lines: readonly string[];
-  dryRun?: boolean;
-  parentRunId?: string;
-}
+export type TemporalJob = TubelessJob;
 
-// TypeScript types do not validate Workflow/Activity payloads on the wire.
 function validateJob(value: unknown): asserts value is TemporalJob {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("lines" in value) ||
-    !Array.isArray(value.lines) ||
-    !value.lines.every((line: unknown) => typeof line === "string") ||
-    ("dryRun" in value && value.dryRun !== undefined && typeof value.dryRun !== "boolean") ||
-    ("parentRunId" in value &&
-      value.parentRunId !== undefined &&
-      (typeof value.parentRunId !== "string" || value.parentRunId.length === 0))
-  ) {
+  try {
+    assertTubelessJob(value);
+  } catch (error) {
     throw ApplicationFailure.nonRetryable(
-      "Expected string rows and optional dryRun/parentRunId",
+      error instanceof Error ? error.message : String(error),
       "InvalidTubelessJob"
     );
   }
