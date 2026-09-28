@@ -102,6 +102,33 @@ describe("fan-out diagnostics", () => {
     expect(diagnostics.failures[0]!.error.message).toHaveLength(1024);
   });
 
+  it("retains only the primary child run when many children fail", async () => {
+    const pipeline = fixture(
+      100,
+      (index) => {
+        throw new Error(`failure ${index}`);
+      },
+      undefined,
+      "child"
+    );
+    const run = await pipeline.run({});
+    const pending: unknown[] = [new PipelineExecutionError(run).cause];
+    const visited = new Set<object>();
+    const retainedRuns: string[] = [];
+    // Inspect native causes as well as enumerable fields; JSON omits the former.
+    while (pending.length > 0) {
+      const value = pending.pop();
+      if (typeof value !== "object" || value === null || visited.has(value)) continue;
+      visited.add(value);
+      if (value instanceof PipelineExecutionError) retainedRuns.push(value.result.pipelineId);
+      for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(value)))
+        if ("value" in descriptor) pending.push(descriptor.value);
+    }
+
+    expect(run.errors[0]?.fanOut).toMatchObject({ failureCount: 100, omittedFailureCount: 68 });
+    expect(retainedRuns).toEqual(["child"]);
+  });
+
   it("keeps cancellation classification per item without changing parent failure precedence", async () => {
     const abort = Object.assign(new Error("stop"), { name: "AbortError" });
     const cancelled = await fixture(2, () => {

@@ -75,6 +75,8 @@ Run `make check` after changes; it builds before checking these boundaries.
   step attempts, stop policy and finalization.
 - `core/pipeline-execution-error.ts` owns execution and child error classes,
   cancellation classification, bounded diagnostics and original cause retention.
+  Fan-out errors retain only the primary child run, bounded diagnostic snapshots,
+  and leaf-handler exceptions for classification; they discard sibling run reports.
   Parent and child execution consume it; it imports neither executor nor run state.
 - `core/lifecycle.ts` owns hook delivery, trace creation, scoped loggers and flushing.
   Executors pass run identity and consume lifecycle operations; only lifecycle

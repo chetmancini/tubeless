@@ -215,17 +215,34 @@ describe("pipeline tools", () => {
     });
   });
 
-  it.each([false, true])(
-    "classifies all fan-out failures beyond the recording cap (unexpected=%s)",
-    async (unexpected) => {
+  it.each(["expected", "handler", "output", "finalizer", "cancelled"])(
+    "classifies all fan-out failures beyond the recording cap (last=%s)",
+    async (lastFailure) => {
       const { step } = createSteps<{ index: number }>();
       const fail = step("fail", {
+        outputSchema: schema<number>((value) => {
+          if (lastFailure === "output")
+            throw new ToolError("INVALID_OUTPUT", "late validator failure");
+          return { value: Number(value) };
+        }),
         run: (_inputs, context) => {
-          if (unexpected && context.options.index === 39) throw new Error("late bug");
+          if (context.options.index === 39) {
+            if (lastFailure === "handler") throw new Error("late bug");
+            if (lastFailure === "output") return 1;
+            if (lastFailure === "finalizer") return 1;
+            if (lastFailure === "cancelled")
+              throw Object.assign(new Error("late cancellation"), { name: "AbortError" });
+          }
           throw new ToolError("MISSING", `Missing ${context.options.index}`);
         },
       });
-      const leaf = definePipeline({ id: "many-leaf", steps: [fail], finalize: fail });
+      const leaf = definePipeline({
+        id: "many-leaf",
+        steps: [fail],
+        finalize: () => {
+          throw new ToolError("FINALIZER", "late finalizer failure");
+        },
+      });
       const { forEachPipeline } = createSteps(emptyInput);
       const batch = forEachPipeline("batch", {
         pipeline: leaf,
@@ -236,8 +253,8 @@ describe("pipeline tools", () => {
       });
       const wrapper = definePipeline({ id: "many", steps: [batch], finalize: batch });
       const result = await caller(pipelineTool(wrapper, { description: "Many failures" })).run({});
-      expect(result.status).toBe(unexpected ? "failed" : "completed");
-      if (!unexpected) {
+      expect(result.status).toBe(lastFailure === "expected" ? "completed" : "failed");
+      if (lastFailure === "expected") {
         const outcome = JSON.parse(result.value!)[0];
         expect(outcome.error.code).toBe("TUBELESS_TOOL_ERRORS");
         expect(outcome.error.message).toContain("Missing 31");
