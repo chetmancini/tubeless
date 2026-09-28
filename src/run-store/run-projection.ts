@@ -53,6 +53,7 @@ export class RunProjection {
   #dryRun = false;
   #definitionIdentity: PipelineDefinitionIdentity | undefined;
   readonly #steps = new Map<string, StoredPipelineStep>();
+  #cachedSnapshot: StoredPipelineRun | undefined;
 
   constructor(
     event: StoredPipelineEvent,
@@ -77,6 +78,7 @@ export class RunProjection {
   }
 
   append(event: StoredPipelineEvent): void {
+    this.#cachedSnapshot = undefined;
     this.#eventCount += 1;
     if (event.name === "pipeline.started" && !this.#startObserved) {
       this.#startObserved = true;
@@ -183,6 +185,7 @@ export class RunProjection {
   }
 
   snapshot(): StoredPipelineRun {
+    if (this.#cachedSnapshot) return this.#cachedSnapshot;
     const completed = this.#completed;
     const run: StoredPipelineRun = {
       dryRun: this.#dryRun,
@@ -204,6 +207,7 @@ export class RunProjection {
     if (completed) run.finishedAtMs = completed.timestampMs;
     if (this.#identity.parentRunId) run.parentRunId = this.#identity.parentRunId;
     if (this.#identity.iteration) run.iteration = { ...this.#identity.iteration };
+    this.#cachedSnapshot = run;
     return run;
   }
 }

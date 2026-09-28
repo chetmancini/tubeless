@@ -567,6 +567,33 @@ describe("incremental pipeline run projector", () => {
     expect(projector.snapshot(999)).toEqual(projectPipelineRunStore(historyFixture, 999));
   });
 
+  it("reuses an unchanged run's projected snapshot across unrelated events", () => {
+    const projector = createPipelineRunProjector();
+    projector.append([
+      event(1, "pipeline.started", { runId: "run-1" }),
+      event(2, "pipeline.started", { runId: "run-2" }),
+    ]);
+
+    const first = projector.snapshot();
+    const firstRunOne = first.runs.find((run) => run.runId === "run-1");
+    const firstRunTwo = first.runs.find((run) => run.runId === "run-2");
+    expect(firstRunOne).toBeDefined();
+    expect(firstRunTwo).toBeDefined();
+
+    // Only run-2 receives a new event.
+    projector.append([event(3, "step.planned", { runId: "run-2", stepId: "load" })]);
+
+    const second = projector.snapshot();
+    const secondRunOne = second.runs.find((run) => run.runId === "run-1");
+    const secondRunTwo = second.runs.find((run) => run.runId === "run-2");
+
+    // run-1 was untouched: same object reference, proving it was not recomputed.
+    expect(secondRunOne).toBe(firstRunOne);
+    // run-2 changed: must be a new object reflecting the new step.
+    expect(secondRunTwo).not.toBe(firstRunTwo);
+    expect(secondRunTwo?.steps).not.toEqual(firstRunTwo?.steps);
+  });
+
   it("does not re-fold historical events on a no-new-events snapshot", () => {
     const events: StoredPipelineEvent[] = [];
     let id = 1;
