@@ -6,6 +6,7 @@ import {
   STEP_NESTED_PIPELINE,
   STEP_OPTIONS_SCHEMA,
   STEP_REMOTE,
+  STEP_AGENT,
 } from "./pipeline-step-metadata.js";
 
 export interface CompiledStepGraph<TOptions extends object = object> {
@@ -36,6 +37,7 @@ function compileStep<TOptions extends object>(
   const nestedPipeline = step[STEP_NESTED_PIPELINE];
   const remote = step[STEP_REMOTE];
   const optionsSchema = step[STEP_OPTIONS_SCHEMA];
+  const agent = step[STEP_AGENT];
   const name = step.name;
   const description = step.description;
   const metadata = snapshotPipelineMetadata(step.metadata);
@@ -59,6 +61,7 @@ function compileStep<TOptions extends object>(
   if (optionsSchema !== undefined)
     Object.assign(compiled, { [STEP_OPTIONS_SCHEMA]: optionsSchema });
   if (metadata !== undefined) Object.assign(compiled, { metadata });
+  if (agent !== undefined) Object.assign(compiled, { [STEP_AGENT]: agent });
   if (name !== undefined) Object.assign(compiled, { name });
   if (description !== undefined) Object.assign(compiled, { description });
   if (dryRun !== undefined) {

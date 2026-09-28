@@ -16,6 +16,7 @@ function dependencies(file: string): string[] {
 }
 
 const allowedDependencies: Record<string, readonly string[]> = {
+  agent: ["core", "tracing", "utilities"],
   core: ["tracing", "utilities"],
   tracing: [],
   utilities: [],

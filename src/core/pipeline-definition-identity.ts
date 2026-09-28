@@ -8,6 +8,7 @@ import {
   STEP_NESTED_PIPELINE,
   STEP_OPTIONS_SCHEMA,
   STEP_REMOTE,
+  STEP_AGENT,
 } from "./pipeline-step-metadata.js";
 import type { PipelineDefinitionIdentity, PipelineDefinitionSnapshot } from "./pipeline-types.js";
 
@@ -41,6 +42,33 @@ function iterationFields(
   return {
     maxIterations: nested.maxIterations,
     ...(Object.keys(normalizedControls).length > 0 ? { controls: normalizedControls } : {}),
+  };
+}
+
+function agentFields(agent: NonNullable<PipelineDefinitionSnapshot["steps"][number]["agent"]>) {
+  return {
+    limits: {
+      maxTurns: agent.limits.maxTurns,
+      maxCalls: agent.limits.maxCalls,
+      maxDecisions: agent.limits.maxDecisions,
+      maxConcurrency: agent.limits.maxConcurrency,
+    },
+    resultSchemaFingerprint: agent.resultSchemaFingerprint,
+    capabilities: [...agent.capabilities]
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+      .map((capability) => ({
+        name: capability.name,
+        description: capability.description,
+        inputSchemaFingerprint: capability.inputSchemaFingerprint,
+        identity: {
+          version: capability.identity.version,
+          structuralFingerprint: capability.identity.structuralFingerprint,
+          ...(capability.identity.implementationVersion !== undefined
+            ? { implementationVersion: capability.identity.implementationVersion }
+            : {}),
+          definitionId: capability.identity.definitionId,
+        },
+      })),
   };
 }
 
@@ -85,6 +113,7 @@ export function compileDefinitionSnapshot(input: {
             },
           }
         : {}),
+      ...(step[STEP_AGENT] ? { agent: agentFields(step[STEP_AGENT]) } : {}),
       ...(nested
         ? {
             nestedPipeline: {
@@ -137,7 +166,9 @@ export function createDefinitionIdentity(
     ? 3
     : input.steps.some(
           (step) =>
-            step.nestedPipeline?.mode === "iterate" || step.nestedPipeline?.identity?.version === 2
+            step.agent !== undefined ||
+            step.nestedPipeline?.mode === "iterate" ||
+            step.nestedPipeline?.identity?.version === 2
         )
       ? 2
       : 1;
@@ -159,6 +190,22 @@ export function createDefinitionIdentity(
             cache: {
               policy: step.cache.policy,
               ...(step.cache.maxAgeMs !== undefined ? { maxAgeMs: step.cache.maxAgeMs } : {}),
+            },
+          }
+        : {}),
+      ...(step.agent
+        ? {
+            agent: {
+              ...agentFields(step.agent),
+              capabilities: agentFields(step.agent).capabilities.map(
+                ({ identity, ...capability }) => ({
+                  ...capability,
+                  identity: {
+                    version: identity.version,
+                    structuralFingerprint: identity.structuralFingerprint,
+                  },
+                })
+              ),
             },
           }
         : {}),
@@ -212,6 +259,20 @@ export function createDefinitionIdentity(
         : {}),
       children: input.steps.map((step) => {
         const child = step.nestedPipeline?.identity;
+        if (step.agent)
+          return {
+            child: child
+              ? {
+                  version: child.version,
+                  structuralFingerprint: child.structuralFingerprint,
+                  ...(child.implementationVersion !== undefined
+                    ? { implementationVersion: child.implementationVersion }
+                    : {}),
+                  definitionId: child.definitionId,
+                }
+              : undefined,
+            capabilities: agentFields(step.agent).capabilities.map(({ identity }) => identity),
+          };
         if (!child) return null;
         // Bind every recorded child identity field, not just its opaque definition ID.
         return {

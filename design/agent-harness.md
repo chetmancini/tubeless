@@ -1,14 +1,16 @@
 # Structured agent harness contract
 
-Status: stage 2 implements generic bounded iteration in core. The agent harness
-remains an API design with compile-time probes; it is not implemented or exported.
+Status: stage 3 implements single-agent execution through `tubeless/agent`, on
+top of generic bounded iteration. Handler tools, owned state, per-invocation
+limits, previews, and saved lifecycle records are implemented. Pipeline tools,
+subagents, and shared tree admission remain stage 4.
 The first agent release will execute in process; crash-safe resume follows later.
 
 The [prototype declarations](./agent-harness.prototype.ts) and
 [type probes](./agent-harness.probes.ts) fix the proposed agent boundaries before
 runtime implementation and exercise the real public iteration API. They are
-checked by `bun run typecheck` and `make check`. The agent declarations have no
-runtime implementation; these probes must not be executed. `design/` is
+checked by `bun run typecheck` and `make check`. The agent probes now use the implemented public API; `pipelineTool` remains
+a prototype declaration. Declared fixture schemas mean these probes must not be executed. `design/` is
 excluded from the npm artifact; the packed-artifact check enforces that boundary.
 
 ## API decisions
@@ -19,8 +21,8 @@ result type, and definition metadata. It works with existing `fromPipeline`,
 `defineProject`, and `definePipelineCommand`. Schema metadata remains necessary
 for automatic CLI flags. There is no separate agent project or command registry.
 
-The proposed `tubeless/agent` entrypoint owns `defineAgent`, `defineTool`,
-`pipelineTool`, `ToolError`, and their contracts. It depends on core, utilities,
+The `tubeless/agent` entrypoint owns `defineAgent`, `defineTool`, `ToolError`,
+and their contracts; `pipelineTool` joins it in stage 4. It depends on core, utilities,
 and trace emission. Core stays independent of the agent entrypoint, model SDKs,
 storage, CLI, and Studio. Model prompting and provider request/response mapping
 remain application-owned.
@@ -148,6 +150,10 @@ exhaustion is never a successful final answer or a recoverable tool error.
 
 ## Limits, cancellation, and dry-run
 
+Stage 3 implements `maxTurns`, `maxCalls`, `maxDecisions`, and `maxConcurrency`
+for one invocation. The tree scopes and `maxDepth` below describe stage 4, not
+a guarantee of the current release slice.
+
 Limits are definition configuration in v1, separate from domain input. There
 are no new agent-specific positional run arguments or overloads. Applications
 can construct a definition with different limits. Existing outer pipeline
@@ -235,8 +241,13 @@ Bounded progress rows are presentation; they are not the complete history.
 Stage 2 preserves identity v1 hashing and its old test vectors, and adds identity
 v2 for iteration semantics and parents that contain them. Ordinary unchanged
 definitions retain their v1 identity. New writes use trace v3 with typed iteration
-relations; readers continue accepting trace v2. Agent call relations and
-decision/limit summaries follow with agent execution.
+relations; readers continue accepting trace v2. Stage 3 records tool calls using ordinary parent run links, `itemKey`, and
+first-attempt attributes for agent run, turn, call, tool, and parent attempt.
+Decision, admission, and state-version summaries use first-attempt attributes too;
+no new event kind or SQLite column is needed. The tuple (agent run, turn, call ID)
+is the logical identity. Typed call-specific projection and presentation follow
+in stage 5. Agent definition metadata adds capability identities and descriptor
+fingerprints to v2 snapshots without changing hashes for existing definitions.
 The run report stays at its existing version unless its shape changes. Do not
 silently widen the v2 wire enum for nested modes or reinterpret old hashes.
 
@@ -261,9 +272,12 @@ lookups, and dynamic IDs used as static targets. Iteration probes preserve
 transformed dependency outputs, raw parent inputs, schema-backed CLI inference,
 schema-less explicit CLI parameters, and a precise `undefined` finish result.
 
-The agent probes remain compile-time evidence; they do not prove agent scheduling,
-isolation, validation counts, or recovery. Core iteration now uses ordinary child
+The remaining pipeline-tool probes are compile-time evidence only. Stage 3
+adds runtime coverage for decision validation, schema counts, error classification,
+isolation, limits, concurrency, cancellation, and saved history. The public
+[scripted agent](../examples/agent.ts) exercises heterogeneous dynamic calls and
+recovery without credentials; [agent usage](../docs/agents.md) documents this slice. Core iteration now uses ordinary child
 execution, with deterministic tests for transitions, limits, run isolation,
 selection, cancellation, dry-run, and saved-record compatibility. The public
 [pagination example](../examples/iteration.ts) runs without a model or credentials.
-Stages 3–4 convert the agent probes into executable public-package examples.
+Stage 4 adds executable pipeline-tool and subagent examples.
