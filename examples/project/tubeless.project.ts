@@ -10,6 +10,7 @@ import { OverrideExamplePipeline } from "../step-output-overrides.ts";
 import { CachedCountCommand } from "../step-output-cache.ts";
 import { PaginatedPipeline } from "../iteration.ts";
 import { ScriptedAgent } from "../agent.ts";
+import { OpenAIAgentCommand } from "../agent-openai.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
 import { YamlPelotonCommand } from "../yaml-peloton.ts";
 import { AirflowRemoteCommand } from "../airflow/remote.ts";
@@ -33,6 +34,7 @@ export default defineProject(
     // Plain cached results and their receipts appear in history and Studio.
     CachedCountCommand,
     ScriptedAgent,
+    OpenAIAgentCommand,
     definePipelineCommand(PaginatedPipeline, {
       params: { rows: { type: "string", multiple: true } },
     }),

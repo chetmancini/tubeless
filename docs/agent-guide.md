@@ -42,13 +42,19 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 - Use `defineAgent` and `defineTool` from `tubeless/agent` for an in-process
   decision loop over registered handler tools. Read [agents](./agents.md) and
-  adapt the credential-free [scripted recipe](../examples/agent.ts). Keep model
+  adapt the credential-free [scripted recipe](../examples/agent.ts) or the
+  [OpenAI recipe](../examples/agent-openai.ts) for a real provider callback. Keep model
   requests and prompts in `decide`; validate every tool input/output and the final
   result. Return `continue` with a nonempty batch or `finish` with a raw result.
   State is copied and frozen per initialization/reduction. Limits currently apply
   to one invocation; pipeline tools, subagents, shared tree budgets, and durable
   resume are later stages. Dry runs skip decisions and tools unless both provide
   preview handlers. Agents remain ordinary pipelines for projects and CLI use.
+  Resolve provider credentials only during execution, pass cancellation to the
+  HTTP request, and keep provider response parsing in application code. The
+  OpenAI recipe has no live dry-run callback; use the scripted recipe for previews.
+  Bound questions, accumulated observations, and encoded provider requests before
+  sending them. Reject oversized text without silently changing tool results.
 
 - For YAML or JSON authoring, read [declarative pipelines](./declarative-pipelines.md)
   and adapt [the YAML recipe](../examples/yaml-pipelines.ts). Parse at the

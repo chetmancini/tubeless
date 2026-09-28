@@ -4,6 +4,10 @@ Status: stage 3 implements single-agent execution through `tubeless/agent`, on
 top of generic bounded iteration. Handler tools, owned state, per-invocation
 limits, previews, and saved lifecycle records are implemented. Pipeline tools,
 subagents, and shared tree admission remain stage 4.
+The provider example was brought forward from stage 6: the
+[OpenAI recipe](../examples/agent-openai.ts) now supplies an application-owned
+Responses callback, accumulated outcomes, and model-selected finish. Offline
+fixtures cover the adapter; live provider execution is a separate smoke check.
 The first agent release will execute in process; crash-safe resume follows later.
 
 The [prototype declarations](./agent-harness.prototype.ts) and

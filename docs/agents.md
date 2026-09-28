@@ -19,6 +19,77 @@ from a deliberate domain error, and transforms the final answer. Its `decide`
 callback is scripted; application code supplies provider SDKs, prompts, and
 response mapping when connecting a model.
 
+## Connect a model
+
+The [OpenAI agent recipe](../examples/agent-openai.ts) connects the same tools to
+the Responses API using built-in `fetch`. Its
+[decision adapter](../examples/agent-openai-decision.ts) is application code,
+with no provider SDK or new Tubeless API. Replace `decide: openaiDecision` with
+another provider's callback to keep the same tools, state, limits, and execution.
+
+Set `OPENAI_API_KEY` in your environment, then run:
+
+```sh
+bun run tubeless -- run --trace logs/openai-agent.ndjson examples/agent-openai.ts -- \
+  --question "Uppercase red, blue, and green in separate calls. Then count the characters in the uppercase results joined by single spaces."
+```
+
+The example defaults to `gpt-4.1-mini`; set `OPENAI_MODEL` to choose another
+Responses model with function calling. This command makes paid API requests.
+The tools themselves only transform and count text in process.
+
+The model chooses which tools to call, their arguments, and how many calls to
+request. A run can uppercase three words in one turn, consume those results in
+a count call on the next turn, then finish with `RED BLUE GREEN` and a count of 14. The call sequence is model-selected; the recipe does not script those turns.
+The command prints the validated final answer.
+
+The adapter follows OpenAI's [function calling protocol](https://developers.openai.com/api/docs/guides/function-calling):
+
+- Tool descriptors come from `context.capabilities`. Each function wraps the
+  raw tool argument in `{ input }`, so even a string-valued tool has an object
+  parameter schema. This recipe's schemas support OpenAI strict mode. When
+  adapting other tools, check the provider's supported JSON Schema subset.
+- An adapter-only `_finish` function wraps `context.resultJsonSchema` in
+  `{ result }`. Calling it alone returns a Tubeless finish decision. Combining
+  it with other calls fails before any tools start.
+- Each request sends the current question and accumulated, validated outcomes.
+  Tubeless owns the state; this example makes independent model requests with
+  `store: false`, without a provider conversation or replayed reasoning items.
+- Provider call IDs become turn-local Tubeless call IDs. The adapter checks the
+  response envelope and parses arguments; Tubeless checks registered tools,
+  call IDs, budgets, argument schemas, tool results, and the final answer.
+
+The example allows six decisions and twelve tool calls, with up to three tools
+running concurrently. Each HTTP request has a 30-second deadline and receives
+the run's cancellation signal. HTTP errors, incomplete responses, refusals,
+invalid JSON, and invalid decisions fail the run. There are no automatic
+provider retries. Error messages omit HTTP response bodies.
+
+The recipe also bounds model input in UTF-8 bytes. Questions may use up to
+4 KiB; accumulated observations may use up to 16 KiB of serialized JSON. An
+oversized question fails before the first model request. Oversized history fails
+before committing the next state or requesting another decision. Accepted
+observations remain complete, so later tools can use their exact text. The
+adapter checks the complete encoded HTTP body against a 32 KiB limit before
+every request, including instructions, schemas, and JSON escaping. These are
+application byte budgets; they do not measure a selected model's token usage.
+
+`plan`, `inspect`, and `graph` need no credentials and make no API requests. The
+live example has no preview decision source: `--dry-run` skips the agent and
+fails required finalization because there is no answer. Use the scripted recipe
+for a credential-free executable preview. Importing the project also makes no
+requests; `openai-agent` is registered in the
+[example project](../examples/project/tubeless.project.ts).
+
+CI replaces `fetch` with provider response fixtures while running real Tubeless
+tools, reduction, and finalization. Run the command above separately for a live
+provider check. Traces record turn/call lifecycles and summaries; prompts, state,
+tool output, and credentials are not added to traces by this adapter.
+
+The compiled turn graph stays `decide -> calls -> reduce`. Its execution history
+expands with each chosen batch and turn; a model cannot rewrite dependency edges
+or register executable code.
+
 ## Define tools and an agent
 
 Use `defineTool` for a handler with a description, `inputSchema`, `outputSchema`,
@@ -131,5 +202,4 @@ at most 32 visible call groups and 32 recent turn groups.
 This release slice executes handler tools in process. `pipelineTool`, subagents,
 delegation depth, and shared tree admission arrive in the next stage. Agent
 limits currently apply to one invocation; calling another agent manually from a
-handler does not share them. Crash-safe resume and a provider integration recipe
-remain later stages of the harness.
+handler does not share them. Crash-safe resume remains a later stage of the harness.
