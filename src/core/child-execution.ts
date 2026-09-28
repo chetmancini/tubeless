@@ -1,3 +1,5 @@
+import { inheritExecutionScope } from "./execution-scope.js";
+import type { PreparedOptions } from "./prepared-options.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { emitRejectedPlanLifecycle } from "./lifecycle.js";
 import { runConcurrentPartial } from "../utilities/batch.js";
@@ -30,7 +32,9 @@ type CompiledChildExecute = (
   plan: PipelinePlan,
   options: object,
   controls: PipelineRunControls,
-  context?: Partial<PipelineContext>
+  context?: Partial<PipelineContext>,
+  overrides?: undefined,
+  preparedOptions?: PreparedOptions
 ) => Promise<PipelineRun<unknown>>;
 
 type ExecutableChild = ChildPipeline & {
@@ -50,13 +54,14 @@ function executeCompiledChild(
   plan: PipelinePlan,
   domainOptions: object,
   controls: PipelineRunControls,
-  context: PipelineContext
+  context: PipelineContext,
+  preparedOptions?: PreparedOptions
 ): Promise<PipelineRun<unknown>> {
   const execute = compiledChildExecute(pipeline);
   if (execute === undefined) {
     return pipeline.run(domainOptions, controls, context);
   }
-  return execute(plan, domainOptions, controls, context);
+  return execute(plan, domainOptions, controls, context, undefined, preparedOptions);
 }
 
 function publicChildRuntime(context: PipelineContext): PipelineRuntime {
@@ -186,7 +191,12 @@ export function invokeChildPipeline(
   pipeline: ChildPipeline,
   options: object,
   context: PipelineStepContext<object>,
-  invocation: { plan: PipelinePlan; hooks: PipelineHooks; itemKey: string }
+  invocation: {
+    plan: PipelinePlan;
+    hooks: PipelineHooks;
+    itemKey: string;
+    preparedOptions?: PreparedOptions;
+  }
 ): Promise<PipelineRun<unknown>> {
   const controls = childRunControls(undefined, context.dryRun, context.cachePolicy);
   const runtime: PipelineContext = {
@@ -200,7 +210,14 @@ export function invokeChildPipeline(
     tracing: childTracingOptions(context, invocation.itemKey),
     hooks: invocation.hooks,
   };
-  return executeCompiledChild(pipeline, invocation.plan, options, controls, runtime);
+  return executeCompiledChild(
+    pipeline,
+    invocation.plan,
+    options,
+    controls,
+    inheritExecutionScope(context, runtime),
+    invocation.preparedOptions
+  );
 }
 
 function childRunControls(
@@ -317,7 +334,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
       config.pipeline,
       domainOptions,
       controls,
-      baseChildContext,
+      inheritExecutionScope(context, baseChildContext),
       childHooks,
       `Child pipeline ${config.pipeline.id} `,
       childPlan
@@ -382,7 +399,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
             config.pipeline,
             domainOptions,
             controls,
-            {
+            inheritExecutionScope(context, {
               correlationId: context.correlationId,
               cwd: context.cwd,
               log: context.log,
@@ -391,7 +408,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
               signal: context.signal,
               sleep: context.sleep,
               tracing: childTracingOptions(context, key),
-            },
+            }),
             childHooks,
             "",
             childPlan
@@ -440,7 +457,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
           ? `Mapped child pipeline ${config.pipeline.id} failed for ${failures.length} item(s): ${details}`
           : `Mapped child pipeline ${config.pipeline.id} failed: ${primaryError?.message ?? "aborted"}`;
       throw new PipelineChildError(message, cancelled, primaryError, {
-        failures: failures.slice(0, 32).map(({ error, key, index }) => ({
+        failures: failures.map(({ error, key, index }) => ({
           error,
           key,
           index,

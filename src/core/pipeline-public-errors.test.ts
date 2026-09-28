@@ -225,6 +225,7 @@ describe("definePipeline failures and cancellation", () => {
       code: "TUBELESS_STEP_FAILED",
       message: "query failed",
       phase: "execution",
+      stack: thrownError.stack,
       stepId: "query",
     });
     expect(() => JSON.stringify(result)).not.toThrow();
@@ -249,6 +250,31 @@ describe("definePipeline failures and cancellation", () => {
       "ECONNREFUSED: connection refused"
     );
   });
+
+  it.each([undefined, null, "request rejected", Number.NaN])(
+    "preserves a non-Error handler failure (%s) without exposing internal provenance",
+    async (failure) => {
+      const { step } = createSteps();
+      const fail = step("fail", {
+        run: () => {
+          throw failure;
+        },
+      });
+      const pipeline = definePipeline({ id: "non-error", steps: [fail], finalize: fail });
+      const result = await pipeline.run({});
+
+      expect(result.errors).toEqual([
+        {
+          code: "TUBELESS_STEP_FAILED",
+          kind: "step",
+          phase: "execution",
+          stepId: "fail",
+          message: String(failure),
+        },
+      ]);
+      expect(new PipelineExecutionError(result).cause).toBe(failure);
+    }
+  );
 
   it("normalizes non-Error and circular causes without retaining their objects", async () => {
     const circular = new Error("circular wrapper") as Error & { cause?: unknown };
@@ -339,6 +365,30 @@ describe("definePipeline failures and cancellation", () => {
       stepId: "work",
     });
   });
+
+  it.each(["operator stopped", new Error("operator stopped")])(
+    "recognizes a handler throwing its signal's custom reason (%s)",
+    async (reason) => {
+      const controller = new AbortController();
+      const { step } = createSteps();
+      const work = step("work", {
+        run: () => {
+          controller.abort(reason);
+          throw controller.signal.reason;
+        },
+      });
+      const pipeline = definePipeline({ id: "custom-cancellation", steps: [work], finalize: work });
+      const result = await pipeline.run({}, undefined, { signal: controller.signal });
+
+      expect(result.status).toBe("cancelled");
+      expect(result.errors[0]).toMatchObject({
+        code: "TUBELESS_RUN_CANCELLED",
+        kind: "cancellation",
+        message: "operator stopped",
+      });
+      expect(new PipelineExecutionError(result).cause).toBe(reason);
+    }
+  );
 
   it("does not misclassify an unrelated step failure when its signal is also aborted", async () => {
     const controller = new AbortController();

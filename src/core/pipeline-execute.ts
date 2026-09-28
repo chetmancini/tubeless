@@ -1,3 +1,4 @@
+import { type PreparedOptions, validatePipelineOptions } from "./prepared-options.js";
 import { abortableSleep, throwIfAborted as throwIfSignalAborted } from "../utilities/abort.js";
 import { createPipelineLifecycleObserver } from "./lifecycle.js";
 import { createRunId } from "./pipeline-ids.js";
@@ -27,7 +28,7 @@ import type {
   PipelineRuntime,
   StandardSchemaV1,
 } from "./pipeline-types.js";
-import { PipelineBoundaryValidationError, validateStandardSchema } from "./pipeline-validation.js";
+import { validateStandardSchema } from "./pipeline-validation.js";
 import {
   finalizationError,
   stepExecutionError,
@@ -52,6 +53,7 @@ export async function executePlannedRun<
   plan: PipelinePlan;
   runtime: PipelineRuntime;
   overrides?: ReadonlyMap<AnyStep, unknown>;
+  preparedOptions?: PreparedOptions;
 }): Promise<
   PipelineRun<TResultSchema extends StandardSchemaV1 ? InferSchemaOutput<TResultSchema> : TResult>
 > {
@@ -92,22 +94,18 @@ export async function executePlannedRun<
   // SAFETY: `domainOptions` is the user-supplied options object; if a schema
   // is present it is re-validated below before assignment to `pipelineOptions`.
   let pipelineOptions = input.domainOptions as TOptions;
-  if (compiled.optionsSchema) {
+  if (compiled.optionsSchema || input.preparedOptions) {
     try {
-      const validated = await validateStandardSchema(
-        compiled.optionsSchema,
-        input.domainOptions,
-        `Pipeline ${compiled.id} options`
-      );
-      if (typeof validated !== "object" || validated === null || Array.isArray(validated)) {
-        throw new PipelineBoundaryValidationError(
-          `Pipeline ${compiled.id} options schema returned a non-object value`,
-          [{ message: "Expected the validated options value to be an object" }]
-        );
-      }
-      // SAFETY: the schema validated the value against `TOptions` and the
-      // object-shape check above passed, so the value is a `TOptions`.
-      pipelineOptions = validated as TOptions;
+      // SAFETY: the private token or ordinary schema validates the same options boundary.
+      pipelineOptions = (
+        input.preparedOptions
+          ? input.preparedOptions.read(compiled.optionsSchema, input.domainOptions)
+          : await validatePipelineOptions(
+              compiled.optionsSchema,
+              input.domainOptions,
+              `Pipeline ${compiled.id} options`
+            )
+      ) as TOptions;
     } catch (error) {
       state.recordRunErrors([
         toPipelineError(error, {

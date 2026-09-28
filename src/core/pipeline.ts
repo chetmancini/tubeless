@@ -1,3 +1,4 @@
+import type { PreparedOptions } from "./prepared-options.js";
 import { PipelineExecutionError } from "./pipeline-execution-error.js";
 import {
   defaultPipelineContext,
@@ -204,7 +205,8 @@ export function definePipeline<
     options: TInputOptions,
     controls: PipelineRunControls<TStepId, TTargetId>,
     context: Partial<PipelineContext> = defaultPipelineContext(),
-    overrides?: ReadonlyMap<AnyStep, unknown>
+    overrides?: ReadonlyMap<AnyStep, unknown>,
+    preparedOptions?: PreparedOptions
   ): Promise<PipelineRun<TPipelineResult>> {
     return executePlannedRun({
       compiled,
@@ -213,6 +215,7 @@ export function definePipeline<
       plan: runPlan,
       runtime: resolvePipelineRuntime(context),
       overrides,
+      preparedOptions,
     });
   }
 

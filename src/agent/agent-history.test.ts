@@ -1,3 +1,4 @@
+import { createDefinitionIdentity } from "../core/pipeline-definition-identity.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -131,6 +132,7 @@ describe("agent definition and recorded execution", () => {
     expect(Object.isFrozen(pipeline.plan().steps[0]!.agent!.capabilities)).toBe(true);
     for (const other of [
       agent({ maxCalls: 2 }),
+      agent({ maxDepth: 2 }),
       agent({ maxDecisions: 5 }),
       agent({ maxConcurrency: 2 }),
       agent({ maxTurns: 7 }),
@@ -195,6 +197,36 @@ describe("agent definition and recorded execution", () => {
     };
     event.payload.definitionSnapshot.steps[0].agent.limits.maxCalls++;
     expect(() => decodeStoredTraceEvent(event)).toThrow("structural fingerprint");
+  });
+
+  it("reads legacy agent definitions without a depth field", () => {
+    const current = agent().definition;
+    const snapshot = {
+      ...current,
+      steps: current.steps.map((step) => {
+        if (!step.agent) return step;
+        const { maxDepth, ...limits } = step.agent.limits;
+        expect(maxDepth).toBe(4);
+        return { ...step, agent: { ...step.agent, limits } };
+      }),
+    };
+    const identity = createDefinitionIdentity(snapshot, undefined);
+    const event = {
+      version: 3,
+      name: "pipeline.started",
+      pipelineId: "recorded-agent",
+      runId: "legacy",
+      timestampMs: 0,
+      payload: {
+        dryRun: false,
+        planOk: true,
+        stepCount: 1,
+        targetIds: ["agent"],
+        definitionIdentity: identity,
+        definitionSnapshot: { ...snapshot, identity },
+      },
+    };
+    expect(() => decodeStoredTraceEvent(event)).not.toThrow();
   });
 
   it("reads input descriptors once and keeps the model inventory immutable and handler-free", async () => {

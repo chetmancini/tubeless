@@ -51,6 +51,7 @@ function agentFields(agent: NonNullable<PipelineDefinitionSnapshot["steps"][numb
       maxTurns: agent.limits.maxTurns,
       maxCalls: agent.limits.maxCalls,
       maxDecisions: agent.limits.maxDecisions,
+      ...(agent.limits.maxDepth !== undefined ? { maxDepth: agent.limits.maxDepth } : {}),
       maxConcurrency: agent.limits.maxConcurrency,
     },
     resultSchemaFingerprint: agent.resultSchemaFingerprint,

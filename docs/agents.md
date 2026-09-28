@@ -113,6 +113,54 @@ transformed output, and literal ID work with ordinary `fromPipeline`,
 `defineProject`, and `definePipelineCommand`. Automatic CLI flags still require
 JSON Schema metadata on the agent's input schema.
 
+## Delegate to pipelines and subagents
+
+Use `pipelineTool` to register an ordinary compiled pipeline or another agent in
+the same tools registry. A schema-backed child needs only a description:
+
+```ts
+const tools = {
+  research: pipelineTool(ResearchAgent, { description: "Research one question." }),
+};
+```
+
+The tool uses the child's options schema for model arguments and returns its
+exact finalized result. For different argument shapes or a schema-less child,
+supply `inputSchema` and `mapOptions` together:
+
+```ts
+const tools = {
+  count: pipelineTool(CounterPipeline, {
+    description: "Count a question's characters.",
+    inputSchema: questionSchema,
+    mapOptions: ({ question }) => ({ text: question }),
+  }),
+};
+```
+
+The harness validates arguments, maps options, validates child options, and checks
+child plans for the whole batch before starting any child. Each schema transform
+runs once. Keep mappers free of side effects. A child owns its state and registry;
+its finish returns a result to the parent, which can make further decisions.
+
+Run the [delegation recipe](../examples/agent-delegation.ts) without credentials:
+
+```sh
+make run FILE=examples/agent-delegation.ts ARGS='--question "red blue"'
+make run FILE=examples/agent-delegation.ts ARGS='--dry-run --question "red blue"'
+```
+
+The parent creates two child-agent calls, consumes their results in a later
+ordinary summary-pipeline call, then finishes with
+`Summary: 3 characters; RED | 4 characters; BLUE`. Each decision source is
+scripted; it can be replaced with an application-owned model callback.
+
+A failed child is recoverable only when all its failures are actual handler
+`ToolError`s. Multiple expected failures become one bounded `TUBELESS_TOOL_ERRORS`
+observation in pipeline order. Mixed failures, validation, finalization, model
+callbacks, and cancellation remain fatal. Child pipelines inherit dry runs and
+retain their own step policies; mark side effects or supply preview handlers.
+
 ## Decisions and state
 
 `decide(state, context)` may return either of these shapes:
@@ -154,14 +202,15 @@ tool's child run retains its failed lifecycle. An arbitrary error with the same
 string code is fatal. Tool errors thrown by validators or reducers are fatal too.
 Successful outcomes contain `{ id, tool, ok: true, value }` with validated outputs.
 
-| Limit            | Default | Scope                                                            |
-| ---------------- | ------- | ---------------------------------------------------------------- |
-| `maxTurns`       | 20      | Decision invocations, including finish                           |
-| `maxCalls`       | 100     | Whole-batch call admissions in this invocation                   |
-| `maxDecisions`   | 100     | Decision callback admissions; excludes provider-internal retries |
-| `maxConcurrency` | 1       | Simultaneous tool execution in this invocation                   |
+| Limit            | Default | Scope                                                           |
+| ---------------- | ------- | --------------------------------------------------------------- |
+| `maxTurns`       | 20      | Decision invocations, including finish                          |
+| `maxCalls`       | 100     | Whole-batch tool/child admissions across the subtree            |
+| `maxDecisions`   | 100     | Subtree decision admissions; excludes provider-internal retries |
+| `maxDepth`       | 4       | Pipeline-tool delegation edges below this agent                 |
+| `maxConcurrency` | 1       | Active decision callbacks and leaf step handlers in the subtree |
 
-Limits are safe integers; only `maxCalls` permits zero. A batch exceeding the
+Limits are safe integers; `maxCalls` and `maxDepth` permit zero. A batch exceeding the
 remaining call budget fails before any handler starts. Admitted calls consume
 their allowance even if execution stops before dispatch. Finishing on the last
 turn succeeds; continuing on that turn fails before tools run. Exhaustion fails
@@ -169,6 +218,22 @@ with `TUBELESS_AGENT_LIMIT_REACHED`, including bound, consumed count, requested
 count, and scope in the error. Invalid decisions and state use
 `TUBELESS_AGENT_INVALID_DECISION` and `TUBELESS_AGENT_INVALID_STATE`. Ordinary
 pipeline child-error wrapping retains these source codes in the cause chain.
+
+The root invocation owns shared counters and execution permits. Child limits can
+tighten the bounds; every ancestor limit still applies. Concurrent sibling
+admissions check and charge the entire batch atomically, with no refunds.
+`maxTurns` remains local to each agent. A `pipelineTool` call consumes one call
+and one delegation edge; calls and decisions inside that child also consume
+ancestor budgets. Ordinary pipeline steps consume leaf permits, not call counts.
+A depth of zero permits handler tools but rejects pipeline tools.
+
+Decision callbacks release their permits before child dispatch. Wrappers waiting
+on descendants hold no permit, so nested execution works with concurrency one.
+The scope survives ordinary `fromPipeline`, `forEachPipeline`, and iteration
+between agents. Use registered pipeline tools for delegation: manually calling
+`run` from a handler is outside this composition contract. Schema validation,
+mapping, reducers, and finalizers are not counted as leaf handlers. The outer
+pipeline's DAG `maxConcurrency` remains a separate control.
 
 Cancellation stops new calls and waits for active work to settle. Fatal failures
 also stop dispatch and drain active work, without cancelling sibling handlers.
@@ -192,14 +257,11 @@ validators, reducers, or handlers whose semantics cannot be inferred from the gr
 Execution uses ordinary `decide`, `calls`, and `reduce` steps, with a new child run
 per turn and per dispatched tool. Turn iteration relations identify the owning
 agent. A tool run's `parentRunId` identifies its turn, and `itemKey` retains the
-call ID. First-attempt trace attributes record `agent.runId`, `agent.turn`,
+call ID. Handler-tool first-attempt trace attributes record `agent.runId`, `agent.turn`,
 `agent.callId`, `agent.tool`, and `agent.parentAttemptId`. Decision, admission,
 and reduction attempts record bounded decision/count/state-version summaries.
 These existing trace v3 records round-trip through NDJSON and SQLite. State,
 prompts, inputs, and outputs are not recorded automatically. Live progress keeps
 at most 32 visible call groups and 32 recent turn groups.
 
-This release slice executes handler tools in process. `pipelineTool`, subagents,
-delegation depth, and shared tree admission arrive in the next stage. Agent
-limits currently apply to one invocation; calling another agent manually from a
-handler does not share them. Crash-safe resume remains a later stage of the harness.
+The harness executes in process. Crash-safe resume remains a later stage.

@@ -1,4 +1,4 @@
-/** Compile-only probes: schemas are declared and pipelineTool awaits stage 4. */
+/** Compile-only public API probes: fixture schemas are declared. */
 import { expectTypeOf } from "vitest";
 import {
   createSteps,
@@ -18,7 +18,7 @@ import {
   type AgentCall,
   type AgentDecision,
   type AgentOutcome,
-} from "./agent-harness.prototype.js";
+} from "tubeless/agent";
 
 // These declared schemas represent application-owned validators, not fake runtime validators.
 // Their implementations must supply JSON Schema metadata or use the explicit descriptor fallback.

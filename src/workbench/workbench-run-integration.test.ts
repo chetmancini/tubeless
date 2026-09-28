@@ -1,3 +1,5 @@
+import { pathToFileURL } from "node:url";
+import { Writable } from "node:stream";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
@@ -11,6 +13,7 @@ import {
   execFileAsync,
   parseNdjson,
   writeActualPipelineCommandModule,
+  writeModule,
 } from "./workbench.test-support.js";
 
 describe("workbench run integration", () => {
@@ -502,6 +505,40 @@ describe("workbench run integration", () => {
     controller.abort();
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
     expect(io.output.join("")).not.toContain("completed:hello");
+  });
+
+  it("serializes concurrent child traces without multiplying stream listeners", async () => {
+    const core = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
+    const cli = pathToFileURL(path.resolve("dist/cli/cli.js")).href;
+    const { directory } = await writeModule(`
+      import { createSteps, definePipeline } from ${JSON.stringify(core)};
+      import { definePipelineCommand } from ${JSON.stringify(cli)};
+      const { step, forEachPipeline } = createSteps();
+      const work = step("work", { run: () => 1 });
+      const child = definePipeline({ id: "child", steps: [work] });
+      const batch = forEachPipeline("batch", { pipeline: child,
+        items: () => Array.from({ length: 20 }, (_, i) => i), key: String,
+        mapOptions: () => ({}), concurrency: 20 });
+      export default definePipelineCommand(definePipeline({ id: "root", steps: [batch] }), { params: {} });
+    `);
+    let peak = 0;
+    const chunks: string[] = [];
+    const stdout = new Writable({
+      write(chunk, _encoding, done) {
+        chunks.push(String(chunk));
+        peak = Math.max(peak, this.listenerCount("error"));
+        setImmediate(done);
+      },
+    });
+    const io = { ...captureIo(directory), stdout };
+    expect(await runWorkbenchCli(["run", "--trace", "-", "pipeline.mjs"], io)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(peak).toBeLessThanOrEqual(1);
+    const events = parseNdjson(chunks.join(""));
+    expect(events.filter(({ name }) => name === "pipeline.completed")).toHaveLength(21);
+    expect(stdout.listenerCount("error")).toBe(0);
+    expect(stdout.listenerCount("close")).toBe(0);
   });
 
   it("rejects after an accepted write later fails", async () => {

@@ -1,4 +1,6 @@
-import { STEP_CACHE } from "./pipeline-step-metadata.js";
+import { executionScope } from "./execution-scope.js";
+import { PipelineHandlerFailure } from "./pipeline-execution-error.js";
+import { STEP_CACHE, STEP_NESTED_PIPELINE, STEP_ORCHESTRATION } from "./pipeline-step-metadata.js";
 import { executeWithStepCache } from "./pipeline-cache.js";
 import { artifactRecordSchema, type ArtifactRecord } from "../tracing/artifact-metadata.js";
 import type { AnyStep } from "./pipeline-steps.js";
@@ -64,6 +66,7 @@ export async function executeStepAttempt<TOptions extends object>(input: {
   step: AnyStep<TOptions>;
 }): Promise<unknown> {
   const { step } = input;
+  const leaf = !step[STEP_NESTED_PIPELINE] && !step[STEP_ORCHESTRATION];
   let acceptsReports = true;
   const stepContext = {
     ...input.context,
@@ -86,6 +89,8 @@ export async function executeStepAttempt<TOptions extends object>(input: {
       return input.dryRun && typeof step.dryRun === "function"
         ? await step.dryRun(input.inputs, stepContext)
         : await step.run(input.inputs, stepContext);
+    } catch (error) {
+      throw leaf ? new PipelineHandlerFailure(error) : error;
     } finally {
       acceptsReports = false;
     }
@@ -96,7 +101,10 @@ export async function executeStepAttempt<TOptions extends object>(input: {
     stepId: step.id,
     inputs: input.inputs,
     context: input.context,
-    run,
+    run: () => {
+      const scope = executionScope(input.context);
+      return scope && leaf ? scope.run(run, input.context.signal) : run();
+    },
     onArtifact: (record) => input.onArtifact?.(record, false),
     validate: (value) => validateStepOutput(step, value, input.outputBoundary),
     onHit: () => {

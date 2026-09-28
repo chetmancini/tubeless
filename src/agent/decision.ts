@@ -1,15 +1,29 @@
+import { PreparedOptions } from "../core/prepared-options.js";
+import { agentScope, type AgentExecutionScope } from "./execution-scope.js";
 import type { PipelinePlan, PipelineStepContext } from "../core/pipeline-types.js";
 import { validateStandardSchema } from "../core/pipeline-validation.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { agentError } from "./agent-state.js";
 import type { CompiledTool } from "./tools.js";
 
-export interface PreparedCall {
+type PreparedTool =
+  | {
+      kind: "handler";
+      tool: Extract<CompiledTool, { kind: "handler" }>;
+      input: unknown;
+    }
+  | {
+      kind: "pipeline";
+      tool: Extract<CompiledTool, { kind: "pipeline" }>;
+      options: object;
+      preparedOptions: PreparedOptions;
+      scope: AgentExecutionScope;
+    };
+
+export type PreparedCall = PreparedTool & {
   id: string;
-  tool: CompiledTool;
-  input: unknown;
   plan: PipelinePlan;
-}
+};
 
 function invalid(message: string): never {
   throw agentError("TUBELESS_AGENT_INVALID_DECISION", message);
@@ -78,15 +92,36 @@ export async function prepareCalls(
   const prepared: PreparedCall[] = [];
   for (const { call, tool } of entries) {
     throwIfAborted(context.signal, "Agent batch validation");
-    const input = await validateStandardSchema(
-      tool.inputSchema,
-      call.input,
-      `Agent tool ${call.tool} input`
-    );
+    let invocation: PreparedTool;
+    if (tool.kind === "pipeline") {
+      const scope = agentScope(context)!.delegate();
+      const input = tool.mapOptions
+        ? await validateStandardSchema(
+            tool.inputSchema,
+            call.input,
+            `Agent tool ${call.tool} input`
+          )
+        : call.input;
+      // SAFETY: the private preparation boundary checks object shape, even for schema-less children.
+      const options = tool.mapOptions ? tool.mapOptions(input) : (input as object);
+      const preparedOptions = await PreparedOptions.prepare(
+        tool.pipeline.optionsSchema,
+        options,
+        `Pipeline ${tool.pipeline.id} options`
+      );
+      invocation = { kind: "pipeline", tool, options, preparedOptions, scope };
+    } else {
+      const input = await validateStandardSchema(
+        tool.inputSchema,
+        call.input,
+        `Agent tool ${call.tool} input`
+      );
+      invocation = { kind: "handler", tool, input };
+    }
     throwIfAborted(context.signal, "Agent batch validation");
     const plan = tool.pipeline.plan({ dryRun: context.dryRun, cache: context.cachePolicy });
     if (!plan.ok) return invalid(`Agent tool ${call.tool} has an invalid plan`);
-    prepared.push({ id: call.id, tool, input, plan });
+    prepared.push({ ...invocation, id: call.id, plan });
   }
   return prepared;
 }

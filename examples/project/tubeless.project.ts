@@ -10,6 +10,7 @@ import { OverrideExamplePipeline } from "../step-output-overrides.ts";
 import { CachedCountCommand } from "../step-output-cache.ts";
 import { PaginatedPipeline } from "../iteration.ts";
 import { ScriptedAgent } from "../agent.ts";
+import { DelegatingAgentCommand } from "../agent-delegation.ts";
 import { OpenAIAgentCommand } from "../agent-openai.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
 import { YamlPelotonCommand } from "../yaml-peloton.ts";
@@ -35,6 +36,7 @@ export default defineProject(
     CachedCountCommand,
     ScriptedAgent,
     OpenAIAgentCommand,
+    DelegatingAgentCommand,
     definePipelineCommand(PaginatedPipeline, {
       params: { rows: { type: "string", multiple: true } },
     }),

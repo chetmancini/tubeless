@@ -1,3 +1,7 @@
+import { setExecutionScope } from "../core/execution-scope.js";
+import { STEP_ORCHESTRATION } from "../core/pipeline-step-metadata.js";
+import { agentScope, limit } from "./execution-scope.js";
+import { expectedToolFailure } from "./tool-failure.js";
 import { createSteps, definePipeline, type IterationDecision } from "../core/pipeline.js";
 import { invokeChildPipeline } from "../core/child-execution.js";
 import { createMappedChildProgress } from "../core/child-progress.js";
@@ -5,11 +9,12 @@ import {
   PipelineExecutionError,
   isPipelineCancellation,
 } from "../core/pipeline-execution-error.js";
-import type { StandardSchemaV1 } from "../core/pipeline-types.js";
+import type { PipelineStepContext, StandardSchemaV1 } from "../core/pipeline-types.js";
+import type { PreparedOptions } from "../core/prepared-options.js";
 import { validateStandardSchema } from "../core/pipeline-validation.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { runConcurrentPartial } from "../utilities/batch.js";
-import { agentError, ownState } from "./agent-state.js";
+import { ownState } from "./agent-state.js";
 import { decisionEnvelope, prepareCalls, type PreparedCall } from "./decision.js";
 import type {
   AgentDefinition,
@@ -29,30 +34,16 @@ export interface TurnState<State> {
   calls: number;
 }
 
-export function resolvedLimits(limits: AgentLimits = {}): Required<AgentLimits> {
-  const defaults = { maxTurns: 20, maxCalls: 100, maxDecisions: 100, maxConcurrency: 1 };
-  for (const key of Object.keys(limits)) {
-    if (!Object.hasOwn(defaults, key))
-      throw agentError("TUBELESS_AGENT_INVALID_DEFINITION", `Unsupported agent limit: ${key}`);
-  }
-  const result = { ...defaults };
-  for (const key of Object.keys(defaults) as (keyof AgentLimits)[]) {
-    const value = limits[key] === undefined ? defaults[key] : limits[key];
-    if (!Number.isSafeInteger(value) || value < (key === "maxCalls" ? 0 : 1))
-      throw agentError(
-        "TUBELESS_AGENT_INVALID_DEFINITION",
-        `Agent ${key} must be a ${key === "maxCalls" ? "nonnegative" : "positive"} safe integer`
-      );
-    result[key] = value;
-  }
-  return Object.freeze(result);
-}
-
-function limit(name: string, bound: number, consumed: number, requested: number): never {
-  throw agentError(
-    "TUBELESS_AGENT_LIMIT_REACHED",
-    `Agent invocation ${name}=${bound} exceeded (consumed=${consumed}, requested=${requested}, scope=invocation)`
-  );
+function childInvocation(
+  call: PreparedCall,
+  context: PipelineStepContext<object>,
+  attributes: ToolInvocation["attributes"]
+): { options: object; context: PipelineStepContext<object>; preparedOptions?: PreparedOptions } {
+  if (call.kind === "handler")
+    return { options: { input: call.input, attributes } satisfies ToolInvocation, context };
+  const childContext = { ...context };
+  setExecutionScope(childContext, call.scope);
+  return { options: call.options, context: childContext, preparedOptions: call.preparedOptions };
 }
 
 export function createAgentTurn<
@@ -77,7 +68,8 @@ export function createAgentTurn<
       const { execution, options, agentRunId } = context.options;
       const { turn, stateVersion, state, calls } = execution;
       throwIfAborted(context.signal, "Agent decision");
-      if (turn > limits.maxDecisions) limit("maxDecisions", limits.maxDecisions, turn - 1, 1);
+      const scope = agentScope(context)!;
+      scope.reserve("maxDecisions", 1, context.signal);
       const callback = context.dryRun ? definition.dryRun! : definition.decide;
       const attributes = {
         "agent.runId": agentRunId,
@@ -85,13 +77,17 @@ export function createAgentTurn<
         "agent.stateVersion": stateVersion,
         "agent.callsAdmitted": calls,
       };
-      const response = await callback(state, {
-        ...context,
-        options,
-        turn,
-        stateVersion,
-        ...descriptors,
-      });
+      const response = await scope.run(
+        async () =>
+          callback(state, {
+            ...context,
+            options,
+            turn,
+            stateVersion,
+            ...descriptors,
+          }),
+        context.signal
+      );
       throwIfAborted(context.signal, "Agent decision");
       const decision = decisionEnvelope(response);
       context.reportAttempt(1, {
@@ -108,9 +104,8 @@ export function createAgentTurn<
         throwIfAborted(context.signal, "Agent finish");
         return { kind: "finish", result };
       }
-      if (turn === limits.maxTurns) limit("maxTurns", limits.maxTurns, turn, 1);
-      if (decision.calls.length > limits.maxCalls - calls)
-        limit("maxCalls", limits.maxCalls, calls, decision.calls.length);
+      if (turn === limits.maxTurns) limit("maxTurns", limits.maxTurns, turn, 1, agentRunId);
+      scope.check("maxCalls", decision.calls.length);
       return { kind: "continue", calls: await prepareCalls(decision.calls, registry, context) };
     },
   });
@@ -121,6 +116,7 @@ export function createAgentTurn<
       if (decision.kind === "finish") return [];
       const { execution, agentRunId } = context.options;
       throwIfAborted(context.signal, "Agent call admission");
+      agentScope(context)!.reserve("maxCalls", decision.calls.length, context.signal);
       const admitted = execution.calls + decision.calls.length;
       context.reportAttempt(1, {
         "agent.runId": agentRunId,
@@ -140,46 +136,35 @@ export function createAgentTurn<
         { concurrency: limits.maxConcurrency, signal: context.signal },
         async (call) => {
           progress.start(call.id);
-          const invocation: ToolInvocation = {
-            input: call.input,
-            attributes: {
+          try {
+            const invocation = childInvocation(call, context, {
               "agent.runId": agentRunId,
               "agent.turn": execution.turn,
               "agent.callId": call.id,
               "agent.tool": call.tool.name,
               "agent.parentAttemptId": context.attemptId,
-            },
-          };
-          try {
-            const result = await invokeChildPipeline(call.tool.pipeline, invocation, context, {
-              plan: call.plan,
-              hooks: progress.plan(call.id, call.plan),
-              itemKey: call.id,
             });
+            const result = await invokeChildPipeline(
+              call.tool.pipeline,
+              invocation.options,
+              invocation.context,
+              {
+                plan: call.plan,
+                hooks: progress.plan(call.id, call.plan),
+                itemKey: call.id,
+                preparedOptions: invocation.preparedOptions,
+              }
+            );
             if (result.status === "completed" && result.finalized) {
               progress.childCompleted(call.id);
               progress.complete(call.id);
               return { id: call.id, tool: call.tool.name, ok: true as const, value: result.value };
             }
             const failure = new PipelineExecutionError(result);
-            if (
-              result.status === "failed" &&
-              !context.signal?.aborted &&
-              invocation.expectedError &&
-              result.errors.length === 1 &&
-              result.errors[0]!.stepId === "tool" &&
-              result.errors[0]!.code === "TUBELESS_STEP_FAILED"
-            ) {
+            const expected = !context.signal?.aborted && expectedToolFailure(result);
+            if (expected) {
               progress.fail(call.id, failure, false);
-              return {
-                id: call.id,
-                tool: call.tool.name,
-                ok: false as const,
-                error: {
-                  code: invocation.expectedError.code,
-                  message: invocation.expectedError.message,
-                },
-              };
+              return { id: call.id, tool: call.tool.name, ok: false as const, error: expected };
             }
             throw failure;
           } catch (error) {
@@ -230,6 +215,8 @@ export function createAgentTurn<
       };
     },
   });
+  for (const step of [decide, calls, reduce])
+    Object.defineProperty(step, STEP_ORCHESTRATION, { value: true });
   return definePipeline({
     id: `${definition.id}/turn`,
     steps: [decide, calls, reduce],

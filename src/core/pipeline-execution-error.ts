@@ -32,6 +32,21 @@ export class PipelineChildError extends Error {
 
 const originalPipelineErrors = new WeakMap<PipelineError, unknown>();
 
+/** Private provenance carried from a leaf handler to the diagnostic boundary. */
+export class PipelineHandlerFailure {
+  constructor(readonly error: unknown) {}
+}
+
+export function originalHandlerFailure(error: PipelineError): unknown {
+  const failure = originalPipelineErrors.get(error);
+  return failure instanceof PipelineHandlerFailure ? failure.error : undefined;
+}
+
+export function originalPipelineError(error: PipelineError): unknown {
+  const failure = originalPipelineErrors.get(error);
+  return failure instanceof PipelineHandlerFailure ? failure.error : failure;
+}
+
 function defaultExecutionErrorMessage(result: PipelineRun<unknown>): string {
   const firstError = result.errors[0];
   const disposition = isCancellationOnly(result.errors) ? "cancelled" : "failed";
@@ -42,7 +57,7 @@ function defaultExecutionErrorMessage(result: PipelineRun<unknown>): string {
 
 function firstOriginalPipelineError(errors: readonly PipelineError[]): unknown {
   for (const error of errors) {
-    if (originalPipelineErrors.has(error)) return originalPipelineErrors.get(error);
+    if (originalPipelineErrors.has(error)) return originalPipelineError(error);
   }
   return undefined;
 }
@@ -132,9 +147,10 @@ function normalizedNestedCause(error: unknown): PipelineErrorCause | undefined {
 }
 
 export function toPipelineError(
-  error: unknown,
+  failure: unknown,
   classification: Omit<PipelineError, "cause" | "message" | "sourceCode" | "stack">
 ): PipelineError {
+  const error = failure instanceof PipelineHandlerFailure ? failure.error : failure;
   const sourceCode =
     typeof error === "object" && error !== null ? readErrorField(error, "code") : undefined;
   const cause = normalizedNestedCause(error);
@@ -149,7 +165,7 @@ export function toPipelineError(
   if (error instanceof PipelineChildError && error.fanOut) {
     const { failures, failureCount, schedulerError } = error.fanOut;
     pipelineError.fanOut = {
-      failures: failures.map(({ error: itemError, key, index, cancelled }) => ({
+      failures: failures.slice(0, 32).map(({ error: itemError, key, index, cancelled }) => ({
         index,
         key: key.slice(0, 1024),
         keyTruncated: key.length > 1024,
@@ -157,12 +173,12 @@ export function toPipelineError(
         error: fanOutCause(itemError),
       })),
       failureCount,
-      omittedFailureCount: failureCount - failures.length,
+      omittedFailureCount: failureCount - Math.min(failures.length, 32),
     };
     if (schedulerError !== undefined)
       pipelineError.fanOut.schedulerError = fanOutCause(schedulerError);
   }
-  originalPipelineErrors.set(pipelineError, error);
+  originalPipelineErrors.set(pipelineError, failure);
   return pipelineError;
 }
 
@@ -178,15 +194,16 @@ export function isPipelineCancellation(
 
 /** Classify a failed attempt without exposing error subclasses to execution. */
 export function stepExecutionError(
-  error: unknown,
+  failure: unknown,
   runtime: Pick<PipelineRuntime, "signal">,
   stepId: string
 ): PipelineError {
+  const error = failure instanceof PipelineHandlerFailure ? failure.error : failure;
   const cancelled = isPipelineCancellation(error, runtime);
   const childFailure =
     error instanceof PipelineExecutionError || error instanceof PipelineChildError;
   const validationFailure = error instanceof PipelineBoundaryValidationError;
-  return toPipelineError(error, {
+  return toPipelineError(failure, {
     code: cancelled
       ? "TUBELESS_RUN_CANCELLED"
       : validationFailure

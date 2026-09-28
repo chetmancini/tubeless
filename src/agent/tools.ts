@@ -1,6 +1,7 @@
+import { compilePipelineTool } from "./pipeline-tool.js";
 import { createSteps, definePipeline } from "../core/pipeline.js";
 import type { PipelineStepContext, StandardSchemaV1 } from "../core/pipeline-types.js";
-import { agentError, checkSchema, jsonDescriptor } from "./agent-state.js";
+import { agentError, checkDescription, checkSchema, jsonDescriptor } from "./agent-state.js";
 import type { AgentTool, Awaitable, Input, Output } from "./agent-types.js";
 
 /** A handler may throw this error to return a recoverable observation to its agent. */
@@ -41,15 +42,7 @@ export function defineTool<
   const Arguments extends StandardSchemaV1,
   const Result extends StandardSchemaV1,
 >(definition: ToolDefinition<Arguments, Result>): AgentTool<Input<Arguments>, Output<Result>> {
-  if (
-    typeof definition.description !== "string" ||
-    !definition.description.trim() ||
-    definition.description.length > 4096
-  )
-    throw agentError(
-      "TUBELESS_AGENT_INVALID_DEFINITION",
-      "Tool description must be nonblank and at most 4096 characters"
-    );
+  checkDescription(definition.description);
   checkSchema(definition.outputSchema, "Tool output");
   if (
     typeof definition.run !== "function" ||
@@ -75,22 +68,21 @@ export function defineTool<
 export interface ToolInvocation {
   input: unknown;
   attributes: Readonly<Record<string, string | number>>;
-  expectedError?: ToolError;
 }
 
 export function compileTool(agentId: string, name: string, tool: AgentTool<unknown, unknown>) {
+  const pipelineTool = compilePipelineTool(name, tool);
+  if (pipelineTool) return pipelineTool;
   const definition = tools.get(tool);
   if (!definition)
-    throw agentError("TUBELESS_AGENT_INVALID_DEFINITION", `Tool ${name} must come from defineTool`);
+    throw agentError(
+      "TUBELESS_AGENT_INVALID_DEFINITION",
+      `Tool ${name} must come from defineTool or pipelineTool`
+    );
   const { run, dryRun, inputSchema, outputSchema, inputJsonSchema, description } = definition;
   const invoke = async (handler: typeof run, context: PipelineStepContext<ToolInvocation>) => {
     context.reportAttempt(1, context.options.attributes);
-    try {
-      return await handler(context.options.input, { ...context, options: {} });
-    } catch (error) {
-      if (error instanceof ToolError) context.options.expectedError = error;
-      throw error;
-    }
+    return handler(context.options.input, { ...context, options: {} });
   };
   const { step } = createSteps<ToolInvocation>();
   const call = step("tool", {
@@ -100,6 +92,7 @@ export function compileTool(agentId: string, name: string, tool: AgentTool<unkno
     dryRun: typeof dryRun === "function" ? (_inputs, context) => invoke(dryRun, context) : "skip",
   });
   return {
+    kind: "handler" as const,
     name,
     description,
     inputSchema,

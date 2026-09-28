@@ -14,6 +14,7 @@ import {
   STEP_OPTIONS_SCHEMA,
   STEP_REMOTE,
   STEP_AGENT,
+  STEP_ORCHESTRATION,
 } from "./pipeline-step-metadata.js";
 import type {
   InferSchemaInput,
@@ -48,6 +49,7 @@ type AnyStepDryRunHandler<TOptions extends object> = {
 
 /** Runtime shape shared by every declared pipeline step. */
 export interface AnyStep<TOptions extends object = object> {
+  readonly [STEP_ORCHESTRATION]?: true;
   readonly [STEP_AGENT]?: NonNullable<PipelinePlanStep["agent"]>;
   readonly [STEP_NESTED_PIPELINE]?: NonNullable<PipelinePlanStep["nestedPipeline"]>;
   readonly [STEP_REMOTE]?: NonNullable<PipelinePlanStep["remote"]>;
