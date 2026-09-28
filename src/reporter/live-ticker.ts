@@ -192,7 +192,12 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
     inlineFallback = createFallback();
   };
 
-  worker.on("error", () => void worker.terminate());
+  worker.on("error", (error) => {
+    options.write(
+      `tubeless: live ticker worker failed (${String(error)}); falling back to inline rendering\n`
+    );
+    void worker.terminate();
+  });
   worker.on("exit", () => failToInline());
   worker.unref();
 

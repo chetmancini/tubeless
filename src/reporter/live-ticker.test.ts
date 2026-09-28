@@ -166,6 +166,25 @@ describe("createLiveTicker worker fallback", () => {
     }
   });
 
+  it("writes a diagnostic line when the worker errors before falling back", async () => {
+    const { chunks, close, ticker } = workerTicker('throw new Error("boot failure")');
+    try {
+      ticker.setLines(["running"]);
+      await vi.waitFor(() =>
+        expect(chunks.some((chunk) => chunk.includes("boot failure"))).toBe(true)
+      );
+
+      expect(
+        chunks.some(
+          (chunk) => chunk.includes("live ticker worker failed") && chunk.includes("boot failure")
+        )
+      ).toBe(true);
+    } finally {
+      ticker.dispose();
+      close();
+    }
+  });
+
   it("replays only unacknowledged logs after a worker fails between writes", async () => {
     const workerUrl = new URL("../../dist/reporter/live-ticker-worker.js", import.meta.url);
     const { chunks, close, path, ticker } = workerTicker(`
