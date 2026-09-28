@@ -7,7 +7,7 @@ export function writeAtomicText(filePath: string, text: string): void {
   // Each call owns its sibling temp file, including writers on same-PID workers.
   const tmpPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`;
   try {
-    fs.writeFileSync(tmpPath, text);
+    fs.writeFileSync(tmpPath, text, { flag: "wx" });
     fs.renameSync(tmpPath, filePath);
   } catch (error) {
     try {

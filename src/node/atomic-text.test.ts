@@ -30,3 +30,17 @@ it("keeps overlapping writes in the same process on independent temporary files"
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+it("writes the temporary file with exclusive create", () => {
+  const dir = fs.mkdtempSync(join(tmpdir(), "atomic-text-test-"));
+  const file = join(dir, "artifact.json");
+
+  try {
+    writeAtomicText(file, '{"writer":"only"}\n');
+    const [tmpPathArg, , optionsArg] = vi.mocked(fs.writeFileSync).mock.calls.at(-1)!;
+    expect(String(tmpPathArg)).toContain(`${file}.tmp-`);
+    expect(optionsArg).toMatchObject({ flag: "wx" });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
