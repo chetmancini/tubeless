@@ -131,6 +131,9 @@ Read the corresponding package recipe before using these features:
   HTTP boundary with fixtures. The OpenAI recipe has no preview decision source;
   its dry run skips model work and has no final answer. Provider schemas and
   response mapping belong in application code, not the runtime.
+  Bound model input and accumulated observations. The OpenAI recipe rejects
+  oversized questions, history, and encoded requests locally, preserving exact
+  tool results within those budgets.
 
 - For YAML or JSON authoring, read `docs/declarative-pipelines.md` and
   `examples/yaml-pipelines.ts`. Use `compilePipelineDocument(document, registry)` from

@@ -65,6 +65,15 @@ the run's cancellation signal. HTTP errors, incomplete responses, refusals,
 invalid JSON, and invalid decisions fail the run. There are no automatic
 provider retries. Error messages omit HTTP response bodies.
 
+The recipe also bounds model input in UTF-8 bytes. Questions may use up to
+4 KiB; accumulated observations may use up to 16 KiB of serialized JSON. An
+oversized question fails before the first model request. Oversized history fails
+before committing the next state or requesting another decision. Accepted
+observations remain complete, so later tools can use their exact text. The
+adapter checks the complete encoded HTTP body against a 32 KiB limit before
+every request, including instructions, schemas, and JSON escaping. These are
+application byte budgets; they do not measure a selected model's token usage.
+
 `plan`, `inspect`, and `graph` need no credentials and make no API requests. The
 live example has no preview decision source: `--dry-run` skips the agent and
 fails required finalization because there is no answer. Use the scripted recipe

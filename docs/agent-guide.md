@@ -53,6 +53,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Resolve provider credentials only during execution, pass cancellation to the
   HTTP request, and keep provider response parsing in application code. The
   OpenAI recipe has no live dry-run callback; use the scripted recipe for previews.
+  Bound questions, accumulated observations, and encoded provider requests before
+  sending them. Reject oversized text without silently changing tool results.
 
 - For YAML or JSON authoring, read [declarative pipelines](./declarative-pipelines.md)
   and adapt [the YAML recipe](../examples/yaml-pipelines.ts). Parse at the

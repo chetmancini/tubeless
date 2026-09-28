@@ -122,6 +122,52 @@ describe("OpenAI agent recipe", () => {
     ]);
   });
 
+  it.each(["a".repeat(4097), "🙂".repeat(1025)])(
+    "rejects an oversized UTF-8 question before any model request",
+    async (question) => {
+      const run = await createPipelineTestRuntime().run(OpenAIAgent, { question });
+      expect(run.status).toBe("failed");
+      expect(JSON.stringify(run.errors)).toContain("Question exceeds 4096 UTF-8 bytes");
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  );
+
+  it("accepts a question exactly at the UTF-8 byte limit", async () => {
+    const question = "🙂".repeat(1024);
+    respond(call("_finish", { result: "done" }));
+    expect(await createPipelineTestRuntime().runOrThrow(OpenAIAgent, { question })).toEqual({
+      answer: "done",
+    });
+    expect(JSON.parse(request(0).input).state.question).toBe(question);
+  });
+
+  it("bounds the fully encoded request before fetch, including JSON escaping", async () => {
+    const question = "\\".repeat(4096);
+    respond(call("uppercase", { input: question }));
+    const run = await createPipelineTestRuntime().run(OpenAIAgent, { question });
+    expect(run.status).toBe("failed");
+    expect(JSON.stringify(run.errors)).toContain("OpenAI request exceeds 32768 UTF-8 bytes");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([1, 3])(
+    "stops oversized observation history after %s batches, before another model request",
+    async (batches) => {
+      const input = "é".repeat(batches === 1 ? 8192 : 3000);
+      for (let index = 0; index < batches; index++)
+        respond(call("uppercase", { input }, `call-${index}`));
+      const run = await createPipelineTestRuntime().run(OpenAIAgent, {});
+      expect(run.status).toBe("failed");
+      expect(run.finalized).toBe(false);
+      expect(JSON.stringify(run.errors)).toContain("Observation history exceeds 16384 UTF-8 bytes");
+      expect(fetchMock).toHaveBeenCalledTimes(batches);
+      if (batches > 1) {
+        expect(JSON.parse(request(1).input).state.observations[0].value).toBe(input.toUpperCase());
+        expect(JSON.parse(request(2).input).state.observations).toHaveLength(2);
+      }
+    }
+  );
+
   it.each([
     null,
     { status: "incomplete", output: [call("uppercase", { input: "red" })] },
