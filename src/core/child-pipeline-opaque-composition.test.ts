@@ -296,7 +296,12 @@ describe("opaque child adapter: composition", () => {
     });
     // Hold the child pending across the old 250ms observation window so a late
     // empty snapshot would still be recorded before we release the gate.
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    vi.useFakeTimers();
+    try {
+      await vi.advanceTimersByTimeAsync(250);
+    } finally {
+      vi.useRealTimers();
+    }
     expect(bridged.some((message) => message.includes("0 completed"))).toBe(false);
     releaseWork();
     const result = await runPromise;

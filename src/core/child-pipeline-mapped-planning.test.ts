@@ -216,7 +216,12 @@ describe("mapped child adapter: planning and progress", () => {
     });
     // Hold mapped children across the old 250ms observation window so a late
     // empty-progress tick would still be recorded before we release the gate.
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    vi.useFakeTimers();
+    try {
+      await vi.advanceTimersByTimeAsync(250);
+    } finally {
+      vi.useRealTimers();
+    }
     expect(zeroProgressLabels).toBe(0);
     releaseWork();
     const result = await runPromise;
