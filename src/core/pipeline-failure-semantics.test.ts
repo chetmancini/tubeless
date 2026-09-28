@@ -457,6 +457,34 @@ describe("parallel failure semantics", () => {
     expect(runStep).not.toHaveBeenCalled();
   });
 
+  it("attributes still-unstarted steps to an abort observed after an earlier failure stopped dispatch", async () => {
+    const controller = new AbortController();
+    const { step } = createSteps();
+    const first = step("first", {
+      run: () => {
+        controller.abort("operator stopped");
+        throw new Error("first step exploded");
+      },
+    });
+    const second = step("second", { run: () => "second-output" });
+    const third = step("third", { run: () => "third-output" });
+    const pipeline = definePipeline({
+      id: "cancellation-precedence-over-fail-fast",
+      steps: [first, second, third],
+    });
+
+    const result = await pipeline.run({}, { maxConcurrency: 1 }, { signal: controller.signal });
+
+    expect(result.steps.map(({ id, status }) => [id, status])).toEqual([
+      ["first", "failed"],
+      ["second", "cancelled"],
+      ["third", "cancelled"],
+    ]);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "TUBELESS_RUN_CANCELLED" })])
+    );
+  });
+
   it("cancels pending work after abort even when every active handler ignores the signal", async () => {
     const release = defer();
     const controller = new AbortController();
