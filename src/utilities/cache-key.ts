@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
-/** Canonical data-graph hash: sorted record keys, explicit types, holes, and references. */
-export function defaultCacheKey(inputs: unknown, options: unknown): string {
+const optionsHashCache = new WeakMap<object, string>();
+
+function hashCanonicalValue(value: unknown): string {
   const seen = new Map<object, number>();
   const unsupported = () => {
     throw new Error(
@@ -58,7 +59,23 @@ export function defaultCacheKey(inputs: unknown, options: unknown): string {
       ? ["array", id, value.length, fields]
       : [prototype === null ? "null-record" : "record", id, fields];
   };
-  return createHash("sha256")
-    .update(JSON.stringify(visit([inputs, options])))
-    .digest("hex");
+  return createHash("sha256").update(JSON.stringify(visit(value))).digest("hex");
+}
+
+function hashOptions(options: object): string {
+  const cached = optionsHashCache.get(options);
+  if (cached !== undefined) return cached;
+  const hash = hashCanonicalValue(options);
+  optionsHashCache.set(options, hash);
+  return hash;
+}
+
+/** Canonical data-graph hash: sorted record keys, explicit types, holes, and references. */
+export function defaultCacheKey(inputs: unknown, options: unknown): string {
+  const inputsHash = hashCanonicalValue(inputs);
+  const optionsHash =
+    typeof options === "object" && options !== null
+      ? hashOptions(options)
+      : hashCanonicalValue(options);
+  return `${inputsHash}:${optionsHash}`;
 }
