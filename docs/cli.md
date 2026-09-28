@@ -441,6 +441,8 @@ tubeless history [options] [run-id]
 - `--pipeline <id>` filters by the exact recorded pipeline ID
 - `--json` emits the projected run list, or one projected run when `run-id` is set
 - `--events` emits raw store events as NDJSON (run-scoped when `run-id` is set)
+- `--clear` deletes all recorded events from a SQLite store and compacts it; requires `--yes` and cannot combine with `--trace`, `--json`, `--events`, or a run id
+- `--yes` confirms `--clear`; there is no interactive prompt
 
 `--store` and `--trace` cannot be combined. `--json` and `--events` cannot be
 combined. `--pipeline` applies to every output mode and both artifact sources.
@@ -466,6 +468,7 @@ bunx tubeless history --pipeline import
 bunx tubeless history --json <run-id>
 bunx tubeless history --events <run-id>
 bunx tubeless history --trace run.ndjson
+bunx tubeless history --clear --yes --store .tubeless/runs.sqlite
 ```
 
 ## Studio

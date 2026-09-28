@@ -30,6 +30,8 @@ Options:
       --pipeline <id>   Filter by recorded pipeline ID
       --json            Emit the projected run list or run as JSON
       --events          Emit raw store events as NDJSON
+      --clear           Delete all recorded history from a SQLite store (requires --yes)
+      --yes             Confirm --clear; there is no interactive prompt
   -h, --help            Show this help
 `;
 
@@ -38,12 +40,14 @@ function parseHistoryArgs(argv: readonly string[]) {
     args: [...argv],
     allowPositionals: true,
     options: {
+      clear: { type: "boolean" },
       events: { type: "boolean" },
       help: { type: "boolean", short: "h" },
       json: { type: "boolean" },
       pipeline: { type: "string" },
       store: { type: "string" },
       trace: { type: "string" },
+      yes: { type: "boolean" },
     },
     strict: true,
   });
@@ -136,6 +140,28 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
         if (parsed.positionals.length > 1) {
           return writeUsageError(commandIo, "Pass at most one run id.", HISTORY_USAGE);
         }
+        if (parsed.values.clear) {
+          if (parsed.values.trace) {
+            return writeUsageError(commandIo, "--clear requires --store, not --trace.", HISTORY_USAGE);
+          }
+          if (parsed.values.json || parsed.values.events) {
+            return writeUsageError(
+              commandIo,
+              "--clear cannot combine with --json or --events.",
+              HISTORY_USAGE
+            );
+          }
+          if (parsed.positionals.length > 0) {
+            return writeUsageError(commandIo, "--clear does not take a run id.", HISTORY_USAGE);
+          }
+          if (!parsed.values.yes) {
+            return writeUsageError(
+              commandIo,
+              "--clear requires --yes to confirm deleting all recorded history.",
+              HISTORY_USAGE
+            );
+          }
+        }
 
         const runId = parsed.positionals[0];
         const filename = path.resolve(
@@ -149,6 +175,27 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
             `Error: ${parsed.values.trace ? "Trace artifact" : "Run store"} not found at ${filename}\n`
           );
           return TUBELESS_WORKBENCH_EXIT_CODE.load;
+        }
+
+        if (parsed.values.clear) {
+          let writableStore;
+          try {
+            const { openSqlitePipelineRunStore } = await import("../run-store/run-store-sqlite.js");
+            writableStore = await openSqlitePipelineRunStore(filename, { initialize: false });
+          } catch (error) {
+            commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
+            return TUBELESS_WORKBENCH_EXIT_CODE.load;
+          }
+          try {
+            await writableStore.clearHistory();
+            await writeCliChunk(commandIo.stdout, `Cleared all recorded history in ${filename}\n`);
+            return TUBELESS_WORKBENCH_EXIT_CODE.success;
+          } catch (error) {
+            commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
+            return TUBELESS_WORKBENCH_EXIT_CODE.load;
+          } finally {
+            await writableStore.close();
+          }
         }
 
         let store: PipelineRunEventReader;

@@ -346,6 +346,68 @@ describe("runHistory", () => {
     expect(io.output.join("")).not.toContain("\u001b");
   });
 
+  it("requires --yes before clearing recorded history", async () => {
+    const directory = await tempDir();
+    const storePath = path.join(directory, "runs.sqlite");
+    await seedStore(storePath, failedRunEvents);
+    const io = captureIo(directory);
+
+    expect(await runHistory(["--clear", "--store", storePath], io)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.usage
+    );
+    expect(io.errors.join("")).toContain("--clear requires --yes");
+
+    const listIo = captureIo(directory);
+    expect(await runHistory(["--store", storePath], listIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(listIo.output.join("")).toContain("failed");
+  });
+
+  it("rejects --clear combined with --trace, --json, --events, or a run id", async () => {
+    const directory = await tempDir();
+    const storePath = path.join(directory, "runs.sqlite");
+    await seedStore(storePath, failedRunEvents);
+    const tracePath = path.join(directory, "run.ndjson");
+    await writeFile(tracePath, "");
+
+    const traceIo = captureIo(directory);
+    expect(await runHistory(["--clear", "--yes", "--trace", tracePath], traceIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.usage
+    );
+    expect(traceIo.errors.join("")).toContain("--clear requires --store, not --trace.");
+
+    const jsonIo = captureIo(directory);
+    expect(await runHistory(["--clear", "--yes", "--store", storePath, "--json"], jsonIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.usage
+    );
+    expect(jsonIo.errors.join("")).toContain("--clear cannot combine with --json or --events.");
+
+    const runIdIo = captureIo(directory);
+    expect(
+      await runHistory(["--clear", "--yes", "--store", storePath, "run-failed"], runIdIo)
+    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(runIdIo.errors.join("")).toContain("--clear does not take a run id.");
+  });
+
+  it("clears all recorded history from a SQLite store with --yes", async () => {
+    const directory = await tempDir();
+    const storePath = path.join(directory, "runs.sqlite");
+    await seedStore(storePath, failedRunEvents);
+    const clearIo = captureIo(directory);
+
+    expect(await runHistory(["--clear", "--yes", "--store", storePath], clearIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(clearIo.output.join("")).toContain("Cleared all recorded history");
+
+    const listIo = captureIo(directory);
+    expect(await runHistory(["--store", storePath], listIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(listIo.output.join("")).toBe("");
+  });
+
   it("rejects conflicting artifact sources and malformed traces", async () => {
     const directory = await tempDir();
     const tracePath = path.join(directory, "run.ndjson");
