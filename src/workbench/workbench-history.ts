@@ -142,7 +142,11 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
         }
         if (parsed.values.clear) {
           if (parsed.values.trace) {
-            return writeUsageError(commandIo, "--clear requires --store, not --trace.", HISTORY_USAGE);
+            return writeUsageError(
+              commandIo,
+              "--clear requires --store, not --trace.",
+              HISTORY_USAGE
+            );
           }
           if (parsed.values.json || parsed.values.events) {
             return writeUsageError(

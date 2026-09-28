@@ -62,7 +62,7 @@ Agent instructions:
 
 Advanced:
 
-- In-process agents: ./agents.md (handler tools, per-invocation limits, no subagents or crash resume yet)
+- In-process agents: ./agents.md (scripted and OpenAI examples, handler tools, per-invocation limits, no subagents or crash resume yet)
 - Child pipelines: ./child-pipeline-composition.md
 - Remote steps: ./remote-step-composition.md
 - Tubeless and Airflow: ./airflow.md
@@ -74,6 +74,8 @@ Advanced:
 - Machine-readable surface: ./api-report.json
 Executable examples:
 
+- ../examples/agent.ts
+- ../examples/agent-openai.ts
 - ../examples/project/tubeless.project.ts
 - ../examples/tubeless.project.ts
 - ../examples/minimal-pipeline.ts

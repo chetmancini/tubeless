@@ -120,12 +120,17 @@ Read the corresponding package recipe before using these features:
 
 - `defineAgent` and `defineTool` from `tubeless/agent` for bounded in-process
   decisions over registered handler tools. Read `docs/agents.md` and
-  `examples/agent.ts`. Keep provider calls application-owned, validate raw
+  `examples/agent.ts`; use `examples/agent-openai.ts` for a real Responses API
+  callback with native fetch. Keep provider calls application-owned, validate raw
   decisions and all schema boundaries, and reduce ordered outcomes into owned
   plain-data state. Handler-originated `ToolError` is recoverable; validation and
   unclassified failures are fatal. Dry-run decisions and tools need explicit
   previews. Limits are per invocation in this slice; pipeline tools, delegation,
   tree-wide budgets, and crash resume are not yet implemented.
+  Read provider credentials inside `decide`, forward cancellation, and test the
+  HTTP boundary with fixtures. The OpenAI recipe has no preview decision source;
+  its dry run skips model work and has no final answer. Provider schemas and
+  response mapping belong in application code, not the runtime.
 
 - For YAML or JSON authoring, read `docs/declarative-pipelines.md` and
   `examples/yaml-pipelines.ts`. Use `compilePipelineDocument(document, registry)` from

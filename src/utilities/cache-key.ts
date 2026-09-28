@@ -59,7 +59,9 @@ function hashCanonicalValue(value: unknown): string {
       ? ["array", id, value.length, fields]
       : [prototype === null ? "null-record" : "record", id, fields];
   };
-  return createHash("sha256").update(JSON.stringify(visit(value))).digest("hex");
+  return createHash("sha256")
+    .update(JSON.stringify(visit(value)))
+    .digest("hex");
 }
 
 function hashOptions(options: object): string {

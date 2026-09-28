@@ -32,7 +32,7 @@ const options = schema<{ question?: string }, { question: string }>(
   },
   {
     type: "object",
-    properties: { question: { type: "string", description: "Text for the scripted agent." } },
+    properties: { question: { type: "string", description: "Text or task for the agent." } },
   }
 );
 const answer = schema<string, { answer: string }>(
@@ -64,6 +64,9 @@ const tools = {
     dryRun: (value) => value.length,
   }),
 };
+
+// The live-provider recipe uses the same validated tools and boundary schemas.
+export { tools as textTools, options as textOptions, answer as textAnswer };
 
 interface State {
   question: string;
