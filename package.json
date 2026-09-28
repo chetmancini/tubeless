@@ -62,6 +62,7 @@
     "prepack": "bun run build",
     "test": "bun run build && bun run test:run",
     "test:run": "vitest run --config vitest.config.ts",
+    "test:coverage": "vitest run --config vitest.config.ts --coverage",
     "typecheck": "bun run build && bun run typecheck:run",
     "typecheck:run": "tsc -p tsconfig.json --noEmit && tsc -p examples/tsconfig.json --noEmit && tsc -p tsconfig.automation.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p design/tsconfig.json",
     "pack:verify": "node scripts/verify-packed-artifact.mjs"
@@ -76,6 +77,7 @@
     "@temporalio/workflow": "1.24.0",
     "@types/aws-lambda": "8.10.163",
     "@types/node": "26.6.3",
+    "@vitest/coverage-v8": "^5.0.2",
     "inngest": "4.21.0",
     "knip": "6.38.0",
     "oxfmt": "0.70.0",
