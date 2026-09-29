@@ -214,6 +214,23 @@ describe("workspace search and listing", () => {
 
 describe("workspace file replacement", () => {
   for (const tool of ["write", "edit"] as const) {
+    it(`${tool} preserves setuid, setgid, and sticky bits after restoring ownership`, async () => {
+      const context = await workspace();
+      const path = join(context.cwd, "target");
+      await fs.chmod(path, 0o7751);
+      const before = await fs.stat(path);
+      expect(before.mode & 0o7777).toBe(0o7751);
+      if (tool === "write")
+        await writeTool({ path: "target", content: "updated content" }, context);
+      else await editTool({ path: "target", oldText: "original", newText: "updated" }, context);
+      expect(await fs.readFile(path, "utf8")).toBe("updated content");
+      expect(await fs.stat(path)).toMatchObject({
+        uid: before.uid,
+        gid: before.gid,
+        mode: before.mode,
+      });
+    });
+
     it.each(["staging directory", "ownership restoration"])(
       `${tool} preserves the original when permissions block %s`,
       async (failure) => {

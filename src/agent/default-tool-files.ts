@@ -143,13 +143,13 @@ export async function writeTool(input: { path: string; content: string }, contex
     const staging = await mkdtemp(join(dirname(destination), ".tubeless-write-"));
     try {
       const temporary = join(staging, "content");
-      const file = await open(temporary, "wx", info ? info.mode & 0o777 : 0o666);
+      const file = await open(temporary, "wx", info ? info.mode & 0o7777 : 0o666);
       try {
         await file.writeFile(input.content, { encoding: "utf8", signal: context.signal });
         if (info) {
           await file.chown(info.uid, info.gid);
           // Creation and ownership changes can alter mode bits; restore them last.
-          await file.chmod(info.mode & 0o777);
+          await file.chmod(info.mode & 0o7777);
         }
       } finally {
         await file.close();
