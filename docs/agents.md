@@ -135,9 +135,19 @@ JSON Schema metadata on the agent's input schema.
 | `search` | `query`, optional `path`                    | Case-sensitive literal search with paths and line numbers; up to 50 matches and 16 KiB of path/text content.                                     |
 
 File reads, edits and writes support regular UTF-8 files up to 1 MiB; named pipes
-and devices are rejected. `read` rejects binary files. `search` skips binary and oversized files, `.git`, `node_modules`, and nested
-symlinks; it visits at most 2,000 entries and 32 directory levels. Search snippets
-are capped at 1,024 bytes per line; `skippedFiles` and `truncated` report omissions.
+and devices are rejected. `read` rejects binary files. `search` skips binary and
+oversized files, `.git`, `node_modules`, and nested symlinks. During directory
+searches it also skips unavailable descendants, retaining other matches;
+`skippedFiles` counts unsupported files and unavailable entries, counting an
+unavailable directory once. Missing or inaccessible explicit roots still fail,
+as do cancellation and unexpected I/O errors.
+
+List and search sort each directory in case-sensitive filename order before
+applying result limits or descending. Each visited directory's entry list is read
+in full for sorting; search processes at most 2,000 entries and 32 directory levels.
+Search snippets are capped at 1,024 UTF-8 bytes per line and shift to the first
+match when the initial snippet omits it. A query longer than that bound can itself
+be clipped; `truncated` reports omitted text or results.
 Listing caps retained names at 16 KiB. Result metadata is additional to these content limits.
 Nullable options select defaults. Application calls may omit these options;
 model descriptors require them explicitly with `null` accepted for defaults.

@@ -4,7 +4,7 @@ import {
   mkdir,
   mkdtemp,
   open,
-  opendir,
+  readdir,
   realpath,
   rename,
   rm,
@@ -28,6 +28,22 @@ function clippedText(text: string, maxBytes = MAX_OUTPUT_BYTES) {
     }),
     truncated: bytes.length > maxBytes,
   };
+}
+
+async function sortedEntries(path: string, signal?: AbortSignal) {
+  throwIfAborted(signal, "List files");
+  const entries = await readdir(path, { withFileTypes: true });
+  throwIfAborted(signal, "List files");
+  return entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+function unavailableEntry(error: unknown) {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    ["EACCES", "EPERM", "ENOENT", "ENOTDIR"].includes(error.code)
+  );
 }
 
 async function fileOperation<T>(context: Context, work: () => Promise<T>): Promise<T> {
@@ -159,7 +175,7 @@ export async function listTool(input: { path?: string | null }, context: Context
     const entries: { name: string; kind: "file" | "directory" | "symlink" | "other" }[] = [];
     let truncated = false;
     let bytes = 0;
-    for await (const entry of await opendir(path)) {
+    for (const entry of await sortedEntries(path, context.signal)) {
       throwIfAborted(context.signal, "List files");
       bytes += Buffer.byteLength(entry.name);
       if (entries.length === 200 || bytes > MAX_OUTPUT_BYTES) {
@@ -177,7 +193,6 @@ export async function listTool(input: { path?: string | null }, context: Context
               : "other",
       });
     }
-    entries.sort((a, b) => a.name.localeCompare(b.name));
     return { path, entries, truncated };
   });
 }
@@ -190,12 +205,17 @@ export async function searchTool(input: { query: string; path?: string | null },
     let bytes = 0;
     let truncated = false;
     let skippedFiles = 0;
-    async function searchFile(path: string) {
+    async function searchFile(path: string, discovered = false) {
       let text: string;
       try {
         text = await readText(path, context.signal);
       } catch (error) {
-        if (error instanceof ToolError && ["FILE_TOO_LARGE", "NOT_TEXT"].includes(error.code)) {
+        throwIfAborted(context.signal, "Search files");
+        if (
+          (error instanceof ToolError &&
+            ["FILE_TOO_LARGE", "NOT_TEXT", "NOT_FILE"].includes(error.code)) ||
+          (discovered && unavailableEntry(error))
+        ) {
           skippedFiles++;
           return;
         }
@@ -203,8 +223,12 @@ export async function searchTool(input: { query: string; path?: string | null },
       }
       const lines = text.split(/\r?\n/);
       for (let index = 0; index < lines.length; index++) {
-        if (!lines[index]!.includes(input.query)) continue;
-        const line = clippedText(lines[index]!, 1024);
+        const source = lines[index]!;
+        const match = source.indexOf(input.query);
+        if (match < 0) continue;
+        const line = clippedText(source, 1024);
+        if (line.truncated && !line.text.includes(input.query))
+          line.text = clippedText(source.slice(match), 1024).text;
         bytes += Buffer.byteLength(path) + Buffer.byteLength(line.text);
         if (matches.length === 50 || bytes > MAX_OUTPUT_BYTES) {
           truncated = true;
@@ -219,7 +243,13 @@ export async function searchTool(input: { query: string; path?: string | null },
         truncated = true;
         return;
       }
-      for await (const entry of await opendir(path)) {
+      const children = await sortedEntries(path, context.signal).catch((error: unknown) => {
+        throwIfAborted(context.signal, "Search files");
+        if (depth === 0 || !unavailableEntry(error)) throw error;
+        skippedFiles++;
+        return [];
+      });
+      for (const entry of children) {
         throwIfAborted(context.signal, "Search files");
         if (++entries > 2000 || matches.length >= 50 || bytes > MAX_OUTPUT_BYTES) {
           truncated = true;
@@ -227,7 +257,7 @@ export async function searchTool(input: { query: string; path?: string | null },
         }
         if (entry.isDirectory() && entry.name !== ".git" && entry.name !== "node_modules")
           await walk(join(path, entry.name), depth + 1);
-        else if (entry.isFile()) await searchFile(join(path, entry.name));
+        else if (entry.isFile()) await searchFile(join(path, entry.name), true);
       }
     }
     if ((await stat(root)).isFile()) await searchFile(root);

@@ -52,6 +52,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   [workspace recipe](../examples/agent-workspace.ts) for real file edits and shell checks.
   Writes and edits stage complete files before atomic replacement. Bash bounds
   pipe draining during cancellation; escaped descendants may outlive the tool.
+  List and search order entries by filename before applying caps. Directory
+  searches retain matches when descendants become unavailable and count skipped entries.
   State is copied and frozen per initialization/reduction. Register children with
   `pipelineTool`; reuse their options schema or supply `inputSchema` and
   `mapOptions` together. Follow the [delegation recipe](../examples/agent-delegation.ts).

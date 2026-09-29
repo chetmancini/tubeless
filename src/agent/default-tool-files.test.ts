@@ -1,12 +1,17 @@
 import * as fs from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { editTool, writeTool } from "./default-tool-files.js";
+import { editTool, listTool, searchTool, writeTool } from "./default-tool-files.js";
 
 vi.mock("node:fs/promises", { spy: true });
 const actualFs = await vi.importActual<typeof fs>("node:fs/promises");
 const directories: string[] = [];
+// These tests exercise the string-name, withFileTypes overload.
+const directoryReads = vi.mocked<
+  (path: string, options: { withFileTypes: true }) => Promise<Dirent[]>
+>(fs.readdir);
 async function workspace() {
   const cwd = await fs.mkdtemp(join(tmpdir(), "tubeless-tool-write-"));
   directories.push(cwd);
@@ -17,8 +22,132 @@ async function workspace() {
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.mocked(fs.open).mockReset().mockImplementation(actualFs.open);
+  directoryReads.mockReset().mockImplementation(actualFs.readdir);
   await Promise.all(
     directories.splice(0).map((path) => fs.rm(path, { recursive: true, force: true }))
+  );
+});
+
+describe("workspace search and listing", () => {
+  it("sorts directory entries before limiting a listing", async () => {
+    const context = await workspace();
+    const names = Array.from(
+      { length: 205 },
+      (_, index) => `file-${String(index).padStart(3, "0")}`
+    );
+    await Promise.all(
+      names
+        .slice()
+        .reverse()
+        .map((name) => fs.writeFile(join(context.cwd, name), ""))
+    );
+    const entries = await actualFs.readdir(context.cwd, { withFileTypes: true });
+    directoryReads.mockResolvedValueOnce(entries.slice().reverse());
+    const reversed = await listTool({}, context);
+    directoryReads.mockResolvedValueOnce(entries);
+    expect(await listTool({}, context)).toEqual(reversed);
+    expect(reversed.entries.map(({ name }) => name)).toEqual(names.slice(0, 200));
+    expect(reversed.truncated).toBe(true);
+  });
+
+  it("sorts directories before descending and applying search match limits", async () => {
+    const context = await workspace();
+    for (const name of ["z", "a"]) {
+      await fs.mkdir(join(context.cwd, name));
+      await fs.writeFile(join(context.cwd, name, "hits"), "needle\n".repeat(26));
+    }
+    const entries = await actualFs.readdir(context.cwd, { withFileTypes: true });
+    directoryReads.mockResolvedValueOnce(entries.slice().reverse());
+    const reversed = await searchTool({ query: "needle" }, context);
+    directoryReads.mockResolvedValueOnce(entries);
+    expect(await searchTool({ query: "needle" }, context)).toEqual(reversed);
+    expect(reversed.matches.map(({ path }) => path)).toEqual([
+      ...Array(26).fill(join(context.cwd, "a", "hits")),
+      ...Array(24).fill(join(context.cwd, "z", "hits")),
+    ]);
+    expect(reversed.truncated).toBe(true);
+  });
+
+  it.each(["EACCES", "EPERM", "ENOENT", "ENOTDIR"])(
+    "retains matches and counts a discovered file that fails with %s",
+    async (code) => {
+      const context = await workspace();
+      for (const name of ["a-before", "b-unavailable", "c-after"])
+        await fs.writeFile(join(context.cwd, name), "needle");
+      vi.mocked(fs.open).mockImplementation(async (...args) => {
+        if (args[0] === join(context.cwd, "b-unavailable"))
+          throw Object.assign(new Error("Unavailable"), { code });
+        return actualFs.open(...args);
+      });
+      const result = await searchTool({ query: "needle" }, context);
+      expect(result.matches.map(({ path }) => path)).toEqual([
+        join(context.cwd, "a-before"),
+        join(context.cwd, "c-after"),
+      ]);
+      expect(result.skippedFiles).toBe(1);
+      // An explicitly requested file must still report its failure.
+      await expect(
+        searchTool({ query: "needle", path: "b-unavailable" }, context)
+      ).rejects.toMatchObject({ code });
+    }
+  );
+
+  it("skips inaccessible descendant directories but rejects an inaccessible root", async () => {
+    const context = await workspace();
+    await fs.mkdir(join(context.cwd, "a-unavailable"));
+    await fs.writeFile(join(context.cwd, "z-after"), "needle");
+    const error = Object.assign(new Error("Access denied"), { code: "EACCES" });
+    directoryReads
+      .mockResolvedValueOnce(await actualFs.readdir(context.cwd, { withFileTypes: true }))
+      .mockRejectedValueOnce(error);
+    expect(await searchTool({ query: "needle" }, context)).toMatchObject({
+      matches: [{ path: join(context.cwd, "z-after"), line: 1, text: "needle" }],
+      skippedFiles: 1,
+    });
+    directoryReads.mockRejectedValueOnce(error);
+    await expect(searchTool({ query: "needle" }, context)).rejects.toMatchObject({
+      code: "EACCES",
+    });
+    await expect(searchTool({ query: "needle", path: "missing" }, context)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("does not swallow cancellation or unexpected read failures", async () => {
+    const context = await workspace();
+    const controller = new AbortController();
+    const reason = Object.assign(new Error("cancel search"), { code: "ENOENT" });
+    vi.mocked(fs.open).mockImplementationOnce(async () => {
+      controller.abort(reason);
+      throw reason;
+    });
+    await expect(
+      searchTool({ query: "needle" }, { ...context, signal: controller.signal })
+    ).rejects.toBe(reason);
+    vi.mocked(fs.open).mockRejectedValueOnce(
+      Object.assign(new Error("I/O failed"), { code: "EIO" })
+    );
+    await expect(searchTool({ query: "needle" }, context)).rejects.toMatchObject({ code: "EIO" });
+  });
+
+  it.each([
+    { prefix: "🙂".repeat(400), query: "needle", expected: "needle" },
+    { prefix: "x".repeat(1022), query: "needle", expected: "needle" },
+    { prefix: "🙂".repeat(400), query: "界".repeat(340), expected: "界".repeat(340) },
+    { prefix: "x".repeat(2000), query: "y".repeat(2000), expected: "y".repeat(1024) },
+  ])(
+    "shows long-line matches within the UTF-8 snippet limit ($query.length characters)",
+    async ({ prefix, query, expected }) => {
+      const context = await workspace();
+      await fs.writeFile(join(context.cwd, "long"), `header\n${prefix}${query}${"é".repeat(1000)}`);
+      const result = await searchTool({ query, path: "long" }, context);
+      expect(result.matches).toHaveLength(1);
+      expect(result.matches[0]!.line).toBe(2);
+      expect(result.matches[0]!.text.startsWith(expected)).toBe(true);
+      expect(Buffer.byteLength(result.matches[0]!.text)).toBeLessThanOrEqual(1024);
+      expect(result.matches[0]!.text).not.toContain("�");
+      expect(result.truncated).toBe(true);
+    }
   );
 });
 
