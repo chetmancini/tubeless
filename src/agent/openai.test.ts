@@ -1,0 +1,289 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { defineModelAgent, defineTool } from "./agent.js";
+import { openaiModel } from "./openai.js";
+import { openaiRequest } from "./openai-http.js";
+
+const directories: string[] = [];
+async function workspace() {
+  const cwd = await mkdtemp(join(tmpdir(), "tubeless-openai-"));
+  directories.push(cwd);
+  await mkdir(join(cwd, ".git"));
+  await writeFile(join(cwd, "AGENTS.md"), "Always verify edits.");
+  await writeFile(join(cwd, "target"), "actual text");
+  return cwd;
+}
+afterEach(async () => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  await Promise.all(
+    directories.splice(0).map((path) => rm(path, { recursive: true, force: true }))
+  );
+});
+const call = (name: string, input: unknown, id = "call_1") => ({
+  type: "function_call",
+  id: `fc_${id}`,
+  call_id: id,
+  name,
+  arguments: JSON.stringify({ [name === "_finish" ? "result" : "input"]: input }),
+  status: "completed",
+});
+const finish = () => call("_finish", { answer: "Done." }, "finish");
+const response = (output: unknown[]) => Response.json({ status: "completed", output });
+
+describe("OpenAI model", () => {
+  it("rejects reference schemas before HTTP even when conversation compaction is due", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetcher);
+    const schema = {
+      "~standard": {
+        version: 1 as const,
+        vendor: "fixture",
+        validate: (value: unknown) => ({ value }),
+        jsonSchema: {
+          input: () => ({
+            type: "object",
+            properties: { value: { $ref: "#/$defs/word" } },
+            $defs: { word: { type: "string" } },
+          }),
+        },
+      },
+    };
+    const transport = openaiModel({ apiKey: "fixture", compactAfterBytes: 1 });
+    const result = await defineModelAgent({
+      id: "schema-reference",
+      projectContext: false,
+      tools: {
+        custom: defineTool({
+          description: "A tool with a referenced argument schema.",
+          inputSchema: schema,
+          outputSchema: schema,
+          run: (input) => input,
+        }),
+      },
+      model: (request, context) =>
+        transport(
+          {
+            ...request,
+            conversation: [{ role: "user", content: request.task }],
+            outcomes: [{ id: "old", tool: "custom", ok: true, value: "prior result" }],
+          },
+          context
+        ),
+    }).run({ task: "Work" });
+    expect(result.status).toBe("failed");
+    expect(result.errors[0]!.message).toContain("$ref is unsupported");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("fails compaction errors without retrying or making another decision request", async () => {
+    const cwd = await workspace();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response([call("list", {})]))
+      .mockResolvedValueOnce(new Response("private provider error", { status: 500 }));
+    vi.stubGlobal("fetch", fetcher);
+    const result = await defineModelAgent({
+      id: "compact-error",
+      model: openaiModel({ apiKey: "fixture", compactAfterBytes: 1 }),
+    }).run({ task: "List" }, undefined, { cwd });
+    expect(result.status).toBe("failed");
+    expect(result.errors[0]!.message).toContain("responses/compact failed (HTTP 500)");
+    expect(result.errors[0]!.message).not.toContain("private provider error");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("aborts the active HTTP request at the configured decision deadline", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(
+      (_url, options) =>
+        new Promise((_resolve, reject) => {
+          options!.signal!.addEventListener("abort", () => reject(options!.signal!.reason), {
+            once: true,
+          });
+        })
+    );
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      defineModelAgent({
+        id: "deadline",
+        projectContext: false,
+        model: openaiModel({ apiKey: "fixture", timeoutMs: 25 }),
+      }).runOrThrow({ task: "Work" })
+    ).rejects.toThrow();
+    expect(fetcher.mock.calls[0]![1]!.signal!.aborted).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("replays every provider item and the exact ordered tool outputs with project instructions", async () => {
+    const cwd = await workspace();
+    const output = [
+      { type: "reasoning", id: "rs_1", summary: [], encrypted_content: "opaque" },
+      {
+        type: "message",
+        id: "msg_1",
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text: "Inspecting.", annotations: [] }],
+      },
+      call("read", { path: "target" }),
+      call("read", { path: "missing" }, "call_2"),
+    ];
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(output))
+      .mockResolvedValueOnce(response([finish()]));
+    vi.stubGlobal("fetch", fetcher);
+    const agent = defineModelAgent({
+      id: "openai",
+      model: openaiModel({ apiKey: "fixture", model: "fixture-model" }),
+    });
+    expect(await agent.runOrThrow({ task: "Inspect workspace" }, undefined, { cwd })).toEqual({
+      answer: "Done.",
+    });
+    const first = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
+    const second = JSON.parse(fetcher.mock.calls[1]![1]!.body as string);
+    expect(first).toMatchObject({
+      model: "fixture-model",
+      store: false,
+      include: ["reasoning.encrypted_content"],
+      tool_choice: "required",
+    });
+    expect(first.instructions).toContain("Always verify edits.");
+    expect(second.instructions).toBe(first.instructions);
+    expect(second.input.slice(0, 5)).toEqual([
+      { role: "user", content: "Inspect workspace" },
+      ...output,
+    ]);
+    expect(
+      second.input
+        .slice(5)
+        .map((item: { call_id: string; output: string }) => [item.call_id, JSON.parse(item.output)])
+    ).toMatchObject([
+      ["call_1", { ok: true, value: { content: "actual text" } }],
+      ["call_2", { ok: false, error: { code: "ENOENT" } }],
+    ]);
+    expect(second).not.toHaveProperty("previous_response_id");
+  });
+
+  it("compacts completed batches and uses the entire returned window unchanged", async () => {
+    const cwd = await workspace();
+    const compacted = [
+      { role: "user", content: "retained task" },
+      { type: "compaction", id: "cmp_1", encrypted_content: "encrypted" },
+    ];
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response([call("read", { path: "target" })]))
+      .mockResolvedValueOnce(Response.json({ object: "response.compaction", output: compacted }))
+      .mockResolvedValueOnce(response([finish()]));
+    vi.stubGlobal("fetch", fetcher);
+    const log = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    await defineModelAgent({
+      id: "compact",
+      model: openaiModel({ apiKey: "fixture", compactAfterBytes: 1 }),
+    }).runOrThrow({ task: "Read target" }, undefined, { cwd, log });
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "https://api.openai.com/v1/responses",
+      "https://api.openai.com/v1/responses/compact",
+      "https://api.openai.com/v1/responses",
+    ]);
+    const compactBody = JSON.parse(fetcher.mock.calls[1]![1]!.body as string);
+    expect(compactBody.input.at(-1)).toMatchObject({
+      type: "function_call_output",
+      call_id: "call_1",
+    });
+    expect(JSON.parse(fetcher.mock.calls[2]![1]!.body as string).input).toEqual(compacted);
+    expect(log.log).toHaveBeenCalledWith("Compacted agent conversation");
+  });
+
+  it("does not make a decision request after cancellation during compaction", async () => {
+    const cwd = await workspace();
+    const controller = new AbortController();
+    const reason = new Error("stop compaction");
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response([call("list", {})]))
+      .mockImplementationOnce(async () => {
+        controller.abort(reason);
+        return Response.json({
+          object: "response.compaction",
+          output: [{ type: "compaction", encrypted_content: "opaque" }],
+        });
+      });
+    vi.stubGlobal("fetch", fetcher);
+    const result = await defineModelAgent({
+      id: "cancel",
+      model: openaiModel({ apiKey: "fixture", compactAfterBytes: 1 }),
+    }).run({ task: "List" }, undefined, { cwd, signal: controller.signal });
+    expect(result.status).toBe("cancelled");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { status: "incomplete", output: [finish()] },
+    { status: "completed", output: [call("_finish", { answer: "bad" }), call("list", {})] },
+    {
+      status: "completed",
+      output: [{ type: "message", content: [{ type: "refusal", refusal: "no" }] }],
+    },
+    { status: "completed", output: [{ ...call("list", {}), arguments: "not json" }] },
+    {
+      status: "completed",
+      output: [{ ...call("list", {}), arguments: '{"input":{},"extra":true}' }],
+    },
+    { status: "completed", output: [call("not_registered", {})] },
+    { status: "completed", output: [] },
+  ])("fails invalid model output without starting another request: %j", async (body) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(body));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      defineModelAgent({
+        id: "invalid",
+        projectContext: false,
+        model: openaiModel({ apiKey: "fixture" }),
+      }).runOrThrow({ task: "Do work" })
+    ).rejects.toThrow();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves credentials lazily and forwards cancellation to HTTP", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([finish()]));
+    vi.stubGlobal("fetch", fetcher);
+    const agent = defineModelAgent({ id: "lazy", projectContext: false, model: openaiModel() });
+    expect(agent.plan().ok).toBe(true);
+    await agent.run({ task: "Do work" }, { dryRun: true });
+    expect(fetcher).not.toHaveBeenCalled();
+    await expect(agent.runOrThrow({ task: "Do work" })).rejects.toThrow();
+    expect(fetcher).not.toHaveBeenCalled();
+    vi.stubEnv("OPENAI_API_KEY", "late-credential");
+    await agent.runOrThrow({ task: "Do work" });
+    expect(fetcher.mock.calls[0]![1]!.headers).toMatchObject({
+      Authorization: "Bearer late-credential",
+    });
+    expect(fetcher.mock.calls[0]![1]!.signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+it("bounds HTTP payloads and excludes error bodies from diagnostics", async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(new Response("PRIVATE RESPONSE", { status: 429 }));
+  vi.stubGlobal("fetch", fetcher);
+  const signal = new AbortController().signal;
+  await expect(
+    openaiRequest("responses", { input: "x".repeat(1_048_576) }, "fixture", signal)
+  ).rejects.toThrow("request exceeds");
+  expect(fetcher).not.toHaveBeenCalled();
+  await expect(openaiRequest("responses", {}, "fixture", signal)).rejects.toThrow(
+    "OpenAI responses failed (HTTP 429)"
+  );
+  fetcher.mockResolvedValueOnce(new Response("x".repeat(2_097_153)));
+  await expect(openaiRequest("responses", {}, "fixture", signal)).rejects.toThrow(
+    "response exceeds"
+  );
+  fetcher.mockResolvedValueOnce(new Response("invalid json"));
+  await expect(openaiRequest("responses", {}, "fixture", signal)).rejects.toThrow("invalid JSON");
+});

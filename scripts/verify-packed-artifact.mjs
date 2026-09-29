@@ -151,6 +151,7 @@ try {
     "docs/agents.md",
     "examples/agent.ts",
     "examples/agent-workspace.ts",
+    "examples/agent-model.ts",
     "docs/remote-step-composition.md",
     "docs/cli.md",
     "docs/concepts.md",

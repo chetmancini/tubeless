@@ -7,16 +7,20 @@
         "AgentDecision",
         "AgentDecisionContext",
         "AgentLimits",
+        "AgentModel",
+        "AgentModelRequest",
+        "AgentModelResponse",
         "AgentOutcome",
         "AgentState",
         "AgentTool",
         "DefaultAgentTools",
         "defineAgent",
+        "defineModelAgent",
         "defineTool",
         "pipelineTool",
         "ToolError"
       ],
-      "sha256": "efa40f80af70843accc4320d8579448689fdfaa4a629223349ca1e5790cd29bd",
+      "sha256": "a10be7265ec35563e37c9bdfa2b9fdcfa494ad516e97ed11c490fc8a38c90109",
       "specifier": "tubeless/agent"
     },
     {
@@ -233,6 +237,12 @@
       "exports": ["composeTraceExporters", "PipelineTraceEvent", "PipelineTraceExporter"],
       "sha256": "5e5d5d09edd191d41a29b584a2ab368038dcb3db91b6c20709c19e6ed189fb97",
       "specifier": "tubeless/tracing"
+    },
+    {
+      "declaration": "./dist/agent/openai.d.ts",
+      "exports": ["openaiModel", "OpenAIModelOptions"],
+      "sha256": "d25280b676a1c5e1677749b6d3a9989e8af5fe825d2c28bcd6f2caf28a157f27",
+      "specifier": "tubeless/agent/openai"
     }
   ],
   "packageName": "tubeless",

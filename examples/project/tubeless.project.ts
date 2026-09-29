@@ -11,6 +11,7 @@ import { CachedCountCommand } from "../step-output-cache.ts";
 import { PaginatedPipeline } from "../iteration.ts";
 import { ScriptedAgent } from "../agent.ts";
 import { DelegatingAgentCommand } from "../agent-delegation.ts";
+import { CodingAgent } from "../agent-model.js";
 import { OpenAIAgentCommand } from "../agent-openai.ts";
 import { WorkspaceAgentCommand } from "../agent-workspace.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
@@ -37,6 +38,7 @@ export default defineProject(
     CachedCountCommand,
     ScriptedAgent,
     OpenAIAgentCommand,
+    CodingAgent,
     DelegatingAgentCommand,
     WorkspaceAgentCommand,
     definePipelineCommand(PaginatedPipeline, {

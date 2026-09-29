@@ -17,7 +17,6 @@ import { runConcurrentPartial } from "../utilities/batch.js";
 import { ownState } from "./agent-state.js";
 import { decisionEnvelope, prepareCalls, type PreparedCall } from "./decision.js";
 import type {
-  AgentDefinition,
   AgentDecisionContext,
   AgentLimits,
   AgentOutcome,
@@ -25,6 +24,7 @@ import type {
   Output,
   Tools,
 } from "./agent-types.js";
+import type { RuntimeAgentDefinition } from "./compile-agent.js";
 import type { CompiledTool, ToolInvocation } from "./tools.js";
 
 export interface TurnState<State> {
@@ -52,7 +52,7 @@ export function createAgentTurn<
   State,
   Registry extends Tools,
 >(
-  definition: AgentDefinition<string, Options, Result, State, Registry>,
+  definition: RuntimeAgentDefinition<string, Options, Result, State, Registry>,
   registry: ReadonlyMap<string, CompiledTool>,
   limits: Required<AgentLimits>,
   descriptors: Pick<AgentDecisionContext<Output<Options>>, "capabilities" | "resultJsonSchema">
@@ -60,7 +60,7 @@ export function createAgentTurn<
   type TurnOptions = { execution: TurnState<State>; options: Output<Options>; agentRunId: string };
   type Decision =
     | { kind: "finish"; result: Output<Result> }
-    | { kind: "continue"; calls: PreparedCall[] };
+    | { kind: "continue"; calls: PreparedCall[]; state: AgentState<State> };
   const { step } = createSteps<TurnOptions>();
   const decide = step("decide", {
     description: "Request and validate one decision, including the complete call batch.",
@@ -89,7 +89,7 @@ export function createAgentTurn<
         context.signal
       );
       throwIfAborted(context.signal, "Agent decision");
-      const decision = decisionEnvelope(response);
+      const decision = decisionEnvelope(response.decision);
       context.reportAttempt(1, {
         ...attributes,
         "agent.decision": decision.kind,
@@ -106,7 +106,12 @@ export function createAgentTurn<
       }
       if (turn === limits.maxTurns) limit("maxTurns", limits.maxTurns, turn, 1, agentRunId);
       scope.check("maxCalls", decision.calls.length);
-      return { kind: "continue", calls: await prepareCalls(decision.calls, registry, context) };
+      const stateAfterDecision = ownState(response.state);
+      return {
+        kind: "continue",
+        calls: await prepareCalls(decision.calls, registry, context),
+        state: stateAfterDecision,
+      };
     },
   });
   const calls = step("calls", {
@@ -195,8 +200,8 @@ export function createAgentTurn<
       const { execution } = context.options;
       throwIfAborted(context.signal, "Agent reduction");
       const state = definition.reduce
-        ? ownState(definition.reduce(execution.state, outcomes))
-        : execution.state;
+        ? ownState(definition.reduce(decision.state, outcomes))
+        : decision.state;
       throwIfAborted(context.signal, "Agent reduction");
       context.reportAttempt(1, {
         "agent.runId": context.options.agentRunId,

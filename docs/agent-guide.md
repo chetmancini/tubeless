@@ -40,6 +40,16 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   step/pipeline metadata. Read [graph metadata](./graph-metadata.md) and adapt
   [the recipe](../examples/graph-metadata.ts).
 
+- For a general workspace agent, use `defineModelAgent({ id, model })` from
+  `tubeless/agent` with `openaiModel()` from `tubeless/agent/openai`. It supplies
+  task/answer schemas, a customizable coding prompt, startup AGENTS.md discovery,
+  and per-run conversation ownership. The optional provider adapter retains native
+  history and compacts it before subsequent decisions. Add `instructions`, custom
+  `tools`, or tighter `limits` as needed; the OpenAI adapter requires inline tool
+  descriptors and rejects schema references before HTTP. Read [the model-agent contract](./agents.md#default-model-backed-agent)
+  and adapt [the minimal recipe](../examples/agent-model.ts). Use `bun run eval:agent`
+  for opt-in paid workspace evaluations; routine CI stays credential-free.
+
 - Use `defineAgent`, `defineTool`, and `pipelineTool` from `tubeless/agent` for an in-process
   decision loop over registered handlers, pipelines, and child agents. Read [agents](./agents.md) and
   adapt the credential-free [scripted recipe](../examples/agent.ts) or the

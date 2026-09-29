@@ -65,7 +65,8 @@
     "test:coverage": "vitest run --config vitest.config.ts --coverage",
     "typecheck": "bun run build && bun run typecheck:run",
     "typecheck:run": "tsc -p tsconfig.json --noEmit && tsc -p examples/tsconfig.json --noEmit && tsc -p tsconfig.automation.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p design/tsconfig.json",
-    "pack:verify": "node scripts/verify-packed-artifact.mjs"
+    "pack:verify": "node scripts/verify-packed-artifact.mjs",
+    "eval:agent": "bun run build && node scripts/eval-agent.mjs"
   },
   "devDependencies": {
     "@dagster-io/dagster-pipes": "0.1.0",
@@ -137,6 +138,11 @@
       "types": "./dist/tracing/tracing.d.ts",
       "import": "./dist/tracing/tracing.js",
       "default": "./dist/tracing/tracing.js"
+    },
+    "./agent/openai": {
+      "types": "./dist/agent/openai.d.ts",
+      "import": "./dist/agent/openai.js",
+      "default": "./dist/agent/openai.js"
     }
   }
 }
