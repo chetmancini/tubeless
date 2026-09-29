@@ -1,4 +1,15 @@
-import { mkdir, open, opendir, stat } from "node:fs/promises";
+import {
+  access,
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  opendir,
+  realpath,
+  rename,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { PipelineStepContext } from "../core/pipeline-types.js";
@@ -92,14 +103,30 @@ export async function writeTool(input: { path: string; content: string }, contex
     if (bytes > MAX_FILE_BYTES) throw new ToolError("FILE_TOO_LARGE", "Content exceeds 1 MiB");
     await mkdir(dirname(path), { recursive: true });
     throwIfAborted(context.signal, "Write file");
-    const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_NONBLOCK);
+    const entry = await lstat(path).catch((error: unknown) => {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
+      throw error;
+    });
+    // Preserve an existing symlink and replace its resolved target, not the link.
+    const destination = entry?.isSymbolicLink() ? await realpath(path) : path;
+    const info = entry?.isSymbolicLink() ? await stat(destination) : entry;
+    if (info && !info.isFile()) throw new ToolError("NOT_FILE", "Expected a regular file");
+    if (info) await access(destination, constants.W_OK);
+    const staging = await mkdtemp(join(dirname(destination), ".tubeless-write-"));
     try {
-      if (!(await file.stat()).isFile()) throw new ToolError("NOT_FILE", "Expected a regular file");
+      const temporary = join(staging, "content");
+      const file = await open(temporary, "wx", info ? info.mode & 0o777 : 0o666);
+      try {
+        await file.writeFile(input.content, { encoding: "utf8", signal: context.signal });
+        // Creation applies umask; restore existing permission bits after writing.
+        if (info) await file.chmod(info.mode & 0o777);
+      } finally {
+        await file.close();
+      }
       throwIfAborted(context.signal, "Write file");
-      await file.truncate(0);
-      await file.writeFile(input.content, { encoding: "utf8", signal: context.signal });
+      await rename(temporary, destination);
     } finally {
-      await file.close();
+      await rm(staging, { recursive: true, force: true });
     }
     return { path, bytes };
   });

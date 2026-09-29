@@ -183,7 +183,7 @@ describe("default agent tools", () => {
     ]).runOrThrow({}, undefined, { cwd });
     expect(outcomes).toMatchObject([
       { ok: false, error: { code: "NOT_FILE" } },
-      { ok: false, error: { code: "ENXIO" } },
+      { ok: false, error: { code: "NOT_FILE" } },
       { ok: false, error: { code: "NOT_FILE" } },
     ]);
   });

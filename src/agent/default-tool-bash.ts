@@ -65,7 +65,14 @@ export function bashTool(
       if (stopping) return;
       stopping = true;
       kill("SIGTERM");
-      escalation = setTimeout(() => kill("SIGKILL"), 250);
+      escalation = setTimeout(() => {
+        kill("SIGKILL");
+        // A descendant can escape the group while keeping these pipes open.
+        // Bound output draining so it cannot prevent the owned child from closing.
+        if (!child.stdout.readableEnded || !child.stderr.readableEnded) truncated = true;
+        child.stdout.destroy();
+        child.stderr.destroy();
+      }, 250);
     };
     const timeout = setTimeout(() => {
       timedOut = true;

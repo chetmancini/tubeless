@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -101,4 +101,66 @@ describe("default bash tool", () => {
       expect.objectContaining({ code: "BASH_FAILED" })
     );
   });
+
+  it.each(["timeout", "cancellation"] as const)(
+    "settles %s when an escaped descendant keeps both output pipes open",
+    async (mode) => {
+      const context = await workspace();
+      await symlink(process.execPath, join(context.cwd, "node"));
+      const descendant = `
+        process.stdout.write("held stdout");
+        process.stderr.write("held stderr");
+        require("node:fs").writeFileSync("ready", "ready");
+        setTimeout(() => {}, 10000);
+      `;
+      await writeFile(
+        join(context.cwd, "launcher.cjs"),
+        `
+          const child = require("node:child_process").spawn(
+            process.execPath, ["-e", ${JSON.stringify(descendant)}],
+            { detached: true, stdio: ["ignore", process.stdout, process.stderr] }
+          );
+          require("node:fs").writeFileSync("descendant.pid", String(child.pid));
+          child.unref();
+        `
+      );
+      const controller = new AbortController();
+      const reason = new Error("cancel escaped descendant");
+      let settled = false;
+      const outcome = bashTool(
+        { command: "exec ./node launcher.cjs", timeoutMs: mode === "timeout" ? 1000 : 10000 },
+        { ...context, signal: controller.signal }
+      )
+        .catch((error: unknown) => error)
+        .finally(() => {
+          settled = true;
+        });
+      try {
+        await vi.waitFor(async () =>
+          expect(await readFile(join(context.cwd, "ready"), "utf8")).toBe("ready")
+        );
+        expect(settled).toBe(false);
+        if (mode === "cancellation") controller.abort(reason);
+        await vi.waitFor(() => expect(settled).toBe(true), { timeout: 2000 });
+        if (mode === "cancellation") expect(await outcome).toBe(reason);
+        else
+          expect(await outcome).toMatchObject({
+            exitCode: 0,
+            signal: null,
+            stdout: "held stdout",
+            stderr: "held stderr",
+            timedOut: true,
+            truncated: true,
+          });
+        // It escaped the command's process group; settling cannot rely on killing it.
+        const pid = Number(await readFile(join(context.cwd, "descendant.pid"), "utf8"));
+        expect(() => process.kill(pid, 0)).not.toThrow();
+      } finally {
+        controller.abort(reason);
+        const pid = Number(await readFile(join(context.cwd, "descendant.pid"), "utf8"));
+        process.kill(pid, "SIGKILL");
+        await outcome;
+      }
+    }
+  );
 });

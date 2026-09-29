@@ -50,6 +50,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   `tools` adds capabilities or replaces defaults by name; narrow reducer outcomes
   by `ok` and `tool`. Paths resolve from the run cwd. Follow the
   [workspace recipe](../examples/agent-workspace.ts) for real file edits and shell checks.
+  Writes and edits stage complete files before atomic replacement. Bash bounds
+  pipe draining during cancellation; escaped descendants may outlive the tool.
   State is copied and frozen per initialization/reduction. Register children with
   `pipelineTool`; reuse their options schema or supply `inputSchema` and
   `mapOptions` together. Follow the [delegation recipe](../examples/agent-delegation.ts).
