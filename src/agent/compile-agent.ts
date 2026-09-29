@@ -18,6 +18,7 @@ import { defaultTools } from "./default-tools.js";
 import { setExecutionScope } from "../core/execution-scope.js";
 import { AgentExecutionScope, resolvedLimits } from "./execution-scope.js";
 import { createAgentTurn, type TurnState } from "./turn.js";
+import { throwIfAborted } from "../utilities/abort.js";
 import type {
   AgentDefinition,
   AgentDecisionContext,
@@ -59,7 +60,8 @@ export function compileAgent<
   State,
   const Registry extends Tools = {},
 >(
-  definition: RuntimeAgentDefinition<Id, Options, Result, State, Registry>
+  definition: RuntimeAgentDefinition<Id, Options, Result, State, Registry>,
+  resolveCwd?: (cwd: string) => Promise<string>
 ): Pipeline<Input<Options>, Output<Result>, "agent", "agent", Id> & {
   readonly optionsSchema: Options;
   readonly definition: PipelineDefinitionSnapshot;
@@ -124,6 +126,15 @@ export function compileAgent<
     }),
     transition: (result) => result,
   });
+  const compiledAgent: AnyStep = agent;
+  if (resolveCwd) {
+    // Resolve once before iteration so decisions and all child calls share one cwd.
+    const run = compiledAgent.run;
+    compiledAgent.run = async (inputs, context) => {
+      throwIfAborted(context.signal, "Agent workspace");
+      return run(inputs, { ...context, cwd: await resolveCwd(context.cwd) });
+    };
+  }
   Object.defineProperty(agent, STEP_AGENT, {
     value: Object.freeze({
       limits,
@@ -140,7 +151,6 @@ export function compileAgent<
       ),
     }),
   });
-  const compiledAgent: AnyStep = agent;
   const pipeline = definePipeline({
     id: config.id,
     name: config.name,

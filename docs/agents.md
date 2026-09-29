@@ -46,8 +46,11 @@ The prompt asks the agent to inspect before editing, preserve unrelated work,
 recover from tool errors, verify changes, and distinguish verified results from
 remaining limitations. At the first live decision, project context loads
 `AGENTS.md` from the nearest repository root through the run's cwd, in that order.
-A symlinked cwd is resolved to its physical directory before finding that root,
-so guidance comes from the project containing the files. A `.git` file also marks
+A live model-agent run resolves cwd to its physical directory once, before any
+decision or tool call. The prompt, file tools, bash, custom tools, and child
+pipelines all use that directory, including when resolving `..`. This also applies
+with `projectContext: false`; planning and dry runs do not resolve cwd.
+Guidance comes from the project containing the files. A `.git` file also marks
 a worktree root. Outside a repository it loads only cwd's
 file. More specific directory instructions take precedence. Deeper directories
 and files referenced by those instructions are read by the agent when needed;
@@ -69,7 +72,8 @@ Expected tool failures are outcomes; fatal failure or cancellation stops the run
 The optional OpenAI subpath uses native fetch and adds no SDK dependency. It defaults
 to `OPENAI_MODEL` or `gpt-5.4-mini`; `openaiModel({ model, apiKey })` supplies explicit
 values. Model names are trimmed; a blank `OPENAI_MODEL` uses the default, while an
-explicit blank model is rejected locally. Environment credentials are read at execution, so imports, plans, and dry
+explicit blank model is rejected locally. API keys are trimmed before use.
+Environment credentials are read at execution, so imports, plans, and dry
 runs need no API key. Live runs make paid API requests and execute workspace tools
 with the host's existing permissions. Dry runs skip the model and have no final answer.
 

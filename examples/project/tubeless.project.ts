@@ -38,6 +38,7 @@ export default defineProject(
     CachedCountCommand,
     ScriptedAgent,
     OpenAIAgentCommand,
+    // Live model decisions and tools share the physical run cwd, including through symlinks.
     CodingAgent,
     DelegatingAgentCommand,
     WorkspaceAgentCommand,

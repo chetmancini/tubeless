@@ -366,15 +366,21 @@ describe("OpenAI model", () => {
     const log = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
     await defineModelAgent({
       id: "compact",
-      model: openaiModel({ apiKey: "fixture", model: " fixture-model ", compactAfterBytes: 1 }),
+      model: openaiModel({
+        apiKey: " \t\nfixture\r\n ",
+        model: " fixture-model ",
+        compactAfterBytes: 1,
+      }),
     }).runOrThrow({ task: "Read target" }, undefined, { cwd, log });
     expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
       "https://api.openai.com/v1/responses",
       "https://api.openai.com/v1/responses/compact",
       "https://api.openai.com/v1/responses",
     ]);
-    for (const [, options] of fetcher.mock.calls)
+    for (const [, options] of fetcher.mock.calls) {
       expect(JSON.parse(options!.body as string).model).toBe("fixture-model");
+      expect(new Headers(options!.headers).get("Authorization")).toBe("Bearer fixture");
+    }
     const compactBody = JSON.parse(fetcher.mock.calls[1]![1]!.body as string);
     expect(compactBody.input.at(-1)).toMatchObject({
       type: "function_call_output",
@@ -444,7 +450,7 @@ describe("OpenAI model", () => {
     expect(fetcher).not.toHaveBeenCalled();
     await expect(agent.runOrThrow({ task: "Do work" })).rejects.toThrow();
     expect(fetcher).not.toHaveBeenCalled();
-    vi.stubEnv("OPENAI_API_KEY", "late-credential");
+    vi.stubEnv("OPENAI_API_KEY", " \t\nlate-credential\r\n ");
     await agent.runOrThrow({ task: "Do work" });
     expect(fetcher.mock.calls[0]![1]!.headers).toMatchObject({
       Authorization: "Bearer late-credential",

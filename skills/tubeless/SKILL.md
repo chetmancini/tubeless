@@ -122,7 +122,7 @@ Read the corresponding package recipe before using these features:
   workspace agent. `openaiModel()` from `tubeless/agent/openai` supplies the optional
   Responses adapter. Run with `{ task }` to get `{ answer }`; add `instructions`,
   tools or execution limits as needed. The factory loads startup AGENTS.md guidance
-  from the physical workspace path
+  from the physical workspace path, shared by the model and every tool call,
   and owns isolated conversation state. The adapter preserves native history and
   compacts completed turns. Custom OpenAI tool descriptors must be inline; provide
   `inputJsonSchema` when generated descriptors contain references. All object

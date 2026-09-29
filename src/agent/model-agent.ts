@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import type { StandardSchemaV1 } from "../core/pipeline-types.js";
 import type { AgentLimits, AgentOutcome, Tools } from "./agent-types.js";
 import type { AgentModel } from "./model-types.js";
@@ -42,31 +43,34 @@ export function defineModelAgent<
     typeof projectContext !== "boolean"
   )
     throw agentError("TUBELESS_AGENT_INVALID_DEFINITION", "Invalid model agent configuration");
-  return compileAgent({
-    ...config,
-    inputSchema,
-    resultSchema: answer,
-    initialState: ({ task }): ModelState => {
-      if (Buffer.byteLength(task) > 16_384) throw new Error("Task exceeds 16384 UTF-8 bytes");
-      return { conversation: null, outcomes: [] };
+  return compileAgent(
+    {
+      ...config,
+      inputSchema,
+      resultSchema: answer,
+      initialState: ({ task }): ModelState => {
+        if (Buffer.byteLength(task) > 16_384) throw new Error("Task exceeds 16384 UTF-8 bytes");
+        return { conversation: null, outcomes: [] };
+      },
+      decide: async (state, context) => {
+        const prompt =
+          state.instructions ??
+          (await modelInstructions(context.cwd, instructions, projectContext, context.signal));
+        const response = await model(
+          { ...state, instructions: prompt, task: context.options.task },
+          context
+        );
+        return {
+          decision: response.decision,
+          state: {
+            instructions: prompt,
+            conversation: response.conversation,
+            outcomes: [],
+          },
+        };
+      },
+      reduce: (state, outcomes) => ({ ...state, outcomes }),
     },
-    decide: async (state, context) => {
-      const prompt =
-        state.instructions ??
-        (await modelInstructions(context.cwd, instructions, projectContext, context.signal));
-      const response = await model(
-        { ...state, instructions: prompt, task: context.options.task },
-        context
-      );
-      return {
-        decision: response.decision,
-        state: {
-          instructions: prompt,
-          conversation: response.conversation,
-          outcomes: [],
-        },
-      };
-    },
-    reduce: (state, outcomes) => ({ ...state, outcomes }),
-  });
+    realpath
+  );
 }

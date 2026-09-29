@@ -43,7 +43,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 - For a general workspace agent, use `defineModelAgent({ id, model })` from
   `tubeless/agent` with `openaiModel()` from `tubeless/agent/openai`. It supplies
   task/answer schemas, a customizable coding prompt, startup AGENTS.md discovery
-  from the physical workspace directory,
+  from the physical workspace directory, shared by the model and all tool calls,
   and per-run conversation ownership. The optional provider adapter retains native
   history and compacts it before subsequent decisions. Add `instructions`, custom
   `tools`, or tighter `limits` as needed; the OpenAI adapter requires inline tool

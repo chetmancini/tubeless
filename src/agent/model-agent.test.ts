@@ -171,8 +171,11 @@ describe("model agents", () => {
     const model = vi.fn();
     const agent = defineModelAgent({ id: "preview", model });
     expect(agent.plan().ok).toBe(true);
-    const result = await agent.run({ task: "Do work" }, { dryRun: true }, { cwd });
-    expect(result.finalized).toBe(false);
+    for (const directory of [cwd, join(cwd, "missing")]) {
+      const result = await agent.run({ task: "Do work" }, { dryRun: true }, { cwd: directory });
+      expect(result.steps[0]?.status).toBe("skipped");
+      expect(result.finalized).toBe(false);
+    }
     expect(model).not.toHaveBeenCalled();
   });
 

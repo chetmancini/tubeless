@@ -12,8 +12,8 @@ export async function openaiRequest(
   const body = JSON.stringify(payload);
   if (Buffer.byteLength(body) > MAX_REQUEST_BYTES) throw new Error("OpenAI request exceeds 1 MiB");
   throwIfAborted(signal, "OpenAI request");
-  const key = apiKey ?? process.env.OPENAI_API_KEY;
-  if (!key?.trim()) throw new Error("OPENAI_API_KEY is required for live model execution");
+  const key = (apiKey ?? process.env.OPENAI_API_KEY)?.trim();
+  if (!key) throw new Error("OPENAI_API_KEY is required for live model execution");
   const response = await fetch(`https://api.openai.com/v1/${endpoint}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
