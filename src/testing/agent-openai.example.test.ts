@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "v
 import { createPipelineTestRuntime } from "tubeless/testing";
 import type { PipelineTraceEvent } from "tubeless/tracing";
 import { OpenAIAgent } from "../../examples/agent-openai.js";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 const fetchMock = vi.fn<typeof fetch>();
 beforeEach(() => {
@@ -43,6 +46,36 @@ function recording() {
 }
 
 describe("OpenAI agent recipe", () => {
+  it("advertises the defaults with explicit nullable options and executes a model-selected read", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "tubeless-model-tools-"));
+    try {
+      await writeFile(join(cwd, "note.txt"), "hello defaults");
+      respond(call("read", { input: { path: "note.txt", startLine: null, maxLines: null } }));
+      respond(call("_finish", { result: "hello defaults" }));
+      expect(
+        await OpenAIAgent.runOrThrow({ question: "Read note.txt" }, undefined, { cwd })
+      ).toEqual({ answer: "hello defaults" });
+      const read = request(0).tools.find((tool: { name: string }) => tool.name === "read");
+      expect(read).toMatchObject({
+        strict: true,
+        parameters: {
+          properties: {
+            input: {
+              additionalProperties: false,
+              required: ["path", "startLine", "maxLines"],
+              properties: { startLine: { anyOf: [{ type: "integer" }, { type: "null" }] } },
+            },
+          },
+        },
+      });
+      expect(JSON.parse(request(1).input).state.observations).toMatchObject([
+        { tool: "read", ok: true, value: { content: "hello defaults" } },
+      ]);
+      expect(await readFile(join(cwd, "note.txt"), "utf8")).toBe("hello defaults");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
   it("runs model-selected batches, supplies accumulated outcomes, and validates the final answer", async () => {
     vi.stubEnv("OPENAI_MODEL", "example-model");
     respond(
@@ -75,16 +108,28 @@ describe("OpenAI agent recipe", () => {
       max_output_tokens: 2048,
       tool_choice: "required",
       parallel_tool_calls: true,
-      tools: [
-        { name: "count", strict: true, parameters: { properties: { input: { type: "string" } } } },
-        { name: "uppercase", strict: true },
-        {
-          name: "_finish",
-          strict: true,
-          parameters: { properties: { result: { type: "string" } } },
-        },
-      ],
     });
+    expect(request(0).tools.find((tool: { name: string }) => tool.name === "count")).toMatchObject({
+      strict: true,
+      parameters: { properties: { input: { type: "string" } } },
+    });
+    expect(
+      request(0).tools.find((tool: { name: string }) => tool.name === "_finish")
+    ).toMatchObject({
+      strict: true,
+      parameters: { properties: { result: { type: "string" } } },
+    });
+    expect(request(0).tools.map((tool: { name: string }) => tool.name)).toEqual([
+      "bash",
+      "count",
+      "edit",
+      "list",
+      "read",
+      "search",
+      "uppercase",
+      "write",
+      "_finish",
+    ]);
     expect(JSON.parse(request(0).input)).toEqual({
       state: { question, observations: [] },
       turn: 1,

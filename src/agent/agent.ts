@@ -14,6 +14,7 @@ import {
   ownState,
 } from "./agent-state.js";
 import { compileTool } from "./tools.js";
+import { defaultTools } from "./default-tools.js";
 import { setExecutionScope } from "../core/execution-scope.js";
 import { AgentExecutionScope, resolvedLimits } from "./execution-scope.js";
 import { createAgentTurn, type TurnState } from "./turn.js";
@@ -21,6 +22,7 @@ import type { AgentDefinition, Input, Output, Tools } from "./agent-types.js";
 
 export { pipelineTool } from "./pipeline-tool.js";
 export { defineTool, ToolError } from "./tools.js";
+export type { DefaultAgentTools } from "./default-tools.js";
 export type {
   AgentCall,
   AgentDecision,
@@ -62,7 +64,7 @@ export function defineAgent<
     config.resultJsonSchema,
     "Agent result"
   );
-  const entries = Object.entries(config.tools ?? {}).sort(([a], [b]) =>
+  const entries = Object.entries({ ...defaultTools, ...config.tools }).sort(([a], [b]) =>
     a < b ? -1 : a > b ? 1 : 0
   );
   if (entries.length > 4096)

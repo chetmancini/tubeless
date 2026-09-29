@@ -46,6 +46,10 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   [OpenAI recipe](../examples/agent-openai.ts) for a real provider callback. Keep model
   requests and prompts in `decide`; validate every tool input/output and the final
   result. Return `continue` with a nonempty batch or `finish` with a raw result.
+  Every agent includes `read`, `write`, `edit`, `bash`, `list`, and `search`.
+  `tools` adds capabilities or replaces defaults by name; narrow reducer outcomes
+  by `ok` and `tool`. Paths resolve from the run cwd. Follow the
+  [workspace recipe](../examples/agent-workspace.ts) for real file edits and shell checks.
   State is copied and frozen per initialization/reduction. Register children with
   `pipelineTool`; reuse their options schema or supply `inputSchema` and
   `mapOptions` together. Follow the [delegation recipe](../examples/agent-delegation.ts).

@@ -35,6 +35,9 @@ their source files.
   carries that opaque scope through ordinary child execution and brackets leaf
   handlers; orchestration steps hold no permit. The internal child invocation
   boundary returns full reports for handler-origin error classification.
+  `agent/default-tools.ts` supplies the standard registry; filesystem and bash
+  handlers live beside it, use Node built-ins, and resolve services from each
+  invocation context. Custom names override defaults with matching type inference.
 
 - Core uses utilities and internal trace emission. Its complete runtime import graph
   must stay independent of exporters, storage, UI, command parsing and presentation.

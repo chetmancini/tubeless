@@ -65,7 +65,8 @@ export const DelegatingAgent = defineAgent({
     for (const outcome of outcomes) {
       if (!outcome.ok) answers.push(`Observed ${outcome.error.code}: ${outcome.error.message}`);
       else if (outcome.tool === "summarize") summary = outcome.value;
-      else answers.push(outcome.value.answer);
+      else if (outcome.tool === "processWord") answers.push(outcome.value.answer);
+      else answers.push(JSON.stringify(outcome.value));
     }
     return { ...state, answers, summary };
   },

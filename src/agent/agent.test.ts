@@ -9,7 +9,13 @@ import { createPipelineTestRuntime } from "../testing/testing.js";
 import { definePipelineCommand } from "../cli/cli.js";
 import { defineProject } from "../project/project.js";
 import { defer } from "../core/child-pipeline.test-support.js";
-import { defineAgent, defineTool, ToolError, type AgentDecision } from "./agent.js";
+import {
+  defineAgent,
+  defineTool,
+  ToolError,
+  type AgentDecision,
+  type AgentOutcome,
+} from "./agent.js";
 import { emptyInput, numberSchema, schema, textSchema } from "./agent.test-support.js";
 
 const base = {
@@ -84,10 +90,11 @@ describe("single-agent execution", () => {
       }),
     };
     const reducer = vi.fn(
-      (
-        _state: readonly number[],
-        outcomes: readonly { ok: boolean; value?: { doubled: number } }[]
-      ) => outcomes.map((outcome) => outcome.value!.doubled)
+      (_state: readonly number[], outcomes: readonly AgentOutcome<typeof tools>[]) =>
+        outcomes.map((outcome) => {
+          if (!outcome.ok || outcome.tool !== "double") throw new Error("Expected double output");
+          return outcome.value.doubled;
+        })
     );
     const decide = vi.fn(
       (state: readonly number[], context: { turn: number; stateVersion: number }) => {
@@ -559,12 +566,10 @@ describe("single-agent execution", () => {
           run,
         }),
       };
-      const reduce = vi.fn(
-        (_state: number, outcomes: readonly { ok: boolean; value?: number }[]) => {
-          expect(outcomes.map((outcome) => outcome.value)).toEqual([1, 2, 3]);
-          return 0;
-        }
-      );
+      const reduce = vi.fn((_state: number, outcomes: readonly AgentOutcome<typeof tools>[]) => {
+        expect(outcomes.map((outcome) => outcome.ok && outcome.value)).toEqual([1, 2, 3]);
+        return 0;
+      });
       const agent = defineAgent({
         ...base,
         tools,
@@ -617,7 +622,8 @@ describe("single-agent execution", () => {
       tools,
       decide: () => valid,
       reduce: (state, outcomes) => {
-        if (outcomes[0]?.ok) expectTypeOf(outcomes[0].value).toEqualTypeOf<number>();
+        if (outcomes[0]?.ok && outcomes[0].tool === "text")
+          expectTypeOf(outcomes[0].value).toEqualTypeOf<number>();
         return state;
       },
     });

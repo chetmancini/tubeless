@@ -1,8 +1,23 @@
 import { DelegatingAgent } from "../../examples/agent-delegation.js";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { ScriptedAgent, runAgentExample } from "../../examples/agent.js";
+import { WorkspaceAgent } from "../../examples/agent-workspace.js";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 describe("public agent recipe", () => {
+  it("uses every default tool and a custom tool to modify and verify a real workspace", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "tubeless-workspace-recipe-"));
+    try {
+      expect(await WorkspaceAgent.runOrThrow({ directory: "demo" }, undefined, { cwd })).toEqual({
+        answer: "Verified: all six default tools and a custom tool",
+      });
+      expect(await readFile(join(cwd, "demo/message.txt"), "utf8")).toBe("hello agent\n");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
   it("delegates to child agents and a mapped ordinary pipeline, including previews", async () => {
     expectTypeOf(DelegatingAgent.runOrThrow).returns.resolves.toEqualTypeOf<{ answer: string }>();
     for (const dryRun of [false, true]) {
