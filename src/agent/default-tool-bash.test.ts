@@ -44,6 +44,44 @@ describe("default bash tool", () => {
     expect(Buffer.byteLength(result.stdout) + Buffer.byteLength(result.stderr)).toBe(16_384);
   });
 
+  it.each([
+    { stdoutBytes: 16_384, stderrBytes: 0, stdoutChars: 5461, stderrChars: 0, truncated: true },
+    { stdoutBytes: 0, stderrBytes: 16_384, stdoutChars: 0, stderrChars: 5461, truncated: true },
+    { stdoutBytes: 4096, stderrBytes: 8192, stdoutChars: 4096, stderrChars: 1365, truncated: true },
+    { stdoutBytes: 2, stderrBytes: 3, stdoutChars: 2, stderrChars: 3, truncated: false },
+  ])(
+    "caps decoded invalid bytes with $stdoutBytes stdout bytes and $stderrBytes stderr bytes",
+    async ({ stdoutBytes, stderrBytes, stdoutChars, stderrChars, truncated }) => {
+      const context = await workspace();
+      await writeFile(join(context.cwd, "stdout"), Buffer.alloc(stdoutBytes, 0xff));
+      await writeFile(join(context.cwd, "stderr"), Buffer.alloc(stderrBytes, 0xff));
+      const result = await bashTool({ command: "cat stdout; cat stderr >&2" }, context);
+      expect(result).toMatchObject({
+        stdout: "\uFFFD".repeat(stdoutChars),
+        stderr: "\uFFFD".repeat(stderrChars),
+        exitCode: 0,
+        truncated,
+      });
+      expect(
+        Buffer.byteLength(result.stdout) + Buffer.byteLength(result.stderr)
+      ).toBeLessThanOrEqual(16_384);
+    }
+  );
+
+  it("keeps complete multibyte characters within the remaining decoded output budget", async () => {
+    const context = await workspace();
+    await writeFile(join(context.cwd, "stdout"), Buffer.alloc(4097, 0xff));
+    await writeFile(join(context.cwd, "stderr"), "🙂".repeat(2048));
+    const result = await bashTool({ command: "cat stdout; cat stderr >&2" }, context);
+    expect(result).toMatchObject({
+      stdout: "\uFFFD".repeat(4097),
+      stderr: "🙂".repeat(1023),
+      exitCode: 0,
+      truncated: true,
+    });
+    expect(Buffer.byteLength(result.stdout) + Buffer.byteLength(result.stderr)).toBe(16_383);
+  });
+
   it("escalates a timeout and tolerates a cleanup race after the process group closes", async () => {
     const started = Date.now();
     const kill = process.kill.bind(process);

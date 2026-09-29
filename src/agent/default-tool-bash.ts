@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import type { PipelineStepContext } from "../core/pipeline-types.js";
 import { createAbortError, throwIfAborted } from "../utilities/abort.js";
-import { MAX_OUTPUT_BYTES } from "./default-tool-files.js";
+import { clippedText, MAX_OUTPUT_BYTES } from "./default-tool-files.js";
 import { ToolError } from "./tools.js";
 
 export function bashTool(
@@ -91,16 +91,25 @@ export function bashTool(
       if (stopping && grouped) kill("SIGKILL", true);
       if (context.signal?.aborted) reject(createAbortError(context.signal, "Bash tool"));
       else if (spawnError) reject(new ToolError("BASH_FAILED", spawnError.message.slice(0, 4096)));
-      else
+      else {
+        // Invalid bytes can expand to three-byte replacement characters when decoded.
+        const out = clippedText(
+          new TextDecoder().decode(Buffer.concat(stdout), { stream: truncated })
+        );
+        const err = clippedText(
+          new TextDecoder().decode(Buffer.concat(stderr), { stream: truncated }),
+          MAX_OUTPUT_BYTES - Buffer.byteLength(out.text)
+        );
         resolveResult({
           cwd,
-          stdout: new TextDecoder().decode(Buffer.concat(stdout), { stream: truncated }),
-          stderr: new TextDecoder().decode(Buffer.concat(stderr), { stream: truncated }),
+          stdout: out.text,
+          stderr: err.text,
           exitCode,
           signal,
           timedOut,
-          truncated,
+          truncated: truncated || out.truncated || err.truncated,
         });
+      }
     });
     context.signal?.addEventListener("abort", stop, { once: true });
     if (context.signal?.aborted) stop();

@@ -50,56 +50,34 @@ export const WorkspaceAgent = defineAgent({
   // A provider callback receives the same default and custom tool descriptors.
   decide(state, context): AgentDecision<typeof tools, string> {
     const path = `${state.directory}/message.txt`;
-    switch (context.turn) {
-      case 1:
-        return {
-          kind: "continue",
-          calls: [{ id: "seed", tool: "write", input: { path, content: "hello tubeless\n" } }],
-        };
-      case 2:
-        return {
-          kind: "continue",
-          calls: [
-            { id: "inspect", tool: "read", input: { path } },
-            { id: "files", tool: "list", input: { path: state.directory } },
-            { id: "find", tool: "search", input: { path: state.directory, query: "tubeless" } },
-          ],
-        };
-      case 3:
-        return {
-          kind: "continue",
-          calls: [
-            {
-              id: "change",
-              tool: "edit",
-              input: { path, oldText: "hello tubeless", newText: "hello agent" },
-            },
-          ],
-        };
-      case 4:
-        return {
-          kind: "continue",
-          calls: [
-            {
-              id: "check",
-              tool: "bash",
-              input: {
-                cwd: state.directory,
-                command: 'test "$(cat message.txt)" = "hello agent" && printf "check passed\\n"',
-              },
-            },
-          ],
-        };
-      case 5:
-        return {
-          kind: "continue",
-          calls: [
-            { id: "report", tool: "report", input: "all six default tools and a custom tool" },
-          ],
-        };
-      default:
-        return { kind: "finish", result: state.summary };
-    }
+    const batches = [
+      [{ id: "seed", tool: "write", input: { path, content: "hello tubeless\n" } }],
+      [
+        { id: "inspect", tool: "read", input: { path } },
+        { id: "files", tool: "list", input: { path: state.directory } },
+        { id: "find", tool: "search", input: { path: state.directory, query: "tubeless" } },
+      ],
+      [
+        {
+          id: "change",
+          tool: "edit",
+          input: { path, oldText: "hello tubeless", newText: "hello agent" },
+        },
+      ],
+      [
+        {
+          id: "check",
+          tool: "bash",
+          input: {
+            cwd: state.directory,
+            command: 'test "$(cat message.txt)" = "hello agent" && printf "check passed\\n"',
+          },
+        },
+      ],
+      [{ id: "report", tool: "report", input: "all six default tools and a custom tool" }],
+    ] as const;
+    const calls = batches[context.turn - 1];
+    return calls ? { kind: "continue", calls } : { kind: "finish", result: state.summary };
   },
   reduce(state, outcomes) {
     let summary = state.summary;

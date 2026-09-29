@@ -20,7 +20,7 @@ type Context = Pick<PipelineStepContext<object>, "cwd" | "signal">;
 export const MAX_FILE_BYTES = 1_048_576;
 export const MAX_OUTPUT_BYTES = 16_384;
 
-function clippedText(text: string, maxBytes = MAX_OUTPUT_BYTES) {
+export function clippedText(text: string, maxBytes = MAX_OUTPUT_BYTES) {
   const bytes = Buffer.from(text);
   return {
     text: new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes.subarray(0, maxBytes), {
