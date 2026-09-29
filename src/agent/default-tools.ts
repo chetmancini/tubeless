@@ -66,14 +66,14 @@ export const defaultTools = Object.freeze({
   }),
   write: defineTool({
     description:
-      "Create or replace a UTF-8 file (up to 1 MiB), creating parent directories. Paths resolve from the run cwd. Skipped in dry runs.",
+      "Create or replace a UTF-8 file (up to 1 MiB), creating parent directories and following symlinks, including missing targets. Paths resolve from the run cwd. Atomic replacement requires a writable parent directory and permission to preserve existing ownership. Skipped in dry runs.",
     inputSchema: toolSchema(wireObject({ path, content: text })),
     outputSchema: written,
     run: writeTool,
   }),
   edit: defineTool({
     description:
-      "Replace one exact occurrence of oldText with newText in a UTF-8 file up to 1 MiB. Missing or ambiguous matches fail without writing. Skipped in dry runs.",
+      "Replace one exact occurrence of oldText with newText in a UTF-8 file up to 1 MiB. Missing or ambiguous matches fail without writing. Atomic replacement requires a writable parent directory and permission to preserve existing ownership. Skipped in dry runs.",
     inputSchema: toolSchema(
       wireObject({ path, oldText: wireString({ maxLength: MAX_FILE_BYTES }), newText: text })
     ),

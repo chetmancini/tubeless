@@ -50,7 +50,10 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   `tools` adds capabilities or replaces defaults by name; narrow reducer outcomes
   by `ok` and `tool`. Paths resolve from the run cwd. Follow the
   [workspace recipe](../examples/agent-workspace.ts) for real file edits and shell checks.
-  Writes and edits stage complete files before atomic replacement. Bash bounds
+  Writes and edits stage complete files before atomic replacement, requiring a writable
+  destination directory and permission to preserve the original owner/group. These
+  permission failures leave the original intact; there is no in-place fallback. Writes follow symlinks even
+  when the target must be created. Bash bounds
   pipe draining during cancellation; escaped descendants may outlive the tool.
   List and search order entries by filename before applying caps. Directory
   searches retain matches when descendants become unavailable and count skipped entries.

@@ -171,9 +171,13 @@ successive turns; calls in a batch may run concurrently. Each write or edit stag
 the complete contents in a sibling temporary directory, then atomically replaces
 the destination. Cancellation or failure before replacement preserves the original;
 cancellation racing with replacement can leave the complete new file. Existing
-symlinks are followed and file permission bits are preserved. Replacement creates
-a new inode: other hard links retain the old contents, and extended file attributes
-are not copied.
+symlinks are followed; `write` can create a missing target and its parent directories
+without replacing the link. Existing owner, group, and file permission bits are preserved.
+Atomic replacement requires write and search permissions on the destination directory,
+even when the file itself is writable. If staging or restoring ownership is not permitted,
+the tool fails without replacing the original; it does not fall back to an in-place write.
+Replacement creates a new inode: other hard links retain the old contents, and extended
+file attributes are not copied.
 Operations are not transactions across calls or a crash-safe durability guarantee.
 
 The [workspace recipe](../examples/agent-workspace.ts) uses all six defaults and

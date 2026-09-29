@@ -5,13 +5,14 @@ import {
   mkdtemp,
   open,
   readdir,
+  readlink,
   realpath,
   rename,
   rm,
   stat,
 } from "node:fs/promises";
 import { constants } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { PipelineStepContext } from "../core/pipeline-types.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { ToolError } from "./tools.js";
@@ -113,20 +114,30 @@ export async function readTool(
   });
 }
 
+async function writeDestination(path: string, signal?: AbortSignal) {
+  for (let links = 0; ; links++) {
+    throwIfAborted(signal, "Write file");
+    await mkdir(dirname(path), { recursive: true });
+    const trailingSeparator = path.endsWith(sep) || path.endsWith("/") ? sep : "";
+    path = join(await realpath(dirname(path)), basename(path)) + trailingSeparator;
+    const info = await lstat(path).catch((error: unknown) => {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
+      throw error;
+    });
+    if (!info?.isSymbolicLink()) return { destination: path, info };
+    if (links === 40) throw new ToolError("ELOOP", "Too many symbolic links");
+    const target = await readlink(path);
+    // Let the filesystem resolve directory symlinks before interpreting any '..'.
+    path = isAbsolute(target) ? target : `${dirname(path)}${sep}${target}`;
+  }
+}
+
 export async function writeTool(input: { path: string; content: string }, context: Context) {
   return fileOperation(context, async () => {
     const path = resolve(context.cwd, input.path);
     const bytes = Buffer.byteLength(input.content);
     if (bytes > MAX_FILE_BYTES) throw new ToolError("FILE_TOO_LARGE", "Content exceeds 1 MiB");
-    await mkdir(dirname(path), { recursive: true });
-    throwIfAborted(context.signal, "Write file");
-    const entry = await lstat(path).catch((error: unknown) => {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
-      throw error;
-    });
-    // Preserve an existing symlink and replace its resolved target, not the link.
-    const destination = entry?.isSymbolicLink() ? await realpath(path) : path;
-    const info = entry?.isSymbolicLink() ? await stat(destination) : entry;
+    const { destination, info } = await writeDestination(path, context.signal);
     if (info && !info.isFile()) throw new ToolError("NOT_FILE", "Expected a regular file");
     if (info) await access(destination, constants.W_OK);
     const staging = await mkdtemp(join(dirname(destination), ".tubeless-write-"));
@@ -135,8 +146,11 @@ export async function writeTool(input: { path: string; content: string }, contex
       const file = await open(temporary, "wx", info ? info.mode & 0o777 : 0o666);
       try {
         await file.writeFile(input.content, { encoding: "utf8", signal: context.signal });
-        // Creation applies umask; restore existing permission bits after writing.
-        if (info) await file.chmod(info.mode & 0o777);
+        if (info) {
+          await file.chown(info.uid, info.gid);
+          // Creation and ownership changes can alter mode bits; restore them last.
+          await file.chmod(info.mode & 0o777);
+        }
       } finally {
         await file.close();
       }

@@ -214,6 +214,39 @@ describe("workspace search and listing", () => {
 
 describe("workspace file replacement", () => {
   for (const tool of ["write", "edit"] as const) {
+    it.each(["staging directory", "ownership restoration"])(
+      `${tool} preserves the original when permissions block %s`,
+      async (failure) => {
+        const context = await workspace();
+        const before = await fs.stat(join(context.cwd, "target"));
+        const code = failure === "staging directory" ? "EACCES" : "EPERM";
+        const error = Object.assign(new Error("Permission denied"), { code });
+        if (failure === "staging directory") vi.mocked(fs.mkdtemp).mockRejectedValueOnce(error);
+        else
+          vi.mocked(fs.open).mockImplementation(async (...args) => {
+            const file = await actualFs.open(...args);
+            vi.spyOn(file, "chown").mockImplementation(async (uid, gid) => {
+              expect([uid, gid]).toEqual([before.uid, before.gid]);
+              throw error;
+            });
+            return file;
+          });
+        const operation =
+          tool === "write"
+            ? writeTool({ path: "target", content: "replacement" }, context)
+            : editTool({ path: "target", oldText: "original", newText: "replacement" }, context);
+        await expect(operation).rejects.toMatchObject({ code });
+        expect(await fs.readFile(join(context.cwd, "target"), "utf8")).toBe("original content");
+        expect(await fs.stat(join(context.cwd, "target"))).toMatchObject({
+          ino: before.ino,
+          uid: before.uid,
+          gid: before.gid,
+          mode: before.mode,
+        });
+        expect(await fs.readdir(context.cwd)).toEqual(["target"]);
+      }
+    );
+
     it.each(["cancel during write", "cancel before rename", "write error"])(
       `${tool} preserves the destination on %s and removes staging files`,
       async (failure) => {
@@ -257,13 +290,71 @@ describe("workspace file replacement", () => {
     );
   }
 
-  it("preserves existing symlinks and the destination's permission bits", async () => {
+  it("preserves existing symlinks and the destination's ownership and permission bits", async () => {
     const context = await workspace();
+    const before = await fs.stat(join(context.cwd, "target"));
     await fs.symlink("target", join(context.cwd, "link"));
     await editTool({ path: "link", oldText: "original", newText: "updated" }, context);
     expect(await fs.readlink(join(context.cwd, "link"))).toBe("target");
     expect(await fs.readFile(join(context.cwd, "target"), "utf8")).toBe("updated content");
-    expect((await fs.stat(join(context.cwd, "target"))).mode & 0o777).toBe(0o771);
+    expect(await fs.stat(join(context.cwd, "target"))).toMatchObject({
+      uid: before.uid,
+      gid: before.gid,
+      mode: before.mode,
+    });
+    expect((await fs.readdir(context.cwd)).sort()).toEqual(["link", "target"]);
+  });
+
+  it.each(["relative", "absolute", "chained"])(
+    "creates a missing target through a %s symlink without replacing the link",
+    async (kind) => {
+      const context = await workspace();
+      const destination = join(context.cwd, "missing", "created");
+      const target =
+        kind === "absolute" ? destination : kind === "chained" ? "next" : "missing/created";
+      await fs.symlink(target, join(context.cwd, "link"));
+      if (kind === "chained") await fs.symlink("missing/created", join(context.cwd, "next"));
+      expect(await writeTool({ path: "link", content: "created" }, context)).toEqual({
+        path: join(context.cwd, "link"),
+        bytes: 7,
+      });
+      expect(await fs.readlink(join(context.cwd, "link"))).toBe(target);
+      if (kind === "chained")
+        expect(await fs.readlink(join(context.cwd, "next"))).toBe("missing/created");
+      expect(await fs.readFile(destination, "utf8")).toBe("created");
+    }
+  );
+
+  it("resolves directory symlinks before parent traversal in a missing target", async () => {
+    const context = await workspace();
+    await fs.mkdir(join(context.cwd, "real", "child"), { recursive: true });
+    await fs.symlink("real/child", join(context.cwd, "alias"));
+    await fs.symlink("alias/../created", join(context.cwd, "link"));
+    await writeTool({ path: "link", content: "created" }, context);
+    expect(await fs.readlink(join(context.cwd, "link"))).toBe("alias/../created");
+    expect(await fs.readFile(join(context.cwd, "real", "created"), "utf8")).toBe("created");
+    await expect(fs.lstat(join(context.cwd, "created"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects cyclic symlinks without replacing them", async () => {
+    const context = await workspace();
+    await fs.symlink("second", join(context.cwd, "first"));
+    await fs.symlink("first", join(context.cwd, "second"));
+    await expect(writeTool({ path: "first", content: "new" }, context)).rejects.toMatchObject({
+      code: "ELOOP",
+    });
+    expect(await fs.readlink(join(context.cwd, "first"))).toBe("second");
+    expect(await fs.readlink(join(context.cwd, "second"))).toBe("first");
+  });
+
+  it("does not turn a missing directory symlink target into a regular file", async () => {
+    const context = await workspace();
+    await fs.symlink("missing/", join(context.cwd, "link"));
+    await expect(writeTool({ path: "link", content: "new" }, context)).rejects.toMatchObject({
+      code: expect.stringMatching(/^(ENOENT|ENOTDIR)$/),
+    });
+    expect(await fs.readlink(join(context.cwd, "link"))).toBe("missing/");
+    await expect(fs.lstat(join(context.cwd, "missing"))).rejects.toMatchObject({ code: "ENOENT" });
     expect((await fs.readdir(context.cwd)).sort()).toEqual(["link", "target"]);
   });
 
