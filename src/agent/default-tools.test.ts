@@ -176,15 +176,20 @@ describe("default agent tools", () => {
   it("rejects special files without blocking on a named pipe or truncating a device", async () => {
     const cwd = await workspace();
     execFileSync("mkfifo", [join(cwd, "pipe")]);
+    await symlink("pipe", join(cwd, "link"));
+    await mkdir(join(cwd, ".git"));
+    await mkdir(join(cwd, "node_modules"));
     const outcomes = await batch([
       { id: "read", tool: "read", input: { path: "pipe" } },
       { id: "write", tool: "write", input: { path: "pipe", content: "x" } },
       { id: "device", tool: "write", input: { path: "/dev/null", content: "x" } },
+      { id: "search", tool: "search", input: { query: "needle" } },
     ]).runOrThrow({}, undefined, { cwd });
     expect(outcomes).toMatchObject([
       { ok: false, error: { code: "NOT_FILE" } },
       { ok: false, error: { code: "NOT_FILE" } },
       { ok: false, error: { code: "NOT_FILE" } },
+      { ok: true, value: { matches: [], skippedFiles: 1, truncated: false } },
     ]);
   });
 

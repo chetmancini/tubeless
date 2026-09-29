@@ -273,6 +273,7 @@ export async function searchTool(input: { query: string; path?: string | null },
         if (entry.isDirectory() && entry.name !== ".git" && entry.name !== "node_modules")
           await walk(join(path, entry.name), depth + 1);
         else if (entry.isFile()) await searchFile(join(path, entry.name), true);
+        else if (!entry.isDirectory() && !entry.isSymbolicLink()) skippedFiles++;
       }
     }
     if ((await stat(root)).isFile()) await searchFile(root);
