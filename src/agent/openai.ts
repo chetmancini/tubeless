@@ -1,6 +1,7 @@
 import type { AgentModel } from "./model-types.js";
 import { MAX_REQUEST_BYTES, openaiRequest } from "./openai-http.js";
 import { openaiDecision, outputItems, parameter, record } from "./openai-protocol.js";
+import { openaiToolOutputs } from "./openai-tool-outputs.js";
 import { throwIfAborted } from "../utilities/abort.js";
 
 /** Responses transport settings; credentials are resolved only when a decision executes. */
@@ -40,14 +41,14 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
         type: "function",
         name: tool.name,
         description: tool.description,
-        parameters: parameter("input", tool.inputJsonSchema),
+        parameters: parameter("input", tool.inputJsonSchema, `tool ${tool.name}`),
         strict: true,
       })),
       {
         type: "function",
         name: "_finish",
         description: "Finish with the final answer.",
-        parameters: parameter("result", context.resultJsonSchema),
+        parameters: parameter("result", context.resultJsonSchema, "tool _finish"),
         strict: true,
       },
     ];
@@ -60,51 +61,37 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
       request.conversation === null
         ? [{ role: "user", content: request.task }]
         : [...request.conversation];
-    input.push(
-      ...request.outcomes.map((outcome) => ({
-        type: "function_call_output",
-        call_id: outcome.id,
-        output: JSON.stringify(
-          outcome.ok ? { ok: true, value: outcome.value } : { ok: false, error: outcome.error }
-        ),
-      }))
-    );
+    const compactRequest = { model: selectedModel, instructions: request.instructions, input };
+    const decisionRequest = {
+      model: selectedModel,
+      store: false,
+      include: ["reasoning.encrypted_content"],
+      max_output_tokens: 8192,
+      instructions: `${request.instructions}\n\nCall _finish alone with the final answer. Never mix _finish with tool calls.`,
+      input,
+      tools,
+      tool_choice: "required",
+      parallel_tool_calls: true,
+    };
+    const availableBytes =
+      MAX_REQUEST_BYTES -
+      Math.max(
+        Buffer.byteLength(JSON.stringify(compactRequest)),
+        Buffer.byteLength(JSON.stringify(decisionRequest))
+      );
+    input.push(...openaiToolOutputs(request.outcomes, availableBytes));
     if (
       request.outcomes.length > 0 &&
       Buffer.byteLength(JSON.stringify(input)) > compactAfterBytes
     ) {
-      const compacted = await openaiRequest(
-        "responses/compact",
-        {
-          model: selectedModel,
-          instructions: request.instructions,
-          input,
-        },
-        apiKey,
-        signal
-      );
+      const compacted = await openaiRequest("responses/compact", compactRequest, apiKey, signal);
       if (!record(compacted) || compacted.object !== "response.compaction")
         throw new Error("OpenAI returned invalid compaction");
       input = outputItems(compacted);
       if (input.length === 0) throw new Error("OpenAI returned empty compaction");
       context.log.log("Compacted agent conversation");
     }
-    const body = await openaiRequest(
-      "responses",
-      {
-        model: selectedModel,
-        store: false,
-        include: ["reasoning.encrypted_content"],
-        max_output_tokens: 8192,
-        instructions: `${request.instructions}\n\nCall _finish alone with the final answer. Never mix _finish with tool calls.`,
-        input,
-        tools,
-        tool_choice: "required",
-        parallel_tool_calls: true,
-      },
-      apiKey,
-      signal
-    );
+    const body = await openaiRequest("responses", { ...decisionRequest, input }, apiKey, signal);
     if (!record(body) || body.status !== "completed")
       throw new Error("OpenAI did not return a completed response");
     const output = outputItems(body);

@@ -1,4 +1,4 @@
-import { lstat } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { readTool } from "./default-tool-files.js";
 import { throwIfAborted } from "../utilities/abort.js";
@@ -25,10 +25,12 @@ export async function modelInstructions(
   projectContext: boolean,
   signal?: AbortSignal
 ) {
-  const sections = [defaultAgentPrompt, `Working directory: ${resolve(cwd)}`];
+  throwIfAborted(signal, "Load project instructions");
+  const workspace = projectContext ? await realpath(cwd) : resolve(cwd);
+  const sections = [defaultAgentPrompt, `Working directory: ${workspace}`];
   if (projectContext) {
     const ancestors: string[] = [];
-    let directory = resolve(cwd);
+    let directory = workspace;
     while (true) {
       throwIfAborted(signal, "Load project instructions");
       ancestors.push(directory);

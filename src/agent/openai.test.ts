@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defineModelAgent, defineTool } from "./agent.js";
+import { defineModelAgent, defineTool, type AgentModelRequest } from "./agent.js";
 import { openaiModel } from "./openai.js";
 import { openaiRequest } from "./openai-http.js";
 
@@ -34,48 +34,123 @@ const finish = () => call("_finish", { answer: "Done." }, "finish");
 const response = (output: unknown[]) => Response.json({ status: "completed", output });
 
 describe("OpenAI model", () => {
-  it("rejects reference schemas before HTTP even when conversation compaction is due", async () => {
-    const fetcher = vi.fn<typeof fetch>();
-    vi.stubGlobal("fetch", fetcher);
-    const schema = {
-      "~standard": {
-        version: 1 as const,
-        vendor: "fixture",
-        validate: (value: unknown) => ({ value }),
-        jsonSchema: {
-          input: () => ({
+  it.each([
+    {
+      descriptor: {
+        type: "object",
+        properties: { value: { $ref: "#/$defs/word" } },
+        $defs: { word: { type: "string" } },
+      },
+      message: "$ref is unsupported",
+    },
+    {
+      descriptor: {
+        type: "object",
+        properties: {
+          nested: {
             type: "object",
-            properties: { value: { $ref: "#/$defs/word" } },
-            $defs: { word: { type: "string" } },
+            properties: { value: { type: "string" } },
+            required: ["value"],
+          },
+        },
+        required: ["nested"],
+        additionalProperties: false,
+      },
+      message: 'tool custom.properties["nested"] requires additionalProperties: false',
+    },
+    {
+      descriptor: {
+        type: "object",
+        properties: { value: { type: ["string", "null"] } },
+        additionalProperties: false,
+      },
+      message: "tool custom must require every property exactly once",
+    },
+  ])(
+    "rejects invalid schemas before HTTP even when compaction is due: $message",
+    async ({ descriptor, message }) => {
+      const fetcher = vi.fn<typeof fetch>();
+      vi.stubGlobal("fetch", fetcher);
+      const schema = {
+        "~standard": {
+          version: 1 as const,
+          vendor: "fixture",
+          validate: (value: unknown) => ({ value }),
+          jsonSchema: {
+            input: () => descriptor,
+          },
+        },
+      };
+      const transport = openaiModel({ apiKey: "fixture", compactAfterBytes: 1 });
+      const result = await defineModelAgent({
+        id: "schema-reference",
+        projectContext: false,
+        tools: {
+          custom: defineTool({
+            description: "A tool with a referenced argument schema.",
+            inputSchema: schema,
+            outputSchema: schema,
+            run: (input) => input,
           }),
         },
+        model: (request, context) =>
+          transport(
+            {
+              ...request,
+              conversation: [{ role: "user", content: request.task }],
+              outcomes: [{ id: "old", tool: "custom", ok: true, value: "prior result" }],
+            },
+            context
+          ),
+      }).run({ task: "Work" });
+      expect(result.status).toBe("failed");
+      expect(result.errors[0]!.message).toContain(message);
+      expect(fetcher).not.toHaveBeenCalled();
+    }
+  );
+
+  it("compacts a permitted batch of 100 large reads and keeps full harness outcomes", async () => {
+    const cwd = await workspace();
+    const content = '"\\\t🙂'.repeat(2000);
+    await writeFile(join(cwd, "target"), content);
+    const calls = Array.from({ length: 100 }, (_, index) =>
+      call("read", { path: "target" }, `read_${index}`)
+    );
+    const compacted = [{ type: "compaction", encrypted_content: "opaque" }];
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(calls))
+      .mockResolvedValueOnce(Response.json({ object: "response.compaction", output: compacted }))
+      .mockResolvedValueOnce(response([finish()]));
+    vi.stubGlobal("fetch", fetcher);
+    const requests: AgentModelRequest[] = [];
+    const transport = openaiModel({ apiKey: "fixture" });
+    const agent = defineModelAgent({
+      id: "large-batch",
+      limits: { maxConcurrency: 8 },
+      model: (request, context) => {
+        requests.push(request);
+        return transport(request, context);
       },
-    };
-    const transport = openaiModel({ apiKey: "fixture", compactAfterBytes: 1 });
-    const result = await defineModelAgent({
-      id: "schema-reference",
-      projectContext: false,
-      tools: {
-        custom: defineTool({
-          description: "A tool with a referenced argument schema.",
-          inputSchema: schema,
-          outputSchema: schema,
-          run: (input) => input,
-        }),
-      },
-      model: (request, context) =>
-        transport(
-          {
-            ...request,
-            conversation: [{ role: "user", content: request.task }],
-            outcomes: [{ id: "old", tool: "custom", ok: true, value: "prior result" }],
-          },
-          context
-        ),
-    }).run({ task: "Work" });
-    expect(result.status).toBe("failed");
-    expect(result.errors[0]!.message).toContain("$ref is unsupported");
-    expect(fetcher).not.toHaveBeenCalled();
+    });
+    expect(await agent.runOrThrow({ task: "Read all files" }, undefined, { cwd })).toEqual({
+      answer: "Done.",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    for (const [, options] of fetcher.mock.calls)
+      expect(Buffer.byteLength(options!.body as string)).toBeLessThanOrEqual(1_048_576);
+    expect(fetcher.mock.calls[1]![0]).toBe("https://api.openai.com/v1/responses/compact");
+    const input = JSON.parse(fetcher.mock.calls[1]![1]!.body as string).input;
+    const outputs = input.slice(101);
+    expect(outputs).toHaveLength(100);
+    outputs.forEach((item: { call_id: string; output: string }, index: number) => {
+      expect(item.call_id).toBe(`read_${index}`);
+      expect(JSON.parse(item.output)).toMatchObject({ ok: true, truncated: true });
+    });
+    expect(JSON.parse(fetcher.mock.calls[2]![1]!.body as string).input).toEqual(compacted);
+    expect(requests[1]!.outcomes).toHaveLength(100);
+    for (const outcome of requests[1]!.outcomes)
+      expect(outcome).toMatchObject({ ok: true, value: { content } });
   });
 
   it("fails compaction errors without retrying or making another decision request", async () => {

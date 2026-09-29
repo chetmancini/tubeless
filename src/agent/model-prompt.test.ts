@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -34,6 +34,29 @@ it("loads root-to-cwd guidance, stops at worktree git files and excludes unrelat
   expect(prompt).not.toContain("DEEPER RULE");
   expect(await modelInstructions(cwd, undefined, false)).not.toContain("NESTED RULE");
 });
+
+it.each([true, false])(
+  "follows the physical workspace when cwd is a symlink (repo: %s)",
+  async (repository) => {
+    const outside = await workspace();
+    const decoy = join(outside, "decoy");
+    const root = join(outside, "actual");
+    const target = join(root, "nested");
+    const cwd = join(decoy, "linked");
+    await mkdir(join(decoy, ".git"), { recursive: true });
+    await mkdir(target, { recursive: true });
+    if (repository) await mkdir(join(root, ".git"));
+    await writeFile(join(decoy, "AGENTS.md"), "DECOY PROJECT");
+    await writeFile(join(root, "AGENTS.md"), "ACTUAL ROOT");
+    await writeFile(join(target, "AGENTS.md"), "ACTUAL WORKSPACE");
+    await symlink(target, cwd, "dir");
+    const prompt = await modelInstructions(cwd, undefined, true);
+    expect(prompt).toContain(`Working directory: ${await realpath(target)}`);
+    expect(prompt).toContain("ACTUAL WORKSPACE");
+    expect(prompt.includes("ACTUAL ROOT")).toBe(repository);
+    expect(prompt).not.toContain("DECOY PROJECT");
+  }
+);
 
 it("uses cwd only outside a repository and allows missing instructions", async () => {
   const parent = await workspace();

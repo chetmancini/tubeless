@@ -46,7 +46,9 @@ The prompt asks the agent to inspect before editing, preserve unrelated work,
 recover from tool errors, verify changes, and distinguish verified results from
 remaining limitations. At the first live decision, project context loads
 `AGENTS.md` from the nearest repository root through the run's cwd, in that order.
-A `.git` file also marks a worktree root. Outside a repository it loads only cwd's
+A symlinked cwd is resolved to its physical directory before finding that root,
+so guidance comes from the project containing the files. A `.git` file also marks
+a worktree root. Outside a repository it loads only cwd's
 file. More specific directory instructions take precedence. Deeper directories
 and files referenced by those instructions are read by the agent when needed;
 there is no recursive startup scan or `@file` expansion. Set `projectContext: false`
@@ -75,9 +77,23 @@ subset. The adapter wraps each argument in `{ input }`; reference keywords
 (`$ref`, `$dynamicRef`, `$recursiveRef`) are rejected locally before any HTTP
 request because wrapping changes their reference root. Supply an inline
 `inputJsonSchema` override when the tool's schema generates references.
+Every object, including nested and nullable objects, must set
+`additionalProperties: false` and list every property in `required`. These
+[strict object requirements](https://developers.openai.com/api/docs/guides/function-calling#strict-mode)
+are checked locally with the tool name and schema path in the error. Other
+model-specific restrictions on the supported schema subset still apply.
 
 The adapter keeps the complete Responses output sequence, including encrypted
 reasoning, messages, and function calls, then appends matching tool outputs.
+New tool outputs share an encoded 256 KiB batch budget, reduced further when the
+surrounding requests leave less room. Batches that fit remain exact. Otherwise,
+large outputs receive a fair per-call share with `truncated: true`, the original
+JSON byte count, and a UTF-8-safe JSON-text `preview`. Every call still receives
+a matching output and retains its success/failure flag. The model is told to
+retrieve narrower results and avoid repeating successful mutations. Full tool
+outcomes remain available to the harness and evaluation reports. This provider
+boundary keeps large batches from preventing compaction; it does not change tool
+execution or the outcomes supplied to custom `decide` callbacks.
 It uses `store: false` with client-owned history. Once completed history exceeds
 `compactAfterBytes` (64 KiB by default), it calls the native
 [`/responses/compact` endpoint](https://developers.openai.com/api/docs/guides/compaction)
@@ -90,6 +106,8 @@ One decision has a combined 60-second deadline (`timeoutMs`) and makes at most t
 HTTP requests: optional compaction and the decision itself. Harness decision budgets
 count callbacks, not these HTTP requests or tokens. Encoded requests are capped at
 1 MiB and responses at 2 MiB; these byte limits are not model token estimates.
+If prior history or schemas leave no room even for the output markers, the run
+fails explicitly rather than dropping a call's result.
 Compaction failure, a still-oversized request, refusal, malformed output, or an
 incomplete response fails without silently dropping history or retrying. No streaming,
 cross-run chat session, or crash-safe resume is added by this helper.

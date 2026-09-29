@@ -21,7 +21,13 @@ it("leaves literal data and property names that resemble reference keywords unch
     type: "object",
     properties: {
       $ref: { type: "string" },
-      default: { type: "object", const: { $ref: "literal" } },
+      default: {
+        type: "object",
+        properties: { $ref: { type: "string" } },
+        required: ["$ref"],
+        additionalProperties: false,
+        const: { $ref: "literal" },
+      },
       examples: { type: "string", enum: ["$dynamicRef"] },
     },
     default: { $ref: "literal" },
@@ -35,4 +41,41 @@ it("leaves literal data and property names that resemble reference keywords unch
     required: ["input"],
     additionalProperties: false,
   });
+});
+
+it.each([
+  { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+  { type: "object", additionalProperties: true },
+  { type: "object", properties: { value: { type: "string" } }, additionalProperties: false },
+  {
+    type: "object",
+    properties: { value: { type: "string" } },
+    required: ["other"],
+    additionalProperties: false,
+  },
+  {
+    type: "object",
+    properties: { a: { type: "string" }, b: { type: "string" } },
+    required: ["a", "a"],
+    additionalProperties: false,
+  },
+  { type: "array", items: { type: ["object", "null"], additionalProperties: true } },
+  {
+    anyOf: [
+      { type: "object", additionalProperties: false, properties: { value: { type: "string" } } },
+    ],
+  },
+])("rejects non-strict object schemas at every nesting level: %j", (schema) => {
+  expect(() => parameter("input", schema)).toThrow("OpenAI strict schema at input");
+});
+
+it("accepts required nullable fields and strict objects nested in arrays and unions", () => {
+  const item = {
+    type: ["object", "null"],
+    properties: { value: { type: ["string", "null"] } },
+    required: ["value"],
+    additionalProperties: false,
+  };
+  const schema = { anyOf: [{ type: "array", items: item }, { type: "null" }] };
+  expect(parameter("input", schema).properties.input).toBe(schema);
 });

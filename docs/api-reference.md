@@ -252,5 +252,5 @@ Package: `tubeless`
 
 | Symbol                                                                                           | Description                                                                                   |
 | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L19)       | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
-| [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L7) | Responses transport settings; credentials are resolved only when a decision executes.         |
+| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L20)       | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
+| [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L8) | Responses transport settings; credentials are resolved only when a decision executes.         |

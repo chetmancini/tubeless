@@ -48,16 +48,16 @@ export function openaiDecision(output: readonly Record<string, unknown>[]) {
 
 // Wrapping changes the resource root. Only inspect schema positions, never literal
 // values in const/enum/default/examples or property names that resemble keywords.
-function assertInlineSchema(schema: unknown): void {
+function assertParameterSchema(schema: unknown, path: string): void {
   if (Array.isArray(schema)) {
-    for (const child of schema) assertInlineSchema(child);
+    schema.forEach((child, index) => assertParameterSchema(child, `${path}[${index}]`));
     return;
   }
   if (!record(schema)) return;
   for (const keyword of ["$ref", "$dynamicRef", "$recursiveRef"]) {
     if (Object.hasOwn(schema, keyword))
       throw new Error(
-        `OpenAI function parameters require inline schemas; ${keyword} is unsupported. Supply an inline inputJsonSchema descriptor.`
+        `OpenAI function parameters require inline schemas; ${keyword} is unsupported at ${path}. Supply an inline inputJsonSchema descriptor.`
       );
   }
   for (const keyword of [
@@ -70,7 +70,8 @@ function assertInlineSchema(schema: unknown): void {
   ]) {
     const children = schema[keyword];
     if (record(children)) {
-      for (const child of Object.values(children)) assertInlineSchema(child);
+      for (const [name, child] of Object.entries(children))
+        assertParameterSchema(child, `${path}.${keyword}[${JSON.stringify(name)}]`);
     }
   }
   for (const keyword of [
@@ -91,11 +92,31 @@ function assertInlineSchema(schema: unknown): void {
     "oneOf",
     "prefixItems",
   ])
-    assertInlineSchema(schema[keyword]);
+    assertParameterSchema(schema[keyword], `${path}.${keyword}`);
+
+  const object =
+    schema.type === "object" ||
+    (Array.isArray(schema.type) && schema.type.includes("object")) ||
+    Object.hasOwn(schema, "properties");
+  if (!object) return;
+  if (schema.additionalProperties !== false)
+    throw new Error(`OpenAI strict schema at ${path} requires additionalProperties: false`);
+  if (schema.properties !== undefined && !record(schema.properties))
+    throw new Error(`OpenAI strict schema at ${path} requires an object properties map`);
+  const fields = Object.keys(schema.properties ?? {});
+  const required = schema.required;
+  if (fields.length === 0 && required === undefined) return;
+  if (
+    !Array.isArray(required) ||
+    required.length !== fields.length ||
+    new Set(required).size !== fields.length ||
+    fields.some((field) => !required.includes(field))
+  )
+    throw new Error(`OpenAI strict schema at ${path} must require every property exactly once`);
 }
 
-export function parameter(name: string, schema: Readonly<Record<string, unknown>>) {
-  assertInlineSchema(schema);
+export function parameter(name: string, schema: Readonly<Record<string, unknown>>, label = name) {
+  assertParameterSchema(schema, label);
   return {
     type: "object",
     properties: { [name]: schema },

@@ -59,6 +59,11 @@ one of these recipes.
 | Register custom command adapters                    | [`project/tubeless.project.ts`](../examples/project/tubeless.project.ts)                                                       | `defineProject`, explicit command adapters, custom mappings                                                               |
 | Host Studio beneath a private admin URL             | [Gateway hosting](./studio.md#host-studio-behind-an-application-gateway)                                                       | `--public-url`, server-only gateway token, application-owned authorization                                                |
 
+The [model-agent recipe](../examples/agent-model.ts) loads guidance from the physical
+workspace path. Custom OpenAI tools need inline strict schemas; oversized result
+batches use explicit previews while the harness keeps complete outcomes. See the
+[model-agent contract](./agents.md#default-model-backed-agent).
+
 For ownership and governance discovery, adapt [graph-metadata.ts](../examples/graph-metadata.ts).
 Use `metadata`, `querySteps`, and `toMermaid({ query })`; read [graph metadata](./graph-metadata.md)
 for bounds, trace identity, and document compatibility.
