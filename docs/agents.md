@@ -68,7 +68,8 @@ Expected tool failures are outcomes; fatal failure or cancellation stops the run
 
 The optional OpenAI subpath uses native fetch and adds no SDK dependency. It defaults
 to `OPENAI_MODEL` or `gpt-5.4-mini`; `openaiModel({ model, apiKey })` supplies explicit
-values. Environment credentials are read at execution, so imports, plans, and dry
+values. Model names are trimmed; a blank `OPENAI_MODEL` uses the default, while an
+explicit blank model is rejected locally. Environment credentials are read at execution, so imports, plans, and dry
 runs need no API key. Live runs make paid API requests and execute workspace tools
 with the host's existing permissions. Dry runs skip the model and have no final answer.
 

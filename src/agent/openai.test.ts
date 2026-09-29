@@ -35,6 +35,32 @@ const response = (output: unknown[]) => Response.json({ status: "completed", out
 
 describe("OpenAI model", () => {
   it.each([
+    { model: undefined, environment: undefined, expected: "gpt-5.4-mini" },
+    { model: undefined, environment: "", expected: "gpt-5.4-mini" },
+    { model: undefined, environment: " \t\n ", expected: "gpt-5.4-mini" },
+    { model: undefined, environment: " env-model\t ", expected: "env-model" },
+    { model: " explicit-model\t ", environment: "env-model", expected: "explicit-model" },
+    { model: "explicit-model", environment: "", expected: "explicit-model" },
+  ])("normalizes the model selected at execution: %j", async ({ model, environment, expected }) => {
+    vi.stubEnv("OPENAI_MODEL", "factory-time-model");
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([finish()]));
+    vi.stubGlobal("fetch", fetcher);
+    const agent = defineModelAgent({
+      id: "model-selection",
+      projectContext: false,
+      model: openaiModel({ apiKey: "fixture", ...(model === undefined ? {} : { model }) }),
+    });
+    vi.stubEnv("OPENAI_MODEL", environment);
+    await agent.runOrThrow({ task: "Finish" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetcher.mock.calls[0]![1]!.body as string).model).toBe(expected);
+  });
+
+  it.each(["", " \t\n "])("rejects an explicit blank model: %j", (model) => {
+    expect(() => openaiModel({ model })).toThrow("Invalid OpenAI model configuration");
+  });
+
+  it.each([
     { historyKiB: 500, schemaKiB: 500, compactAfterBytes: 65_536, compactedKiB: 1 },
     { historyKiB: 600, schemaKiB: 450, compactAfterBytes: 65_536, compactedKiB: 1 },
     { historyKiB: 500, schemaKiB: 500, compactAfterBytes: 1_048_575, compactedKiB: 1 },
@@ -340,13 +366,15 @@ describe("OpenAI model", () => {
     const log = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
     await defineModelAgent({
       id: "compact",
-      model: openaiModel({ apiKey: "fixture", compactAfterBytes: 1 }),
+      model: openaiModel({ apiKey: "fixture", model: " fixture-model ", compactAfterBytes: 1 }),
     }).runOrThrow({ task: "Read target" }, undefined, { cwd, log });
     expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
       "https://api.openai.com/v1/responses",
       "https://api.openai.com/v1/responses/compact",
       "https://api.openai.com/v1/responses",
     ]);
+    for (const [, options] of fetcher.mock.calls)
+      expect(JSON.parse(options!.body as string).model).toBe("fixture-model");
     const compactBody = JSON.parse(fetcher.mock.calls[1]![1]!.body as string);
     expect(compactBody.input.at(-1)).toMatchObject({
       type: "function_call_output",

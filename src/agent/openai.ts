@@ -31,7 +31,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
   )
     throw new Error("Invalid OpenAI model configuration");
   return async (request, context) => {
-    const selectedModel = model ?? process.env.OPENAI_MODEL ?? "gpt-5.4-mini";
+    const selectedModel = (model ?? process.env.OPENAI_MODEL)?.trim() || "gpt-5.4-mini";
     const timeout = AbortSignal.timeout(timeoutMs);
     const signal = context.signal ? AbortSignal.any([context.signal, timeout]) : timeout;
     throwIfAborted(signal, "OpenAI decision");
