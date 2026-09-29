@@ -96,10 +96,15 @@ export async function readTool(
   return fileOperation(context, async () => {
     const path = resolve(context.cwd, input.path);
     const text = await readText(path, context.signal);
-    const lines = text.length === 0 ? [] : text.split(/\r?\n/);
+    // Retain separators so each selected window is an exact substring of the file.
+    const parts = text.length === 0 ? [] : text.split(/(\r?\n)/);
+    const totalLines = Math.ceil(parts.length / 2);
     const startLine = input.startLine ?? 1;
-    const selected = lines.slice(startLine - 1, startLine - 1 + (input.maxLines ?? 200));
-    const content = clippedText(selected.join("\n"));
+    const selected = parts.slice(
+      (startLine - 1) * 2,
+      (startLine - 1 + (input.maxLines ?? 200)) * 2 - 1
+    );
+    const content = clippedText(selected.join(""));
     let endLine =
       selected.length === 0 ? startLine - 1 : startLine + content.text.split("\n").length - 1;
     if (content.truncated && content.text.endsWith("\n")) endLine--;
@@ -108,8 +113,8 @@ export async function readTool(
       content: content.text,
       startLine,
       endLine,
-      totalLines: lines.length,
-      truncated: content.truncated || endLine < lines.length,
+      totalLines,
+      truncated: content.truncated || endLine < totalLines,
     };
   });
 }

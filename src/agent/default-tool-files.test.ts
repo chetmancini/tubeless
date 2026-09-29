@@ -30,25 +30,77 @@ afterEach(async () => {
 
 describe("workspace file reads", () => {
   it.each([
-    { name: "LF boundary", length: 16_383, separator: "\n", startLine: 1, next: "SECOND" },
-    { name: "CRLF boundary", length: 16_383, separator: "\r\n", startLine: 2, next: "SECOND" },
+    { text: "alpha\r\nbeta\r\n", startLine: 1, maxLines: 200, expected: "alpha\r\nbeta\r\n" },
+    {
+      text: "before\r\nalpha\r\nbeta\r\nafter",
+      startLine: 2,
+      maxLines: 2,
+      expected: "alpha\r\nbeta",
+    },
+    {
+      text: "before\nalpha\r\nbeta\ngamma\r\nafter",
+      startLine: 2,
+      maxLines: 3,
+      expected: "alpha\r\nbeta\ngamma",
+    },
+    { text: "before\r\nalpha\r\nafter", startLine: 2, maxLines: 1, expected: "alpha" },
+    { text: "before\nalpha\r", startLine: 2, maxLines: 1, expected: "alpha\r" },
+  ])("preserves separators in an exact read-to-edit round trip ($text)", async (input) => {
+    const context = await workspace();
+    const path = join(context.cwd, "target");
+    await fs.writeFile(path, input.text);
+    const result = await readTool(
+      { path, startLine: input.startLine, maxLines: input.maxLines },
+      context
+    );
+    expect(result.content).toBe(input.expected);
+    await editTool({ path, oldText: result.content, newText: "replacement" }, context);
+    expect(await fs.readFile(path, "utf8")).toBe(input.text.replace(input.expected, "replacement"));
+  });
+
+  it.each([
+    {
+      name: "LF boundary",
+      length: 16_383,
+      separator: "\n",
+      retainedSeparator: "\n",
+      startLine: 1,
+      next: "SECOND",
+    },
+    {
+      name: "CRLF boundary",
+      length: 16_382,
+      separator: "\r\n",
+      retainedSeparator: "\r\n",
+      startLine: 2,
+      next: "SECOND",
+    },
+    {
+      name: "partial CRLF separator",
+      length: 16_383,
+      separator: "\r\n",
+      retainedSeparator: "\r",
+      startLine: 2,
+      next: "SECOND",
+    },
     {
       name: "partial UTF-8 character",
       length: 16_381,
       separator: "\n",
+      retainedSeparator: "\n",
       startLine: 2,
       next: "🙂SECOND",
     },
   ])(
     "does not skip the next line after clipping at a $name",
-    async ({ length, separator, startLine, next }) => {
+    async ({ length, separator, retainedSeparator, startLine, next }) => {
       const context = await workspace();
       const first = "x".repeat(length);
       const prefix = startLine === 1 ? "" : `before${separator}`;
       await fs.writeFile(join(context.cwd, "target"), `${prefix}${first}${separator}${next}`);
       const result = await readTool({ path: "target", startLine }, context);
       expect(result).toMatchObject({
-        content: `${first}\n`,
+        content: `${first}${retainedSeparator}`,
         startLine,
         endLine: startLine,
         totalLines: startLine + 1,
@@ -65,10 +117,12 @@ describe("workspace file reads", () => {
     }
   );
 
-  it("retains empty final lines when the complete selection fits the byte limit", async () => {
+  it.each(["\n", "\r\n"])("retains empty final lines with %j separators", async (separator) => {
     const context = await workspace();
-    await fs.writeFile(join(context.cwd, "target"), `${"x".repeat(16_383)}\n`);
+    const text = `${"x".repeat(16_384 - separator.length)}${separator}`;
+    await fs.writeFile(join(context.cwd, "target"), text);
     expect(await readTool({ path: "target" }, context)).toMatchObject({
+      content: text,
       endLine: 2,
       totalLines: 2,
       truncated: false,
