@@ -3,7 +3,7 @@ import type { Dirent } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { editTool, listTool, searchTool, writeTool } from "./default-tool-files.js";
+import { editTool, listTool, readTool, searchTool, writeTool } from "./default-tool-files.js";
 
 vi.mock("node:fs/promises", { spy: true });
 const actualFs = await vi.importActual<typeof fs>("node:fs/promises");
@@ -26,6 +26,67 @@ afterEach(async () => {
   await Promise.all(
     directories.splice(0).map((path) => fs.rm(path, { recursive: true, force: true }))
   );
+});
+
+describe("workspace file reads", () => {
+  it.each([
+    { name: "LF boundary", length: 16_383, separator: "\n", startLine: 1, next: "SECOND" },
+    { name: "CRLF boundary", length: 16_383, separator: "\r\n", startLine: 2, next: "SECOND" },
+    {
+      name: "partial UTF-8 character",
+      length: 16_381,
+      separator: "\n",
+      startLine: 2,
+      next: "🙂SECOND",
+    },
+  ])(
+    "does not skip the next line after clipping at a $name",
+    async ({ length, separator, startLine, next }) => {
+      const context = await workspace();
+      const first = "x".repeat(length);
+      const prefix = startLine === 1 ? "" : `before${separator}`;
+      await fs.writeFile(join(context.cwd, "target"), `${prefix}${first}${separator}${next}`);
+      const result = await readTool({ path: "target", startLine }, context);
+      expect(result).toMatchObject({
+        content: `${first}\n`,
+        startLine,
+        endLine: startLine,
+        totalLines: startLine + 1,
+        truncated: true,
+      });
+      expect(
+        await readTool({ path: "target", startLine: result.endLine + 1 }, context)
+      ).toMatchObject({
+        content: next,
+        startLine: startLine + 1,
+        endLine: startLine + 1,
+        truncated: false,
+      });
+    }
+  );
+
+  it("retains empty final lines when the complete selection fits the byte limit", async () => {
+    const context = await workspace();
+    await fs.writeFile(join(context.cwd, "target"), `${"x".repeat(16_383)}\n`);
+    expect(await readTool({ path: "target" }, context)).toMatchObject({
+      endLine: 2,
+      totalLines: 2,
+      truncated: false,
+    });
+    expect(await readTool({ path: "target", startLine: 2 }, context)).toMatchObject({
+      content: "",
+      endLine: 2,
+      totalLines: 2,
+      truncated: false,
+    });
+    await fs.writeFile(join(context.cwd, "target"), "");
+    expect(await readTool({ path: "target" }, context)).toMatchObject({
+      content: "",
+      endLine: 0,
+      totalLines: 0,
+      truncated: false,
+    });
+  });
 });
 
 describe("workspace search and listing", () => {

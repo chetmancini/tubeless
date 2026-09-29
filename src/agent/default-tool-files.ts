@@ -99,8 +99,9 @@ export async function readTool(
     const startLine = input.startLine ?? 1;
     const selected = lines.slice(startLine - 1, startLine - 1 + (input.maxLines ?? 200));
     const content = clippedText(selected.join("\n"));
-    const endLine =
+    let endLine =
       selected.length === 0 ? startLine - 1 : startLine + content.text.split("\n").length - 1;
+    if (content.truncated && content.text.endsWith("\n")) endLine--;
     return {
       path,
       content: content.text,
