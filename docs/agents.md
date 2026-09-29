@@ -86,8 +86,10 @@ model-specific restrictions on the supported schema subset still apply.
 The adapter keeps the complete Responses output sequence, including encrypted
 reasoning, messages, and function calls, then appends matching tool outputs.
 New tool outputs share an encoded 256 KiB batch budget, reduced further when the
-surrounding requests leave less room. Batches that fit remain exact. Otherwise,
-large outputs receive a fair per-call share with `truncated: true`, the original
+request being sent leaves less room. Batches that fit remain exact. Otherwise,
+each result's fixed metadata is reserved first, and the remaining preview space
+is shared across large results. Small complete results are kept when they cost
+less than a preview marker. Large outputs carry `truncated: true`, the original
 JSON byte count, and a UTF-8-safe JSON-text `preview`. Every call still receives
 a matching output and retains its success/failure flag. The model is told to
 retrieve narrower results and avoid repeating successful mutations. Full tool
@@ -95,10 +97,14 @@ outcomes remain available to the harness and evaluation reports. This provider
 boundary keeps large batches from preventing compaction; it does not change tool
 execution or the outcomes supplied to custom `decide` callbacks.
 It uses `store: false` with client-owned history. Once completed history exceeds
-`compactAfterBytes` (64 KiB by default), it calls the native
+`compactAfterBytes` (64 KiB by default), or a complete decision would exceed the
+request limit, it calls the native
 [`/responses/compact` endpoint](https://developers.openai.com/api/docs/guides/compaction)
-and carries the entire returned context window into the next decision. Instructions
-are sent again on each request. Compaction can lose exact historical detail; the
+and carries the entire returned context window into the next decision. The
+compaction budget includes instructions and history; tool schemas are
+only included when checking the subsequent decision with the compacted window.
+This prevents large schemas from unnecessarily trimming results before compaction.
+Instructions are sent again on each request. Compaction can lose exact historical detail; the
 prompt tells the model to re-read sources when exact text matters. Select a model
 that supports both Responses function calling and compaction.
 

@@ -64,3 +64,32 @@ it("fails explicitly when even one result marker cannot fit", () => {
     openaiToolOutputs([{ id: "read", tool: "read", ok: true, value: "text" }], 1)
   ).toThrow("no room for tool output metadata");
 });
+
+it.each([false, true])(
+  "reserves unequal call-ID overhead before sharing preview space (small result: %s)",
+  (smallResult) => {
+    const outcomes = [
+      { id: "long".repeat(64), tool: "read", ok: true as const, value: "x".repeat(300_000) },
+      {
+        id: "s",
+        tool: "read",
+        ok: true as const,
+        value: smallResult ? "done" : "y".repeat(300_000),
+      },
+    ];
+    const minimum = openaiToolOutputs(outcomes, 1_000_000).map((item) => {
+      const output = JSON.parse(item.output);
+      return output.truncated
+        ? { ...item, output: JSON.stringify({ ...output, preview: "" }) }
+        : item;
+    });
+    const history = [{ role: "user", content: "Task" }];
+    const budget =
+      Buffer.byteLength(JSON.stringify([...history, ...minimum])) -
+      Buffer.byteLength(JSON.stringify(history));
+    expect(openaiToolOutputs(outcomes, budget)).toEqual(minimum);
+    expect(() => openaiToolOutputs(outcomes, budget - 1)).toThrow(
+      "no room for tool output metadata"
+    );
+  }
+);

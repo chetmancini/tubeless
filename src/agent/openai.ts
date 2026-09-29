@@ -10,7 +10,7 @@ export interface OpenAIModelOptions {
   readonly model?: string;
   /** Defaults to OPENAI_API_KEY at execution time. */
   readonly apiKey?: string;
-  /** Compact completed conversation above this serialized UTF-8 size; defaults to 65536 bytes. */
+  /** Compact above this history size (default 65536 bytes), or when the complete decision exceeds the request limit. */
   readonly compactAfterBytes?: number;
   /** Combined deadline for compaction and decision requests; defaults to 60000 ms. */
   readonly timeoutMs?: number;
@@ -73,18 +73,33 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
       tool_choice: "required",
       parallel_tool_calls: true,
     };
-    const availableBytes =
-      MAX_REQUEST_BYTES -
-      Math.max(
-        Buffer.byteLength(JSON.stringify(compactRequest)),
-        Buffer.byteLength(JSON.stringify(decisionRequest))
-      );
-    input.push(...openaiToolOutputs(request.outcomes, availableBytes));
-    if (
+    const completedInput = [...input, ...openaiToolOutputs(request.outcomes, MAX_REQUEST_BYTES)];
+    const shouldCompact =
       request.outcomes.length > 0 &&
-      Buffer.byteLength(JSON.stringify(input)) > compactAfterBytes
-    ) {
-      const compacted = await openaiRequest("responses/compact", compactRequest, apiKey, signal);
+      (Buffer.byteLength(JSON.stringify(completedInput)) > compactAfterBytes ||
+        Buffer.byteLength(JSON.stringify({ ...decisionRequest, input: completedInput })) >
+          MAX_REQUEST_BYTES);
+    // Compaction sends no tool schemas. Budget against the request actually sent,
+    // then check the decision with the returned compacted window at the HTTP boundary.
+    const nextRequest = shouldCompact ? compactRequest : decisionRequest;
+    input =
+      Buffer.byteLength(JSON.stringify({ ...nextRequest, input: completedInput })) <=
+      MAX_REQUEST_BYTES
+        ? completedInput
+        : [
+            ...input,
+            ...openaiToolOutputs(
+              request.outcomes,
+              MAX_REQUEST_BYTES - Buffer.byteLength(JSON.stringify(nextRequest))
+            ),
+          ];
+    if (shouldCompact) {
+      const compacted = await openaiRequest(
+        "responses/compact",
+        { ...compactRequest, input },
+        apiKey,
+        signal
+      );
       if (!record(compacted) || compacted.object !== "response.compaction")
         throw new Error("OpenAI returned invalid compaction");
       input = outputItems(compacted);

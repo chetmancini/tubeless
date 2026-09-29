@@ -35,6 +35,89 @@ const response = (output: unknown[]) => Response.json({ status: "completed", out
 
 describe("OpenAI model", () => {
   it.each([
+    { historyKiB: 500, schemaKiB: 500, compactAfterBytes: 65_536, compactedKiB: 1 },
+    { historyKiB: 600, schemaKiB: 450, compactAfterBytes: 65_536, compactedKiB: 1 },
+    { historyKiB: 500, schemaKiB: 500, compactAfterBytes: 1_048_575, compactedKiB: 1 },
+    { historyKiB: 500, schemaKiB: 500, compactAfterBytes: 65_536, compactedKiB: 600 },
+  ])(
+    "budgets compaction separately from decision schemas: %j",
+    async ({ historyKiB, schemaKiB, compactAfterBytes, compactedKiB }) => {
+      const schema = {
+        "~standard": {
+          version: 1 as const,
+          vendor: "fixture",
+          validate: (value: unknown) => ({ value }),
+          jsonSchema: {
+            input: () => ({ type: "string", description: "s".repeat(schemaKiB * 1024) }),
+          },
+        },
+      };
+      const value = "v".repeat(100 * 1024);
+      const compacted = [
+        { type: "compaction", encrypted_content: "c".repeat(compactedKiB * 1024) },
+      ];
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(Response.json({ object: "response.compaction", output: compacted }))
+        .mockResolvedValueOnce(response([finish()]));
+      vi.stubGlobal("fetch", fetcher);
+      const transport = openaiModel({ apiKey: "fixture", compactAfterBytes });
+      const agent = defineModelAgent({
+        id: "compact-with-large-schemas",
+        projectContext: false,
+        tools: {
+          custom: defineTool({
+            description: "Custom tool",
+            inputSchema: schema,
+            outputSchema: schema,
+            run: (input) => input,
+          }),
+        },
+        model: (request, context) =>
+          transport(
+            {
+              ...request,
+              conversation: [
+                { role: "user", content: "h".repeat(historyKiB * 1024) },
+                call("custom", "input", "previous"),
+              ],
+              outcomes: [{ id: "previous", tool: "custom", ok: true, value }],
+            },
+            context
+          ),
+      });
+      const result = await agent.run({ task: "Continue" });
+      expect(fetcher.mock.calls[0]![0]).toBe("https://api.openai.com/v1/responses/compact");
+      const compactRequest = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
+      expect(compactRequest).not.toHaveProperty("tools");
+      expect(compactRequest.input.at(-1)).toMatchObject({
+        call_id: "previous",
+        type: "function_call_output",
+      });
+      expect(JSON.parse(compactRequest.input.at(-1).output)).toEqual({ ok: true, value });
+      for (const [, options] of fetcher.mock.calls)
+        expect(Buffer.byteLength(options!.body as string)).toBeLessThanOrEqual(1_048_576);
+      if (compactedKiB === 600) {
+        expect(result.status).toBe("failed");
+        expect(result.errors[0]!.message).toContain("request exceeds 1 MiB");
+        expect(fetcher).toHaveBeenCalledTimes(1);
+      } else {
+        expect(result).toMatchObject({
+          status: "completed",
+          finalized: true,
+          value: { answer: "Done." },
+        });
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        const decisionRequest = JSON.parse(fetcher.mock.calls[1]![1]!.body as string);
+        expect(decisionRequest.input).toEqual(compacted);
+        expect(decisionRequest.tools.some((tool: { name: string }) => tool.name === "custom")).toBe(
+          true
+        );
+      }
+    }
+  );
+
+  it.each([
     {
       descriptor: {
         type: "object",
