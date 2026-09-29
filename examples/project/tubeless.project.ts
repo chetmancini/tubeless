@@ -12,6 +12,7 @@ import { PaginatedPipeline } from "../iteration.ts";
 import { ScriptedAgent } from "../agent.ts";
 import { DelegatingAgentCommand } from "../agent-delegation.ts";
 import { OpenAIAgentCommand } from "../agent-openai.ts";
+import { WorkspaceAgentCommand } from "../agent-workspace.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
 import { YamlPelotonCommand } from "../yaml-peloton.ts";
 import { AirflowRemoteCommand } from "../airflow/remote.ts";
@@ -37,6 +38,7 @@ export default defineProject(
     ScriptedAgent,
     OpenAIAgentCommand,
     DelegatingAgentCommand,
+    WorkspaceAgentCommand,
     definePipelineCommand(PaginatedPipeline, {
       params: { rows: { type: "string", multiple: true } },
     }),

@@ -150,6 +150,7 @@ try {
     "docs/child-pipeline-composition.md",
     "docs/agents.md",
     "examples/agent.ts",
+    "examples/agent-workspace.ts",
     "docs/remote-step-composition.md",
     "docs/cli.md",
     "docs/concepts.md",

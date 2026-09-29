@@ -105,7 +105,8 @@ export const ScriptedAgent = defineAgent({
     ...state,
     observations: outcomes.map((outcome) => {
       if (!outcome.ok) return `Observed ${outcome.error.code}: ${outcome.error.message}`;
-      return outcome.tool === "count" ? `${outcome.value} characters` : outcome.value;
+      if (outcome.tool === "count") return `${outcome.value} characters`;
+      return outcome.tool === "uppercase" ? outcome.value : JSON.stringify(outcome.value);
     }),
   }),
 });

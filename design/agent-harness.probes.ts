@@ -133,8 +133,11 @@ const researcher = defineAgent({
         expectTypeOf(outcome.value).toEqualTypeOf<{ hits: readonly string[] }>();
         return outcome.value.hits.join("\n");
       }
-      expectTypeOf(outcome.value).toEqualTypeOf<string>();
-      return outcome.value;
+      if (outcome.tool === "readPage") {
+        expectTypeOf(outcome.value).toEqualTypeOf<string>();
+        return outcome.value;
+      }
+      return JSON.stringify(outcome.value);
     });
     return { ...state, observations: [...state.observations, ...observations] };
   },
@@ -185,12 +188,17 @@ const wrongOutcome: AgentOutcome<typeof tools> = {
 };
 void [mixed, empty, unknownTool, transformedInput, wrongInput, wrongFinish, wrongOutcome];
 
-const noRegisteredTools: AgentDecision<{}, string> = {
+const noCustomTools: AgentDecision<{}, string> = {
   kind: "continue",
-  // @ts-expect-error A tool-free agent cannot continue with a call.
-  calls: [{ id: "x", tool: "search", input: {} }],
+  calls: [{ id: "read", tool: "read", input: { path: "README.md" } }],
 };
-void noRegisteredTools;
+const unknownCustomTool: AgentCall = {
+  id: "x",
+  // @ts-expect-error An agent without custom tools cannot call an unregistered name.
+  tool: "privateTool",
+  input: {},
+};
+void [noCustomTools, unknownCustomTool];
 defineTool({
   description: "Invalid transformed output.",
   inputSchema: searchInputSchema,

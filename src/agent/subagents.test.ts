@@ -69,12 +69,21 @@ describe("agent subtrees", () => {
         return value;
       },
       decide: (state, context) => {
-        expect(context.capabilities.map(({ name }) => name)).toEqual(["double"]);
+        expect(context.capabilities.map(({ name }) => name)).toEqual([
+          "bash",
+          "double",
+          "edit",
+          "list",
+          "read",
+          "search",
+          "write",
+        ]);
         return context.turn === 1
           ? { kind: "continue", calls: [{ id: "double", tool: "double", input: state }] }
           : { kind: "finish", result: state };
       },
-      reduce: (_state, outcomes) => (outcomes[0]!.ok ? outcomes[0]!.value : 0),
+      reduce: (_state, outcomes) =>
+        outcomes[0]?.ok && outcomes[0].tool === "double" ? outcomes[0].value : 0,
     });
     const parent = coordinator(
       "parent",

@@ -4,6 +4,9 @@ Status: stage 4 implements pipeline tools and subagent delegation on top of the
 single-agent runtime and generic bounded iteration. Subtrees share call/decision
 budgets, depth bounds, cancellation, and leaf execution limits. Each child owns
 its state and capability registry.
+Every agent now includes the standard workspace tools; custom tools extend the
+registry or replace defaults by name. The workspace tool slice precedes stage 5
+history and presentation work.
 The provider example was brought forward from stage 6: the
 [OpenAI recipe](../examples/agent-openai.ts) now supplies an application-owned
 Responses callback, accumulated outcomes, and model-selected finish. Offline
@@ -58,7 +61,11 @@ or invalid final result fails the invocation. V1 does not automatically ask the
 model to repair malformed decisions. A result such as `null` is accepted only
 when the result schema accepts it; absence is distinct from a published value.
 
-Use one `tools` registry. Each entry is created through one of these boundaries:
+Use one merged registry: `read`, `write`, `edit`, `bash`, `list`, and `search`
+are included by default, and custom `tools` add or replace names. Built-ins use
+the same `defineTool` boundary and carry no invocation state on their definitions.
+They resolve cwd at execution and obey the existing cancellation, budget and
+dry-run contracts. Each entry is created through one of these boundaries:
 
 | Constructor                     | Input validation                                                              | Execution                      | Result                                                           |
 | ------------------------------- | ----------------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------------- |

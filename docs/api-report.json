@@ -10,12 +10,13 @@
         "AgentOutcome",
         "AgentState",
         "AgentTool",
+        "DefaultAgentTools",
         "defineAgent",
         "defineTool",
         "pipelineTool",
         "ToolError"
       ],
-      "sha256": "d8c098c04e519a62ffd2acacc22b3cc78bcbe933147d3d6169b5a2d2ebb09fd8",
+      "sha256": "efa40f80af70843accc4320d8579448689fdfaa4a629223349ca1e5790cd29bd",
       "specifier": "tubeless/agent"
     },
     {

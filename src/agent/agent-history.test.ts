@@ -43,7 +43,7 @@ function agent(
           : { kind: "finish", result: state.value },
     reduce: (state, outcomes) => ({
       ...state,
-      value: outcomes[0]?.ok ? outcomes[0].value : state.value,
+      value: outcomes[0]?.ok && outcomes[0].tool === "double" ? outcomes[0].value : state.value,
     }),
   });
 }
@@ -258,7 +258,16 @@ describe("agent definition and recorded execution", () => {
       tools: { number: tool },
       initialState: () => 0,
       decide: (_state, context) => {
-        expect(context.capabilities).toEqual([
+        expect(context.capabilities.map(({ name }) => name)).toEqual([
+          "bash",
+          "edit",
+          "list",
+          "number",
+          "read",
+          "search",
+          "write",
+        ]);
+        expect(context.capabilities.filter(({ name }) => name === "number")).toEqual([
           { name: "number", description: "Number", inputJsonSchema: { type: "number" } },
         ]);
         expect(Object.isFrozen(context.capabilities[0]!.inputJsonSchema)).toBe(true);

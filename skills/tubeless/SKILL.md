@@ -132,6 +132,12 @@ Read the corresponding package recipe before using these features:
   concurrency obey shared ancestor limits; turns are local. Waiting wrappers
   hold no leaf permit. Ordinary child composition carries the private scope.
   Crash-safe resume is not yet implemented.
+  Every agent includes `read`, `write`, `edit`, `bash`, `list`, and `search`.
+  Custom `tools` extend the registry or replace built-ins by name. Reducers must
+  narrow outcomes by `ok` and `tool`. Paths use the run cwd and host permissions;
+  dependent file operations belong in successive turns. Read/list/search work in
+  dry runs; write/edit/bash skip live execution. See `examples/agent-workspace.ts`
+  and the bounds documented in `docs/agents.md`.
   Read provider credentials inside `decide`, forward cancellation, and test the
   HTTP boundary with fixtures. The OpenAI recipe has no preview decision source;
   its dry run skips model work and has no final answer. Provider schemas and

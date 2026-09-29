@@ -36,7 +36,10 @@ bun run tubeless -- run --trace logs/openai-agent.ndjson examples/agent-openai.t
 
 The example defaults to `gpt-4.1-mini`; set `OPENAI_MODEL` to choose another
 Responses model with function calling. This command makes paid API requests.
-The tools themselves only transform and count text in process.
+Its custom tools transform and count text. Like every agent, it also advertises
+the default workspace tools, including `bash`, to the model. Those tools execute
+with the host process's permissions and environment; there is no per-call approval
+or sandbox built into the harness.
 
 The model chooses which tools to call, their arguments, and how many calls to
 request. A run can uppercase three words in one turn, consume those results in
@@ -88,9 +91,16 @@ tool output, and credentials are not added to traces by this adapter.
 
 The compiled turn graph stays `decide -> calls -> reduce`. Its execution history
 expands with each chosen batch and turn; a model cannot rewrite dependency edges
-or register executable code.
+or add tool-registry entries. The registered `bash` tool executes model-supplied commands.
 
 ## Define tools and an agent
+
+Every `defineAgent` includes `read`, `write`, `edit`, `bash`, `list`, and `search`,
+including child agents. The optional `tools` object adds custom capabilities;
+a custom entry with a built-in name replaces that tool for this agent. The
+decision context advertises the merged registry, and `AgentCall`, `AgentDecision`,
+and `AgentOutcome` include the defaults with each custom override's exact types.
+Narrow outcomes by both `ok` and `tool` before reading a tool-specific value.
 
 Use `defineTool` for a handler with a description, `inputSchema`, `outputSchema`,
 and `run(validatedInput, context)`. Both schemas follow Standard Schema V1.
@@ -104,7 +114,7 @@ runtime dependency of Tubeless.
 Tool names start with a letter and contain letters, digits, underscores, or
 hyphens, up to 128 characters. A call ID is a nonblank string of at most 256
 characters, unique within its turn. Model data can select registered names and
-supply arguments; it cannot register code or change execution controls.
+supply arguments; it cannot add registry entries or change harness limits.
 
 `defineAgent` takes `id`, `inputSchema`, `resultSchema`, `initialState`, and
 `decide`, with optional `tools`, `reduce`, `dryRun`, and `limits`. It returns a
@@ -112,6 +122,75 @@ pipeline with the single step and target `agent`. Its exact raw input, schema
 transformed output, and literal ID work with ordinary `fromPipeline`,
 `defineProject`, and `definePipelineCommand`. Automatic CLI flags still require
 JSON Schema metadata on the agent's input schema.
+
+## Default workspace tools
+
+| Tool     | Arguments                                   | Result and bounds                                                                                                                                |
+| -------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `read`   | `path`, optional `startLine` and `maxLines` | UTF-8 content and line range; starts at line 1, returns up to 200 lines by default and 16 KiB. `maxLines` may be at most 2,000.                  |
+| `write`  | `path`, `content`                           | Creates parent directories and creates or replaces the file; returns its path and byte count.                                                    |
+| `edit`   | `path`, `oldText`, `newText`                | Replaces one exact match; missing or ambiguous matches return a recoverable error without writing.                                               |
+| `bash`   | `command`, optional `cwd` and `timeoutMs`   | stdout, stderr, exit code, signal, timeout and truncation flags. Defaults to 30 seconds; maximum 5 minutes. Combined output is capped at 16 KiB. |
+| `list`   | optional `path`                             | Up to 200 directory entries with file/directory/symlink kinds and a truncation flag.                                                             |
+| `search` | `query`, optional `path`                    | Case-sensitive literal search with paths and line numbers; up to 50 matches and 16 KiB of path/text content.                                     |
+
+File reads, edits and writes support regular UTF-8 files up to 1 MiB; named pipes
+and devices are rejected. `read` rejects binary files. `search` skips binary and
+oversized files, `.git`, `node_modules`, and nested symlinks. During directory
+searches it also skips unavailable descendants, retaining other matches;
+`skippedFiles` counts unsupported files and unavailable entries, counting an
+unavailable directory once. Missing or inaccessible explicit roots still fail,
+as do cancellation and unexpected I/O errors.
+
+List and search sort each directory in case-sensitive filename order before
+applying result limits or descending. Each visited directory's entry list is read
+in full for sorting; search processes at most 2,000 entries and 32 directory levels.
+Search snippets are capped at 1,024 UTF-8 bytes per line and shift to the first
+match when the initial snippet omits it. A query longer than that bound can itself
+be clipped; `truncated` reports omitted text or results.
+Listing caps retained names at 16 KiB. Result metadata is additional to these content limits.
+Nullable options select defaults. Application calls may omit these options;
+model descriptors require them explicitly with `null` accepted for defaults.
+
+Paths resolve from the invocation's `context.cwd`; absolute paths are accepted.
+`bash.cwd` resolves from that same directory. These are host filesystem and shell
+operations using the process's permissions and environment; `cwd` is not a sandbox.
+Filesystem and command-start failures become recoverable `ToolError` observations.
+A command's nonzero exit or timeout is reported in its result. Cancellation remains
+fatal and waits for the owned command to close; on POSIX, timeout/cancellation
+signals the command's process group, escalating to SIGKILL after 250 milliseconds.
+At that deadline, remaining output pipes are closed and the output is marked
+truncated. Descendants that escape the process group may survive, but cannot keep
+the tool waiting on inherited output pipes; process groups are not a sandbox.
+
+All defaults use the ordinary validated tool execution path, shared budgets,
+concurrency limits, and tracing. Read, list, and search run in dry runs. Write,
+edit, and bash skip live work and produce no fabricated result; an agent turn
+requiring one of these skipped results fails. Put dependent filesystem changes in
+successive turns; calls in a batch may run concurrently. Each write or edit stages
+the complete contents in a sibling temporary directory, then atomically replaces
+the destination. Cancellation or failure before replacement preserves the original;
+cancellation racing with replacement can leave the complete new file. Existing
+symlinks are followed; `write` can create a missing target and its parent directories
+without replacing the link. Existing owner, group, and file permission bits are preserved.
+Atomic replacement requires write and search permissions on the destination directory,
+even when the file itself is writable. If staging or restoring ownership is not permitted,
+the tool fails without replacing the original; it does not fall back to an in-place write.
+Replacement creates a new inode: other hard links retain the old contents, and extended
+file attributes are not copied.
+Operations are not transactions across calls or a crash-safe durability guarantee.
+
+The [workspace recipe](../examples/agent-workspace.ts) uses all six defaults and
+one custom tool to create, inspect, edit, and verify `message.txt`. Its decisions
+are scripted; its filesystem and bash operations are real:
+
+```sh
+make run FILE=examples/agent-workspace.ts ARGS='--directory .tubeless/agent-tools-demo'
+```
+
+The recipe creates or replaces that demo file. It is registered as `workspace-agent`
+in the example project. The existing OpenAI recipe also advertises the defaults
+automatically, alongside its custom text tools.
 
 ## Delegate to pipelines and subagents
 
