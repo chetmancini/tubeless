@@ -7,7 +7,7 @@ export type Output<S extends StandardSchemaV1> = NonNullable<S["~standard"]["typ
 export type AgentState<T> = { readonly [K in keyof T]: AgentState<T[K]> };
 declare const capabilityTypes: unique symbol;
 
-/** Opaque capability created by defineTool; model decisions contain data only. */
+/** Opaque capability created by defineTool or pipelineTool; model decisions contain data only. */
 export interface AgentTool<Arguments, Result> {
   readonly [capabilityTypes]: { readonly input: Arguments; readonly output: Result };
 }
@@ -40,15 +40,17 @@ export type AgentDecision<Registry extends Tools, Result> =
     }
   | { readonly kind: "finish"; readonly result: Result; readonly calls?: never };
 
-/** Finite admission and active-execution limits for one agent invocation. */
+/** Finite limits for this agent and its descendants; child limits may only tighten them. */
 export interface AgentLimits {
   /** Decision callbacks, including finish. Defaults to 20. */
   readonly maxTurns?: number;
-  /** Admitted calls, including calls stopped before dispatch. Defaults to 100. */
+  /** Admitted subtree calls, including calls stopped before dispatch. Defaults to 100. */
   readonly maxCalls?: number;
-  /** Decision callback admissions. Defaults to 100; provider retries are application-owned. */
+  /** Subtree decision callback admissions. Defaults to 100; provider retries are application-owned. */
   readonly maxDecisions?: number;
-  /** Active tool handlers. Defaults to 1; decisions and call batches never overlap. */
+  /** Pipeline-tool delegation edges below this agent. Defaults to 4; zero allows leaf tools only. */
+  readonly maxDepth?: number;
+  /** Active decision callbacks and leaf handlers across the subtree. Defaults to 1. */
   readonly maxConcurrency?: number;
 }
 

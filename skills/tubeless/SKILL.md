@@ -118,15 +118,20 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 
 Read the corresponding package recipe before using these features:
 
-- `defineAgent` and `defineTool` from `tubeless/agent` for bounded in-process
-  decisions over registered handler tools. Read `docs/agents.md` and
+- `defineAgent`, `defineTool`, and `pipelineTool` from `tubeless/agent` for bounded in-process
+  decisions over registered handlers, pipelines, and subagents. Read `docs/agents.md` and
   `examples/agent.ts`; use `examples/agent-openai.ts` for a real Responses API
   callback with native fetch. Keep provider calls application-owned, validate raw
   decisions and all schema boundaries, and reduce ordered outcomes into owned
   plain-data state. Handler-originated `ToolError` is recoverable; validation and
   unclassified failures are fatal. Dry-run decisions and tools need explicit
-  previews. Limits are per invocation in this slice; pipeline tools, delegation,
-  tree-wide budgets, and crash resume are not yet implemented.
+  previews. Use `examples/agent-delegation.ts` for child agents and ordinary
+  pipeline tools. Reuse the child options schema, or supply `inputSchema` and
+  `mapOptions` together; keep mapping free of side effects. The complete batch
+  is prevalidated and transforms run once. Calls, decisions, depth, and leaf
+  concurrency obey shared ancestor limits; turns are local. Waiting wrappers
+  hold no leaf permit. Ordinary child composition carries the private scope.
+  Crash-safe resume is not yet implemented.
   Read provider credentials inside `decide`, forward cancellation, and test the
   HTTP boundary with fixtures. The OpenAI recipe has no preview decision source;
   its dry run skips model work and has no final answer. Provider schemas and

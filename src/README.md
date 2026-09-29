@@ -12,7 +12,7 @@ their source files.
 | Directory    | Responsibility                                                                                |
 | ------------ | --------------------------------------------------------------------------------------------- |
 | `core/`      | Pipeline definitions, graph planning, execution, lifecycle and progress                       |
-| `agent/`     | In-process decision validation, handler tools, owned state, bounded turn execution            |
+| `agent/`     | In-process decision validation, handler/pipeline tools, owned state, shared subtree admission |
 | `tracing/`   | Trace contracts, internal emission and exporter composition                                   |
 | `utilities/` | Domain-independent cancellation, collections, batching, retry, rate limits and error branding |
 | `cli/`       | Argument parsing, command declarations and pipeline adaptation                                |
@@ -30,7 +30,11 @@ their source files.
 - Agent execution composes core pipelines and utilities. The root entrypoint and
   core never import agent code, providers, storage, or presentation. Handler
   tools validate arguments before dispatch and use private one-step pipelines;
-  the internal child invocation boundary returns full reports for classification.
+  pipeline tools prevalidate child options using private prepared values.
+  `agent/execution-scope.ts` owns ancestor budgets and leaf admission. Core
+  carries that opaque scope through ordinary child execution and brackets leaf
+  handlers; orchestration steps hold no permit. The internal child invocation
+  boundary returns full reports for handler-origin error classification.
 
 - Core uses utilities and internal trace emission. Its complete runtime import graph
   must stay independent of exporters, storage, UI, command parsing and presentation.
@@ -71,6 +75,8 @@ Run `make check` after changes; it builds before checking these boundaries.
   step attempts, stop policy and finalization.
 - `core/pipeline-execution-error.ts` owns execution and child error classes,
   cancellation classification, bounded diagnostics and original cause retention.
+  Fan-out errors retain only the primary child run, bounded diagnostic snapshots,
+  and leaf-handler exceptions for classification; they discard sibling run reports.
   Parent and child execution consume it; it imports neither executor nor run state.
 - `core/lifecycle.ts` owns hook delivery, trace creation, scoped loggers and flushing.
   Executors pass run identity and consume lifecycle operations; only lifecycle

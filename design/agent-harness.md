@@ -1,21 +1,18 @@
 # Structured agent harness contract
 
-Status: stage 3 implements single-agent execution through `tubeless/agent`, on
-top of generic bounded iteration. Handler tools, owned state, per-invocation
-limits, previews, and saved lifecycle records are implemented. Pipeline tools,
-subagents, and shared tree admission remain stage 4.
+Status: stage 4 implements pipeline tools and subagent delegation on top of the
+single-agent runtime and generic bounded iteration. Subtrees share call/decision
+budgets, depth bounds, cancellation, and leaf execution limits. Each child owns
+its state and capability registry.
 The provider example was brought forward from stage 6: the
 [OpenAI recipe](../examples/agent-openai.ts) now supplies an application-owned
 Responses callback, accumulated outcomes, and model-selected finish. Offline
 fixtures cover the adapter; live provider execution is a separate smoke check.
 The first agent release will execute in process; crash-safe resume follows later.
 
-The [prototype declarations](./agent-harness.prototype.ts) and
-[type probes](./agent-harness.probes.ts) fix the proposed agent boundaries before
-runtime implementation and exercise the real public iteration API. They are
-checked by `bun run typecheck` and `make check`. The agent probes now use the implemented public API; `pipelineTool` remains
-a prototype declaration. Declared fixture schemas mean these probes must not be executed. `design/` is
-excluded from the npm artifact; the packed-artifact check enforces that boundary.
+The [type probes](./agent-harness.probes.ts) exercise the implemented public API
+and are checked by `bun run typecheck` and `make check`. Declared fixture schemas
+mean these probes must not be executed. `design/` is excluded from the npm artifact.
 
 ## API decisions
 
@@ -25,8 +22,8 @@ result type, and definition metadata. It works with existing `fromPipeline`,
 `defineProject`, and `definePipelineCommand`. Schema metadata remains necessary
 for automatic CLI flags. There is no separate agent project or command registry.
 
-The `tubeless/agent` entrypoint owns `defineAgent`, `defineTool`, `ToolError`,
-and their contracts; `pipelineTool` joins it in stage 4. It depends on core, utilities,
+The `tubeless/agent` entrypoint owns `defineAgent`, `defineTool`, `pipelineTool`,
+`ToolError`, and their contracts. It depends on core, utilities,
 and trace emission. Core stays independent of the agent entrypoint, model SDKs,
 storage, CLI, and Studio. Model prompting and provider request/response mapping
 remain application-owned.
@@ -154,9 +151,8 @@ exhaustion is never a successful final answer or a recoverable tool error.
 
 ## Limits, cancellation, and dry-run
 
-Stage 3 implements `maxTurns`, `maxCalls`, `maxDecisions`, and `maxConcurrency`
-for one invocation. The tree scopes and `maxDepth` below describe stage 4, not
-a guarantee of the current release slice.
+Stage 4 implements every limit below. `maxTurns` is local to an agent; the other
+bounds constrain its subtree. Delegation depth counts `pipelineTool` edges.
 
 Limits are definition configuration in v1, separate from domain input. There
 are no new agent-specific positional run arguments or overloads. Applications
@@ -185,16 +181,15 @@ handler remain the application's responsibility. Any future harness retries
 must consume the relevant admission budget.
 
 Allocate the shared execution scope on the root invocation, never on the
-definition. Core will carry one private opaque scope slot through runtime
+definition. Core carries one private opaque scope slot through runtime
 normalization and child contexts; the agent layer owns its counters and limiter.
 Core does not interpret agent policy. This slot must survive ordinary pipelines
 between parent and child agents. It is not a public extension registry, a
-global run-ID map, domain input, or serialized model context. Add this transport
-only when implementing tree-wide admission in stage 4.
+global run-ID map, domain input, or serialized model context.
 
 An active parent wrapper waiting on children holds no shared execution permit.
 A decision releases its permit before dispatching calls. Descendant leaf work
-acquires applicable ancestor/local permits in a consistent order. Tests with
+acquires all applicable ancestor/local permits atomically from one root queue. Tests with
 concurrency one must prove nested calls cannot deadlock.
 
 Cancellation stops new admissions and dispatch, propagates the same signal to
@@ -276,7 +271,7 @@ lookups, and dynamic IDs used as static targets. Iteration probes preserve
 transformed dependency outputs, raw parent inputs, schema-backed CLI inference,
 schema-less explicit CLI parameters, and a precise `undefined` finish result.
 
-The remaining pipeline-tool probes are compile-time evidence only. Stage 3
+The probes use public exports, including pipeline tools. Stage 3
 adds runtime coverage for decision validation, schema counts, error classification,
 isolation, limits, concurrency, cancellation, and saved history. The public
 [scripted agent](../examples/agent.ts) exercises heterogeneous dynamic calls and
@@ -284,4 +279,8 @@ recovery without credentials; [agent usage](../docs/agents.md) documents this sl
 execution, with deterministic tests for transitions, limits, run isolation,
 selection, cancellation, dry-run, and saved-record compatibility. The public
 [pagination example](../examples/iteration.ts) runs without a model or credentials.
-Stage 4 adds executable pipeline-tool and subagent examples.
+Stage 4 adds the executable [delegation recipe](../examples/agent-delegation.ts)
+and tests schema counts, nested concurrency one, ancestor/local budgets, depth,
+cancellation/draining, child failure classification, previews, and simultaneous
+root isolation. Pipeline tools require compiled Tubeless children so private
+prevalidation and scope transport cannot be lost through external wrappers.

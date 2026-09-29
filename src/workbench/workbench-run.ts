@@ -3,7 +3,11 @@ import { mkdir, readlink, realpath, stat, unlink, writeFile } from "node:fs/prom
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import type { PipelineRunEventStore } from "../run-store/run-store.js";
-import { composeTraceExporters, type PipelineTraceExporter } from "../tracing/tracing.js";
+import {
+  composeTraceExporters,
+  type PipelineTraceExporter,
+  type PipelineTraceEvent,
+} from "../tracing/tracing.js";
 import { toExitCode } from "../cli/cli-exit.js";
 import { executePipelineCommand } from "./workbench-command-execution.js";
 import { resolveWorkbenchRegistration } from "./workbench-project-loader.js";
@@ -169,7 +173,14 @@ async function createRunTraceWriter(
   exporter: PipelineTraceExporter;
 }> {
   let writeSignal = signal;
-  const currentSignal = () => writeSignal;
+  // Nested runs share this exporter but have separate emission queues. Serialize
+  // at the destination so only one flush/error/close listener set is active.
+  let writes = Promise.resolve();
+  const writeEvent = (output: WorkbenchCliIo["stdout"], event: PipelineTraceEvent) => {
+    const chunk = `${JSON.stringify(event)}\n`;
+    writes = writes.then(() => writeCliChunk(output, chunk, writeSignal));
+    return writes;
+  };
 
   if (destination === "-") {
     let writeError: Error | undefined;
@@ -185,7 +196,7 @@ async function createRunTraceWriter(
         async export(event) {
           if (writeError) throw writeError;
           try {
-            await writeCliChunk(io.stdout, `${JSON.stringify(event)}\n`, currentSignal());
+            await writeEvent(io.stdout, event);
           } catch (error) {
             writeError = error instanceof Error ? error : new Error(String(error));
             throw writeError;
@@ -250,7 +261,7 @@ async function createRunTraceWriter(
     exporter: {
       async export(event) {
         if (writeError) throw writeError;
-        await writeCliChunk(stream, `${JSON.stringify(event)}\n`, currentSignal());
+        await writeEvent(stream, event);
         if (writeError) throw writeError;
       },
     },

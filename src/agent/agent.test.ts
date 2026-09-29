@@ -339,6 +339,8 @@ describe("single-agent execution", () => {
     { maxTurns: 0 },
     { maxCalls: -1 },
     { maxDecisions: 1.5 },
+    { maxDepth: -1 },
+    { maxDepth: 1.5 },
     { maxConcurrency: Infinity },
     { maxTurns: Number.MAX_SAFE_INTEGER + 1 },
   ])("rejects invalid definition limits %j", (limits) => {

@@ -14,9 +14,12 @@ import {
   ownState,
 } from "./agent-state.js";
 import { compileTool } from "./tools.js";
-import { createAgentTurn, resolvedLimits, type TurnState } from "./turn.js";
+import { setExecutionScope } from "../core/execution-scope.js";
+import { AgentExecutionScope, resolvedLimits } from "./execution-scope.js";
+import { createAgentTurn, type TurnState } from "./turn.js";
 import type { AgentDefinition, Input, Output, Tools } from "./agent-types.js";
 
+export { pipelineTool } from "./pipeline-tool.js";
 export { defineTool, ToolError } from "./tools.js";
 export type {
   AgentCall,
@@ -85,12 +88,15 @@ export function defineAgent<
     pipeline: turn,
     maxIterations: limits.maxTurns,
     dryRun: config.dryRun ? undefined : "skip",
-    initialState: (_inputs, context): TurnState<State> => ({
-      state: ownState(config.initialState(context.options)),
-      turn: 1,
-      stateVersion: 0,
-      calls: 0,
-    }),
+    initialState: (_inputs, context): TurnState<State> => {
+      setExecutionScope(context, AgentExecutionScope.enter(context, limits, context.runId));
+      return {
+        state: ownState(config.initialState(context.options)),
+        turn: 1,
+        stateVersion: 0,
+        calls: 0,
+      };
+    },
     mapOptions: (execution, _inputs, context) => ({
       execution,
       options: context.options,

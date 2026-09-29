@@ -40,15 +40,18 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   step/pipeline metadata. Read [graph metadata](./graph-metadata.md) and adapt
   [the recipe](../examples/graph-metadata.ts).
 
-- Use `defineAgent` and `defineTool` from `tubeless/agent` for an in-process
-  decision loop over registered handler tools. Read [agents](./agents.md) and
+- Use `defineAgent`, `defineTool`, and `pipelineTool` from `tubeless/agent` for an in-process
+  decision loop over registered handlers, pipelines, and child agents. Read [agents](./agents.md) and
   adapt the credential-free [scripted recipe](../examples/agent.ts) or the
   [OpenAI recipe](../examples/agent-openai.ts) for a real provider callback. Keep model
   requests and prompts in `decide`; validate every tool input/output and the final
   result. Return `continue` with a nonempty batch or `finish` with a raw result.
-  State is copied and frozen per initialization/reduction. Limits currently apply
-  to one invocation; pipeline tools, subagents, shared tree budgets, and durable
-  resume are later stages. Dry runs skip decisions and tools unless both provide
+  State is copied and frozen per initialization/reduction. Register children with
+  `pipelineTool`; reuse their options schema or supply `inputSchema` and
+  `mapOptions` together. Follow the [delegation recipe](../examples/agent-delegation.ts).
+  Calls, decisions, depth, and leaf concurrency obey every ancestor limit; turns
+  are local. Child options are prevalidated once for the whole batch. Crash-safe
+  resume is a later stage. Dry runs skip decisions and handler tools unless both provide
   preview handlers. Agents remain ordinary pipelines for projects and CLI use.
   Resolve provider credentials only during execution, pass cancellation to the
   HTTP request, and keep provider response parsing in application code. The

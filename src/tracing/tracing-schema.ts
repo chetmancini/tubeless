@@ -393,6 +393,7 @@ const agentMetadataSchema = wireObject({
     maxTurns: positiveInteger,
     maxCalls: nonnegativeInteger,
     maxDecisions: positiveInteger,
+    maxDepth: wireOptional(nonnegativeInteger),
     maxConcurrency: positiveInteger,
   }),
   resultSchemaFingerprint: schemaFingerprint,

@@ -7,6 +7,7 @@ import {
   STEP_OPTIONS_SCHEMA,
   STEP_REMOTE,
   STEP_AGENT,
+  STEP_ORCHESTRATION,
 } from "./pipeline-step-metadata.js";
 
 export interface CompiledStepGraph<TOptions extends object = object> {
@@ -61,6 +62,7 @@ function compileStep<TOptions extends object>(
   if (optionsSchema !== undefined)
     Object.assign(compiled, { [STEP_OPTIONS_SCHEMA]: optionsSchema });
   if (metadata !== undefined) Object.assign(compiled, { metadata });
+  if (step[STEP_ORCHESTRATION]) Object.assign(compiled, { [STEP_ORCHESTRATION]: true });
   if (agent !== undefined) Object.assign(compiled, { [STEP_AGENT]: agent });
   if (name !== undefined) Object.assign(compiled, { name });
   if (description !== undefined) Object.assign(compiled, { description });

@@ -88,3 +88,11 @@ export function jsonDescriptor(
 export function descriptorFingerprint(descriptor: Readonly<Record<string, unknown>>): string {
   return `sha256:${createHash("sha256").update(JSON.stringify(descriptor)).digest("hex")}`;
 }
+
+export function checkDescription(description: string): void {
+  if (typeof description !== "string" || !description.trim() || description.length > 4096)
+    throw agentError(
+      "TUBELESS_AGENT_INVALID_DEFINITION",
+      "Tool description must be nonblank and at most 4096 characters"
+    );
+}

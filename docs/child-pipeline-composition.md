@@ -318,6 +318,9 @@ use the existing eight-level bound. `keyTruncated` explicitly marks shortened
 keys; use the original input index to recover those identities. Snapshots retain
 messages, names, source codes, and causes, without stacks, options, successful
 outputs, or nested run objects. Nested fan-outs do not recursively expand here.
+The native error retains the primary child run as its cause. Other failed child
+reports are discarded after extracting leaf-handler exceptions for classification;
+failures beyond the diagnostic limit still participate in agent recovery decisions.
 
 Use complete keys to select original inputs for a caller-directed rerun. Check
 `omittedFailureCount` before treating the list as exhaustive, and account for
