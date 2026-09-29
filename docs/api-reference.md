@@ -34,7 +34,7 @@ Package: `tubeless`
 | [`AgentOutcome`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L44)         | Input-order result or deliberately recoverable handler failure, including default tools.    |
 | [`AgentState`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L8)            | Deeply read-only view of the owned plain-data state supplied to agent callbacks.            |
 | [`AgentTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L12)            | Opaque capability created by defineTool or pipelineTool; model decisions contain data only. |
-| [`DefaultAgentTools`](https://github.com/chetmancini/tubeless/blob/main/src/agent/default-tools.ts#L145) | The read, write, edit, bash, list and search tools included in every agent.                 |
+| [`DefaultAgentTools`](https://github.com/chetmancini/tubeless/blob/main/src/agent/default-tools.ts#L136) | The read, write, edit, bash, list and search tools included in every agent.                 |
 | [`defineAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent.ts#L37)                | Build a bounded in-process agent as an ordinary pipeline with one target, agent.            |
 | [`defineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L41)                 | Declare a validated handler capability; tools skip live work in dry runs by default.        |
 | [`pipelineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/pipeline-tool.ts#L23)       | Reuse a compiled child's options schema and exact final result.                             |

@@ -1,5 +1,5 @@
 import type { StandardSchemaV1 } from "../core/pipeline-types.js";
-import { wireCustom, wireOptional, type WireSchema } from "../tracing/wire-schema.js";
+import { wireCustom, wireObject, wireOptional, type WireSchema } from "../tracing/wire-schema.js";
 
 export function optionalToolField<T>(schema: WireSchema<T>) {
   return wireOptional(
@@ -9,11 +9,13 @@ export function optionalToolField<T>(schema: WireSchema<T>) {
   );
 }
 
-/** Reuse the runtime wire decoders for the built-in tools' Standard Schema boundaries. */
-export function toolSchema<T>(schema: WireSchema<T>): StandardSchemaV1<T> {
-  const properties = schema.jsonSchema.properties;
-  const fields = properties && typeof properties === "object" ? Object.keys(properties) : [];
-  return {
+/** Build a built-in tool's object boundary from its declared field schemas. */
+export function toolObject<const Shape extends Readonly<Record<string, WireSchema<unknown>>>>(
+  shape: Shape
+) {
+  const schema = wireObject(shape);
+  const fields = Object.keys(shape);
+  const standard: StandardSchemaV1<ReturnType<typeof schema.decode>> = {
     "~standard": {
       version: 1,
       vendor: "tubeless",
@@ -34,4 +36,5 @@ export function toolSchema<T>(schema: WireSchema<T>): StandardSchemaV1<T> {
       },
     },
   };
+  return standard;
 }

@@ -220,16 +220,15 @@ export async function searchTool(input: { query: string; path?: string | null },
     let bytes = 0;
     let truncated = false;
     let skippedFiles = 0;
-    async function searchFile(path: string, discovered = false) {
+    async function searchFile(path: string) {
       let text: string;
       try {
         text = await readText(path, context.signal);
       } catch (error) {
         throwIfAborted(context.signal, "Search files");
         if (
-          (error instanceof ToolError &&
-            ["FILE_TOO_LARGE", "NOT_TEXT", "NOT_FILE"].includes(error.code)) ||
-          (discovered && unavailableEntry(error))
+          error instanceof ToolError &&
+          ["FILE_TOO_LARGE", "NOT_TEXT", "NOT_FILE"].includes(error.code)
         ) {
           skippedFiles++;
           return;
@@ -258,22 +257,22 @@ export async function searchTool(input: { query: string; path?: string | null },
         truncated = true;
         return;
       }
-      const children = await sortedEntries(path, context.signal).catch((error: unknown) => {
-        throwIfAborted(context.signal, "Search files");
-        if (depth === 0 || !unavailableEntry(error)) throw error;
-        skippedFiles++;
-        return [];
-      });
-      for (const entry of children) {
+      for (const entry of await sortedEntries(path, context.signal)) {
         throwIfAborted(context.signal, "Search files");
         if (++entries > 2000 || matches.length >= 50 || bytes > MAX_OUTPUT_BYTES) {
           truncated = true;
           return;
         }
-        if (entry.isDirectory() && entry.name !== ".git" && entry.name !== "node_modules")
-          await walk(join(path, entry.name), depth + 1);
-        else if (entry.isFile()) await searchFile(join(path, entry.name), true);
-        else if (!entry.isDirectory() && !entry.isSymbolicLink()) skippedFiles++;
+        try {
+          if (entry.isDirectory() && entry.name !== ".git" && entry.name !== "node_modules")
+            await walk(join(path, entry.name), depth + 1);
+          else if (entry.isFile()) await searchFile(join(path, entry.name));
+          else if (!entry.isDirectory() && !entry.isSymbolicLink()) skippedFiles++;
+        } catch (error) {
+          throwIfAborted(context.signal, "Search files");
+          if (!unavailableEntry(error)) throw error;
+          skippedFiles++;
+        }
       }
     }
     if ((await stat(root)).isFile()) await searchFile(root);
