@@ -439,6 +439,19 @@ export async function openSqlitePipelineRunStore(
       }
       const predicates: string[] = [];
       const params: unknown[] = [];
+      let subtree = "";
+      if (query.rootRunId !== undefined) {
+        // UNION visits each run once, including cyclic or duplicate parent links.
+        // SQLite can build a transient join index for older read-only stores.
+        subtree = `WITH RECURSIVE run_tree(run_id) AS (
+          SELECT ?
+          UNION
+          SELECT event.run_id FROM pipeline_run_events AS event
+          JOIN run_tree AS parent ON event.parent_run_id = parent.run_id
+        )`;
+        params.push(query.rootRunId);
+        predicates.push("run_id IN (SELECT run_id FROM run_tree)");
+      }
       if (query.afterId !== undefined) {
         predicates.push("id > ?");
         params.push(query.afterId);
@@ -451,10 +464,6 @@ export async function openSqlitePipelineRunStore(
         predicates.push("run_id = ?");
         params.push(query.runId);
       }
-      if (query.parentRunId !== undefined) {
-        predicates.push("parent_run_id = ?");
-        params.push(query.parentRunId);
-      }
       const limit = Math.max(1, Math.min(100_000, Math.floor(query.limit ?? 20_000)));
       params.push(limit);
       const where = predicates.length > 0 ? `WHERE ${predicates.join(" AND ")}` : "";
@@ -462,7 +471,7 @@ export async function openSqlitePipelineRunStore(
       // (the table schema is owned by this module), so each result row is one.
       const rows = statement(
         database,
-        `SELECT * FROM pipeline_run_events ${where} ORDER BY id ASC LIMIT ?`
+        `${subtree} SELECT * FROM pipeline_run_events ${where} ORDER BY id ASC LIMIT ?`
       ).all(...params) as StoredEventRow[];
       if (readOnly && resolvedFilename !== ":memory:") {
         await sqliteAssertImmutableInspect(resolvedFilename);

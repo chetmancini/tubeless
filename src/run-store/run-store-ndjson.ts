@@ -114,8 +114,7 @@ export async function openNdjsonPipelineRunStore(
     }
   }
 
-  // Descendant traversal queries each parent separately. Keep those queries
-  // local to its children instead of rescanning the full trace for every run.
+  // Resolve subtrees through recorded parent links without scanning unrelated runs.
   const eventsByRun = new Map<string, StoredPipelineEvent[]>();
   const eventsByParent = new Map<string, StoredPipelineEvent[]>();
   for (const event of events) {
@@ -137,12 +136,21 @@ export async function openNdjsonPipelineRunStore(
     async listEvents(query: PipelineRunEventQuery = {}) {
       if (closed) throw new Error("Cannot query a closed NDJSON pipeline run store.");
       const limit = Math.max(1, Math.min(100_000, Math.floor(query.limit ?? 20_000)));
-      const selected =
-        query.runId !== undefined
-          ? (eventsByRun.get(query.runId) ?? [])
-          : query.parentRunId !== undefined
-            ? (eventsByParent.get(query.parentRunId) ?? [])
-            : events;
+      let selected = query.runId !== undefined ? (eventsByRun.get(query.runId) ?? []) : events;
+      if (query.rootRunId !== undefined) {
+        const tree = new Set([query.rootRunId]);
+        for (const runId of tree) {
+          for (const event of eventsByParent.get(runId) ?? []) tree.add(event.runId);
+        }
+        selected =
+          query.runId !== undefined
+            ? tree.has(query.runId)
+              ? selected
+              : []
+            : [...tree]
+                .flatMap((runId) => eventsByRun.get(runId) ?? [])
+                .sort((a, b) => a.id - b.id);
+      }
       // Buckets retain file order. Seek past the cursor without revisiting
       // preceding pages, including when the reader requests very small pages.
       let start = 0;
@@ -158,7 +166,6 @@ export async function openNdjsonPipelineRunStore(
       for (let index = start; index < selected.length && page.length < limit; index++) {
         const event = selected[index]!;
         if (query.pipelineId !== undefined && event.pipelineId !== query.pipelineId) continue;
-        if (query.parentRunId !== undefined && event.parentRunId !== query.parentRunId) continue;
         page.push(structuredClone(event));
       }
       return page;

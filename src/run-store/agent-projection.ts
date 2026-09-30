@@ -1,5 +1,5 @@
 import type { PipelineDefinitionSnapshot } from "../core/pipeline-types.js";
-import type { StoredPipelineEvent } from "./run-store.js";
+import type { StoredPipelineEvent, StoredPipelineRun } from "./run-store.js";
 
 type AgentMetadata = NonNullable<PipelineDefinitionSnapshot["steps"][number]["agent"]>;
 
@@ -39,16 +39,28 @@ function text(value: unknown): string | undefined {
 
 /** Retain only recognized agent telemetry, never arbitrary attempt attributes. */
 export class AgentProjection {
-  definition: StoredAgentDefinition | undefined;
-  turn: StoredAgentTurnMetadata | undefined;
-  call: StoredAgentCallMetadata | undefined;
+  #definition: StoredAgentDefinition | undefined;
+  #turn: Omit<StoredAgentTurnMetadata, "calls"> | undefined;
+  #call: StoredAgentCallMetadata | undefined;
   readonly #calls = new Map<string, StoredAgentCallMetadata>();
 
+  snapshot(): Pick<StoredPipelineRun, "agent" | "agentTurn" | "agentCall"> {
+    const snapshot: Pick<StoredPipelineRun, "agent" | "agentTurn" | "agentCall"> = {};
+    if (this.#definition) snapshot.agent = structuredClone(this.#definition);
+    if (this.#turn)
+      snapshot.agentTurn = {
+        ...this.#turn,
+        calls: [...this.#calls.values()].map((call) => ({ ...call })),
+      };
+    if (this.#call) snapshot.agentCall = { ...this.#call };
+    return snapshot;
+  }
+
   append(event: StoredPipelineEvent): void {
-    if (event.name === "pipeline.started" && !this.definition) {
+    if (event.name === "pipeline.started" && !this.#definition) {
       const step = event.payload.definitionSnapshot?.steps.find((step) => step.agent);
       if (step?.agent)
-        this.definition = {
+        this.#definition = {
           stepId: step.id,
           limits: { ...step.agent.limits },
           capabilities: step.agent.capabilities.map(({ name }) => name),
@@ -68,7 +80,7 @@ export class AgentProjection {
         : undefined;
     if (!event.iteration) {
       // Older handler tools already emitted their own attribution.
-      if (event.stepId === "tool" && call && event.itemKey === call.callId) this.call = call;
+      if (event.stepId === "tool" && call && event.itemKey === call.callId) this.#call = call;
       return;
     }
     if (
@@ -78,27 +90,26 @@ export class AgentProjection {
       !["decide", "calls", "reduce"].includes(event.stepId)
     )
       return;
-    this.turn ??= { agentRunId, index, calls: [] };
+    this.#turn ??= { agentRunId, index };
     if (call) {
       if (event.stepId === "calls" && event.attemptId === parentAttemptId) {
         this.#calls.set(JSON.stringify([parentAttemptId, callId]), call);
-        this.turn.calls = [...this.#calls.values()];
       }
       return;
     }
     if (event.stepId === "decide") {
       const decision = attributes["agent.decision"];
-      if (decision === "continue" || decision === "finish") this.turn.decision = decision;
+      if (decision === "continue" || decision === "finish") this.#turn.decision = decision;
       const version = count(attributes["agent.stateVersion"]);
-      if (version !== undefined) this.turn.stateVersion = version;
+      if (version !== undefined) this.#turn.stateVersion = version;
     }
     if (event.stepId === "reduce") {
       const version = count(attributes["agent.stateVersion"]);
-      if (version !== undefined) this.turn.nextStateVersion = version;
+      if (version !== undefined) this.#turn.nextStateVersion = version;
     }
     const callCount = count(attributes["agent.callCount"]);
     const admitted = count(attributes["agent.callsAdmitted"]);
-    if (callCount !== undefined) this.turn.callCount = callCount;
-    if (admitted !== undefined) this.turn.callsAdmitted = admitted;
+    if (callCount !== undefined) this.#turn.callCount = callCount;
+    if (admitted !== undefined) this.#turn.callsAdmitted = admitted;
   }
 }

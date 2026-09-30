@@ -22,7 +22,7 @@ async function collect(pages: AsyncIterable<readonly StoredPipelineEvent[]>) {
 }
 
 describe("readPipelineEventPages", () => {
-  it("reads descendants across short pages, preserves earlier child events, and guards cyclic parent links", async () => {
+  it("pages a subtree once, preserves earlier child events, and guards cyclic parent links", async () => {
     const root = event(0, "root");
     const child = { ...event(1, "child"), parentRunId: "root" };
     const grandchild = { ...event(2, "grandchild"), parentRunId: "child" };
@@ -33,7 +33,7 @@ describe("readPipelineEventPages", () => {
     const reader = {
       async listEvents(query: PipelineRunEventQuery = {}) {
         queries.push(query);
-        // Deliberately ignore parentRunId to verify the common reader enforces it.
+        // Ignore rootRunId to exercise the fallback for readers returning extra runs.
         return events
           .filter((event) => query.afterId === undefined || event.id > query.afterId)
           .slice(0, 1);
@@ -41,9 +41,8 @@ describe("readPipelineEventPages", () => {
     };
     const runs = await readPipelineRunTree(reader, projectPipelineRun([root]));
     expect(runs.map((run) => run.runId)).toEqual(["root", "child", "grandchild"]);
-    expect(new Set(queries.map((query) => query.parentRunId))).toEqual(
-      new Set(["root", "child", "grandchild"])
-    );
+    expect(queries).toHaveLength(events.length + 1);
+    expect(queries.every((query) => query.rootRunId === "root")).toBe(true);
   });
   it("reads past short pages and preserves zero as the first cursor", async () => {
     const events = [event(0), event(1), event(2)];

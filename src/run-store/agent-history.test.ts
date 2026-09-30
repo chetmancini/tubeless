@@ -112,7 +112,21 @@ describe("agent history projection", () => {
     });
     const { events } = await record(agent);
     const { runs } = projectPipelineRunStore(events);
+    let callIdReads = 0;
+    for (const run of runs) {
+      for (const call of run.agentTurn?.calls ?? []) {
+        const callId = call.callId;
+        Object.defineProperty(call, "callId", {
+          get() {
+            callIdReads++;
+            return callId;
+          },
+        });
+      }
+    }
     const root = projectAgentHistory(runs).agents[0]!;
+    // Bound work by calls, rather than wall-clock time or the chosen collection type.
+    expect(callIdReads).toBeLessThanOrEqual(70 * 10);
     expect(root.turns[0]!.calls).toHaveLength(70);
     expect(new Set(root.turns[0]!.calls.map((call) => call.callId)).size).toBe(70);
     // Batch, call, decision and state reports all describe initial attempts.
@@ -235,6 +249,34 @@ describe("agent history projection", () => {
     expect(root.turns.flatMap((turn) => turn.calls)).toContainEqual(
       expect.objectContaining({ callId: "same", tool: "double", status: "unknown" })
     );
+  });
+
+  it("joins partial dispatch records in order while retaining legacy and duplicate child runs", async () => {
+    const { events, run } = await record(fixture());
+    const { runs } = projectPipelineRunStore(events);
+    const turn = runs.find(
+      (entry) => entry.agentTurn?.agentRunId === run.runId && entry.agentTurn.index === 1
+    )!;
+    const call = runs.find(
+      (entry) => entry.parentRunId === turn.runId && entry.itemKey === "left"
+    )!;
+    turn.agentTurn!.calls = turn.agentTurn!.calls.filter((entry) => entry.callId !== "same");
+    const missing = runs.filter(
+      (entry) => !(entry.parentRunId === turn.runId && entry.itemKey === "right")
+    );
+    const history = projectAgentHistory([
+      ...missing.reverse(),
+      { ...call, runId: "duplicate-child" },
+    ]);
+    const calls = history.agents.find((entry) => entry.runId === run.runId)!.turns[0]!.calls;
+    expect(calls.map((entry) => [entry.callId, entry.tool, entry.status])).toEqual([
+      ["same", "double", "failed"],
+      ["left", "left", "completed"],
+      ["left", "left", "completed"],
+      ["right", "right", "unknown"],
+      ["wrapped", "wrapped", "completed"],
+    ]);
+    expect(calls[2]!.runId).toBe("duplicate-child");
   });
 
   it.each(["limit", "failed", "cancelled", "skipped"] as const)(

@@ -33,8 +33,8 @@ export interface PipelineRunEventQuery {
   pipelineId?: string;
   /** Restrict results to one run. */
   runId?: string;
-  /** Restrict results to directly nested runs. */
-  parentRunId?: string;
+  /** Restrict results to this run and all its descendants, across pipeline IDs. */
+  rootRunId?: string;
   /** Maximum rows to return. Defaults to the store implementation's safe limit. */
   limit?: number;
 }

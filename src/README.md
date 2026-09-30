@@ -168,8 +168,10 @@ and interactive reporter orchestration.
   Studio. It orders and deduplicates pages, advances through short pages, enforces
   query filters and stops when the cursor cannot advance. Consumers control
   backpressure and retain responsibility for closing the reader.
-  Run-detail reads follow parent IDs through separately ordered child queries;
-  they do not discard earlier child events when the parent finishes later.
+  Run-detail reads page one subtree query, then arrange the projected runs in
+  parent-first order. SQLite resolves descendants with a recursive query, including
+  older read-only stores; NDJSON follows its in-memory parent index. Cursor and
+  pipeline filters apply after discovering the subtree so they cannot sever links.
 - `studio/run-store-ui-state.ts` serializes reads and history clearing; it consumes
   only the reader's `listEvents` capability.
 - `studio/run-store-ui-api.ts` owns route behavior, command validation and API state.

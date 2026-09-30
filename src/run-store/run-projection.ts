@@ -192,6 +192,7 @@ export class RunProjection {
     if (this.#cachedSnapshot) return this.#cachedSnapshot;
     const completed = this.#completed;
     const run: StoredPipelineRun = {
+      ...this.#agent.snapshot(),
       dryRun: this.#dryRun,
       eventCount: this.#eventCount,
       logCount: this.#logCount,
@@ -212,9 +213,6 @@ export class RunProjection {
     if (this.#identity.parentRunId) run.parentRunId = this.#identity.parentRunId;
     if (this.#identity.iteration) run.iteration = { ...this.#identity.iteration };
     if (this.#identity.itemKey !== undefined) run.itemKey = this.#identity.itemKey;
-    if (this.#agent.definition) run.agent = structuredClone(this.#agent.definition);
-    if (this.#agent.turn) run.agentTurn = structuredClone(this.#agent.turn);
-    if (this.#agent.call) run.agentCall = { ...this.#agent.call };
     this.#cachedSnapshot = run;
     return run;
   }

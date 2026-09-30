@@ -1,5 +1,9 @@
 import type { PipelineTraceError } from "../tracing/tracing-contracts.js";
-import type { StoredAgentDefinition, StoredAgentTurnMetadata } from "./agent-projection.js";
+import type {
+  StoredAgentCallMetadata,
+  StoredAgentDefinition,
+  StoredAgentTurnMetadata,
+} from "./agent-projection.js";
 import type { StoredPipelineRun, StoredPipelineRunStatus } from "./run-store.js";
 
 export interface AgentCallHistory {
@@ -83,19 +87,26 @@ export function projectAgentHistory(runs: readonly StoredPipelineRun[]): AgentHi
       .sort((a, b) => a.iteration!.index - b.iteration!.index || a.startedAtMs - b.startedAtMs)
       .map((turn): AgentTurnHistory => {
         const metadata = turn.agentTurn;
-        const recorded = metadata?.calls ?? [];
-        const callRuns = (children.get(turn.runId) ?? []).filter(
-          (child) => child.itemKey !== undefined
-        );
-        const calls = callRuns.map((child): AgentCallHistory => {
-          const attribution =
-            recorded.find((call) => call.callId === child.itemKey) ?? child.agentCall;
+        const recorded = new Map<
+          string,
+          { attribution: StoredAgentCallMetadata; calls: AgentCallHistory[] }
+        >();
+        for (const attribution of metadata?.calls ?? []) {
+          if (!recorded.has(attribution.callId))
+            recorded.set(attribution.callId, { attribution, calls: [] });
+        }
+        // Keep unattributed children first, then calls in recorded dispatch order.
+        const calls: AgentCallHistory[] = [];
+        for (const child of children.get(turn.runId) ?? []) {
+          if (child.itemKey === undefined) continue;
+          const entry = recorded.get(child.itemKey);
+          const attribution = entry?.attribution ?? child.agentCall;
           const matches =
             attribution?.agentRunId === id &&
             attribution.turn === turn.iteration!.index &&
             attribution.callId === child.itemKey;
           const call: AgentCallHistory = {
-            callId: child.itemKey!,
+            callId: child.itemKey,
             tool: matches ? attribution.tool : undefined,
             parentAttemptId: matches ? attribution.parentAttemptId : undefined,
             runId: child.runId,
@@ -114,10 +125,12 @@ export function projectAgentHistory(runs: readonly StoredPipelineRun[]): AgentHi
               runId: child.runId,
             },
           });
-          return call;
-        });
-        for (const call of recorded) {
-          if (!callRuns.some((child) => child.itemKey === call.callId))
+          (entry?.calls ?? calls).push(call);
+        }
+        for (const { attribution: call, calls: observed } of recorded.values()) {
+          if (observed.length) {
+            for (const entry of observed) calls.push(entry);
+          } else {
             calls.push({
               callId: call.callId,
               tool: call.tool,
@@ -125,13 +138,8 @@ export function projectAgentHistory(runs: readonly StoredPipelineRun[]): AgentHi
               status: "unknown",
               childAgentRunIds: [],
             });
+          }
         }
-        if (recorded.length)
-          calls.sort(
-            (a, b) =>
-              recorded.findIndex((call) => call.callId === a.callId) -
-              recorded.findIndex((call) => call.callId === b.callId)
-          );
         return {
           runId: turn.runId,
           index: turn.iteration!.index,

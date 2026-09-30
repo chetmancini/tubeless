@@ -8,8 +8,6 @@ import { createSteps, definePipeline } from "tubeless";
 import { createPipelineTestRuntime, overrideStep } from "tubeless/testing";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite.js";
 import { projectPipelineRunStore } from "./run-store.js";
-import { readPipelineEventPages } from "./run-store-reader.js";
-import type { PipelineRunEventQuery, StoredPipelineEvent } from "./run-store.js";
 import type { PipelineTraceEvent, PipelineTraceExporter } from "../tracing/tracing.js";
 
 const directories: string[] = [];
@@ -305,57 +303,6 @@ describe("openNdjsonPipelineRunStore", () => {
 
     await store.close();
     await expect(store.listEvents()).rejects.toThrow("closed NDJSON pipeline run store");
-  });
-
-  it("pages interleaved run and parent selections without changing filters or stored events", async () => {
-    const recorded = [
-      event("root"),
-      { ...event("child-a"), parentRunId: "root" },
-      event("unrelated"),
-      { ...event("child-b", "publish"), parentRunId: "root" },
-      { ...event("grandchild"), parentRunId: "child-a" },
-      { ...event("child-a"), parentRunId: "root" },
-      { ...event("child-b", "publish"), parentRunId: "root" },
-    ];
-    const store = await openNdjsonPipelineRunStore(
-      await tempFile(recorded.map((event) => JSON.stringify(event)).join("\n"))
-    );
-    try {
-      const selections: [PipelineRunEventQuery, number[]][] = [
-        [{}, [0, 1, 2, 3, 4, 5, 6]],
-        [{ parentRunId: "root" }, [1, 3, 5, 6]],
-        [{ parentRunId: "root", afterId: 2 }, [3, 5, 6]],
-        [{ parentRunId: "root", pipelineId: "publish" }, [3, 6]],
-        [{ parentRunId: "root", runId: "child-a" }, [1, 5]],
-        [{ parentRunId: "child-a", runId: "child-a" }, []],
-        [{ parentRunId: "child-a" }, [4]],
-        [{ parentRunId: "absent" }, []],
-        [{ runId: "absent", parentRunId: "root" }, []],
-        [{ runId: "child-b", afterId: 3 }, [6]],
-        [{ runId: "child-b", pipelineId: "import" }, []],
-        [{ pipelineId: "publish", afterId: 1 }, [3, 6]],
-        [{ afterId: 6 }, []],
-      ];
-      for (const [query, ids] of selections) {
-        const collected: StoredPipelineEvent[] = [];
-        for await (const page of readPipelineEventPages(store, { ...query, limit: 1 })) {
-          expect(page).toHaveLength(1);
-          collected.push(...page);
-        }
-        expect(
-          collected.map(({ id }) => id),
-          JSON.stringify(query)
-        ).toEqual(ids);
-      }
-      const [returned] = await store.listEvents({ runId: "child-a" });
-      returned!.parentRunId = "changed";
-      await expect(store.listEvents({ parentRunId: "root", runId: "child-a" })).resolves.toEqual([
-        { ...recorded[1], id: 1 },
-        { ...recorded[5], id: 5 },
-      ]);
-    } finally {
-      await store.close();
-    }
   });
 
   it("rejects malformed events without echoing their contents", async () => {
