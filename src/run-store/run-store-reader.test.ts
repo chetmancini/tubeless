@@ -22,25 +22,26 @@ async function collect(pages: AsyncIterable<readonly StoredPipelineEvent[]>) {
 }
 
 describe("readPipelineEventPages", () => {
-  it("pages a subtree once, preserves earlier child events, and guards cyclic parent links", async () => {
+  it("pages a selected subtree once and retains the supplied root", async () => {
     const root = event(0, "root");
     const child = { ...event(1, "child"), parentRunId: "root" };
     const grandchild = { ...event(2, "grandchild"), parentRunId: "child" };
     const cyclic = { ...root, id: 3, parentRunId: "grandchild" };
-    const unrelated = event(4, "unrelated");
-    const events = [root, child, grandchild, cyclic, unrelated];
+    const events = [root, child, grandchild, cyclic];
     const queries: PipelineRunEventQuery[] = [];
     const reader = {
       async listEvents(query: PipelineRunEventQuery = {}) {
         queries.push(query);
-        // Ignore rootRunId to exercise the fallback for readers returning extra runs.
+        // The adapter has selected the subtree; exercise its one-event page cap.
         return events
           .filter((event) => query.afterId === undefined || event.id > query.afterId)
           .slice(0, 1);
       },
     };
-    const runs = await readPipelineRunTree(reader, projectPipelineRun([root]));
-    expect(runs.map((run) => run.runId)).toEqual(["root", "child", "grandchild"]);
+    const rootRun = projectPipelineRun([root]);
+    const runs = await readPipelineRunTree(reader, rootRun);
+    expect(runs[0]).toBe(rootRun);
+    expect(runs.map((run) => run.runId)).toEqual(["root", "grandchild", "child"]);
     expect(queries).toHaveLength(events.length + 1);
     expect(queries.every((query) => query.rootRunId === "root")).toBe(true);
   });

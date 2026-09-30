@@ -35,7 +35,7 @@ export async function* readPipelineEventPages(
   }
 }
 
-/** Fold a selected subtree in event order, then return its runs in parent-first order. */
+/** Fold an adapter-selected subtree in event order, retaining the supplied root snapshot. */
 export async function readPipelineRunTree(
   reader: Pick<PipelineRunEventReader, "listEvents">,
   root: StoredPipelineRun
@@ -43,21 +43,5 @@ export async function readPipelineRunTree(
   const projector = createPipelineRunProjector({ retainLogs: false, retainArtifacts: false });
   for await (const page of readPipelineEventPages(reader, { rootRunId: root.runId }))
     projector.append(page);
-  const children = new Map<string, StoredPipelineRun[]>();
-  for (const run of projector.snapshot().runs) {
-    if (run.parentRunId === undefined) continue;
-    const siblings = children.get(run.parentRunId) ?? [];
-    siblings.push(run);
-    children.set(run.parentRunId, siblings);
-  }
-  const runs = [root];
-  const visited = new Set([root.runId]);
-  for (let index = 0; index < runs.length; index++) {
-    for (const run of children.get(runs[index]!.runId) ?? []) {
-      if (visited.has(run.runId)) continue;
-      visited.add(run.runId);
-      runs.push(run);
-    }
-  }
-  return runs;
+  return [root, ...projector.snapshot().runs.filter((run) => run.runId !== root.runId)];
 }

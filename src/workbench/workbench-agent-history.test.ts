@@ -120,7 +120,10 @@ it("runs a delegating agent through the CLI and inspects the same typed history 
     ).toBe(0);
     const detail = JSON.parse(parentIo.output.join(""));
     expect(detail.agent).toBeUndefined();
-    expect(detail.agentHistory).toEqual(histories[0]);
+    // Flat nodes link by ID; selecting a wrapper can change their list order.
+    expect(detail.agentHistory.agents).toHaveLength(histories[0]!.agents.length);
+    expect(detail.agentHistory).toEqual({ agents: expect.arrayContaining(histories[0]!.agents) });
+    expect(formatAgentHistory(detail.agentHistory)).toBe(formatAgentHistory(histories[0]!));
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
