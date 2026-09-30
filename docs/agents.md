@@ -16,8 +16,132 @@ make plan FILE=examples/agent.ts
 
 It creates a variable number of calls, preserves their decision order, recovers
 from a deliberate domain error, and transforms the final answer. Its `decide`
-callback is scripted; application code supplies provider SDKs, prompts, and
-response mapping when connecting a model.
+callback is scripted. Supply a custom model integration through `decide`, or use
+the default model-backed factory below.
+
+## Default model-backed agent
+
+For general workspace tasks, supply a model and an ID:
+
+```ts
+import { defineModelAgent } from "tubeless/agent";
+import { openaiModel } from "tubeless/agent/openai";
+
+const agent = defineModelAgent({ id: "coding", model: openaiModel() });
+const { answer } = await agent.runOrThrow(
+  { task: "Find and fix the failing test, then verify the change." },
+  undefined,
+  { cwd: "/path/to/project" }
+);
+```
+
+The factory supplies the `{ task: string }` input and `{ answer: string }` result
+schemas, default tools, a short coding prompt, conversation state, and reduction.
+Add `instructions` to customize its behavior, `tools` to extend or override the
+defaults, and `limits` to bound execution. It remains an ordinary pipeline;
+`pipelineTool`, project registration, traces, and cancellation work as before.
+Use `defineAgent` with `decide` when you need custom state, decisions, or result schemas.
+
+The prompt asks the agent to inspect before editing, preserve unrelated work,
+recover from tool errors, verify changes, and distinguish verified results from
+remaining limitations. At the first live decision, project context loads
+`AGENTS.md` from the nearest repository root through the run's cwd, in that order.
+A live model-agent run resolves cwd to its physical directory once, before any
+decision or tool call. The prompt, file tools, bash, custom tools, and child
+pipelines all use that directory, including when resolving `..`. This also applies
+with `projectContext: false`; planning and dry runs do not resolve cwd.
+Guidance comes from the project containing the files. A `.git` file also marks
+a worktree root. Outside a repository it loads only cwd's
+file. More specific directory instructions take precedence. Deeper directories
+and files referenced by those instructions are read by the agent when needed;
+there is no recursive startup scan or `@file` expansion. Set `projectContext: false`
+to disable discovery. Context is loaded once per invocation; simultaneous and later
+runs have independent state. Missing instruction files are allowed; unreadable,
+non-text, or oversized files fail before a model request rather than silently
+discarding guidance. Each file uses the read tool's 16 KiB/2,000-line bounds;
+the complete prompt is capped at 32 KiB and tasks at 16 KiB of UTF-8.
+
+`AgentModel` is a provider-independent callback. It receives the task, instructions,
+its previous plain-data `conversation` (initially `null`), ordered outcomes from the
+latest completed batch, and the usual decision context. It returns an untrusted
+`decision` plus the next plain-data `conversation`. Tubeless validates the decision
+and owns a frozen copy of that state; model definitions do not hold mutable sessions.
+Conversation state is committed only after the whole tool batch settles successfully.
+Expected tool failures are outcomes; fatal failure or cancellation stops the run.
+
+The optional OpenAI subpath uses native fetch and adds no SDK dependency. It defaults
+to `OPENAI_MODEL` or `gpt-5.4-mini`; `openaiModel({ model, apiKey })` supplies explicit
+values. Model names are trimmed; a blank `OPENAI_MODEL` uses the default, while an
+explicit blank model is rejected locally. API keys are trimmed before use.
+Environment credentials are read at execution, so imports, plans, and dry
+runs need no API key. Live runs make paid API requests and execute workspace tools
+with the host's existing permissions. Dry runs skip the model and have no final answer.
+
+Custom tool descriptors must be inline and support OpenAI's strict JSON Schema
+subset. The adapter wraps each argument in `{ input }`; reference keywords
+(`$ref`, `$dynamicRef`, `$recursiveRef`) are rejected locally before any HTTP
+request because wrapping changes their reference root. Supply an inline
+`inputJsonSchema` override when the tool's schema generates references.
+Every object, including nested and nullable objects, must set
+`additionalProperties: false` and list every property in `required`. These
+[strict object requirements](https://developers.openai.com/api/docs/guides/function-calling#strict-mode)
+are checked locally with the tool name and schema path in the error. Other
+model-specific restrictions on the supported schema subset still apply.
+
+The adapter keeps the complete Responses output sequence, including encrypted
+reasoning, messages, and function calls, then appends matching tool outputs.
+New tool outputs share an encoded 256 KiB batch budget, reduced further when the
+request being sent leaves less room. Batches that fit remain exact. Otherwise,
+each result's fixed metadata is reserved first, and the remaining preview space
+is shared across large results. Small complete results are kept when they cost
+less than a preview marker. Large outputs carry `truncated: true`, the original
+JSON byte count, and a UTF-8-safe JSON-text `preview`. Every call still receives
+a matching output and retains its success/failure flag. The model is told to
+retrieve narrower results and avoid repeating successful mutations. Full tool
+outcomes remain available to the harness and evaluation reports. This provider
+boundary keeps large batches from preventing compaction; it does not change tool
+execution or the outcomes supplied to custom `decide` callbacks.
+It uses `store: false` with client-owned history. Once completed history exceeds
+`compactAfterBytes` (64 KiB by default), or a complete decision would exceed the
+request limit, it calls the native
+[`/responses/compact` endpoint](https://developers.openai.com/api/docs/guides/compaction)
+and carries the entire returned context window into the next decision. The
+compaction budget includes instructions and history; tool schemas are
+only included when checking the subsequent decision with the compacted window.
+This prevents large schemas from unnecessarily trimming results before compaction.
+Instructions are sent again on each request. Compaction can lose exact historical detail; the
+prompt tells the model to re-read sources when exact text matters. Select a model
+that supports both Responses function calling and compaction.
+
+One decision has a combined 60-second deadline (`timeoutMs`) and makes at most two
+HTTP requests: optional compaction and the decision itself. Harness decision budgets
+count callbacks, not these HTTP requests or tokens. Encoded requests are capped at
+1 MiB and responses at 2 MiB; these byte limits are not model token estimates.
+If prior history or schemas leave no room even for the output markers, the run
+fails explicitly rather than dropping a call's result.
+Compaction failure, a still-oversized request, refusal, malformed output, or an
+incomplete response fails without silently dropping history or retrying. No streaming,
+cross-run chat session, or crash-safe resume is added by this helper.
+
+The executable [model agent recipe](../examples/agent-model.ts) is registered as
+`coding-agent` in the example project. Run it from the workspace it should change:
+
+```sh
+export OPENAI_API_KEY=...
+bun /path/to/tubeless/dist/workbench/workbench-bin.js run \
+  /path/to/tubeless/examples/agent-model.ts -- --task 'Fix the failing test and verify it'
+```
+
+Run the opt-in live evaluations from the package root with `bun run eval:agent`.
+They create disposable workspaces and check investigation, actual edits, successful
+verification, project instructions, recovery from a missing file, and forced
+compaction. They also require existing tests and unrelated work to remain intact.
+Results are written to `.context/model-agent-eval.json`; these paid evaluations
+are separate from credential-free CI. Reports retain full call arguments, observed
+tool outcomes, and any completed answer and verification output, including when a
+later assertion fails. The disposable workspaces are still removed after each task.
+Passing them is evidence for these specific
+tasks, not a general reliability guarantee.
 
 ## Connect a model
 

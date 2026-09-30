@@ -7,6 +7,12 @@ its state and capability registry.
 Every agent now includes the standard workspace tools; custom tools extend the
 registry or replace defaults by name. The workspace tool slice precedes stage 5
 history and presentation work.
+The default model-backed slice adds `defineModelAgent({ id, model })`, scoped
+startup AGENTS.md loading, and isolated provider conversation state through the
+same runtime. `tubeless/agent/openai` supplies native Responses history and
+compaction with no provider imports in core or the generic agent entrypoint.
+Opt-in workspace evaluations cover edits, verification, project context and
+recovery; live results remain distinct from deterministic protocol tests.
 The provider example was brought forward from stage 6: the
 [OpenAI recipe](../examples/agent-openai.ts) now supplies an application-owned
 Responses callback, accumulated outcomes, and model-selected finish. Offline
@@ -28,8 +34,9 @@ for automatic CLI flags. There is no separate agent project or command registry.
 The `tubeless/agent` entrypoint owns `defineAgent`, `defineTool`, `pipelineTool`,
 `ToolError`, and their contracts. It depends on core, utilities,
 and trace emission. Core stays independent of the agent entrypoint, model SDKs,
-storage, CLI, and Studio. Model prompting and provider request/response mapping
-remain application-owned.
+storage, CLI, and Studio. Custom `decide` callbacks keep application-owned prompts
+and provider mapping. The convenience factory supplies defaults, with provider
+protocols isolated in optional adapter entrypoints.
 
 `createSteps` includes the generic constructor `iteratePipeline`. The probes use
 the real public factory for all core constructors. It takes a child pipeline, `initialState`,

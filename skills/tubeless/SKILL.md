@@ -118,6 +118,20 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 
 Read the corresponding package recipe before using these features:
 
+- `defineModelAgent({ id, model })` from `tubeless/agent` for a ready-to-run
+  workspace agent. `openaiModel()` from `tubeless/agent/openai` supplies the optional
+  Responses adapter. Run with `{ task }` to get `{ answer }`; add `instructions`,
+  tools or execution limits as needed. The factory loads startup AGENTS.md guidance
+  from the physical workspace path, shared by the model and every tool call,
+  and owns isolated conversation state. The adapter preserves native history and
+  compacts completed turns. Custom OpenAI tool descriptors must be inline; provide
+  `inputJsonSchema` when generated descriptors contain references. All object
+  properties must be required, with `additionalProperties: false` at every object.
+  Large output batches use explicit model-visible previews; harness outcomes remain
+  complete. Read `docs/agents.md` and `examples/agent-model.ts` for
+  context-loading scope, byte bounds and live-evaluation instructions. Custom
+  `defineAgent` and `decide` remain the lower-level path.
+
 - `defineAgent`, `defineTool`, and `pipelineTool` from `tubeless/agent` for bounded in-process
   decisions over registered handlers, pipelines, and subagents. Read `docs/agents.md` and
   `examples/agent.ts`; use `examples/agent-openai.ts` for a real Responses API
