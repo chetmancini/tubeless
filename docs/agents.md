@@ -247,6 +247,24 @@ transformed output, and literal ID work with ordinary `fromPipeline`,
 `defineProject`, and `definePipelineCommand`. Automatic CLI flags still require
 JSON Schema metadata on the agent's input schema.
 
+### Embed an agent in a pipeline
+
+Use `fromPipeline` when ordinary work needs an agent's answer, just as for any
+other child pipeline. The [composition recipe](../examples/agent-pipeline.ts)
+forwards validated parent options to a delegating agent and feeds its validated
+answer into a dependent report step. It uses scripted decisions so the entire
+example, including child agents, can run without credentials or in preview mode:
+
+```sh
+make run FILE=examples/agent-pipeline.ts ARGS='--question "red missing"'
+make run FILE=examples/agent-pipeline.ts ARGS='--dry-run --question "red missing"'
+```
+
+Both return `Summary: 3 characters; RED | 7 characters; Observed NOT_FOUND: Word unavailable`.
+Recording the parent with `--trace` or `--store` exposes the same child-agent
+history as recording the agent directly. A child failure or cancellation prevents
+the required report step from running.
+
 ## Default workspace tools
 
 | Tool     | Arguments                                   | Result and bounds                                                                                                                                |

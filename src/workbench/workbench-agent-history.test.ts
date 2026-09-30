@@ -8,126 +8,111 @@ import { openSqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import type { AgentHistory } from "../run-store/agent-history.js";
 import { formatAgentHistory } from "./workbench-agent-history.js";
 
-it("runs a delegating agent through the CLI and inspects the same typed history from SQLite and NDJSON", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "tubeless-agent-history-"));
-  try {
-    const trace = join(cwd, "agent.ndjson");
-    const database = join(cwd, "agent.sqlite");
-    const example = resolve("examples/agent-delegation.ts");
-    const runIo = captureIo(cwd);
-    expect(
-      await runWorkbenchCli(
-        ["run", "--trace", trace, "--store", database, example, "--", "--question", "red missing"],
-        runIo
-      )
-    ).toBe(0);
-    const events = (await readFile(trace, "utf8"))
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line));
-    const runId: string = events.find(
-      (event) => event.name === "pipeline.started" && !event.parentRunId
-    ).runId;
-    // An unrelated run in the same database must not leak into this detail view.
-    const store = await openSqlitePipelineRunStore(database);
-    await store.export({
-      version: 2,
-      name: "pipeline.started",
-      pipelineId: "unrelated",
-      runId: "unrelated-run",
-      timestampMs: 1,
-      payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
-    });
-    await store.close();
-    await writeFile(
-      join(cwd, "tubeless.project.ts"),
-      'throw new Error("History must not load executable modules");'
-    );
-    const histories: AgentHistory[] = [];
-    for (const [source, filename] of [
-      ["--trace", trace],
-      ["--store", database],
-    ]) {
-      const args = ["history", source!, filename!, "--pipeline", "delegating-agent", runId];
-      const jsonIo = captureIo(cwd);
-      expect(await runWorkbenchCli([...args, "--json"], jsonIo)).toBe(0);
-      const detail = JSON.parse(jsonIo.output.join(""));
-      expect(detail.runId).toBe(runId);
-      const history: AgentHistory = detail.agentHistory;
-      histories.push(history);
-      expect(history.agents).toHaveLength(3);
-      const root = history.agents.find((agent) => agent.runId === runId)!;
-      expect(root.termination).toBe("finish");
-      expect(root.turns.map((turn) => turn.decision)).toEqual(["continue", "continue", "finish"]);
-      expect(root.turns[0]!.calls.map((call) => [call.callId, call.tool])).toEqual([
-        ["word-0", "processWord"],
-        ["word-1", "processWord"],
-      ]);
-      expect(root.turns[1]!.calls[0]!.tool).toBe("summarize");
+it.each([
+  ["agent-delegation.ts", "delegating-agent"],
+  ["agent-pipeline.ts", "agent-pipeline"],
+])(
+  "runs %s through the CLI and inspects the same typed history from SQLite and NDJSON",
+  async (filename, pipelineId) => {
+    const cwd = await mkdtemp(join(tmpdir(), "tubeless-agent-history-"));
+    try {
+      const trace = join(cwd, "agent.ndjson");
+      const database = join(cwd, "agent.sqlite");
+      const example = resolve("examples", filename);
+      const runIo = captureIo(cwd);
       expect(
-        history.agents
-          .flatMap((agent) => agent.turns)
-          .flatMap((turn) => turn.calls)
-          .some((call) => call.status === "failed")
-      ).toBe(true);
-      expect(jsonIo.output.join("")).not.toContain("unrelated-run");
-      const textIo = captureIo(cwd);
-      expect(await runWorkbenchCli(args, textIo)).toBe(0);
-      const text = textIo.output.join("");
-      expect(text).toContain("Agent history:");
-      expect(text).toContain("termination finish");
-      expect(text).toContain("Call word-0  tool processWord");
-      expect(text).toContain("Call word-1  tool processWord");
-      expect(text).toContain("NOT_FOUND");
-      expect(text).toContain("state 0 -> 1");
-      const rawIo = captureIo(cwd);
-      expect(await runWorkbenchCli([...args, "--events"], rawIo)).toBe(0);
-      expect(
-        rawIo.output
-          .join("")
-          .trim()
-          .split("\n")
-          .map((line) => JSON.parse(line))
-          .every((event) => event.runId === runId)
-      ).toBe(true);
+        await runWorkbenchCli(
+          [
+            "run",
+            "--trace",
+            trace,
+            "--store",
+            database,
+            example,
+            "--",
+            "--question",
+            "red missing",
+          ],
+          runIo
+        )
+      ).toBe(0);
+      const events = (await readFile(trace, "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      const runId: string = events.find(
+        (event) => event.name === "pipeline.started" && !event.parentRunId
+      ).runId;
+      // An unrelated run in the same database must not leak into this detail view.
+      const store = await openSqlitePipelineRunStore(database);
+      await store.export({
+        version: 2,
+        name: "pipeline.started",
+        pipelineId: "unrelated",
+        runId: "unrelated-run",
+        timestampMs: 1,
+        payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+      });
+      await store.close();
+      await writeFile(
+        join(cwd, "tubeless.project.ts"),
+        'throw new Error("History must not load executable modules");'
+      );
+      const histories: AgentHistory[] = [];
+      for (const [source, filename] of [
+        ["--trace", trace],
+        ["--store", database],
+      ]) {
+        const args = ["history", source!, filename!, "--pipeline", pipelineId, runId];
+        const jsonIo = captureIo(cwd);
+        expect(await runWorkbenchCli([...args, "--json"], jsonIo)).toBe(0);
+        const detail = JSON.parse(jsonIo.output.join(""));
+        expect(detail.runId).toBe(runId);
+        if (pipelineId === "agent-pipeline") expect(detail.agent).toBeUndefined();
+        const history: AgentHistory = detail.agentHistory;
+        histories.push(history);
+        expect(history.agents).toHaveLength(3);
+        const root = history.agents.find((agent) => agent.pipelineId === "delegating-agent")!;
+        expect(root.termination).toBe("finish");
+        expect(root.turns.map((turn) => turn.decision)).toEqual(["continue", "continue", "finish"]);
+        expect(root.turns[0]!.calls.map((call) => [call.callId, call.tool])).toEqual([
+          ["word-0", "processWord"],
+          ["word-1", "processWord"],
+        ]);
+        expect(root.turns[1]!.calls[0]!.tool).toBe("summarize");
+        expect(
+          history.agents
+            .flatMap((agent) => agent.turns)
+            .flatMap((turn) => turn.calls)
+            .some((call) => call.status === "failed")
+        ).toBe(true);
+        expect(jsonIo.output.join("")).not.toContain("unrelated-run");
+        const textIo = captureIo(cwd);
+        expect(await runWorkbenchCli(args, textIo)).toBe(0);
+        const text = textIo.output.join("");
+        expect(text).toContain("Agent history:");
+        expect(text).toContain("termination finish");
+        expect(text).toContain("Call word-0  tool processWord");
+        expect(text).toContain("Call word-1  tool processWord");
+        expect(text).toContain("NOT_FOUND");
+        expect(text).toContain("state 0 -> 1");
+        const rawIo = captureIo(cwd);
+        expect(await runWorkbenchCli([...args, "--events"], rawIo)).toBe(0);
+        expect(
+          rawIo.output
+            .join("")
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line))
+            .every((event) => event.runId === runId)
+        ).toBe(true);
+      }
+      expect(histories[0]).toEqual(histories[1]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
     }
-    expect(histories[0]).toEqual(histories[1]);
-
-    // An ordinary parent still needs to discover agents deeper in its run tree.
-    const parent = {
-      version: 2,
-      name: "pipeline.started",
-      pipelineId: "ordinary-parent",
-      runId: "parent-run",
-      timestampMs: 0,
-      payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
-    };
-    const wrapped = join(cwd, "wrapped.ndjson");
-    await writeFile(
-      wrapped,
-      [
-        parent,
-        ...events.map((event) =>
-          event.runId === runId ? { ...event, parentRunId: parent.runId } : event
-        ),
-      ]
-        .map((event) => JSON.stringify(event))
-        .join("\n")
-    );
-    const parentIo = captureIo(cwd);
-    expect(
-      await runWorkbenchCli(["history", "--trace", wrapped, "--json", parent.runId], parentIo)
-    ).toBe(0);
-    const detail = JSON.parse(parentIo.output.join(""));
-    expect(detail.agent).toBeUndefined();
-    // Flat nodes link by ID; selecting a wrapper can change their list order.
-    expect(detail.agentHistory.agents).toHaveLength(histories[0]!.agents.length);
-    expect(detail.agentHistory).toEqual({ agents: expect.arrayContaining(histories[0]!.agents) });
-    expect(formatAgentHistory(detail.agentHistory)).toBe(formatAgentHistory(histories[0]!));
-  } finally {
-    await rm(cwd, { recursive: true, force: true });
   }
-});
+);
 
 it("escapes terminal controls in call IDs and errors and labels incomplete observations", () => {
   const text = formatAgentHistory({

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 
-// Exercise the actual CLI, tools, checks and report writer without a live provider.
+// Exercise the evaluator, tools, checks and report writer without a live provider.
 const preload = String.raw`
 const turns = new Map();
 const sequences = {
@@ -95,7 +95,7 @@ it.each([false, true])(
         value: { exitCode: 0, stdout: "config checks passed\n" },
       });
       if (skipRecovery) {
-        expect(recovery.error).toBe("Agent must observe and recover from the missing file");
+        expect(recovery.error).toBe("Agent must perform the requested missing-file read first");
         expect(recovery.calls[0].input).toEqual({ path: "config/current.json" });
       } else {
         expect(recovery.calls[0].input).toEqual({ path: "legacy-config.json" });

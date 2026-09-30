@@ -1,4 +1,5 @@
 import { DelegatingAgent } from "../../examples/agent-delegation.js";
+import { AgentPipeline } from "../../examples/agent-pipeline.js";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { ScriptedAgent, runAgentExample } from "../../examples/agent.js";
 import { WorkspaceAgent } from "../../examples/agent-workspace.js";
@@ -7,6 +8,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 describe("public agent recipe", () => {
+  it("passes a child agent's validated answer to an ordinary dependent step, including previews", async () => {
+    expectTypeOf(AgentPipeline.runOrThrow).returns.resolves.toEqualTypeOf<string>();
+    for (const dryRun of [false, true]) {
+      expect(await AgentPipeline.runOrThrow({ question: "red missing" }, { dryRun })).toBe(
+        "Summary: 3 characters; RED | 7 characters; Observed NOT_FOUND: Word unavailable"
+      );
+    }
+  });
   it("uses every default tool and a custom tool to modify and verify a real workspace", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "tubeless-workspace-recipe-"));
     try {

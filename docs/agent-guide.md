@@ -77,6 +77,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   are local. Child options are prevalidated once for the whole batch. Crash-safe
   resume is a later stage. Dry runs skip decisions and handler tools unless both provide
   preview handlers. Agents remain ordinary pipelines for projects and CLI use.
+  Use `fromPipeline` to feed a validated answer into ordinary dependent work;
+  the [composition recipe](../examples/agent-pipeline.ts) includes credential-free previews.
   Resolve provider credentials only during execution, pass cancellation to the
   HTTP request, and keep provider response parsing in application code. The
   OpenAI recipe has no live dry-run callback; use the scripted recipe for previews.

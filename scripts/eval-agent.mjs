@@ -125,8 +125,15 @@ for (const fixture of cases) {
       "Agent must run the fixture check successfully"
     );
     if (fixture.compactAfterBytes) {
+      const first = calls[0];
       assert(
-        outcomes.some((outcome) => !outcome.ok && outcome.error.code === "ENOENT"),
+        first?.tool === "read" && first.input.path === "legacy-config.json",
+        "Agent must perform the requested missing-file read first"
+      );
+      assert(
+        outcomes.some(
+          (outcome) => outcome.id === first.id && !outcome.ok && outcome.error.code === "ENOENT"
+        ),
         "Agent must observe and recover from the missing file"
       );
       assert(compactions > 0, "Conversation must compact and still complete");

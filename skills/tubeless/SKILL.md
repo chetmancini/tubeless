@@ -141,7 +141,9 @@ Read the corresponding package recipe before using these features:
   unclassified failures are fatal. Dry-run decisions and tools need explicit
   previews. Use `examples/agent-delegation.ts` for child agents and ordinary
   pipeline tools. Reuse the child options schema, or supply `inputSchema` and
-  `mapOptions` together; keep mapping free of side effects. The complete batch
+  `mapOptions` together. Use `examples/agent-pipeline.ts` to embed an agent with
+  `fromPipeline` and consume its validated answer in an ordinary dependent step.
+  Keep mapping free of side effects. The complete batch
   is prevalidated and transforms run once. Calls, decisions, depth, and leaf
   concurrency obey shared ancestor limits; turns are local. Waiting wrappers
   hold no leaf permit. Ordinary child composition carries the private scope.
