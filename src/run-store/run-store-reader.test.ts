@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PipelineRunEventQuery, StoredPipelineEvent } from "./run-store.js";
-import { readPipelineEventPages } from "./run-store-reader.js";
+import { readPipelineEventPages, readPipelineRunTree } from "./run-store-reader.js";
+import { projectPipelineRun } from "./run-store.js";
 
 function event(id: number, runId = "run", pipelineId = "pipeline"): StoredPipelineEvent {
   return {
@@ -21,6 +22,29 @@ async function collect(pages: AsyncIterable<readonly StoredPipelineEvent[]>) {
 }
 
 describe("readPipelineEventPages", () => {
+  it("reads descendants across short pages, preserves earlier child events, and guards cyclic parent links", async () => {
+    const root = event(0, "root");
+    const child = { ...event(1, "child"), parentRunId: "root" };
+    const grandchild = { ...event(2, "grandchild"), parentRunId: "child" };
+    const cyclic = { ...root, id: 3, parentRunId: "grandchild" };
+    const unrelated = event(4, "unrelated");
+    const events = [root, child, grandchild, cyclic, unrelated];
+    const queries: PipelineRunEventQuery[] = [];
+    const reader = {
+      async listEvents(query: PipelineRunEventQuery = {}) {
+        queries.push(query);
+        // Deliberately ignore parentRunId to verify the common reader enforces it.
+        return events
+          .filter((event) => query.afterId === undefined || event.id > query.afterId)
+          .slice(0, 1);
+      },
+    };
+    const runs = await readPipelineRunTree(reader, projectPipelineRun([root]));
+    expect(runs.map((run) => run.runId)).toEqual(["root", "child", "grandchild"]);
+    expect(new Set(queries.map((query) => query.parentRunId))).toEqual(
+      new Set(["root", "child", "grandchild"])
+    );
+  });
   it("reads past short pages and preserves zero as the first cursor", async () => {
     const events = [event(0), event(1), event(2)];
     const queries: PipelineRunEventQuery[] = [];

@@ -127,7 +127,8 @@ export async function openNdjsonPipelineRunStore(
           (event) =>
             (query.afterId === undefined || event.id > query.afterId) &&
             (query.pipelineId === undefined || event.pipelineId === query.pipelineId) &&
-            (query.runId === undefined || event.runId === query.runId)
+            (query.runId === undefined || event.runId === query.runId) &&
+            (query.parentRunId === undefined || event.parentRunId === query.parentRunId)
         )
         .slice(0, limit)
         .map((event) => structuredClone(event));

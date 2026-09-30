@@ -2,6 +2,7 @@ import type { PipelineDefinitionIdentity } from "../core/pipeline-types.js";
 import type { PipelineTraceError } from "../tracing/tracing-contracts.js";
 import { RUN_MODEL_VERSION } from "../core/pipeline-ids.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
+import { AgentProjection } from "./agent-projection.js";
 import type {
   StoredPipelineEvent,
   StoredPipelineRun,
@@ -44,7 +45,7 @@ export class RunProjection {
   #eventCount = 0;
   readonly #identity: Pick<
     StoredPipelineEvent,
-    "pipelineId" | "runId" | "correlationId" | "parentRunId" | "iteration"
+    "pipelineId" | "runId" | "correlationId" | "parentRunId" | "iteration" | "itemKey"
   >;
   #logCount = 0;
   readonly #logs: StoredPipelineLog[] = [];
@@ -54,6 +55,7 @@ export class RunProjection {
   #definitionIdentity: PipelineDefinitionIdentity | undefined;
   readonly #steps = new Map<string, StoredPipelineStep>();
   #cachedSnapshot: StoredPipelineRun | undefined;
+  readonly #agent = new AgentProjection();
 
   constructor(
     event: StoredPipelineEvent,
@@ -67,6 +69,7 @@ export class RunProjection {
       runId: event.runId,
       correlationId: event.correlationId,
       parentRunId: event.parentRunId,
+      itemKey: event.itemKey,
       iteration: event.iteration ? { ...event.iteration } : undefined,
     };
     this.#startedAtMs = event.timestampMs;
@@ -79,6 +82,7 @@ export class RunProjection {
 
   append(event: StoredPipelineEvent): void {
     this.#cachedSnapshot = undefined;
+    this.#agent.append(event);
     this.#eventCount += 1;
     if (event.name === "pipeline.started" && !this.#startObserved) {
       this.#startObserved = true;
@@ -207,6 +211,10 @@ export class RunProjection {
     if (completed) run.finishedAtMs = completed.timestampMs;
     if (this.#identity.parentRunId) run.parentRunId = this.#identity.parentRunId;
     if (this.#identity.iteration) run.iteration = { ...this.#identity.iteration };
+    if (this.#identity.itemKey !== undefined) run.itemKey = this.#identity.itemKey;
+    if (this.#agent.definition) run.agent = structuredClone(this.#agent.definition);
+    if (this.#agent.turn) run.agentTurn = structuredClone(this.#agent.turn);
+    if (this.#agent.call) run.agentCall = { ...this.#agent.call };
     this.#cachedSnapshot = run;
     return run;
   }

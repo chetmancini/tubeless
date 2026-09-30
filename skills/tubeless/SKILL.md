@@ -145,6 +145,9 @@ Read the corresponding package recipe before using these features:
   is prevalidated and transforms run once. Calls, decisions, depth, and leaf
   concurrency obey shared ancestor limits; turns are local. Waiting wrappers
   hold no leaf permit. Ordinary child composition carries the private scope.
+  Record with `--trace` or `--store`; `tubeless history <run-id>` joins agent turns,
+  calls and child agents with state versions, failures and termination. JSON
+  details expose `agentHistory.agents`; missing observations remain unknown.
   Crash-safe resume is not yet implemented.
   Every agent includes `read`, `write`, `edit`, `bash`, `list`, and `search`.
   Custom `tools` extend the registry or replace built-ins by name. Reducers must

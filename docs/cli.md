@@ -446,11 +446,17 @@ tubeless history [options] [run-id]
 
 `--store` and `--trace` cannot be combined. `--json` and `--events` cannot be
 combined. `--pipeline` applies to every output mode and both artifact sources.
-With `run-id`, both selectors must match; a mismatch is an unknown run (exit `1`).
+With `run-id`, both selectors must match the requested root; a mismatch is an unknown run (exit `1`).
 A pipeline with no recorded runs returns an empty list or event stream (exit `0`).
 History reads recorded IDs directly without loading a project file or command module.
 By default, history prints a run list. Supply a run ID to see that run's steps,
-logs, and error details. A missing store exits `2`. A store also exits `2` with an error if it has a pending SQLite `-wal` or
+logs, and error details. Agent runs and parents containing agents also show their
+recorded turn/call/child structure, state versions, call counts, and termination.
+JSON details add the linked `agentHistory.agents` projection. Descendants are
+included regardless of their pipeline IDs; `--events` remains scoped to the
+requested run only. Missing observations stay unknown, and missing terminal
+events stay recorded as running. See [agent history](./agents.md#inspection-and-recordings).
+A missing store exits `2`. A store also exits `2` with an error if it has a pending SQLite `-wal` or
 `-journal` file, has multiple hard links, or is not a supported run store. An unknown run id exits `1`. `tubeless run --store` flushes pending events at completion. A process crash
 before a flush can lose up to 63 buffered events. See [storage behavior](./studio.md#storage-behavior)
 for programmatic writers and read-only access.

@@ -142,13 +142,16 @@ export function createAgentTurn<
         async (call) => {
           progress.start(call.id);
           try {
-            const invocation = childInvocation(call, context, {
+            const attributes = {
               "agent.runId": agentRunId,
               "agent.turn": execution.turn,
               "agent.callId": call.id,
               "agent.tool": call.tool.name,
               "agent.parentAttemptId": context.attemptId,
-            });
+            };
+            // Record the selected alias for pipeline tools as well as handlers.
+            context.reportAttempt(1, attributes);
+            const invocation = childInvocation(call, context, attributes);
             const result = await invokeChildPipeline(
               call.tool.pipeline,
               invocation.options,

@@ -132,6 +132,8 @@ const RUN_EVENT_STORE_SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS pipeline_run_events_run_id_idx
     ON pipeline_run_events(run_id, id);
+  CREATE INDEX IF NOT EXISTS pipeline_run_events_parent_run_id_idx
+    ON pipeline_run_events(parent_run_id, id);
   CREATE INDEX IF NOT EXISTS pipeline_run_events_pipeline_id_idx
     ON pipeline_run_events(pipeline_id, id DESC);
   CREATE INDEX IF NOT EXISTS pipeline_run_events_timestamp_idx
@@ -448,6 +450,10 @@ export async function openSqlitePipelineRunStore(
       if (query.runId !== undefined) {
         predicates.push("run_id = ?");
         params.push(query.runId);
+      }
+      if (query.parentRunId !== undefined) {
+        predicates.push("parent_run_id = ?");
+        params.push(query.parentRunId);
       }
       const limit = Math.max(1, Math.min(100_000, Math.floor(query.limit ?? 20_000)));
       params.push(limit);

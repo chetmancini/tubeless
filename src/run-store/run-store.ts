@@ -13,6 +13,11 @@ import type {
 } from "../tracing/tracing-contracts.js";
 import { RunProjection } from "./run-projection.js";
 import { DefinitionProjection } from "./definition-projection.js";
+import type {
+  StoredAgentDefinition,
+  StoredAgentTurnMetadata,
+  StoredAgentCallMetadata,
+} from "./agent-projection.js";
 export { projectPipelineRun } from "./run-projection.js";
 
 /** One trace event after it has been appended to a durable local store. */
@@ -28,6 +33,8 @@ export interface PipelineRunEventQuery {
   pipelineId?: string;
   /** Restrict results to one run. */
   runId?: string;
+  /** Restrict results to directly nested runs. */
+  parentRunId?: string;
   /** Maximum rows to return. Defaults to the store implementation's safe limit. */
   limit?: number;
 }
@@ -111,6 +118,10 @@ export interface StoredPipelineStep {
 }
 
 export interface StoredPipelineRun {
+  agent?: StoredAgentDefinition;
+  agentTurn?: StoredAgentTurnMetadata;
+  agentCall?: StoredAgentCallMetadata;
+  itemKey?: string;
   iteration?: PipelineTraceEvent["iteration"];
   definitionIdentity?: PipelineDefinitionIdentity;
   correlationId?: string;

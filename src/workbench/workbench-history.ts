@@ -9,7 +9,9 @@ import {
   type StoredPipelineEvent,
   type StoredPipelineRun,
 } from "../run-store/run-store.js";
-import { readPipelineEventPages } from "../run-store/run-store-reader.js";
+import { readPipelineEventPages, readPipelineRunTree } from "../run-store/run-store-reader.js";
+import { projectAgentHistory } from "../run-store/agent-history.js";
+import { formatAgentHistory, terminalSafeText } from "./workbench-agent-history.js";
 import {
   DEFAULT_PIPELINE_RUN_STORE,
   errorMessage,
@@ -23,6 +25,7 @@ import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 const HISTORY_USAGE = `Usage: tubeless history [options] [run-id]
 
 Show recorded pipeline runs from SQLite or an NDJSON trace.
+Run details include recorded agent turns, tool calls, and child agents.
 
 Options:
       --store <path>    SQLite database (default: .tubeless/runs.sqlite)
@@ -60,10 +63,6 @@ interface HistoryRunSummary {
   runId: string;
   startedAtMs: number;
   status: StoredPipelineRun["status"];
-}
-
-function terminalSafeText(value: string): string {
-  return value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, " ");
 }
 
 function summarizeRun(run: StoredPipelineRun): HistoryRunSummary {
@@ -249,9 +248,14 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
                 HISTORY_USAGE
               );
             }
+            const agentHistory = projectAgentHistory(await readPipelineRunTree(store, run));
+            const detail = agentHistory.agents.length ? { ...run, agentHistory } : run;
             await writeCliChunk(
               commandIo.stdout,
-              parsed.values.json ? `${JSON.stringify(run, null, 2)}\n` : formatRunDetail(run)
+              parsed.values.json
+                ? `${JSON.stringify(detail, null, 2)}\n`
+                : formatRunDetail(run) +
+                    (agentHistory.agents.length ? `\n${formatAgentHistory(agentHistory)}` : "")
             );
             return TUBELESS_WORKBENCH_EXIT_CODE.success;
           }
