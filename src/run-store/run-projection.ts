@@ -157,7 +157,7 @@ export class RunProjection {
         step.attempt = attempt;
       }
       if (step.outputSource) attempt.outputSource = step.outputSource;
-      if (event.name === "step.attempted") {
+      if (event.name === "step.attempted" && event.payload.attempt > 1) {
         attempt.retries.push(event.payload.attempt);
       }
       const terminal = terminalStepStatus(event);

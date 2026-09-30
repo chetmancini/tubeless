@@ -111,9 +111,16 @@ describe("agent history projection", () => {
           : { kind: "finish", result: 70 },
     });
     const { events } = await record(agent);
-    const root = projectAgentHistory(projectPipelineRunStore(events).runs).agents[0]!;
+    const { runs } = projectPipelineRunStore(events);
+    const root = projectAgentHistory(runs).agents[0]!;
     expect(root.turns[0]!.calls).toHaveLength(70);
     expect(new Set(root.turns[0]!.calls.map((call) => call.callId)).size).toBe(70);
+    // Batch, call, decision and state reports all describe initial attempts.
+    for (const run of runs) {
+      for (const step of run.steps) {
+        if (step.attempt) expect(step.attempt.retries).toEqual([]);
+      }
+    }
     expect(
       events.some(
         (event) =>

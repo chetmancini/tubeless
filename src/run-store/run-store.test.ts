@@ -417,25 +417,22 @@ describe("pipeline run store projections", () => {
     });
   });
 
-  it("stores repeated reportAttempt telemetry on one execution attempt", () => {
+  it("excludes initial attempts while retaining retries across operations in one step", () => {
     const snapshot = projectPipelineRunStore([
       event(1, "pipeline.started"),
       event(2, "step.running", { attemptId: "attempt-1", stepId: "load" }),
-      event(3, "step.attempted", {
-        attemptId: "attempt-1",
-        payload: { attempt: 1 },
-        stepId: "load",
-      }),
-      event(4, "step.attempted", {
-        attemptId: "attempt-1",
-        payload: { attempt: 2 },
-        stepId: "load",
-      }),
-      event(5, "step.complete", { attemptId: "attempt-1", stepId: "load" }),
+      ...[1, 1, 2, 3, 1, 2].map((attempt, index) =>
+        event(index + 3, "step.attempted", {
+          attemptId: "attempt-1",
+          payload: { attempt },
+          stepId: "load",
+        })
+      ),
+      event(9, "step.complete", { attemptId: "attempt-1", stepId: "load" }),
     ]);
 
     expect(snapshot.runs[0]?.steps[0]).toMatchObject({
-      attempt: { attemptId: "attempt-1", retries: [1, 2] },
+      attempt: { attemptId: "attempt-1", retries: [2, 3, 2] },
     });
     expect(snapshot.runs[0]?.steps[0]).not.toHaveProperty("attempts");
   });

@@ -92,6 +92,35 @@ it("runs a delegating agent through the CLI and inspects the same typed history 
       ).toBe(true);
     }
     expect(histories[0]).toEqual(histories[1]);
+
+    // An ordinary parent still needs to discover agents deeper in its run tree.
+    const parent = {
+      version: 2,
+      name: "pipeline.started",
+      pipelineId: "ordinary-parent",
+      runId: "parent-run",
+      timestampMs: 0,
+      payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+    };
+    const wrapped = join(cwd, "wrapped.ndjson");
+    await writeFile(
+      wrapped,
+      [
+        parent,
+        ...events.map((event) =>
+          event.runId === runId ? { ...event, parentRunId: parent.runId } : event
+        ),
+      ]
+        .map((event) => JSON.stringify(event))
+        .join("\n")
+    );
+    const parentIo = captureIo(cwd);
+    expect(
+      await runWorkbenchCli(["history", "--trace", wrapped, "--json", parent.runId], parentIo)
+    ).toBe(0);
+    const detail = JSON.parse(parentIo.output.join(""));
+    expect(detail.agent).toBeUndefined();
+    expect(detail.agentHistory).toEqual(histories[0]);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
