@@ -86,8 +86,10 @@ Do not add this command or live credentials to CI.
 
 Require all three tasks to pass: investigation/edit/check, scoped project
 instructions, and the requested missing-file read followed by recovery through
-conversation compaction. Preserve the JSON report (model, timestamp, calls,
-outcomes, answer and independent checks) with the candidate's acceptance evidence,
+conversation compaction. The first recovery batch must contain only that read;
+recovery must be chosen in a later decision that receives its failure outcome.
+Preserve the JSON report (model, timestamp, calls, outcomes, decision batches with
+their incoming outcomes, answer and independent checks) with the candidate's acceptance evidence,
 including failed attempts. These small tasks establish observed behavior, not a
 general reliability guarantee. A failed task is an acceptance finding even when
 the final edited file is correct.

@@ -50,6 +50,7 @@ for (const fixture of cases) {
   const started = Date.now();
   const calls = [];
   const outcomes = [];
+  const turns = [];
   let compactions = 0;
   let answer;
   let verification;
@@ -71,8 +72,11 @@ for (const fixture of cases) {
       id: fixture.id,
       limits: { maxTurns: 12, maxCalls: 24, maxDecisions: 12 },
       model: async (request, context) => {
+        const turn = { outcomes: request.outcomes };
+        turns.push(turn);
         outcomes.push(...request.outcomes);
         const result = await transport(request, context);
+        turn.decision = result.decision;
         if (result.decision.kind === "continue") calls.push(...result.decision.calls);
         return result;
       },
@@ -131,10 +135,20 @@ for (const fixture of cases) {
         "Agent must perform the requested missing-file read first"
       );
       assert(
-        outcomes.some(
-          (outcome) => outcome.id === first.id && !outcome.ok && outcome.error.code === "ENOENT"
-        ),
-        "Agent must observe and recover from the missing file"
+        turns[0].decision.calls.length === 1,
+        "Agent must wait for the missing-file result before choosing recovery calls"
+      );
+      const recovery = turns[1];
+      assert(
+        recovery?.decision?.kind === "continue" &&
+          recovery.outcomes.some(
+            (outcome) =>
+              outcome.id === first.id &&
+              outcome.tool === "read" &&
+              !outcome.ok &&
+              outcome.error.code === "ENOENT"
+          ),
+        "Agent must choose recovery in a subsequent decision that observes the missing-file error"
       );
       assert(compactions > 0, "Conversation must compact and still complete");
     }
@@ -151,13 +165,19 @@ for (const fixture of cases) {
     verification,
     calls,
     outcomes,
+    turns,
     compactions,
     durationMs: Date.now() - started,
   };
   results.push(result);
   // Keep console output short; the report retains the complete captured evidence.
   console.log(
-    JSON.stringify({ ...result, calls: calls.map(({ tool }) => tool), outcomes: undefined })
+    JSON.stringify({
+      ...result,
+      calls: calls.map(({ tool }) => tool),
+      outcomes: undefined,
+      turns: undefined,
+    })
   );
 }
 const reportPath = process.argv[2] ?? ".context/model-agent-eval.json";

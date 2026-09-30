@@ -96,6 +96,28 @@ it.each([
         expect(text).toContain("Call word-1  tool processWord");
         expect(text).toContain("NOT_FOUND");
         expect(text).toContain("state 0 -> 1");
+        if (runId !== root.runId) {
+          const directArgs = [
+            "history",
+            source!,
+            filename!,
+            "--pipeline",
+            root.pipelineId,
+            root.runId,
+          ];
+          const directJsonIo = captureIo(cwd);
+          expect(await runWorkbenchCli([...directArgs, "--json"], directJsonIo)).toBe(0);
+          const directHistory: AgentHistory = JSON.parse(directJsonIo.output.join("")).agentHistory;
+          // Flat-node order may depend on selection; the nodes and rendered tree must agree.
+          expect(directHistory.agents).toHaveLength(history.agents.length);
+          expect(directHistory.agents).toEqual(expect.arrayContaining(history.agents));
+          expect(formatAgentHistory(directHistory)).toBe(formatAgentHistory(history));
+          const directTextIo = captureIo(cwd);
+          expect(await runWorkbenchCli(directArgs, directTextIo)).toBe(0);
+          expect(directTextIo.output.join("").split("Agent history:\n")[1]).toBe(
+            text.split("Agent history:\n")[1]
+          );
+        }
         const rawIo = captureIo(cwd);
         expect(await runWorkbenchCli([...args, "--events"], rawIo)).toBe(0);
         expect(

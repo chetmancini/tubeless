@@ -54,7 +54,10 @@ Guidance comes from the project containing the files. A `.git` file also marks
 a worktree root. Outside a repository it loads only cwd's
 file. More specific directory instructions take precedence. Deeper directories
 and files referenced by those instructions are read by the agent when needed;
-there is no recursive startup scan or `@file` expansion. Set `projectContext: false`
+there is no recursive startup scan or `@file` expansion. Required instruction
+discovery and reading precede a user's requested first task action; optional
+exploration waits until after that action. Already supplied guidance need not be
+reread. Set `projectContext: false`
 to disable discovery. Context is loaded once per invocation; simultaneous and later
 runs have independent state. Missing instruction files are allowed; unreadable,
 non-text, or oversized files fail before a model request rather than silently
@@ -138,8 +141,12 @@ verification, project instructions, recovery from a missing file, and forced
 compaction. They also require existing tests and unrelated work to remain intact.
 Results are written to `.context/model-agent-eval.json`; these paid evaluations
 are separate from credential-free CI. Reports retain full call arguments, observed
-tool outcomes, and any completed answer and verification output, including when a
+tool outcomes, decision batches with the outcomes supplied to each decision, and
+any completed answer and verification output, including when a
 later assertion fails. The disposable workspaces are still removed after each task.
+The recovery task must request the missing-file read alone, then choose recovery
+in a later decision that receives its `ENOENT` outcome; a speculative recovery
+call in the first batch fails the evaluation.
 Passing them is evidence for these specific
 tasks, not a general reliability guarantee.
 

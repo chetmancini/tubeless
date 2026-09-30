@@ -9,23 +9,25 @@ const preload = String.raw`
 const turns = new Map();
 const sequences = {
   "investigate-edit-verify": [
-    ["read", {path: "price.mjs"}],
-    ["edit", {path: "price.mjs", oldText: "Math.floor(value * 100)", newText: "Math.round((value + Number.EPSILON) * 100)"}],
-    ["bash", {command: "node check.mjs"}],
+    [["read", {path: "price.mjs"}]],
+    [["edit", {path: "price.mjs", oldText: "Math.floor(value * 100)", newText: "Math.round((value + Number.EPSILON) * 100)"}]],
+    [["bash", {command: "node check.mjs"}]],
   ],
   "project-context": [
-    ["read", {path: "greet.mjs"}],
-    ["edit", {path: "greet.mjs", oldText: 'return "hello"', newText: 'return "Ahoy, " + (name.trim() || "friend") + "!"'}],
-    ["bash", {command: "node ../check.mjs"}],
+    [["read", {path: "greet.mjs"}]],
+    [["edit", {path: "greet.mjs", oldText: 'return "hello"', newText: 'return "Ahoy, " + (name.trim() || "friend") + "!"'}]],
+    [["bash", {command: "node ../check.mjs"}]],
   ],
   "recover-and-compact": [
-    ["read", {path: "legacy-config.json"}],
-    ["read", {path: "config/current.json"}],
-    ["edit", {path: "config/current.json", oldText: '"retries":0', newText: '"retries":3'}],
-    ["bash", {command: "node check.mjs"}],
+    [["read", {path: "legacy-config.json"}]],
+    [["read", {path: "config/current.json"}]],
+    [["edit", {path: "config/current.json", oldText: '"retries":0', newText: '"retries":3'}]],
+    [["bash", {command: "node check.mjs"}]],
   ],
 };
-if (process.env.EVAL_SKIP_RECOVERY === "true") sequences["recover-and-compact"].shift();
+const recovery = sequences["recover-and-compact"];
+if (process.env.EVAL_RECOVERY === "skipped") recovery.shift();
+if (process.env.EVAL_RECOVERY === "batched") recovery.splice(0, 2, [...recovery[0], ...recovery[1]]);
 globalThis.fetch = async (url, options) => {
   if (url === "https://api.openai.com/v1/responses/compact") {
     return Response.json({object: "response.compaction", output: [{type: "compaction", encrypted_content: "fixture"}]});
@@ -36,17 +38,17 @@ globalThis.fetch = async (url, options) => {
   if (!kind) throw new Error("Unrecognized fixture");
   const turn = turns.get(kind) ?? 0;
   turns.set(kind, turn + 1);
-  const [name, input] = sequences[kind][turn] ?? ["_finish", {answer: "Fixture completed."}];
-  return Response.json({status: "completed", output: [{
-    type: "function_call", name, call_id: kind + "-" + turn,
+  const batch = sequences[kind][turn] ?? [["_finish", {answer: "Fixture completed."}]];
+  return Response.json({status: "completed", output: batch.map(([name, input], index) => ({
+    type: "function_call", name, call_id: kind + "-" + turn + "-" + index,
     arguments: JSON.stringify({[name === "_finish" ? "result" : "input"]: input}),
-  }]});
+  }))});
 };
 `;
 
-it.each([false, true])(
-  "retains evaluation evidence when the recovery assertion fails: %s",
-  async (skipRecovery) => {
+it.each(["ordered", "skipped", "batched"])(
+  "retains decision batches and evaluation evidence for %s recovery",
+  async (mode) => {
     const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-report-"));
     try {
       const mockPath = join(directory, "provider.mjs");
@@ -63,18 +65,18 @@ it.each([false, true])(
               ...process.env,
               OPENAI_API_KEY: "offline-fixture",
               OPENAI_MODEL: "offline-fixture",
-              EVAL_SKIP_RECOVERY: String(skipRecovery),
+              EVAL_RECOVERY: mode,
             },
           }
         );
-      if (skipRecovery) expect(run).toThrow();
+      if (mode !== "ordered") expect(run).toThrow();
       else run();
       const report = JSON.parse(await readFile(reportPath, "utf8"));
       const [price, project, recovery] = report.results;
       expect(price.passed).toBe(true);
       expect(project.passed).toBe(true);
       expect(price.calls[0]).toMatchObject({
-        id: "investigate-edit-verify-0",
+        id: "investigate-edit-verify-0-0",
         tool: "read",
         input: { path: "price.mjs" },
       });
@@ -84,7 +86,7 @@ it.each([false, true])(
         value: { content: expect.stringContaining("Math.floor") },
       });
       expect(recovery).toMatchObject({
-        passed: !skipRecovery,
+        passed: mode === "ordered",
         answer: "Fixture completed.",
         verification: "config checks passed",
       });
@@ -94,12 +96,30 @@ it.each([false, true])(
         ok: true,
         value: { exitCode: 0, stdout: "config checks passed\n" },
       });
-      if (skipRecovery) {
+      expect(recovery.turns[0].outcomes).toEqual([]);
+      expect(recovery.turns[0].decision.calls).toEqual(
+        recovery.calls.slice(0, mode === "batched" ? 2 : 1)
+      );
+      if (mode === "skipped") {
         expect(recovery.error).toBe("Agent must perform the requested missing-file read first");
         expect(recovery.calls[0].input).toEqual({ path: "config/current.json" });
       } else {
         expect(recovery.calls[0].input).toEqual({ path: "legacy-config.json" });
-        expect(recovery.outcomes[0]).toMatchObject({ ok: false, error: { code: "ENOENT" } });
+        expect(recovery.turns[1].outcomes[0]).toMatchObject({
+          id: recovery.calls[0].id,
+          tool: "read",
+          ok: false,
+          error: { code: "ENOENT" },
+        });
+        if (mode === "batched") {
+          expect(recovery.error).toBe(
+            "Agent must wait for the missing-file result before choosing recovery calls"
+          );
+        } else {
+          expect(recovery.turns[1].decision.calls[0].input).toEqual({
+            path: "config/current.json",
+          });
+        }
       }
     } finally {
       await rm(directory, { recursive: true, force: true });

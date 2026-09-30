@@ -45,7 +45,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   task/answer schemas, a customizable coding prompt, startup AGENTS.md discovery
   from the physical workspace directory, shared by the model and all tool calls,
   and per-run conversation ownership. The optional provider adapter retains native
-  history and compacts it before subsequent decisions. Add `instructions`, custom
+  history and compacts it before subsequent decisions. Required project-guidance
+  reads precede requested task actions; optional exploration follows them. Add `instructions`, custom
   `tools`, or tighter `limits` as needed; the OpenAI adapter requires inline tool
   descriptors with strict object constraints, validated before HTTP. Large batches
   get explicitly marked model-visible previews; the harness retains full outcomes.

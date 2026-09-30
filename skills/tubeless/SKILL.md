@@ -124,7 +124,8 @@ Read the corresponding package recipe before using these features:
   tools or execution limits as needed. The factory loads startup AGENTS.md guidance
   from the physical workspace path, shared by the model and every tool call,
   and owns isolated conversation state. The adapter preserves native history and
-  compacts completed turns. Custom OpenAI tool descriptors must be inline; provide
+  compacts completed turns. Required project-guidance reads precede requested task
+  actions; optional exploration follows them. Custom OpenAI tool descriptors must be inline; provide
   `inputJsonSchema` when generated descriptors contain references. All object
   properties must be required, with `additionalProperties: false` at every object.
   Large output batches use explicit model-visible previews; harness outcomes remain
