@@ -13,6 +13,11 @@ import type {
 } from "../tracing/tracing-contracts.js";
 import { RunProjection } from "./run-projection.js";
 import { DefinitionProjection } from "./definition-projection.js";
+import type {
+  StoredAgentDefinition,
+  StoredAgentTurnMetadata,
+  StoredAgentCallMetadata,
+} from "./agent-projection.js";
 export { projectPipelineRun } from "./run-projection.js";
 
 /** One trace event after it has been appended to a durable local store. */
@@ -28,6 +33,8 @@ export interface PipelineRunEventQuery {
   pipelineId?: string;
   /** Restrict results to one run. */
   runId?: string;
+  /** Restrict results to this run and all its descendants, across pipeline IDs. */
+  rootRunId?: string;
   /** Maximum rows to return. Defaults to the store implementation's safe limit. */
   limit?: number;
 }
@@ -74,6 +81,7 @@ export interface StoredPipelineAttempt {
   attemptId: string;
   durationMs?: number;
   finishedAtMs?: number;
+  /** Reported one-based attempt numbers greater than 1, one entry per retry report. */
   retries: number[];
   startedAtMs: number;
   status: Exclude<PipelineStepLifecycleStatus, "planned">;
@@ -90,7 +98,7 @@ export type StoredPipelineArtifact = Extract<
 export interface StoredPipelineStep {
   artifacts?: StoredPipelineArtifact[];
   outputSource?: "override" | "cache";
-  /** One execution attempt; `retries` carries `reportAttempt` telemetry. */
+  /** One execution attempt; `retries` excludes initial `reportAttempt(1)` telemetry. */
   attempt?: StoredPipelineAttempt;
   description?: string;
   durationMs?: number;
@@ -111,6 +119,10 @@ export interface StoredPipelineStep {
 }
 
 export interface StoredPipelineRun {
+  agent?: StoredAgentDefinition;
+  agentTurn?: StoredAgentTurnMetadata;
+  agentCall?: StoredAgentCallMetadata;
+  itemKey?: string;
   iteration?: PipelineTraceEvent["iteration"];
   definitionIdentity?: PipelineDefinitionIdentity;
   correlationId?: string;

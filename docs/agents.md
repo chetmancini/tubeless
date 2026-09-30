@@ -463,8 +463,40 @@ agent. A tool run's `parentRunId` identifies its turn, and `itemKey` retains the
 call ID. Handler-tool first-attempt trace attributes record `agent.runId`, `agent.turn`,
 `agent.callId`, `agent.tool`, and `agent.parentAttemptId`. Decision, admission,
 and reduction attempts record bounded decision/count/state-version summaries.
-These existing trace v3 records round-trip through NDJSON and SQLite. State,
+Dispatch also records the selected tool name on the turn, so aliases for the same
+child pipeline remain distinguishable. These trace v3 records round-trip through NDJSON and SQLite. State,
 prompts, inputs, and outputs are not recorded automatically. Live progress keeps
 at most 32 visible call groups and 32 recent turn groups.
+
+Use `tubeless history <run-id>` to inspect a recorded agent or a parent pipeline
+containing agents. The detail view joins descendants by run identity and shows
+agent → turn → call → child agent, including decisions, state versions before and
+after reduction, observed/selected call counts, cumulative local call admissions,
+errors, and termination. Repeated call IDs remain separate across turns; a failed
+tool can appear inside a completed turn when the agent recovered. History retains
+every recorded call even when live progress rows were truncated.
+
+```sh
+bunx tubeless run --trace agent.ndjson ./examples/agent-delegation.ts -- --question "red missing"
+bunx tubeless history --trace agent.ndjson
+bunx tubeless history --trace agent.ndjson <agent-run-id>
+bunx tubeless history --trace agent.ndjson --json <agent-run-id>
+```
+
+JSON details add `agentHistory.agents`: each agent has its run ID, declared
+capabilities and limits, termination, and ordered turns with calls. Calls link to
+child agents with `childAgentRunIds`; each child has a `parentCall` containing the
+owning agent, turn, call ID, and call run ID. This keeps nested histories linked
+without duplicating subtrees. Existing run lists and `--events` output retain
+their scope. `--pipeline` selects the requested root run; its detail still includes
+children with different pipeline IDs.
+
+Older traces remain readable. Missing decisions or tool aliases are shown as
+unknown; history does not guess an alias from a pipeline name. A dispatch with no
+recorded child has unknown status. A run with no terminal event remains recorded
+as running, which does not establish that a process is still alive. Termination
+distinguishes validated finish, limit exhaustion, cancellation, failure, skipped
+execution, and completion without a recorded finish decision. Detailed Studio
+presentation remains a separate slice.
 
 The harness executes in process. Crash-safe resume remains a later stage.

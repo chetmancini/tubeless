@@ -114,6 +114,20 @@ export async function openNdjsonPipelineRunStore(
     }
   }
 
+  // Resolve subtrees through recorded parent links without scanning unrelated runs.
+  const eventsByRun = new Map<string, StoredPipelineEvent[]>();
+  const eventsByParent = new Map<string, StoredPipelineEvent[]>();
+  for (const event of events) {
+    const runEvents = eventsByRun.get(event.runId) ?? [];
+    runEvents.push(event);
+    eventsByRun.set(event.runId, runEvents);
+    if (event.parentRunId !== undefined) {
+      const childEvents = eventsByParent.get(event.parentRunId) ?? [];
+      childEvents.push(event);
+      eventsByParent.set(event.parentRunId, childEvents);
+    }
+  }
+
   let closed = false;
   return {
     close() {
@@ -122,15 +136,39 @@ export async function openNdjsonPipelineRunStore(
     async listEvents(query: PipelineRunEventQuery = {}) {
       if (closed) throw new Error("Cannot query a closed NDJSON pipeline run store.");
       const limit = Math.max(1, Math.min(100_000, Math.floor(query.limit ?? 20_000)));
-      return events
-        .filter(
-          (event) =>
-            (query.afterId === undefined || event.id > query.afterId) &&
-            (query.pipelineId === undefined || event.pipelineId === query.pipelineId) &&
-            (query.runId === undefined || event.runId === query.runId)
-        )
-        .slice(0, limit)
-        .map((event) => structuredClone(event));
+      let selected = query.runId !== undefined ? (eventsByRun.get(query.runId) ?? []) : events;
+      if (query.rootRunId !== undefined) {
+        const tree = new Set([query.rootRunId]);
+        for (const runId of tree) {
+          for (const event of eventsByParent.get(runId) ?? []) tree.add(event.runId);
+        }
+        selected =
+          query.runId !== undefined
+            ? tree.has(query.runId)
+              ? selected
+              : []
+            : [...tree]
+                .flatMap((runId) => eventsByRun.get(runId) ?? [])
+                .sort((a, b) => a.id - b.id);
+      }
+      // Buckets retain file order. Seek past the cursor without revisiting
+      // preceding pages, including when the reader requests very small pages.
+      let start = 0;
+      let end = selected.length;
+      if (query.afterId !== undefined) {
+        while (start < end) {
+          const middle = Math.floor((start + end) / 2);
+          if (selected[middle]!.id > query.afterId) end = middle;
+          else start = middle + 1;
+        }
+      }
+      const page: StoredPipelineEvent[] = [];
+      for (let index = start; index < selected.length && page.length < limit; index++) {
+        const event = selected[index]!;
+        if (query.pipelineId !== undefined && event.pipelineId !== query.pipelineId) continue;
+        page.push(structuredClone(event));
+      }
+      return page;
     },
   };
 }

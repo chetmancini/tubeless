@@ -160,10 +160,18 @@ and interactive reporter orchestration.
   It retains only required fields and copies retained identities and errors at the
   boundary. `run-store/definition-projection.ts` owns definition replacement and
   per-run start metadata, including timestamp and event-ID tie breaking.
+- `run-store/agent-projection.ts` retains typed agent attempt summaries;
+  `agent-history.ts` joins agent, turn and call identities across recorded runs.
+  Neither imports agent execution or a storage adapter. The workbench formats the
+  joined history for text and JSON inspection.
 - `run-store/run-store-reader.ts` owns cursor pagination for both CLI history and
   Studio. It orders and deduplicates pages, advances through short pages, enforces
   query filters and stops when the cursor cannot advance. Consumers control
   backpressure and retain responsibility for closing the reader.
+  Run-detail reads page one subtree query and retain the supplied root snapshot.
+  SQLite resolves descendants with a recursive query, including
+  older read-only stores; NDJSON follows its in-memory parent index. Cursor and
+  pipeline filters apply after discovering the subtree so they cannot sever links.
 - `studio/run-store-ui-state.ts` serializes reads and history clearing; it consumes
   only the reader's `listEvents` capability.
 - `studio/run-store-ui-api.ts` owns route behavior, command validation and API state.

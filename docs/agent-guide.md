@@ -338,7 +338,11 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   recorded runs from SQLite, or pass `--trace` to inspect a finished NDJSON
   artifact without importing it.
   Filter shared history with `--pipeline <recorded-pipeline-id>` in any output
-  mode. Use the pipeline definition’s ID.
+  mode. Use the pipeline definition’s ID. Agent run details include typed turn and
+  call history, nested agents, state versions, errors, and termination; `--json`
+  exposes `agentHistory.agents`. The pipeline filter selects the root while its
+  detail includes descendants with other pipeline IDs. Raw `--events` remains
+  run-scoped. Treat missing observations as unknown, not successful execution.
 
 ## Runtime rules
 

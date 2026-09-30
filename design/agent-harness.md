@@ -5,8 +5,9 @@ single-agent runtime and generic bounded iteration. Subtrees share call/decision
 budgets, depth bounds, cancellation, and leaf execution limits. Each child owns
 its state and capability registry.
 Every agent now includes the standard workspace tools; custom tools extend the
-registry or replace defaults by name. The workspace tool slice precedes stage 5
-history and presentation work.
+registry or replace defaults by name. Stage 5 now projects typed agent history
+and exposes it through CLI text and JSON details. Richer Studio presentation
+remains separate from the in-process core release.
 The default model-backed slice adds `defineModelAgent({ id, model })`, scoped
 startup AGENTS.md loading, and isolated provider conversation state through the
 same runtime. `tubeless/agent/openai` supplies native Responses history and
@@ -258,16 +259,18 @@ relations; readers continue accepting trace v2. Stage 3 records tool calls using
 first-attempt attributes for agent run, turn, call, tool, and parent attempt.
 Decision, admission, and state-version summaries use first-attempt attributes too;
 no new event kind or SQLite column is needed. The tuple (agent run, turn, call ID)
-is the logical identity. Typed call-specific projection and presentation follow
-in stage 5. Agent definition metadata adds capability identities and descriptor
+is the logical identity. Stage 5 retains typed decision/state/count summaries and
+joins call and child-agent identities for CLI history. Dispatch records the tool
+alias for pipeline tools using the existing attempted-event attributes; older
+records with missing aliases remain unknown. Agent definition metadata adds capability identities and descriptor
 fingerprints to v2 snapshots without changing hashes for existing definitions.
 The run report stays at its existing version unless its shape changes. Do not
 silently widen the v2 wire enum for nested modes or reinterpret old hashes.
 
 Stage 2 updates plan metadata, definition compilation, schemas/codecs,
 decoders, and storage projections together before emitting the new records.
-Stages 3–4 fill agent-specific records as execution lands; stage 5 completes
-presentation. Old records may lack relationships and remain inspectable with
+Stages 3–4 fill agent-specific records; stage 5 supplies typed history and CLI
+presentation, with richer Studio views still pending. Old records may lack relationships and remain inspectable with
 unknown metadata. State, prompts, and tool bodies are not traced by default.
 
 Trace export remains best-effort. Recovery later needs an independently

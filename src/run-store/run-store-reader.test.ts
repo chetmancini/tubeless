@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PipelineRunEventQuery, StoredPipelineEvent } from "./run-store.js";
-import { readPipelineEventPages } from "./run-store-reader.js";
+import { readPipelineEventPages, readPipelineRunTree } from "./run-store-reader.js";
+import { projectPipelineRun } from "./run-store.js";
 
 function event(id: number, runId = "run", pipelineId = "pipeline"): StoredPipelineEvent {
   return {
@@ -21,6 +22,29 @@ async function collect(pages: AsyncIterable<readonly StoredPipelineEvent[]>) {
 }
 
 describe("readPipelineEventPages", () => {
+  it("pages a selected subtree once and retains the supplied root", async () => {
+    const root = event(0, "root");
+    const child = { ...event(1, "child"), parentRunId: "root" };
+    const grandchild = { ...event(2, "grandchild"), parentRunId: "child" };
+    const cyclic = { ...root, id: 3, parentRunId: "grandchild" };
+    const events = [root, child, grandchild, cyclic];
+    const queries: PipelineRunEventQuery[] = [];
+    const reader = {
+      async listEvents(query: PipelineRunEventQuery = {}) {
+        queries.push(query);
+        // The adapter has selected the subtree; exercise its one-event page cap.
+        return events
+          .filter((event) => query.afterId === undefined || event.id > query.afterId)
+          .slice(0, 1);
+      },
+    };
+    const rootRun = projectPipelineRun([root]);
+    const runs = await readPipelineRunTree(reader, rootRun);
+    expect(runs[0]).toBe(rootRun);
+    expect(runs.map((run) => run.runId)).toEqual(["root", "grandchild", "child"]);
+    expect(queries).toHaveLength(events.length + 1);
+    expect(queries.every((query) => query.rootRunId === "root")).toBe(true);
+  });
   it("reads past short pages and preserves zero as the first cursor", async () => {
     const events = [event(0), event(1), event(2)];
     const queries: PipelineRunEventQuery[] = [];

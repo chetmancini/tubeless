@@ -63,6 +63,9 @@ The [model-agent recipe](../examples/agent-model.ts) loads guidance from the phy
 workspace path and uses that same cwd for all tool calls. Custom OpenAI tools need inline strict schemas; oversized result
 batches use explicit previews while the harness keeps complete outcomes. See the
 [model-agent contract](./agents.md#default-model-backed-agent).
+Record the [delegation recipe](../examples/agent-delegation.ts) with `--trace` or
+`--store`, then use `tubeless history <run-id>` for typed agent/turn/call history
+and child-agent links; add `--json` for the same structured projection.
 
 For ownership and governance discovery, adapt [graph-metadata.ts](../examples/graph-metadata.ts).
 Use `metadata`, `querySteps`, and `toMermaid({ query })`; read [graph metadata](./graph-metadata.md)

@@ -93,6 +93,8 @@ describe("module runtime boundaries", () => {
       "core/progress.js",
       "run-store/run-store.js",
       "run-store/run-projection.js",
+      "run-store/agent-projection.js",
+      "run-store/agent-history.js",
       "run-store/definition-projection.js",
       "run-store/run-store-reader.js",
       "studio/run-store-ui-api.js",
@@ -103,6 +105,7 @@ describe("module runtime boundaries", () => {
     const pending = [
       resolve(dist, "studio/run-store-ui-api.js"),
       resolve(dist, "run-store/run-store.js"),
+      resolve(dist, "run-store/agent-history.js"),
     ];
     const visited = new Set<string>();
     while (pending.length > 0) {
