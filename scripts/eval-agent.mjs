@@ -46,17 +46,13 @@ const cases = [
 
 function locatesConfiguration(outcome, root) {
   if (!outcome.ok) return false;
-  const directory = join(root, "config");
-  const file = join(directory, "current.json");
+  const file = join(root, "config", "current.json");
   const refersToFile = (text) => text.includes("config/current.json") || text.includes(file);
   switch (outcome.tool) {
     case "read":
       return outcome.value.path === file || refersToFile(outcome.value.content);
     case "list":
-      return outcome.value.entries.some((entry) => {
-        const path = join(outcome.value.path, entry.name);
-        return path === directory || path === file;
-      });
+      return outcome.value.entries.some((entry) => join(outcome.value.path, entry.name) === file);
     case "search":
       return outcome.value.matches.some((match) => match.path === file || refersToFile(match.text));
     case "bash":

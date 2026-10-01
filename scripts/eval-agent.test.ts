@@ -59,7 +59,7 @@ globalThis.fetch = async (url, options) => {
 const recoveryError = "The error-observing decision must read or locate the current configuration";
 it.each([
   ["ordered", undefined],
-  ["list-root", undefined],
+  ["list-root", recoveryError],
   ["list-config", undefined],
   ["search", undefined],
   ["bash", undefined],
