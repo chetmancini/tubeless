@@ -18,7 +18,12 @@ The provider example was brought forward from stage 6: the
 [OpenAI recipe](../examples/agent-openai.ts) now supplies an application-owned
 Responses callback, accumulated outcomes, and model-selected finish. Offline
 fixtures cover the adapter; live provider execution is a separate smoke check.
-The first agent release will execute in process; crash-safe resume follows later.
+Stage 6 completes the learning surface with an
+[agent embedded in an ordinary pipeline](../examples/agent-pipeline.ts), real
+CLI history tests and installed-package execution of the recipe and its previews.
+The [release acceptance checklist](../RELEASE_CHECKLIST.md#in-process-agent-acceptance)
+maps each gate to existing checks and the separate paid workspace evaluations.
+The first agent release executes in process; crash-safe resume follows later.
 
 The [type probes](./agent-harness.probes.ts) exercise the implemented public API
 and are checked by `bun run typecheck` and `make check`. Declared fixture schemas

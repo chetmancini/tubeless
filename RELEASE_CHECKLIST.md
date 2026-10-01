@@ -11,19 +11,19 @@ field immediately before `npm publish`.
 
 These names are the pre-1.0 contract. Treat a change as breaking.
 
-| Kind               | Stable name                                                                                                                                                        | Notes                                                                                                               |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| Package and binary | `tubeless`                                                                                                                                                         | Bin path `./dist/workbench/workbench-bin.js` is an implementation detail.                                           |
-| Export paths       | `tubeless`, `tubeless/cli`, `tubeless/batch`, `tubeless/node`, `tubeless/rate-limit`, `tubeless/retry`, `tubeless/testing`, `tubeless/tracing`, `tubeless/project` | CLI owns terminal commands; project owns catalogs. Each API has one entrypoint. Studio and storage remain internal. |
-| Error codes        | `TUBELESS_*` on `PipelineErrorCode`                                                                                                                                | Prefix and current spellings stay.                                                                                  |
-| CLI exit behavior  | Codes `0`–`7`                                                                                                                                                      | Success, usage, load, definition, validation, planning, execution, cancellation.                                    |
-| Storage            | `.tubeless/runs.sqlite`                                                                                                                                            | Default Studio/CLI store path.                                                                                      |
-| Runtime symbols    | `Symbol.for("tubeless/pipeline-command")`                                                                                                                          | Cross-instance marker. Consumers should not set it.                                                                 |
-| Other constants    | `RUN_MODEL_VERSION` (`2`)                                                                                                                                          | Stored-run version.                                                                                                 |
+| Kind               | Stable name                                                                                                                                                                                                   | Notes                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Package and binary | `tubeless`                                                                                                                                                                                                    | Bin path `./dist/workbench/workbench-bin.js` is an implementation detail.                                   |
+| Export paths       | `tubeless`, `tubeless/agent`, `tubeless/agent/openai`, `tubeless/cli`, `tubeless/batch`, `tubeless/node`, `tubeless/rate-limit`, `tubeless/retry`, `tubeless/testing`, `tubeless/tracing`, `tubeless/project` | The OpenAI adapter is optional; the agent core is provider-independent. Studio and storage remain internal. |
+| Error codes        | `TUBELESS_*` on `PipelineErrorCode`                                                                                                                                                                           | Prefix and current spellings stay.                                                                          |
+| CLI exit behavior  | Codes `0`–`7`                                                                                                                                                                                                 | Success, usage, load, definition, validation, planning, execution, cancellation.                            |
+| Storage            | `.tubeless/runs.sqlite`                                                                                                                                                                                       | Default Studio/CLI store path.                                                                              |
+| Runtime symbols    | `Symbol.for("tubeless/pipeline-command")`                                                                                                                                                                     | Cross-instance marker. Consumers should not set it.                                                         |
+| Other constants    | `RUN_MODEL_VERSION` (`2`)                                                                                                                                                                                     | Stored-run version.                                                                                         |
 
-Version 2 trace events and NDJSON recordings remain a durable compatibility
-boundary. Removing the concrete JSON and OpenTelemetry exporter entrypoints
-does not remove support for existing saved recordings.
+Version 2 and 3 trace events and NDJSON recordings remain a durable compatibility
+boundary. Agent iteration records use version 3. Removing the concrete JSON and
+OpenTelemetry exporter entrypoints does not remove support for existing saved recordings.
 
 `TUBELESS_VERSION`, `TUBELESS_LIMIT`, `TUBELESS_NAMES`, and
 `TUBELESS_CORE_PUBLIC_API_SMOKE_ENV` appear only in tests. They are not package
@@ -34,6 +34,68 @@ environment variables.
 The studio is a local process, not an authenticated network service.
 `tubeless ui` defaults to `127.0.0.1`. See [SECURITY.md](./SECURITY.md) and
 [docs/studio.md](./docs/studio.md).
+
+## In-process agent acceptance
+
+Run these gates on the release candidate before cutting a tag. Acceptance does
+not publish the package. This release covers in-process execution; crash-safe
+resume and richer Studio agent presentation remain follow-ups.
+
+```sh
+make check
+make website-build
+```
+
+`make check` includes the existing tests, declaration/type checks, generated API
+check and packed-consumer verification. All are credential-free; mocked provider
+responses exercise the HTTP protocol and evaluation runner without paid calls.
+
+| Required behavior                                                               | Repeatable evidence in the ordinary check suite                                               |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Dynamic tool batches, expected failure recovery, owned state, validated finish  | `src/agent/agent.test.ts`, `src/testing/agent.example.test.ts`                                |
+| Subagents, shared budgets, depth and concurrency, cancellation and draining     | `src/agent/subagents.test.ts`, `src/agent/pipeline-tool.test.ts`                              |
+| Limits, invalid model decisions, dry-run previews and skipped live work         | `src/agent/agent.test.ts`, `src/agent/model-agent.test.ts`                                    |
+| Prompt/project context, conversation ownership and compaction protocol          | `src/agent/model-prompt.test.ts`, `src/agent/model-agent.test.ts`, `src/agent/openai.test.ts` |
+| Normal CLI execution, ordinary parent pipeline, SQLite/NDJSON turn/call history | `src/workbench/workbench-agent-history.test.ts`                                               |
+| Installed public imports and CLI, agent composition and previews                | `scripts/verify-packed-artifact.mjs`                                                          |
+
+Inspect a recording manually with the credential-free composition recipe:
+
+```sh
+bun run tubeless -- run --trace .context/agent-release.ndjson examples/agent-pipeline.ts -- --question "red missing"
+bun run tubeless -- history --trace .context/agent-release.ndjson
+# Copy the agent-pipeline run ID from the list, then inspect it:
+bun run tubeless -- history --trace .context/agent-release.ndjson <run-id>
+```
+
+The result must be `Summary: 3 characters; RED | 7 characters; Observed NOT_FOUND: Word unavailable`.
+History must show three agents, the recovered `NOT_FOUND` call, state advancement
+and validated finish. The same recipe with `--dry-run` must return the same answer.
+
+With an authorized OpenAI credential, run the opt-in paid acceptance separately:
+
+```sh
+bun run eval:agent
+```
+
+The evaluator reads `OPENAI_API_KEY` from the process environment. To use an
+ignored local credential file without putting it in a command argument, run
+`bun run build` followed by
+`node --env-file=.env.local scripts/eval-agent.mjs .context/agent-release-live-eval.json`.
+Do not add this command or live credentials to CI.
+
+Require all three tasks to pass: investigation/edit/check, scoped project
+instructions, and the requested missing-file read followed by recovery through
+conversation compaction. The first recovery batch must contain only that read;
+recovery must be chosen in the next decision that receives its failure outcome.
+That batch must read the current configuration or expose its location through a
+read, listing, search, or shell result. Successful recovery in a later batch
+does not satisfy this check.
+Preserve the JSON report (model, timestamp, calls, outcomes, decision batches with
+their incoming outcomes, answer and independent checks) with the candidate's acceptance evidence,
+including failed attempts. These small tasks establish observed behavior, not a
+general reliability guarantee. A failed task is an acceptance finding even when
+the final edited file is correct.
 
 ## Remaining public work
 

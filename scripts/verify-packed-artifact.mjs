@@ -115,6 +115,29 @@ function assertPackedExecutable(tubelessBin, installedPackage, consumerRoot) {
   if (!output.includes("Normalized 2 row(s).")) {
     throw new Error(`Packed executable returned invalid output:\n${output}`);
   }
+  // Exercise dynamic tools, recoverable failure and subagents through an ordinary
+  // pipeline from the installed artifact. Neither run needs model credentials.
+  for (const controls of [[], ["--dry-run"]]) {
+    const answer = run(
+      tubelessBin,
+      [
+        "run",
+        join(installedPackage, "examples", "agent-pipeline.ts"),
+        "--",
+        ...controls,
+        "--question",
+        "red missing",
+      ],
+      consumerRoot
+    );
+    if (
+      !answer.includes(
+        "Summary: 3 characters; RED | 7 characters; Observed NOT_FOUND: Word unavailable"
+      )
+    ) {
+      throw new Error(`Packed agent recipe returned invalid output:\n${answer}`);
+    }
+  }
 }
 try {
   const packedStdout = run(
@@ -152,6 +175,9 @@ try {
     "examples/agent.ts",
     "examples/agent-workspace.ts",
     "examples/agent-model.ts",
+    "examples/agent-delegation.ts",
+    "examples/agent-pipeline.ts",
+    "examples/agent-openai.ts",
     "docs/remote-step-composition.md",
     "docs/cli.md",
     "docs/concepts.md",

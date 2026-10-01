@@ -54,7 +54,10 @@ Guidance comes from the project containing the files. A `.git` file also marks
 a worktree root. Outside a repository it loads only cwd's
 file. More specific directory instructions take precedence. Deeper directories
 and files referenced by those instructions are read by the agent when needed;
-there is no recursive startup scan or `@file` expansion. Set `projectContext: false`
+there is no recursive startup scan or `@file` expansion. Required instruction
+discovery and reading precede a user's requested first task action; optional
+exploration waits until after that action. Already supplied guidance need not be
+reread. Set `projectContext: false`
 to disable discovery. Context is loaded once per invocation; simultaneous and later
 runs have independent state. Missing instruction files are allowed; unreadable,
 non-text, or oversized files fail before a model request rather than silently
@@ -138,8 +141,14 @@ verification, project instructions, recovery from a missing file, and forced
 compaction. They also require existing tests and unrelated work to remain intact.
 Results are written to `.context/model-agent-eval.json`; these paid evaluations
 are separate from credential-free CI. Reports retain full call arguments, observed
-tool outcomes, and any completed answer and verification output, including when a
+tool outcomes, decision batches with the outcomes supplied to each decision, and
+any completed answer and verification output, including when a
 later assertion fails. The disposable workspaces are still removed after each task.
+The recovery task must request the missing-file read alone, then choose recovery
+in the next decision that receives its `ENOENT` outcome. That batch's results
+must contain the current configuration or reveal its location. Speculative
+recovery in the first batch and recovery deferred past the error-observing
+decision both fail the evaluation.
 Passing them is evidence for these specific
 tasks, not a general reliability guarantee.
 
@@ -246,6 +255,24 @@ pipeline with the single step and target `agent`. Its exact raw input, schema
 transformed output, and literal ID work with ordinary `fromPipeline`,
 `defineProject`, and `definePipelineCommand`. Automatic CLI flags still require
 JSON Schema metadata on the agent's input schema.
+
+### Embed an agent in a pipeline
+
+Use `fromPipeline` when ordinary work needs an agent's answer, just as for any
+other child pipeline. The [composition recipe](../examples/agent-pipeline.ts)
+forwards validated parent options to a delegating agent and feeds its validated
+answer into a dependent report step. It uses scripted decisions so the entire
+example, including child agents, can run without credentials or in preview mode:
+
+```sh
+make run FILE=examples/agent-pipeline.ts ARGS='--question "red missing"'
+make run FILE=examples/agent-pipeline.ts ARGS='--dry-run --question "red missing"'
+```
+
+Both return `Summary: 3 characters; RED | 7 characters; Observed NOT_FOUND: Word unavailable`.
+Recording the parent with `--trace` or `--store` exposes the same child-agent
+history as recording the agent directly. A child failure or cancellation prevents
+the required report step from running.
 
 ## Default workspace tools
 

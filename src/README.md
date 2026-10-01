@@ -43,6 +43,9 @@ their source files.
   per-run conversation state; `model-prompt.ts` loads scoped project guidance.
   The optional `tubeless/agent/openai` entrypoint owns HTTP, provider protocol and
   compaction. The provider-independent agent entrypoint never imports it.
+  `testing/agent.example.test.ts` covers public recipes, including ordinary pipeline
+  composition. Workbench history tests and the packed-artifact check exercise those
+  recipes through the CLI; live model evaluations remain an opt-in script outside CI.
 
 - Core uses utilities and internal trace emission. Its complete runtime import graph
   must stay independent of exporters, storage, UI, command parsing and presentation.

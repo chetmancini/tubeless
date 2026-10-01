@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { defineModelAgent } from "tubeless/agent";
@@ -44,12 +44,31 @@ const cases = [
   },
 ];
 
+function locatesConfiguration(outcome, root) {
+  if (!outcome.ok) return false;
+  const file = join(root, "config", "current.json");
+  const refersToFile = (text) => text.includes("config/current.json") || text.includes(file);
+  switch (outcome.tool) {
+    case "read":
+      return outcome.value.path === file || refersToFile(outcome.value.content);
+    case "list":
+      return outcome.value.entries.some((entry) => join(outcome.value.path, entry.name) === file);
+    case "search":
+      return outcome.value.matches.some((match) => match.path === file || refersToFile(match.text));
+    case "bash":
+      return outcome.value.exitCode === 0 && refersToFile(outcome.value.stdout);
+    default:
+      return false;
+  }
+}
+
 const results = [];
 for (const fixture of cases) {
-  const root = await mkdtemp(join(tmpdir(), `tubeless-eval-${fixture.id}-`));
+  const root = await realpath(await mkdtemp(join(tmpdir(), `tubeless-eval-${fixture.id}-`)));
   const started = Date.now();
   const calls = [];
   const outcomes = [];
+  const turns = [];
   let compactions = 0;
   let answer;
   let verification;
@@ -71,8 +90,11 @@ for (const fixture of cases) {
       id: fixture.id,
       limits: { maxTurns: 12, maxCalls: 24, maxDecisions: 12 },
       model: async (request, context) => {
+        const turn = { outcomes: request.outcomes };
+        turns.push(turn);
         outcomes.push(...request.outcomes);
         const result = await transport(request, context);
+        turn.decision = result.decision;
         if (result.decision.kind === "continue") calls.push(...result.decision.calls);
         return result;
       },
@@ -125,9 +147,38 @@ for (const fixture of cases) {
       "Agent must run the fixture check successfully"
     );
     if (fixture.compactAfterBytes) {
+      const first = calls[0];
       assert(
-        outcomes.some((outcome) => !outcome.ok && outcome.error.code === "ENOENT"),
-        "Agent must observe and recover from the missing file"
+        first?.tool === "read" && first.input.path === "legacy-config.json",
+        "Agent must perform the requested missing-file read first"
+      );
+      assert(
+        turns[0].decision.calls.length === 1,
+        "Agent must wait for the missing-file result before choosing recovery calls"
+      );
+      const recovery = turns[1];
+      assert(
+        recovery?.decision?.kind === "continue" &&
+          recovery.outcomes.some(
+            (outcome) =>
+              outcome.id === first.id &&
+              outcome.tool === "read" &&
+              !outcome.ok &&
+              outcome.error.code === "ENOENT"
+          ),
+        "Agent must choose recovery in a subsequent decision that observes the missing-file error"
+      );
+      // Only outcomes from this batch establish recovery; later successful work cannot satisfy it.
+      assert(
+        recovery.decision.calls.some((call) =>
+          turns[2]?.outcomes.some(
+            (outcome) =>
+              outcome.id === call.id &&
+              outcome.tool === call.tool &&
+              locatesConfiguration(outcome, root)
+          )
+        ),
+        "The error-observing decision must read or locate the current configuration"
       );
       assert(compactions > 0, "Conversation must compact and still complete");
     }
@@ -144,13 +195,19 @@ for (const fixture of cases) {
     verification,
     calls,
     outcomes,
+    turns,
     compactions,
     durationMs: Date.now() - started,
   };
   results.push(result);
   // Keep console output short; the report retains the complete captured evidence.
   console.log(
-    JSON.stringify({ ...result, calls: calls.map(({ tool }) => tool), outcomes: undefined })
+    JSON.stringify({
+      ...result,
+      calls: calls.map(({ tool }) => tool),
+      outcomes: undefined,
+      turns: undefined,
+    })
   );
 }
 const reportPath = process.argv[2] ?? ".context/model-agent-eval.json";

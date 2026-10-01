@@ -36,7 +36,7 @@ For agent or editor validation, use the [pipeline document JSON Schema](./pipeli
 
 | Document                                                      | Use it for                                                                             |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| [In-process agents](./agents.md)                              | Scripted and live LLM decisions, validated tools, and owned state                      |
+| [In-process agents](./agents.md)                              | Model defaults, dynamic tools, subagents, pipeline composition, and recorded history   |
 | [Child-pipeline composition](./child-pipeline-composition.md) | Running a reusable pipeline once or for many items                                     |
 | [Remote-step composition](./remote-step-composition.md)       | Calling remote services and running inside workers                                     |
 | [Tubeless ↔ Airflow](./airflow.md)                            | Calling an Airflow DAG or running a pipeline inside an Airflow task                    |

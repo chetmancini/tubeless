@@ -124,7 +124,8 @@ Read the corresponding package recipe before using these features:
   tools or execution limits as needed. The factory loads startup AGENTS.md guidance
   from the physical workspace path, shared by the model and every tool call,
   and owns isolated conversation state. The adapter preserves native history and
-  compacts completed turns. Custom OpenAI tool descriptors must be inline; provide
+  compacts completed turns. Required project-guidance reads precede requested task
+  actions; optional exploration follows them. Custom OpenAI tool descriptors must be inline; provide
   `inputJsonSchema` when generated descriptors contain references. All object
   properties must be required, with `additionalProperties: false` at every object.
   Large output batches use explicit model-visible previews; harness outcomes remain
@@ -141,7 +142,9 @@ Read the corresponding package recipe before using these features:
   unclassified failures are fatal. Dry-run decisions and tools need explicit
   previews. Use `examples/agent-delegation.ts` for child agents and ordinary
   pipeline tools. Reuse the child options schema, or supply `inputSchema` and
-  `mapOptions` together; keep mapping free of side effects. The complete batch
+  `mapOptions` together. Use `examples/agent-pipeline.ts` to embed an agent with
+  `fromPipeline` and consume its validated answer in an ordinary dependent step.
+  Keep mapping free of side effects. The complete batch
   is prevalidated and transforms run once. Calls, decisions, depth, and leaf
   concurrency obey shared ancestor limits; turns are local. Waiting wrappers
   hold no leaf permit. Ordinary child composition carries the private scope.
