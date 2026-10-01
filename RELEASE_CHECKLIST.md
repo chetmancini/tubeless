@@ -90,6 +90,8 @@ instructions, nested guidance read in a separate turn before the requested file
 read, and the requested missing-file read followed by recovery through
 conversation compaction. The nested-guidance task must follow the scoped answer
 convention, preserve all fixture files, and call only `read`, `list`, or `search`.
+Both reads must return the expected contents in successful outcomes matched to
+their call IDs in the following turn; empty or failed reads do not count.
 The evaluator rejects mutating capabilities even if the agent restores the original contents.
 The first recovery batch must contain
 only that read;

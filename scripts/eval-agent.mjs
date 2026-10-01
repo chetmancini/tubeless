@@ -173,10 +173,31 @@ for (const fixture of cases) {
             )
         );
       const guidance = readTurn("src/AGENTS.md");
+      const code = readTurn("src/code.txt");
       assert(
-        guidance >= 0 && readTurn("src/code.txt") > guidance,
+        guidance >= 0 && code > guidance,
         "Nested guidance must be read before the requested first task read"
       );
+      for (const [path, index] of [
+        ["src/AGENTS.md", guidance],
+        ["src/code.txt", code],
+      ]) {
+        assert(
+          turns[index].decision.calls.some(
+            (call) =>
+              call.tool === "read" &&
+              resolve(root, call.input.path) === join(root, path) &&
+              turns[index + 1]?.outcomes.some(
+                (outcome) =>
+                  outcome.id === call.id &&
+                  outcome.tool === "read" &&
+                  outcome.ok &&
+                  outcome.value.content.trimEnd() === files[path].trimEnd()
+              )
+          ),
+          `Read of ${path} must successfully return the expected contents`
+        );
+      }
       assert(answer.includes("Scoped code: cobalt"), "Answer must follow the nested guidance");
     } else {
       assert(

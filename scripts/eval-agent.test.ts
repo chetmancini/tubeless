@@ -6,6 +6,9 @@ import { expect, it } from "vitest";
 
 // Exercise the evaluator, tools, checks and report writer without a live provider.
 const preload = String.raw`
+import fs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
+
 const turns = new Map();
 const sequences = {
   "investigate-edit-verify": [
@@ -33,6 +36,27 @@ const sequences = {
 const guidance = sequences["nested-guidance"];
 if (process.env.EVAL_RECOVERY === "guidance-skipped") guidance.shift();
 if (process.env.EVAL_RECOVERY === "guidance-batched") guidance.splice(0, 2, [...guidance[0], ...guidance[1]]);
+if (process.env.EVAL_RECOVERY === "guidance-empty") guidance[0][0][1].startLine = 999;
+if (process.env.EVAL_RECOVERY === "code-empty") guidance[1][0][1].startLine = 999;
+if (process.env.EVAL_RECOVERY === "guidance-bounded") {
+  guidance[0][0][1].maxLines = 1;
+  guidance[1][0][1].maxLines = 1;
+}
+const failedRead = {
+  "guidance-failed": "/src/AGENTS.md",
+  "code-failed": "/src/code.txt",
+}[process.env.EVAL_RECOVERY];
+if (failedRead) {
+  // Fail only the tool's file open, leaving fixture setup and independent checks intact.
+  const open = fs.open;
+  fs.open = async (path, ...args) => {
+    if (path.includes("tubeless-eval-nested-guidance-") && path.endsWith(failedRead)) {
+      throw Object.assign(new Error("Fixture read denied"), {code: "EACCES"});
+    }
+    return open(path, ...args);
+  };
+  syncBuiltinESMExports();
+}
 const mutations = {
   "guidance-create": [[["write", {path: "extra.txt", content: "unexpected file"}]]],
   "guidance-restore": [
@@ -94,6 +118,19 @@ it.each([
   ["unrelated-search", recoveryError, undefined],
   ["guidance-skipped", undefined, guidanceError],
   ["guidance-batched", undefined, guidanceError],
+  ["guidance-bounded", undefined, undefined],
+  [
+    "guidance-empty",
+    undefined,
+    "Read of src/AGENTS.md must successfully return the expected contents",
+  ],
+  [
+    "guidance-failed",
+    undefined,
+    "Read of src/AGENTS.md must successfully return the expected contents",
+  ],
+  ["code-empty", undefined, "Read of src/code.txt must successfully return the expected contents"],
+  ["code-failed", undefined, "Read of src/code.txt must successfully return the expected contents"],
   ["guidance-create", undefined, readOnlyError],
   ["guidance-restore", undefined, readOnlyError],
   ["guidance-bash", undefined, readOnlyError],
@@ -133,6 +170,16 @@ it.each([
         verification: "guidance checks passed",
       });
       expect(guidance.error).toBe(expectedGuidanceError);
+      if (["guidance-empty", "code-empty", "guidance-failed", "code-failed"].includes(mode)) {
+        const index = mode.startsWith("guidance-") ? 0 : 1;
+        expect(guidance.turns[index + 1].outcomes[0]).toMatchObject({
+          id: guidance.turns[index].decision.calls[0].id,
+          tool: "read",
+          ...(mode.endsWith("empty")
+            ? { ok: true, value: { content: "" } }
+            : { ok: false, error: { code: "EACCES" } }),
+        });
+      }
       if (expectedGuidanceError === readOnlyError) {
         const mutations = guidance.outcomes.filter((outcome: { tool: string }) =>
           ["write", "edit", "bash"].includes(outcome.tool)
