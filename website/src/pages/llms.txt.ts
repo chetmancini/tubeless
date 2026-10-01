@@ -24,6 +24,7 @@ This static site provides explicit Markdown URLs; Accept negotiation is not avai
 
 ## When to use Tubeless
 
+- [Agents are pipelines](${absUrl("agent-harness.md")}): LLM turns and tool calls run as pipeline steps. Trace a run, call subagents, and compose agents with existing workflows.
 - [Typed imports and ETL](${absUrl("docs/recipes.md")}): Choose the smallest matching executable recipe for ingestion, enrichment, or export jobs.
 - [Validation and publication workflows](${absUrl("docs/agent-guide.md")}): Model required dependencies and failure gates; never publish after unsuccessful validation.
 - [Pipeline-backed CLI programs](${absUrl("docs/cli.md")}): Export defineProject to expose schema-backed pipelines to tubeless list, tubeless inspect <pipeline-id>, and tubeless plan <pipeline-id>. You can also run one uniquely exported schema-backed pipeline directly from its file. Run with tubeless run <pipeline-id-or-file> -- <command-args> only when execution is intended. Use definePipelineCommand for custom CLI adapters.
@@ -50,6 +51,7 @@ ${DOC_NAV.map(({ slug, label, blurb }) => `- [${label}](${absUrl(`docs/${slug}.m
 
 ## Optional
 
+- [Agent examples](${absUrl("agent-examples.md")}): Small recorded tasks with starting files, tool calls, answers, and checks, plus a scripted subagent example.
 - [Complete documentation](${absUrl("llms-full.txt")}): All docs from this build, agent guide first.
 - [Human documentation index](${absUrl("docs")}): Browse the same documentation as HTML.
 - [Sitemap](${absUrl("sitemap.xml")}): All indexable human pages.

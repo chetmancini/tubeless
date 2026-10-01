@@ -1,0 +1,266 @@
+{
+  "agents": [
+    {
+      "runId": "scripted-agent:8e7417b4-8fc6-4d3f-a646-af4546d117f4",
+      "pipelineId": "scripted-agent",
+      "status": "completed",
+      "termination": "finish",
+      "definition": {
+        "stepId": "agent",
+        "limits": {
+          "maxTurns": 3,
+          "maxCalls": 100,
+          "maxDecisions": 3,
+          "maxDepth": 4,
+          "maxConcurrency": 2
+        },
+        "capabilities": [
+          "bash",
+          "count",
+          "edit",
+          "list",
+          "read",
+          "search",
+          "uppercase",
+          "write"
+        ]
+      },
+      "turns": [
+        {
+          "runId": "scripted-agent/turn:c1512781-7d1f-4847-9536-4e36ee5232ed",
+          "index": 1,
+          "attemptId": "scripted-agent:8e7417b4-8fc6-4d3f-a646-af4546d117f4:attempt:1",
+          "status": "completed",
+          "decision": "continue",
+          "stateVersion": 0,
+          "nextStateVersion": 1,
+          "callCount": 2,
+          "callsAdmitted": 2,
+          "calls": [
+            {
+              "callId": "length",
+              "tool": "count",
+              "parentAttemptId": "scripted-agent/turn:c1512781-7d1f-4847-9536-4e36ee5232ed:attempt:2",
+              "runId": "scripted-agent/tool/count:bee22f92-4157-4c4d-8d50-de5e1e392ed8",
+              "pipelineId": "scripted-agent/tool/count",
+              "status": "completed",
+              "durationMs": 3,
+              "childAgentRunIds": []
+            },
+            {
+              "callId": "word-0",
+              "tool": "uppercase",
+              "parentAttemptId": "scripted-agent/turn:c1512781-7d1f-4847-9536-4e36ee5232ed:attempt:2",
+              "runId": "scripted-agent/tool/uppercase:f5f21279-28c6-4639-8eac-595f0da6ce56",
+              "pipelineId": "scripted-agent/tool/uppercase",
+              "status": "failed",
+              "durationMs": 3,
+              "error": {
+                "code": "TUBELESS_STEP_FAILED",
+                "kind": "step",
+                "message": "Word unavailable",
+                "phase": "execution",
+                "sourceCode": "NOT_FOUND"
+              },
+              "childAgentRunIds": []
+            }
+          ]
+        },
+        {
+          "runId": "scripted-agent/turn:c93c0f20-2ebd-42db-88c3-8ba452712f11",
+          "index": 2,
+          "attemptId": "scripted-agent:8e7417b4-8fc6-4d3f-a646-af4546d117f4:attempt:1",
+          "status": "completed",
+          "decision": "finish",
+          "stateVersion": 1,
+          "callCount": 0,
+          "callsAdmitted": 2,
+          "calls": []
+        }
+      ],
+      "parentCall": {
+        "agentRunId": "delegating-agent:0e8d8251-9931-409c-8fab-34a49a0e4690",
+        "turnRunId": "delegating-agent/turn:fec279ce-7fe6-41e4-9a4e-0403cd8a103f",
+        "callId": "word-1",
+        "runId": "scripted-agent:8e7417b4-8fc6-4d3f-a646-af4546d117f4"
+      }
+    },
+    {
+      "runId": "scripted-agent:7f2fe574-6c88-49d6-b942-8b5d2d04017f",
+      "pipelineId": "scripted-agent",
+      "status": "completed",
+      "termination": "finish",
+      "definition": {
+        "stepId": "agent",
+        "limits": {
+          "maxTurns": 3,
+          "maxCalls": 100,
+          "maxDecisions": 3,
+          "maxDepth": 4,
+          "maxConcurrency": 2
+        },
+        "capabilities": [
+          "bash",
+          "count",
+          "edit",
+          "list",
+          "read",
+          "search",
+          "uppercase",
+          "write"
+        ]
+      },
+      "turns": [
+        {
+          "runId": "scripted-agent/turn:bbea7dbc-e84a-4365-8896-ec7396c4cdda",
+          "index": 1,
+          "attemptId": "scripted-agent:7f2fe574-6c88-49d6-b942-8b5d2d04017f:attempt:1",
+          "status": "completed",
+          "decision": "continue",
+          "stateVersion": 0,
+          "nextStateVersion": 1,
+          "callCount": 2,
+          "callsAdmitted": 2,
+          "calls": [
+            {
+              "callId": "length",
+              "tool": "count",
+              "parentAttemptId": "scripted-agent/turn:bbea7dbc-e84a-4365-8896-ec7396c4cdda:attempt:2",
+              "runId": "scripted-agent/tool/count:35cf0651-4673-44f5-b65b-8d0baa2bcfa1",
+              "pipelineId": "scripted-agent/tool/count",
+              "status": "completed",
+              "durationMs": 5,
+              "childAgentRunIds": []
+            },
+            {
+              "callId": "word-0",
+              "tool": "uppercase",
+              "parentAttemptId": "scripted-agent/turn:bbea7dbc-e84a-4365-8896-ec7396c4cdda:attempt:2",
+              "runId": "scripted-agent/tool/uppercase:0c0e5989-59ab-4b98-99bc-7c686f0b10bc",
+              "pipelineId": "scripted-agent/tool/uppercase",
+              "status": "completed",
+              "durationMs": 4,
+              "childAgentRunIds": []
+            }
+          ]
+        },
+        {
+          "runId": "scripted-agent/turn:54d918e2-39b0-4bfc-97a2-314636f61cf6",
+          "index": 2,
+          "attemptId": "scripted-agent:7f2fe574-6c88-49d6-b942-8b5d2d04017f:attempt:1",
+          "status": "completed",
+          "decision": "finish",
+          "stateVersion": 1,
+          "callCount": 0,
+          "callsAdmitted": 2,
+          "calls": []
+        }
+      ],
+      "parentCall": {
+        "agentRunId": "delegating-agent:0e8d8251-9931-409c-8fab-34a49a0e4690",
+        "turnRunId": "delegating-agent/turn:fec279ce-7fe6-41e4-9a4e-0403cd8a103f",
+        "callId": "word-0",
+        "runId": "scripted-agent:7f2fe574-6c88-49d6-b942-8b5d2d04017f"
+      }
+    },
+    {
+      "runId": "delegating-agent:0e8d8251-9931-409c-8fab-34a49a0e4690",
+      "pipelineId": "delegating-agent",
+      "status": "completed",
+      "termination": "finish",
+      "definition": {
+        "stepId": "agent",
+        "limits": {
+          "maxTurns": 3,
+          "maxCalls": 100,
+          "maxDecisions": 50,
+          "maxDepth": 1,
+          "maxConcurrency": 2
+        },
+        "capabilities": [
+          "bash",
+          "edit",
+          "list",
+          "processWord",
+          "read",
+          "search",
+          "summarize",
+          "write"
+        ]
+      },
+      "turns": [
+        {
+          "runId": "delegating-agent/turn:fec279ce-7fe6-41e4-9a4e-0403cd8a103f",
+          "index": 1,
+          "attemptId": "delegating-agent:0e8d8251-9931-409c-8fab-34a49a0e4690:attempt:1",
+          "status": "completed",
+          "decision": "continue",
+          "stateVersion": 0,
+          "nextStateVersion": 1,
+          "callCount": 2,
+          "callsAdmitted": 2,
+          "calls": [
+            {
+              "callId": "word-0",
+              "tool": "processWord",
+              "parentAttemptId": "delegating-agent/turn:fec279ce-7fe6-41e4-9a4e-0403cd8a103f:attempt:2",
+              "runId": "scripted-agent:7f2fe574-6c88-49d6-b942-8b5d2d04017f",
+              "pipelineId": "scripted-agent",
+              "status": "completed",
+              "durationMs": 29,
+              "childAgentRunIds": [
+                "scripted-agent:7f2fe574-6c88-49d6-b942-8b5d2d04017f"
+              ]
+            },
+            {
+              "callId": "word-1",
+              "tool": "processWord",
+              "parentAttemptId": "delegating-agent/turn:fec279ce-7fe6-41e4-9a4e-0403cd8a103f:attempt:2",
+              "runId": "scripted-agent:8e7417b4-8fc6-4d3f-a646-af4546d117f4",
+              "pipelineId": "scripted-agent",
+              "status": "completed",
+              "durationMs": 28,
+              "childAgentRunIds": [
+                "scripted-agent:8e7417b4-8fc6-4d3f-a646-af4546d117f4"
+              ]
+            }
+          ]
+        },
+        {
+          "runId": "delegating-agent/turn:72dd3785-ff6d-4f85-979b-f54bcbf2480d",
+          "index": 2,
+          "attemptId": "delegating-agent:0e8d8251-9931-409c-8fab-34a49a0e4690:attempt:1",
+          "status": "completed",
+          "decision": "continue",
+          "stateVersion": 1,
+          "nextStateVersion": 2,
+          "callCount": 1,
+          "callsAdmitted": 3,
+          "calls": [
+            {
+              "callId": "summary",
+              "tool": "summarize",
+              "parentAttemptId": "delegating-agent/turn:72dd3785-ff6d-4f85-979b-f54bcbf2480d:attempt:2",
+              "runId": "agent-summary:a0f67a85-5dea-45bc-b773-646e5d081d22",
+              "pipelineId": "agent-summary",
+              "status": "completed",
+              "durationMs": 1,
+              "childAgentRunIds": []
+            }
+          ]
+        },
+        {
+          "runId": "delegating-agent/turn:036bfaa4-b3c7-4814-b304-ab98b5210f4a",
+          "index": 3,
+          "attemptId": "delegating-agent:0e8d8251-9931-409c-8fab-34a49a0e4690:attempt:1",
+          "status": "completed",
+          "decision": "finish",
+          "stateVersion": 2,
+          "callCount": 0,
+          "callsAdmitted": 3,
+          "calls": []
+        }
+      ]
+    }
+  ]
+}

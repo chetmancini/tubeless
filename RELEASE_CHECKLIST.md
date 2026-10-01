@@ -81,17 +81,22 @@ bun run eval:agent
 The evaluator reads `OPENAI_API_KEY` from the process environment. To use an
 ignored local credential file without putting it in a command argument, run
 `bun run build` followed by
-`node --env-file=.env.local scripts/eval-agent.mjs .context/agent-release-live-eval.json`.
+`env -u OPENAI_API_KEY node --env-file=.env.local scripts/eval-agent.mjs .context/agent-release-live-eval.json`.
+The `env -u` prevents a stale inherited key from overriding the workspace file.
 Do not add this command or live credentials to CI.
 
-Require all three tasks to pass: investigation/edit/check, scoped project
-instructions, and the requested missing-file read followed by recovery through
-conversation compaction. The first recovery batch must contain only that read;
+Require all four tasks to pass: investigation/edit/check, startup project
+instructions, nested guidance read in a separate turn before the requested file
+read, and the requested missing-file read followed by recovery through
+conversation compaction. The nested-guidance task must follow the scoped answer
+convention and preserve all fixture files. The first recovery batch must contain
+only that read;
 recovery must be chosen in the next decision that receives its failure outcome.
 That batch must read the current configuration or expose its location through a
 read, listing, search, or shell result. Successful recovery in a later batch
 does not satisfy this check.
-Preserve the JSON report (model, timestamp, calls, outcomes, decision batches with
+Preserve the JSON report (model, reasoning effort, timestamp, calls, outcomes,
+decision batches with
 their incoming outcomes, answer and independent checks) with the candidate's acceptance evidence,
 including failed attempts. These small tasks establish observed behavior, not a
 general reliability guarantee. A failed task is an acceptance finding even when

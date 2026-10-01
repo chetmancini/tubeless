@@ -34,6 +34,29 @@ const finish = () => call("_finish", { answer: "Done." }, "finish");
 const response = (output: unknown[]) => Response.json({ status: "completed", output });
 
 describe("OpenAI model", () => {
+  it.each([undefined, null, "none", "medium"] as const)(
+    "configures reasoning effort independently of model selection: %s",
+    async (reasoningEffort) => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([finish()]));
+      vi.stubGlobal("fetch", fetcher);
+      await defineModelAgent({
+        id: "reasoning",
+        projectContext: false,
+        model: openaiModel({ apiKey: "fixture", reasoningEffort }),
+      }).runOrThrow({ task: "Finish" });
+      const body = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
+      if (reasoningEffort === null) expect(body).not.toHaveProperty("reasoning");
+      else expect(body.reasoning).toEqual({ effort: reasoningEffort ?? "high" });
+    }
+  );
+
+  it("rejects unsupported reasoning settings locally", () => {
+    // @ts-expect-error Exercise the boundary for JavaScript callers.
+    expect(() => openaiModel({ reasoningEffort: "fast" })).toThrow(
+      "Invalid OpenAI model configuration"
+    );
+  });
+
   it.each([
     { model: undefined, environment: undefined, expected: "gpt-5.4-mini" },
     { model: undefined, environment: "", expected: "gpt-5.4-mini" },

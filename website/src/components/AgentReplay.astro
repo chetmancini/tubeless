@@ -1,0 +1,111 @@
+---
+import recording from "../../public/agent-evaluation.json";
+import { RECORDING_CONTEXT, ROOT_INSTRUCTIONS } from "../data/agent-recordings";
+---
+
+<div class="recordings">
+  {recording.results.map((run) => {
+    const context = RECORDING_CONTEXT[run.id];
+    return (
+    <details class="recording" open={run.id === "recover-and-compact"}>
+      <summary><span>{context.title}</span><span class="verdict">{run.passed ? "Passed" : "Failed"} ↗</span></summary>
+      <div class="recording-body" data-agent-replay>
+        <div class="task-context">
+          <h3>Task given to the agent</h3>
+          <blockquote>{run.task}</blockquote>
+          <div class="starting-context">
+            <div><h4>Starting workspace</h4><p>{context.setup}</p></div>
+            <div><h4>What success looks like</h4><p>{context.expected}</p></div>
+          </div>
+          <details class="starting-files">
+            <summary>Read the starting files and project instructions</summary>
+            {Object.entries({ "AGENTS.md": ROOT_INSTRUCTIONS, ...context.files }).map(([path, content]) => (
+              <div><h4><code>{path}</code></h4><pre>{content}</pre></div>
+            ))}
+            <p class="preserved-file">Each workspace also contains <code>unrelated.txt</code> with existing user work that must be preserved.</p>
+          </details>
+        </div>
+        <div class="replay-controls" hidden>
+          <button type="button" data-previous aria-label={`Previous turn: ${context.title}`}>← Previous</button>
+          <span data-position role="status" aria-live="polite"></span>
+          <button type="button" data-next aria-label={`Next turn: ${context.title}`}>Next →</button>
+        </div>
+        <ol class="decisions">
+          {run.turns.map((turn, index) => (
+            <li data-decision>
+              <p class="turn-label">Turn {index + 1} / {turn.decision.kind === "finish" ? "Agent’s final answer" : "Tools chosen by the agent"}</p>
+              {turn.outcomes.length > 0 && (
+                <details class="evidence">
+                  <summary>Results the model received from the previous turn ({turn.outcomes.length})</summary>
+                  <pre>{JSON.stringify(turn.outcomes, null, 2)}</pre>
+                </details>
+              )}
+              {turn.decision.kind === "continue" ? turn.decision.calls?.map((call) => (
+                <div class="tool-call">
+                  <strong>{call.tool}</strong>
+                  <p class="input-label">Tool input</p>
+                  <pre>{JSON.stringify(call.input, null, 2)}</pre>
+                </div>
+              )) : <p class="answer">{turn.decision.result?.answer}</p>}
+            </li>
+          ))}
+        </ol>
+        <p class="verified">Independent check: <code>{run.verification}</code> · {run.compactions} compactions</p>
+      </div>
+    </details>
+  ); })}
+</div>
+
+<script>
+  for (const replay of document.querySelectorAll<HTMLElement>("[data-agent-replay]")) {
+    const decisions = [...replay.querySelectorAll<HTMLElement>("[data-decision]")];
+    const controls = replay.querySelector<HTMLElement>(".replay-controls")!;
+    const previous = replay.querySelector<HTMLButtonElement>("[data-previous]")!;
+    const next = replay.querySelector<HTMLButtonElement>("[data-next]")!;
+    const position = replay.querySelector<HTMLElement>("[data-position]")!;
+    let current = 0;
+    const render = () => {
+      decisions.forEach((decision, index) => { decision.hidden = index !== current; });
+      previous.disabled = current === 0;
+      next.disabled = current === decisions.length - 1;
+      position.textContent = `Turn ${current + 1} of ${decisions.length}`;
+    };
+    previous.addEventListener("click", () => { current--; render(); });
+    next.addEventListener("click", () => { current++; render(); });
+    controls.hidden = false;
+    render();
+  }
+</script>
+
+<style>
+  .recordings { border-top: 1px solid var(--line); }
+  .recording { border-bottom: 1px solid var(--line); }
+  .recording > summary { display: flex; justify-content: space-between; gap: 1rem; cursor: pointer; padding: 1.4rem 0; font-size: 1.15rem; }
+  .verdict { color: #41633b; font: 0.8rem var(--mono); white-space: nowrap; }
+  .recording-body { padding-bottom: 1.5rem; }
+  .task-context { border: 1px solid var(--line); border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; background: var(--paper); }
+  .task-context h3 { font-size: 0.85rem; font-weight: 500; margin: 0 0 0.7rem; color: var(--muted); }
+  .task-context blockquote { margin: 0; padding-left: 1rem; border-left: 2px solid var(--gold); font-size: 1.05rem; }
+  .starting-context { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem; }
+  .task-context h4 { font-size: 0.85rem; font-weight: 500; margin: 0; }
+  .starting-context p { font-size: 0.9rem; margin: 0.4rem 0 0; }
+  .starting-files { margin-top: 1.2rem; font-size: 0.85rem; }
+  .starting-files summary { cursor: pointer; text-decoration: underline; text-underline-offset: 0.2em; }
+  .starting-files h4 { margin-top: 1.2rem; }
+  .preserved-file { color: var(--muted); }
+  .replay-controls:not([hidden]) { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 0; }
+  button { font: 0.8rem var(--mono); padding: 0.6rem 0.8rem; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; color: inherit; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button:focus-visible, summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+  [data-position], .turn-label { font: 0.75rem var(--mono); color: var(--muted); }
+  .decisions { padding: 0; list-style: none; margin: 0; }
+  [data-decision] { border: 1px solid var(--line); border-radius: 8px; padding: 1.5rem; background: var(--paper); margin-block: 0.75rem; }
+  .tool-call { margin-top: 1.2rem; }
+  .tool-call strong { font: 500 1rem var(--mono); }
+  .input-label { margin: 0.5rem 0 -0.5rem; font-size: 0.75rem; color: var(--muted); }
+  pre { overflow: auto; max-height: 22rem; padding: 1rem; background: #1d211e; color: #e9eee5; border-radius: 6px; font: 0.78rem/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .evidence summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); }
+  .answer { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .verified { font-size: 0.8rem; color: var(--muted); overflow-wrap: anywhere; }
+  @media (max-width: 600px) { [data-decision], .task-context { padding: 1rem; } .recording > summary { font-size: 1rem; } .starting-context { grid-template-columns: 1fr; gap: 1rem; } .task-context blockquote { font-size: 0.95rem; } }
+</style>

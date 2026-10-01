@@ -1,0 +1,222 @@
+---
+const phases = [
+  "The model chooses two tools to find the relevant code.",
+  "Read and search run as separate steps. Their results return to the agent.",
+  "The next model turn uses those results to choose an edit.",
+  "The edit runs as another tool step.",
+  "The agent asks a verifier subagent to check the change.",
+  "The verifier starts its own model turn, inside a child pipeline.",
+  "The verifier runs the tests with bash.",
+  "The verifier returns its result to the parent agent.",
+  "The parent uses that result to finish with an answer.",
+];
+const edges = [
+  ["turn1", "read"], ["turn1", "search"], ["read", "turn2"],
+  ["search", "turn2"], ["turn2", "edit"], ["edit", "turn3"],
+  ["turn3", "child1"], ["child1", "bash"], ["bash", "child2"],
+  ["child2", "turn4"],
+];
+---
+
+<figure class="agent-graph" data-agent-graph data-phases={JSON.stringify(phases)}>
+  <figcaption class="graph-heading">
+    <div><strong>coding-agent</strong><span>Task: fix the failing test</span></div>
+    <span class="illustration">Illustrated run</span>
+  </figcaption>
+  <div class="dag-stage">
+    <svg class="edges" aria-hidden="true">
+      <defs><marker id="agent-graph-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9" fill="none" stroke="context-stroke" stroke-width="1.5" /></marker></defs>
+      {edges.map(([from, to]) => <g data-edge data-from={from} data-to={to}>
+        <path class="track" marker-end="url(#agent-graph-arrow)" />
+        <path class="signal" pathLength="1" marker-end="url(#agent-graph-arrow)" />
+      </g>)}
+    </svg>
+    <div class="node model turn1" data-node="turn1" data-phase="0">
+      <span class="node-label">LLM turn 1</span><strong>Choose tools</strong><span class="node-state">Waiting</span>
+    </div>
+    <div class="tool-pair">
+      <div class="node tool" data-node="read" data-phase="1"><span class="node-label">Tool call</span><strong>read</strong><span class="node-state">Waiting</span></div>
+      <div class="node tool" data-node="search" data-phase="1"><span class="node-label">Tool call</span><strong>search</strong><span class="node-state">Waiting</span></div>
+    </div>
+    <div class="node model turn2" data-node="turn2" data-phase="2">
+      <span class="node-label">LLM turn 2</span><strong>Choose an edit</strong><span class="node-state">Waiting</span>
+    </div>
+    <div class="node tool edit" data-node="edit" data-phase="3"><span class="node-label">Tool call</span><strong>edit</strong><span class="node-state">Waiting</span></div>
+    <div class="node model turn3" data-node="turn3" data-phase="4">
+      <span class="node-label">LLM turn 3</span><strong>Delegate a check</strong><span class="node-state">Waiting</span>
+    </div>
+    <div class="child-pipeline">
+      <p class="child-heading"><strong>verifier</strong><span>Subagent / child pipeline</span></p>
+      <div class="child-steps">
+        <div class="node model" data-node="child1" data-phase="5"><span class="node-label">LLM turn 1</span><strong>Choose a check</strong><span class="node-state">Waiting</span></div>
+        <div class="node tool" data-node="bash" data-phase="6"><span class="node-label">Tool call</span><strong>bash</strong><span class="node-state">Waiting</span></div>
+        <div class="node model" data-node="child2" data-phase="7"><span class="node-label">LLM turn 2</span><strong>Return result</strong><span class="node-state">Waiting</span></div>
+      </div>
+    </div>
+    <div class="node model turn4" data-node="turn4" data-phase="8">
+      <span class="node-label">LLM turn 4</span><strong>Finish with an answer</strong><span class="node-state">Waiting</span>
+    </div>
+  </div>
+  <div class="graph-footer">
+    <p class="graph-status" data-graph-status>Model turns choose tool calls. A subagent runs its own pipeline, then returns its result to the parent.</p>
+    <div class="graph-controls" hidden>
+      <button type="button" data-play>Play</button>
+      <button type="button" data-step>Next step →</button>
+    </div>
+  </div>
+</figure>
+
+<script>
+  for (const graph of document.querySelectorAll<HTMLElement>("[data-agent-graph]")) {
+    const phases: string[] = JSON.parse(graph.dataset.phases!);
+    const stage = graph.querySelector<HTMLElement>(".dag-stage")!;
+    const svg = graph.querySelector<SVGSVGElement>("svg")!;
+    const nodes = new Map([...graph.querySelectorAll<HTMLElement>("[data-node]")].map(node => [node.dataset.node!, node]));
+    const edges = [...graph.querySelectorAll<SVGGElement>("[data-edge]")];
+    const play = graph.querySelector<HTMLButtonElement>("[data-play]")!;
+    const step = graph.querySelector<HTMLButtonElement>("[data-step]")!;
+    const status = graph.querySelector<HTMLElement>("[data-graph-status]")!;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let current = -1;
+    let playing = false;
+    let visible = false;
+    let started = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const draw = () => {
+      const bounds = stage.getBoundingClientRect();
+      svg.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
+      for (const edge of edges) {
+        const from = nodes.get(edge.dataset.from!)!.getBoundingClientRect();
+        const to = nodes.get(edge.dataset.to!)!.getBoundingClientRect();
+        const vertical = to.top >= from.bottom;
+        const right = to.left > from.left;
+        const x1 = (vertical ? from.left + from.width / 2 : right ? from.right : from.left) - bounds.left;
+        const y1 = (vertical ? from.bottom : from.top + from.height / 2) - bounds.top;
+        const x2 = (vertical ? to.left + to.width / 2 : right ? to.left : to.right) - bounds.left;
+        const y2 = (vertical ? to.top : to.top + to.height / 2) - bounds.top;
+        const d = vertical
+          ? `M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2} ${x2} ${(y1 + y2) / 2} ${x2} ${y2}`
+          : `M ${x1} ${y1} C ${(x1 + x2) / 2} ${y1} ${(x1 + x2) / 2} ${y2} ${x2} ${y2}`;
+        edge.querySelectorAll("path").forEach(path => path.setAttribute("d", d));
+      }
+    };
+    const render = () => {
+      for (const node of nodes.values()) {
+        const phase = Number(node.dataset.phase);
+        const state = phase < current ? "done" : phase === current ? "active" : "waiting";
+        node.dataset.state = state;
+        node.querySelector(".node-state")!.textContent = state === "done" ? "Done" : state === "active" ? "Running" : "Waiting";
+      }
+      for (const edge of edges) {
+        const phase = Number(nodes.get(edge.dataset.to!)!.dataset.phase);
+        edge.dataset.state = phase < current ? "done" : phase === current ? "active" : "waiting";
+      }
+      play.textContent = playing ? "Pause" : current === phases.length ? "Replay" : "Play";
+      step.disabled = current === phases.length;
+      status.textContent = current === phases.length
+        ? "Run complete. Four parent turns, four tool calls, and one subagent, all in the same run history."
+        : current >= 0 ? phases[current] : "Press play or step through the run.";
+    };
+    const schedule = () => {
+      clearTimeout(timer);
+      render();
+      if (playing && visible && !document.hidden) timer = setTimeout(() => {
+        current++;
+        if (current === phases.length) playing = false;
+        schedule();
+      }, 1600);
+    };
+    play.addEventListener("click", () => {
+      started = true;
+      playing = !playing;
+      if (playing && (current < 0 || current === phases.length)) current = 0;
+      schedule();
+    });
+    step.addEventListener("click", () => {
+      started = true;
+      playing = false;
+      current++;
+      schedule();
+    });
+    reducedMotion.addEventListener("change", () => { playing = false; schedule(); });
+    document.addEventListener("visibilitychange", schedule);
+    new ResizeObserver(draw).observe(stage);
+    void document.fonts.ready.then(draw);
+    new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      if (visible && !started && !reducedMotion.matches) {
+        started = true;
+        current = 0;
+        playing = true;
+      }
+      schedule();
+    }, { threshold: 0.25 }).observe(graph);
+    graph.querySelector<HTMLElement>(".graph-controls")!.hidden = false;
+    if (reducedMotion.matches) current = phases.length;
+    render();
+  }
+</script>
+
+<style>
+  .agent-graph { margin: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); overflow: hidden; }
+  .graph-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.2rem 1.5rem; border-bottom: 1px solid var(--line); }
+  .graph-heading div { display: flex; align-items: baseline; gap: 1rem; }
+  .graph-heading strong, .child-heading strong { font: 500 0.85rem var(--mono); }
+  .graph-heading span { font-size: 0.8rem; color: var(--muted); }
+  .illustration { white-space: nowrap; }
+  .dag-stage { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-areas: "turn1 tools turn2 edit" "turn4 child child turn3"; gap: 3rem 2.5rem; align-items: center; position: relative; padding: 2rem; background-image: radial-gradient(var(--line) 0.7px, transparent 0.7px); background-size: 16px 16px; }
+  .edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .edges path { fill: none; stroke-width: 1.5; }
+  .track { stroke: #c5c1b4; }
+  .signal { stroke: var(--gold); stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 500ms var(--ease); }
+  [data-state="active"] > .signal, [data-state="done"] > .signal { stroke-dashoffset: 0; }
+  [data-state="done"] > .signal { stroke: var(--ok); }
+  .node { z-index: 1; min-width: 0; position: relative; border: 1px solid #c5c1b4; border-radius: 7px; background: var(--paper); padding: 0.8rem; transition: border-color 250ms, background-color 250ms, box-shadow 250ms; }
+  .node-label { display: block; color: var(--muted); font: 0.65rem var(--mono); }
+  .node strong { display: block; margin-block: 0.4rem; font-size: 0.9rem; font-weight: 500; line-height: 1.4; }
+  .tool strong { font-family: var(--mono); }
+  .node-state { display: flex; align-items: center; gap: 0.35rem; font: 0.6rem var(--mono); color: var(--muted); }
+  .node-state::before { content: ""; width: 5px; height: 5px; border: 1px solid currentColor; border-radius: 50%; }
+  .node[data-state="active"] { border-color: var(--gold); background: #fff7df; box-shadow: 0 0 0 3px rgb(134 101 34 / 12%); }
+  .node[data-state="active"] .node-state { color: var(--gold); }
+  .node[data-state="active"] .node-state::before { background: currentColor; }
+  .node[data-state="done"] { border-color: #86a18b; background: #f3f8f0; }
+  .node[data-state="done"] .node-state { color: var(--ok); }
+  .node[data-state="done"] .node-state::before { content: "✓"; border: 0; width: auto; height: auto; }
+  .turn1 { grid-area: turn1; } .turn2 { grid-area: turn2; } .turn3 { grid-area: turn3; } .turn4 { grid-area: turn4; } .edit { grid-area: edit; }
+  .tool-pair { grid-area: tools; display: grid; gap: 0.75rem; }
+  .child-pipeline { grid-area: child; border: 1px dashed #a3a093; border-radius: 9px; padding: 1rem; }
+  .child-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.3rem; margin: 0 0 0.9rem; }
+  .child-heading span { font-size: 0.65rem; color: var(--muted); }
+  .child-steps { display: flex; flex-direction: row-reverse; align-items: stretch; gap: 1.1rem; }
+  .child-steps .node { flex: 1; padding: 0.65rem; }
+  .child-steps .node strong { font-size: 0.75rem; }
+  .child-steps .node-label { font-size: 0.6rem; }
+  .graph-footer { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding: 1.1rem 1.5rem; border-top: 1px solid var(--line); }
+  .graph-status { margin: 0; max-width: 44rem; min-height: 2.8em; font-size: 0.85rem; }
+  .graph-controls:not([hidden]) { display: flex; gap: 0.5rem; flex-shrink: 0; }
+  button { padding: 0.5rem 0.7rem; background: var(--paper); color: var(--ink); border: 1px solid #c5c1b4; border-radius: 4px; font: 0.7rem var(--mono); cursor: pointer; }
+  [data-play] { min-width: 4.6rem; }
+  button:disabled { color: var(--muted); cursor: default; opacity: 0.6; }
+  @media (max-width: 900px) {
+    .dag-stage { gap: 2.5rem 1.3rem; padding: 1.5rem 1rem; }
+    .child-pipeline { padding: 0.7rem; }
+    .child-steps { gap: 0.7rem; }
+    .node { padding: 0.7rem; }
+  }
+  @media (max-width: 650px) {
+    .graph-heading { align-items: start; padding: 1rem; }
+    .graph-heading div { display: grid; gap: 0.3rem; }
+    .graph-heading span { font-size: 0.7rem; }
+    .dag-stage { grid-template-columns: 1fr; grid-template-areas: "turn1" "tools" "turn2" "edit" "turn3" "child" "turn4"; gap: 1.6rem; padding: 1.5rem; }
+    .dag-stage > .node { width: 75%; justify-self: center; }
+    .tool-pair { grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .child-steps { flex-direction: row; }
+    .child-steps .node { padding: 0.6rem 0.4rem; }
+    .child-heading { flex-direction: column; align-items: flex-end; margin-bottom: 0.7rem; }
+    .graph-footer { align-items: start; flex-direction: column; gap: 0.8rem; padding: 1rem; }
+    .graph-status { min-height: 4.5em; }
+  }
+  @media (prefers-reduced-motion: reduce) { .node, .signal { transition: none; } }
+</style>

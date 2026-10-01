@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { defineModelAgent } from "tubeless/agent";
 import { openaiModel } from "tubeless/agent/openai";
 
@@ -29,6 +29,17 @@ const cases = [
       "src/greet.mjs": 'export function greet(name) { return "hello"; }\n',
       "check.mjs":
         'import assert from "node:assert/strict";\nimport { greet } from "./src/greet.mjs";\nassert.equal(greet("  Ada  "), "Ahoy, Ada!");\nassert.equal(greet("  "), "Ahoy, friend!");\nconsole.log("greeting checks passed");\n',
+    },
+  },
+  {
+    id: "nested-guidance",
+    task: "Read src/code.txt first, then report its content according to project conventions. Do not edit any files.",
+    readOnly: true,
+    files: {
+      "src/AGENTS.md": 'Report codes from this directory with the prefix "Scoped code: ".\n',
+      "src/code.txt": "cobalt\n",
+      "check.mjs":
+        'import assert from "node:assert/strict";\nimport { readFileSync } from "node:fs";\nassert.equal(readFileSync("src/code.txt", "utf8"), "cobalt\\n");\nconsole.log("guidance checks passed");\n',
     },
   },
   {
@@ -111,7 +122,12 @@ for (const fixture of cases) {
       },
     }));
     for (const [name, content] of Object.entries(files)) {
-      if (name === "check.mjs" || name === "unrelated.txt" || name.endsWith("AGENTS.md"))
+      if (
+        fixture.readOnly ||
+        name === "check.mjs" ||
+        name === "unrelated.txt" ||
+        name.endsWith("AGENTS.md")
+      )
         assert.equal(
           await readFile(join(root, name), "utf8"),
           content,
@@ -127,25 +143,42 @@ for (const fixture of cases) {
       calls.some((call) => call.tool === "read"),
       "Agent must inspect files"
     );
-    assert(
-      calls.some((call) => call.tool === "edit" || call.tool === "write"),
-      "Agent must edit files"
-    );
-    assert(
-      outcomes.some(
-        (outcome) =>
-          outcome.tool === "bash" &&
-          outcome.ok &&
-          outcome.value.exitCode === 0 &&
-          calls.some(
-            (call) =>
-              call.id === outcome.id &&
-              call.tool === "bash" &&
-              /\bnode\s+[^\n]*check\.mjs\b/.test(call.input.command)
-          )
-      ),
-      "Agent must run the fixture check successfully"
-    );
+    if (fixture.readOnly) {
+      const readTurn = (path) =>
+        turns.findIndex(
+          (turn) =>
+            turn.decision?.kind === "continue" &&
+            turn.decision.calls.some(
+              (call) => call.tool === "read" && resolve(root, call.input.path) === join(root, path)
+            )
+        );
+      const guidance = readTurn("src/AGENTS.md");
+      assert(
+        guidance >= 0 && readTurn("src/code.txt") > guidance,
+        "Nested guidance must be read before the requested first task read"
+      );
+      assert(answer.includes("Scoped code: cobalt"), "Answer must follow the nested guidance");
+    } else {
+      assert(
+        calls.some((call) => call.tool === "edit" || call.tool === "write"),
+        "Agent must edit files"
+      );
+      assert(
+        outcomes.some(
+          (outcome) =>
+            outcome.tool === "bash" &&
+            outcome.ok &&
+            outcome.value.exitCode === 0 &&
+            calls.some(
+              (call) =>
+                call.id === outcome.id &&
+                call.tool === "bash" &&
+                /\bnode\s+[^\n]*check\.mjs\b/.test(call.input.command)
+            )
+        ),
+        "Agent must run the fixture check successfully"
+      );
+    }
     if (fixture.compactAfterBytes) {
       const first = calls[0];
       assert(
@@ -189,6 +222,7 @@ for (const fixture of cases) {
   }
   const result = {
     id: fixture.id,
+    task: fixture.task,
     passed: failure === undefined,
     error: failure,
     answer,
@@ -217,6 +251,7 @@ await writeFile(
   JSON.stringify(
     {
       model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
+      reasoningEffort: "high",
       completedAt: new Date().toISOString(),
       results,
     },

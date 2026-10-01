@@ -1,0 +1,96 @@
+---
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import Base from "../layouts/Base.astro";
+import CodeBlock from "../components/CodeBlock.astro";
+import AgentGraph from "../components/AgentGraph.astro";
+import { githubBlob, href } from "../lib/paths";
+
+const starter = readFileSync(join(__REPO_ROOT__, "examples/agent-model.ts"), "utf8");
+const composition = readFileSync(join(__REPO_ROOT__, "examples/agent-pipeline.ts"), "utf8");
+---
+
+<Base title="Agents are pipelines" markdown="agent-harness.md" description="Build agents as pipelines of LLM turns and tool calls. Trace each run, call other agents, and use their results in ordinary pipeline steps.">
+  <main class="wrap harness">
+    <header class="agent-hero">
+      <p class="kicker">Tubeless agents</p>
+      <h1 class="page-title">Agents are pipelines.</h1>
+      <p class="lede">An agent is a pipeline of LLM turns and tool calls. The model chooses what runs next. Tubeless runs the steps and keeps track of what happened.</p>
+      <p class="hero-detail">Tool calls are steps. Subagents are child pipelines. You can trace the whole run, reuse a pipeline as a tool, or put an agent in the middle of a larger workflow.</p>
+      <div class="actions">
+        <a class="btn" href="#start">Build an agent</a>
+        <a class="btn ghost" href={href("docs/agents")}>Agent documentation</a>
+      </div>
+    </header>
+    <AgentGraph />
+    <p class="graph-note">Each model turn can choose a new batch of tools or finish. The graph grows as the agent works; the turns above show one possible run.</p>
+
+    <section class="section" id="compose">
+      <div class="section-head">
+        <h2>Use agents wherever you use pipelines.</h2>
+        <div>
+          <p>A pipeline can ask an agent to investigate a problem, then pass its answer to the next step. An agent can call an existing pipeline as a tool, or delegate work to another agent.</p>
+          <p>It is the same execution model in both directions. Inputs and outputs are validated. Each child agent has its own state, and its work counts toward the parent’s execution limits.</p>
+        </div>
+      </div>
+      <div class="composition-examples">
+        <div><code>pipeline → agent → next step</code><p>Use <code>fromPipeline</code> to run an agent inside a workflow and consume its answer.</p></div>
+        <div><code>agent → tool → pipeline or subagent</code><p>Use <code>pipelineTool</code> to give an agent a capability you have already built.</p></div>
+      </div>
+      <details class="composition"><summary>Example: use an agent’s answer in the next pipeline step</summary><CodeBlock code={composition} lang="ts" /></details>
+    </section>
+
+    <section class="section setup" id="start">
+      <div>
+        <h2>Start with a model and a task.</h2>
+        <p>Save this as <code>agent.ts</code>. It gives the model a coding prompt, project instructions from <code>AGENTS.md</code>, conversation history, and six workspace tools.</p>
+        <p class="tools"><code>read</code><code>edit</code><code>write</code><code>bash</code><code>list</code><code>search</code></p>
+        <p>Add your own tools and instructions as needed. The core is provider-independent: use the OpenAI adapter shown here, supply another model callback, or write your own decision logic with <code>defineAgent</code>.</p>
+        <a href={githubBlob("examples/agent-workspace.ts")}>Add a custom tool ↗</a>
+      </div>
+      <div class="code-panel"><CodeBlock code={starter} lang="ts" /></div>
+      <div class="run-it">
+        <p>Install Tubeless and set <code>OPENAI_API_KEY</code> in your environment. From a disposable workspace, run with Bun 1.3.14+:</p>
+        <CodeBlock code={'npm install tubeless\nbunx tubeless run --trace agent.ndjson ./agent.ts -- \\\n  --task "Find and fix the failing test, then verify the change."\nbunx tubeless history --trace agent.ndjson'} lang="sh" />
+        <p class="fine">This makes paid model calls and uses your machine’s file and shell permissions. Run it in a workspace you are comfortable letting it change.</p>
+      </div>
+    </section>
+
+    <section class="section runtime-notes">
+      <h2>Runs in your process.</h2>
+      <p>Set limits on turns, calls, nesting, and concurrency. Cancel with an <code>AbortSignal</code>. Record history to NDJSON or SQLite. The runtime has no dependencies, and you do not need a separate service to run an agent.</p>
+      <p>Inspect which tools were called, what failed, and which subagent did the work. Parent and child runs stay connected in the history.</p>
+      <p class="fine">Execution is in process; crash-safe resume is not supported yet. Workspace tools use host permissions and are not sandboxed.</p>
+      <div class="actions">
+        <a class="btn" href={href("docs/agents")}>Agent documentation</a>
+        <a class="btn ghost" href={href("agent-examples")}>Examples and recorded runs</a>
+      </div>
+    </section>
+  </main>
+</Base>
+
+<style>
+  .agent-hero { padding-block: 4.5rem 2.5rem; max-width: 54rem; }
+  .agent-hero .page-title { font-size: clamp(3.5rem, 7vw, 6rem); line-height: 1; margin-block: 1rem 1.5rem; }
+  .agent-hero .lede { max-width: 46rem; }
+  .hero-detail { max-width: 43rem; }
+  .graph-note { max-width: 45rem; margin-block: 1rem 3rem; color: var(--muted); font-size: 0.85rem; }
+  .setup { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 2rem 3rem; }
+  .setup > *, .section-head > * { min-width: 0; }
+  .code-panel { align-self: center; }
+  .code-panel :global(pre) { margin: 0; }
+  .harness :global(.astro-code span[style*="#6A737D"]) { color: #a3acb8 !important; }
+  .tools { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.5rem 0; }
+  .tools code { padding: 0.35rem 0.7rem; border: 1px solid var(--line); border-radius: 4px; font-size: 0.8rem; }
+  .run-it { grid-column: 1 / -1; }
+  .fine { color: var(--muted); font-size: 0.85rem; line-height: 1.7; }
+  .composition-examples { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+  .composition-examples > div { padding-left: 1.2rem; border-left: 2px solid var(--gold); }
+  .composition-examples > div > code { font-size: 0.85rem; }
+  .composition { margin-top: 1.5rem; }
+  .composition summary { cursor: pointer; padding-block: 1rem; text-decoration: underline; text-underline-offset: 0.2em; }
+  .harness a:focus-visible, .composition summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+  .runtime-notes { padding-bottom: 5rem; }
+  .runtime-notes > p { max-width: 48rem; }
+  @media (max-width: 850px) { .setup, .composition-examples { grid-template-columns: 1fr; } .agent-hero { padding-block: 3rem 2rem; } }
+</style>

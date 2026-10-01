@@ -24,7 +24,15 @@ const sequences = {
     [["edit", {path: "config/current.json", oldText: '"retries":0', newText: '"retries":3'}]],
     [["bash", {command: "node check.mjs"}]],
   ],
+  "nested-guidance": [
+    [["read", {path: "src/AGENTS.md"}]],
+    [["read", {path: "src/code.txt"}]],
+    [["_finish", {answer: "Scoped code: cobalt"}]],
+  ],
 };
+const guidance = sequences["nested-guidance"];
+if (process.env.EVAL_RECOVERY === "guidance-skipped") guidance.shift();
+if (process.env.EVAL_RECOVERY === "guidance-batched") guidance.splice(0, 2, [...guidance[0], ...guidance[1]]);
 const recovery = sequences["recover-and-compact"];
 if (process.env.EVAL_RECOVERY === "skipped") recovery.shift();
 if (process.env.EVAL_RECOVERY === "batched") recovery.splice(0, 2, [...recovery[0], ...recovery[1]]);
@@ -68,6 +76,8 @@ it.each([
   ["delayed", recoveryError],
   ["unrelated-list", recoveryError],
   ["unrelated-search", recoveryError],
+  ["guidance-skipped", undefined],
+  ["guidance-batched", undefined],
 ] as const)(
   "retains decision batches and evaluation evidence for %s recovery",
   async (mode, expectedError) => {
@@ -91,12 +101,23 @@ it.each([
             },
           }
         );
-      if (expectedError) expect(run).toThrow();
+      const guidanceFailure = mode.startsWith("guidance-");
+      if (expectedError || guidanceFailure) expect(run).toThrow();
       else run();
       const report = JSON.parse(await readFile(reportPath, "utf8"));
-      const [price, project, recovery] = report.results;
+      const [price, project, guidance, recovery] = report.results;
       expect(price.passed).toBe(true);
       expect(project.passed).toBe(true);
+      expect(guidance).toMatchObject({
+        passed: !guidanceFailure,
+        answer: "Scoped code: cobalt",
+        verification: "guidance checks passed",
+      });
+      expect(guidance.error).toBe(
+        guidanceFailure
+          ? "Nested guidance must be read before the requested first task read"
+          : undefined
+      );
       expect(price.calls[0]).toMatchObject({
         id: "investigate-edit-verify-0-0",
         tool: "read",
