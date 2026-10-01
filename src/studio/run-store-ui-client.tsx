@@ -490,12 +490,33 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
         onInput={(event) => onChange(index, [event.currentTarget.value])}
       />
     );
+  } else if (parameter.type === "number") {
+    const inputValue = values[0] ?? "";
+    control = (
+      <input
+        id={id}
+        type="number"
+        value={String(inputValue)}
+        step={parameter.integer ? "1" : "any"}
+        min={parameter.min}
+        max={parameter.max}
+        required={parameter.required}
+        onInput={(event) =>
+          onChange(
+            index,
+            event.currentTarget.value !== ""
+              ? [Number(event.currentTarget.value)]
+              : [event.currentTarget.value]
+          )
+        }
+      />
+    );
   } else {
     const inputValue = values[0] ?? "";
     control = (
       <input
         id={id}
-        type={parameter.type === "number" ? "number" : "text"}
+        type="text"
         value={String(inputValue)}
         placeholder={
           parameter.type === "path"
@@ -504,18 +525,8 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
               : "./file"
             : ""
         }
-        step={parameter.type === "number" ? (parameter.integer ? "1" : "any") : undefined}
-        min={parameter.type === "number" ? parameter.min : undefined}
-        max={parameter.type === "number" ? parameter.max : undefined}
         required={parameter.required}
-        onInput={(event) =>
-          onChange(
-            index,
-            parameter.type === "number" && event.currentTarget.value !== ""
-              ? [Number(event.currentTarget.value)]
-              : [event.currentTarget.value]
-          )
-        }
+        onInput={(event) => onChange(index, [event.currentTarget.value])}
       />
     );
   }
@@ -1640,14 +1651,16 @@ export function resolveSelectedRunId(
 
 export function StudioAccessNotice({ status, href }: { status: 401 | 403; href: string }) {
   return (
-    <main class="workspace" role="alert">
-      <h1>{status === 401 ? "Sign in to continue" : "Access denied"}</h1>
-      <p>
-        {status === 401
-          ? "Your access has expired. Open Studio again to sign in through your application."
-          : "Your account cannot access this Studio. Open Studio again after your access is restored."}
-      </p>
-      <a href={href}>Open Studio again</a>
+    <main class="workspace">
+      <div role="alert">
+        <h1>{status === 401 ? "Sign in to continue" : "Access denied"}</h1>
+        <p>
+          {status === 401
+            ? "Your access has expired. Open Studio again to sign in through your application."
+            : "Your account cannot access this Studio. Open Studio again after your access is restored."}
+        </p>
+        <a href={href}>Open Studio again</a>
+      </div>
     </main>
   );
 }
