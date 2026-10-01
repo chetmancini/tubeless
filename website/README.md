@@ -39,6 +39,7 @@ The build fails when only one variable is set.
 | Animated stage pipe | `src/components/PipelineFlow.astro`; weaves behind the hero and homepage stages, ending in a pulse-synchronized completion bucket, with responsive curves and reduced-motion support |
 | Agent execution graph | `src/components/AgentGraph.astro`; illustrates successive model turns, branching tool calls, and a nested subagent on the homepage and agent page. Uses a scripted animation, not recorded data. Includes playback controls, offscreen pausing, and a static reduced-motion view. |
 | Recorded-run context | `src/data/agent-recordings.ts` describes the starting fixtures and expected outcomes for `public/agent-evaluation.json`, shared by the replay and Markdown page. Keep it matched to the recorded fixture version when replacing the recordings. The exact task comes from the recording itself. |
+| Recording provenance | The evaluator captures `sourceHashes` before running. Retain those hashes when sanitizing the report; the website build verifies them against the candidate sources. Regenerate the recording after changing those sources. |
 | Package version and engines | `../package.json` via `src/lib/package.ts` |
 | Route catalog | `src/lib/docs.ts` (`DOC_NAV`; static paths and doc nav) |
 | Rendered-link check | `scripts/check-built-links.mjs` (runs after `astro build`) |

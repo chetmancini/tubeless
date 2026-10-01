@@ -34,7 +34,7 @@ const finish = () => call("_finish", { answer: "Done." }, "finish");
 const response = (output: unknown[]) => Response.json({ status: "completed", output });
 
 describe("OpenAI model", () => {
-  it.each([undefined, null, "none", "low", "medium", "high", "xhigh"] as const)(
+  it.each([undefined, null, "none", "minimal", "low", "medium", "high", "xhigh", "max"] as const)(
     "configures reasoning effort independently of model selection: %s",
     async (reasoningEffort) => {
       const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([finish()]));

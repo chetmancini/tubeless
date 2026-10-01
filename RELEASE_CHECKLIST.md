@@ -89,13 +89,15 @@ Require all four tasks to pass: investigation/edit/check, startup project
 instructions, nested guidance read in a separate turn before the requested file
 read, and the requested missing-file read followed by recovery through
 conversation compaction. The nested-guidance task must follow the scoped answer
-convention and preserve all fixture files. The first recovery batch must contain
+convention, preserve all fixture files, and call only `read`, `list`, or `search`.
+The evaluator rejects mutating capabilities even if the agent restores the original contents.
+The first recovery batch must contain
 only that read;
 recovery must be chosen in the next decision that receives its failure outcome.
 That batch must read the current configuration or expose its location through a
 read, listing, search, or shell result. Successful recovery in a later batch
 does not satisfy this check.
-Preserve the JSON report (model, reasoning effort, timestamp, calls, outcomes,
+Preserve the JSON report (model, reasoning effort, timestamp, captured source hashes, calls, outcomes,
 decision batches with
 their incoming outcomes, answer and independent checks) with the candidate's acceptance evidence,
 including failed attempts. These small tasks establish observed behavior, not a

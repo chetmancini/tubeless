@@ -28,7 +28,7 @@ export const RECORDING_CONTEXT: Record<string, {
   "nested-guidance": {
     title: "Read a code using nested instructions",
     setup: "The agent starts in the project root. The requested file is inside src/, which has its own AGENTS.md. The agent must discover those instructions before reading the code.",
-    expected: 'The agent reads src/AGENTS.md in an earlier turn than src/code.txt, answers "Scoped code: cobalt", and leaves every file unchanged.',
+    expected: 'The agent reads src/AGENTS.md in an earlier turn than src/code.txt and answers "Scoped code: cobalt". It uses only read, list, and search, leaving every file unchanged.',
     files: {
       "src/AGENTS.md": 'Report codes from this directory with the prefix "Scoped code: ".',
       "src/code.txt": "cobalt",

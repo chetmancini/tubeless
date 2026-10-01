@@ -33,6 +33,15 @@ const sequences = {
 const guidance = sequences["nested-guidance"];
 if (process.env.EVAL_RECOVERY === "guidance-skipped") guidance.shift();
 if (process.env.EVAL_RECOVERY === "guidance-batched") guidance.splice(0, 2, [...guidance[0], ...guidance[1]]);
+const mutations = {
+  "guidance-create": [[["write", {path: "extra.txt", content: "unexpected file"}]]],
+  "guidance-restore": [
+    [["edit", {path: "src/code.txt", oldText: "cobalt", newText: "changed"}]],
+    [["edit", {path: "src/code.txt", oldText: "changed", newText: "cobalt"}]],
+  ],
+  "guidance-bash": [[["bash", {command: "touch extra.txt"}]]],
+}[process.env.EVAL_RECOVERY];
+if (mutations) guidance.splice(2, 0, ...mutations);
 const recovery = sequences["recover-and-compact"];
 if (process.env.EVAL_RECOVERY === "skipped") recovery.shift();
 if (process.env.EVAL_RECOVERY === "batched") recovery.splice(0, 2, [...recovery[0], ...recovery[1]]);
@@ -66,22 +75,31 @@ globalThis.fetch = async (url, options) => {
 `;
 
 const recoveryError = "The error-observing decision must read or locate the current configuration";
+const guidanceError = "Nested guidance must be read before the requested first task read";
+const readOnlyError = "Read-only task must use only read, list, and search tools";
 it.each([
-  ["ordered", undefined],
-  ["list-root", recoveryError],
-  ["list-config", undefined],
-  ["search", undefined],
-  ["bash", undefined],
-  ["skipped", "Agent must perform the requested missing-file read first"],
-  ["batched", "Agent must wait for the missing-file result before choosing recovery calls"],
-  ["delayed", recoveryError],
-  ["unrelated-list", recoveryError],
-  ["unrelated-search", recoveryError],
-  ["guidance-skipped", undefined],
-  ["guidance-batched", undefined],
+  ["ordered", undefined, undefined],
+  ["list-root", recoveryError, undefined],
+  ["list-config", undefined, undefined],
+  ["search", undefined, undefined],
+  ["bash", undefined, undefined],
+  ["skipped", "Agent must perform the requested missing-file read first", undefined],
+  [
+    "batched",
+    "Agent must wait for the missing-file result before choosing recovery calls",
+    undefined,
+  ],
+  ["delayed", recoveryError, undefined],
+  ["unrelated-list", recoveryError, undefined],
+  ["unrelated-search", recoveryError, undefined],
+  ["guidance-skipped", undefined, guidanceError],
+  ["guidance-batched", undefined, guidanceError],
+  ["guidance-create", undefined, readOnlyError],
+  ["guidance-restore", undefined, readOnlyError],
+  ["guidance-bash", undefined, readOnlyError],
 ] as const)(
-  "retains decision batches and evaluation evidence for %s recovery",
-  async (mode, expectedError) => {
+  "retains decision batches and acceptance verdicts for %s",
+  async (mode, expectedError, expectedGuidanceError) => {
     const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-report-"));
     try {
       const mockPath = join(directory, "provider.mjs");
@@ -102,7 +120,7 @@ it.each([
             },
           }
         );
-      const guidanceFailure = mode.startsWith("guidance-");
+      const guidanceFailure = expectedGuidanceError !== undefined;
       if (expectedError || guidanceFailure) expect(run).toThrow();
       else run();
       const report = JSON.parse(await readFile(reportPath, "utf8"));
@@ -114,11 +132,14 @@ it.each([
         answer: "Scoped code: cobalt",
         verification: "guidance checks passed",
       });
-      expect(guidance.error).toBe(
-        guidanceFailure
-          ? "Nested guidance must be read before the requested first task read"
-          : undefined
-      );
+      expect(guidance.error).toBe(expectedGuidanceError);
+      if (expectedGuidanceError === readOnlyError) {
+        const mutations = guidance.outcomes.filter((outcome: { tool: string }) =>
+          ["write", "edit", "bash"].includes(outcome.tool)
+        );
+        expect(mutations.length).toBeGreaterThan(0);
+        expect(mutations.every((outcome: { ok: boolean }) => outcome.ok)).toBe(true);
+      }
       expect(price.calls[0]).toMatchObject({
         id: "investigate-edit-verify-0-0",
         tool: "read",

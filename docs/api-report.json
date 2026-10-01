@@ -241,7 +241,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "715536626c11004fdd36f11165605acb90d9f4e1fe1924a995c948b9593afbf5",
+      "sha256": "72e99bb502057e79673e3c116383c80696d506aa53e2bc5719c617ef0612a72c",
       "specifier": "tubeless/agent/openai"
     }
   ],

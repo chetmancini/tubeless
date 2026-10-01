@@ -20,7 +20,7 @@ Package: `tubeless`
 | `tubeless/project`      | `./dist/project/project.d.ts`      | `1b8b5d492a2af8848656fe2e723a35346677a9426a332b12adc9a1d46d6afbbf` |                8 |
 | `tubeless/testing`      | `./dist/testing/testing.d.ts`      | `afd2498f7c2449b7656ae8d2d5a70452dca7fcf51be2f4e4e7195655ec397815` |               10 |
 | `tubeless/tracing`      | `./dist/tracing/tracing.d.ts`      | `5e5d5d09edd191d41a29b584a2ab368038dcb3db91b6c20709c19e6ed189fb97` |                3 |
-| `tubeless/agent/openai` | `./dist/agent/openai.d.ts`         | `715536626c11004fdd36f11165605acb90d9f4e1fe1924a995c948b9593afbf5` |                2 |
+| `tubeless/agent/openai` | `./dist/agent/openai.d.ts`         | `72e99bb502057e79673e3c116383c80696d506aa53e2bc5719c617ef0612a72c` |                2 |
 
 ## Symbols
 
@@ -252,5 +252,5 @@ Package: `tubeless`
 
 | Symbol                                                                                           | Description                                                                                   |
 | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L22)       | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
+| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L30)       | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
 | [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L8) | Responses transport settings; credentials are resolved only when a decision executes.         |

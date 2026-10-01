@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
@@ -21,6 +22,14 @@ test("the published evaluation has complete call/result evidence for every passi
           outcome.id === call.id && outcome.tool === call.tool), `${run.id}: ${call.id}`);
       }
     }
+  }
+});
+
+test("the published evaluation matches the evaluator and model sources", () => {
+  const { sourceHashes } = JSON.parse(read("agent-evaluation.json"));
+  for (const path of ["src/agent/model-prompt.ts", "src/agent/openai.ts", "scripts/eval-agent.mjs"]) {
+    const source = readFileSync(new URL(`../../${path}`, import.meta.url));
+    assert.equal(sourceHashes[path], createHash("sha256").update(source).digest("hex"), path);
   }
 });
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -9,6 +10,18 @@ import { openaiModel } from "tubeless/agent/openai";
 // Opt-in, paid live evaluations. Each task gets a disposable workspace and objective checks.
 if (!process.env.OPENAI_API_KEY)
   throw new Error("Set OPENAI_API_KEY to run live agent evaluations");
+const sourceHashes = Object.fromEntries(
+  await Promise.all(
+    ["src/agent/model-prompt.ts", "src/agent/openai.ts", "scripts/eval-agent.mjs"].map(
+      async (path) => [
+        path,
+        createHash("sha256")
+          .update(await readFile(new URL(`../${path}`, import.meta.url)))
+          .digest("hex"),
+      ]
+    )
+  )
+);
 const cases = [
   {
     id: "investigate-edit-verify",
@@ -147,6 +160,10 @@ for (const fixture of cases) {
       "Agent must inspect files"
     );
     if (fixture.readOnly) {
+      assert(
+        calls.every((call) => ["read", "list", "search"].includes(call.tool)),
+        "Read-only task must use only read, list, and search tools"
+      );
       const readTurn = (path) =>
         turns.findIndex(
           (turn) =>
@@ -256,6 +273,7 @@ await writeFile(
       model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
       reasoningEffort: "high",
       completedAt: new Date().toISOString(),
+      sourceHashes,
       results,
     },
     null,

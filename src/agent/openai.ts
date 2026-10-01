@@ -11,7 +11,15 @@ export interface OpenAIModelOptions {
   /** Defaults to OPENAI_API_KEY at execution time. */
   readonly apiKey?: string;
   /** Omitted by default. Set explicitly for models that support reasoning; null also omits it. */
-  readonly reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
+  readonly reasoningEffort?:
+    | "none"
+    | "minimal"
+    | "low"
+    | "medium"
+    | "high"
+    | "xhigh"
+    | "max"
+    | null;
   /** Compact above this history size (default 65536 bytes), or when the complete decision exceeds the request limit. */
   readonly compactAfterBytes?: number;
   /** Combined deadline for compaction and decision requests; defaults to 60000 ms. */
@@ -37,7 +45,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
     (model !== undefined && (typeof model !== "string" || !model.trim())) ||
     (apiKey !== undefined && (typeof apiKey !== "string" || !apiKey.trim())) ||
     (reasoningEffort !== null &&
-      !["none", "low", "medium", "high", "xhigh"].includes(reasoningEffort))
+      !["none", "minimal", "low", "medium", "high", "xhigh", "max"].includes(reasoningEffort))
   )
     throw new Error("Invalid OpenAI model configuration");
   return async (request, context) => {

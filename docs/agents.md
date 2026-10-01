@@ -81,7 +81,10 @@ values. The adapter omits reasoning settings by default so models that do not ac
 them remain compatible. Opt in with `reasoningEffort` for a model that supports it;
 `null` also omits the setting. The coding-agent recipe and live evaluations explicitly
 request `"high"`. Supported effort values depend on the selected model; higher
-effort can increase latency and cost. Model names are trimmed; a blank
+effort can increase latency and cost. Accepted settings are `"none"`, `"minimal"`,
+`"low"`, `"medium"`, `"high"`, `"xhigh"`, and `"max"`; check the selected model's
+[supported efforts](https://developers.openai.com/api/docs/guides/reasoning).
+Model names are trimmed; a blank
 `OPENAI_MODEL` uses the default, while an
 explicit blank model is rejected locally. API keys are trimmed before use.
 Environment credentials are read at execution, so imports, plans, and dry
