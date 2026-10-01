@@ -37,6 +37,9 @@ The build fails when only one variable is set.
 | Featured use cases | `src/data/use-cases.ts` shares copy between `src/pages/use-cases.astro`, its Markdown download, and homepage cards |
 | Use-case animations | `src/data/workflow-scenes.ts` defines illustrative fan-out and DAG scenes; `WorkflowAnimation.astro` animates cargo along their tracks and `WorkflowObject.astro` draws dimensional machines. Includes pause controls, offscreen pausing, and reduced-motion support |
 | Animated stage pipe | `src/components/PipelineFlow.astro`; weaves behind the hero and homepage stages, ending in a pulse-synchronized completion bucket, with responsive curves and reduced-motion support |
+| Agent execution graph | `src/components/AgentGraph.astro`; illustrates successive model turns, branching tool calls, and a nested subagent on the homepage and agent page. Uses a scripted animation, not recorded data. Includes playback controls, offscreen pausing, and a static reduced-motion view. |
+| Recorded-run context | `src/data/agent-recordings.ts` describes the starting fixtures and expected outcomes for `public/agent-evaluation.json`, shared by the replay and Markdown page. Keep it matched to the recorded fixture version when replacing the recordings. The exact task comes from the recording itself. |
+| Recording provenance | The evaluator captures `sourceHashes` before running. Retain those hashes when sanitizing the report; the website build verifies them against the candidate sources. Regenerate the recording after changing those sources. |
 | Package version and engines | `../package.json` via `src/lib/package.ts` |
 | Route catalog | `src/lib/docs.ts` (`DOC_NAV`; static paths and doc nav) |
 | Rendered-link check | `scripts/check-built-links.mjs` (runs after `astro build`) |
@@ -44,6 +47,8 @@ The build fails when only one variable is set.
 | Studio screenshot | `public/studio.png` (recapture from `tubeless ui`) |
 | Markdown downloads and full text | `src/pages/*.md.ts`, `src/pages/docs/[slug].md.ts`, `src/pages/llms-full.txt.ts`; generated from `DOC_NAV` and `../docs/*.md` |
 | Agent URL table | `src/pages/agents.astro`, `src/pages/llms.txt.ts` |
+| Agent overview | `src/pages/agent-harness.astro` and its Markdown alternate explain execution, composition, and setup. Recorded test tasks live on the separate examples page. |
+| Agent examples and recordings | `src/pages/agent-examples.astro` and its Markdown alternate; `AgentReplay.astro` displays `public/agent-evaluation.json`. Update the recording only from a passing opt-in evaluation, retaining model/effort/date and replacing disposable workspace prefixes with `<workspace>`. Preserve failed attempts in the candidate's acceptance evidence. `public/agent-delegation.json` is separate, scripted CLI history with local stack paths removed. No live calls run during site builds or replay. |
 | Developer resource hub | `src/pages/developers.astro`, `src/pages/developers.md.ts` |
 | Brand page and downloadable logos | `src/pages/brand.astro`, `src/pages/brand.md.ts`, and `public/wordmark*.svg`; the square mark remains `public/logo.svg` |
 | Homepage Markdown overview | `src/pages/index.md.ts`; advertised in the homepage head and `llms.txt` |

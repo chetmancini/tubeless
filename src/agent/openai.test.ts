@@ -34,6 +34,30 @@ const finish = () => call("_finish", { answer: "Done." }, "finish");
 const response = (output: unknown[]) => Response.json({ status: "completed", output });
 
 describe("OpenAI model", () => {
+  it.each([undefined, null, "none", "minimal", "low", "medium", "high", "xhigh", "max"] as const)(
+    "configures reasoning effort independently of model selection: %s",
+    async (reasoningEffort) => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([finish()]));
+      vi.stubGlobal("fetch", fetcher);
+      await defineModelAgent({
+        id: "reasoning",
+        projectContext: false,
+        model: openaiModel({ apiKey: "fixture", reasoningEffort }),
+      }).runOrThrow({ task: "Finish" });
+      const body = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
+      if (reasoningEffort === undefined || reasoningEffort === null)
+        expect(body).not.toHaveProperty("reasoning");
+      else expect(body.reasoning).toEqual({ effort: reasoningEffort });
+    }
+  );
+
+  it("rejects unsupported reasoning settings locally", () => {
+    // @ts-expect-error Exercise the boundary for JavaScript callers.
+    expect(() => openaiModel({ reasoningEffort: "fast" })).toThrow(
+      "Invalid OpenAI model configuration"
+    );
+  });
+
   it.each([
     { model: undefined, environment: undefined, expected: "gpt-5.4-mini" },
     { model: undefined, environment: "", expected: "gpt-5.4-mini" },
@@ -53,7 +77,9 @@ describe("OpenAI model", () => {
     vi.stubEnv("OPENAI_MODEL", environment);
     await agent.runOrThrow({ task: "Finish" });
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(fetcher.mock.calls[0]![1]!.body as string).model).toBe(expected);
+    const body = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
+    expect(body.model).toBe(expected);
+    expect(body).not.toHaveProperty("reasoning");
   });
 
   it.each(["", " \t\n "])("rejects an explicit blank model: %j", (model) => {
@@ -116,6 +142,7 @@ describe("OpenAI model", () => {
       expect(fetcher.mock.calls[0]![0]).toBe("https://api.openai.com/v1/responses/compact");
       const compactRequest = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
       expect(compactRequest).not.toHaveProperty("tools");
+      expect(compactRequest).not.toHaveProperty("reasoning");
       expect(compactRequest.input.at(-1)).toMatchObject({
         call_id: "previous",
         type: "function_call_output",
@@ -135,6 +162,7 @@ describe("OpenAI model", () => {
         });
         expect(fetcher).toHaveBeenCalledTimes(2);
         const decisionRequest = JSON.parse(fetcher.mock.calls[1]![1]!.body as string);
+        expect(decisionRequest).not.toHaveProperty("reasoning");
         expect(decisionRequest.input).toEqual(compacted);
         expect(decisionRequest.tools.some((tool: { name: string }) => tool.name === "custom")).toBe(
           true

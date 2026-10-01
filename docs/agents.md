@@ -54,8 +54,15 @@ Guidance comes from the project containing the files. A `.git` file also marks
 a worktree root. Outside a repository it loads only cwd's
 file. More specific directory instructions take precedence. Deeper directories
 and files referenced by those instructions are read by the agent when needed;
-there is no recursive startup scan or `@file` expansion. Required instruction
-discovery and reading precede a user's requested first task action; optional
+there is no recursive startup scan or `@file` expansion. The prompt requires
+guidance reads and the file operations or task commands they govern to run in
+separate turns. Commands that only discover filenames may run before those reads.
+This also applies when a command selects a directory with bash's `cwd` option or
+shell `cd`. The prompt requires trying that directory's `AGENTS.md` even when
+filename discovery did not list it; a missing-file result permits proceeding.
+Beyond startup, discovery and ordering depend on the model; file tools do not
+enforce them as access controls. Required instruction discovery and reading
+precede a user's requested first task action; optional
 exploration waits until after that action. Already supplied guidance need not be
 reread. Set `projectContext: false`
 to disable discovery. Context is loaded once per invocation; simultaneous and later
@@ -74,7 +81,15 @@ Expected tool failures are outcomes; fatal failure or cancellation stops the run
 
 The optional OpenAI subpath uses native fetch and adds no SDK dependency. It defaults
 to `OPENAI_MODEL` or `gpt-5.4-mini`; `openaiModel({ model, apiKey })` supplies explicit
-values. Model names are trimmed; a blank `OPENAI_MODEL` uses the default, while an
+values. The adapter omits reasoning settings by default so models that do not accept
+them remain compatible. Opt in with `reasoningEffort` for a model that supports it;
+`null` also omits the setting. The coding-agent recipe and live evaluations explicitly
+request `"high"`. Supported effort values depend on the selected model; higher
+effort can increase latency and cost. Accepted settings are `"none"`, `"minimal"`,
+`"low"`, `"medium"`, `"high"`, `"xhigh"`, and `"max"`; check the selected model's
+[supported efforts](https://developers.openai.com/api/docs/guides/reasoning).
+Model names are trimmed; a blank
+`OPENAI_MODEL` uses the default, while an
 explicit blank model is rejected locally. API keys are trimmed before use.
 Environment credentials are read at execution, so imports, plans, and dry
 runs need no API key. Live runs make paid API requests and execute workspace tools
@@ -137,8 +152,9 @@ bun /path/to/tubeless/dist/workbench/workbench-bin.js run \
 
 Run the opt-in live evaluations from the package root with `bun run eval:agent`.
 They create disposable workspaces and check investigation, actual edits, successful
-verification, project instructions, recovery from a missing file, and forced
-compaction. They also require existing tests and unrelated work to remain intact.
+verification, startup project instructions, nested guidance discovered before a
+requested file read, recovery from a missing file, and forced compaction. They
+also require existing tests and unrelated work to remain intact.
 Results are written to `.context/model-agent-eval.json`; these paid evaluations
 are separate from credential-free CI. Reports retain full call arguments, observed
 tool outcomes, decision batches with the outcomes supplied to each decision, and
@@ -149,6 +165,8 @@ in the next decision that receives its `ENOENT` outcome. That batch's results
 must contain the current configuration or reveal its location. Speculative
 recovery in the first batch and recovery deferred past the error-observing
 decision both fail the evaluation.
+The read-only nested-guidance task must load `src/AGENTS.md` in an earlier turn
+than `src/code.txt`, apply its answer convention, and preserve every fixture file.
 Passing them is evidence for these specific
 tasks, not a general reliability guarantee.
 

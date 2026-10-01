@@ -48,7 +48,7 @@ export const USE_CASES = [
       { title: "API limits and retries", detail: "Retry and rate-limit helpers wrap provider calls. When processing documents in parallel, you can cap concurrency and pass cancellation through to each request." },
       { title: "Checking model output", detail: "Check structured responses against a schema before saving them. A custom dry-run handler can return a sample response without making a paid model call." },
     ],
-    boundary: "Use whichever model SDK and retrieval system you already work with. Tubeless doesn’t include a model provider or an agent loop.",
+    boundary: "Use whichever model SDK and retrieval system you already work with. For dynamic tool selection, tubeless/agent adds a bounded agent loop with default workspace tools and an optional OpenAI adapter.",
     recipes: [
       { label: "Retry and rate-limit calls", file: "resumable-enrichment.ts" },
       { label: "Validate output boundaries", file: "validated-boundaries.ts" },

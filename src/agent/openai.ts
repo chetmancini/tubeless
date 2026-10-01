@@ -10,6 +10,16 @@ export interface OpenAIModelOptions {
   readonly model?: string;
   /** Defaults to OPENAI_API_KEY at execution time. */
   readonly apiKey?: string;
+  /** Omitted by default. Set explicitly for models that support reasoning; null also omits it. */
+  readonly reasoningEffort?:
+    | "none"
+    | "minimal"
+    | "low"
+    | "medium"
+    | "high"
+    | "xhigh"
+    | "max"
+    | null;
   /** Compact above this history size (default 65536 bytes), or when the complete decision exceeds the request limit. */
   readonly compactAfterBytes?: number;
   /** Combined deadline for compaction and decision requests; defaults to 60000 ms. */
@@ -18,7 +28,13 @@ export interface OpenAIModelOptions {
 
 /** Create a dependency-free OpenAI Responses model with native history and automatic compaction. */
 export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
-  const { model, apiKey, compactAfterBytes = 65_536, timeoutMs = 60_000 } = options;
+  const {
+    model,
+    apiKey,
+    reasoningEffort = null,
+    compactAfterBytes = 65_536,
+    timeoutMs = 60_000,
+  } = options;
   if (
     !Number.isSafeInteger(compactAfterBytes) ||
     compactAfterBytes < 1 ||
@@ -27,7 +43,9 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
     timeoutMs < 1 ||
     timeoutMs > 2_147_483_647 ||
     (model !== undefined && (typeof model !== "string" || !model.trim())) ||
-    (apiKey !== undefined && (typeof apiKey !== "string" || !apiKey.trim()))
+    (apiKey !== undefined && (typeof apiKey !== "string" || !apiKey.trim())) ||
+    (reasoningEffort !== null &&
+      !["none", "minimal", "low", "medium", "high", "xhigh", "max"].includes(reasoningEffort))
   )
     throw new Error("Invalid OpenAI model configuration");
   return async (request, context) => {
@@ -65,6 +83,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
     const decisionRequest = {
       model: selectedModel,
       store: false,
+      ...(reasoningEffort === null ? {} : { reasoning: { effort: reasoningEffort } }),
       include: ["reasoning.encrypted_content"],
       max_output_tokens: 8192,
       instructions: `${request.instructions}\n\nCall _finish alone with the final answer. Never mix _finish with tool calls.`,

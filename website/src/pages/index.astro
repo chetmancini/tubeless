@@ -5,6 +5,7 @@ import Install from "../components/Install.astro";
 import LiveTerminal from "../components/LiveTerminal.astro";
 import MermaidGraph from "../components/MermaidGraph.astro";
 import PipelineFlow from "../components/PipelineFlow.astro";
+import AgentGraph from "../components/AgentGraph.astro";
 import Terminal from "../components/Terminal.astro";
 import TtyBar from "../components/TtyBar.astro";
 import { FIRST_PIPELINE_SAMPLE } from "../data/code-samples";
@@ -33,7 +34,7 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
     sameAs: [GITHUB_REPO],
     author: { "@type": "Person", name: "Chet Mancini", url: "https://github.com/chetmancini" },
   }}
-  description="Tubeless is a TypeScript library for data pipelines and multi-step workflows, with no runtime dependencies."
+  description="Tubeless is a TypeScript library for pipelines, from data jobs to agents. Connect steps, run them, and inspect what happened."
 >
   <main>
     <PipelineFlow>
@@ -61,16 +62,17 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
         <div>
           <h1>Tubeless</h1>
           <p class="lede">
-            Typed pipelines for Node.js. Define dependencies, preview execution,
-            and inspect step results.
+            Typed pipelines for Node.js, from data jobs to agents.
+            Connect steps, run them, and inspect what happened.
           </p>
           <p>
-          Inspired by cycling, designed to keep work rolling with fewer flats and less resistance.
+            An agent is a pipeline too: LLM turns choose tool calls, and subagents
+            run as child pipelines. Trace those runs and compose them with the rest of your code.
           </p>
           <Install command={`npm install ${PACKAGE.name}`} />
           <div class="actions">
             <a class="btn" href={href("start")}>Getting started</a>
-            <a class="btn ghost" href={href("agents")}>Agent documentation</a>
+            <a class="btn ghost" href={href("agent-harness")}>Build an agent</a>
           </div>
           <aside class="agent-tip" aria-label="Coding agent setup">
             <p>
@@ -112,6 +114,18 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
             </div>
           </dl>
       </div>
+
+      <section class="wrap section">
+        <div class="section-head">
+          <h2>Agents are pipelines.</h2>
+          <div>
+            <p>The model chooses the next tools to call. Each call becomes a step, and each turn builds on the results. A subagent runs its own pipeline and returns an answer to its parent.</p>
+            <p>You can follow the whole run in one history, use existing pipelines as tools, and pass an agent’s answer to the next step in a workflow.</p>
+            <a href={href("agent-harness")}>Build an agent with Tubeless ↗</a>
+          </div>
+        </div>
+        <AgentGraph />
+      </section>
 
       <section class="wrap section">
         <div class="section-head">

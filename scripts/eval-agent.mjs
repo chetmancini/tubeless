@@ -1,14 +1,27 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { defineModelAgent } from "tubeless/agent";
 import { openaiModel } from "tubeless/agent/openai";
 
 // Opt-in, paid live evaluations. Each task gets a disposable workspace and objective checks.
 if (!process.env.OPENAI_API_KEY)
   throw new Error("Set OPENAI_API_KEY to run live agent evaluations");
+const sourceHashes = Object.fromEntries(
+  await Promise.all(
+    ["src/agent/model-prompt.ts", "src/agent/openai.ts", "scripts/eval-agent.mjs"].map(
+      async (path) => [
+        path,
+        createHash("sha256")
+          .update(await readFile(new URL(`../${path}`, import.meta.url)))
+          .digest("hex"),
+      ]
+    )
+  )
+);
 const cases = [
   {
     id: "investigate-edit-verify",
@@ -21,7 +34,7 @@ const cases = [
   },
   {
     id: "project-context",
-    task: "Implement greet(name) in src/greet.mjs according to the project conventions. Preserve existing tests and unrelated files; verify your implementation.",
+    task: "Implement greet(name) in src/greet.mjs using the project instructions already supplied. Read and edit only greet.mjs, then verify by running exactly node ../check.mjs. Do not reread AGENTS.md or inspect the test file. Preserve existing tests and unrelated files.",
     cwd: "src",
     files: {
       "src/AGENTS.md":
@@ -29,6 +42,17 @@ const cases = [
       "src/greet.mjs": 'export function greet(name) { return "hello"; }\n',
       "check.mjs":
         'import assert from "node:assert/strict";\nimport { greet } from "./src/greet.mjs";\nassert.equal(greet("  Ada  "), "Ahoy, Ada!");\nassert.equal(greet("  "), "Ahoy, friend!");\nconsole.log("greeting checks passed");\n',
+    },
+  },
+  {
+    id: "nested-guidance",
+    task: "Read src/code.txt first, then report its content according to project conventions. Do not edit any files.",
+    readOnly: true,
+    files: {
+      "src/AGENTS.md": 'Report codes from this directory with the prefix "Scoped code: ".\n',
+      "src/code.txt": "cobalt\n",
+      "check.mjs":
+        'import assert from "node:assert/strict";\nimport { readFileSync } from "node:fs";\nassert.equal(readFileSync("src/code.txt", "utf8"), "cobalt\\n");\nconsole.log("guidance checks passed");\n',
     },
   },
   {
@@ -70,6 +94,7 @@ for (const fixture of cases) {
   const outcomes = [];
   const turns = [];
   let compactions = 0;
+  let startupGuidanceLoaded = false;
   let answer;
   let verification;
   let failure;
@@ -85,11 +110,19 @@ for (const fixture of cases) {
       await mkdir(dirname(join(root, name)), { recursive: true });
       await writeFile(join(root, name), content);
     }
-    const transport = openaiModel({ compactAfterBytes: fixture.compactAfterBytes });
+    const transport = openaiModel({
+      reasoningEffort: "high",
+      compactAfterBytes: fixture.compactAfterBytes,
+    });
     const agent = defineModelAgent({
       id: fixture.id,
       limits: { maxTurns: 12, maxCalls: 24, maxDecisions: 12 },
       model: async (request, context) => {
+        if (fixture.id === "project-context" && turns.length === 0) {
+          startupGuidanceLoaded = ["AGENTS.md", "src/AGENTS.md"].every((path) =>
+            request.instructions.includes(files[path])
+          );
+        }
         const turn = { outcomes: request.outcomes };
         turns.push(turn);
         outcomes.push(...request.outcomes);
@@ -111,7 +144,12 @@ for (const fixture of cases) {
       },
     }));
     for (const [name, content] of Object.entries(files)) {
-      if (name === "check.mjs" || name === "unrelated.txt" || name.endsWith("AGENTS.md"))
+      if (
+        fixture.readOnly ||
+        name === "check.mjs" ||
+        name === "unrelated.txt" ||
+        name.endsWith("AGENTS.md")
+      )
         assert.equal(
           await readFile(join(root, name), "utf8"),
           content,
@@ -127,25 +165,86 @@ for (const fixture of cases) {
       calls.some((call) => call.tool === "read"),
       "Agent must inspect files"
     );
-    assert(
-      calls.some((call) => call.tool === "edit" || call.tool === "write"),
-      "Agent must edit files"
-    );
-    assert(
-      outcomes.some(
-        (outcome) =>
-          outcome.tool === "bash" &&
-          outcome.ok &&
-          outcome.value.exitCode === 0 &&
-          calls.some(
+    if (fixture.id === "project-context") {
+      assert(startupGuidanceLoaded, "Startup guidance must be included in the first model request");
+      assert(
+        calls.every((call) =>
+          call.tool === "bash"
+            ? call.input.command.trim() === "node ../check.mjs" &&
+              resolve(root, fixture.cwd, call.input.cwd ?? ".") === join(root, "src")
+            : ["read", "edit", "write"].includes(call.tool) &&
+              resolve(root, fixture.cwd, call.input.path) === join(root, "src/greet.mjs")
+        ),
+        "Startup-guidance task must access only greet.mjs and run node ../check.mjs"
+      );
+      assert(
+        outcomes
+          .filter((outcome) => outcome.tool === "bash")
+          .every((outcome) => outcome.ok && outcome.value.exitCode === 0),
+        "Startup-guidance task must pass verification without learning from failed checks"
+      );
+    }
+    if (fixture.readOnly) {
+      assert(
+        calls.every((call) => ["read", "list", "search"].includes(call.tool)),
+        "Read-only task must use only read, list, and search tools"
+      );
+      const readTurn = (path) =>
+        turns.findIndex(
+          (turn) =>
+            turn.decision?.kind === "continue" &&
+            turn.decision.calls.some(
+              (call) => call.tool === "read" && resolve(root, call.input.path) === join(root, path)
+            )
+        );
+      const guidance = readTurn("src/AGENTS.md");
+      const code = readTurn("src/code.txt");
+      assert(
+        guidance >= 0 && code > guidance,
+        "Nested guidance must be read before the requested first task read"
+      );
+      for (const [path, index] of [
+        ["src/AGENTS.md", guidance],
+        ["src/code.txt", code],
+      ]) {
+        assert(
+          turns[index].decision.calls.some(
             (call) =>
-              call.id === outcome.id &&
-              call.tool === "bash" &&
-              /\bnode\s+[^\n]*check\.mjs\b/.test(call.input.command)
-          )
-      ),
-      "Agent must run the fixture check successfully"
-    );
+              call.tool === "read" &&
+              resolve(root, call.input.path) === join(root, path) &&
+              turns[index + 1]?.outcomes.some(
+                (outcome) =>
+                  outcome.id === call.id &&
+                  outcome.tool === "read" &&
+                  outcome.ok &&
+                  outcome.value.content.trimEnd() === files[path].trimEnd()
+              )
+          ),
+          `Read of ${path} must successfully return the expected contents`
+        );
+      }
+      assert(answer.includes("Scoped code: cobalt"), "Answer must follow the nested guidance");
+    } else {
+      assert(
+        calls.some((call) => call.tool === "edit" || call.tool === "write"),
+        "Agent must edit files"
+      );
+      assert(
+        outcomes.some(
+          (outcome) =>
+            outcome.tool === "bash" &&
+            outcome.ok &&
+            outcome.value.exitCode === 0 &&
+            calls.some(
+              (call) =>
+                call.id === outcome.id &&
+                call.tool === "bash" &&
+                /\bnode\s+[^\n]*check\.mjs\b/.test(call.input.command)
+            )
+        ),
+        "Agent must run the fixture check successfully"
+      );
+    }
     if (fixture.compactAfterBytes) {
       const first = calls[0];
       assert(
@@ -189,6 +288,7 @@ for (const fixture of cases) {
   }
   const result = {
     id: fixture.id,
+    task: fixture.task,
     passed: failure === undefined,
     error: failure,
     answer,
@@ -217,7 +317,9 @@ await writeFile(
   JSON.stringify(
     {
       model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
+      reasoningEffort: "high",
       completedAt: new Date().toISOString(),
+      sourceHashes,
       results,
     },
     null,

@@ -42,6 +42,7 @@ import { githubBlob, href } from "../lib/paths";
             ))}
           </div>
           <a class="case-guide" href={href(`docs/${useCase.guide.path}`)}>{useCase.guide.label} <span aria-hidden="true">↗</span></a>
+          {useCase.id === "llm-workflows" && <p><a href={href("agent-harness")}>Build an agent with Tubeless ↗</a></p>}
         </div>
 
         <aside class="case-example" aria-label={`${useCase.label} workflow idea and recipes`}>

@@ -1,0 +1,53 @@
+---
+import Base from "../layouts/Base.astro";
+import AgentReplay from "../components/AgentReplay.astro";
+import recording from "../../public/agent-evaluation.json";
+import { githubBlob, href } from "../lib/paths";
+---
+
+<Base title="Agent examples" markdown="agent-examples.md" description="Small recorded agent tasks with their starting files, tool calls, answers, and independent checks, plus a scripted subagent example.">
+  <main class="wrap examples">
+    <header class="page-lead">
+      <a href={href("agent-harness")}>← Agents are pipelines</a>
+      <h1 class="page-title">Agent examples</h1>
+      <p class="lede">Small test tasks that make an agent’s execution easy to follow. See what it was asked to do, which files it started with, and how it reached an answer.</p>
+    </header>
+
+    <section class="section" id="recorded-run">
+      <div class="section-head">
+        <h2>Recorded model runs</h2>
+        <div>
+          <p>These four tasks cover edits, project instructions, and recovery from a missing file. They run in tiny, temporary workspaces; they do not measure performance on a real codebase.</p>
+          <p>Each recording includes the original task, starting files, expected result, and independent checks. Step through the turns to inspect the tool calls and final answer.</p>
+          <p class="fine">Recorded with <code>{recording.model}</code> ({recording.reasoningEffort} reasoning) on {recording.completedAt.slice(0, 10)}. Browsing them makes no model calls.</p>
+          <a href={href("agent-evaluation.json")} download>Download the recordings ↓</a>
+        </div>
+      </div>
+      <AgentReplay />
+      <p class="fine">To run these tasks yourself, see the <a href={githubBlob("scripts/eval-agent.mjs")}>evaluation script</a>. Live evaluations make paid model calls.</p>
+    </section>
+
+    <section class="section" id="delegation">
+      <div class="section-head">
+        <h2>Subagent delegation</h2>
+        <div>
+          <p>This example gives a parent agent two words, <code>red</code> and <code>missing</code>. It delegates each word to a child agent, then combines their answers.</p>
+          <p>Each child counts and uppercases its word. The uppercase tool deliberately fails on <code>missing</code>; that child reports the error and finishes. The recorded history connects both children to the parent’s calls.</p>
+          <p class="fine">The decisions are scripted and the tools execute locally. This example demonstrates composition and error handling without calling a model.</p>
+          <div class="actions">
+            <a class="btn ghost" href={githubBlob("examples/agent-delegation.ts")}>Read the example ↗</a>
+            <a class="btn ghost" href={href("agent-delegation.json")} download>Download the history ↓</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</Base>
+
+<style>
+  .page-lead .lede { max-width: 45rem; }
+  .page-lead > a { font-size: 0.85rem; }
+  .section-head > * { min-width: 0; }
+  .fine { color: var(--muted); font-size: 0.85rem; line-height: 1.7; }
+  .examples { padding-bottom: 3rem; }
+</style>

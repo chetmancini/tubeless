@@ -6,9 +6,20 @@ export const GET: APIRoute = () => new Response(`# Tubeless
 
 > ${PACKAGE.description}
 
-Tubeless is a TypeScript library by Chet Mancini for data pipelines and multi-step
-workflows. It has no runtime dependencies. Define steps and their dependencies,
-preview which steps will run, and inspect the results. Version: ${PACKAGE.version}.
+Tubeless is a TypeScript library by Chet Mancini for pipelines, from data jobs to
+agents. Connect steps, run them, and inspect what happened. It has no runtime
+dependencies. Version: ${PACKAGE.version}.
+
+## Agents are pipelines
+
+An agent is a pipeline of LLM turns and tool calls. The model chooses what runs
+next. Tubeless runs the steps and keeps track of what happened. Tool calls are
+steps; subagents are child pipelines.
+
+You can follow the whole run in one history, use existing pipelines as tools,
+and pass an agent's answer to the next step in a workflow.
+
+[Build an agent with Tubeless](${absUrl("agent-harness.md")}).
 
 ## When to use Tubeless
 
