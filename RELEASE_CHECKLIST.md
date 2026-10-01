@@ -88,8 +88,13 @@ Do not add this command or live credentials to CI.
 Require all four tasks to pass: investigation/edit/check, startup project
 instructions, nested guidance read in a separate turn before the requested file
 read, and the requested missing-file read followed by recovery through
-conversation compaction. The nested-guidance task must follow the scoped answer
-convention, preserve all fixture files, and call only `read`, `list`, or `search`.
+conversation compaction.
+The startup-instructions task must receive root and cwd guidance in its first
+model request. It may access only `greet.mjs` and run `node ../check.mjs`, which
+must pass on every attempt. Rereading guidance or tests, searching for their
+contents, and learning the required greeting from failed checks do not count.
+The nested-guidance task must follow the scoped answer convention, preserve all
+fixture files, and call only `read`, `list`, or `search`.
 Both reads must return the expected contents in successful outcomes matched to
 their call IDs in the following turn; empty or failed reads do not count.
 The evaluator rejects mutating capabilities even if the agent restores the original contents.

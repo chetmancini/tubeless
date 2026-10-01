@@ -46,17 +46,31 @@ const failedRead = {
   "guidance-failed": "/src/AGENTS.md",
   "code-failed": "/src/code.txt",
 }[process.env.EVAL_RECOVERY];
-if (failedRead) {
+const missingStartup = process.env.EVAL_RECOVERY === "startup-missing";
+if (failedRead || missingStartup) {
   // Fail only the tool's file open, leaving fixture setup and independent checks intact.
   const open = fs.open;
   fs.open = async (path, ...args) => {
-    if (path.includes("tubeless-eval-nested-guidance-") && path.endsWith(failedRead)) {
+    if (missingStartup && path.includes("tubeless-eval-project-context-") && path.endsWith("/AGENTS.md")) {
+      throw Object.assign(new Error("Fixture startup guidance missing"), {code: "ENOENT"});
+    }
+    if (failedRead && path.includes("tubeless-eval-nested-guidance-") && path.endsWith(failedRead)) {
       throw Object.assign(new Error("Fixture read denied"), {code: "EACCES"});
     }
     return open(path, ...args);
   };
   syncBuiltinESMExports();
 }
+const startupRead = {
+  "startup-reread": ["read", {path: "./AGENTS.md"}],
+  "startup-root-reread": ["read", {path: "../AGENTS.md"}],
+  "startup-test-read": ["read", {path: "../check.mjs"}],
+  "startup-search": ["search", {query: "Greeting", path: "."}],
+  "startup-bash": ["bash", {command: "cat AGENTS.md"}],
+  "startup-check-cwd": ["bash", {command: "node ../check.mjs", cwd: "../.git"}],
+  "startup-failed-check": ["bash", {command: "node ../check.mjs"}],
+}[process.env.EVAL_RECOVERY];
+if (startupRead) sequences["project-context"].unshift([startupRead]);
 const mutations = {
   "guidance-create": [[["write", {path: "extra.txt", content: "unexpected file"}]]],
   "guidance-restore": [
@@ -101,6 +115,7 @@ globalThis.fetch = async (url, options) => {
 const recoveryError = "The error-observing decision must read or locate the current configuration";
 const guidanceError = "Nested guidance must be read before the requested first task read";
 const readOnlyError = "Read-only task must use only read, list, and search tools";
+const startupError = "Startup-guidance task must access only greet.mjs and run node ../check.mjs";
 it.each([
   ["ordered", undefined, undefined],
   ["list-root", recoveryError, undefined],
@@ -134,9 +149,27 @@ it.each([
   ["guidance-create", undefined, readOnlyError],
   ["guidance-restore", undefined, readOnlyError],
   ["guidance-bash", undefined, readOnlyError],
+  ["startup-reread", undefined, undefined, startupError],
+  ["startup-root-reread", undefined, undefined, startupError],
+  ["startup-test-read", undefined, undefined, startupError],
+  ["startup-search", undefined, undefined, startupError],
+  ["startup-bash", undefined, undefined, startupError],
+  ["startup-check-cwd", undefined, undefined, startupError],
+  [
+    "startup-missing",
+    undefined,
+    undefined,
+    "Startup guidance must be included in the first model request",
+  ],
+  [
+    "startup-failed-check",
+    undefined,
+    undefined,
+    "Startup-guidance task must pass verification without learning from failed checks",
+  ],
 ] as const)(
   "retains decision batches and acceptance verdicts for %s",
-  async (mode, expectedError, expectedGuidanceError) => {
+  async (mode, expectedError, expectedGuidanceError, expectedStartupError?: string) => {
     const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-report-"));
     try {
       const mockPath = join(directory, "provider.mjs");
@@ -158,12 +191,30 @@ it.each([
           }
         );
       const guidanceFailure = expectedGuidanceError !== undefined;
-      if (expectedError || guidanceFailure) expect(run).toThrow();
+      if (expectedError || guidanceFailure || expectedStartupError) expect(run).toThrow();
       else run();
       const report = JSON.parse(await readFile(reportPath, "utf8"));
       const [price, project, guidance, recovery] = report.results;
       expect(price.passed).toBe(true);
-      expect(project.passed).toBe(true);
+      expect(project).toMatchObject({
+        passed: expectedStartupError === undefined,
+        answer: "Fixture completed.",
+        verification: "greeting checks passed",
+      });
+      expect(project.error).toBe(expectedStartupError);
+      if (expectedStartupError === startupError) {
+        expect(project.turns[1].outcomes[0]).toMatchObject({
+          id: project.turns[0].decision.calls[0].id,
+          ok: true,
+        });
+      }
+      if (mode === "startup-failed-check") {
+        expect(project.turns[1].outcomes[0]).toMatchObject({
+          tool: "bash",
+          ok: true,
+          value: { exitCode: 1 },
+        });
+      }
       expect(guidance).toMatchObject({
         passed: !guidanceFailure,
         answer: "Scoped code: cobalt",

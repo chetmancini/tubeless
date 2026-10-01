@@ -17,8 +17,8 @@ export const RECORDING_CONTEXT: Record<string, {
   },
   "project-context": {
     title: "Implement a greeting from project instructions",
-    setup: "The agent starts in src/. greet() always returns “hello”. The local AGENTS.md, loaded at startup, specifies the greeting format.",
-    expected: 'greet("  Ada  ") returns "Ahoy, Ada!" and a blank name returns "Ahoy, friend!". The agent runs the existing checks without changing them.',
+    setup: "The agent starts in src/. greet() always returns “hello”. Root and local AGENTS.md instructions must be present in its first model request. The local instructions specify the greeting format.",
+    expected: 'Using the supplied instructions, the agent reads and edits only greet.mjs, then runs node ../check.mjs successfully on the first attempt. It must not reread guidance or inspect tests. greet("  Ada  ") returns "Ahoy, Ada!" and a blank name returns "Ahoy, friend!".',
     files: {
       "src/AGENTS.md": 'Greeting format is exactly "Ahoy, <trimmed name>!". Empty names use "friend". Run node ../check.mjs to verify.',
       "src/greet.mjs": 'export function greet(name) { return "hello"; }',

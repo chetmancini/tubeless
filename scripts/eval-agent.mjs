@@ -34,7 +34,7 @@ const cases = [
   },
   {
     id: "project-context",
-    task: "Implement greet(name) in src/greet.mjs according to the project conventions. Preserve existing tests and unrelated files; verify your implementation.",
+    task: "Implement greet(name) in src/greet.mjs using the project instructions already supplied. Read and edit only greet.mjs, then verify by running exactly node ../check.mjs. Do not reread AGENTS.md or inspect the test file. Preserve existing tests and unrelated files.",
     cwd: "src",
     files: {
       "src/AGENTS.md":
@@ -94,6 +94,7 @@ for (const fixture of cases) {
   const outcomes = [];
   const turns = [];
   let compactions = 0;
+  let startupGuidanceLoaded = false;
   let answer;
   let verification;
   let failure;
@@ -117,6 +118,11 @@ for (const fixture of cases) {
       id: fixture.id,
       limits: { maxTurns: 12, maxCalls: 24, maxDecisions: 12 },
       model: async (request, context) => {
+        if (fixture.id === "project-context" && turns.length === 0) {
+          startupGuidanceLoaded = ["AGENTS.md", "src/AGENTS.md"].every((path) =>
+            request.instructions.includes(files[path])
+          );
+        }
         const turn = { outcomes: request.outcomes };
         turns.push(turn);
         outcomes.push(...request.outcomes);
@@ -159,6 +165,25 @@ for (const fixture of cases) {
       calls.some((call) => call.tool === "read"),
       "Agent must inspect files"
     );
+    if (fixture.id === "project-context") {
+      assert(startupGuidanceLoaded, "Startup guidance must be included in the first model request");
+      assert(
+        calls.every((call) =>
+          call.tool === "bash"
+            ? call.input.command.trim() === "node ../check.mjs" &&
+              resolve(root, fixture.cwd, call.input.cwd ?? ".") === join(root, "src")
+            : ["read", "edit", "write"].includes(call.tool) &&
+              resolve(root, fixture.cwd, call.input.path) === join(root, "src/greet.mjs")
+        ),
+        "Startup-guidance task must access only greet.mjs and run node ../check.mjs"
+      );
+      assert(
+        outcomes
+          .filter((outcome) => outcome.tool === "bash")
+          .every((outcome) => outcome.ok && outcome.value.exitCode === 0),
+        "Startup-guidance task must pass verification without learning from failed checks"
+      );
+    }
     if (fixture.readOnly) {
       assert(
         calls.every((call) => ["read", "list", "search"].includes(call.tool)),
