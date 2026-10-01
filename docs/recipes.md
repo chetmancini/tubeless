@@ -62,7 +62,8 @@ one of these recipes.
 
 The [model-agent recipe](../examples/agent-model.ts) explicitly requests high reasoning;
 omit that option when selecting a model that does not support it. The recipe loads guidance from the physical
-workspace path and uses that same cwd for all tool calls. Custom OpenAI tools need inline strict schemas; oversized result
+workspace path and uses that same cwd for all tool calls. The prompt requires nested guidance
+before file operations or task commands in its scope. Custom OpenAI tools need inline strict schemas; oversized result
 batches use explicit previews while the harness keeps complete outcomes. See the
 [model-agent contract](./agents.md#default-model-backed-agent).
 Record the [delegation recipe](../examples/agent-delegation.ts) with `--trace` or

@@ -40,6 +40,7 @@ export default defineProject(
     ScriptedAgent,
     OpenAIAgentCommand,
     // Live model decisions and tools share the physical run cwd, including through symlinks.
+    // Scoped guidance precedes nested file operations and task commands in separate turns.
     CodingAgent,
     // Record with --trace/--store; history <run-id> shows turns, calls and child agents.
     DelegatingAgentCommand,

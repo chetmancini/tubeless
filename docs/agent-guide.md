@@ -46,7 +46,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   from the physical workspace directory, shared by the model and all tool calls,
   and per-run conversation ownership. The optional provider adapter retains native
   history and compacts it before subsequent decisions. The prompt requires project-guidance
-  reads in a separate turn before the work they govern; optional exploration follows them.
+  reads in a separate turn before file operations or task commands in their scope;
+  filename discovery may precede them, while optional exploration follows them.
   Add `instructions`, custom
   `tools`, or tighter `limits` as needed; the OpenAI adapter requires inline tool
   descriptors with strict object constraints, validated before HTTP. Large batches

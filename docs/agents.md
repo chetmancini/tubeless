@@ -55,7 +55,11 @@ a worktree root. Outside a repository it loads only cwd's
 file. More specific directory instructions take precedence. Deeper directories
 and files referenced by those instructions are read by the agent when needed;
 there is no recursive startup scan or `@file` expansion. The prompt requires
-guidance reads and the file operations they govern to run in separate turns.
+guidance reads and the file operations or task commands they govern to run in
+separate turns. Commands that only discover filenames may run before those reads.
+This also applies when a command selects a directory with bash's `cwd` option or
+shell `cd`. The prompt requires trying that directory's `AGENTS.md` even when
+filename discovery did not list it; a missing-file result permits proceeding.
 Beyond startup, discovery and ordering depend on the model; file tools do not
 enforce them as access controls. Required instruction discovery and reading
 precede a user's requested first task action; optional
