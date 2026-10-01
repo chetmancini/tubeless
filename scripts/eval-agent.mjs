@@ -96,7 +96,10 @@ for (const fixture of cases) {
       await mkdir(dirname(join(root, name)), { recursive: true });
       await writeFile(join(root, name), content);
     }
-    const transport = openaiModel({ compactAfterBytes: fixture.compactAfterBytes });
+    const transport = openaiModel({
+      reasoningEffort: "high",
+      compactAfterBytes: fixture.compactAfterBytes,
+    });
     const agent = defineModelAgent({
       id: fixture.id,
       limits: { maxTurns: 12, maxCalls: 24, maxDecisions: 12 },

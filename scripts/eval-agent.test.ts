@@ -52,6 +52,7 @@ globalThis.fetch = async (url, options) => {
   }
   if (url !== "https://api.openai.com/v1/responses") throw new Error("Unexpected fixture request");
   const body = JSON.parse(options.body);
+  if (body.reasoning?.effort !== "high") throw new Error("Evaluation must explicitly request high reasoning");
   const kind = Object.keys(sequences).find(name => body.instructions.includes("tubeless-eval-" + name + "-"));
   if (!kind) throw new Error("Unrecognized fixture");
   const turn = turns.get(kind) ?? 0;

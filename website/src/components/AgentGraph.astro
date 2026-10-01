@@ -113,13 +113,21 @@ const edges = [
         edge.dataset.state = phase < current ? "done" : phase === current ? "active" : "waiting";
       }
       play.textContent = playing ? "Pause" : current === phases.length ? "Replay" : "Play";
-      step.disabled = current === phases.length;
-      status.textContent = current === phases.length
+      play.disabled = reducedMotion.matches;
+      step.disabled = reducedMotion.matches || current === phases.length;
+      status.textContent = reducedMotion.matches
+        ? "Reduced motion is enabled. The complete run is shown."
+        : current === phases.length
         ? "Run complete. Four parent turns, four tool calls, and one subagent, all in the same run history."
         : current >= 0 ? phases[current] : "Press play or step through the run.";
     };
     const schedule = () => {
       clearTimeout(timer);
+      if (reducedMotion.matches) {
+        current = phases.length;
+        playing = false;
+        started = true;
+      }
       render();
       if (playing && visible && !document.hidden) timer = setTimeout(() => {
         current++;
@@ -153,8 +161,7 @@ const edges = [
       schedule();
     }, { threshold: 0.25 }).observe(graph);
     graph.querySelector<HTMLElement>(".graph-controls")!.hidden = false;
-    if (reducedMotion.matches) current = phases.length;
-    render();
+    schedule();
   }
 </script>
 

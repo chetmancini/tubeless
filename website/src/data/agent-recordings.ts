@@ -32,6 +32,7 @@ export const RECORDING_CONTEXT: Record<string, {
     files: {
       "src/AGENTS.md": 'Report codes from this directory with the prefix "Scoped code: ".',
       "src/code.txt": "cobalt",
+      "check.mjs": 'import assert from "node:assert/strict";\nimport { readFileSync } from "node:fs";\nassert.equal(readFileSync("src/code.txt", "utf8"), "cobalt\\n");\nconsole.log("guidance checks passed");',
     },
   },
   "recover-and-compact": {

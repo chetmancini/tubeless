@@ -77,9 +77,10 @@ Expected tool failures are outcomes; fatal failure or cancellation stops the run
 
 The optional OpenAI subpath uses native fetch and adds no SDK dependency. It defaults
 to `OPENAI_MODEL` or `gpt-5.4-mini`; `openaiModel({ model, apiKey })` supplies explicit
-values. The adapter requests high reasoning for agent tasks. Set
-`reasoningEffort` to tune it, or `null` to omit the setting for a model that does
-not support reasoning. Supported effort values depend on the selected model; higher
+values. The adapter omits reasoning settings by default so models that do not accept
+them remain compatible. Opt in with `reasoningEffort` for a model that supports it;
+`null` also omits the setting. The coding-agent recipe and live evaluations explicitly
+request `"high"`. Supported effort values depend on the selected model; higher
 effort can increase latency and cost. Model names are trimmed; a blank
 `OPENAI_MODEL` uses the default, while an
 explicit blank model is rejected locally. API keys are trimmed before use.

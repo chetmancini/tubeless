@@ -10,7 +10,7 @@ export interface OpenAIModelOptions {
   readonly model?: string;
   /** Defaults to OPENAI_API_KEY at execution time. */
   readonly apiKey?: string;
-  /** Defaults to high for agent tasks. Use null to omit reasoning for models that do not support it. */
+  /** Omitted by default. Set explicitly for models that support reasoning; null also omits it. */
   readonly reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
   /** Compact above this history size (default 65536 bytes), or when the complete decision exceeds the request limit. */
   readonly compactAfterBytes?: number;
@@ -23,7 +23,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
   const {
     model,
     apiKey,
-    reasoningEffort = "high",
+    reasoningEffort = null,
     compactAfterBytes = 65_536,
     timeoutMs = 60_000,
   } = options;

@@ -7,5 +7,5 @@ export const CodingAgent = defineModelAgent({
   name: "Workspace coding agent",
   description: "Investigate a task, edit the workspace, and verify the result with a model.",
   implementationVersion: "coding-agent-v5",
-  model: openaiModel(),
+  model: openaiModel({ reasoningEffort: "high" }),
 });
