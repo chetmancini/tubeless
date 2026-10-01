@@ -145,8 +145,10 @@ tool outcomes, decision batches with the outcomes supplied to each decision, and
 any completed answer and verification output, including when a
 later assertion fails. The disposable workspaces are still removed after each task.
 The recovery task must request the missing-file read alone, then choose recovery
-in a later decision that receives its `ENOENT` outcome; a speculative recovery
-call in the first batch fails the evaluation.
+in the next decision that receives its `ENOENT` outcome. That batch's results
+must contain the current configuration or reveal its location. Speculative
+recovery in the first batch and recovery deferred past the error-observing
+decision both fail the evaluation.
 Passing them is evidence for these specific
 tasks, not a general reliability guarantee.
 

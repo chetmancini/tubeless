@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { defineModelAgent } from "tubeless/agent";
@@ -44,9 +44,31 @@ const cases = [
   },
 ];
 
+function locatesConfiguration(outcome, root) {
+  if (!outcome.ok) return false;
+  const directory = join(root, "config");
+  const file = join(directory, "current.json");
+  const refersToFile = (text) => text.includes("config/current.json") || text.includes(file);
+  switch (outcome.tool) {
+    case "read":
+      return outcome.value.path === file || refersToFile(outcome.value.content);
+    case "list":
+      return outcome.value.entries.some((entry) => {
+        const path = join(outcome.value.path, entry.name);
+        return path === directory || path === file;
+      });
+    case "search":
+      return outcome.value.matches.some((match) => match.path === file || refersToFile(match.text));
+    case "bash":
+      return outcome.value.exitCode === 0 && refersToFile(outcome.value.stdout);
+    default:
+      return false;
+  }
+}
+
 const results = [];
 for (const fixture of cases) {
-  const root = await mkdtemp(join(tmpdir(), `tubeless-eval-${fixture.id}-`));
+  const root = await realpath(await mkdtemp(join(tmpdir(), `tubeless-eval-${fixture.id}-`)));
   const started = Date.now();
   const calls = [];
   const outcomes = [];
@@ -149,6 +171,18 @@ for (const fixture of cases) {
               outcome.error.code === "ENOENT"
           ),
         "Agent must choose recovery in a subsequent decision that observes the missing-file error"
+      );
+      // Only outcomes from this batch establish recovery; later successful work cannot satisfy it.
+      assert(
+        recovery.decision.calls.some((call) =>
+          turns[2]?.outcomes.some(
+            (outcome) =>
+              outcome.id === call.id &&
+              outcome.tool === call.tool &&
+              locatesConfiguration(outcome, root)
+          )
+        ),
+        "The error-observing decision must read or locate the current configuration"
       );
       assert(compactions > 0, "Conversation must compact and still complete");
     }

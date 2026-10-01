@@ -87,7 +87,10 @@ Do not add this command or live credentials to CI.
 Require all three tasks to pass: investigation/edit/check, scoped project
 instructions, and the requested missing-file read followed by recovery through
 conversation compaction. The first recovery batch must contain only that read;
-recovery must be chosen in a later decision that receives its failure outcome.
+recovery must be chosen in the next decision that receives its failure outcome.
+That batch must read the current configuration or expose its location through a
+read, listing, search, or shell result. Successful recovery in a later batch
+does not satisfy this check.
 Preserve the JSON report (model, timestamp, calls, outcomes, decision batches with
 their incoming outcomes, answer and independent checks) with the candidate's acceptance evidence,
 including failed attempts. These small tasks establish observed behavior, not a

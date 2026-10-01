@@ -28,6 +28,16 @@ const sequences = {
 const recovery = sequences["recover-and-compact"];
 if (process.env.EVAL_RECOVERY === "skipped") recovery.shift();
 if (process.env.EVAL_RECOVERY === "batched") recovery.splice(0, 2, [...recovery[0], ...recovery[1]]);
+const exploration = {
+  "list-root": ["list", {}],
+  "list-config": ["list", {path: "./config"}],
+  "search": ["search", {query: "retries"}],
+  "bash": ["bash", {command: "find . -name current.json"}],
+  "delayed": ["read", {path: "unrelated.txt"}],
+  "unrelated-list": ["list", {path: ".git"}],
+  "unrelated-search": ["search", {query: "no-matching-configuration"}],
+}[process.env.EVAL_RECOVERY];
+if (exploration) recovery.splice(1, 0, [exploration]);
 globalThis.fetch = async (url, options) => {
   if (url === "https://api.openai.com/v1/responses/compact") {
     return Response.json({object: "response.compaction", output: [{type: "compaction", encrypted_content: "fixture"}]});
@@ -46,9 +56,21 @@ globalThis.fetch = async (url, options) => {
 };
 `;
 
-it.each(["ordered", "skipped", "batched"])(
+const recoveryError = "The error-observing decision must read or locate the current configuration";
+it.each([
+  ["ordered", undefined],
+  ["list-root", undefined],
+  ["list-config", undefined],
+  ["search", undefined],
+  ["bash", undefined],
+  ["skipped", "Agent must perform the requested missing-file read first"],
+  ["batched", "Agent must wait for the missing-file result before choosing recovery calls"],
+  ["delayed", recoveryError],
+  ["unrelated-list", recoveryError],
+  ["unrelated-search", recoveryError],
+] as const)(
   "retains decision batches and evaluation evidence for %s recovery",
-  async (mode) => {
+  async (mode, expectedError) => {
     const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-report-"));
     try {
       const mockPath = join(directory, "provider.mjs");
@@ -69,7 +91,7 @@ it.each(["ordered", "skipped", "batched"])(
             },
           }
         );
-      if (mode !== "ordered") expect(run).toThrow();
+      if (expectedError) expect(run).toThrow();
       else run();
       const report = JSON.parse(await readFile(reportPath, "utf8"));
       const [price, project, recovery] = report.results;
@@ -86,10 +108,11 @@ it.each(["ordered", "skipped", "batched"])(
         value: { content: expect.stringContaining("Math.floor") },
       });
       expect(recovery).toMatchObject({
-        passed: mode === "ordered",
+        passed: expectedError === undefined,
         answer: "Fixture completed.",
         verification: "config checks passed",
       });
+      expect(recovery.error).toBe(expectedError);
       expect(recovery.compactions).toBeGreaterThan(0);
       expect(recovery.outcomes.at(-1)).toMatchObject({
         tool: "bash",
@@ -101,7 +124,6 @@ it.each(["ordered", "skipped", "batched"])(
         recovery.calls.slice(0, mode === "batched" ? 2 : 1)
       );
       if (mode === "skipped") {
-        expect(recovery.error).toBe("Agent must perform the requested missing-file read first");
         expect(recovery.calls[0].input).toEqual({ path: "config/current.json" });
       } else {
         expect(recovery.calls[0].input).toEqual({ path: "legacy-config.json" });
@@ -111,12 +133,13 @@ it.each(["ordered", "skipped", "batched"])(
           ok: false,
           error: { code: "ENOENT" },
         });
-        if (mode === "batched") {
-          expect(recovery.error).toBe(
-            "Agent must wait for the missing-file result before choosing recovery calls"
-          );
-        } else {
+        if (mode === "ordered") {
           expect(recovery.turns[1].decision.calls[0].input).toEqual({
+            path: "config/current.json",
+          });
+        } else if (expectedError === recoveryError) {
+          // The third decision recovers successfully, but must not rescue the second one's verdict.
+          expect(recovery.turns[2].decision.calls[0].input).toEqual({
             path: "config/current.json",
           });
         }
