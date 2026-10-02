@@ -268,15 +268,40 @@ describe("workspace search and listing", () => {
 
 describe("workspace file replacement", () => {
   for (const tool of ["write", "edit"] as const) {
-    it(`${tool} preserves setuid, setgid, and sticky bits after restoring ownership`, async () => {
+    it(`${tool} restores setuid, setgid, and sticky bits after restoring ownership`, async () => {
       const context = await workspace();
       const path = join(context.cwd, "target");
-      await fs.chmod(path, 0o7751);
+      await fs.chmod(path, 0o751);
       const before = await fs.stat(path);
-      expect(before.mode & 0o7777).toBe(0o7751);
+      // Some filesystems strip special bits even during fixture setup. Model those
+      // bits at the metadata boundary and verify restoration order explicitly.
+      vi.mocked(fs.lstat).mockResolvedValueOnce(
+        Object.assign(await fs.lstat(path), { mode: (before.mode & ~0o7777) | 0o7751 })
+      );
+      const restored: string[] = [];
+      vi.mocked(fs.open).mockImplementation(async (...args) => {
+        const file = await actualFs.open(...args);
+        if (args[1] === "wx") {
+          const chown = file.chown.bind(file);
+          const chmod = file.chmod.bind(file);
+          vi.spyOn(file, "chown").mockImplementation(async (uid, gid) => {
+            expect([uid, gid]).toEqual([before.uid, before.gid]);
+            await chown(uid, gid);
+            restored.push("ownership");
+          });
+          vi.spyOn(file, "chmod").mockImplementation(async (mode) => {
+            expect(restored).toEqual(["ownership"]);
+            expect(mode).toBe(0o7751);
+            await chmod(0o751);
+            restored.push("mode");
+          });
+        }
+        return file;
+      });
       if (tool === "write")
         await writeTool({ path: "target", content: "updated content" }, context);
       else await editTool({ path: "target", oldText: "original", newText: "updated" }, context);
+      expect(restored).toEqual(["ownership", "mode"]);
       expect(await fs.readFile(path, "utf8")).toBe("updated content");
       expect(await fs.stat(path)).toMatchObject({
         uid: before.uid,
