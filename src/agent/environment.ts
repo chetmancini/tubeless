@@ -18,6 +18,7 @@ export interface AgentEnvironment {
   projectInstructions(
     context: AgentEnvironmentContext
   ): Awaitable<readonly AgentProjectInstruction[]>;
+  /** Return at most 16 KiB of UTF-8 content. */
   read(
     input: { path: string; startLine?: number | null; maxLines?: number | null },
     context: AgentEnvironmentContext
@@ -29,14 +30,17 @@ export interface AgentEnvironment {
     totalLines: number;
     truncated: boolean;
   }>;
+  /** Accept at most 1 MiB of UTF-8 content and enforce the same file-size limit. */
   write(
     input: { path: string; content: string },
     context: AgentEnvironmentContext
   ): Awaitable<{ path: string; bytes: number }>;
+  /** Accept old/new text of at most 1 MiB each and enforce the completed file-size limit. */
   edit(
     input: { path: string; oldText: string; newText: string },
     context: AgentEnvironmentContext
   ): Awaitable<{ path: string; bytes: number }>;
+  /** Return at most 16 KiB of combined UTF-8 stdout/stderr. */
   bash(
     input: { command: string; cwd?: string | null; timeoutMs?: number | null },
     context: AgentEnvironmentContext
@@ -49,6 +53,7 @@ export interface AgentEnvironment {
     timedOut: boolean;
     truncated: boolean;
   }>;
+  /** Return up to 200 entries with at most 16 KiB of UTF-8 names. */
   list(
     input: { path?: string | null },
     context: AgentEnvironmentContext

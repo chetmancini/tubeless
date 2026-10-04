@@ -83,8 +83,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   are local. Child options are prevalidated once for the whole batch. Crash-safe
   resume is a later stage. Supply an `AgentEnvironment` for remote guidance, files
   and commands; children inherit it. Custom tools receive `context.environment`.
-  Remote search results must obey the same snippet and aggregate UTF-8 byte
-  limits as local search; oversized output fails before state commits.
+  Remote tools obey the same UTF-8 byte limits as local tools. Oversized write/edit
+  arguments fail before batch dispatch; oversized read, bash, listing and search
+  results fail before state commits. See [the environment contract](./agents.md#execution-environments).
   Use the [environment recipe](../examples/agent-environment.ts) and the optional
   local adapter from `tubeless/agent/node`. Dry runs skip decisions and handler tools unless both provide
   preview handlers. Agents remain ordinary pipelines for projects and CLI use.

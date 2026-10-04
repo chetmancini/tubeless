@@ -18,7 +18,24 @@ import {
 } from "./default-tool-limits.js";
 
 const path = wireString({ maxLength: 4096 });
-const text = wireString({ allowEmpty: true, maxLength: MAX_FILE_BYTES });
+function utf8Text(maxBytes: number, allowEmpty = true) {
+  return wireRefine(wireString({ allowEmpty, maxLength: maxBytes }), (value) => {
+    if (new TextEncoder().encode(value).length > maxBytes)
+      throw new Error(`Text exceeds ${maxBytes} UTF-8 bytes`);
+  });
+}
+
+function checkOutputBytes(parts: readonly string[]) {
+  const encoder = new TextEncoder();
+  let bytes = 0;
+  for (const part of parts) {
+    bytes += encoder.encode(part).length;
+    if (bytes > MAX_OUTPUT_BYTES)
+      throw new Error(`Tool output content exceeds ${MAX_OUTPUT_BYTES} UTF-8 bytes`);
+  }
+}
+
+const text = utf8Text(MAX_FILE_BYTES);
 const count = wireNumber({ integer: true, minimum: 0 });
 function positive(maximum: number) {
   const number = wireNumber({ integer: true, minimum: 1 });
@@ -47,7 +64,7 @@ export const defaultTools = Object.freeze({
     }),
     outputSchema: toolObject({
       path,
-      content: text,
+      content: utf8Text(MAX_OUTPUT_BYTES),
       startLine: count,
       endLine: count,
       totalLines: count,
@@ -68,7 +85,7 @@ export const defaultTools = Object.freeze({
       "Replace one exact occurrence of oldText with newText in a UTF-8 file up to 1 MiB. Missing or ambiguous matches fail without writing. Atomic replacement requires a writable parent directory and permission to preserve existing ownership. Skipped in dry runs.",
     inputSchema: toolObject({
       path,
-      oldText: wireString({ maxLength: MAX_FILE_BYTES }),
+      oldText: utf8Text(MAX_FILE_BYTES, false),
       newText: text,
     }),
     outputSchema: written,
@@ -82,29 +99,35 @@ export const defaultTools = Object.freeze({
       cwd: optionalToolField(path),
       timeoutMs: optionalToolField(positive(300_000)),
     }),
-    outputSchema: toolObject({
-      cwd: path,
-      stdout: text,
-      stderr: text,
-      exitCode: wireUnion([count, nullValue]),
-      signal: wireUnion([path, nullValue]),
-      timedOut: wireBoolean(),
-      truncated: wireBoolean(),
-    }),
+    outputSchema: toolObject(
+      {
+        cwd: path,
+        stdout: utf8Text(MAX_OUTPUT_BYTES),
+        stderr: utf8Text(MAX_OUTPUT_BYTES),
+        exitCode: wireUnion([count, nullValue]),
+        signal: wireUnion([path, nullValue]),
+        timedOut: wireBoolean(),
+        truncated: wireBoolean(),
+      },
+      ({ stdout, stderr }) => checkOutputBytes([stdout, stderr])
+    ),
     run: (input, context) => context.environment.bash(input, context),
   }),
   list: defineTool({
     description:
-      "List up to 200 entries in filename order, defaulting to the run cwd. Return names and file/directory/symlink kinds. Use null for the default path.",
+      "List up to 200 entries in filename order, defaulting to the run cwd. Retained names are capped at 16 KiB. Return names and file/directory/symlink kinds. Use null for the default path.",
     inputSchema: toolObject({ path: optionalToolField(path) }),
     outputSchema: toolObject({
       path,
-      entries: wireArray(
-        wireObject({
-          name: path,
-          kind: wireEnum(["file", "directory", "symlink", "other"] as const),
-        }),
-        { maxItems: 200 }
+      entries: wireRefine(
+        wireArray(
+          wireObject({
+            name: path,
+            kind: wireEnum(["file", "directory", "symlink", "other"] as const),
+          }),
+          { maxItems: 200 }
+        ),
+        (entries) => checkOutputBytes(entries.map(({ name }) => name))
       ),
       truncated: wireBoolean(),
     }),
@@ -124,25 +147,11 @@ export const defaultTools = Object.freeze({
           wireObject({
             path,
             line: count,
-            text: wireRefine(
-              wireString({ allowEmpty: true, maxLength: MAX_SEARCH_SNIPPET_BYTES }),
-              (value) => {
-                if (new TextEncoder().encode(value).length > MAX_SEARCH_SNIPPET_BYTES)
-                  throw new Error(`Search snippet exceeds ${MAX_SEARCH_SNIPPET_BYTES} UTF-8 bytes`);
-              }
-            ),
+            text: utf8Text(MAX_SEARCH_SNIPPET_BYTES),
           }),
           { maxItems: 50 }
         ),
-        (matches) => {
-          const encoder = new TextEncoder();
-          let bytes = 0;
-          for (const match of matches) {
-            bytes += encoder.encode(match.path).length + encoder.encode(match.text).length;
-            if (bytes > MAX_OUTPUT_BYTES)
-              throw new Error(`Search path/text content exceeds ${MAX_OUTPUT_BYTES} UTF-8 bytes`);
-          }
-        }
+        (matches) => checkOutputBytes(matches.flatMap(({ path, text }) => [path, text]))
       ),
       truncated: wireBoolean(),
       skippedFiles: count,

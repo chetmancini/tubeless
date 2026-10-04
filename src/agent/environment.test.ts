@@ -1,48 +1,8 @@
 import { expect, it, vi } from "vitest";
 import { createSteps, definePipeline } from "../core/pipeline.js";
-import { defineAgent, defineModelAgent, defineTool, pipelineTool } from "./agent.js";
-import type { AgentEnvironment } from "./environment.js";
+import { defineModelAgent, defineTool, pipelineTool } from "./agent.js";
 import { toolObject } from "./default-tool-schema.js";
-import { emptyInput, textSchema } from "./agent.test-support.js";
-
-function remote(): AgentEnvironment {
-  return {
-    id: "container:one",
-    resolveCwd: vi.fn(() => "/remote/project"),
-    projectInstructions: vi.fn(() => [
-      { path: "/remote/project/AGENTS.md", content: "REMOTE GUIDANCE" },
-    ]),
-    read: vi.fn(() => ({
-      path: "/remote/project/a",
-      content: "before",
-      startLine: 1,
-      endLine: 1,
-      totalLines: 1,
-      truncated: false,
-    })),
-    write: vi.fn(() => ({ path: "/remote/project/a", bytes: 5 })),
-    edit: vi.fn(() => ({ path: "/remote/project/a", bytes: 5 })),
-    bash: vi.fn(() => ({
-      cwd: "/remote/project",
-      stdout: "verified",
-      stderr: "",
-      exitCode: 0,
-      signal: null,
-      timedOut: false,
-      truncated: false,
-    })),
-    list: vi.fn(() => ({
-      path: "/remote/project",
-      entries: [{ name: "a", kind: "file" as const }],
-      truncated: false,
-    })),
-    search: vi.fn(() => ({
-      matches: [{ path: "/remote/project/a", line: 1, text: "before" }],
-      truncated: false,
-      skippedFiles: 0,
-    })),
-  };
-}
+import { remote, workspaceAgent } from "./environment.test-support.js";
 
 it("routes all workspace operations, guidance and custom tools through a remote environment", async () => {
   const environment = remote();
@@ -272,26 +232,6 @@ it("resolves asynchronous factories independently for concurrent invocations", a
   expect(factory).toHaveBeenCalledTimes(2);
 });
 
-function searchAgent(environment: AgentEnvironment) {
-  const decide = vi.fn((state: string, context: { turn: number }) =>
-    context.turn === 1
-      ? { kind: "continue", calls: [{ id: "search", tool: "search", input: { query: "needle" } }] }
-      : { kind: "finish", result: state }
-  );
-  const reduce = vi.fn((_state: string, outcomes: unknown) => JSON.stringify(outcomes));
-  const agent = defineAgent({
-    id: "search-byte-boundary",
-    environment,
-    inputSchema: emptyInput,
-    resultSchema: textSchema,
-    initialState: () => "",
-    decide,
-    dryRun: decide,
-    reduce,
-  });
-  return { agent, decide, reduce };
-}
-
 it.each([false, true])(
   "rejects oversized remote search output before committing state (dryRun=%s)",
   async (dryRun) => {
@@ -318,7 +258,9 @@ it.each([false, true])(
     for (const result of cases) {
       const environment = remote();
       environment.search = vi.fn(() => ({ ...result, skippedFiles: 0 }));
-      const { agent, decide, reduce } = searchAgent(environment);
+      const { agent, decide, reduce } = workspaceAgent(environment, [
+        { id: "search", tool: "search", input: { query: "needle" } },
+      ]);
       expect((await agent.run({}, { dryRun })).status).toBe("failed");
       expect(environment.search).toHaveBeenCalledTimes(1);
       expect(reduce).not.toHaveBeenCalled();
@@ -343,7 +285,9 @@ it.each([false, true])(
       const result = { matches, truncated: true, skippedFiles: 3 };
       const environment = remote();
       environment.search = vi.fn(() => result);
-      const { agent, decide, reduce } = searchAgent(environment);
+      const { agent, decide, reduce } = workspaceAgent(environment, [
+        { id: "search", tool: "search", input: { query: "needle" } },
+      ]);
       expect(JSON.parse(await agent.runOrThrow({}, { dryRun }))).toEqual([
         { id: "search", tool: "search", ok: true, value: result },
       ]);
