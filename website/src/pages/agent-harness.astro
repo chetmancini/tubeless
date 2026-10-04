@@ -60,8 +60,8 @@ const composition = readFileSync(join(__REPO_ROOT__, "examples/agent-pipeline.ts
       <h2>Runs in your process.</h2>
       <p>Set limits on turns, calls, nesting, and concurrency. Cancel with an <code>AbortSignal</code>. Record history to NDJSON or SQLite. The runtime has no dependencies, and you do not need a separate service to run an agent.</p>
       <p>Inspect which tools were called, what failed, and which subagent did the work. Parent and child runs stay connected in the history.</p>
-      <p>Supply an execution environment to route workspace tools and project guidance to a remote service. Child agents inherit it. <a href={githubBlob("examples/agent-environment.ts")}>Try the environment recipe ↗</a></p>
-      <p class="fine">Execution is in process; crash-safe resume is not supported yet. The default workspace tools use host permissions. Your environment backend supplies isolation.</p>
+      <p>Opt into durable execution with a checkpoint store, execution key and implementation version. Saved conversations, tool outcomes, child state and budgets survive a restart. Completed calls are reused; interrupted mutations return an uncertain outcome for the agent to inspect. <a href={githubBlob("examples/agent-durable.ts")}>Try the credential-free SQLite recipe ↗</a></p>
+      <p class="fine">Supply an execution environment to put guidance, files and commands in a remote workspace. Children inherit it. <a href={githubBlob("examples/agent-environment.ts")}>Try the environment recipe ↗</a> The default workspace uses host permissions; isolation belongs to the environment backend. <a href={href("docs/agents") + "#durable-execution"}>Read the contracts.</a></p>
       <div class="actions">
         <a class="btn" href={href("docs/agents")}>Agent documentation</a>
         <a class="btn ghost" href={href("agent-examples")}>Examples and recorded runs</a>

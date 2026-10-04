@@ -2,19 +2,28 @@
   "modules": [
     {
       "declaration": "./dist/agent/node.d.ts",
-      "exports": ["createNodeAgentEnvironment"],
-      "sha256": "96272edbdf86708363fc3389c464dbd1da38461bc079e7629086fdeb7fa168d7",
+      "exports": [
+        "createNodeAgentEnvironment",
+        "openSqliteAgentCheckpointStore",
+        "SqliteAgentCheckpointStore"
+      ],
+      "sha256": "8af290421672269a77cc5d8bf90b09dd3e7564f9bba5f21dad53115c6e3a02d9",
       "specifier": "tubeless/agent/node"
     },
     {
       "declaration": "./dist/agent/agent.d.ts",
       "exports": [
         "AgentCall",
+        "AgentCheckpointCodec",
+        "AgentCheckpointLease",
+        "AgentCheckpointStore",
         "AgentDecision",
         "AgentDecisionContext",
+        "AgentDurability",
         "AgentEnvironment",
         "AgentEnvironmentContext",
         "AgentEnvironmentProvider",
+        "AgentExecutionIdentity",
         "AgentLimits",
         "AgentModel",
         "AgentModelRequest",
@@ -24,14 +33,16 @@
         "AgentState",
         "AgentTool",
         "AgentToolContext",
+        "createMemoryAgentCheckpointStore",
         "DefaultAgentTools",
         "defineAgent",
         "defineModelAgent",
         "defineTool",
         "pipelineTool",
+        "plainAgentCheckpointCodec",
         "ToolError"
       ],
-      "sha256": "37ad48e49015af83bb50c2a1b324e4bb8b2e73aa6303cec89a91edfdf5a3df88",
+      "sha256": "c8078b955291546942bf8cfa8bf0f116d114cc718fa8fe2e7205fc75698210fb",
       "specifier": "tubeless/agent"
     },
     {
@@ -252,7 +263,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "5cf6a033a0343e61c70dd4927f82e48dd9c1c13e2f32d0c1d01ba0998d29bfbb",
+      "sha256": "d469c4c627c8938d4c73cb1d03e54dccaf98a03cced86ddc3c85a234436fc005",
       "specifier": "tubeless/agent/openai"
     }
   ],

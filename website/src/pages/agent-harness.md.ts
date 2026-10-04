@@ -49,9 +49,9 @@ Set limits on turns, calls, nesting, and concurrency. Cancel with an AbortSignal
 
 Inspect which tools were called, what failed, and which subagent did the work. Parent and child runs stay connected in the history.
 
-Supply an execution environment to route workspace tools and project guidance to a remote service. Child agents inherit it. [Try the environment recipe](${githubBlob("examples/agent-environment.ts")}).
+Opt into durable execution with a checkpoint store, execution key and implementation version. Saved conversations, tool outcomes, child state and budgets survive a restart. Completed calls are reused; interrupted mutations return an uncertain outcome for the agent to inspect. [Try the credential-free SQLite recipe](${githubBlob("examples/agent-durable.ts")}).
 
-Execution is in process; crash-safe resume is not supported yet. The default workspace tools use host permissions. Your environment backend supplies isolation.
+Supply an execution environment to put guidance, files and commands in a remote workspace. Children inherit it. [Try the environment recipe](${githubBlob("examples/agent-environment.ts")}). The default workspace uses host permissions; isolation belongs to the environment backend. [Read the durability and environment contracts](${absUrl("docs/agents.md#durable-execution")}).
 
 - [Agent documentation](${absUrl("docs/agents.md")})
 - [Examples and recorded runs](${absUrl("agent-examples.md")})

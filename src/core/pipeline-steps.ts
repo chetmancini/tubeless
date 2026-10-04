@@ -538,7 +538,7 @@ function createStepFactory<
       description: config.description,
       metadata: config.metadata,
       dryRun: config.dryRun,
-      run: createSingleChildRunner(config),
+      run: createSingleChildRunner({ ...config, stepId: id }),
     };
 
     const skip = config.skip;
@@ -759,7 +759,7 @@ function createStepFactory<
       description: config.description,
       metadata: config.metadata,
       dryRun: config.dryRun,
-      run: createMappedChildRunner(config),
+      run: createMappedChildRunner({ ...config, stepId: id }),
     };
 
     const skip = config.skip;

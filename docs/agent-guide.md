@@ -80,8 +80,13 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   `pipelineTool`; reuse their options schema or supply `inputSchema` and
   `mapOptions` together. Follow the [delegation recipe](../examples/agent-delegation.ts).
   Calls, decisions, depth, and leaf concurrency obey every ancestor limit; turns
-  are local. Child options are prevalidated once for the whole batch. Crash-safe
-  resume is a later stage. Supply an `AgentEnvironment` for remote guidance, files
+  are local. Child options are prevalidated once for the whole batch. Add
+  `durability: { store, key }` and an explicit `implementationVersion` for checkpointed
+  decisions, outcomes, child state and budgets. Reuse the key and inputs to resume;
+  use a new key for changed semantics. See [durable execution](./agents.md#durable-execution)
+  and the [SQLite recipe](../examples/agent-durable.ts). Running unsafe calls become
+  recoverable interruption outcomes; mark only repeatable or idempotent tools
+  `replay: "safe"`. Supply an `AgentEnvironment` for remote guidance, files
   and commands; children inherit it. Custom tools receive `context.environment`.
   Environment operations preserve signal cancellation across SDK-specific errors
   and late results, while still draining active work.
@@ -91,7 +96,7 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   arguments fail before batch dispatch; oversized read, bash, listing and search
   results fail before state commits. See [the environment contract](./agents.md#execution-environments).
   Use the [environment recipe](../examples/agent-environment.ts) and the optional
-  local adapter from `tubeless/agent/node`. Dry runs skip decisions and handler tools unless both provide
+  local and SQLite adapters from `tubeless/agent/node`. Dry runs skip decisions and handler tools unless both provide
   preview handlers. Agents remain ordinary pipelines for projects and CLI use.
   Use `fromPipeline` to feed a validated answer into ordinary dependent work;
   the [composition recipe](../examples/agent-pipeline.ts) includes credential-free previews.

@@ -94,7 +94,7 @@ flags after `--`. Record runs with `--store` or `--trace`, then inspect them wit
 - Start with a [typed import](./examples/typed-import.ts) or add
   [dry runs and write gates](./examples/publish-with-gates.ts) to a publishing job.
 - Build workflows with [child pipelines](./examples/child-pipeline.ts) and [fan-out](./examples/fan-out-progress.ts).
-- Run bounded model decisions, default filesystem/shell tools, custom tools, and subagents with [in-process agents](./docs/agents.md).
+- Run bounded model decisions, workspace tools, custom tools, and subagents with [agents](./docs/agents.md), optional durable checkpoints, and local or remote execution environments.
 - Optional: the [peloton example](./examples/peloton.ts) is a cycling-themed kitchen sink for the live TUI.
 
 The [recipe index](./docs/recipes.md) covers validation, retries, tracing, testing,

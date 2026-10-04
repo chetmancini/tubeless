@@ -24,6 +24,16 @@ export type {
   AgentProjectInstruction,
 } from "./environment.js";
 
+export { createMemoryAgentCheckpointStore } from "./memory-checkpoint-store.js";
+export { plainAgentCheckpointCodec } from "./checkpoint-codec.js";
+export type {
+  AgentCheckpointLease,
+  AgentCheckpointStore,
+  AgentCheckpointCodec,
+  AgentDurability,
+  AgentExecutionIdentity,
+} from "./checkpoint-types.js";
+
 export { defineModelAgent } from "./model-agent.js";
 export type { AgentModel, AgentModelRequest, AgentModelResponse } from "./model-types.js";
 

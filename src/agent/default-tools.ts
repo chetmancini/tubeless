@@ -76,6 +76,7 @@ const searchMatches: WireSchema<
 
 export const defaultTools = Object.freeze({
   read: defineTool({
+    replay: "safe",
     description:
       "Read a UTF-8 file up to 1 MiB. Paths resolve from the run cwd. startLine is 1-based (default 1); maxLines defaults to 200. Output is capped at 16 KiB. Use null for defaults.",
     inputSchema: toolObject({
@@ -140,6 +141,7 @@ export const defaultTools = Object.freeze({
       environmentOperation(context, () => context.environment.bash(input, context)),
   }),
   list: defineTool({
+    replay: "safe",
     description:
       "List up to 200 entries in filename order, defaulting to the run cwd. Retained names are capped at 16 KiB. Return names and file/directory/symlink kinds. Use null for the default path.",
     inputSchema: toolObject({ path: optionalToolField(path) }),
@@ -154,6 +156,7 @@ export const defaultTools = Object.freeze({
       environmentOperation(context, () => context.environment.list(input, context)),
   }),
   search: defineTool({
+    replay: "safe",
     description:
       "Search for literal, case-sensitive text in a file or directory (default run cwd), traversing entries in filename order. Skip .git, node_modules and nested symlinks. Count binary/oversized files (over 1 MiB) and unavailable descendants in skippedFiles. Examine at most 2000 entries and 32 directory levels; return up to 50 matching lines and 16 KiB. Long-line snippets shift to the match and cap at 1024 bytes. Use null for the default path.",
     inputSchema: toolObject({

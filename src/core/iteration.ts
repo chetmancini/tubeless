@@ -105,6 +105,8 @@ export function createIterationRunner<TOptions extends object>(config: Iteration
       try {
         const runChild = createSingleChildRunner<TOptions>({
           pipeline: config.pipeline,
+          stepId: config.stepId,
+          itemKey: key,
           controls: config.controls,
           mapOptions: () => config.mapOptions(state, inputs, context),
         });

@@ -23,9 +23,10 @@ Stage 6 completes the learning surface with an
 CLI history tests and installed-package execution of the recipe and its previews.
 The [release acceptance checklist](../RELEASE_CHECKLIST.md#in-process-agent-acceptance)
 maps each gate to existing checks and the separate paid workspace evaluations.
-Agent execution remains in process; crash-safe resume follows later. Typed
-execution environments supply local or remote workspace authority; see
-[the environment contract](../docs/agents.md#execution-environments).
+Agent execution remains an ordinary in-process pipeline. Optional acknowledged
+checkpoints now persist decisions, call intent/outcomes, child state and ancestor
+budgets. Typed execution environments supply local or remote workspace authority;
+see [the recovery and environment contracts](../docs/agents.md#durable-execution).
 
 The [type probes](./agent-harness.probes.ts) exercise the implemented public API
 and are checked by `bun run typecheck` and `make check`. Declared fixture schemas
@@ -280,10 +281,15 @@ Stages 3–4 fill agent-specific records; stage 5 supplies typed history and CLI
 presentation, with richer Studio views still pending. Old records may lack relationships and remain inspectable with
 unknown metadata. State, prompts, and tool bodies are not traced by default.
 
-Trace export remains best-effort. Recovery later needs an independently
-acknowledged journal with explicit codecs, persisted decisions/outcomes/state,
-restored budgets, ownership, and side-effect reconciliation. Stage 1 does not
-declare a storage API or promise serialization of arbitrary schema outputs.
+Trace export remains best-effort. Recovery uses an independent acknowledged
+subtree journal with exclusive ownership and explicit lossless codecs. Default
+SQLite storage fences each key to a live process on one host and reclaims a dead
+owner. Stable agent/call routes survive ordinary child composition; budgets and
+accepted schema receipts are restored before dispatch. A running unsafe call
+becomes an interruption observation, while an explicitly safe call may repeat.
+External effects still require reconciliation or business idempotency; reducers
+and mappers must be pure. Checkpoint storage does not serialize arbitrary
+schema outputs without a suitable codec.
 
 ## Evidence and next implementation boundary
 

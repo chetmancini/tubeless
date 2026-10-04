@@ -1,4 +1,4 @@
-import { inheritExecutionScope } from "./execution-scope.js";
+import { childExecutionScope } from "./execution-scope.js";
 import type { PreparedOptions } from "./prepared-options.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { emitRejectedPlanLifecycle } from "./lifecycle.js";
@@ -123,6 +123,8 @@ async function rejectedChildPlanResult(
 type ChildInputs = Record<string, unknown>;
 
 export interface SingleChildExecutionConfig<TParentOptions extends object> {
+  stepId?: string;
+  itemKey?: string;
   pipeline: ChildPipeline;
   controls?:
     | PipelineRunControls
@@ -139,6 +141,7 @@ export interface SingleChildExecutionConfig<TParentOptions extends object> {
 }
 
 export interface MappedChildExecutionConfig<TParentOptions extends object> {
+  stepId?: string;
   pipeline: ChildPipeline;
   items(
     inputs: ChildInputs,
@@ -192,6 +195,7 @@ export function invokeChildPipeline(
   options: object,
   context: PipelineStepContext<object>,
   invocation: {
+    stepId: string;
     plan: PipelinePlan;
     hooks: PipelineHooks;
     itemKey: string;
@@ -215,7 +219,11 @@ export function invokeChildPipeline(
     invocation.plan,
     options,
     controls,
-    inheritExecutionScope(context, runtime),
+    childExecutionScope(context, runtime, {
+      pipelineId: pipeline.id,
+      stepId: invocation.stepId,
+      itemKey: invocation.itemKey,
+    }),
     invocation.preparedOptions
   );
 }
@@ -334,7 +342,11 @@ export function createSingleChildRunner<TParentOptions extends object>(
       config.pipeline,
       domainOptions,
       controls,
-      inheritExecutionScope(context, baseChildContext),
+      childExecutionScope(context, baseChildContext, {
+        pipelineId: config.pipeline.id,
+        stepId: config.stepId ?? config.pipeline.id,
+        itemKey: config.itemKey,
+      }),
       childHooks,
       `Child pipeline ${config.pipeline.id} `,
       childPlan
@@ -399,16 +411,24 @@ export function createMappedChildRunner<TParentOptions extends object>(
             config.pipeline,
             domainOptions,
             controls,
-            inheritExecutionScope(context, {
-              correlationId: context.correlationId,
-              cwd: context.cwd,
-              log: context.log,
-              now: context.now,
-              parentRunId: context.runId,
-              signal: context.signal,
-              sleep: context.sleep,
-              tracing: childTracingOptions(context, key),
-            }),
+            childExecutionScope(
+              context,
+              {
+                correlationId: context.correlationId,
+                cwd: context.cwd,
+                log: context.log,
+                now: context.now,
+                parentRunId: context.runId,
+                signal: context.signal,
+                sleep: context.sleep,
+                tracing: childTracingOptions(context, key),
+              },
+              {
+                pipelineId: config.pipeline.id,
+                stepId: config.stepId ?? config.pipeline.id,
+                itemKey: key,
+              }
+            ),
             childHooks,
             "",
             childPlan

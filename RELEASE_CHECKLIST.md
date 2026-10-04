@@ -11,15 +11,15 @@ field immediately before `npm publish`.
 
 These names are the pre-1.0 contract. Treat a change as breaking.
 
-| Kind               | Stable name                                                                                                                                                                                                                          | Notes                                                                                                                            |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| Package and binary | `tubeless`                                                                                                                                                                                                                           | Bin path `./dist/workbench/workbench-bin.js` is an implementation detail.                                                        |
-| Export paths       | `tubeless`, `tubeless/agent`, `tubeless/agent/openai`, `tubeless/agent/node`, `tubeless/cli`, `tubeless/batch`, `tubeless/node`, `tubeless/rate-limit`, `tubeless/retry`, `tubeless/testing`, `tubeless/tracing`, `tubeless/project` | Provider and Node environment adapters are optional; the agent core is provider-independent. Studio and storage remain internal. |
-| Error codes        | `TUBELESS_*` on `PipelineErrorCode`                                                                                                                                                                                                  | Prefix and current spellings stay.                                                                                               |
-| CLI exit behavior  | Codes `0`–`7`                                                                                                                                                                                                                        | Success, usage, load, definition, validation, planning, execution, cancellation.                                                 |
-| Storage            | `.tubeless/runs.sqlite`                                                                                                                                                                                                              | Default Studio/CLI store path.                                                                                                   |
-| Runtime symbols    | `Symbol.for("tubeless/pipeline-command")`                                                                                                                                                                                            | Cross-instance marker. Consumers should not set it.                                                                              |
-| Other constants    | `RUN_MODEL_VERSION` (`2`)                                                                                                                                                                                                            | Stored-run version.                                                                                                              |
+| Kind               | Stable name                                                                                                                                                                                                                          | Notes                                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| Package and binary | `tubeless`                                                                                                                                                                                                                           | Bin path `./dist/workbench/workbench-bin.js` is an implementation detail.                     |
+| Export paths       | `tubeless`, `tubeless/agent`, `tubeless/agent/openai`, `tubeless/agent/node`, `tubeless/cli`, `tubeless/batch`, `tubeless/node`, `tubeless/rate-limit`, `tubeless/retry`, `tubeless/testing`, `tubeless/tracing`, `tubeless/project` | Provider and Node checkpoint adapters are optional. Studio and trace storage remain internal. |
+| Error codes        | `TUBELESS_*` on `PipelineErrorCode`                                                                                                                                                                                                  | Prefix and current spellings stay.                                                            |
+| CLI exit behavior  | Codes `0`–`7`                                                                                                                                                                                                                        | Success, usage, load, definition, validation, planning, execution, cancellation.              |
+| Storage            | `.tubeless/runs.sqlite`                                                                                                                                                                                                              | Default Studio/CLI store path.                                                                |
+| Runtime symbols    | `Symbol.for("tubeless/pipeline-command")`                                                                                                                                                                                            | Cross-instance marker. Consumers should not set it.                                           |
+| Other constants    | `RUN_MODEL_VERSION` (`2`)                                                                                                                                                                                                            | Stored-run version.                                                                           |
 
 Version 2 and 3 trace events and NDJSON recordings remain a durable compatibility
 boundary. Agent iteration records use version 3. Removing the concrete JSON and
@@ -38,8 +38,9 @@ The studio is a local process, not an authenticated network service.
 ## In-process agent acceptance
 
 Run these gates on the release candidate before cutting a tag. Acceptance does
-not publish the package. This release covers in-process execution; crash-safe
-resume and richer Studio agent presentation remain follow-ups.
+not publish the package. This release covers in-process execution with optional
+durable checkpoints and execution environments. Richer Studio agent presentation
+remains a follow-up.
 
 ```sh
 make check
@@ -50,15 +51,18 @@ make website-build
 check and packed-consumer verification. All are credential-free; mocked provider
 responses exercise the HTTP protocol and evaluation runner without paid calls.
 
-| Required behavior                                                               | Repeatable evidence in the ordinary check suite                                               |
-| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Dynamic tool batches, expected failure recovery, owned state, validated finish  | `src/agent/agent.test.ts`, `src/testing/agent.example.test.ts`                                |
-| Subagents, shared budgets, depth and concurrency, cancellation and draining     | `src/agent/subagents.test.ts`, `src/agent/pipeline-tool.test.ts`                              |
-| Limits, invalid model decisions, dry-run previews and skipped live work         | `src/agent/agent.test.ts`, `src/agent/model-agent.test.ts`                                    |
-| Prompt/project context, conversation ownership and compaction protocol          | `src/agent/model-prompt.test.ts`, `src/agent/model-agent.test.ts`, `src/agent/openai.test.ts` |
-| Normal CLI execution, ordinary parent pipeline, SQLite/NDJSON turn/call history | `src/workbench/workbench-agent-history.test.ts`                                               |
-| Installed public imports and CLI, agent composition and previews                | `scripts/verify-packed-artifact.mjs`                                                          |
-| Remote guidance/tools, inherited workspace authority and bounded results        | `src/agent/environment.test.ts`                                                               |
+| Required behavior                                                                       | Repeatable evidence in the ordinary check suite                                               |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Dynamic tool batches, expected failure recovery, owned state, validated finish          | `src/agent/agent.test.ts`, `src/testing/agent.example.test.ts`                                |
+| Subagents, shared budgets, depth and concurrency, cancellation and draining             | `src/agent/subagents.test.ts`, `src/agent/pipeline-tool.test.ts`                              |
+| Limits, invalid model decisions, dry-run previews and skipped live work                 | `src/agent/agent.test.ts`, `src/agent/model-agent.test.ts`                                    |
+| Prompt/project context, conversation ownership and compaction protocol                  | `src/agent/model-prompt.test.ts`, `src/agent/model-agent.test.ts`, `src/agent/openai.test.ts` |
+| Normal CLI execution, ordinary parent pipeline, SQLite/NDJSON turn/call history         | `src/workbench/workbench-agent-history.test.ts`                                               |
+| Installed public imports and CLI, agent composition and previews                        | `scripts/verify-packed-artifact.mjs`                                                          |
+| Restarted decisions, validated call receipts, ordered outcomes and ancestor budgets     | `src/agent/durability.test.ts`                                                                |
+| Actual process death, SQLite owner reclaim and uncertain mutation recovery              | `src/agent/durability-process.test.ts`                                                        |
+| Exclusive store leases, acknowledged writes, reopen and lossless serialization          | `src/agent/checkpoint-store.test.ts`, `src/agent/checkpoint-codec.test.ts`                    |
+| Remote guidance/tools, no local cwd dependency, inherited authority and bounded results | `src/agent/environment.test.ts`                                                               |
 
 Inspect a recording manually with the credential-free composition recipe:
 

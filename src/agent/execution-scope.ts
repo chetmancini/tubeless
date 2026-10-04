@@ -1,21 +1,10 @@
 import { executionScope, type ExecutionScope } from "../core/execution-scope.js";
 import { createAbortError, throwIfAborted } from "../utilities/abort.js";
-import { agentError } from "./agent-state.js";
+import { agentError, limit } from "./agent-state.js";
+import type { AgentCheckpointSession } from "./checkpoint-session.js";
+import type { AgentExecutionIdentity } from "./checkpoint-types.js";
 import type { AgentEnvironment } from "./environment.js";
 import type { AgentLimits } from "./agent-types.js";
-
-export function limit(
-  name: string,
-  bound: number,
-  consumed: number,
-  requested: number,
-  scope: string
-): never {
-  throw agentError(
-    "TUBELESS_AGENT_LIMIT_REACHED",
-    `Agent ${name}=${bound} exceeded (consumed=${consumed}, requested=${requested}, scope=${scope})`
-  );
-}
 
 export function resolvedLimits(limits: AgentLimits = {}): Required<AgentLimits> {
   const defaults = {
@@ -45,6 +34,8 @@ export function resolvedLimits(limits: AgentLimits = {}): Required<AgentLimits> 
 
 interface Budget {
   id: string;
+  key: string;
+  journal?: AgentCheckpointSession;
   depth: number;
   limits: Required<AgentLimits>;
   maxCalls: number;
@@ -134,52 +125,142 @@ class LeafQueue {
   }
 }
 
-/** Mutable counters belong to invocation-local scopes; definitions never retain them. */
+/** Invocation-local admission, workspace authority and durable subtree ownership. */
 export class AgentExecutionScope implements ExecutionScope {
   private constructor(
     private readonly budgets: readonly Budget[],
     private readonly queue: LeafQueue,
-    private readonly depth: number,
-    readonly environment: AgentEnvironment
+    readonly depth: number,
+    readonly environment: AgentEnvironment,
+    readonly route: readonly string[],
+    private readonly agentRoute: readonly string[],
+    readonly journal?: AgentCheckpointSession
   ) {}
+
+  get agentKey(): string {
+    return JSON.stringify(this.agentRoute);
+  }
 
   static enter(
     context: object,
     limits: Required<AgentLimits>,
     id: string,
-    environment: AgentEnvironment
+    environment: AgentEnvironment,
+    definitionId: string,
+    journal?: AgentCheckpointSession
   ): AgentExecutionScope {
     const parent = agentScope(context);
     const depth = parent?.depth ?? 0;
-    const budget: Budget = { id, depth, limits, maxCalls: 0, maxDecisions: 0, active: 0 };
+    const route = [...(parent?.route ?? []), JSON.stringify(["agent", definitionId])];
+    const key = JSON.stringify(route);
+    const budget: Budget = {
+      id,
+      key,
+      journal,
+      depth,
+      limits,
+      maxCalls: 0,
+      maxDecisions: 0,
+      active: 0,
+    };
     return new AgentExecutionScope(
       [...(parent?.budgets ?? []), budget],
       parent?.queue ?? new LeafQueue(),
       depth,
-      environment
+      environment,
+      route,
+      route,
+      journal
     );
   }
 
-  check(kind: "maxCalls" | "maxDecisions", count: number): void {
-    for (const budget of this.budgets)
-      if (count > budget.limits[kind] - budget[kind])
-        limit(kind, budget.limits[kind], budget[kind], count, budget.id);
+  identity(turn: number, call?: string): AgentExecutionIdentity | undefined {
+    return this.journal
+      ? Object.freeze({
+          id: this.journal.key,
+          agent: this.agentKey,
+          turn,
+          ...(call === undefined ? {} : { call }),
+        })
+      : undefined;
   }
 
-  reserve(kind: "maxCalls" | "maxDecisions", count: number, signal?: AbortSignal): void {
+  check(kind: "maxCalls" | "maxDecisions", count: number): void {
+    for (const budget of this.budgets) {
+      const usage = budget.journal?.budget(budget.key) ?? budget;
+      if (count > budget.limits[kind] - usage[kind])
+        limit(kind, budget.limits[kind], usage[kind], count, budget.id);
+    }
+  }
+
+  private chargeLocal(
+    kind: "maxCalls" | "maxDecisions",
+    count: number,
+    signal?: AbortSignal
+  ): void {
     throwIfAborted(signal, "Agent admission");
     this.check(kind, count);
-    // No await between checking every ancestor and charging the complete batch. No refunds.
-    for (const budget of this.budgets) budget[kind] += count;
+    for (const budget of this.budgets) if (!budget.journal) budget[kind] += count;
   }
 
-  delegate(): AgentExecutionScope {
+  private get admissionJournal(): AgentCheckpointSession | undefined {
+    return this.budgets.find((budget) => budget.journal)?.journal;
+  }
+
+  private get durableBudgets() {
+    return this.budgets.filter((budget) => budget.journal);
+  }
+
+  async beginDecision(signal?: AbortSignal): Promise<void> {
+    this.chargeLocal("maxDecisions", 1, signal);
+    await this.admissionJournal?.reserve(this.durableBudgets, "maxDecisions", 1);
+  }
+
+  async admitCalls(count: number, signal?: AbortSignal): Promise<void> {
+    if (this.journal?.decision(this.agentKey)?.admitted) return;
+    this.chargeLocal("maxCalls", count, signal);
+    if (this.journal) await this.journal.admitCalls(this.agentKey, this.durableBudgets, count);
+    else await this.admissionJournal?.reserve(this.durableBudgets, "maxCalls", count);
+  }
+
+  child(identity: { pipelineId: string; stepId: string; itemKey?: string }): AgentExecutionScope {
+    const route = [
+      ...this.route,
+      JSON.stringify([
+        "pipeline",
+        identity.pipelineId,
+        identity.stepId,
+        identity.itemKey ?? null,
+        null, // Reserved checkpoint route slot; keep existing execution keys stable.
+      ]),
+    ];
+    return new AgentExecutionScope(
+      this.budgets,
+      this.queue,
+      this.depth,
+      this.environment,
+      route,
+      this.agentRoute,
+      this.journal
+    );
+  }
+
+  delegate(turn: number, call: string): AgentExecutionScope {
     for (const budget of this.budgets) {
       const consumed = this.depth - budget.depth;
       if (consumed >= budget.limits.maxDepth)
         limit("maxDepth", budget.limits.maxDepth, consumed, 1, budget.id);
     }
-    return new AgentExecutionScope(this.budgets, this.queue, this.depth + 1, this.environment);
+    const route = [...this.agentRoute, JSON.stringify(["call", turn, call])];
+    return new AgentExecutionScope(
+      this.budgets,
+      this.queue,
+      this.depth + 1,
+      this.environment,
+      route,
+      this.agentRoute,
+      this.journal
+    );
   }
 
   run<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
