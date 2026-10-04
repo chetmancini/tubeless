@@ -11,7 +11,8 @@ export function optionalToolField<T>(schema: WireSchema<T>) {
 
 /** Build a built-in tool's object boundary from its declared field schemas. */
 export function toolObject<const Shape extends Readonly<Record<string, WireSchema<unknown>>>>(
-  shape: Shape
+  shape: Shape,
+  check?: (value: ReturnType<ReturnType<typeof wireObject<Shape>>["decode"]>) => void
 ) {
   const schema = wireObject(shape);
   const fields = Object.keys(shape);
@@ -29,7 +30,9 @@ export function toolObject<const Shape extends Readonly<Record<string, WireSchem
             Object.keys(value).some((key) => !fields.includes(key))
           )
             throw new Error("Unknown tool argument");
-          return { value: schema.decode(value, "tool") };
+          const decoded = schema.decode(value, "tool");
+          check?.(decoded);
+          return { value: decoded };
         } catch (error) {
           return { issues: [{ message: error instanceof Error ? error.message : String(error) }] };
         }

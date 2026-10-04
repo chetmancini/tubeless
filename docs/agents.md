@@ -69,7 +69,10 @@ to disable discovery. Context is loaded once per invocation; simultaneous and la
 runs have independent state. Missing instruction files are allowed; unreadable,
 non-text, or oversized files fail before a model request rather than silently
 discarding guidance. Each file uses the read tool's 16 KiB/2,000-line bounds;
-the complete prompt is capped at 32 KiB and tasks at 16 KiB of UTF-8.
+guidance paths must be nonblank and at most 4,096 characters. The complete prompt,
+including paths, headers and separators, is capped at 32 KiB of UTF-8 before each
+section is retained. Loading stops at the first section that exceeds the budget.
+Tasks are capped at 16 KiB of UTF-8.
 
 `AgentModel` is a provider-independent callback. It receives the task, instructions,
 its previous plain-data `conversation` (initially `null`), ordered outcomes from the
@@ -545,3 +548,59 @@ execution, and completion without a recorded finish decision. Detailed Studio
 presentation remains a separate slice.
 
 The harness executes in process. Crash-safe resume remains a later stage.
+
+## Execution environments
+
+The default local environment uses the host's filesystem and shell permissions.
+Supply `environment` to either factory to place all default workspace tools and
+project-guidance discovery in a different workspace:
+
+```ts
+import { defineModelAgent, type AgentEnvironment } from "tubeless/agent";
+import { openaiModel } from "tubeless/agent/openai";
+
+function agentForWorkspace(environment: AgentEnvironment) {
+  return defineModelAgent({ id: "remote-coding", model: openaiModel(), environment });
+}
+```
+
+An `AgentEnvironment` owns `resolveCwd`, `projectInstructions`, `read`, `write`,
+`edit`, `bash`, `list`, and `search`. Implement them against your sandbox or
+remote service using the declared typed results and cancellation signal.
+Environment factories, workspace resolution, guidance loading and default tools
+recheck cancellation before and after their work. If an operation rejects while
+the signal is aborted, the run retains the signal's cancellation reason even when
+the adapter throws an SDK-specific error. Without an aborted signal, adapter errors
+keep their ordinary failure semantics. Active operations still settle before the
+run returns.
+All byte limits below count UTF-8 data and apply at the shared tool boundary:
+
+- Limit `write.content`, `edit.oldText`, and `edit.newText` to 1 MiB each. Oversized
+  arguments fail validation before any call in the batch starts.
+- Return at most 16 KiB of read content or combined bash stdout/stderr.
+- Return up to 200 listing entries with at most 16 KiB of retained names.
+- Return up to 50 search matches with at most 1,024 bytes per snippet and 16 KiB
+  of combined path/text content.
+
+Oversized results fail validation before state commits. Apply truncation in the
+backend and set `truncated` when omitting text or results. Enforce file size and
+mutation semantics in the backend as well, including the completed file after
+an edit. No local guidance or filesystem fallback is used for an explicit environment. Its stable `id`
+identifies the workspace authority, and cwd identifies the workspace within it.
+Custom tools and decision callbacks
+receive `context.environment`. Composed children inherit it unless they declare
+their own environment. Custom closures remain responsible for using that
+authority instead of accessing the host directly.
+
+An environment may be a capability object or an async factory. The factory is
+resolved once per live invocation and is never called by planning or skipped
+dry runs. Model agents and agents with an explicit environment resolve cwd once
+before decisions and tools. `createNodeAgentEnvironment()` from
+`tubeless/agent/node` exposes the local adapter explicitly. Environments supply
+capabilities, not a sandbox guarantee: isolation and remote-process termination
+belong to the backend. The optional Node adapter remains outside
+the provider-independent contracts.
+
+Run the credential-free [environment recipe](../examples/agent-environment.ts)
+to list a workspace through an explicit Node adapter, or supply your own
+environment to its factory.

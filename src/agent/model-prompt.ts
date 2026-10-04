@@ -1,7 +1,8 @@
-import { lstat, realpath } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { readTool } from "./default-tool-files.js";
 import { throwIfAborted } from "../utilities/abort.js";
+import { environmentOperation, type AgentEnvironment } from "./environment.js";
+import { MAX_OUTPUT_BYTES } from "./default-tool-limits.js";
+
+const MAX_PROMPT_BYTES = 32_768;
 
 const defaultAgentPrompt = `You are a capable coding, writing, and computer use agent working in the user's workspace.
 Before choosing tools, resolve prerequisites:
@@ -20,52 +21,55 @@ Run appropriate checks after changes. Never claim a check passed unless its tool
 If output is truncated or context was compacted, read the source again when exact text matters.
 Finish only when the task is complete or blocked. State what changed, what was verified, and any remaining limitation concisely.`;
 
-function missing(error: unknown) {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
-
 export async function modelInstructions(
   cwd: string,
   instructions: string | undefined,
   projectContext: boolean,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  environment?: AgentEnvironment
 ) {
   throwIfAborted(signal, "Load project instructions");
-  const workspace = projectContext ? await realpath(cwd) : resolve(cwd);
-  const sections = [defaultAgentPrompt, `Working directory: ${workspace}`];
-  if (projectContext) {
-    const ancestors: string[] = [];
-    let directory = workspace;
-    while (true) {
-      throwIfAborted(signal, "Load project instructions");
-      ancestors.push(directory);
-      const git = await lstat(join(directory, ".git")).catch((error: unknown) => {
-        if (!missing(error)) throw error;
-        return undefined;
-      });
-      if (git) break;
-      const parent = dirname(directory);
-      if (parent === directory) {
-        // Outside a repository, only the explicit workspace is in scope.
-        ancestors.splice(1);
-        break;
-      }
-      directory = parent;
+  const env = environment ?? (await import("./node-environment.js")).createNodeAgentEnvironment();
+  const workspace = environment
+    ? cwd
+    : await environmentOperation({ cwd, signal }, () => env.resolveCwd({ cwd, signal }));
+  const sections: string[] = [];
+  const encoder = new TextEncoder();
+  let promptBytes = 0;
+  function append(...parts: string[]) {
+    let sectionBytes = sections.length ? 2 : 0;
+    for (const part of parts) {
+      if (part.length > MAX_PROMPT_BYTES - promptBytes - sectionBytes)
+        throw new Error(`Agent instructions exceed ${MAX_PROMPT_BYTES} UTF-8 bytes`);
+      sectionBytes += encoder.encode(part).length;
+      if (promptBytes + sectionBytes > MAX_PROMPT_BYTES)
+        throw new Error(`Agent instructions exceed ${MAX_PROMPT_BYTES} UTF-8 bytes`);
     }
-    for (const path of ancestors.reverse().map((directory) => join(directory, "AGENTS.md"))) {
-      try {
-        const file = await readTool({ path, maxLines: 2000 }, { cwd, signal });
-        if (file.truncated) throw new Error(`Project instructions exceed read limits: ${path}`);
-        sections.push(`Project instructions from ${path}:\n${file.content}`);
-      } catch (error) {
-        if (!missing(error)) throw error;
-      }
+    sections.push(parts.join(""));
+    promptBytes += sectionBytes;
+  }
+  append(defaultAgentPrompt);
+  append("Working directory: ", workspace);
+  if (projectContext) {
+    const context = { cwd: workspace, signal };
+    for (const file of await environmentOperation(context, () =>
+      env.projectInstructions(context)
+    )) {
+      const path = file.path;
+      if (typeof path !== "string" || path.length > 4096 || !path.trim())
+        throw new Error("Project instruction path must be nonblank and at most 4096 characters");
+      const content = file.content;
+      if (
+        typeof content !== "string" ||
+        content.length > MAX_OUTPUT_BYTES ||
+        encoder.encode(content).length > MAX_OUTPUT_BYTES ||
+        content.split("\n").length > 2000
+      )
+        throw new Error("Project instructions exceed read limits or contain invalid data");
+      append("Project instructions from ", path, ":\n", content);
     }
   }
-  if (instructions) sections.push(`Application instructions:\n${instructions}`);
-  const prompt = sections.join("\n\n");
-  if (Buffer.byteLength(prompt) > 32_768)
-    throw new Error("Agent instructions exceed 32768 UTF-8 bytes");
+  if (instructions) append("Application instructions:\n", instructions);
   throwIfAborted(signal, "Load project instructions");
-  return prompt;
+  return sections.join("\n\n");
 }

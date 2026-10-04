@@ -1,4 +1,4 @@
-import { realpath } from "node:fs/promises";
+import type { AgentEnvironmentProvider } from "./environment.js";
 import type { StandardSchemaV1 } from "../core/pipeline-types.js";
 import type { AgentLimits, AgentOutcome, Tools } from "./agent-types.js";
 import type { AgentModel } from "./model-types.js";
@@ -35,6 +35,7 @@ export function defineModelAgent<
   readonly projectContext?: boolean;
   readonly tools?: Registry;
   readonly limits?: AgentLimits;
+  readonly environment?: AgentEnvironmentProvider;
 }) {
   const { model, instructions, projectContext = true } = config;
   if (
@@ -49,13 +50,20 @@ export function defineModelAgent<
       inputSchema,
       resultSchema: answer,
       initialState: ({ task }): ModelState => {
-        if (Buffer.byteLength(task) > 16_384) throw new Error("Task exceeds 16384 UTF-8 bytes");
+        if (new TextEncoder().encode(task).length > 16_384)
+          throw new Error("Task exceeds 16384 UTF-8 bytes");
         return { conversation: null, outcomes: [] };
       },
       decide: async (state, context) => {
         const prompt =
           state.instructions ??
-          (await modelInstructions(context.cwd, instructions, projectContext, context.signal));
+          (await modelInstructions(
+            context.cwd,
+            instructions,
+            projectContext,
+            context.signal,
+            context.environment
+          ));
         const response = await model(
           { ...state, instructions: prompt, task: context.options.task },
           context
@@ -71,6 +79,6 @@ export function defineModelAgent<
       },
       reduce: (state, outcomes) => ({ ...state, outcomes }),
     },
-    realpath
+    true
   );
 }

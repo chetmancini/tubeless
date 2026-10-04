@@ -25,11 +25,14 @@ test("the published evaluation has complete call/result evidence for every passi
   }
 });
 
-test("the published evaluation matches the evaluator and model sources", () => {
-  const { sourceHashes } = JSON.parse(read("agent-evaluation.json"));
+test("the historical evaluation matches its archived evaluator and model sources", () => {
+  const { sourceHashes, sourceSnapshot } = JSON.parse(read("agent-evaluation.json"));
+  assert.equal(sourceSnapshot, "agent-evaluation-sources.json");
+  const { revision, sources } = JSON.parse(read(sourceSnapshot));
+  assert.match(revision, /^[a-f0-9]{40}$/);
+  assert.deepEqual(Object.keys(sources).sort(), Object.keys(sourceHashes).sort());
   for (const path of ["src/agent/model-prompt.ts", "src/agent/openai.ts", "scripts/eval-agent.mjs"]) {
-    const source = readFileSync(new URL(`../../${path}`, import.meta.url));
-    assert.equal(sourceHashes[path], createHash("sha256").update(source).digest("hex"), path);
+    assert.equal(sourceHashes[path], createHash("sha256").update(sources[path]).digest("hex"), path);
   }
 });
 

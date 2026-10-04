@@ -49,7 +49,9 @@ Set limits on turns, calls, nesting, and concurrency. Cancel with an AbortSignal
 
 Inspect which tools were called, what failed, and which subagent did the work. Parent and child runs stay connected in the history.
 
-Execution is in process; crash-safe resume is not supported yet. Workspace tools use host permissions and are not sandboxed.
+Supply an execution environment to route workspace tools and project guidance to a remote service. Child agents inherit it. [Try the environment recipe](${githubBlob("examples/agent-environment.ts")}).
+
+Execution is in process; crash-safe resume is not supported yet. The default workspace tools use host permissions. Your environment backend supplies isolation.
 
 - [Agent documentation](${absUrl("docs/agents.md")})
 - [Examples and recorded runs](${absUrl("agent-examples.md")})

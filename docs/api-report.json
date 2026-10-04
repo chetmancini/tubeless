@@ -1,18 +1,29 @@
 {
   "modules": [
     {
+      "declaration": "./dist/agent/node.d.ts",
+      "exports": ["createNodeAgentEnvironment"],
+      "sha256": "0d4d130ba7c4b52294e96aee31c64f5c2013b38bf0b34bee7e91d1a6b3e1e411",
+      "specifier": "tubeless/agent/node"
+    },
+    {
       "declaration": "./dist/agent/agent.d.ts",
       "exports": [
         "AgentCall",
         "AgentDecision",
         "AgentDecisionContext",
+        "AgentEnvironment",
+        "AgentEnvironmentContext",
+        "AgentEnvironmentProvider",
         "AgentLimits",
         "AgentModel",
         "AgentModelRequest",
         "AgentModelResponse",
         "AgentOutcome",
+        "AgentProjectInstruction",
         "AgentState",
         "AgentTool",
+        "AgentToolContext",
         "DefaultAgentTools",
         "defineAgent",
         "defineModelAgent",
@@ -20,7 +31,7 @@
         "pipelineTool",
         "ToolError"
       ],
-      "sha256": "a10be7265ec35563e37c9bdfa2b9fdcfa494ad516e97ed11c490fc8a38c90109",
+      "sha256": "61fc61ddd12badd73d47850ac4be340dbdccddc10c2e3031f789f0541849c202",
       "specifier": "tubeless/agent"
     },
     {
@@ -241,7 +252,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "72e99bb502057e79673e3c116383c80696d506aa53e2bc5719c617ef0612a72c",
+      "sha256": "03736bef631003145cc8b39459ed4a80d0ffd7a89de4b79c67779921004567d1",
       "specifier": "tubeless/agent/openai"
     }
   ],

@@ -81,7 +81,17 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   `mapOptions` together. Follow the [delegation recipe](../examples/agent-delegation.ts).
   Calls, decisions, depth, and leaf concurrency obey every ancestor limit; turns
   are local. Child options are prevalidated once for the whole batch. Crash-safe
-  resume is a later stage. Dry runs skip decisions and handler tools unless both provide
+  resume is a later stage. Supply an `AgentEnvironment` for remote guidance, files
+  and commands; children inherit it. Custom tools receive `context.environment`.
+  Environment operations preserve signal cancellation across SDK-specific errors
+  and late results, while still draining active work.
+  Guidance paths are nonblank and limited to 4,096 characters; guidance is checked
+  against the 32 KiB UTF-8 prompt budget before each section is retained.
+  Remote tools obey the same UTF-8 byte limits as local tools. Oversized write/edit
+  arguments fail before batch dispatch; oversized read, bash, listing and search
+  results fail before state commits. See [the environment contract](./agents.md#execution-environments).
+  Use the [environment recipe](../examples/agent-environment.ts) and the optional
+  local adapter from `tubeless/agent/node`. Dry runs skip decisions and handler tools unless both provide
   preview handlers. Agents remain ordinary pipelines for projects and CLI use.
   Use `fromPipeline` to feed a validated answer into ordinary dependent work;
   the [composition recipe](../examples/agent-pipeline.ts) includes credential-free previews.

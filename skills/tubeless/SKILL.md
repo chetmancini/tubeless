@@ -154,7 +154,10 @@ Read the corresponding package recipe before using these features:
   Record with `--trace` or `--store`; `tubeless history <run-id>` joins agent turns,
   calls and child agents with state versions, failures and termination. JSON
   details expose `agentHistory.agents`; missing observations remain unknown.
-  Crash-safe resume is not yet implemented.
+  Crash-safe resume is not yet implemented. Supply `environment` for remote
+  guidance, files and commands; children inherit it. Custom tools should use
+  `context.environment` for workspace authority. The optional local adapter lives
+  in `tubeless/agent/node`; see `examples/agent-environment.ts`.
   Every agent includes `read`, `write`, `edit`, `bash`, `list`, and `search`.
   Custom `tools` extend the registry or replace built-ins by name. Reducers must
   narrow outcomes by `ok` and `tool`. Paths use the run cwd and host permissions;
