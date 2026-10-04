@@ -15,10 +15,9 @@ import {
 } from "./agent-state.js";
 import { compileTool } from "./tools.js";
 import { defaultTools } from "./default-tools.js";
-import { setExecutionScope } from "../core/execution-scope.js";
-import { AgentExecutionScope, resolvedLimits } from "./execution-scope.js";
+import { resolvedLimits } from "./execution-scope.js";
 import { createAgentTurn, type TurnState } from "./turn.js";
-import { throwIfAborted } from "../utilities/abort.js";
+import { runAgentInvocation } from "./invocation.js";
 import type {
   AgentDefinition,
   AgentDecisionContext,
@@ -61,7 +60,7 @@ export function compileAgent<
   const Registry extends Tools = {},
 >(
   definition: RuntimeAgentDefinition<Id, Options, Result, State, Registry>,
-  resolveCwd?: (cwd: string) => Promise<string>
+  resolveCwd = false
 ): Pipeline<Input<Options>, Output<Result>, "agent", "agent", Id> & {
   readonly optionsSchema: Options;
   readonly definition: PipelineDefinitionSnapshot;
@@ -111,7 +110,6 @@ export function compileAgent<
     maxIterations: limits.maxTurns,
     dryRun: config.dryRun ? undefined : "skip",
     initialState: (_inputs, context): TurnState<State> => {
-      setExecutionScope(context, AgentExecutionScope.enter(context, limits, context.runId));
       return {
         state: ownState(config.initialState(context.options)),
         turn: 1,
@@ -126,15 +124,12 @@ export function compileAgent<
     }),
     transition: (result) => result,
   });
-  const compiledAgent: AnyStep = agent;
-  if (resolveCwd) {
-    // Resolve once before iteration so decisions and all child calls share one cwd.
-    const run = compiledAgent.run;
-    compiledAgent.run = async (inputs, context) => {
-      throwIfAborted(context.signal, "Agent workspace");
-      return run(inputs, { ...context, cwd: await resolveCwd(context.cwd) });
-    };
-  }
+  const compiledAgent: AnyStep<Output<Options>> = agent;
+  const run = compiledAgent.run;
+  compiledAgent.run = (inputs, context) =>
+    runAgentInvocation({ environment: config.environment, limits, resolveCwd }, context, (scoped) =>
+      run(inputs, scoped)
+    );
   Object.defineProperty(agent, STEP_AGENT, {
     value: Object.freeze({
       limits,

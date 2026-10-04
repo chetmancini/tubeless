@@ -16,9 +16,9 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { PipelineStepContext } from "../core/pipeline-types.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { ToolError } from "./tools.js";
+import { MAX_FILE_BYTES } from "./default-tool-limits.js";
 
 type Context = Pick<PipelineStepContext<object>, "cwd" | "signal">;
-export const MAX_FILE_BYTES = 1_048_576;
 export const MAX_OUTPUT_BYTES = 16_384;
 
 export function clippedText(text: string, maxBytes = MAX_OUTPUT_BYTES) {

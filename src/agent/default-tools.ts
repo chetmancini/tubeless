@@ -9,17 +9,9 @@ import {
   wireString,
   wireUnion,
 } from "../tracing/wire-schema.js";
-import { bashTool } from "./default-tool-bash.js";
-import {
-  editTool,
-  listTool,
-  MAX_FILE_BYTES,
-  readTool,
-  searchTool,
-  writeTool,
-} from "./default-tool-files.js";
 import { optionalToolField, toolObject } from "./default-tool-schema.js";
 import { defineTool } from "./tools.js";
+import { MAX_FILE_BYTES } from "./default-tool-limits.js";
 
 const path = wireString({ maxLength: 4096 });
 const text = wireString({ allowEmpty: true, maxLength: MAX_FILE_BYTES });
@@ -57,15 +49,15 @@ export const defaultTools = Object.freeze({
       totalLines: count,
       truncated: wireBoolean(),
     }),
-    run: readTool,
-    dryRun: readTool,
+    run: (input, context) => context.environment.read(input, context),
+    dryRun: (input, context) => context.environment.read(input, context),
   }),
   write: defineTool({
     description:
       "Create or replace a UTF-8 file (up to 1 MiB), creating parent directories and following symlinks, including missing targets. Paths resolve from the run cwd. Atomic replacement requires a writable parent directory and permission to preserve existing ownership. Skipped in dry runs.",
     inputSchema: toolObject({ path, content: text }),
     outputSchema: written,
-    run: writeTool,
+    run: (input, context) => context.environment.write(input, context),
   }),
   edit: defineTool({
     description:
@@ -76,7 +68,7 @@ export const defaultTools = Object.freeze({
       newText: text,
     }),
     outputSchema: written,
-    run: editTool,
+    run: (input, context) => context.environment.edit(input, context),
   }),
   bash: defineTool({
     description:
@@ -95,7 +87,7 @@ export const defaultTools = Object.freeze({
       timedOut: wireBoolean(),
       truncated: wireBoolean(),
     }),
-    run: bashTool,
+    run: (input, context) => context.environment.bash(input, context),
   }),
   list: defineTool({
     description:
@@ -112,8 +104,8 @@ export const defaultTools = Object.freeze({
       ),
       truncated: wireBoolean(),
     }),
-    run: listTool,
-    dryRun: listTool,
+    run: (input, context) => context.environment.list(input, context),
+    dryRun: (input, context) => context.environment.list(input, context),
   }),
   search: defineTool({
     description:
@@ -127,8 +119,8 @@ export const defaultTools = Object.freeze({
       truncated: wireBoolean(),
       skippedFiles: count,
     }),
-    run: searchTool,
-    dryRun: searchTool,
+    run: (input, context) => context.environment.search(input, context),
+    dryRun: (input, context) => context.environment.search(input, context),
   }),
 });
 

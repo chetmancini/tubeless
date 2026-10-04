@@ -1,6 +1,7 @@
 import { executionScope, type ExecutionScope } from "../core/execution-scope.js";
 import { createAbortError, throwIfAborted } from "../utilities/abort.js";
 import { agentError } from "./agent-state.js";
+import type { AgentEnvironment } from "./environment.js";
 import type { AgentLimits } from "./agent-types.js";
 
 export function limit(
@@ -138,17 +139,24 @@ export class AgentExecutionScope implements ExecutionScope {
   private constructor(
     private readonly budgets: readonly Budget[],
     private readonly queue: LeafQueue,
-    private readonly depth: number
+    private readonly depth: number,
+    readonly environment: AgentEnvironment
   ) {}
 
-  static enter(context: object, limits: Required<AgentLimits>, id: string): AgentExecutionScope {
+  static enter(
+    context: object,
+    limits: Required<AgentLimits>,
+    id: string,
+    environment: AgentEnvironment
+  ): AgentExecutionScope {
     const parent = agentScope(context);
     const depth = parent?.depth ?? 0;
     const budget: Budget = { id, depth, limits, maxCalls: 0, maxDecisions: 0, active: 0 };
     return new AgentExecutionScope(
       [...(parent?.budgets ?? []), budget],
       parent?.queue ?? new LeafQueue(),
-      depth
+      depth,
+      environment
     );
   }
 
@@ -171,7 +179,7 @@ export class AgentExecutionScope implements ExecutionScope {
       if (consumed >= budget.limits.maxDepth)
         limit("maxDepth", budget.limits.maxDepth, consumed, 1, budget.id);
     }
-    return new AgentExecutionScope(this.budgets, this.queue, this.depth + 1);
+    return new AgentExecutionScope(this.budgets, this.queue, this.depth + 1, this.environment);
   }
 
   run<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {

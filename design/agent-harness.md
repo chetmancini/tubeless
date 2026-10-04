@@ -23,7 +23,9 @@ Stage 6 completes the learning surface with an
 CLI history tests and installed-package execution of the recipe and its previews.
 The [release acceptance checklist](../RELEASE_CHECKLIST.md#in-process-agent-acceptance)
 maps each gate to existing checks and the separate paid workspace evaluations.
-The first agent release executes in process; crash-safe resume follows later.
+Agent execution remains in process; crash-safe resume follows later. Typed
+execution environments supply local or remote workspace authority; see
+[the environment contract](../docs/agents.md#execution-environments).
 
 The [type probes](./agent-harness.probes.ts) exercise the implemented public API
 and are checked by `bun run typecheck` and `make check`. Declared fixture schemas

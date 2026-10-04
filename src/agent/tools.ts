@@ -2,7 +2,8 @@ import { compilePipelineTool } from "./pipeline-tool.js";
 import { createSteps, definePipeline } from "../core/pipeline.js";
 import type { PipelineStepContext, StandardSchemaV1 } from "../core/pipeline-types.js";
 import { agentError, checkDescription, checkSchema, jsonDescriptor } from "./agent-state.js";
-import type { AgentTool, Awaitable, Input, Output } from "./agent-types.js";
+import { agentScope } from "./execution-scope.js";
+import type { AgentTool, AgentToolContext, Awaitable, Input, Output } from "./agent-types.js";
 
 /** A handler may throw this error to return a recoverable observation to its agent. */
 export class ToolError extends Error {
@@ -24,10 +25,10 @@ interface ToolDefinition<Arguments extends StandardSchemaV1, Result extends Stan
   readonly inputSchema: Arguments;
   readonly outputSchema: Result;
   readonly inputJsonSchema?: Readonly<Record<string, unknown>>;
-  run(input: Output<Arguments>, context: PipelineStepContext<{}>): Awaitable<Input<Result>>;
+  run(input: Output<Arguments>, context: AgentToolContext): Awaitable<Input<Result>>;
   readonly dryRun?:
     | "skip"
-    | ((input: Output<Arguments>, context: PipelineStepContext<{}>) => Awaitable<Input<Result>>);
+    | ((input: Output<Arguments>, context: AgentToolContext) => Awaitable<Input<Result>>);
 }
 
 const tools = new WeakMap<
@@ -82,7 +83,12 @@ export function compileTool(agentId: string, name: string, tool: AgentTool<unkno
   const { run, dryRun, inputSchema, outputSchema, inputJsonSchema, description } = definition;
   const invoke = async (handler: typeof run, context: PipelineStepContext<ToolInvocation>) => {
     context.reportAttempt(1, context.options.attributes);
-    return handler(context.options.input, { ...context, options: {} });
+    const scope = agentScope(context)!;
+    return handler(context.options.input, {
+      ...context,
+      options: {},
+      environment: scope.environment,
+    });
   };
   const { step } = createSteps<ToolInvocation>();
   const call = step("tool", {
