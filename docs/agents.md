@@ -545,3 +545,42 @@ execution, and completion without a recorded finish decision. Detailed Studio
 presentation remains a separate slice.
 
 The harness executes in process. Crash-safe resume remains a later stage.
+
+## Execution environments
+
+The default local environment uses the host's filesystem and shell permissions.
+Supply `environment` to either factory to place all default workspace tools and
+project-guidance discovery in a different workspace:
+
+```ts
+import { defineModelAgent, type AgentEnvironment } from "tubeless/agent";
+import { openaiModel } from "tubeless/agent/openai";
+
+function agentForWorkspace(environment: AgentEnvironment) {
+  return defineModelAgent({ id: "remote-coding", model: openaiModel(), environment });
+}
+```
+
+An `AgentEnvironment` owns `resolveCwd`, `projectInstructions`, `read`, `write`,
+`edit`, `bash`, `list`, and `search`. Implement them against your sandbox or
+remote service using the declared typed results and cancellation signal.
+Results still pass the normal bounded tool validators. No local guidance or
+filesystem fallback is used for an explicit environment. Its stable `id`
+identifies the workspace authority, and cwd identifies the workspace within it.
+Custom tools and decision callbacks
+receive `context.environment`. Composed children inherit it unless they declare
+their own environment. Custom closures remain responsible for using that
+authority instead of accessing the host directly.
+
+An environment may be a capability object or an async factory. The factory is
+resolved once per live invocation and is never called by planning or skipped
+dry runs. Model agents and agents with an explicit environment resolve cwd once
+before decisions and tools. `createNodeAgentEnvironment()` from
+`tubeless/agent/node` exposes the local adapter explicitly. Environments supply
+capabilities, not a sandbox guarantee: isolation and remote-process termination
+belong to the backend. The optional Node adapter remains outside
+the provider-independent contracts.
+
+Run the credential-free [environment recipe](../examples/agent-environment.ts)
+to list a workspace through an explicit Node adapter, or supply your own
+environment to its factory.

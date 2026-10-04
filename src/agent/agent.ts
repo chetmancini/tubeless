@@ -14,7 +14,15 @@ export type {
   AgentOutcome,
   AgentState,
   AgentTool,
+  AgentToolContext,
 } from "./agent-types.js";
+
+export type {
+  AgentEnvironment,
+  AgentEnvironmentContext,
+  AgentEnvironmentProvider,
+  AgentProjectInstruction,
+} from "./environment.js";
 
 export { defineModelAgent } from "./model-agent.js";
 export type { AgentModel, AgentModelRequest, AgentModelResponse } from "./model-types.js";

@@ -12,6 +12,7 @@ import { PaginatedPipeline } from "../iteration.ts";
 import { ScriptedAgent } from "../agent.ts";
 import { DelegatingAgentCommand } from "../agent-delegation.ts";
 import { AgentPipelineCommand } from "../agent-pipeline.js";
+import { EnvironmentWorkspaceAgent } from "../agent-environment.js";
 import { CodingAgent } from "../agent-model.js";
 import { OpenAIAgentCommand } from "../agent-openai.ts";
 import { WorkspaceAgentCommand } from "../agent-workspace.ts";
@@ -42,6 +43,7 @@ export default defineProject(
     // Live model decisions and tools share the physical run cwd, including through symlinks.
     // Scoped guidance precedes nested file operations and task commands in separate turns.
     CodingAgent,
+    EnvironmentWorkspaceAgent,
     // Record with --trace/--store; history <run-id> shows turns, calls and child agents.
     DelegatingAgentCommand,
     AgentPipelineCommand,

@@ -2,12 +2,27 @@ import { DelegatingAgent } from "../../examples/agent-delegation.js";
 import { AgentPipeline } from "../../examples/agent-pipeline.js";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { ScriptedAgent, runAgentExample } from "../../examples/agent.js";
+import { EnvironmentWorkspaceAgent } from "../../examples/agent-environment.js";
 import { WorkspaceAgent } from "../../examples/agent-workspace.js";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 describe("public agent recipe", () => {
+  it("lists a real workspace through the public Node environment adapter", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "tubeless-environment-recipe-"));
+    try {
+      await writeFile(join(cwd, "fixture.txt"), "workspace fixture");
+      const { answer } = await EnvironmentWorkspaceAgent.runOrThrow(
+        { task: "List workspace" },
+        undefined,
+        { cwd }
+      );
+      expect(JSON.parse(answer).entries).toEqual([{ name: "fixture.txt", kind: "file" }]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
   it("passes a child agent's validated answer to an ordinary dependent step, including previews", async () => {
     expectTypeOf(AgentPipeline.runOrThrow).returns.resolves.toEqualTypeOf<string>();
     for (const dryRun of [false, true]) {

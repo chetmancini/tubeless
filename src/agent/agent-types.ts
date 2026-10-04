@@ -1,4 +1,5 @@
 import type { PipelineStepContext, StandardSchemaV1 } from "../core/pipeline-types.js";
+import type { AgentEnvironment, AgentEnvironmentProvider } from "./environment.js";
 import type { DefaultAgentTools } from "./default-tools.js";
 
 export type Awaitable<T> = T | Promise<T>;
@@ -66,8 +67,14 @@ export interface AgentLimits {
   readonly maxConcurrency?: number;
 }
 
+/** Step services and the workspace capability available to a registered tool. */
+export interface AgentToolContext extends PipelineStepContext<{}> {
+  readonly environment: AgentEnvironment;
+}
+
 /** Model-facing descriptors and ordinary step services, without executable tools. */
 export interface AgentDecisionContext<Options extends object> extends PipelineStepContext<Options> {
+  readonly environment: AgentEnvironment;
   readonly turn: number;
   readonly stateVersion: number;
   readonly capabilities: readonly {
@@ -95,6 +102,8 @@ export interface AgentDefinition<
   /** Extend the standard tools; a custom tool with the same name replaces that default. */
   readonly tools?: Registry;
   readonly limits?: AgentLimits;
+  /** Workspace capabilities; descendants inherit them unless explicitly replaced. */
+  readonly environment?: AgentEnvironmentProvider;
   initialState(options: Output<Options>): State;
   decide(
     state: AgentState<NoInfer<State>>,

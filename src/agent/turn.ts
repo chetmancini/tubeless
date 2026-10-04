@@ -82,6 +82,7 @@ export function createAgentTurn<
           callback(state, {
             ...context,
             options,
+            environment: scope.environment,
             turn,
             stateVersion,
             ...descriptors,

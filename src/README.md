@@ -35,12 +35,15 @@ their source files.
   carries that opaque scope through ordinary child execution and brackets leaf
   handlers; orchestration steps hold no permit. The internal child invocation
   boundary returns full reports for handler-origin error classification.
-  `agent/default-tools.ts` supplies the standard registry; filesystem and bash
-  handlers live beside it, use Node built-ins, and resolve services from each
-  invocation context. Custom names override defaults with matching type inference.
+  `agent/default-tools.ts` supplies the standard registry against the typed
+  `AgentEnvironment`. `node-environment.ts` owns local filesystem, commands and
+  guidance; explicit environments supply remote authority without local fallback.
+  Custom names override defaults with matching type inference.
   `compile-agent.ts` compiles both custom-decision and model-backed agents through
   the same turn pipeline. `model-agent.ts` owns default schemas, prompting and
-  per-run conversation state; `model-prompt.ts` loads scoped project guidance.
+  per-run conversation state; `model-prompt.ts` builds prompts from environment guidance.
+  `invocation.ts` owns environment resolution and invocation-local scope creation.
+  `tubeless/agent/node` exposes the optional local workspace adapter.
   The optional `tubeless/agent/openai` entrypoint owns HTTP, provider protocol and
   compaction. The provider-independent agent entrypoint never imports it.
   `testing/agent.example.test.ts` covers public recipes, including ordinary pipeline

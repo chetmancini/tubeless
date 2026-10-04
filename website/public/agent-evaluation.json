@@ -637,5 +637,6 @@
       "durationMs": 48087
     }
   ],
-  "note": "Recorded live API evaluation in disposable workspaces. Temporary paths are replaced with <workspace>. This is task-specific evidence, not a general reliability guarantee."
+  "note": "Recorded live API evaluation in disposable workspaces. Temporary paths are replaced with <workspace>. This is task-specific evidence, not a general reliability guarantee.",
+  "sourceSnapshot": "agent-evaluation-sources.json"
 }
