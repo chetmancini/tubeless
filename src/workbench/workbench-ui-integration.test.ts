@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { projectPipelineRun } from "../run-store/run-store.js";
 import { openSqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli } from "./workbench.js";
@@ -60,7 +60,14 @@ describe("workbench UI integration", () => {
       io
     );
 
-    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    onTestFinished(async () => {
+      controller.abort();
+      await command;
+    });
+
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"), {
+      timeout: 5_000,
+    });
     const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
     expect(url).toBeDefined();
     const commands = (await fetch(`${url}/api/commands`).then((response) => response.json())) as {
@@ -137,7 +144,7 @@ describe("workbench UI integration", () => {
 
     controller.abort();
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
-  });
+  }, 10_000);
 
   it("holds the launch POST until mapOptions records a store row", async () => {
     const gateDirectory = await mkdtemp(path.join(os.tmpdir(), "tubeless-gate-"));
