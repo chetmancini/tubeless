@@ -83,6 +83,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   are local. Child options are prevalidated once for the whole batch. Crash-safe
   resume is a later stage. Supply an `AgentEnvironment` for remote guidance, files
   and commands; children inherit it. Custom tools receive `context.environment`.
+  Guidance paths are nonblank and limited to 4,096 characters; guidance is checked
+  against the 32 KiB UTF-8 prompt budget before each section is retained.
   Remote tools obey the same UTF-8 byte limits as local tools. Oversized write/edit
   arguments fail before batch dispatch; oversized read, bash, listing and search
   results fail before state commits. See [the environment contract](./agents.md#execution-environments).

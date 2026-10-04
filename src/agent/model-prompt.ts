@@ -1,5 +1,8 @@
 import { throwIfAborted } from "../utilities/abort.js";
 import type { AgentEnvironment } from "./environment.js";
+import { MAX_OUTPUT_BYTES } from "./default-tool-limits.js";
+
+const MAX_PROMPT_BYTES = 32_768;
 
 const defaultAgentPrompt = `You are a capable coding, writing, and computer use agent working in the user's workspace.
 Before choosing tools, resolve prerequisites:
@@ -28,23 +31,40 @@ export async function modelInstructions(
   throwIfAborted(signal, "Load project instructions");
   const env = environment ?? (await import("./node-environment.js")).createNodeAgentEnvironment();
   const workspace = environment ? cwd : await env.resolveCwd({ cwd, signal });
-  const sections = [defaultAgentPrompt, `Working directory: ${workspace}`];
+  const sections: string[] = [];
+  const encoder = new TextEncoder();
+  let promptBytes = 0;
+  function append(...parts: string[]) {
+    let sectionBytes = sections.length ? 2 : 0;
+    for (const part of parts) {
+      if (part.length > MAX_PROMPT_BYTES - promptBytes - sectionBytes)
+        throw new Error(`Agent instructions exceed ${MAX_PROMPT_BYTES} UTF-8 bytes`);
+      sectionBytes += encoder.encode(part).length;
+      if (promptBytes + sectionBytes > MAX_PROMPT_BYTES)
+        throw new Error(`Agent instructions exceed ${MAX_PROMPT_BYTES} UTF-8 bytes`);
+    }
+    sections.push(parts.join(""));
+    promptBytes += sectionBytes;
+  }
+  append(defaultAgentPrompt);
+  append("Working directory: ", workspace);
   if (projectContext) {
     for (const file of await env.projectInstructions({ cwd: workspace, signal })) {
+      const path = file.path;
+      if (typeof path !== "string" || path.length > 4096 || !path.trim())
+        throw new Error("Project instruction path must be nonblank and at most 4096 characters");
+      const content = file.content;
       if (
-        typeof file.path !== "string" ||
-        typeof file.content !== "string" ||
-        new TextEncoder().encode(file.content).length > 16_384 ||
-        file.content.split("\n").length > 2000
+        typeof content !== "string" ||
+        content.length > MAX_OUTPUT_BYTES ||
+        encoder.encode(content).length > MAX_OUTPUT_BYTES ||
+        content.split("\n").length > 2000
       )
         throw new Error("Project instructions exceed read limits or contain invalid data");
-      sections.push(`Project instructions from ${file.path}:\n${file.content}`);
+      append("Project instructions from ", path, ":\n", content);
     }
   }
-  if (instructions) sections.push(`Application instructions:\n${instructions}`);
-  const prompt = sections.join("\n\n");
-  if (new TextEncoder().encode(prompt).length > 32_768)
-    throw new Error("Agent instructions exceed 32768 UTF-8 bytes");
+  if (instructions) append("Application instructions:\n", instructions);
   throwIfAborted(signal, "Load project instructions");
-  return prompt;
+  return sections.join("\n\n");
 }

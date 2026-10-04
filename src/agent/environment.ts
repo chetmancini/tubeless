@@ -15,6 +15,7 @@ export interface AgentEnvironment {
   /** Stable namespace identity; equal IDs refer to the same workspace authority. */
   readonly id: string;
   resolveCwd(context: AgentEnvironmentContext): Awaitable<string>;
+  /** Return guidance with nonblank paths up to 4096 characters and 16 KiB/2000 lines per file. */
   projectInstructions(
     context: AgentEnvironmentContext
   ): Awaitable<readonly AgentProjectInstruction[]>;

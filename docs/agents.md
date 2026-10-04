@@ -69,7 +69,10 @@ to disable discovery. Context is loaded once per invocation; simultaneous and la
 runs have independent state. Missing instruction files are allowed; unreadable,
 non-text, or oversized files fail before a model request rather than silently
 discarding guidance. Each file uses the read tool's 16 KiB/2,000-line bounds;
-the complete prompt is capped at 32 KiB and tasks at 16 KiB of UTF-8.
+guidance paths must be nonblank and at most 4,096 characters. The complete prompt,
+including paths, headers and separators, is capped at 32 KiB of UTF-8 before each
+section is retained. Loading stops at the first section that exceeds the budget.
+Tasks are capped at 16 KiB of UTF-8.
 
 `AgentModel` is a provider-independent callback. It receives the task, instructions,
 its previous plain-data `conversation` (initially `null`), ordered outcomes from the
