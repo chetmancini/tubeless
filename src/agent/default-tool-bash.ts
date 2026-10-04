@@ -2,7 +2,8 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import type { PipelineStepContext } from "../core/pipeline-types.js";
 import { createAbortError, throwIfAborted } from "../utilities/abort.js";
-import { clippedText, MAX_OUTPUT_BYTES } from "./default-tool-files.js";
+import { clippedText } from "./default-tool-files.js";
+import { MAX_OUTPUT_BYTES } from "./default-tool-limits.js";
 import { ToolError } from "./tools.js";
 
 export function bashTool(

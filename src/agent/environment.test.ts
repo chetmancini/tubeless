@@ -1,8 +1,9 @@
 import { expect, it, vi } from "vitest";
 import { createSteps, definePipeline } from "../core/pipeline.js";
-import { defineModelAgent, defineTool, pipelineTool } from "./agent.js";
+import { defineAgent, defineModelAgent, defineTool, pipelineTool } from "./agent.js";
 import type { AgentEnvironment } from "./environment.js";
 import { toolObject } from "./default-tool-schema.js";
+import { emptyInput, textSchema } from "./agent.test-support.js";
 
 function remote(): AgentEnvironment {
   return {
@@ -270,3 +271,85 @@ it("resolves asynchronous factories independently for concurrent invocations", a
   ).toEqual([{ answer: "/remote/one" }, { answer: "/remote/two" }]);
   expect(factory).toHaveBeenCalledTimes(2);
 });
+
+function searchAgent(environment: AgentEnvironment) {
+  const decide = vi.fn((state: string, context: { turn: number }) =>
+    context.turn === 1
+      ? { kind: "continue", calls: [{ id: "search", tool: "search", input: { query: "needle" } }] }
+      : { kind: "finish", result: state }
+  );
+  const reduce = vi.fn((_state: string, outcomes: unknown) => JSON.stringify(outcomes));
+  const agent = defineAgent({
+    id: "search-byte-boundary",
+    environment,
+    inputSchema: emptyInput,
+    resultSchema: textSchema,
+    initialState: () => "",
+    decide,
+    dryRun: decide,
+    reduce,
+  });
+  return { agent, decide, reduce };
+}
+
+it.each([false, true])(
+  "rejects oversized remote search output before committing state (dryRun=%s)",
+  async (dryRun) => {
+    const cases = [
+      { matches: [{ path: "/remote/a", line: 1, text: "x".repeat(1025) }], truncated: false },
+      { matches: [{ path: "/remote/a", line: 1, text: "é".repeat(513) }], truncated: true },
+      {
+        matches: Array.from({ length: 16 }, (_, index) => ({
+          path: "/remote/a",
+          line: index + 1,
+          text: "x".repeat(1024),
+        })),
+        truncated: false,
+      },
+      {
+        matches: Array.from({ length: 16 }, (_, index) => ({
+          path: "é".repeat(256),
+          line: index + 1,
+          text: "x".repeat(768),
+        })),
+        truncated: true,
+      },
+    ];
+    for (const result of cases) {
+      const environment = remote();
+      environment.search = vi.fn(() => ({ ...result, skippedFiles: 0 }));
+      const { agent, decide, reduce } = searchAgent(environment);
+      expect((await agent.run({}, { dryRun })).status).toBe("failed");
+      expect(environment.search).toHaveBeenCalledTimes(1);
+      expect(reduce).not.toHaveBeenCalled();
+      expect(decide).toHaveBeenCalledTimes(1);
+    }
+  }
+);
+
+it.each([false, true])(
+  "preserves remote search output at the UTF-8 byte limits (dryRun=%s)",
+  async (dryRun) => {
+    const cases = [
+      [{ path: "/remote/a", line: 1, text: "🙂".repeat(256) }],
+      Array.from({ length: 16 }, (_, index) => ({
+        path: "/remote/" + "é".repeat(124),
+        line: index + 1,
+        text: "🙂".repeat(192),
+      })),
+      [],
+    ];
+    for (const matches of cases) {
+      const result = { matches, truncated: true, skippedFiles: 3 };
+      const environment = remote();
+      environment.search = vi.fn(() => result);
+      const { agent, decide, reduce } = searchAgent(environment);
+      expect(JSON.parse(await agent.runOrThrow({}, { dryRun }))).toEqual([
+        { id: "search", tool: "search", ok: true, value: result },
+      ]);
+      expect(environment.search).toHaveBeenCalledTimes(1);
+      expect(reduce).toHaveBeenCalledTimes(1);
+      expect(decide).toHaveBeenCalledTimes(2);
+    }
+  }
+);

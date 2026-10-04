@@ -57,6 +57,7 @@ export interface AgentEnvironment {
     entries: { name: string; kind: "file" | "directory" | "symlink" | "other" }[];
     truncated: boolean;
   }>;
+  /** Return up to 50 matches, 1024 UTF-8 bytes per snippet and 16 KiB of path/text content. */
   search(
     input: { query: string; path?: string | null },
     context: AgentEnvironmentContext

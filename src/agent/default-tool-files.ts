@@ -16,10 +16,13 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { PipelineStepContext } from "../core/pipeline-types.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { ToolError } from "./tools.js";
-import { MAX_FILE_BYTES } from "./default-tool-limits.js";
+import {
+  MAX_FILE_BYTES,
+  MAX_OUTPUT_BYTES,
+  MAX_SEARCH_SNIPPET_BYTES,
+} from "./default-tool-limits.js";
 
 type Context = Pick<PipelineStepContext<object>, "cwd" | "signal">;
-export const MAX_OUTPUT_BYTES = 16_384;
 
 export function clippedText(text: string, maxBytes = MAX_OUTPUT_BYTES) {
   const bytes = Buffer.from(text);
@@ -245,9 +248,9 @@ export async function searchTool(input: { query: string; path?: string | null },
         const source = lines[index]!;
         const match = source.indexOf(input.query);
         if (match < 0) continue;
-        const line = clippedText(source, 1024);
+        const line = clippedText(source, MAX_SEARCH_SNIPPET_BYTES);
         if (line.truncated && !line.text.includes(input.query))
-          line.text = clippedText(source.slice(match), 1024).text;
+          line.text = clippedText(source.slice(match), MAX_SEARCH_SNIPPET_BYTES).text;
         bytes += Buffer.byteLength(path) + Buffer.byteLength(line.text);
         if (matches.length === 50 || bytes > MAX_OUTPUT_BYTES) {
           truncated = true;

@@ -11,7 +11,11 @@ import {
 } from "../tracing/wire-schema.js";
 import { optionalToolField, toolObject } from "./default-tool-schema.js";
 import { defineTool } from "./tools.js";
-import { MAX_FILE_BYTES } from "./default-tool-limits.js";
+import {
+  MAX_FILE_BYTES,
+  MAX_OUTPUT_BYTES,
+  MAX_SEARCH_SNIPPET_BYTES,
+} from "./default-tool-limits.js";
 
 const path = wireString({ maxLength: 4096 });
 const text = wireString({ allowEmpty: true, maxLength: MAX_FILE_BYTES });
@@ -115,7 +119,31 @@ export const defaultTools = Object.freeze({
       path: optionalToolField(path),
     }),
     outputSchema: toolObject({
-      matches: wireArray(wireObject({ path, line: count, text }), { maxItems: 50 }),
+      matches: wireRefine(
+        wireArray(
+          wireObject({
+            path,
+            line: count,
+            text: wireRefine(
+              wireString({ allowEmpty: true, maxLength: MAX_SEARCH_SNIPPET_BYTES }),
+              (value) => {
+                if (new TextEncoder().encode(value).length > MAX_SEARCH_SNIPPET_BYTES)
+                  throw new Error(`Search snippet exceeds ${MAX_SEARCH_SNIPPET_BYTES} UTF-8 bytes`);
+              }
+            ),
+          }),
+          { maxItems: 50 }
+        ),
+        (matches) => {
+          const encoder = new TextEncoder();
+          let bytes = 0;
+          for (const match of matches) {
+            bytes += encoder.encode(match.path).length + encoder.encode(match.text).length;
+            if (bytes > MAX_OUTPUT_BYTES)
+              throw new Error(`Search path/text content exceeds ${MAX_OUTPUT_BYTES} UTF-8 bytes`);
+          }
+        }
+      ),
       truncated: wireBoolean(),
       skippedFiles: count,
     }),

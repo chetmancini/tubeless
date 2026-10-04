@@ -564,7 +564,11 @@ function agentForWorkspace(environment: AgentEnvironment) {
 An `AgentEnvironment` owns `resolveCwd`, `projectInstructions`, `read`, `write`,
 `edit`, `bash`, `list`, and `search`. Implement them against your sandbox or
 remote service using the declared typed results and cancellation signal.
-Results still pass the normal bounded tool validators. No local guidance or
+Results still pass the normal bounded tool validators. Return search snippets
+with at most 1,024 UTF-8 bytes each and at most 16 KiB of combined path/text
+content across up to 50 matches. Oversized results fail validation before state
+commits. Apply truncation in the backend and set `truncated` when omitting text
+or results. No local guidance or
 filesystem fallback is used for an explicit environment. Its stable `id`
 identifies the workspace authority, and cwd identifies the workspace within it.
 Custom tools and decision callbacks
