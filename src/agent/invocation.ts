@@ -1,7 +1,11 @@
 import { setExecutionScope } from "../core/execution-scope.js";
 import type { PipelineStepContext } from "../core/pipeline-types.js";
 import { throwIfAborted } from "../utilities/abort.js";
-import { checkEnvironment, type AgentEnvironmentProvider } from "./environment.js";
+import {
+  checkEnvironment,
+  environmentOperation,
+  type AgentEnvironmentProvider,
+} from "./environment.js";
 import { AgentExecutionScope, agentScope } from "./execution-scope.js";
 import type { AgentLimits } from "./agent-types.js";
 
@@ -21,14 +25,14 @@ export async function runAgentInvocation<Options extends object>(
   const environment = checkEnvironment(
     provider !== undefined
       ? typeof provider === "function"
-        ? await provider(context)
+        ? await environmentOperation(context, () => provider(context))
         : provider
       : (parent?.environment ??
           (await import("./node-environment.js")).createNodeAgentEnvironment())
   );
   const cwd =
     config.resolveCwd || provider !== undefined
-      ? await environment.resolveCwd(context)
+      ? await environmentOperation(context, () => environment.resolveCwd(context))
       : context.cwd;
   if (typeof cwd !== "string" || !cwd.trim() || cwd.length > 4096)
     throw new Error("Agent environment requires a nonblank cwd of at most 4096 characters");

@@ -11,6 +11,7 @@ import {
 } from "../tracing/wire-schema.js";
 import { optionalToolField, toolObject } from "./default-tool-schema.js";
 import { defineTool } from "./tools.js";
+import { environmentOperation } from "./environment.js";
 import {
   MAX_FILE_BYTES,
   MAX_OUTPUT_BYTES,
@@ -70,15 +71,18 @@ export const defaultTools = Object.freeze({
       totalLines: count,
       truncated: wireBoolean(),
     }),
-    run: (input, context) => context.environment.read(input, context),
-    dryRun: (input, context) => context.environment.read(input, context),
+    run: (input, context) =>
+      environmentOperation(context, () => context.environment.read(input, context)),
+    dryRun: (input, context) =>
+      environmentOperation(context, () => context.environment.read(input, context)),
   }),
   write: defineTool({
     description:
       "Create or replace a UTF-8 file (up to 1 MiB), creating parent directories and following symlinks, including missing targets. Paths resolve from the run cwd. Atomic replacement requires a writable parent directory and permission to preserve existing ownership. Skipped in dry runs.",
     inputSchema: toolObject({ path, content: text }),
     outputSchema: written,
-    run: (input, context) => context.environment.write(input, context),
+    run: (input, context) =>
+      environmentOperation(context, () => context.environment.write(input, context)),
   }),
   edit: defineTool({
     description:
@@ -89,7 +93,8 @@ export const defaultTools = Object.freeze({
       newText: text,
     }),
     outputSchema: written,
-    run: (input, context) => context.environment.edit(input, context),
+    run: (input, context) =>
+      environmentOperation(context, () => context.environment.edit(input, context)),
   }),
   bash: defineTool({
     description:
@@ -111,7 +116,8 @@ export const defaultTools = Object.freeze({
       },
       ({ stdout, stderr }) => checkOutputBytes([stdout, stderr])
     ),
-    run: (input, context) => context.environment.bash(input, context),
+    run: (input, context) =>
+      environmentOperation(context, () => context.environment.bash(input, context)),
   }),
   list: defineTool({
     description:
@@ -131,8 +137,10 @@ export const defaultTools = Object.freeze({
       ),
       truncated: wireBoolean(),
     }),
-    run: (input, context) => context.environment.list(input, context),
-    dryRun: (input, context) => context.environment.list(input, context),
+    run: (input, context) =>
+      environmentOperation(context, () => context.environment.list(input, context)),
+    dryRun: (input, context) =>
+      environmentOperation(context, () => context.environment.list(input, context)),
   }),
   search: defineTool({
     description:
@@ -156,8 +164,10 @@ export const defaultTools = Object.freeze({
       truncated: wireBoolean(),
       skippedFiles: count,
     }),
-    run: (input, context) => context.environment.search(input, context),
-    dryRun: (input, context) => context.environment.search(input, context),
+    run: (input, context) =>
+      environmentOperation(context, () => context.environment.search(input, context)),
+    dryRun: (input, context) =>
+      environmentOperation(context, () => context.environment.search(input, context)),
   }),
 });
 

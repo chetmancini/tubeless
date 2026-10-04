@@ -567,6 +567,12 @@ function agentForWorkspace(environment: AgentEnvironment) {
 An `AgentEnvironment` owns `resolveCwd`, `projectInstructions`, `read`, `write`,
 `edit`, `bash`, `list`, and `search`. Implement them against your sandbox or
 remote service using the declared typed results and cancellation signal.
+Environment factories, workspace resolution, guidance loading and default tools
+recheck cancellation before and after their work. If an operation rejects while
+the signal is aborted, the run retains the signal's cancellation reason even when
+the adapter throws an SDK-specific error. Without an aborted signal, adapter errors
+keep their ordinary failure semantics. Active operations still settle before the
+run returns.
 All byte limits below count UTF-8 data and apply at the shared tool boundary:
 
 - Limit `write.content`, `edit.oldText`, and `edit.newText` to 1 MiB each. Oversized

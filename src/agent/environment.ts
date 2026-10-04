@@ -1,5 +1,6 @@
 import type { PipelineStepContext } from "../core/pipeline-types.js";
 import type { Awaitable } from "./agent-types.js";
+import { throwIfAborted } from "../utilities/abort.js";
 
 /** Workspace and cancellation shared by an agent's environment operations. */
 export type AgentEnvironmentContext = Pick<PipelineStepContext<object>, "cwd" | "signal">;
@@ -100,4 +101,20 @@ export function checkEnvironment(environment: AgentEnvironment): AgentEnvironmen
     if (typeof environment[name] !== "function")
       throw new Error(`Agent environment requires ${name}`);
   return environment;
+}
+
+/** Preserve signal cancellation across SDK-specific errors and late adapter results. */
+export async function environmentOperation<T>(
+  context: AgentEnvironmentContext,
+  work: () => Awaitable<T>
+): Promise<T> {
+  throwIfAborted(context.signal, "Agent environment");
+  try {
+    const result = await work();
+    throwIfAborted(context.signal, "Agent environment");
+    return result;
+  } catch (error) {
+    throwIfAborted(context.signal, "Agent environment");
+    throw error;
+  }
 }

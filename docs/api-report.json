@@ -3,7 +3,7 @@
     {
       "declaration": "./dist/agent/node.d.ts",
       "exports": ["createNodeAgentEnvironment"],
-      "sha256": "9d458969377136bc15cab540dca808265ac99db53b67afd0a26e27e698aa9da0",
+      "sha256": "0d4d130ba7c4b52294e96aee31c64f5c2013b38bf0b34bee7e91d1a6b3e1e411",
       "specifier": "tubeless/agent/node"
     },
     {
@@ -31,7 +31,7 @@
         "pipelineTool",
         "ToolError"
       ],
-      "sha256": "b5204646284a0b36c39f1edba387ae6159c69be317623f15ac7a8f789eff911a",
+      "sha256": "61fc61ddd12badd73d47850ac4be340dbdccddc10c2e3031f789f0541849c202",
       "specifier": "tubeless/agent"
     },
     {
@@ -252,7 +252,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "26c2c25ac1ca8feb766d373dd774ac0e9c632568028b2fce9c91865535cdbb35",
+      "sha256": "03736bef631003145cc8b39459ed4a80d0ffd7a89de4b79c67779921004567d1",
       "specifier": "tubeless/agent/openai"
     }
   ],

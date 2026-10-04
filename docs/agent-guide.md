@@ -83,6 +83,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   are local. Child options are prevalidated once for the whole batch. Crash-safe
   resume is a later stage. Supply an `AgentEnvironment` for remote guidance, files
   and commands; children inherit it. Custom tools receive `context.environment`.
+  Environment operations preserve signal cancellation across SDK-specific errors
+  and late results, while still draining active work.
   Guidance paths are nonblank and limited to 4,096 characters; guidance is checked
   against the 32 KiB UTF-8 prompt budget before each section is retained.
   Remote tools obey the same UTF-8 byte limits as local tools. Oversized write/edit

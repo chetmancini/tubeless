@@ -1,5 +1,5 @@
 import { throwIfAborted } from "../utilities/abort.js";
-import type { AgentEnvironment } from "./environment.js";
+import { environmentOperation, type AgentEnvironment } from "./environment.js";
 import { MAX_OUTPUT_BYTES } from "./default-tool-limits.js";
 
 const MAX_PROMPT_BYTES = 32_768;
@@ -30,7 +30,9 @@ export async function modelInstructions(
 ) {
   throwIfAborted(signal, "Load project instructions");
   const env = environment ?? (await import("./node-environment.js")).createNodeAgentEnvironment();
-  const workspace = environment ? cwd : await env.resolveCwd({ cwd, signal });
+  const workspace = environment
+    ? cwd
+    : await environmentOperation({ cwd, signal }, () => env.resolveCwd({ cwd, signal }));
   const sections: string[] = [];
   const encoder = new TextEncoder();
   let promptBytes = 0;
@@ -49,7 +51,10 @@ export async function modelInstructions(
   append(defaultAgentPrompt);
   append("Working directory: ", workspace);
   if (projectContext) {
-    for (const file of await env.projectInstructions({ cwd: workspace, signal })) {
+    const context = { cwd: workspace, signal };
+    for (const file of await environmentOperation(context, () =>
+      env.projectInstructions(context)
+    )) {
       const path = file.path;
       if (typeof path !== "string" || path.length > 4096 || !path.trim())
         throw new Error("Project instruction path must be nonblank and at most 4096 characters");
