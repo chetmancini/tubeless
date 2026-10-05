@@ -226,13 +226,7 @@ export class AgentExecutionScope implements ExecutionScope {
   child(identity: { pipelineId: string; stepId: string; itemKey?: string }): AgentExecutionScope {
     const route = [
       ...this.route,
-      JSON.stringify([
-        "pipeline",
-        identity.pipelineId,
-        identity.stepId,
-        identity.itemKey ?? null,
-        null, // Reserved checkpoint route slot; keep existing execution keys stable.
-      ]),
+      JSON.stringify(["pipeline", identity.pipelineId, identity.stepId, identity.itemKey ?? null]),
     ];
     return new AgentExecutionScope(
       this.budgets,

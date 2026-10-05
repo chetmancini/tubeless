@@ -123,7 +123,7 @@ async function rejectedChildPlanResult(
 type ChildInputs = Record<string, unknown>;
 
 export interface SingleChildExecutionConfig<TParentOptions extends object> {
-  stepId?: string;
+  stepId: string;
   itemKey?: string;
   pipeline: ChildPipeline;
   controls?:
@@ -141,7 +141,7 @@ export interface SingleChildExecutionConfig<TParentOptions extends object> {
 }
 
 export interface MappedChildExecutionConfig<TParentOptions extends object> {
-  stepId?: string;
+  stepId: string;
   pipeline: ChildPipeline;
   items(
     inputs: ChildInputs,
@@ -344,7 +344,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
       controls,
       childExecutionScope(context, baseChildContext, {
         pipelineId: config.pipeline.id,
-        stepId: config.stepId ?? config.pipeline.id,
+        stepId: config.stepId,
         itemKey: config.itemKey,
       }),
       childHooks,
@@ -425,7 +425,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
               },
               {
                 pipelineId: config.pipeline.id,
-                stepId: config.stepId ?? config.pipeline.id,
+                stepId: config.stepId,
                 itemKey: key,
               }
             ),

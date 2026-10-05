@@ -295,8 +295,8 @@ it("resumes child agents through ordinary fan-out pipelines with stable identiti
     JSON.stringify([
       '["agent","durable-parent"]',
       '["call",1,"children"]',
-      '["pipeline","durable-wrapper","calls","children",null]',
-      '["pipeline","durable-child","children","1",null]',
+      '["pipeline","durable-wrapper","calls","children"]',
+      '["pipeline","durable-child","children","1"]',
       '["agent","durable-child"]',
     ])
   );
