@@ -4,6 +4,7 @@ import {
   type PipelineRunStoreSnapshot,
   type StoredPipelineEvent,
   type StoredPipelineRun,
+  type StoredPipelineDefinition,
 } from "../run-store/run-store.js";
 import { readPipelineEventPages } from "../run-store/run-store-reader.js";
 import {
@@ -19,7 +20,7 @@ import {
   STUDIO_HISTORY_PAGE_SIZE,
   type StudioSnapshot,
   type StudioRunDetail,
-  type StudioDefinitionDetail,
+  type StudioDefinitionRuns,
 } from "./run-store-ui-schema.js";
 
 export interface PipelineRunStudioHistoryMaintenance {
@@ -139,7 +140,6 @@ export class PipelineRunStudioEventState {
         liveRunIds: [],
         runs: roots.slice(pageOffset, pageOffset + STUDIO_HISTORY_PAGE_SIZE),
         selectedRun: selectedRunId ? history.summaries.get(selectedRunId) : undefined,
-        requestedRunId: selectedRunId || undefined,
       };
     });
   }
@@ -162,26 +162,39 @@ export class PipelineRunStudioEventState {
 
   definition(
     pipelineId: string,
+    definitionId?: string
+  ): Promise<StoredPipelineDefinition | undefined> {
+    return this.#serialize(async () => {
+      await this.#appendNewEvents();
+      return this.#indexedHistory().source.definitions.find(
+        (entry) => entry.pipelineId === pipelineId && entry.identity?.definitionId === definitionId
+      );
+    });
+  }
+
+  definitionRuns(
+    pipelineId: string,
     definitionId?: string,
     offset = 0
-  ): Promise<StudioDefinitionDetail | undefined> {
+  ): Promise<StudioDefinitionRuns | undefined> {
     return this.#serialize(async () => {
       await this.#appendNewEvents();
       const history = this.#indexedHistory();
-      const definition = history.source.definitions.find(
-        (entry) => entry.pipelineId === pipelineId && entry.identity?.definitionId === definitionId
-      );
-      if (!definition) return undefined;
       const runs = history.source.runs.filter(
         (run) =>
           run.pipelineId === pipelineId && run.definitionIdentity?.definitionId === definitionId
       );
-      return {
-        definition,
-        runs: runs
-          .slice(offset, offset + STUDIO_HISTORY_PAGE_SIZE)
-          .map((run) => history.summaries.get(run.runId)!),
+      if (!runs.length) return undefined;
+      const pageOffset = Math.min(
         offset,
+        Math.max(0, Math.ceil(runs.length / STUDIO_HISTORY_PAGE_SIZE) - 1) *
+          STUDIO_HISTORY_PAGE_SIZE
+      );
+      return {
+        runs: runs
+          .slice(pageOffset, pageOffset + STUDIO_HISTORY_PAGE_SIZE)
+          .map((run) => history.summaries.get(run.runId)!),
+        offset: pageOffset,
         runCount: runs.length,
       };
     });

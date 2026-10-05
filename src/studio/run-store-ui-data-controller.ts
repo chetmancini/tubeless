@@ -1,3 +1,4 @@
+import type { StoredRunSummary } from "../run-store/run-history.js";
 import type {
   StudioApi,
   StudioAccessDenied,
@@ -6,10 +7,17 @@ import type {
   StudioHistoryQuery,
 } from "./run-store-ui-client-transport.js";
 
+export type StudioRunSelection =
+  | { status: "none" }
+  | { status: "loading"; runId: string; summary?: StoredRunSummary }
+  | { status: "unavailable"; runId: string }
+  | { status: "ready"; runId: string; summary: StoredRunSummary; detail: StudioRunDetail };
+
 export interface StudioDataState {
   accessDenied?: StudioAccessDenied;
   connected: boolean;
-  detail: StudioRunDetail | null;
+  historyQuery: { query: string; offset: number };
+  selection: StudioRunSelection;
   manualRefreshing: boolean;
   snapshot: StudioSnapshot | null;
 }
@@ -20,8 +28,17 @@ export interface StudioDataInvalidation {
 }
 
 type StudioDataListener = (state: StudioDataState) => void;
-
 const DEFAULT_DETAIL_RETRY_MS = 1_200;
+
+function fingerprint(summary: StoredRunSummary): string {
+  return [
+    summary.runId,
+    summary.eventCount,
+    summary.subtreeEventCount,
+    summary.rootRunId,
+    summary.status,
+  ].join(":");
+}
 
 function clearedSnapshot(snapshot: StudioSnapshot): StudioSnapshot {
   return {
@@ -42,7 +59,7 @@ function clearedSnapshot(snapshot: StudioSnapshot): StudioSnapshot {
   };
 }
 
-/** Owns Studio snapshot freshness and selection-scoped detail loading. */
+/** Owns history queries, selection reconciliation and selection-scoped detail freshness. */
 export class StudioDataController {
   readonly #api: StudioApi;
   readonly #unsubscribeAccess: (() => void) | undefined;
@@ -50,28 +67,35 @@ export class StudioDataController {
   readonly #listeners = new Set<StudioDataListener>();
   #detailRequest: object | null = null;
   #detailRetryTimeout: ReturnType<typeof setTimeout> | undefined;
-  #detailSelection = { fingerprint: null as string | null, runId: null as string | null };
+  #detailFingerprint: string | null = null;
   #detailSelectionVersion = 0;
   #disposed = false;
   #invalidationTimeout: ReturnType<typeof setTimeout> | undefined;
   #manualRefreshPending = false;
   #snapshotEpoch = 0;
-  #historyQuery: StudioHistoryQuery = {};
   #snapshotRefreshActive = false;
   #snapshotRefreshQueued = false;
-  #state: StudioDataState = {
-    connected: true,
-    detail: null,
-    manualRefreshing: false,
-    snapshot: null,
-  };
+  #state: StudioDataState;
 
-  constructor(api: StudioApi, detailRetryMs = DEFAULT_DETAIL_RETRY_MS) {
+  constructor(
+    api: StudioApi,
+    {
+      runId = null,
+      detailRetryMs = DEFAULT_DETAIL_RETRY_MS,
+    }: { runId?: string | null; detailRetryMs?: number } = {}
+  ) {
     this.#api = api;
     this.#detailRetryMs = detailRetryMs;
+    this.#state = {
+      connected: true,
+      historyQuery: { query: "", offset: 0 },
+      selection: runId ? { status: "loading", runId } : { status: "none" },
+      manualRefreshing: false,
+      snapshot: null,
+    };
     this.#unsubscribeAccess = api.subscribeAccessDenied?.((status) => {
       this.#snapshotEpoch += 1;
-      this.#resetDetail();
+      this.#retireDetail();
       if (this.#invalidationTimeout) clearTimeout(this.#invalidationTimeout);
       this.#invalidationTimeout = undefined;
       this.#snapshotRefreshQueued = false;
@@ -79,7 +103,7 @@ export class StudioDataController {
         accessDenied: status,
         connected: false,
         snapshot: null,
-        detail: null,
+        selection: { status: "none" },
         manualRefreshing: false,
       });
     });
@@ -94,10 +118,30 @@ export class StudioDataController {
     return () => this.#listeners.delete(listener);
   }
 
-  setHistoryQuery(query: StudioHistoryQuery): void {
-    if (JSON.stringify(this.#historyQuery) === JSON.stringify(query)) return;
-    this.#historyQuery = query;
+  setHistoryQuery({ query = "", offset = 0 }: Pick<StudioHistoryQuery, "query" | "offset">): void {
+    if (this.#disposed || this.#state.accessDenied) return;
+    if (this.#state.historyQuery.query === query && this.#state.historyQuery.offset === offset)
+      return;
     this.#snapshotEpoch += 1;
+    this.#update({ historyQuery: { query, offset } });
+    this.refresh(true);
+  }
+
+  selectRun(runId: string | null): void {
+    if (this.#disposed || this.#state.accessDenied || runId === this.#selectedRunId()) return;
+    const summary = runId ? this.#findSummary(runId) : undefined;
+    const visible =
+      summary && this.#state.snapshot?.runs.some((root) => root.runId === summary.rootRunId);
+    this.#retireDetail();
+    this.#snapshotEpoch += 1;
+    this.#update({
+      historyQuery: visible ? this.#state.historyQuery : { query: "", offset: 0 },
+      selection: runId ? { status: "loading", runId, summary } : { status: "none" },
+    });
+    if (summary) {
+      this.#detailFingerprint = fingerprint(summary);
+      this.#loadDetail(this.#detailSelectionVersion);
+    }
     this.refresh(true);
   }
 
@@ -117,10 +161,12 @@ export class StudioDataController {
   invalidate({ delayMs = 0, resetHistory = false }: StudioDataInvalidation = {}): void {
     if (this.#disposed || this.#state.accessDenied) return;
     this.#snapshotEpoch += 1;
+    const runId = this.#selectedRunId();
     if (resetHistory) {
-      this.#resetDetail();
+      this.#retireDetail();
       this.#update({
-        detail: null,
+        historyQuery: { query: "", offset: 0 },
+        selection: runId ? { status: "unavailable", runId } : { status: "none" },
         snapshot: this.#state.snapshot ? clearedSnapshot(this.#state.snapshot) : null,
       });
     } else {
@@ -138,36 +184,54 @@ export class StudioDataController {
     this.refresh(true);
   }
 
-  selectRun(runId: string | null, fingerprint: string | null): void {
-    if (this.#disposed || this.#state.accessDenied) return;
-    if (
-      this.#detailSelection.runId === runId &&
-      this.#detailSelection.fingerprint === fingerprint
-    ) {
-      return;
-    }
-    // A new revision of the selected run refreshes its data without retiring
-    // the current read or blanking the last successful detail.
-    if (this.#detailSelection.runId !== runId || !fingerprint) {
-      this.#resetDetail();
-      this.#update({ detail: null });
-    }
-    this.#detailSelection = { fingerprint, runId };
-    if (runId && fingerprint) this.#loadDetail(this.#detailSelectionVersion);
-  }
-
   dispose(): void {
     if (this.#disposed) return;
     this.#unsubscribeAccess?.();
     this.#disposed = true;
     this.#snapshotEpoch += 1;
-    this.#detailSelectionVersion += 1;
-    this.#detailRequest = null;
-    if (this.#detailRetryTimeout) clearTimeout(this.#detailRetryTimeout);
+    this.#retireDetail();
     if (this.#invalidationTimeout) clearTimeout(this.#invalidationTimeout);
-    this.#detailRetryTimeout = undefined;
     this.#invalidationTimeout = undefined;
     this.#listeners.clear();
+  }
+
+  #selectedRunId(): string | null {
+    return this.#state.selection.status === "none" ? null : this.#state.selection.runId;
+  }
+
+  #findSummary(runId: string): StoredRunSummary | undefined {
+    const { snapshot, selection } = this.#state;
+    return (
+      (snapshot?.selectedRun?.runId === runId ? snapshot.selectedRun : undefined) ??
+      snapshot?.runs.find((run) => run.runId === runId) ??
+      (selection.status === "ready"
+        ? (selection.detail.children.find((run) => run.runId === runId) ??
+          selection.detail.ancestors.find((run) => run.runId === runId))
+        : undefined)
+    );
+  }
+
+  #acceptSnapshot(snapshot: StudioSnapshot): void {
+    let selection = this.#state.selection;
+    const runId = this.#selectedRunId();
+    if (runId) {
+      const summary = snapshot.selectedRun ?? snapshot.runs.find((run) => run.runId === runId);
+      if (summary?.runId === runId) {
+        const nextFingerprint = fingerprint(summary);
+        selection =
+          selection.status === "ready"
+            ? { ...selection, summary }
+            : { status: "loading", runId, summary };
+        const changed = nextFingerprint !== this.#detailFingerprint;
+        this.#detailFingerprint = nextFingerprint;
+        this.#update({ connected: true, snapshot, selection });
+        if (changed) this.#loadDetail(this.#detailSelectionVersion);
+        return;
+      }
+      this.#retireDetail();
+      selection = { status: "unavailable", runId };
+    }
+    this.#update({ connected: true, snapshot, selection });
   }
 
   #startSnapshotRefresh(): void {
@@ -176,10 +240,10 @@ export class StudioDataController {
     const epoch = this.#snapshotEpoch;
     this.#manualRefreshPending = false;
     void this.#api
-      .loadSnapshot(this.#historyQuery)
+      .loadSnapshot({ ...this.#state.historyQuery, selectedRunId: this.#selectedRunId() })
       .then((snapshot) => {
         if (this.#disposed || this.#state.accessDenied || epoch !== this.#snapshotEpoch) return;
-        this.#update({ connected: true, snapshot });
+        this.#acceptSnapshot(snapshot);
       })
       .catch(() => {
         if (this.#disposed || this.#state.accessDenied || epoch !== this.#snapshotEpoch) return;
@@ -198,18 +262,18 @@ export class StudioDataController {
   }
 
   #loadDetail(selectionVersion: number): void {
-    const { fingerprint, runId } = this.#detailSelection;
+    const runId = this.#selectedRunId();
+    const startedFingerprint = this.#detailFingerprint;
     if (
       this.#disposed ||
       this.#state.accessDenied ||
       this.#detailRequest !== null ||
       this.#detailRetryTimeout !== undefined ||
       !runId ||
-      !fingerprint ||
+      !startedFingerprint ||
       selectionVersion !== this.#detailSelectionVersion
-    ) {
+    )
       return;
-    }
     const request = {};
     this.#detailRequest = request;
     void this.#api
@@ -217,13 +281,18 @@ export class StudioDataController {
       .then((detail) => {
         if (!this.#detailRequestIsCurrent(request, selectionVersion)) return;
         this.#detailRequest = null;
-        if (detail) {
-          this.#update({ detail });
+        const selection = this.#state.selection;
+        if (
+          detail?.run.runId === runId &&
+          (selection.status === "loading" || selection.status === "ready") &&
+          selection.summary
+        ) {
+          this.#update({
+            selection: { status: "ready", runId, summary: selection.summary, detail },
+          });
           // Coalesce revisions received during this read into one follow-up.
-          if (fingerprint !== this.#detailSelection.fingerprint) this.#loadDetail(selectionVersion);
-          return;
-        }
-        this.#scheduleDetailRetry(selectionVersion);
+          if (startedFingerprint !== this.#detailFingerprint) this.#loadDetail(selectionVersion);
+        } else this.#scheduleDetailRetry(selectionVersion);
       })
       .catch(() => {
         if (!this.#detailRequestIsCurrent(request, selectionVersion)) return;
@@ -256,43 +325,29 @@ export class StudioDataController {
   }
 
   #invalidateDetail(delayMs: number): void {
-    this.#detailSelectionVersion += 1;
-    this.#detailRequest = null;
-    if (this.#detailRetryTimeout) clearTimeout(this.#detailRetryTimeout);
-    this.#detailRetryTimeout = undefined;
-    this.#update({ detail: null });
-    const selectionVersion = this.#detailSelectionVersion;
-    if (!this.#detailSelection.runId || !this.#detailSelection.fingerprint) return;
+    const currentFingerprint = this.#detailFingerprint;
+    this.#retireDetail();
+    this.#detailFingerprint = currentFingerprint;
+    if (!currentFingerprint) return;
+    const version = this.#detailSelectionVersion;
     if (delayMs > 0) {
       this.#detailRetryTimeout = setTimeout(() => {
         this.#detailRetryTimeout = undefined;
-        this.#loadDetail(selectionVersion);
+        this.#loadDetail(version);
       }, delayMs);
-      return;
-    }
-    this.#loadDetail(selectionVersion);
+    } else this.#loadDetail(version);
   }
 
-  #resetDetail(): void {
+  #retireDetail(): void {
     this.#detailSelectionVersion += 1;
     this.#detailRequest = null;
-    this.#detailSelection = { fingerprint: null, runId: null };
+    this.#detailFingerprint = null;
     if (this.#detailRetryTimeout) clearTimeout(this.#detailRetryTimeout);
     this.#detailRetryTimeout = undefined;
   }
 
   #update(update: Partial<StudioDataState>): void {
-    const state = { ...this.#state, ...update };
-    if (
-      state.accessDenied === this.#state.accessDenied &&
-      state.connected === this.#state.connected &&
-      state.detail === this.#state.detail &&
-      state.manualRefreshing === this.#state.manualRefreshing &&
-      state.snapshot === this.#state.snapshot
-    ) {
-      return;
-    }
-    this.#state = state;
-    for (const listener of this.#listeners) listener(state);
+    this.#state = { ...this.#state, ...update };
+    for (const listener of this.#listeners) listener(this.#state);
   }
 }

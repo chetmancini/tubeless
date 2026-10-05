@@ -183,7 +183,10 @@ and interactive reporter orchestration.
   historical hierarchy, descendant activity and summary projection. Studio retains
   that index per history revision, pages root summaries and searches the complete
   hierarchy on the server. Selected-run reads supply ancestry and direct-child
-  summaries; definition reads supply complete snapshots and paged runs.
+  summaries; definition metadata and its run pages load independently.
+  `studio/run-store-ui-data-controller.ts` owns history queries, selection state
+  and detail freshness. Views consume one selection union, and resource refreshes
+  retain matching definition metadata without remounting its explorer.
 - `run-store/run-store-schema.ts` validates projected storage records;
   `studio/run-store-ui-schema.ts` defines the browser protocol. Both reuse pure
   trace schemas. Decode at the transport boundary instead of promoting partially

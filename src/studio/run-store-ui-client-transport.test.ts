@@ -208,6 +208,32 @@ describe("Studio API response parsing", () => {
     expect(parseStudioSnapshot({ ...snapshot(), future: true })?.runs[0]?.runId).toBe("run-1");
   });
 
+  it("validates definition metadata independently of its run page", async () => {
+    const definition = {
+      pipelineId: "fixture",
+      activeRuns: 0,
+      firstSeenAtMs: 1,
+      lastSeenAtMs: 1,
+      runCount: 1,
+      steps: [],
+      targetIds: [],
+    };
+    const page = { runs: snapshot().runs, offset: 0, runCount: 1 };
+    const fetcher: typeof fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ definition }))
+      .mockResolvedValueOnce(jsonResponse(page))
+      .mockResolvedValueOnce(jsonResponse({ definition: { ...definition, steps: "invalid" } }))
+      .mockResolvedValueOnce(jsonResponse({ ...page, offset: -1 }));
+    const api = createStudioApi(fetcher);
+    expect(await api.loadDefinition("fixture")).toEqual(definition);
+    expect(await api.loadDefinitionRuns("fixture")).toEqual(page);
+    await expect(api.loadDefinition("fixture")).rejects.toThrow("invalid response for definition.");
+    await expect(api.loadDefinitionRuns("fixture")).rejects.toThrow(
+      "invalid response for definition runs."
+    );
+  });
+
   it("reuses the validated snapshot on a conditional 304 response", async () => {
     const fetcher: typeof fetch = vi
       .fn()
@@ -325,6 +351,9 @@ describe("mounted transport and access expiry", () => {
     (api: ReturnType<typeof createStudioApi>) => api.loadCommands(),
     (api: ReturnType<typeof createStudioApi>) => api.loadCapabilities(),
     (api: ReturnType<typeof createStudioApi>) => api.loadRunDetail("run/id"),
+    (api: ReturnType<typeof createStudioApi>) => api.loadDefinition("pipeline/id", "definition:id"),
+    (api: ReturnType<typeof createStudioApi>) =>
+      api.loadDefinitionRuns("pipeline/id", "definition:id", 50),
     (api: ReturnType<typeof createStudioApi>) => api.launch("fixture/id", {}),
     (api: ReturnType<typeof createStudioApi>) => api.previewPlan("fixture/id", {}),
     (api: ReturnType<typeof createStudioApi>) => api.cancelRun("run/id"),
@@ -341,6 +370,8 @@ describe("mounted transport and access expiry", () => {
       "/admin/pipelines/api/commands",
       "/admin/pipelines/api/capabilities",
       "/admin/pipelines/api/runs/run%2Fid",
+      "/admin/pipelines/api/definitions?pipelineId=pipeline%2Fid&definitionId=definition%3Aid",
+      "/admin/pipelines/api/definitions/runs?pipelineId=pipeline%2Fid&offset=50&definitionId=definition%3Aid",
       "/admin/pipelines/api/commands/fixture%2Fid/runs",
       "/admin/pipelines/api/commands/fixture%2Fid/plan",
       "/admin/pipelines/api/runs/run%2Fid/cancel",

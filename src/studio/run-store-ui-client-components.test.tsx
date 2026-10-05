@@ -100,11 +100,13 @@ describe("Studio components", () => {
         onCopyLink={() => {}}
         onSelect={() => {}}
         roots={index.roots.map((run) => summarizeRun(run, index))}
-        detail={studioRunDetail(root)}
-        selectedSummary={summarizeRun(root, index)}
+        selection={{
+          status: "ready",
+          runId: root.runId,
+          summary: summarizeRun(root, index),
+          detail: studioRunDetail(root),
+        }}
         latestRunId={root.runId}
-        selectedRun={root}
-        selectedRunId={root.runId}
         totalRunCount={1}
       />
     );
@@ -127,11 +129,13 @@ describe("Studio components", () => {
         onCopyLink={() => {}}
         onSelect={() => {}}
         roots={index.roots.map((run) => summarizeRun(run, index))}
-        detail={studioRunDetail(root)}
-        selectedSummary={summarizeRun(root, index)}
+        selection={{
+          status: "ready",
+          runId: root.runId,
+          summary: summarizeRun(root, index),
+          detail: studioRunDetail(root),
+        }}
         latestRunId={root.runId}
-        selectedRun={root}
-        selectedRunId={root.runId}
         totalRunCount={1}
       />
     );
@@ -155,17 +159,20 @@ describe("Studio components", () => {
       onCopyLink: () => {},
       onSelect: () => {},
       roots: index.roots.map((run) => summarizeRun(run, index)),
-      detail: null,
       latestRunId: root.runId,
-      selectedRun: null,
       totalRunCount: 1,
     };
-    const missing = renderToString(<RunsView {...props} selectedRunId="deleted-run" />);
+    const missing = renderToString(
+      <RunsView {...props} selection={{ status: "unavailable", runId: "deleted-run" }} />
+    );
     expect(missing).toContain("Run unavailable");
     expect(missing).toContain("deleted-run");
     expect(missing).toContain("Select latest run");
     const loading = renderToString(
-      <RunsView {...props} selectedSummary={summarizeRun(root, index)} selectedRunId={root.runId} />
+      <RunsView
+        {...props}
+        selection={{ status: "loading", runId: root.runId, summary: summarizeRun(root, index) }}
+      />
     );
     expect(loading).toContain("Loading run");
     expect(loading).not.toContain("Run unavailable");
@@ -194,11 +201,8 @@ describe("Studio components", () => {
         onCopyLink={() => {}}
         onSelect={() => {}}
         roots={index.roots.map((run) => summarizeRun(run, index))}
-        detail={studioRunDetail(root)}
-        selectedSummary={summarizeRun(root, index)}
+        selection={{ status: "none" }}
         latestRunId={root.runId}
-        selectedRun={null}
-        selectedRunId={null}
         totalRunCount={1}
       />
     );

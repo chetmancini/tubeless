@@ -160,7 +160,6 @@ export const studioSnapshotSchema = wireObject({
   liveRunIds: wireArray(id),
   runs: wireArray(storedRunSummarySchema, { maxItems: STUDIO_HISTORY_PAGE_SIZE }),
   selectedRun: wireOptional(storedRunSummarySchema),
-  requestedRunId: wireOptional(id),
 });
 export const studioRunDetailSchema = wireObject({
   run: storedPipelineRunSchema,
@@ -168,15 +167,15 @@ export const studioRunDetailSchema = wireObject({
   children: wireArray(storedRunSummarySchema),
   descendantCount: count,
 });
-export const studioDefinitionDetailSchema = wireObject({
-  definition: storedPipelineDefinitionSchema,
+export const studioDefinitionSchema = wireObject({ definition: storedPipelineDefinitionSchema });
+export const studioDefinitionRunsSchema = wireObject({
   runs: wireArray(storedRunSummarySchema, { maxItems: STUDIO_HISTORY_PAGE_SIZE }),
   offset: count,
   runCount: count,
 });
 export type StudioSnapshot = InferWireSchema<typeof studioSnapshotSchema>;
 export type StudioRunDetail = InferWireSchema<typeof studioRunDetailSchema>;
-export type StudioDefinitionDetail = InferWireSchema<typeof studioDefinitionDetailSchema>;
+export type StudioDefinitionRuns = InferWireSchema<typeof studioDefinitionRunsSchema>;
 
 export function parseStudioPayload<T>(schema: WireSchema<T>, value: unknown): T | undefined {
   try {

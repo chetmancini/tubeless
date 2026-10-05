@@ -84,13 +84,19 @@ export function createStudioApiHandler(
         } else writeJson(response, { ...snapshot, liveRunIds });
         return;
       }
-      if (request.method === "GET" && url.pathname === "/api/definitions") {
-        const definition = await eventState.definition(
-          url.searchParams.get("pipelineId") ?? "",
-          url.searchParams.get("definitionId") ?? undefined,
-          historyOffset(url)
-        );
-        if (!definition)
+      if (
+        request.method === "GET" &&
+        (url.pathname === "/api/definitions" || url.pathname === "/api/definitions/runs")
+      ) {
+        const pipelineId = url.searchParams.get("pipelineId") ?? "";
+        const definitionId = url.searchParams.get("definitionId") ?? undefined;
+        const result =
+          url.pathname === "/api/definitions/runs"
+            ? await eventState.definitionRuns(pipelineId, definitionId, historyOffset(url))
+            : await eventState
+                .definition(pipelineId, definitionId)
+                .then((definition) => definition && { definition });
+        if (!result)
           writeError(
             response,
             404,
@@ -98,7 +104,7 @@ export function createStudioApiHandler(
             "Definition not found.",
             "Refresh the observed definitions."
           );
-        else writeJson(response, definition);
+        else writeJson(response, result);
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/capabilities") {

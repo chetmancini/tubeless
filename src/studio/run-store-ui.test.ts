@@ -830,7 +830,17 @@ describe("local pipeline run studio", () => {
       (response) => response.json()
     );
     expect(definition.definition).toMatchObject({ pipelineId: "root-0", steps: [], runCount: 1 });
-    expect(definition.runs).toMatchObject([{ runId: "root-0" }]);
+    expect(definition).not.toHaveProperty("runs");
+    const page = await fetch(`${server.url}/api/definitions/runs?pipelineId=root-0&offset=50`).then(
+      (response) => response.json()
+    );
+    expect(page).toMatchObject({ runs: [{ runId: "root-0" }], offset: 0, runCount: 1 });
+    expect(page).not.toHaveProperty("definition");
+    expect(
+      (await fetch(`${server.url}/api/definitions/runs?pipelineId=root-0&offset=-1`)).status
+    ).toBe(400);
+    expect((await fetch(`${server.url}/api/definitions?pipelineId=missing`)).status).toBe(404);
+    expect((await fetch(`${server.url}/api/definitions/runs?pipelineId=missing`)).status).toBe(404);
   });
 
   it("includes a first store event whose id is zero in snapshots", async () => {

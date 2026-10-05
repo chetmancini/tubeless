@@ -1,3 +1,4 @@
+import type { StoredPipelineDefinition } from "../run-store/run-store.js";
 import type { PipelinePlan, PipelineRunControls } from "../core/pipeline.js";
 import type {
   PipelineRunStudioCommand,
@@ -9,15 +10,16 @@ import {
   studioCommandsSchema,
   studioPlanSchema,
   studioRunDetailSchema,
-  studioDefinitionDetailSchema,
+  studioDefinitionSchema,
+  studioDefinitionRunsSchema,
   type StudioSnapshot,
   type StudioRunDetail,
-  type StudioDefinitionDetail,
+  type StudioDefinitionRuns,
 } from "./run-store-ui-schema.js";
 export type {
   StudioSnapshot,
   StudioRunDetail,
-  StudioDefinitionDetail,
+  StudioDefinitionRuns,
 } from "./run-store-ui-schema.js";
 
 export interface StudioHistoryQuery {
@@ -51,11 +53,12 @@ export interface StudioApi {
   loadCommands(): Promise<PipelineRunStudioCommand[]>;
   loadRunDetail(runId: string): Promise<StudioRunDetail | null>;
   loadSnapshot(query?: StudioHistoryQuery): Promise<StudioSnapshot>;
-  loadDefinition(
+  loadDefinition(pipelineId: string, definitionId?: string): Promise<StoredPipelineDefinition>;
+  loadDefinitionRuns(
     pipelineId: string,
     definitionId?: string,
     offset?: number
-  ): Promise<StudioDefinitionDetail>;
+  ): Promise<StudioDefinitionRuns>;
   launch(commandId: string, values: PipelineRunStudioLaunchRequest["values"]): Promise<string>;
   previewPlan(commandId: string, input: PipelineRunControls): Promise<PipelinePlan>;
 }
@@ -143,15 +146,26 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
       cachedSnapshot = { key, etag: response.headers.get("etag"), snapshot };
       return snapshot;
     },
-    async loadDefinition(pipelineId, definitionId, offset = 0) {
-      const params = new URLSearchParams({ pipelineId, offset: String(offset) });
+    async loadDefinition(pipelineId, definitionId) {
+      const params = new URLSearchParams({ pipelineId });
       if (definitionId) params.set("definitionId", definitionId);
       const response = await request("/api/definitions?" + params, { cache: "no-store" });
       const payload = await readJson(response);
       if (!response.ok) throw responseError(payload, "Definition request failed.", response.status);
-      const detail = parseStudioPayload(studioDefinitionDetailSchema, payload);
+      const detail = parseStudioPayload(studioDefinitionSchema, payload);
       if (!detail) throw invalidResponse("definition");
-      return detail;
+      return detail.definition;
+    },
+    async loadDefinitionRuns(pipelineId, definitionId, offset = 0) {
+      const params = new URLSearchParams({ pipelineId, offset: String(offset) });
+      if (definitionId) params.set("definitionId", definitionId);
+      const response = await request("/api/definitions/runs?" + params, { cache: "no-store" });
+      const payload = await readJson(response);
+      if (!response.ok)
+        throw responseError(payload, "Definition runs request failed.", response.status);
+      const page = parseStudioPayload(studioDefinitionRunsSchema, payload);
+      if (!page) throw invalidResponse("definition runs");
+      return page;
     },
     async loadRunDetail(runId) {
       const response = await request("/api/runs/" + encodeURIComponent(runId), {

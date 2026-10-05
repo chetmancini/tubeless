@@ -20,9 +20,8 @@ import {
   createStudioApi,
   type StudioApi,
   type StudioSnapshot,
-  type StudioRunDetail,
 } from "./run-store-ui-client-transport.js";
-import { StudioDataController } from "./run-store-ui-data-controller.js";
+import { StudioDataController, type StudioRunSelection } from "./run-store-ui-data-controller.js";
 import type {
   PipelineRunStudioCommand,
   PipelineRunStudioLaunchRequest,
@@ -880,12 +879,8 @@ interface RunDetailProps {
   onCancel(id: string): void;
   onCopyLink(id: string): void;
   onSelect(id: string): void;
-  run: StoredPipelineRun | null;
-  detail: StudioRunDetail | null;
-  selectedSummary?: StoredRunSummary;
-  selectionPending?: boolean;
+  selection: StudioRunSelection;
   latestRunId?: string;
-  selectedRunId: string | null;
 }
 
 function RunDetail({
@@ -896,15 +891,11 @@ function RunDetail({
   onCancel,
   onCopyLink,
   onSelect,
-  run,
-  detail,
-  selectedSummary,
-  selectionPending,
+  selection,
   latestRunId,
-  selectedRunId,
 }: RunDetailProps) {
-  if (!run) {
-    if (selectedRunId && !selectedSummary && !selectionPending) {
+  if (selection.status !== "ready") {
+    if (selection.status === "unavailable") {
       return (
         <div class="sheet detail">
           <div class="unavailable-run">
@@ -913,7 +904,7 @@ function RunDetail({
               This run is not in this Studio history. It may have been deleted, or this link may
               refer to another local store.
             </p>
-            <code>{selectedRunId}</code>
+            <code>{selection.runId}</code>
             {latestRunId && (
               <button class="secondary-button" type="button" onClick={() => onSelect(latestRunId)}>
                 Select latest run
@@ -926,9 +917,9 @@ function RunDetail({
     return (
       <div class="sheet detail">
         <EmptyView
-          title={selectedRunId ? "Loading run" : "Select a run"}
+          title={selection.status === "loading" ? "Loading run" : "Select a run"}
           copy={
-            selectedRunId
+            selection.status === "loading"
               ? "Loading this run's recorded details."
               : "Choose a run from the history to inspect its steps, retry telemetry, logs, and errors."
           }
@@ -936,8 +927,8 @@ function RunDetail({
       </div>
     );
   }
-  const ancestors = detail?.ancestors ?? [];
-  const children = detail?.children ?? [];
+  const { detail } = selection;
+  const { run, ancestors, children } = detail;
   return (
     <article class="sheet detail">
       <div class="detail-body">
@@ -1030,7 +1021,7 @@ function RunDetail({
             <div class="section-title">
               <span>Nested runs</span>
               <span>
-                {children.length} direct · {detail?.descendantCount ?? 0} total
+                {children.length} direct · {detail.descendantCount} total
               </span>
             </div>
             <div class="nested-runs">
@@ -1085,14 +1076,13 @@ function RunDetail({
   );
 }
 
-interface RunsViewProps extends Omit<RunDetailProps, "run"> {
+interface RunsViewProps extends RunDetailProps {
   api?: StudioApi;
   definitions?: readonly StoredDefinitionSummary[];
   roots: readonly StoredRunSummary[];
   matchingRootCount?: number;
   offset?: number;
   onPage?(offset: number): void;
-  selectedRun: StoredPipelineRun | null;
   totalRunCount: number;
 }
 
@@ -1111,7 +1101,11 @@ export function RunsView(props: RunsViewProps) {
             nowMs={props.nowMs}
             onSelect={props.onSelect}
             run={run}
-            selectedRootRunId={props.selectedSummary?.rootRunId}
+            selectedRootRunId={
+              props.selection.status === "ready" || props.selection.status === "loading"
+                ? props.selection.summary?.rootRunId
+                : undefined
+            }
           />
         ))}
       </>
@@ -1175,7 +1169,7 @@ export function RunsView(props: RunsViewProps) {
             </div>
           )}
         </section>
-        <RunDetail {...props} run={props.selectedRun} />
+        <RunDetail {...props} />
       </div>
     </>
   );
@@ -1501,17 +1495,18 @@ export function StudioAccessNotice({ status, href }: { status: 401 | 403; href: 
 }
 
 function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
-  const dataController = useMemo(() => new StudioDataController(api), [api]);
+  const dataController = useMemo(
+    () => new StudioDataController(api, { runId: runIdFromStudioUrl(window.location.href) }),
+    [api]
+  );
   const [data, setData] = useState(() => dataController.getState());
-  const { accessDenied, connected, detail, manualRefreshing, snapshot } = data;
+  const { accessDenied, connected, historyQuery, selection, manualRefreshing, snapshot } = data;
+  const selectedRunId = selection.status === "none" ? null : selection.runId;
   const [commands, setCommands] = useState<PipelineRunStudioCommand[]>([]);
   const [commandsLoaded, setCommandsLoaded] = useState(false);
   const [view, setView] = useState<StudioView>("runs");
-  const [query, setQuery] = useState("");
-  const [historyOffset, setHistoryOffset] = useState(0);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(() =>
-    runIdFromStudioUrl(window.location.href)
-  );
+  const [commandQuery, setCommandQuery] = useState("");
+  const query = view === "runs" ? historyQuery.query : commandQuery;
   const [canCancel, setCanCancel] = useState(false);
   const [canClearHistory, setCanClearHistory] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -1519,13 +1514,6 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [nowMs, setNowMs] = useState(Date.now);
-  useEffect(() => {
-    dataController.setHistoryQuery({
-      query: view === "runs" ? query : "",
-      offset: historyOffset,
-      selectedRunId,
-    });
-  }, [dataController, historyOffset, query, selectedRunId, view]);
 
   useEffect(() => {
     setData(dataController.getState());
@@ -1577,13 +1565,13 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
 
   useEffect(() => {
     const onPopState = () => {
-      setSelectedRunId(runIdFromStudioUrl(window.location.href));
+      dataController.setHistoryQuery({});
+      dataController.selectRun(runIdFromStudioUrl(window.location.href));
       setView("runs");
-      setQuery("");
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [dataController]);
 
   useEffect(() => {
     if (!toast) return;
@@ -1598,26 +1586,8 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     const next = resolveSelectedRunId(selectedRunId, roots);
     if (!next) return;
     window.history.replaceState(null, "", studioRunUrl(window.location.href, next));
-    setSelectedRunId(next);
-  }, [commandsLoaded, roots, selectedRunId, snapshot, view]);
-
-  const selectedSummary =
-    (snapshot?.selectedRun?.runId === selectedRunId ? snapshot.selectedRun : undefined) ??
-    roots.find((run) => run.runId === selectedRunId) ??
-    detail?.children.find((run) => run.runId === selectedRunId) ??
-    detail?.ancestors.find((run) => run.runId === selectedRunId);
-  const selectedFingerprint = selectedSummary
-    ? [
-        selectedSummary.runId,
-        selectedSummary.eventCount,
-        selectedSummary.subtreeEventCount,
-        selectedSummary.rootRunId,
-        selectedSummary.status,
-      ].join(":")
-    : null;
-  useEffect(() => {
-    dataController.selectRun(selectedRunId, selectedFingerprint);
-  }, [dataController, selectedFingerprint, selectedRunId]);
+    dataController.selectRun(next);
+  }, [commandsLoaded, dataController, roots, selectedRunId, snapshot, view]);
 
   const showToast = (message: string) => {
     if (!dataController.getState().accessDenied) setToast(message);
@@ -1627,16 +1597,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     if (runId !== selectedRunId) {
       window.history.pushState(null, "", studioRunUrl(window.location.href, runId));
     }
-    setSelectedRunId(runId);
-    const summary =
-      roots.find((run) => run.runId === runId) ??
-      (snapshot?.selectedRun?.runId === runId ? snapshot.selectedRun : undefined) ??
-      detail?.children.find((run) => run.runId === runId) ??
-      detail?.ancestors.find((run) => run.runId === runId);
-    if (!summary || !roots.some((root) => root.runId === summary.rootRunId)) {
-      setQuery("");
-      setHistoryOffset(0);
-    }
+    dataController.selectRun(runId);
     setView("runs");
   };
   const copyRunLink = async (runId: string) => {
@@ -1670,7 +1631,6 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
 
   if (accessDenied) return <StudioAccessNotice status={accessDenied} href={window.location.href} />;
 
-  const selectedRun = selectedSummary && detail?.run.runId === selectedRunId ? detail.run : null;
   const connection = connectionPresentation(connected);
 
   return (
@@ -1749,8 +1709,9 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
                 placeholder={isPipelines ? "Filter pipelines" : "Filter runs or IDs"}
                 aria-label="Filter"
                 onInput={(event) => {
-                  setQuery(event.currentTarget.value.trim());
-                  setHistoryOffset(0);
+                  const value = event.currentTarget.value.trim();
+                  if (isPipelines) setCommandQuery(value);
+                  else dataController.setHistoryQuery({ query: value });
                 }}
               />
               {commands.length > 0 && (
@@ -1821,7 +1782,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
                     api={api}
                     offset={snapshot.offset}
                     matchingRootCount={snapshot.matchingRootCount}
-                    onPage={setHistoryOffset}
+                    onPage={(offset) => dataController.setHistoryQuery({ ...historyQuery, offset })}
                     canCancel={canCancel}
                     cancelling={cancelling}
                     liveRunIds={snapshot.liveRunIds ?? []}
@@ -1830,12 +1791,8 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
                     onCopyLink={(id) => void copyRunLink(id)}
                     onSelect={selectRun}
                     roots={roots}
-                    detail={detail?.run.runId === selectedRunId ? detail : null}
-                    selectedSummary={selectedSummary}
-                    selectionPending={!selectedSummary && snapshot.requestedRunId !== selectedRunId}
+                    selection={selection}
                     latestRunId={roots[0]?.runId}
-                    selectedRun={selectedRun}
-                    selectedRunId={selectedRunId}
                     totalRunCount={snapshot.runCount}
                   />
                 )}
@@ -1853,7 +1810,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
           onLaunched={(runId) => {
             if (dataController.getState().accessDenied) return;
             selectRun(runId);
-            setQuery("");
+            dataController.setHistoryQuery({});
             setLaunchCommandId(null);
             showToast("Run accepted · " + shortId(runId));
             dataController.invalidate({ delayMs: 80 });

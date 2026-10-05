@@ -43,7 +43,9 @@ visible separately from package-generated run IDs. History is paged in groups of
 50 top-level runs; search includes nested runs across the complete history.
 Open a run to inspect its steps, progress, logs, and errors. Studio loads those
 details and complete definition snapshots separately from the history summaries,
-and unchanged refreshes reuse the current history page.
+and unchanged refreshes reuse the current history page. Definition run pages
+refresh independently, preserving metadata search, grouping, and comparisons.
+Failed definition requests offer a retry beside the affected content.
 
 Run details put debugging information before the step timeline. Structured errors
 show validation issue paths, expandable cause chains, failed fan-out items, and any

@@ -2,7 +2,10 @@ import { createRunHistoryIndex, summarizeRun } from "../run-store/run-history.js
 import type { StoredPipelineRun } from "../run-store/run-store.js";
 import type { StudioSnapshot, StudioRunDetail } from "./run-store-ui-schema.js";
 
-export function studioSnapshot(runs: readonly StoredPipelineRun[]): StudioSnapshot {
+export function studioSnapshot(
+  runs: readonly StoredPipelineRun[],
+  selectedRunId?: string | null
+): StudioSnapshot {
   const index = createRunHistoryIndex(runs);
   return {
     activeRunCount: runs.filter((run) => run.status === "running").length,
@@ -18,6 +21,10 @@ export function studioSnapshot(runs: readonly StoredPipelineRun[]): StudioSnapsh
     matchingRootCount: index.roots.length,
     offset: 0,
     runs: index.roots.map((run) => summarizeRun(run, index)),
+    selectedRun:
+      selectedRunId && index.runById(selectedRunId)
+        ? summarizeRun(index.runById(selectedRunId)!, index)
+        : undefined,
     liveRunIds: [],
   };
 }
