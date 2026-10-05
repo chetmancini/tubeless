@@ -131,7 +131,6 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
   for (const run of runs) {
     if (rootIdByRunId.has(run.runId)) continue;
     const path: string[] = [];
-    const onPath = new Set<string>();
     let currentId: string | undefined = run.runId;
     let resolved: string | undefined;
     while (currentId) {
@@ -143,11 +142,6 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
         resolved = currentId;
         break;
       }
-      if (onPath.has(currentId)) {
-        resolved = undefined;
-        break;
-      }
-      onPath.add(currentId);
       path.push(currentId);
       const parentRunId = parentIdByRunId.get(currentId);
       if (!parentRunId || !runsById.has(parentRunId)) {
@@ -166,12 +160,10 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
   for (const run of runs) {
     if (descendantCountById.has(run.runId)) continue;
     const stack: { exiting: boolean; id: string }[] = [{ exiting: false, id: run.runId }];
-    const visiting = new Set<string>();
     while (stack.length > 0) {
       const frame = stack.pop();
       if (!frame) break;
       if (frame.exiting) {
-        visiting.delete(frame.id);
         let count = 0;
         let running = runsById.get(frame.id)?.status === "running";
         let events = runsById.get(frame.id)?.eventCount ?? 0;
@@ -187,11 +179,10 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
         subtreeEventsById.set(frame.id, events);
         continue;
       }
-      if (descendantCountById.has(frame.id) || visiting.has(frame.id)) continue;
-      visiting.add(frame.id);
+      if (descendantCountById.has(frame.id)) continue;
       stack.push({ exiting: true, id: frame.id });
       for (const child of childrenByParentId.get(frame.id) ?? EMPTY_RUNS) {
-        if (!descendantCountById.has(child.runId) && !visiting.has(child.runId)) {
+        if (!descendantCountById.has(child.runId)) {
           stack.push({ exiting: false, id: child.runId });
         }
       }
@@ -206,12 +197,10 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
   }
   function ancestorsOf(runId: string | null | undefined) {
     const ancestors: T[] = [];
-    const seen = new Set<string>();
     let current = runById(runId);
     while (current) {
       const parentRunId = parentIdByRunId.get(current.runId);
-      if (!parentRunId || seen.has(parentRunId)) break;
-      seen.add(parentRunId);
+      if (!parentRunId) break;
       const parent = runsById.get(parentRunId);
       if (!parent) break;
       ancestors.unshift(parent);

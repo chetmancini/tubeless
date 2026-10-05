@@ -18,7 +18,6 @@ import {
   wireObject,
   wireOptional,
   wireString,
-  wireTransform,
   type WireSchema,
 } from "../tracing/wire-schema.js";
 import type { StoredPipelineRun, StoredPipelineDefinition } from "./run-store.js";
@@ -32,17 +31,6 @@ const positive = wireNumber({ integer: true, minimum: 1 });
 const status = wireEnum(["running", "completed", "failed", "cancelled"]);
 const stepStatus = wireEnum(["planned", "running", "completed", "failed", "cancelled", "skipped"]);
 const outputSource = wireOptional(wireEnum(["override", "cache"]));
-function array<T>(item: WireSchema<T>): WireSchema<T[]> {
-  return wireTransform(wireArray(item), (items) => [...items]);
-}
-const nested = wireTransform(nestedPipelineSchema, (value) => ({
-  ...value,
-  stepIds: [...value.stepIds],
-}));
-const progress = wireTransform(progressSchema, (value) => ({
-  ...value,
-  details: value.details === undefined ? undefined : [...value.details],
-}));
 const agentCall = wireObject({
   agentRunId: id,
   turn: positive,
@@ -57,7 +45,7 @@ export const storedPipelineRunSchema: WireSchema<StoredPipelineRun> = wireObject
     wireObject({
       stepId: id,
       limits: agentLimitsSchema,
-      capabilities: array(id),
+      capabilities: wireArray(id),
     })
   ),
   agentTurn: wireOptional(
@@ -69,7 +57,7 @@ export const storedPipelineRunSchema: WireSchema<StoredPipelineRun> = wireObject
       nextStateVersion: wireOptional(count),
       callCount: wireOptional(count),
       callsAdmitted: wireOptional(count),
-      calls: array(agentCall),
+      calls: wireArray(agentCall),
     })
   ),
   agentCall: wireOptional(agentCall),
@@ -84,7 +72,7 @@ export const storedPipelineRunSchema: WireSchema<StoredPipelineRun> = wireObject
   eventCount: count,
   finishedAtMs: wireOptional(number),
   logCount: count,
-  logs: array(
+  logs: wireArray(
     wireObject({
       attemptId: wireOptional(text),
       id: count,
@@ -98,7 +86,7 @@ export const storedPipelineRunSchema: WireSchema<StoredPipelineRun> = wireObject
   runId: id,
   startedAtMs: number,
   status,
-  steps: array(
+  steps: wireArray(
     wireObject({
       id,
       status: stepStatus,
@@ -108,22 +96,22 @@ export const storedPipelineRunSchema: WireSchema<StoredPipelineRun> = wireObject
       durationMs: wireOptional(number),
       finishedAtMs: wireOptional(number),
       startedAtMs: wireOptional(number),
-      nestedPipeline: wireOptional(nested),
+      nestedPipeline: wireOptional(nestedPipelineSchema),
       remote: wireOptional(remoteSchema),
-      progress: wireOptional(progress),
+      progress: wireOptional(progressSchema),
       attempt: wireOptional(
         wireObject({
           attemptId: id,
           outputSource,
           durationMs: wireOptional(number),
           finishedAtMs: wireOptional(number),
-          retries: array(positive),
+          retries: wireArray(positive),
           startedAtMs: number,
           status: wireEnum(["running", "completed", "failed", "cancelled", "skipped"]),
         })
       ),
       artifacts: wireOptional(
-        array(
+        wireArray(
           wireObject({
             artifact: artifactMetadataSchema,
             operation: artifactOperationSchema,
@@ -150,19 +138,19 @@ export const storedDefinitionSummarySchema: WireSchema<StoredDefinitionSummary> 
 export const storedPipelineDefinitionSchema: WireSchema<StoredPipelineDefinition> = wireObject({
   ...definitionSummaryShape,
   snapshot: wireOptional(pipelineDefinitionSnapshotSchema),
-  targetIds: array(id),
-  steps: array(
+  targetIds: wireArray(id),
+  steps: wireArray(
     wireObject({
-      dependencies: array(id),
+      dependencies: wireArray(id),
       description: wireOptional(text),
       dryRun: text,
       id,
       name: wireOptional(text),
-      nestedPipeline: wireOptional(nested),
+      nestedPipeline: wireOptional(nestedPipelineSchema),
       remote: wireOptional(remoteSchema),
-      optionalDependencies: array(id),
+      optionalDependencies: wireArray(id),
       runtimeSkipPossible: wireBoolean(),
-      skipAfterFailureOf: array(id),
+      skipAfterFailureOf: wireArray(id),
     })
   ),
 });
@@ -183,7 +171,7 @@ export const storedRunSummarySchema: WireSchema<StoredRunSummary> = wireObject({
   subtreeIsRunning: wireBoolean(),
   activity: wireObject({
     count,
-    names: wireTransform(wireArray(text, { maxItems: 3 }), (items) => [...items]),
+    names: wireArray(text, { maxItems: 3 }),
     message: wireOptional(text),
   }),
 });

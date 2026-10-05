@@ -28,13 +28,16 @@ function definition(version: string): StoredPipelineDefinition {
 
 describe("Studio definition history", () => {
   it("renders definition selection, comparison direction and implementation changes as escaped text", () => {
+    const selected = definition("<new>");
+    const previous = definition("old");
     const html = renderToString(
       <DefinitionHistoryView
-        definitions={[definition("<new>"), definition("old")]}
-        selectedKey=""
-        compareKey=""
-        detail={{ definition: definition("<new>"), runs: [], offset: 0, runCount: 0 }}
-        comparison={definition("old")}
+        definitions={[selected, previous]}
+        selected={selected}
+        candidates={[previous]}
+        previous={previous}
+        detail={{ definition: selected, runs: [], offset: 0, runCount: 0 }}
+        comparison={previous}
         onDefinition={() => {}}
         onCompare={() => {}}
         onPage={() => {}}
@@ -50,13 +53,15 @@ describe("Studio definition history", () => {
   });
 
   it("labels legacy versions and refuses to compare incomplete snapshots", () => {
+    const selected = definition("new");
     const legacy = { ...definition("old"), identity: undefined, snapshot: undefined };
     const html = renderToString(
       <DefinitionHistoryView
-        definitions={[definition("new"), legacy]}
-        selectedKey=""
-        compareKey=""
-        detail={{ definition: definition("new"), runs: [], offset: 0, runCount: 0 }}
+        definitions={[selected, legacy]}
+        selected={selected}
+        candidates={[legacy]}
+        previous={legacy}
+        detail={{ definition: selected, runs: [], offset: 0, runCount: 0 }}
         comparison={legacy}
         onDefinition={() => {}}
         onCompare={() => {}}

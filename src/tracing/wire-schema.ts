@@ -143,10 +143,7 @@ export function wireDefault<T>(inner: WireSchema<T>, fallback: T): WireSchema<T>
   );
 }
 
-export function wireArray<T>(
-  item: WireSchema<T>,
-  options: ArrayOptions = {}
-): WireSchema<readonly T[]> {
+export function wireArray<T>(item: WireSchema<T>, options: ArrayOptions = {}): WireSchema<T[]> {
   const jsonSchema: Record<string, unknown> = { items: item.jsonSchema, type: "array" };
   if (options.maxItems !== undefined) jsonSchema.maxItems = options.maxItems;
   return schema(jsonSchema, (value, path) => {

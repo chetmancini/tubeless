@@ -17,8 +17,9 @@ function label(definition: StoredDefinitionSummary): string {
 
 export function DefinitionHistoryView({
   definitions,
-  selectedKey,
-  compareKey,
+  selected,
+  candidates,
+  previous,
   detail,
   comparison,
   error,
@@ -28,8 +29,9 @@ export function DefinitionHistoryView({
   onSelect,
 }: {
   definitions: readonly StoredDefinitionSummary[];
-  selectedKey: string;
-  compareKey: string;
+  selected: StoredDefinitionSummary | undefined;
+  candidates: readonly StoredDefinitionSummary[];
+  previous: StoredDefinitionSummary | undefined;
   detail: StudioDefinitionDetail | null;
   comparison: StoredPipelineDefinition | null;
   error?: string;
@@ -38,14 +40,7 @@ export function DefinitionHistoryView({
   onPage(offset: number): void;
   onSelect(runId: string): void;
 }) {
-  const selected =
-    definitions.find((definition) => key(definition) === selectedKey) ?? definitions[0];
   if (!selected) return null;
-  const candidates = definitions.filter(
-    (definition) =>
-      definition.pipelineId === selected.pipelineId && key(definition) !== key(selected)
-  );
-  const previous = candidates.find((definition) => key(definition) === compareKey) ?? candidates[0];
   const snapshot = detail?.definition.snapshot;
   const groupedRuns = detail?.runs ?? [];
   const changes =
@@ -254,8 +249,9 @@ export function DefinitionHistory({
   return (
     <DefinitionHistoryView
       definitions={definitions}
-      selectedKey={selectedKey}
-      compareKey={compareKey}
+      selected={selected}
+      candidates={candidates}
+      previous={previous}
       detail={result.detail}
       comparison={comparison.detail?.definition ?? null}
       error={result.error ?? comparison.error}

@@ -493,8 +493,13 @@ export const pipelineDefinitionSnapshotSchema = wireRefine(
 export type PipelineDefinitionIdentityContract = InferWireSchema<
   typeof pipelineDefinitionIdentitySchema
 >;
-export type PipelineDefinitionSnapshotContract = InferWireSchema<
-  typeof pipelineDefinitionSnapshotSchema
+type ReadonlyArrays<T> = T extends readonly (infer Item)[]
+  ? readonly ReadonlyArrays<Item>[]
+  : T extends object
+    ? { [Key in keyof T]: ReadonlyArrays<T[Key]> }
+    : T;
+export type PipelineDefinitionSnapshotContract = ReadonlyArrays<
+  InferWireSchema<typeof pipelineDefinitionSnapshotSchema>
 >;
 
 const selectionReasonSimpleSchema = wireObject({
@@ -764,7 +769,9 @@ export const pipelineTraceEventSchema = wireRefine(
 
 export type PipelineErrorKindContract = (typeof PIPELINE_ERROR_KINDS)[number];
 export type PipelineErrorPhaseContract = (typeof PIPELINE_ERROR_PHASES)[number];
-export type PipelineTraceErrorContract = InferWireSchema<typeof pipelineTraceErrorSchema>;
+export type PipelineTraceErrorContract = ReadonlyArrays<
+  InferWireSchema<typeof pipelineTraceErrorSchema>
+>;
 type PipelineTraceEventOptionalFields = {
   attemptId?: string;
   durationMs?: number;
@@ -791,7 +798,7 @@ type PublicPipelineTraceEvent<TEvent> = TEvent extends {
 export type PipelineTraceEventContract =
   InferWireSchema<typeof pipelineTraceEventSchema> extends infer TEvent
     ? TEvent extends object
-      ? PublicPipelineTraceEvent<TEvent & PipelineTraceEventOptionalFields>
+      ? PublicPipelineTraceEvent<ReadonlyArrays<TEvent & PipelineTraceEventOptionalFields>>
       : never
     : never;
 /** @public Shared with the separately built documentation website. */

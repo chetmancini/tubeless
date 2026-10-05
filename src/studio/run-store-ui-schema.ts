@@ -45,7 +45,7 @@ const planControls = wireTransform(iterationControlsSchema, (controls): Pipeline
     throw new Error("Child selectors are mutually exclusive.");
   return targets !== undefined ? { ...common, targets } : { ...common, stepIds };
 });
-const strings = wireTransform(wireArray(id), (values) => [...values]);
+const strings = wireArray(id);
 
 export const studioParameterSchema: WireSchema<CliParameterDescriptor> = wireRefine(
   wireObject({
@@ -76,17 +76,14 @@ export const studioParameterSchema: WireSchema<CliParameterDescriptor> = wireRef
   }
 );
 export const studioCommandsSchema = wireObject({
-  commands: wireTransform(
-    wireArray(
-      wireObject({
-        canPlan: wireBoolean(),
-        id,
-        name: id,
-        description: wireOptional(text),
-        parameters: wireArray(studioParameterSchema),
-      })
-    ),
-    (commands) => [...commands]
+  commands: wireArray(
+    wireObject({
+      canPlan: wireBoolean(),
+      id,
+      name: id,
+      description: wireOptional(text),
+      parameters: wireArray(studioParameterSchema),
+    })
   ),
 });
 
@@ -95,61 +92,55 @@ export const studioPlanSchema: WireSchema<PipelinePlan> = wireObject({
   dryRun: wireBoolean(),
   ok: wireBoolean(),
   pipelineId: id,
-  errors: wireTransform(
-    wireArray(
-      wireCustom<PipelineError>(pipelineTraceErrorSchema.jsonSchema, (value, path) => ({
-        ...pipelineTraceErrorSchema.decode(value, path),
-        ...wireObject({ message: text, stepId: wireOptional(text) }).decode(value, path),
-      }))
-    ),
-    (errors) => [...errors]
+  errors: wireArray(
+    wireCustom<PipelineError>(pipelineTraceErrorSchema.jsonSchema, (value, path) => ({
+      ...pipelineTraceErrorSchema.decode(value, path),
+      ...wireObject({ message: text, stepId: wireOptional(text) }).decode(value, path),
+    }))
   ),
-  steps: wireTransform(
-    wireArray(
-      wireObject({
-        metadata: wireOptional(pipelineMetadataSchema),
-        agent: wireOptional(agentMetadataSchema),
-        dependencies: strings,
-        description: wireOptional(text),
-        dryRun: wireEnum(["custom", "run", "skip"]),
-        id,
-        name: wireOptional(text),
-        optionalDependencies: strings,
-        runtimeSkipPossible: wireBoolean(),
-        selected: wireBoolean(),
-        selectionReasons: selectionReasonsSchema,
-        skipAfterFailureOf: strings,
-        skipReason: wireOptional(
-          wireEnum([
-            "dry-run",
-            "failed-dependency",
-            "fail-fast",
-            "filtered",
-            "policy",
-            "unmet-dependency",
-          ])
-        ),
-        remote: wireOptional(remoteSchema),
-        nestedPipeline: wireOptional(
-          wireRefine(
-            wireObject({
-              mode: wireEnum(["single", "for-each", "iterate"]),
-              maxIterations: wireOptional(wireNumber({ integer: true, minimum: 1 })),
-              controls: wireOptional(planControls),
-              identity: wireOptional(pipelineDefinitionIdentitySchema),
-              concurrency: wireOptional(wireUnion([number, wireLiteral("dynamic")])),
-              pipelineId: id,
-              stepIds: wireArray(id),
-            }),
-            (nested, path) => {
-              if ((nested.mode === "iterate") !== (nested.maxIterations !== undefined))
-                throw new Error(`${path}: only iterate requires maxIterations`);
-            }
-          )
-        ),
-      })
-    ),
-    (steps) => [...steps]
+  steps: wireArray(
+    wireObject({
+      metadata: wireOptional(pipelineMetadataSchema),
+      agent: wireOptional(agentMetadataSchema),
+      dependencies: strings,
+      description: wireOptional(text),
+      dryRun: wireEnum(["custom", "run", "skip"]),
+      id,
+      name: wireOptional(text),
+      optionalDependencies: strings,
+      runtimeSkipPossible: wireBoolean(),
+      selected: wireBoolean(),
+      selectionReasons: selectionReasonsSchema,
+      skipAfterFailureOf: strings,
+      skipReason: wireOptional(
+        wireEnum([
+          "dry-run",
+          "failed-dependency",
+          "fail-fast",
+          "filtered",
+          "policy",
+          "unmet-dependency",
+        ])
+      ),
+      remote: wireOptional(remoteSchema),
+      nestedPipeline: wireOptional(
+        wireRefine(
+          wireObject({
+            mode: wireEnum(["single", "for-each", "iterate"]),
+            maxIterations: wireOptional(wireNumber({ integer: true, minimum: 1 })),
+            controls: wireOptional(planControls),
+            identity: wireOptional(pipelineDefinitionIdentitySchema),
+            concurrency: wireOptional(wireUnion([number, wireLiteral("dynamic")])),
+            pipelineId: id,
+            stepIds: wireArray(id),
+          }),
+          (nested, path) => {
+            if ((nested.mode === "iterate") !== (nested.maxIterations !== undefined))
+              throw new Error(`${path}: only iterate requires maxIterations`);
+          }
+        )
+      ),
+    })
   ),
 });
 

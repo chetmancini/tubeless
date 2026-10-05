@@ -682,7 +682,6 @@ interface RunRowProps {
   onSelect(id: string): void;
   run: StoredRunSummary;
   selectedRootRunId?: string;
-  selectedRunId: string | null;
 }
 
 function RunRow({ nowMs, onSelect, run, selectedRootRunId }: RunRowProps) {
@@ -1113,7 +1112,6 @@ export function RunsView(props: RunsViewProps) {
             onSelect={props.onSelect}
             run={run}
             selectedRootRunId={props.selectedSummary?.rootRunId}
-            selectedRunId={props.selectedRunId}
           />
         ))}
       </>

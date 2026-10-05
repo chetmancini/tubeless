@@ -187,7 +187,9 @@ describe("Studio API response parsing", () => {
         },
       ],
     });
-    expect(parseRun(recorded)).toBeDefined();
+    const decoded = parseRun(recorded);
+    expect(decoded).toBeDefined();
+    expect(decoded?.steps[0]?.progress?.details).not.toBe(recorded.steps[0]?.progress?.details);
     for (const field of ["name", "depth", "completed", "total", "status"]) {
       const invalid = structuredClone(recorded);
       Object.assign(invalid.steps[0]!.progress!.details![0]!, { [field]: { invalid: true } });
