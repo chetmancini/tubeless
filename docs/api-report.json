@@ -7,7 +7,7 @@
         "openSqliteAgentCheckpointStore",
         "SqliteAgentCheckpointStore"
       ],
-      "sha256": "8af290421672269a77cc5d8bf90b09dd3e7564f9bba5f21dad53115c6e3a02d9",
+      "sha256": "a32d0ded9cd0c164fb715d568b1954977645275e6ae47585c55517c24aba9745",
       "specifier": "tubeless/agent/node"
     },
     {
@@ -42,7 +42,7 @@
         "plainAgentCheckpointCodec",
         "ToolError"
       ],
-      "sha256": "c8078b955291546942bf8cfa8bf0f116d114cc718fa8fe2e7205fc75698210fb",
+      "sha256": "7ece65f5f269eb1341a2648adf6da398da93a2bcf38ab887b62676f782434019",
       "specifier": "tubeless/agent"
     },
     {
@@ -263,7 +263,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "d469c4c627c8938d4c73cb1d03e54dccaf98a03cced86ddc3c85a234436fc005",
+      "sha256": "61c0790a5b63a2cb191fcbefe42e889de16af25f4791b026dcb1e671ac54da6d",
       "specifier": "tubeless/agent/openai"
     }
   ],

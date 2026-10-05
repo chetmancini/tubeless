@@ -244,6 +244,7 @@ it("resumes child agents through ordinary fan-out pipelines with stable identiti
   const input = schema<{ n: number }>((value) => ({ value: value as { n: number } }));
   const child = defineAgent({
     id: "durable-child",
+    implementationVersion: "1",
     inputSchema: input,
     resultSchema: numberSchema,
     initialState: () => 0,
@@ -321,6 +322,105 @@ it("rejects different inputs and semantic versions before replaying stored work"
   expect(decide).toHaveBeenCalledTimes(1);
 });
 
+it.each([false, true])(
+  "rejects unversioned children that inherit recovery (wrapped: %s)",
+  async (wrapped) => {
+    const store = createMemoryAgentCheckpointStore();
+    const initialState = vi.fn(() => 0);
+    const decide = vi.fn(() => ({ kind: "finish", result: 1 }));
+    const child = defineAgent({
+      id: "unversioned-child",
+      inputSchema: emptyInput,
+      resultSchema: numberSchema,
+      initialState,
+      decide,
+    });
+    // Ordinary invocations remain ephemeral and do not require a version.
+    expect(await child.runOrThrow({})).toBe(1);
+    initialState.mockClear();
+    decide.mockClear();
+    const { fromPipeline } = createSteps(emptyInput);
+    const step = fromPipeline("child", { pipeline: child });
+    const wrapper = definePipeline({ id: "unversioned-wrapper", steps: [step], finalize: step });
+    const parent = defineAgent({
+      id: "versioned-parent",
+      implementationVersion: "1",
+      inputSchema: emptyInput,
+      resultSchema: numberSchema,
+      initialState: () => 0,
+      durability: { store, key: "job" },
+      tools: {
+        child: pipelineTool(wrapped ? wrapper : child, {
+          description: "Run child",
+          replay: "safe",
+        }),
+      },
+      decide: (state, context) =>
+        context.turn === 1
+          ? { kind: "continue", calls: [{ id: "child", tool: "child", input: {} }] }
+          : { kind: "finish", result: state },
+      reduce: (_state, outcomes) => {
+        const outcome = outcomes[0]!;
+        if (!outcome.ok) throw new Error(outcome.error.message);
+        return Number(outcome.value);
+      },
+    });
+    await expect(parent.runOrThrow({})).rejects.toThrow("implementationVersion");
+    expect(initialState).not.toHaveBeenCalled();
+    expect(decide).not.toHaveBeenCalled();
+    const lease = await store.acquire("job");
+    try {
+      expect(
+        Object.keys(
+          checkedCheckpoint(plainAgentCheckpointCodec.decode((await lease.read())!)).agents
+        )
+      ).toHaveLength(1);
+    } finally {
+      await lease.close();
+    }
+  }
+);
+
+it("rejects changed child versions before restoring a completed ancestor", async () => {
+  const store = createMemoryAgentCheckpointStore();
+  const childDecide = vi.fn(() => ({ kind: "finish", result: 1 }));
+  const initialState = vi.fn(() => 0);
+  const parent = (version: string) => {
+    const child = defineAgent({
+      id: "versioned-child",
+      implementationVersion: version,
+      inputSchema: emptyInput,
+      resultSchema: numberSchema,
+      initialState,
+      decide: childDecide,
+    });
+    const { fromPipeline } = createSteps(emptyInput);
+    const step = fromPipeline("child", { pipeline: child });
+    const wrapper = definePipeline({ id: "versioned-wrapper", steps: [step], finalize: step });
+    return defineAgent({
+      id: "bound-parent",
+      implementationVersion: "1",
+      inputSchema: emptyInput,
+      resultSchema: numberSchema,
+      initialState,
+      durability: { store, key: "job" },
+      tools: {
+        child: pipelineTool(wrapper, { description: "Run versioned child", replay: "safe" }),
+      },
+      decide: (state, context) =>
+        context.turn === 1
+          ? { kind: "continue", calls: [{ id: "child", tool: "child", input: {} }] }
+          : { kind: "finish", result: state },
+      reduce: (_state, outcomes) => (outcomes[0]!.ok ? Number(outcomes[0]!.value) : -1),
+    });
+  };
+  expect(await parent("1").runOrThrow({})).toBe(1);
+  expect(await parent("1").runOrThrow({})).toBe(1);
+  await expect(parent("2").runOrThrow({})).rejects.toThrow("differ");
+  expect(initialState).toHaveBeenCalledTimes(2);
+  expect(childDecide).toHaveBeenCalledTimes(1);
+});
+
 it("does not open checkpoint storage during planning or previews", async () => {
   const acquire = vi.fn();
   const decide = () => ({ kind: "finish", result: 1 });
@@ -390,6 +490,7 @@ it("rehydrates a child agent's prepared options without repeating its schema tra
   }));
   const child = defineAgent({
     id: "transformed-child",
+    implementationVersion: "1",
     inputSchema: schema<{ raw: string }, { value: number }>(transform),
     resultSchema: numberSchema,
     initialState: () => 0,
@@ -652,6 +753,7 @@ it("persists a terminal failure when concurrent child admissions exceed the ance
   const decide = vi.fn(() => ({ kind: "finish", result: 1 }));
   const child = defineAgent({
     id: "budget-child",
+    implementationVersion: "1",
     inputSchema: emptyInput,
     resultSchema: numberSchema,
     initialState: () => 0,

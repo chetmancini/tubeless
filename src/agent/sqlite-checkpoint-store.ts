@@ -1,95 +1,97 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, open } from "node:fs/promises";
-import { hostname } from "node:os";
+import { createHash } from "node:crypto";
+import { lstat, mkdir, open, realpath } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { agentError } from "./agent-state.js";
 import type { AgentCheckpointStore } from "./checkpoint-types.js";
 import { checkCheckpointKey } from "./checkpoint-key.js";
 
-/** File-backed checkpoint storage using Node's built-in SQLite and per-key process ownership. */
+/** File-backed checkpoint storage using Node's built-in SQLite and per-key file locks. */
 export interface SqliteAgentCheckpointStore extends AgentCheckpointStore {
   /** Close after all execution leases have been released. */
   close(): void;
 }
 
-function alive(pid: number) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ESRCH") return false;
-    return true;
-  }
+function hasCode(error: unknown, code: string) {
+  return error instanceof Error && "code" in error && error.code === code;
 }
 
-/** Open durable SQLite checkpoints; dead owners on this host are reclaimed atomically. */
+async function checkPrivatePath(path: string, directory = false) {
+  const info = await lstat(path);
+  if (
+    !(directory ? info.isDirectory() : info.isFile() && info.nlink === 1) ||
+    (process.platform !== "win32" && (info.mode & 0o077) !== 0)
+  )
+    throw new Error(`Agent checkpoint path must be private: ${path}`);
+}
+
+async function privateFile(path: string) {
+  try {
+    await (await open(path, "wx", 0o600)).close();
+  } catch (error) {
+    if (!hasCode(error, "EEXIST")) throw error;
+  }
+  await checkPrivatePath(path);
+}
+
+/** Open durable SQLite checkpoints; process exit automatically releases execution ownership. */
 export async function openSqliteAgentCheckpointStore(
   file: string
 ): Promise<SqliteAgentCheckpointStore> {
   const { DatabaseSync } = await import("node:sqlite");
-  const path = resolve(file);
-  await mkdir(dirname(path), { recursive: true });
-  try {
-    await (await open(path, "wx", 0o600)).close();
-  } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+  const requested = resolve(file);
+  await mkdir(dirname(requested), { recursive: true });
+  await privateFile(requested);
+  // Canonicalize parent aliases so every store reaches the same per-key locks.
+  const path = await realpath(requested);
+  for (const suffix of ["-wal", "-shm", "-journal"]) {
+    try {
+      await checkPrivatePath(`${path}${suffix}`);
+    } catch (error) {
+      if (!hasCode(error, "ENOENT")) throw error;
+    }
   }
+  const locks = `${path}.leases`;
+  await mkdir(locks, { recursive: true, mode: 0o700 });
+  await checkPrivatePath(locks, true);
   const database = new DatabaseSync(path);
   try {
     database.exec(
       "PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;"
     );
     database.exec(
-      "CREATE TABLE IF NOT EXISTS agent_checkpoints (key TEXT PRIMARY KEY, checkpoint TEXT, host TEXT, pid INTEGER, owner TEXT) STRICT"
+      "CREATE TABLE IF NOT EXISTS agent_checkpoints (key TEXT PRIMARY KEY, checkpoint TEXT) STRICT"
     );
   } catch (error) {
     database.close();
     throw error;
   }
-  const host = hostname();
   let active = 0;
   let closed = false;
-  const transaction = <T>(work: () => T): T => {
-    if (closed) throw new Error("Agent checkpoint store is closed");
-    database.exec("BEGIN IMMEDIATE");
-    try {
-      const value = work();
-      database.exec("COMMIT");
-      return value;
-    } catch (error) {
-      database.exec("ROLLBACK");
-      throw error;
-    }
-  };
   return {
     acquire: async (key) => {
       checkCheckpointKey(key);
-      const owner = randomUUID();
-      transaction(() => {
-        const row = database
-          .prepare("SELECT host, pid, owner FROM agent_checkpoints WHERE key = ?")
-          .get(key);
-        if (
-          row?.owner !== null &&
-          row?.owner !== undefined &&
-          (row.host !== host || typeof row.pid !== "number" || alive(row.pid))
-        )
+      if (closed) throw new Error("Agent checkpoint store is closed");
+      const lockPath = `${locks}/${createHash("sha256").update(key).digest("hex")}.sqlite`;
+      await privateFile(lockPath);
+      if (closed) throw new Error("Agent checkpoint store is closed");
+      const lock = new DatabaseSync(lockPath);
+      try {
+        // Keep this transaction open for the lease. SQLite releases its OS locks on process death.
+        // Separate lock databases let unrelated execution keys run concurrently.
+        lock.exec("BEGIN IMMEDIATE");
+      } catch (error) {
+        lock.close();
+        if (error instanceof Error && "errcode" in error && error.errcode === 5)
           throw agentError(
             "TUBELESS_AGENT_EXECUTION_BUSY",
             `Agent execution ${key} is already owned`
           );
-        database
-          .prepare(
-            "INSERT INTO agent_checkpoints (key, host, pid, owner) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET host = excluded.host, pid = excluded.pid, owner = excluded.owner"
-          )
-          .run(key, host, process.pid, owner);
-      });
+        throw error;
+      }
       active++;
       let released = false;
       const check = () => {
         if (released || closed) throw new Error("Agent checkpoint lease is closed");
-        const row = database.prepare("SELECT owner FROM agent_checkpoints WHERE key = ?").get(key);
-        if (row?.owner !== owner) throw new Error("Agent checkpoint ownership was lost");
       };
       return {
         read: async () => {
@@ -101,20 +103,18 @@ export async function openSqliteAgentCheckpointStore(
         },
         write: async (checkpoint) => {
           check();
-          const result = database
-            .prepare("UPDATE agent_checkpoints SET checkpoint = ? WHERE key = ? AND owner = ?")
-            .run(checkpoint, key, owner);
-          if (result.changes !== 1) throw new Error("Agent checkpoint ownership was lost");
+          database
+            .prepare(
+              "INSERT INTO agent_checkpoints (key, checkpoint) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET checkpoint = excluded.checkpoint"
+            )
+            .run(key, checkpoint);
         },
         close: async () => {
           if (released) return;
-          database
-            .prepare(
-              "UPDATE agent_checkpoints SET owner = NULL, host = NULL, pid = NULL WHERE key = ? AND owner = ?"
-            )
-            .run(key, owner);
+          lock.close();
           released = true;
           active--;
+          // Retain the lock file: unlinking it could give another owner a different inode to lock.
         },
       };
     },

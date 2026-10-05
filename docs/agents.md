@@ -575,13 +575,17 @@ try {
 ```
 
 The SQLite adapter uses Node 22.6+ built-ins, WAL and full synchronous commits;
-it adds no runtime dependency. It creates new database files with mode `0600`.
-It permits different execution keys concurrently and rejects a second live
-owner of the same key. After process death, a later process on the same host
-reclaims that key. A live or unverifiable owner, including an owner on another
-host, is rejected. This adapter is intended for one host, not distributed fencing
-or a shared network filesystem. The SQLite adapter requires Node's `node:sqlite`;
-use another store for runtimes without that module.
+it adds no runtime dependency. It creates database files with mode `0600` and
+rejects existing files with group or other access on POSIX. Database files must
+be regular files with one hard link; SQLite sidecars are checked as well. On
+Windows, protect the database directory with the application's filesystem ACLs.
+A private `<database>.leases` directory holds one SQLite lock file per execution
+key. Different keys run concurrently; a second owner of the same key is rejected.
+Closing the lease or exiting the process releases its native SQLite lock, so
+PID reuse cannot prevent recovery. Keep the lock directory and its files while
+any store is open; removing them can break exclusive ownership. This adapter is
+intended for one host with a local filesystem. It requires Node's `node:sqlite`;
+use another store for runtimes without that module or distributed ownership.
 
 The credential-free [durable workspace recipe](../examples/agent-durable.ts)
 writes and verifies a demonstration file. Run it with Node from the repository:
@@ -604,7 +608,12 @@ individual call intent. It commits validated outcomes independently, then the
 reduced state or final result. Child agents share this journal and ancestor
 budgets, including through ordinary pipeline composition. Live children use
 their parent's journal rather than opening an independent store or execution
-key. Explicitly previewed children retain ephemeral state. Stable fan-out keys
+key. Every live child joining recovery must also declare an explicit
+`implementationVersion`, even without its own `durability` configuration.
+Bump that version when changing its decisions, tools or other semantics; ancestor
+definitions include child versions, so changed children invalidate saved ancestor
+results too. Explicitly previewed children retain ephemeral state and do not
+require a version. Stable fan-out keys
 and deterministic mapping preserve child identities; ordinary pipelines are
 not themselves checkpointed step by step. Accepted call argument transforms,
 committed output transforms, and committed finish transforms are reused.

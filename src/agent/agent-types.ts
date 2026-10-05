@@ -98,6 +98,7 @@ export interface AgentDefinition<
   readonly id: Id;
   readonly name?: string;
   readonly description?: string;
+  /** Semantic revision; required when this agent uses or inherits durable recovery. */
   readonly implementationVersion?: string;
   readonly inputSchema: Options;
   readonly resultSchema: Result;

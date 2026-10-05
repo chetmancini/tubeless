@@ -40,6 +40,16 @@ export async function runAgentInvocation<Options extends object, State>(
 ): Promise<unknown> {
   throwIfAborted(context.signal, "Agent workspace");
   const parent = agentScope(context);
+  const durability = context.dryRun ? undefined : config.durability;
+  const inherited = context.dryRun ? undefined : parent?.journal;
+  if (
+    (durability || inherited) &&
+    (typeof config.implementationVersion !== "string" || !config.implementationVersion.trim())
+  )
+    throw agentError(
+      "TUBELESS_AGENT_INVALID_DEFINITION",
+      "Durable agents require an explicit implementationVersion, including inherited recovery"
+    );
   const provider = config.environment;
   const environment = checkEnvironment(
     provider !== undefined
@@ -57,8 +67,6 @@ export async function runAgentInvocation<Options extends object, State>(
     throw new Error("Agent environment requires a nonblank cwd of at most 4096 characters");
   throwIfAborted(context.signal, "Agent workspace");
   const scoped = { ...context, cwd };
-  const durability = context.dryRun ? undefined : config.durability;
-  const inherited = context.dryRun ? undefined : parent?.journal;
   const journal =
     inherited ??
     (durability

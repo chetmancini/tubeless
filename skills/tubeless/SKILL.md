@@ -155,7 +155,9 @@ Read the corresponding package recipe before using these features:
   calls and child agents with state versions, failures and termination. JSON
   details expose `agentHistory.agents`; missing observations remain unknown.
   Add `durability: { store, key }` with an explicit `implementationVersion` to
-  persist decisions, call outcomes, child state and ancestor budgets. Resume
+  persist decisions, call outcomes, child state and ancestor budgets. Every live
+  child inheriting recovery also needs `implementationVersion`; bump it when
+  changing its semantics. Resume
   using unchanged inputs, workspace and semantics. Running unsafe calls produce
   recoverable interruption outcomes; `replay: "safe"` is only for repeatable or
   idempotent work. Keep initialization, mapping, validators and reducers pure.

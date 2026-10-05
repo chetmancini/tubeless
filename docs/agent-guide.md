@@ -82,7 +82,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Calls, decisions, depth, and leaf concurrency obey every ancestor limit; turns
   are local. Child options are prevalidated once for the whole batch. Add
   `durability: { store, key }` and an explicit `implementationVersion` for checkpointed
-  decisions, outcomes, child state and budgets. Reuse the key and inputs to resume;
+  decisions, outcomes, child state and budgets. Live children that inherit recovery
+  also require an explicit `implementationVersion`; bump it when their semantics
+  change. Reuse the key and inputs to resume;
   use a new key for changed semantics. See [durable execution](./agents.md#durable-execution)
   and the [SQLite recipe](../examples/agent-durable.ts). Running unsafe calls become
   recoverable interruption outcomes; mark only repeatable or idempotent tools
