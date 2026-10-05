@@ -34,10 +34,10 @@ The build fails when only one variable is set.
 | --- | --- |
 | Concepts, CLI, recipes, agent rules | `../docs/*.md` then rebuild |
 | Landing copy | `src/pages/index.astro` |
-| Featured use cases | `src/data/use-cases.ts` shares copy between `src/pages/use-cases.astro`, its Markdown download, and homepage cards |
+| Featured use cases | `src/data/use-cases.ts` shares copy between `src/pages/use-cases.astro`, its Markdown download, and homepage cards. The featured Agents card lives in `src/pages/index.astro` and links to the agent overview |
 | Use-case animations | `src/data/workflow-scenes.ts` defines illustrative fan-out and DAG scenes; `WorkflowAnimation.astro` animates cargo along their tracks and `WorkflowObject.astro` draws dimensional machines. Includes pause controls, offscreen pausing, and reduced-motion support |
 | Animated stage pipe | `src/components/PipelineFlow.astro`; weaves behind the hero and homepage stages, ending in a pulse-synchronized completion bucket, with responsive curves and reduced-motion support |
-| Agent execution graph | `src/components/AgentGraph.astro`; illustrates successive model turns, branching tool calls, and a nested subagent on the homepage and agent page. Uses a scripted animation, not recorded data. Includes playback controls, offscreen pausing, and a static reduced-motion view. |
+| Agent execution graph | `src/components/AgentGraph.astro`; illustrates successive model turns, branching tool calls, and a nested subagent on the agent overview page. Uses a scripted animation, not recorded data. Includes playback controls, offscreen pausing, and a static reduced-motion view. |
 | Recorded-run context | `src/data/agent-recordings.ts` describes the starting fixtures and expected outcomes for `public/agent-evaluation.json`, shared by the replay and Markdown page. Keep it matched to the recorded fixture version when replacing the recordings. The exact task comes from the recording itself. |
 | Recording provenance | The evaluator captures `sourceHashes` before running. Retain those hashes when sanitizing the report; the website build verifies them against the candidate sources. Regenerate the recording after changing those sources. |
 | Package version and engines | `../package.json` via `src/lib/package.ts` |

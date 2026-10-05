@@ -5,7 +5,6 @@ import Install from "../components/Install.astro";
 import LiveTerminal from "../components/LiveTerminal.astro";
 import MermaidGraph from "../components/MermaidGraph.astro";
 import PipelineFlow from "../components/PipelineFlow.astro";
-import AgentGraph from "../components/AgentGraph.astro";
 import Terminal from "../components/Terminal.astro";
 import TtyBar from "../components/TtyBar.astro";
 import { FIRST_PIPELINE_SAMPLE } from "../data/code-samples";
@@ -34,7 +33,7 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
     sameAs: [GITHUB_REPO],
     author: { "@type": "Person", name: "Chet Mancini", url: "https://github.com/chetmancini" },
   }}
-  description="Tubeless is a TypeScript library for pipelines, from data jobs to agents. Connect steps, run them, and inspect what happened."
+  description="Tubeless is a TypeScript library for data pipelines and multi-step workflows, with no runtime dependencies."
 >
   <main>
     <PipelineFlow>
@@ -62,17 +61,16 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
         <div>
           <h1>Tubeless</h1>
           <p class="lede">
-            Typed pipelines for Node.js, from data jobs to agents.
-            Connect steps, run them, and inspect what happened.
+            Typed pipelines for Node.js. Define dependencies, preview execution,
+            and inspect step results.
           </p>
           <p>
-            An agent is a pipeline too: LLM turns choose tool calls, and subagents
-            run as child pipelines. Trace those runs and compose them with the rest of your code.
+            Inspired by cycling, designed to keep work rolling with fewer flats and less resistance.
           </p>
           <Install command={`npm install ${PACKAGE.name}`} />
           <div class="actions">
             <a class="btn" href={href("start")}>Getting started</a>
-            <a class="btn ghost" href={href("agent-harness")}>Build an agent</a>
+            <a class="btn ghost" href={href("agents")}>Agent documentation</a>
           </div>
           <aside class="agent-tip" aria-label="Coding agent setup">
             <p>
@@ -114,18 +112,6 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
             </div>
           </dl>
       </div>
-
-      <section class="wrap section">
-        <div class="section-head">
-          <h2>Agents are pipelines.</h2>
-          <div>
-            <p>The model chooses the next tools to call. Each call becomes a step, and each turn builds on the results. A subagent runs its own pipeline and returns an answer to its parent.</p>
-            <p>You can follow the whole run in one history, use existing pipelines as tools, and pass an agent’s answer to the next step in a workflow.</p>
-            <a href={href("agent-harness")}>Build an agent with Tubeless ↗</a>
-          </div>
-        </div>
-        <AgentGraph />
-      </section>
 
       <section class="wrap section">
         <div class="section-head">
@@ -224,9 +210,14 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
     <section class="wrap section" aria-labelledby="use-cases-heading">
       <div class="section-head">
         <h2 id="use-cases-heading">Use cases</h2>
-        <p>See how Tubeless fits into release scripts, data jobs, and maintenance tasks.</p>
+        <p>See how Tubeless fits into agents, release scripts, data jobs, and maintenance tasks.</p>
       </div>
       <div class="agent-grid">
+        <a class="featured-use-case" href={href("agent-harness")}>
+          <span class="kicker">Featured use case</span>
+          <h3>Agents</h3>
+          <p>Run LLM turns, tool calls, and subagents as pipelines. Trace each run and use the answer in your next step.</p>
+        </a>
         {USE_CASES.map((useCase) => (
           <a href={`${href("use-cases")}#${useCase.id}`}>
             <h3>{useCase.label}</h3>
@@ -247,3 +238,15 @@ import { absUrl, GITHUB_REPO, githubBlob, href } from "../lib/paths";
     </section>
   </main>
 </Base>
+
+<style>
+  .agent-grid .featured-use-case {
+    border-color: var(--gold);
+  }
+
+  .featured-use-case .kicker {
+    display: block;
+    margin-bottom: 0.65rem;
+    color: var(--gold);
+  }
+</style>
