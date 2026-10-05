@@ -2,6 +2,9 @@ import { expect, it, vi } from "vitest";
 import { createSteps, definePipeline } from "../core/pipeline.js";
 import { defineModelAgent, defineTool, pipelineTool } from "./agent.js";
 import { toolObject } from "./default-tool-schema.js";
+import { compileTool } from "./tools.js";
+import { AgentExecutionScope, resolvedLimits } from "./execution-scope.js";
+import { setExecutionScope } from "../core/execution-scope.js";
 import { remote, workspaceAgent } from "./environment.test-support.js";
 
 it("routes all workspace operations, guidance and custom tools through a remote environment", async () => {
@@ -297,3 +300,32 @@ it.each([false, true])(
     }
   }
 );
+
+it("carries execution identity independently of tracing attribute names and values", async () => {
+  const environment = remote();
+  const execution = { id: "job", agent: "agent-route", turn: 2, call: "work" };
+  const empty = toolObject({});
+  const tool = compileTool(
+    "agent",
+    "work",
+    defineTool({
+      description: "Observe identity",
+      inputSchema: empty,
+      outputSchema: empty,
+      run: (_input, context) => {
+        expect(context.execution).toBe(execution);
+        return {};
+      },
+    })
+  );
+  const runtime = { cwd: "/remote/project" };
+  setExecutionScope(
+    runtime,
+    AgentExecutionScope.enter(runtime, resolvedLimits(), "run", environment, "agent")
+  );
+  await tool.pipeline.runOrThrow(
+    { input: {}, execution, attributes: { "agent.turn": "changed", "agent.callId": 99 } },
+    undefined,
+    runtime
+  );
+});

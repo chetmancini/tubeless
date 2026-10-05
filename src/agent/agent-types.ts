@@ -1,5 +1,6 @@
 import type { PipelineStepContext, StandardSchemaV1 } from "../core/pipeline-types.js";
 import type { AgentEnvironment, AgentEnvironmentProvider } from "./environment.js";
+import type { AgentDurability, AgentExecutionIdentity } from "./checkpoint-types.js";
 import type { DefaultAgentTools } from "./default-tools.js";
 
 export type Awaitable<T> = T | Promise<T>;
@@ -70,11 +71,13 @@ export interface AgentLimits {
 /** Step services and the workspace capability available to a registered tool. */
 export interface AgentToolContext extends PipelineStepContext<{}> {
   readonly environment: AgentEnvironment;
+  readonly execution?: AgentExecutionIdentity;
 }
 
 /** Model-facing descriptors and ordinary step services, without executable tools. */
 export interface AgentDecisionContext<Options extends object> extends PipelineStepContext<Options> {
   readonly environment: AgentEnvironment;
+  readonly execution?: AgentExecutionIdentity;
   readonly turn: number;
   readonly stateVersion: number;
   readonly capabilities: readonly {
@@ -95,6 +98,7 @@ export interface AgentDefinition<
   readonly id: Id;
   readonly name?: string;
   readonly description?: string;
+  /** Semantic revision; required when this agent uses or inherits durable recovery. */
   readonly implementationVersion?: string;
   readonly inputSchema: Options;
   readonly resultSchema: Result;
@@ -104,6 +108,8 @@ export interface AgentDefinition<
   readonly limits?: AgentLimits;
   /** Workspace capabilities; descendants inherit them unless explicitly replaced. */
   readonly environment?: AgentEnvironmentProvider;
+  /** Acknowledged recovery checkpoints; requires an explicit implementationVersion. */
+  readonly durability?: AgentDurability<Output<Options>>;
   initialState(options: Output<Options>): State;
   decide(
     state: AgentState<NoInfer<State>>,

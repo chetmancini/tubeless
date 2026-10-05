@@ -1,3 +1,4 @@
+import type { AgentDurability } from "./checkpoint-types.js";
 import type { AgentEnvironmentProvider } from "./environment.js";
 import type { StandardSchemaV1 } from "../core/pipeline-types.js";
 import type { AgentLimits, AgentOutcome, Tools } from "./agent-types.js";
@@ -36,6 +37,7 @@ export function defineModelAgent<
   readonly tools?: Registry;
   readonly limits?: AgentLimits;
   readonly environment?: AgentEnvironmentProvider;
+  readonly durability?: AgentDurability<{ task: string }>;
 }) {
   const { model, instructions, projectContext = true } = config;
   if (

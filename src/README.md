@@ -36,14 +36,21 @@ their source files.
   handlers; orchestration steps hold no permit. The internal child invocation
   boundary returns full reports for handler-origin error classification.
   `agent/default-tools.ts` supplies the standard registry against the typed
-  `AgentEnvironment`. `node-environment.ts` owns local filesystem, commands and
+  `AgentEnvironment`. `node-environment.ts` loads local filesystem, commands and
   guidance; explicit environments supply remote authority without local fallback.
   Custom names override defaults with matching type inference.
   `compile-agent.ts` compiles both custom-decision and model-backed agents through
   the same turn pipeline. `model-agent.ts` owns default schemas, prompting and
   per-run conversation state; `model-prompt.ts` builds prompts from environment guidance.
-  `invocation.ts` owns environment resolution and invocation-local scope creation.
-  `tubeless/agent/node` exposes the optional local workspace adapter.
+  `invocation.ts` owns environment resolution, checkpoint leases, terminal recovery
+  and execution initialization. `checkpoint-session.ts` owns typed, acknowledged
+  subtree transitions and persisted budget charges; callers cannot mutate the journal.
+  `checkpoint-format.ts` validates phase/status unions and restored receipts before
+  private prepared options are reused. `checkpoint-calls.ts` reconstructs accepted
+  calls; `turn.ts` orchestrates decisions, calls and reduction through those operations.
+  Runtime call identity is typed invocation data, independent of tracing attributes.
+  Storage and lossless codecs are separate contracts; `tubeless/agent/node` supplies local environment and SQLite
+  adapters. Traces remain best-effort inspection, independent of recovery.
   The optional `tubeless/agent/openai` entrypoint owns HTTP, provider protocol and
   compaction. The provider-independent agent entrypoint never imports it.
   `testing/agent.example.test.ts` covers public recipes, including ordinary pipeline

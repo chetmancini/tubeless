@@ -1,6 +1,6 @@
 import { setExecutionScope } from "../core/execution-scope.js";
 import { STEP_ORCHESTRATION } from "../core/pipeline-step-metadata.js";
-import { agentScope, limit } from "./execution-scope.js";
+import { agentScope } from "./execution-scope.js";
 import { expectedToolFailure } from "./tool-failure.js";
 import { createSteps, definePipeline, type IterationDecision } from "../core/pipeline.js";
 import { invokeChildPipeline } from "../core/child-execution.js";
@@ -14,8 +14,9 @@ import type { PreparedOptions } from "../core/prepared-options.js";
 import { validateStandardSchema } from "../core/pipeline-validation.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { runConcurrentPartial } from "../utilities/batch.js";
-import { ownState } from "./agent-state.js";
+import { ownState, limit } from "./agent-state.js";
 import { decisionEnvelope, prepareCalls, type PreparedCall } from "./decision.js";
+import { restoreCalls, saveCalls } from "./checkpoint-calls.js";
 import type {
   AgentDecisionContext,
   AgentLimits,
@@ -24,6 +25,7 @@ import type {
   Output,
   Tools,
 } from "./agent-types.js";
+import type { CallOutcome } from "./checkpoint-format.js";
 import type { RuntimeAgentDefinition } from "./compile-agent.js";
 import type { CompiledTool, ToolInvocation } from "./tools.js";
 
@@ -37,10 +39,14 @@ export interface TurnState<State> {
 function childInvocation(
   call: PreparedCall,
   context: PipelineStepContext<object>,
-  attributes: ToolInvocation["attributes"]
+  attributes: ToolInvocation["attributes"],
+  execution: ToolInvocation["execution"]
 ): { options: object; context: PipelineStepContext<object>; preparedOptions?: PreparedOptions } {
   if (call.kind === "handler")
-    return { options: { input: call.input, attributes } satisfies ToolInvocation, context };
+    return {
+      options: { input: call.input, attributes, execution } satisfies ToolInvocation,
+      context,
+    };
   const childContext = { ...context };
   setExecutionScope(childContext, call.scope);
   return { options: call.options, context: childContext, preparedOptions: call.preparedOptions };
@@ -69,7 +75,14 @@ export function createAgentTurn<
       const { turn, stateVersion, state, calls } = execution;
       throwIfAborted(context.signal, "Agent decision");
       const scope = agentScope(context)!;
-      scope.reserve("maxDecisions", 1, context.signal);
+      const saved = scope.journal?.agent(scope.agentKey);
+      if (saved?.phase === "calls")
+        return {
+          kind: "continue",
+          calls: restoreCalls(saved.decision.calls, registry, scope, turn, context),
+          state: ownState(saved.decision.state) as AgentState<State>,
+        };
+      await scope.beginDecision(context.signal);
       const callback = context.dryRun ? definition.dryRun! : definition.decide;
       const attributes = {
         "agent.runId": agentRunId,
@@ -82,8 +95,9 @@ export function createAgentTurn<
           callback(state, {
             ...context,
             options,
-            environment: scope.environment,
             turn,
+            environment: scope.environment,
+            execution: scope.identity(turn),
             stateVersion,
             ...descriptors,
           }),
@@ -103,14 +117,17 @@ export function createAgentTurn<
           "Agent finish result"
         );
         throwIfAborted(context.signal, "Agent finish");
+        await scope.journal?.finish(scope.agentKey, result);
         return { kind: "finish", result };
       }
       if (turn === limits.maxTurns) limit("maxTurns", limits.maxTurns, turn, 1, agentRunId);
       scope.check("maxCalls", decision.calls.length);
       const stateAfterDecision = ownState(response.state);
+      const prepared = await prepareCalls(decision.calls, registry, context, turn);
+      await scope.journal?.acceptDecision(scope.agentKey, stateAfterDecision, saveCalls(prepared));
       return {
         kind: "continue",
-        calls: await prepareCalls(decision.calls, registry, context),
+        calls: prepared,
         state: stateAfterDecision,
       };
     },
@@ -118,11 +135,13 @@ export function createAgentTurn<
   const calls = step("calls", {
     dependsOn: [decide],
     description: "Dispatch validated calls and drain active work before advancing state.",
-    run: async ({ decide: decision }, context): Promise<readonly AgentOutcome<Registry>[]> => {
+    run: async ({ decide: decision }, context): Promise<readonly CallOutcome[]> => {
       if (decision.kind === "finish") return [];
       const { execution, agentRunId } = context.options;
       throwIfAborted(context.signal, "Agent call admission");
-      agentScope(context)!.reserve("maxCalls", decision.calls.length, context.signal);
+      const scope = agentScope(context)!;
+      const journal = scope.journal;
+      await scope.admitCalls(decision.calls.length, context.signal);
       const admitted = execution.calls + decision.calls.length;
       context.reportAttempt(1, {
         "agent.runId": agentRunId,
@@ -152,12 +171,32 @@ export function createAgentTurn<
             };
             // Record the selected alias for pipeline tools as well as handlers.
             context.reportAttempt(1, attributes);
-            const invocation = childInvocation(call, context, attributes);
+            const complete = async (outcome: CallOutcome) => {
+              await journal?.completeCall(scope.agentKey, call.id, outcome);
+              if (outcome.ok) progress.complete(call.id);
+              return outcome;
+            };
+            const admission = await journal?.startCall(scope.agentKey, call.id, call.tool.replay);
+            if (admission?.kind === "outcome") {
+              if (admission.reused)
+                context.reportAttempt(1, { ...attributes, "agent.checkpointReused": true });
+              const { outcome } = admission;
+              if (outcome.ok) progress.complete(call.id);
+              else progress.fail(call.id, new Error(outcome.error.message), false);
+              return outcome;
+            }
+            const invocation = childInvocation(
+              call,
+              context,
+              attributes,
+              scope.identity(execution.turn, call.id)
+            );
             const result = await invokeChildPipeline(
               call.tool.pipeline,
               invocation.options,
               invocation.context,
               {
+                stepId: calls.id,
                 plan: call.plan,
                 hooks: progress.plan(call.id, call.plan),
                 itemKey: call.id,
@@ -166,14 +205,23 @@ export function createAgentTurn<
             );
             if (result.status === "completed" && result.finalized) {
               progress.childCompleted(call.id);
-              progress.complete(call.id);
-              return { id: call.id, tool: call.tool.name, ok: true as const, value: result.value };
+              return complete({
+                id: call.id,
+                tool: call.tool.name,
+                ok: true,
+                value: result.value,
+              });
             }
             const failure = new PipelineExecutionError(result);
             const expected = !context.signal?.aborted && expectedToolFailure(result);
             if (expected) {
               progress.fail(call.id, failure, false);
-              return { id: call.id, tool: call.tool.name, ok: false as const, error: expected };
+              return complete({
+                id: call.id,
+                tool: call.tool.name,
+                ok: false,
+                error: expected,
+              });
             }
             throw failure;
           } catch (error) {
@@ -189,22 +237,23 @@ export function createAgentTurn<
       progress.finish();
       if (!partial.ok) throw partial.failure;
       throwIfAborted(context.signal, "Agent batch");
-      // SAFETY: registered names select their own input/output validators before outcomes are built.
-      return partial.results as readonly AgentOutcome<Registry>[];
+      return partial.results;
     },
   });
   const reduce = step("reduce", {
     dependsOn: [decide, calls],
     description: "Commit one owned state snapshot, or publish the validated finish result.",
-    run: (
+    run: async (
       { decide: decision, calls: outcomes },
       context
-    ): IterationDecision<TurnState<State>, Output<Result>> => {
+    ): Promise<IterationDecision<TurnState<State>, Output<Result>>> => {
       if (decision.kind === "finish") return { kind: "finish", result: decision.result };
       const { execution } = context.options;
       throwIfAborted(context.signal, "Agent reduction");
+      // SAFETY: registered tools validated outcomes before persistence; recovery matched their definitions.
+      const typedOutcomes = outcomes as readonly AgentOutcome<Registry>[];
       const state = definition.reduce
-        ? ownState(definition.reduce(decision.state, outcomes))
+        ? ownState(definition.reduce(decision.state, typedOutcomes))
         : decision.state;
       throwIfAborted(context.signal, "Agent reduction");
       context.reportAttempt(1, {
@@ -213,7 +262,7 @@ export function createAgentTurn<
         "agent.stateVersion": execution.stateVersion + 1,
         "agent.callsAdmitted": execution.calls + decision.calls.length,
       });
-      return {
+      const next = {
         kind: "next",
         state: {
           state,
@@ -221,7 +270,10 @@ export function createAgentTurn<
           stateVersion: execution.stateVersion + 1,
           calls: execution.calls + decision.calls.length,
         },
-      };
+      } as const;
+      const scope = agentScope(context)!;
+      await scope.journal?.advance(scope.agentKey, next.state);
+      return next;
     },
   });
   for (const step of [decide, calls, reduce])

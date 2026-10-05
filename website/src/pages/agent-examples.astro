@@ -20,6 +20,7 @@ import { githubBlob, href } from "../lib/paths";
           <p>These four tasks cover edits, project instructions, and recovery from a missing file. They run in tiny, temporary workspaces; they do not measure performance on a real codebase.</p>
           <p>Each recording includes the original task, starting files, expected result, and independent checks. Step through the turns to inspect the tool calls and final answer.</p>
           <p class="fine">Recorded with <code>{recording.model}</code> ({recording.reasoningEffort} reasoning) on {recording.completedAt.slice(0, 10)}. Browsing them makes no model calls.</p>
+          <p class="fine">These are historical runs using the <a href={href(recording.sourceSnapshot)}>archived evaluator and model sources</a>. They precede durable execution and execution environments.</p>
           <a href={href("agent-evaluation.json")} download>Download the recordings ↓</a>
         </div>
       </div>

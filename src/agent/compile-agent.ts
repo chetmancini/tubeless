@@ -6,18 +6,13 @@ import type {
   StandardSchemaV1,
 } from "../core/pipeline-types.js";
 import type { AnyStep } from "../core/pipeline-steps.js";
-import {
-  agentError,
-  checkSchema,
-  descriptorFingerprint,
-  jsonDescriptor,
-  ownState,
-} from "./agent-state.js";
+import { agentError, checkSchema, descriptorFingerprint, jsonDescriptor } from "./agent-state.js";
 import { compileTool } from "./tools.js";
 import { defaultTools } from "./default-tools.js";
-import { resolvedLimits } from "./execution-scope.js";
+import { resolvedLimits, agentScope } from "./execution-scope.js";
 import { createAgentTurn, type TurnState } from "./turn.js";
-import { runAgentInvocation } from "./invocation.js";
+import { initialAgentExecution, runAgentInvocation } from "./invocation.js";
+import { markAgent } from "./agent-identity.js";
 import type {
   AgentDefinition,
   AgentDecisionContext,
@@ -66,6 +61,14 @@ export function compileAgent<
   readonly definition: PipelineDefinitionSnapshot;
 } {
   const config = { ...definition };
+  if (
+    config.durability &&
+    (typeof config.implementationVersion !== "string" || !config.implementationVersion.trim())
+  )
+    throw agentError(
+      "TUBELESS_AGENT_INVALID_DEFINITION",
+      "Durable agents require an explicit implementationVersion"
+    );
   checkSchema(config.inputSchema, "Agent input");
   if (
     typeof config.initialState !== "function" ||
@@ -110,12 +113,11 @@ export function compileAgent<
     maxIterations: limits.maxTurns,
     dryRun: config.dryRun ? undefined : "skip",
     initialState: (_inputs, context): TurnState<State> => {
-      return {
-        state: ownState(config.initialState(context.options)),
-        turn: 1,
-        stateVersion: 0,
-        calls: 0,
-      };
+      const scope = agentScope(context)!;
+      return initialAgentExecution(
+        () => config.initialState(context.options),
+        scope.journal?.agent(scope.agentKey)?.execution
+      );
     },
     mapOptions: (execution, _inputs, context) => ({
       execution,
@@ -127,8 +129,10 @@ export function compileAgent<
   const compiledAgent: AnyStep<Output<Options>> = agent;
   const run = compiledAgent.run;
   compiledAgent.run = (inputs, context) =>
-    runAgentInvocation({ environment: config.environment, limits, resolveCwd }, context, (scoped) =>
-      run(inputs, scoped)
+    runAgentInvocation(
+      { ...config, limits, resolveCwd, definition: pipeline.definition },
+      context,
+      (scoped) => run(inputs, scoped)
     );
   Object.defineProperty(agent, STEP_AGENT, {
     value: Object.freeze({
@@ -154,6 +158,7 @@ export function compileAgent<
     steps: [compiledAgent],
     finalize: compiledAgent,
   });
+  markAgent(pipeline);
   // SAFETY: the sole iteration step inherits Options, publishes the once-validated Result,
   // and is the only target. This restores deferred generic inference at the factory boundary.
   return pipeline as unknown as Pipeline<Input<Options>, Output<Result>, "agent", "agent", Id> & {

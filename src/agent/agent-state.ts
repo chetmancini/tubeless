@@ -6,6 +6,19 @@ export function agentError(code: string, message: string, cause?: unknown): Erro
   return Object.assign(new Error(message, cause === undefined ? undefined : { cause }), { code });
 }
 
+export function limit(
+  name: string,
+  bound: number,
+  consumed: number,
+  requested: number,
+  scope: string
+): never {
+  throw agentError(
+    "TUBELESS_AGENT_LIMIT_REACHED",
+    `Agent ${name}=${bound} exceeded (consumed=${consumed}, requested=${requested}, scope=${scope})`
+  );
+}
+
 /** Copy plain data into owned, frozen snapshots; repeated references are copied, cycles fail. */
 function copy(value: unknown, ancestors: Set<object>, json: boolean): unknown {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;

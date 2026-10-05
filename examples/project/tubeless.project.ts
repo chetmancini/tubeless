@@ -12,8 +12,9 @@ import { PaginatedPipeline } from "../iteration.ts";
 import { ScriptedAgent } from "../agent.ts";
 import { DelegatingAgentCommand } from "../agent-delegation.ts";
 import { AgentPipelineCommand } from "../agent-pipeline.js";
-import { EnvironmentWorkspaceAgent } from "../agent-environment.js";
 import { CodingAgent } from "../agent-model.js";
+import { EnvironmentWorkspaceAgent } from "../agent-environment.js";
+import { DurableWorkspaceAgent } from "../agent-durable.js";
 import { OpenAIAgentCommand } from "../agent-openai.ts";
 import { WorkspaceAgentCommand } from "../agent-workspace.ts";
 import { YamlImportCommand, YamlPreviewCommand } from "../yaml-pipelines.ts";
@@ -44,6 +45,7 @@ export default defineProject(
     // Scoped guidance precedes nested file operations and task commands in separate turns.
     CodingAgent,
     EnvironmentWorkspaceAgent,
+    DurableWorkspaceAgent,
     // Record with --trace/--store; history <run-id> shows turns, calls and child agents.
     DelegatingAgentCommand,
     AgentPipelineCommand,

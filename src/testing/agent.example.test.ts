@@ -2,8 +2,9 @@ import { DelegatingAgent } from "../../examples/agent-delegation.js";
 import { AgentPipeline } from "../../examples/agent-pipeline.js";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { ScriptedAgent, runAgentExample } from "../../examples/agent.js";
-import { EnvironmentWorkspaceAgent } from "../../examples/agent-environment.js";
 import { WorkspaceAgent } from "../../examples/agent-workspace.js";
+import { EnvironmentWorkspaceAgent } from "../../examples/agent-environment.js";
+import { createDurableWorkspaceAgent } from "../../examples/agent-durable.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +20,31 @@ describe("public agent recipe", () => {
         { cwd }
       );
       expect(JSON.parse(answer).entries).toEqual([{ name: "fixture.txt", kind: "file" }]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+  it("reopens the public SQLite recipe and returns a committed answer without repeating a write", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "tubeless-durable-recipe-"));
+    try {
+      const checkpoint = join(cwd, "state.db");
+      expect(
+        await createDurableWorkspaceAgent(checkpoint).runOrThrow(
+          { task: "hello durable" },
+          undefined,
+          { cwd }
+        )
+      ).toEqual({ answer: "Verified .tubeless/durable-message.txt" });
+      const target = join(cwd, ".tubeless/durable-message.txt");
+      await rm(target);
+      expect(
+        await createDurableWorkspaceAgent(checkpoint).runOrThrow(
+          { task: "hello durable" },
+          undefined,
+          { cwd }
+        )
+      ).toEqual({ answer: "Verified .tubeless/durable-message.txt" });
+      await expect(readFile(target)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -15,6 +15,8 @@ These four tasks cover edits, project instructions, and recovery from a missing 
 
 Each recording includes the original task, starting files, expected result, and independent checks. Recorded ${recording.completedAt}, model ${recording.model}, reasoning ${recording.reasoningEffort}. Browsing them makes no model calls.
 
+These are historical runs using the [archived evaluator and model sources](${absUrl(recording.sourceSnapshot)}). They precede durable execution and execution environments.
+
 ${recording.results.map(run => {
   const context = RECORDING_CONTEXT[run.id];
   return `### ${context.title}

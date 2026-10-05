@@ -154,10 +154,19 @@ Read the corresponding package recipe before using these features:
   Record with `--trace` or `--store`; `tubeless history <run-id>` joins agent turns,
   calls and child agents with state versions, failures and termination. JSON
   details expose `agentHistory.agents`; missing observations remain unknown.
-  Crash-safe resume is not yet implemented. Supply `environment` for remote
-  guidance, files and commands; children inherit it. Custom tools should use
-  `context.environment` for workspace authority. The optional local adapter lives
-  in `tubeless/agent/node`; see `examples/agent-environment.ts`.
+  Add `durability: { store, key }` with an explicit `implementationVersion` to
+  persist decisions, call outcomes, child state and ancestor budgets. Every live
+  child inheriting recovery also needs `implementationVersion`; bump it when
+  changing its semantics. Resume
+  using unchanged inputs, workspace and semantics. Running unsafe calls produce
+  recoverable interruption outcomes; `replay: "safe"` is only for repeatable or
+  idempotent work. Keep initialization, mapping, validators and reducers pure.
+  Read `docs/agents.md` and `examples/agent-durable.ts` for SQLite acknowledgement
+  and single-host ownership. Supply `environment` for remote workspace guidance,
+  files and commands; children inherit it. Custom tools should use
+  `context.environment` and `context.execution` for workspace authority and
+  durable business idempotency. Node adapters live in `tubeless/agent/node`;
+  see `examples/agent-environment.ts` for the workspace adapter.
   Every agent includes `read`, `write`, `edit`, `bash`, `list`, and `search`.
   Custom `tools` extend the registry or replace built-ins by name. Reducers must
   narrow outcomes by `ok` and `tool`. Paths use the run cwd and host permissions;

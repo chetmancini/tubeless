@@ -1,3 +1,4 @@
+import { isAgent } from "./agent-identity.js";
 import { isCompiledPipeline } from "../core/pipeline-identity.js";
 import type {
   Pipeline,
@@ -12,6 +13,7 @@ import type { AgentTool, Input, Output } from "./agent-types.js";
 type ChildPipeline = Pipeline<object, unknown>;
 interface PipelineToolDefinition {
   description: string;
+  replay: "safe" | "unsafe";
   inputSchema: StandardSchemaV1;
   inputJsonSchema: Readonly<Record<string, unknown>>;
   mapOptions?: (input: unknown) => object;
@@ -24,6 +26,7 @@ export function pipelineTool<const Child extends ChildPipeline>(
   pipeline: Child & { readonly optionsSchema: StandardSchemaV1 },
   metadata: {
     readonly description: string;
+    readonly replay?: "safe" | "unsafe";
     readonly inputJsonSchema?: Readonly<Record<string, unknown>>;
   }
 ): AgentTool<PipelineInput<Child>, PipelineResult<Child>>;
@@ -36,6 +39,7 @@ export function pipelineTool<
   pipeline: Child,
   definition: {
     readonly description: string;
+    readonly replay?: "safe" | "unsafe";
     readonly inputSchema: Arguments;
     readonly inputJsonSchema?: Readonly<Record<string, unknown>>;
     mapOptions(input: Output<Arguments>): PipelineInput<Child>;
@@ -49,12 +53,22 @@ export function pipelineTool<
   pipeline: Child,
   definition: {
     readonly description: string;
+    readonly replay?: "safe" | "unsafe";
     readonly inputSchema?: Arguments;
     readonly inputJsonSchema?: Readonly<Record<string, unknown>>;
     mapOptions?(input: Output<Arguments>): PipelineInput<Child>;
   }
 ): AgentTool<unknown, unknown> {
   checkDescription(definition.description);
+  if (
+    definition.replay !== undefined &&
+    definition.replay !== "safe" &&
+    definition.replay !== "unsafe"
+  )
+    throw agentError(
+      "TUBELESS_AGENT_INVALID_DEFINITION",
+      "Pipeline tool replay must be safe or unsafe"
+    );
   if (!isCompiledPipeline(pipeline) || !pipeline.definition)
     throw agentError(
       "TUBELESS_AGENT_INVALID_DEFINITION",
@@ -76,6 +90,7 @@ export function pipelineTool<
   const tool = Object.freeze({}) as AgentTool<unknown, unknown>;
   pipelineTools.set(tool, {
     description: definition.description,
+    replay: definition.replay ?? (isAgent(pipeline) ? "safe" : "unsafe"),
     inputSchema,
     inputJsonSchema,
     // SAFETY: the dispatcher validates Arguments before calling this erased mapper.

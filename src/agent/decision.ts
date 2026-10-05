@@ -65,7 +65,8 @@ export function decisionEnvelope(
 export async function prepareCalls(
   values: readonly unknown[],
   registry: ReadonlyMap<string, CompiledTool>,
-  context: PipelineStepContext<object>
+  context: PipelineStepContext<object>,
+  turn: number
 ): Promise<PreparedCall[]> {
   const ids = new Set<string>();
   const calls = Array.from(values, (call: unknown) => {
@@ -94,7 +95,7 @@ export async function prepareCalls(
     throwIfAborted(context.signal, "Agent batch validation");
     let invocation: PreparedTool;
     if (tool.kind === "pipeline") {
-      const scope = agentScope(context)!.delegate();
+      const scope = agentScope(context)!.delegate(turn, call.id);
       const input = tool.mapOptions
         ? await validateStandardSchema(
             tool.inputSchema,

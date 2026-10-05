@@ -25,6 +25,8 @@ interface ToolDefinition<Arguments extends StandardSchemaV1, Result extends Stan
   readonly inputSchema: Arguments;
   readonly outputSchema: Result;
   readonly inputJsonSchema?: Readonly<Record<string, unknown>>;
+  /** May an interrupted handler rerun? Defaults to unsafe. */
+  readonly replay?: "safe" | "unsafe";
   run(input: Output<Arguments>, context: AgentToolContext): Awaitable<Input<Result>>;
   readonly dryRun?:
     | "skip"
@@ -49,7 +51,10 @@ export function defineTool<
     typeof definition.run !== "function" ||
     (definition.dryRun !== undefined &&
       definition.dryRun !== "skip" &&
-      typeof definition.dryRun !== "function")
+      typeof definition.dryRun !== "function") ||
+    (definition.replay !== undefined &&
+      definition.replay !== "safe" &&
+      definition.replay !== "unsafe")
   )
     throw agentError(
       "TUBELESS_AGENT_INVALID_DEFINITION",
@@ -68,6 +73,7 @@ export function defineTool<
 
 export interface ToolInvocation {
   input: unknown;
+  execution: AgentToolContext["execution"];
   attributes: Readonly<Record<string, string | number>>;
 }
 
@@ -80,7 +86,15 @@ export function compileTool(agentId: string, name: string, tool: AgentTool<unkno
       "TUBELESS_AGENT_INVALID_DEFINITION",
       `Tool ${name} must come from defineTool or pipelineTool`
     );
-  const { run, dryRun, inputSchema, outputSchema, inputJsonSchema, description } = definition;
+  const {
+    run,
+    dryRun,
+    inputSchema,
+    outputSchema,
+    inputJsonSchema,
+    description,
+    replay = "unsafe",
+  } = definition;
   const invoke = async (handler: typeof run, context: PipelineStepContext<ToolInvocation>) => {
     context.reportAttempt(1, context.options.attributes);
     const scope = agentScope(context)!;
@@ -88,6 +102,7 @@ export function compileTool(agentId: string, name: string, tool: AgentTool<unkno
       ...context,
       options: {},
       environment: scope.environment,
+      execution: context.options.execution,
     });
   };
   const { step } = createSteps<ToolInvocation>();
@@ -99,6 +114,7 @@ export function compileTool(agentId: string, name: string, tool: AgentTool<unkno
   });
   return {
     kind: "handler" as const,
+    replay,
     name,
     description,
     inputSchema,

@@ -10,8 +10,8 @@ Package: `tubeless`
 
 | Entrypoint              | Declaration                        | Surface hash                                                       | Exported symbols |
 | ----------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless/agent/node`   | `./dist/agent/node.d.ts`           | `96272edbdf86708363fc3389c464dbd1da38461bc079e7629086fdeb7fa168d7` |                1 |
-| `tubeless/agent`        | `./dist/agent/agent.d.ts`          | `37ad48e49015af83bb50c2a1b324e4bb8b2e73aa6303cec89a91edfdf5a3df88` |               21 |
+| `tubeless/agent/node`   | `./dist/agent/node.d.ts`           | `a32d0ded9cd0c164fb715d568b1954977645275e6ae47585c55517c24aba9745` |                3 |
+| `tubeless/agent`        | `./dist/agent/agent.d.ts`          | `7ece65f5f269eb1341a2648adf6da398da93a2bcf38ab887b62676f782434019` |               28 |
 | `tubeless`              | `./dist/core/pipeline.d.ts`        | `575c60c9404a70f27f199c8b6ae68502718b1d018f2670bcff8536b62cb25767` |               78 |
 | `tubeless/cli`          | `./dist/cli/cli.d.ts`              | `9397e97d1c7bed6a9b86e221056ed3513bf1c7ccc58c253e5d9721143fcddeee` |               31 |
 | `tubeless/batch`        | `./dist/utilities/batch.d.ts`      | `a09125c6849bb91b4bbba2f76c4248452d5288cf0c70671461de5846b1d17037` |                7 |
@@ -21,41 +21,50 @@ Package: `tubeless`
 | `tubeless/project`      | `./dist/project/project.d.ts`      | `688e12b056db35c7d6ac70e1f03335f5e13c90ebd81c4226aa5d718e9f3df615` |                8 |
 | `tubeless/testing`      | `./dist/testing/testing.d.ts`      | `ea6d1d4fbc64eb57d1a93d030bff98f587e611bb5758404d58675c9b160389ba` |               10 |
 | `tubeless/tracing`      | `./dist/tracing/tracing.d.ts`      | `7518d5cc8de7fbd3766f21ece9f6d7e120c6135f95c1d9e3a83d314d7ba2046c` |                3 |
-| `tubeless/agent/openai` | `./dist/agent/openai.d.ts`         | `5cf6a033a0343e61c70dd4927f82e48dd9c1c13e2f32d0c1d01ba0998d29bfbb` |                2 |
+| `tubeless/agent/openai` | `./dist/agent/openai.d.ts`         | `61c0790a5b63a2cb191fcbefe42e889de16af25f4791b026dcb1e671ac54da6d` |                2 |
 
 ## Symbols
 
 ### `tubeless/agent/node`
 
-| Symbol                                                                                                              | Description                                                                          |
-| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| [`createNodeAgentEnvironment`](https://github.com/chetmancini/tubeless/blob/main/src/agent/node-environment.ts#L53) | Local workspace capabilities with bounded reads, atomic writes and cancellable bash. |
+| Symbol                                                                                                                         | Description                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| [`createNodeAgentEnvironment`](https://github.com/chetmancini/tubeless/blob/main/src/agent/node-environment.ts#L53)            | Local workspace capabilities with bounded reads, atomic writes and cancellable bash.      |
+| [`openSqliteAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/sqlite-checkpoint-store.ts#L37) | Open durable SQLite checkpoints; process exit automatically releases execution ownership. |
+| [`SqliteAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/sqlite-checkpoint-store.ts#L9)      | File-backed checkpoint storage using Node's built-in SQLite and per-key file locks.       |
 
 ### `tubeless/agent`
 
-| Symbol                                                                                                       | Description                                                                                          |
-| ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| [`AgentCall`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L29)                | One built-in or custom call with raw model arguments; custom names replace defaults.                 |
-| [`AgentDecision`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L48)            | A nonempty batch of independent calls, or the raw input to the final-result schema.                  |
-| [`AgentDecisionContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L76)     | Model-facing descriptors and ordinary step services, without executable tools.                       |
-| [`AgentEnvironment`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L15)         | Filesystem and command capabilities supplied by a local or remote workspace.                         |
-| [`AgentEnvironmentContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L6)   | Workspace and cancellation shared by an agent's environment operations.                              |
-| [`AgentEnvironmentProvider`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L79) | A workspace capability or a factory resolved once per live agent invocation.                         |
-| [`AgentLimits`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L57)              | Finite limits for this agent and its descendants; child limits may only tighten them.                |
-| [`AgentModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-types.ts#L19)               | Pluggable model transport; the harness owns and isolates its returned conversation per run.          |
-| [`AgentModelRequest`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-types.ts#L4)         | Per-run provider context and the latest ordered tool outcomes, never executable handlers.            |
-| [`AgentModelResponse`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-types.ts#L13)       | An untrusted harness decision and plain-data conversation to retain after the batch succeeds.        |
-| [`AgentOutcome`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L45)             | Input-order result or deliberately recoverable handler failure, including default tools.             |
-| [`AgentProjectInstruction`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L9)   | One scoped guidance file, loaded by the workspace that owns it.                                      |
-| [`AgentState`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L9)                | Deeply read-only view of the owned plain-data state supplied to agent callbacks.                     |
-| [`AgentTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L13)                | Opaque capability created by defineTool or pipelineTool; model decisions contain data only.          |
-| [`AgentToolContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L71)         | Step services and the workspace capability available to a registered tool.                           |
-| [`DefaultAgentTools`](https://github.com/chetmancini/tubeless/blob/main/src/agent/default-tools.ts#L176)     | The read, write, edit, bash, list and search tools included in every agent.                          |
-| [`defineAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent.ts#L31)                    | Build a bounded in-process agent as an ordinary pipeline with one target, agent.                     |
-| [`defineModelAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-agent.ts#L23)         | Build a task-to-answer agent with default tools, prompting, project context, and owned conversation. |
-| [`defineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L42)                     | Declare a validated handler capability; tools skip live work in dry runs by default.                 |
-| [`pipelineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/pipeline-tool.ts#L23)           | Reuse a compiled child's options schema and exact final result.                                      |
-| [`ToolError`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L9)                       | A handler may throw this error to return a recoverable observation to its agent.                     |
+| Symbol                                                                                                                          | Description                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [`AgentCall`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L30)                                   | One built-in or custom call with raw model arguments; custom names replace defaults.                 |
+| [`AgentCheckpointCodec`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-types.ts#L16)                   | Lossless serialization for persisted state, validated arguments and outcomes.                        |
+| [`AgentCheckpointLease`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-types.ts#L2)                    | Exclusive ownership of one execution's acknowledged checkpoint bytes.                                |
+| [`AgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-types.ts#L11)                   | Pluggable checkpoint persistence.                                                                    |
+| [`AgentDecision`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L49)                               | A nonempty batch of independent calls, or the raw input to the final-result schema.                  |
+| [`AgentDecisionContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L78)                        | Model-facing descriptors and ordinary step services, without executable tools.                       |
+| [`AgentDurability`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-types.ts#L22)                        | Resume the same execution key on subsequent invocations with the same definition and inputs.         |
+| [`AgentEnvironment`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L15)                            | Filesystem and command capabilities supplied by a local or remote workspace.                         |
+| [`AgentEnvironmentContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L6)                      | Workspace and cancellation shared by an agent's environment operations.                              |
+| [`AgentEnvironmentProvider`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L79)                    | A workspace capability or a factory resolved once per live agent invocation.                         |
+| [`AgentExecutionIdentity`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-types.ts#L30)                 | Stable durable identities for business idempotency and cross-attempt correlation.                    |
+| [`AgentLimits`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L58)                                 | Finite limits for this agent and its descendants; child limits may only tighten them.                |
+| [`AgentModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-types.ts#L19)                                  | Pluggable model transport; the harness owns and isolates its returned conversation per run.          |
+| [`AgentModelRequest`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-types.ts#L4)                            | Per-run provider context and the latest ordered tool outcomes, never executable handlers.            |
+| [`AgentModelResponse`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-types.ts#L13)                          | An untrusted harness decision and plain-data conversation to retain after the batch succeeds.        |
+| [`AgentOutcome`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L46)                                | Input-order result or deliberately recoverable handler failure, including default tools.             |
+| [`AgentProjectInstruction`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L9)                      | One scoped guidance file, loaded by the workspace that owns it.                                      |
+| [`AgentState`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L10)                                  | Deeply read-only view of the owned plain-data state supplied to agent callbacks.                     |
+| [`AgentTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L14)                                   | Opaque capability created by defineTool or pipelineTool; model decisions contain data only.          |
+| [`AgentToolContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L72)                            | Step services and the workspace capability available to a registered tool.                           |
+| [`createMemoryAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/memory-checkpoint-store.ts#L6) | In-memory checkpoint store with exclusive leases, useful for tests and embedded hosts.               |
+| [`DefaultAgentTools`](https://github.com/chetmancini/tubeless/blob/main/src/agent/default-tools.ts#L179)                        | The read, write, edit, bash, list and search tools included in every agent.                          |
+| [`defineAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent.ts#L41)                                       | Build a bounded in-process agent as an ordinary pipeline with one target, agent.                     |
+| [`defineModelAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-agent.ts#L24)                            | Build a task-to-answer agent with default tools, prompting, project context, and owned conversation. |
+| [`defineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L44)                                        | Declare a validated handler capability; tools skip live work in dry runs by default.                 |
+| [`pipelineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/pipeline-tool.ts#L25)                              | Reuse a compiled child's options schema and exact final result.                                      |
+| [`plainAgentCheckpointCodec`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-codec.ts#L101)             | Lossless, tagged JSON codec for finite plain data; preserves undefined and sparse arrays.            |
+| [`ToolError`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L9)                                          | A handler may throw this error to return a recoverable observation to its agent.                     |
 
 ### `tubeless`
 

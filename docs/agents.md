@@ -1,4 +1,4 @@
-# In-process agents
+# Agents and durable execution
 
 `tubeless/agent` builds an ordinary pipeline around a bounded decision loop.
 Each turn calls your `decide` callback, validates its decision, executes a batch
@@ -79,7 +79,7 @@ its previous plain-data `conversation` (initially `null`), ordered outcomes from
 latest completed batch, and the usual decision context. It returns an untrusted
 `decision` plus the next plain-data `conversation`. Tubeless validates the decision
 and owns a frozen copy of that state; model definitions do not hold mutable sessions.
-Conversation state is committed only after the whole tool batch settles successfully.
+Conversation state is accepted before dispatch and reduced after the whole tool batch settles successfully.
 Expected tool failures are outcomes; fatal failure or cancellation stops the run.
 
 The optional OpenAI subpath uses native fetch and adds no SDK dependency. It defaults
@@ -547,7 +547,115 @@ distinguishes validated finish, limit exhaustion, cancellation, failure, skipped
 execution, and completion without a recorded finish decision. Detailed Studio
 presentation remains a separate slice.
 
-The harness executes in process. Crash-safe resume remains a later stage.
+## Durable execution
+
+Add `durability` and an explicit `implementationVersion` to either agent factory.
+The execution key identifies one task across process restarts. Invoke the same
+agent with the same key and inputs to resume it. Use a new key for new work or
+after changing its definition, prompt, validators, reducers, model configuration,
+or tool implementations.
+
+```ts
+import { defineModelAgent } from "tubeless/agent";
+import { openSqliteAgentCheckpointStore } from "tubeless/agent/node";
+import { openaiModel } from "tubeless/agent/openai";
+
+const store = await openSqliteAgentCheckpointStore(".tubeless/agents.sqlite");
+try {
+  const agent = defineModelAgent({
+    id: "coding",
+    implementationVersion: "coding-v1",
+    model: openaiModel(),
+    durability: { store, key: "issue-123" },
+  });
+  await agent.runOrThrow({ task: "Fix issue 123 and verify the change." });
+} finally {
+  store.close(); // after active invocations have settled
+}
+```
+
+The SQLite adapter uses Node 22.6+ built-ins, WAL and full synchronous commits;
+it adds no runtime dependency. It creates database files with mode `0600` and
+rejects existing files with group or other access on POSIX. Database files must
+be regular files with one hard link; SQLite sidecars are checked as well. On
+Windows, protect the database directory with the application's filesystem ACLs.
+A private `<database>.leases` directory holds one SQLite lock file per execution
+key. Different keys run concurrently; a second owner of the same key is rejected.
+Closing the lease or exiting the process releases its native SQLite lock, so
+PID reuse cannot prevent recovery. Keep the lock directory and its files while
+any store is open; removing them can break exclusive ownership. This adapter is
+intended for one host with a local filesystem. It requires Node's `node:sqlite`;
+use another store for runtimes without that module or distributed ownership.
+
+The credential-free [durable workspace recipe](../examples/agent-durable.ts)
+writes and verifies a demonstration file. Run it with Node from the repository:
+
+```sh
+bun run build
+node dist/workbench/workbench-bin.js run examples/agent-durable.ts -- --task "hello durable"
+```
+
+It opens storage lazily, closes it after execution, and derives a key from the
+task. Repeating that task returns its saved answer without repeating tools.
+A completed answer describes the committed execution; it does not recheck
+external files that have since changed. Plans and dry runs open no storage.
+Durable resume is driven by the key, independently of the CLI's artifact
+`--resume` flag and trace/history storage.
+
+Before external work, the harness acknowledges decision-budget reservations,
+validated decisions and prepared arguments, whole-batch call reservations, and
+individual call intent. It commits validated outcomes independently, then the
+reduced state or final result. Child agents share this journal and ancestor
+budgets, including through ordinary pipeline composition. Live children use
+their parent's journal rather than opening an independent store or execution
+key. Every live child joining recovery must also declare an explicit
+`implementationVersion`, even without its own `durability` configuration.
+Bump that version when changing its decisions, tools or other semantics; ancestor
+definitions include child versions, so changed children invalidate saved ancestor
+results too. Explicitly previewed children retain ephemeral state and do not
+require a version. Stable fan-out keys
+and deterministic mapping preserve child identities; ordinary pipelines are
+not themselves checkpointed step by step. Accepted call argument transforms,
+committed output transforms, and committed finish transforms are reused.
+Root input validation still runs on every invocation.
+
+| Call state at restart       | Behavior                                                           |
+| --------------------------- | ------------------------------------------------------------------ |
+| Completed                   | Reuse the validated outcome; do not dispatch again.                |
+| Pending                     | Dispatch after the saved batch admission.                          |
+| Running, `replay: "safe"`   | Rerun with the same durable call identity.                         |
+| Running, `replay: "unsafe"` | Return `TUBELESS_AGENT_CALL_INTERRUPTED` as a recoverable outcome. |
+
+Handler tools and ordinary pipeline tools default to `"unsafe"`. Read, list,
+search, and directly registered agent pipelines default to `"safe"`.
+Set `replay: "safe"` only for repeatable work or an operation protected by
+business idempotency. A safe ordinary pipeline may repeat its intermediate
+steps and option mapping; that entire invocation must be repeatable. Custom
+tools and decision callbacks receive `context.execution`, containing the stable
+execution ID, agent route, turn, and optional call ID. Use all applicable fields
+for external idempotency keys. Trace run IDs identify individual attempts and
+can change after a restart.
+
+Checkpoints cannot make arbitrary external effects exactly once. An interrupted
+unsafe mutation may have run partially or completely; the agent must inspect
+its effects and choose its next action. Unacknowledged decisions may make a new
+model request and consume another decision reservation. Initialization,
+validators, mappers and reducers must be pure: a crash before their output is
+acknowledged can repeat them. Cancellation preserves resumable state; ordinary
+fatal failures are saved as terminal failures. A rejected storage write stops
+the invocation even when its commit is ambiguous. Reopening reads authoritative
+storage before choosing recovery behavior.
+
+Implement `AgentCheckpointStore` for another backend. `acquire` must guarantee
+exclusive ownership, and `write` must atomically replace the bytes and resolve
+only after durable acknowledgement. Trace exporters are best-effort and do not
+satisfy this contract. `createMemoryAgentCheckpointStore()` is useful for tests
+and embedded hosts; its data is lost with the process. The default
+`plainAgentCheckpointCodec` preserves finite plain data, undefined fields,
+negative zero and sparse arrays. Other validated arguments or results require
+a deterministic lossless codec; agent state itself remains owned plain data.
+Checkpoints contain task inputs, prompts, conversation and outputs; protect
+them as application data.
 
 ## Execution environments
 
@@ -586,8 +694,8 @@ Oversized results fail validation before state commits. Apply truncation in the
 backend and set `truncated` when omitting text or results. Enforce file size and
 mutation semantics in the backend as well, including the completed file after
 an edit. No local guidance or filesystem fallback is used for an explicit environment. Its stable `id`
-identifies the workspace authority, and cwd identifies the workspace within it.
-Custom tools and decision callbacks
+identifies the workspace authority, and cwd identifies the workspace within it;
+durable resume rejects changes to either. Custom tools and decision callbacks
 receive `context.environment`. Composed children inherit it unless they declare
 their own environment. Custom closures remain responsible for using that
 authority instead of accessing the host directly.
@@ -598,7 +706,7 @@ dry runs. Model agents and agents with an explicit environment resolve cwd once
 before decisions and tools. `createNodeAgentEnvironment()` from
 `tubeless/agent/node` exposes the local adapter explicitly. Environments supply
 capabilities, not a sandbox guarantee: isolation and remote-process termination
-belong to the backend. The optional Node adapter remains outside
+belong to the backend. The optional Node adapter and storage remain outside
 the provider-independent contracts.
 
 Run the credential-free [environment recipe](../examples/agent-environment.ts)

@@ -14,7 +14,7 @@ export async function validatePipelineOptions(
   return value;
 }
 
-/** Only the validating factory can mint a token; it is bound to the schema and raw input. */
+/** Private validation receipt, bound to its schema and raw input; never a public bypass. */
 export class PreparedOptions {
   private constructor(
     private readonly schema: StandardSchemaV1 | undefined,
@@ -28,6 +28,15 @@ export class PreparedOptions {
       input,
       await validatePipelineOptions(schema, input, boundary)
     );
+  }
+
+  /** Internal recovery only: restore a receipt after its owning definition and journal were checked. */
+  static restore(
+    schema: StandardSchemaV1 | undefined,
+    input: object,
+    value: object
+  ): PreparedOptions {
+    return new PreparedOptions(schema, input, value);
   }
 
   read(schema: StandardSchemaV1 | undefined, input: object): object {
