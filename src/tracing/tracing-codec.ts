@@ -1,10 +1,5 @@
-import type { PipelineTraceError, PipelineTraceEvent } from "./tracing-contracts.js";
-import { pipelineTraceErrorSchema, pipelineTraceEventSchema } from "./tracing-schema.js";
-
-/** Decode and validate a structured pipeline error from an untrusted wire value. */
-export function decodePipelineTraceError(value: unknown): PipelineTraceError {
-  return pipelineTraceErrorSchema.decode(value, "error");
-}
+import type { PipelineTraceEvent } from "./tracing-contracts.js";
+import { pipelineTraceEventSchema } from "./tracing-schema.js";
 
 /** Decode and validate a version 2 or 3 trace record. */
 export function decodePipelineTraceEvent(value: unknown): PipelineTraceEvent {

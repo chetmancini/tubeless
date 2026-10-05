@@ -664,15 +664,11 @@ describe("local pipeline run studio", () => {
     expect(snapshot.runs).toEqual([
       expect.objectContaining({
         eventCount: 2,
-        logCount: 1,
-        logs: [],
         runId: "run-2",
         status: "running",
       }),
       expect.objectContaining({
         eventCount: 3,
-        logCount: 1,
-        logs: [],
         runId: "run-1",
         status: "completed",
       }),
@@ -688,7 +684,9 @@ describe("local pipeline run studio", () => {
       status: "completed",
     });
     expect(queries.length).toBeGreaterThan(0);
-    expect(queries.every((query) => query.runId === "run-1")).toBe(true);
+    expect(
+      queries.filter((query) => query.runId !== undefined).every((query) => query.runId === "run-1")
+    ).toBe(true);
 
     const missing = await fetch(`${server.url}/api/runs/missing`);
     expect(missing.status).toBe(404);
@@ -735,7 +733,8 @@ describe("local pipeline run studio", () => {
       );
       expect(snapshot.runs).toHaveLength(2);
       for (const run of snapshot.runs) {
-        expect(run.steps).toEqual([{ id: "write", status: "planned" }]);
+        expect(run.stepCount).toBe(1);
+        expect(run).not.toHaveProperty("steps");
       }
       expect(JSON.stringify(snapshot).length).toBeLessThan(2000);
       const detail = await fetch(`${server.url}/api/runs/run-1`).then((response) =>
@@ -751,6 +750,97 @@ describe("local pipeline run studio", () => {
           }))
       );
     }
+  });
+
+  it("pages compact roots, searches descendants and conditionally refreshes history", async () => {
+    const stored: StoredPipelineEvent[] = [];
+    const start = (runId: string, parentRunId?: string) =>
+      stored.push(
+        storedEvent({
+          id: stored.length + 1,
+          version: 2,
+          name: "pipeline.started",
+          pipelineId: runId,
+          runId,
+          parentRunId,
+          timestampMs: stored.length + 1,
+          payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+        })
+      );
+    for (let index = 0; index < 110; index += 1) start(`root-${index}`);
+    start("searchable-child", "root-0");
+    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(stored) });
+    servers.push(server);
+    const endpoint = `${server.url}/api/snapshot`;
+    const initial = await fetch(endpoint);
+    const snapshot = await initial.json();
+    expect(snapshot).toMatchObject({
+      runCount: 111,
+      rootRunCount: 110,
+      matchingRootCount: 110,
+      offset: 0,
+    });
+    expect(snapshot.runs).toHaveLength(50);
+    expect(snapshot.runs[0].runId).toBe("root-109");
+    expect(snapshot.runs.every((run: object) => !("steps" in run) && !("logs" in run))).toBe(true);
+    expect(
+      snapshot.definitions.every(
+        (definition: object) => !("steps" in definition) && !("snapshot" in definition)
+      )
+    ).toBe(true);
+    const unchanged = await fetch(endpoint, {
+      headers: { "if-none-match": initial.headers.get("etag")! },
+    });
+    expect(unchanged.status).toBe(304);
+    expect(await unchanged.text()).toBe("");
+    const replacement = await startPipelineRunStudio({ port: 0, store: memoryStore(stored) });
+    servers.push(replacement);
+    expect(
+      (
+        await fetch(`${replacement.url}/api/snapshot`, {
+          headers: { "if-none-match": initial.headers.get("etag")! },
+        })
+      ).status
+    ).toBe(200);
+    const second = await fetch(endpoint + "?offset=50").then((response) => response.json());
+    expect(second.runs).toHaveLength(50);
+    expect(second.runs[0].runId).toBe("root-59");
+    const search = await fetch(endpoint + "?query=SEARCHABLE&run=searchable-child").then(
+      (response) => response.json()
+    );
+    expect(search.runs).toMatchObject([
+      { runId: "root-0", descendantCount: 1, subtreeEventCount: 2 },
+    ]);
+    expect(search.selectedRun).toMatchObject({ runId: "searchable-child", rootRunId: "root-0" });
+    const nested = await fetch(`${server.url}/api/runs/searchable-child`).then((response) =>
+      response.json()
+    );
+    expect(nested.ancestors).toMatchObject([{ runId: "root-0" }]);
+    const root = await fetch(`${server.url}/api/runs/root-0`).then((response) => response.json());
+    expect(root.children).toMatchObject([{ runId: "searchable-child" }]);
+    expect(root.descendantCount).toBe(1);
+    start("new-root");
+    const changed = await fetch(endpoint, {
+      headers: { "if-none-match": initial.headers.get("etag")! },
+    });
+    expect(changed.status).toBe(200);
+    expect((await changed.json()).runCount).toBe(112);
+    expect((await fetch(endpoint + "?offset=-1")).status).toBe(400);
+    const definition = await fetch(`${server.url}/api/definitions?pipelineId=root-0`).then(
+      (response) => response.json()
+    );
+    expect(definition.definition).toMatchObject({ pipelineId: "root-0", steps: [], runCount: 1 });
+    expect(definition).not.toHaveProperty("runs");
+    const page = await fetch(`${server.url}/api/definitions/runs?pipelineId=root-0&offset=50`).then(
+      (response) => response.json()
+    );
+    expect(page).toMatchObject({ runs: [{ runId: "root-0" }], offset: 0, runCount: 1 });
+    expect(page).not.toHaveProperty("definition");
+    expect(
+      (await fetch(`${server.url}/api/definitions/runs?pipelineId=root-0&offset=-1`)).status
+    ).toBe(400);
+    expect((await fetch(`${server.url}/api/definitions?pipelineId=missing`)).status).toBe(404);
+    expect((await fetch(`${server.url}/api/definitions/runs?pipelineId=missing`)).status).toBe(404);
   });
 
   it("includes a first store event whose id is zero in snapshots", async () => {

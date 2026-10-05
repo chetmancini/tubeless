@@ -1,3 +1,6 @@
+import { studioSnapshot, studioRunDetail } from "./run-store-ui.test-support.js";
+import { storedPipelineRunSchema } from "../run-store/run-store-schema.js";
+import { parseStudioPayload } from "./run-store-ui-schema.js";
 import { describe, expect, it, vi } from "vitest";
 import { RUN_MODEL_VERSION } from "../core/pipeline.js";
 import type { StoredPipelineRun } from "../run-store/run-store.js";
@@ -24,16 +27,10 @@ function run(overrides: Partial<StoredPipelineRun> = {}): StoredPipelineRun {
 }
 
 function snapshot(runs: readonly StoredPipelineRun[] = [run()]) {
-  return {
-    activeRunCount: 0,
-    completedRunCount: runs.length,
-    definitions: [],
-    failedRunCount: 0,
-    generatedAtMs: 2,
-    lastEventId: 1,
-    liveRunIds: [],
-    runs,
-  };
+  return studioSnapshot(runs);
+}
+function parseRun(value: unknown) {
+  return parseStudioPayload(storedPipelineRunSchema, value);
 }
 
 function jsonResponse(value: unknown, init?: ResponseInit) {
@@ -53,10 +50,8 @@ describe("Studio API response parsing", () => {
       artifact: { id: "input" },
     };
     const read = (artifact: unknown) =>
-      parseStudioSnapshot(
-        snapshot([
-          run({ steps: [{ id: "load", status: "completed", artifacts: [artifact as never] }] }),
-        ])
+      parseRun(
+        run({ steps: [{ id: "load", status: "completed", artifacts: [artifact as never] }] })
       );
     expect(read(entry)).toBeDefined();
     expect(read({ ...entry, operation: "reuse" })).toBeDefined();
@@ -72,25 +67,23 @@ describe("Studio API response parsing", () => {
 
   it("accepts a complete snapshot and rejects malformed nested run data", () => {
     expect(parseStudioSnapshot(snapshot())?.runs[0]?.runId).toBe("run-1");
-    expect(parseStudioSnapshot(snapshot([run({ correlationId: 42 as never })]))).toBeUndefined();
+    expect(parseRun(run({ correlationId: 42 as never }))).toBeUndefined();
     expect(
-      parseStudioSnapshot(
-        snapshot([
-          run({
-            steps: [
-              {
-                attempt: {
-                  attemptId: "attempt-1",
-                  retries: undefined as never,
-                  startedAtMs: 1,
-                  status: "completed",
-                },
-                id: "step",
+      parseRun(
+        run({
+          steps: [
+            {
+              id: "step",
+              status: "completed",
+              attempt: {
+                attemptId: "attempt",
+                retries: undefined as never,
+                startedAtMs: 1,
                 status: "completed",
               },
-            ],
-          }),
-        ])
+            },
+          ],
+        })
       )
     ).toBeUndefined();
   });
@@ -121,6 +114,140 @@ describe("Studio API response parsing", () => {
         commands: [{ ...valid.commands[0], parameters: [{ key: "name" }] }],
       })
     ).toBeUndefined();
+    for (const field of [
+      "min",
+      "max",
+      "integer",
+      "mustExist",
+      "pathKind",
+      "short",
+      "environment",
+      "description",
+    ]) {
+      expect(
+        parseStudioCommands({
+          commands: [
+            {
+              ...valid.commands[0],
+              parameters: [{ ...valid.commands[0]!.parameters[0], [field]: { invalid: true } }],
+            },
+          ],
+        })
+      ).toBeUndefined();
+    }
+  });
+
+  it("rejects incomplete plans before they reach rendering", async () => {
+    const step = {
+      id: "work",
+      dependencies: [],
+      optionalDependencies: [],
+      skipAfterFailureOf: [],
+      selectionReasons: [{ kind: "all" }],
+      selected: true,
+      dryRun: "run",
+      runtimeSkipPossible: false,
+    };
+    const plan = { pipelineId: "fixture", dryRun: false, errors: [], ok: true, steps: [step] };
+    const preview = (value: unknown) =>
+      createStudioApi(vi.fn(async () => jsonResponse({ plan: value }))).previewPlan("fixture", {});
+    await expect(preview(plan)).resolves.toEqual(plan);
+    for (const field of [
+      "selectionReasons",
+      "optionalDependencies",
+      "skipAfterFailureOf",
+      "dryRun",
+      "runtimeSkipPossible",
+    ]) {
+      const invalid = { ...step, [field]: undefined };
+      await expect(preview({ ...plan, steps: [invalid] })).rejects.toThrow(
+        /invalid response for plan/
+      );
+    }
+    await expect(preview({ ...plan, errors: [{ message: "only a message" }] })).rejects.toThrow(
+      /invalid response for plan/
+    );
+    await expect(
+      preview({ ...plan, steps: [{ ...step, selectionReasons: [{ kind: "target" }] }] })
+    ).rejects.toThrow(/invalid response for plan/);
+  });
+
+  it("validates full progress details, agent metadata and the literal run version", () => {
+    const recorded = run({
+      steps: [
+        {
+          id: "work",
+          status: "running",
+          progress: {
+            completed: 1,
+            details: [
+              { id: "item", name: "Item", depth: 1, completed: 1, total: 2, status: "running" },
+            ],
+          },
+        },
+      ],
+    });
+    const decoded = parseRun(recorded);
+    expect(decoded).toBeDefined();
+    expect(decoded?.steps[0]?.progress?.details).not.toBe(recorded.steps[0]?.progress?.details);
+    for (const field of ["name", "depth", "completed", "total", "status"]) {
+      const invalid = structuredClone(recorded);
+      Object.assign(invalid.steps[0]!.progress!.details![0]!, { [field]: { invalid: true } });
+      expect(parseRun(invalid)).toBeUndefined();
+    }
+    expect(parseRun({ ...recorded, version: 999 })).toBeUndefined();
+    expect(
+      parseRun({ ...recorded, agentTurn: { agentRunId: "agent", index: 1, calls: [{}] } })
+    ).toBeUndefined();
+  });
+
+  it("rejects incomplete definition summaries and preserves unknown-field compatibility", () => {
+    expect(
+      parseStudioSnapshot({ ...snapshot(), definitions: [{ pipelineId: "fixture", runCount: 1 }] })
+    ).toBeUndefined();
+    expect(parseStudioSnapshot({ ...snapshot(), future: true })?.runs[0]?.runId).toBe("run-1");
+  });
+
+  it("validates definition metadata independently of its run page", async () => {
+    const definition = {
+      pipelineId: "fixture",
+      activeRuns: 0,
+      firstSeenAtMs: 1,
+      lastSeenAtMs: 1,
+      runCount: 1,
+      steps: [],
+      targetIds: [],
+    };
+    const page = { runs: snapshot().runs, offset: 0, runCount: 1 };
+    const fetcher: typeof fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ definition }))
+      .mockResolvedValueOnce(jsonResponse(page))
+      .mockResolvedValueOnce(jsonResponse({ definition: { ...definition, steps: "invalid" } }))
+      .mockResolvedValueOnce(jsonResponse({ ...page, offset: -1 }));
+    const api = createStudioApi(fetcher);
+    expect(await api.loadDefinition("fixture")).toEqual(definition);
+    expect(await api.loadDefinitionRuns("fixture")).toEqual(page);
+    await expect(api.loadDefinition("fixture")).rejects.toThrow("invalid response for definition.");
+    await expect(api.loadDefinitionRuns("fixture")).rejects.toThrow(
+      "invalid response for definition runs."
+    );
+  });
+
+  it("reuses the validated snapshot on a conditional 304 response", async () => {
+    const fetcher: typeof fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(snapshot(), { headers: { etag: '"revision"' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 304 }));
+    const api = createStudioApi(fetcher);
+    const first = await api.loadSnapshot({ query: "child", selectedRunId: "nested", offset: 50 });
+    expect(await api.loadSnapshot({ query: "child", selectedRunId: "nested", offset: 50 })).toBe(
+      first
+    );
+    expect(fetcher).toHaveBeenLastCalledWith(
+      "/api/snapshot?query=child&offset=50&run=nested",
+      expect.objectContaining({ headers: { "if-none-match": '"revision"' } })
+    );
   });
 
   it("accepts iteration metadata and rejects invalid bounds or relationships", () => {
@@ -136,23 +263,19 @@ describe("Studio API response parsing", () => {
       iteration,
       steps: [{ id: "repeat", status: "completed", nestedPipeline }],
     });
-    expect(parseStudioSnapshot(snapshot([recorded]))?.runs[0]?.iteration).toEqual(iteration);
+    expect(parseRun(recorded)?.iteration).toEqual(iteration);
+    expect(parseRun({ ...recorded, iteration: { ...iteration, index: 0 } })).toBeUndefined();
     expect(
-      parseStudioSnapshot(snapshot([{ ...recorded, iteration: { ...iteration, index: 0 } }]))
-    ).toBeUndefined();
-    expect(
-      parseStudioSnapshot(
-        snapshot([
-          run({
-            steps: [
-              {
-                id: "repeat",
-                status: "completed",
-                nestedPipeline: { ...nestedPipeline, maxIterations: 0 },
-              },
-            ],
-          }),
-        ])
+      parseRun(
+        run({
+          steps: [
+            {
+              id: "repeat",
+              status: "completed",
+              nestedPipeline: { ...nestedPipeline, maxIterations: 0 },
+            },
+          ],
+        })
       )
     ).toBeUndefined();
   });
@@ -164,10 +287,10 @@ describe("Studio API response parsing", () => {
   });
 
   it("validates projected run details without requiring raw events", async () => {
-    const validFetcher: typeof fetch = vi.fn(async () => jsonResponse({ run: run() }));
-    await expect(createStudioApi(validFetcher).loadRunDetail("run-1")).resolves.toEqual({
-      run: run(),
-    });
+    const validFetcher: typeof fetch = vi.fn(async () => jsonResponse(studioRunDetail(run())));
+    await expect(createStudioApi(validFetcher).loadRunDetail("run-1")).resolves.toEqual(
+      studioRunDetail(run())
+    );
 
     const invalidFetcher: typeof fetch = vi.fn(async () =>
       jsonResponse({ run: { ...run(), logs: 1 } })
@@ -199,31 +322,26 @@ describe("Studio API response parsing", () => {
 it.each(["override", "cache"] as const)(
   "accepts %s steps and attempts in recorded Studio runs",
   (outputSource) => {
-    const recorded = snapshot([
-      run({
-        steps: [
-          {
-            id: "load",
+    const recorded = run({
+      steps: [
+        {
+          id: "load",
+          status: "completed",
+          outputSource,
+          attempt: {
+            attemptId: "override-1",
+            startedAtMs: 1,
+            finishedAtMs: 2,
+            retries: [],
             status: "completed",
             outputSource,
-            attempt: {
-              attemptId: "override-1",
-              startedAtMs: 1,
-              finishedAtMs: 2,
-              retries: [],
-              status: "completed",
-              outputSource,
-            },
           },
-        ],
-      }),
-    ]);
-    expect(parseStudioSnapshot(recorded)?.runs[0]?.steps[0]).toMatchObject({
-      status: "completed",
-      outputSource,
+        },
+      ],
     });
-    recorded.runs[0]!.steps[0]!.outputSource = "invalid" as never;
-    expect(parseStudioSnapshot(recorded)).toBeUndefined();
+    expect(parseRun(recorded)?.steps[0]).toMatchObject({ status: "completed", outputSource });
+    recorded.steps[0]!.outputSource = "invalid" as never;
+    expect(parseRun(recorded)).toBeUndefined();
   }
 );
 
@@ -233,6 +351,9 @@ describe("mounted transport and access expiry", () => {
     (api: ReturnType<typeof createStudioApi>) => api.loadCommands(),
     (api: ReturnType<typeof createStudioApi>) => api.loadCapabilities(),
     (api: ReturnType<typeof createStudioApi>) => api.loadRunDetail("run/id"),
+    (api: ReturnType<typeof createStudioApi>) => api.loadDefinition("pipeline/id", "definition:id"),
+    (api: ReturnType<typeof createStudioApi>) =>
+      api.loadDefinitionRuns("pipeline/id", "definition:id", 50),
     (api: ReturnType<typeof createStudioApi>) => api.launch("fixture/id", {}),
     (api: ReturnType<typeof createStudioApi>) => api.previewPlan("fixture/id", {}),
     (api: ReturnType<typeof createStudioApi>) => api.cancelRun("run/id"),
@@ -249,6 +370,8 @@ describe("mounted transport and access expiry", () => {
       "/admin/pipelines/api/commands",
       "/admin/pipelines/api/capabilities",
       "/admin/pipelines/api/runs/run%2Fid",
+      "/admin/pipelines/api/definitions?pipelineId=pipeline%2Fid&definitionId=definition%3Aid",
+      "/admin/pipelines/api/definitions/runs?pipelineId=pipeline%2Fid&offset=50&definitionId=definition%3Aid",
       "/admin/pipelines/api/commands/fixture%2Fid/runs",
       "/admin/pipelines/api/commands/fixture%2Fid/plan",
       "/admin/pipelines/api/runs/run%2Fid/cancel",

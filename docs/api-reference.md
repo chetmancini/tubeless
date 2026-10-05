@@ -10,18 +10,18 @@ Package: `tubeless`
 
 | Entrypoint              | Declaration                        | Surface hash                                                       | Exported symbols |
 | ----------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless/agent/node`   | `./dist/agent/node.d.ts`           | `0d4d130ba7c4b52294e96aee31c64f5c2013b38bf0b34bee7e91d1a6b3e1e411` |                1 |
-| `tubeless/agent`        | `./dist/agent/agent.d.ts`          | `61fc61ddd12badd73d47850ac4be340dbdccddc10c2e3031f789f0541849c202` |               21 |
-| `tubeless`              | `./dist/core/pipeline.d.ts`        | `f333263c7a90feb529af245f3d4a462df9e4d58d144fbce987be4dd3ce3141f8` |               78 |
-| `tubeless/cli`          | `./dist/cli/cli.d.ts`              | `6fe9230a581d033b4d6d869260acf671a8d580c7af817f77cee8795caac02f45` |               31 |
+| `tubeless/agent/node`   | `./dist/agent/node.d.ts`           | `96272edbdf86708363fc3389c464dbd1da38461bc079e7629086fdeb7fa168d7` |                1 |
+| `tubeless/agent`        | `./dist/agent/agent.d.ts`          | `37ad48e49015af83bb50c2a1b324e4bb8b2e73aa6303cec89a91edfdf5a3df88` |               21 |
+| `tubeless`              | `./dist/core/pipeline.d.ts`        | `575c60c9404a70f27f199c8b6ae68502718b1d018f2670bcff8536b62cb25767` |               78 |
+| `tubeless/cli`          | `./dist/cli/cli.d.ts`              | `9397e97d1c7bed6a9b86e221056ed3513bf1c7ccc58c253e5d9721143fcddeee` |               31 |
 | `tubeless/batch`        | `./dist/utilities/batch.d.ts`      | `a09125c6849bb91b4bbba2f76c4248452d5288cf0c70671461de5846b1d17037` |                7 |
-| `tubeless/node`         | `./dist/node/node.d.ts`            | `9e5b0fa9821531901f98aeb6227f13ec42fad86e36d556812b86b48657e33c26` |               14 |
+| `tubeless/node`         | `./dist/node/node.d.ts`            | `1df5330d5c0263a2b96239a6e30d0472ecb49cc60e9c15b04ab89914b8cbe183` |               14 |
 | `tubeless/rate-limit`   | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`        | `./dist/utilities/retry.d.ts`      | `86e98c33f7e91ee1b34eff817ef6075f6583b9a57037a1ad2394dcf3f372bbcf` |                6 |
-| `tubeless/project`      | `./dist/project/project.d.ts`      | `1b8b5d492a2af8848656fe2e723a35346677a9426a332b12adc9a1d46d6afbbf` |                8 |
-| `tubeless/testing`      | `./dist/testing/testing.d.ts`      | `afd2498f7c2449b7656ae8d2d5a70452dca7fcf51be2f4e4e7195655ec397815` |               10 |
-| `tubeless/tracing`      | `./dist/tracing/tracing.d.ts`      | `5e5d5d09edd191d41a29b584a2ab368038dcb3db91b6c20709c19e6ed189fb97` |                3 |
-| `tubeless/agent/openai` | `./dist/agent/openai.d.ts`         | `03736bef631003145cc8b39459ed4a80d0ffd7a89de4b79c67779921004567d1` |                2 |
+| `tubeless/project`      | `./dist/project/project.d.ts`      | `688e12b056db35c7d6ac70e1f03335f5e13c90ebd81c4226aa5d718e9f3df615` |                8 |
+| `tubeless/testing`      | `./dist/testing/testing.d.ts`      | `ea6d1d4fbc64eb57d1a93d030bff98f587e611bb5758404d58675c9b160389ba` |               10 |
+| `tubeless/tracing`      | `./dist/tracing/tracing.d.ts`      | `7518d5cc8de7fbd3766f21ece9f6d7e120c6135f95c1d9e3a83d314d7ba2046c` |                3 |
+| `tubeless/agent/openai` | `./dist/agent/openai.d.ts`         | `5cf6a033a0343e61c70dd4927f82e48dd9c1c13e2f32d0c1d01ba0998d29bfbb` |                2 |
 
 ## Symbols
 
@@ -50,7 +50,7 @@ Package: `tubeless`
 | [`AgentState`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L9)                | Deeply read-only view of the owned plain-data state supplied to agent callbacks.                     |
 | [`AgentTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L13)                | Opaque capability created by defineTool or pipelineTool; model decisions contain data only.          |
 | [`AgentToolContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L71)         | Step services and the workspace capability available to a registered tool.                           |
-| [`DefaultAgentTools`](https://github.com/chetmancini/tubeless/blob/main/src/agent/default-tools.ts#L175)     | The read, write, edit, bash, list and search tools included in every agent.                          |
+| [`DefaultAgentTools`](https://github.com/chetmancini/tubeless/blob/main/src/agent/default-tools.ts#L176)     | The read, write, edit, bash, list and search tools included in every agent.                          |
 | [`defineAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent.ts#L31)                    | Build a bounded in-process agent as an ordinary pipeline with one target, agent.                     |
 | [`defineModelAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-agent.ts#L23)         | Build a task-to-answer agent with default tools, prompting, project context, and owned conversation. |
 | [`defineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L42)                     | Declare a validated handler capability; tools skip live work in dry runs by default.                 |

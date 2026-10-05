@@ -1,44 +1,53 @@
+import { STUDIO_HISTORY_PAGE_SIZE } from "./run-store-ui-schema.js";
+import type { StoredDefinitionSummary } from "../run-store/run-history.js";
+import type { StudioApi, StudioDefinitionRuns } from "./run-store-ui-client-transport.js";
 import { MetadataDetails, MetadataExplorer } from "./run-store-ui-metadata.js";
-import { useState } from "preact/hooks";
+import { useCallback, useState } from "preact/hooks";
 import { compareDefinitions } from "../run-store/definition-diff.js";
-import type { StoredPipelineDefinition, StoredPipelineRun } from "../run-store/run-store.js";
+import type { StoredPipelineDefinition } from "../run-store/run-store.js";
+import { useStudioResource, type StudioResource } from "./run-store-ui-resource.js";
 
-function key(definition: StoredPipelineDefinition): string {
+function key(definition: StoredDefinitionSummary): string {
   return JSON.stringify([definition.pipelineId, definition.identity?.definitionId ?? null]);
 }
 
-function label(definition: StoredPipelineDefinition): string {
+function label(definition: StoredDefinitionSummary): string {
   const identity = definition.identity;
   return `${definition.pipelineId} · ${identity ? identity.definitionId.slice(7, 19) : "Legacy (identity not recorded)"} · ${identity?.implementationVersion ?? "implementation unknown"} · ${definition.runCount} ${definition.runCount === 1 ? "run" : "runs"}`;
 }
 
-export function DefinitionHistory({
+export function DefinitionHistoryView({
   definitions,
+  selected,
+  candidates,
+  previous,
+  definition,
   runs,
+  comparison,
+  onDefinition,
+  onCompare,
+  onPage,
   onSelect,
 }: {
-  definitions: readonly StoredPipelineDefinition[];
-  runs: readonly StoredPipelineRun[];
-  onSelect: (runId: string) => void;
+  definitions: readonly StoredDefinitionSummary[];
+  selected: StoredDefinitionSummary | undefined;
+  candidates: readonly StoredDefinitionSummary[];
+  previous: StoredDefinitionSummary | undefined;
+  definition: StudioResource<StoredPipelineDefinition>;
+  runs: StudioResource<StudioDefinitionRuns>;
+  comparison: StudioResource<StoredPipelineDefinition>;
+  onDefinition(key: string): void;
+  onCompare(key: string): void;
+  onPage(offset: number): void;
+  onSelect(runId: string): void;
 }) {
-  const [selectedKey, setSelectedKey] = useState("");
-  const [compareKey, setCompareKey] = useState("");
-  const selected =
-    definitions.find((definition) => key(definition) === selectedKey) ?? definitions[0];
   if (!selected) return null;
-  const candidates = definitions.filter(
-    (definition) =>
-      definition.pipelineId === selected.pipelineId && key(definition) !== key(selected)
-  );
-  const previous = candidates.find((definition) => key(definition) === compareKey) ?? candidates[0];
-  const groupedRuns = runs.filter(
-    (run) =>
-      run.pipelineId === selected.pipelineId &&
-      run.definitionIdentity?.definitionId === selected.identity?.definitionId
-  );
+  const snapshot = definition.value?.snapshot;
+  const page = runs.value;
+  const groupedRuns = page?.runs ?? [];
   const changes =
-    previous?.snapshot && selected.snapshot
-      ? compareDefinitions(previous.snapshot, selected.snapshot)
+    comparison.value?.snapshot && snapshot
+      ? compareDefinitions(comparison.value.snapshot, snapshot)
       : undefined;
   return (
     <section class="sheet definition-history">
@@ -58,8 +67,7 @@ export function DefinitionHistory({
             aria-label="Definition"
             value={key(selected)}
             onChange={(event) => {
-              setSelectedKey(event.currentTarget.value);
-              setCompareKey("");
+              onDefinition(event.currentTarget.value);
             }}
           >
             {definitions.map((definition) => (
@@ -76,14 +84,32 @@ export function DefinitionHistory({
             Definition ID: <code>{selected.identity.definitionId}</code>
           </p>
         )}
-        {selected.snapshot && (
+        {snapshot && (
           <>
-            <MetadataDetails metadata={selected.snapshot.metadata} />
-            <MetadataExplorer key={key(selected)} steps={selected.snapshot.steps} />
+            <MetadataDetails metadata={snapshot.metadata} />
+            <MetadataExplorer key={key(selected)} steps={snapshot.steps} />
           </>
         )}
+        {definition.error && (
+          <p role="alert">
+            {definition.error}{" "}
+            <button type="button" onClick={definition.reload}>
+              Retry definition
+            </button>
+          </p>
+        )}
+        {!definition.value && definition.loading && <p>Loading definition…</p>}
         <details>
-          <summary>Runs with this definition ({groupedRuns.length})</summary>
+          <summary>Runs with this definition ({selected.runCount})</summary>
+          {runs.error && (
+            <p role="alert">
+              {runs.error}{" "}
+              <button type="button" onClick={runs.reload}>
+                Retry runs
+              </button>
+            </p>
+          )}
+          {runs.loading && <p>Loading runs…</p>}
           <ul>
             {groupedRuns.map((run) => (
               <li key={run.runId}>
@@ -93,6 +119,27 @@ export function DefinitionHistory({
               </li>
             ))}
           </ul>
+          {page && page.runCount > STUDIO_HISTORY_PAGE_SIZE && (
+            <div class="confirm-actions">
+              <button
+                class="secondary-button"
+                disabled={runs.loading || !page.offset}
+                onClick={() => onPage(Math.max(0, page.offset - STUDIO_HISTORY_PAGE_SIZE))}
+              >
+                Previous
+              </button>
+              <span>
+                {page.offset + 1}–{page.offset + groupedRuns.length} of {page.runCount}
+              </span>
+              <button
+                class="secondary-button"
+                disabled={runs.loading || page.offset + STUDIO_HISTORY_PAGE_SIZE >= page.runCount}
+                onClick={() => onPage(page.offset + STUDIO_HISTORY_PAGE_SIZE)}
+              >
+                Next
+              </button>
+            </div>
+          )}
         </details>
         {previous ? (
           <>
@@ -101,7 +148,7 @@ export function DefinitionHistory({
               <select
                 aria-label="Compare from"
                 value={key(previous)}
-                onChange={(event) => setCompareKey(event.currentTarget.value)}
+                onChange={(event) => onCompare(event.currentTarget.value)}
               >
                 {candidates.map((definition) => (
                   <option key={key(definition)} value={key(definition)}>
@@ -113,7 +160,16 @@ export function DefinitionHistory({
             <p class="sheet-subtitle">
               Changes from the comparison definition to the selected definition.
             </p>
-            {changes ? (
+            {comparison.error ? (
+              <p role="alert">
+                {comparison.error}{" "}
+                <button type="button" onClick={comparison.reload}>
+                  Retry comparison
+                </button>
+              </p>
+            ) : !comparison.value || !definition.value ? (
+              (comparison.loading || definition.loading) && <p>Loading comparison…</p>
+            ) : changes ? (
               changes.length ? (
                 <ul class="definition-changes">
                   {changes.map((change, index) => (
@@ -148,5 +204,80 @@ export function DefinitionHistory({
         )}
       </div>
     </section>
+  );
+}
+
+function useDefinition(
+  api: StudioApi | undefined,
+  definition: StoredDefinitionSummary | undefined
+): StudioResource<StoredPipelineDefinition> {
+  const pipelineId = definition?.pipelineId;
+  const definitionId = definition?.identity?.definitionId;
+  // Legacy observations can replace their graph; an incomplete snapshot can be
+  // supplied by a later run of the same identified definition.
+  const revision = definitionId ? definition?.runCount : definition?.lastSeenAtMs;
+  const load = useCallback(async () => {
+    if (!api || !pipelineId) throw new Error("No definition selected.");
+    return api.loadDefinition(pipelineId, definitionId);
+  }, [api, pipelineId, definitionId, revision]);
+  return useStudioResource(api, definition ? key(definition) : "", load);
+}
+
+function useDefinitionRuns(
+  api: StudioApi | undefined,
+  definition: StoredDefinitionSummary | undefined,
+  offset: number
+): StudioResource<StudioDefinitionRuns> {
+  const pipelineId = definition?.pipelineId;
+  const definitionId = definition?.identity?.definitionId;
+  const revision = definition
+    ? [definition.runCount, definition.activeRuns, definition.lastSeenAtMs].join(":")
+    : "";
+  const load = useCallback(async () => {
+    if (!api || !pipelineId) throw new Error("No definition selected.");
+    return api.loadDefinitionRuns(pipelineId, definitionId, offset);
+  }, [api, pipelineId, definitionId, revision, offset]);
+  return useStudioResource(api, definition ? key(definition) : "", load);
+}
+
+export function DefinitionHistory({
+  definitions,
+  api,
+  onSelect,
+}: {
+  definitions: readonly StoredDefinitionSummary[];
+  api?: StudioApi;
+  onSelect(runId: string): void;
+}) {
+  const [selectedKey, setSelectedKey] = useState("");
+  const [compareKey, setCompareKey] = useState("");
+  const [offset, setOffset] = useState(0);
+  const selected = definitions.find((entry) => key(entry) === selectedKey) ?? definitions[0];
+  const candidates = definitions.filter(
+    (entry) =>
+      entry.pipelineId === selected?.pipelineId && key(entry) !== (selected && key(selected))
+  );
+  const previous = candidates.find((entry) => key(entry) === compareKey) ?? candidates[0];
+  const definition = useDefinition(api, selected);
+  const runs = useDefinitionRuns(api, selected, offset);
+  const comparison = useDefinition(api, previous);
+  return (
+    <DefinitionHistoryView
+      definitions={definitions}
+      selected={selected}
+      candidates={candidates}
+      previous={previous}
+      definition={definition}
+      runs={runs}
+      comparison={comparison}
+      onDefinition={(value) => {
+        setSelectedKey(value);
+        setCompareKey("");
+        setOffset(0);
+      }}
+      onCompare={setCompareKey}
+      onPage={setOffset}
+      onSelect={onSelect}
+    />
   );
 }

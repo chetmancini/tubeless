@@ -224,7 +224,9 @@ pipeline does not require credentials.
    custom adapters are needed. Do not infer executable modules from run history
    or the filesystem.
    Cancel only a live launch owned by the current studio process; it is not
-   crash-resume and does not abort sibling launches.
+   crash-resume and does not abort sibling launches. Studio pages top-level history;
+   search includes nested runs across all pages, and run links open recorded details
+   directly. See the [Studio controls](./studio.md#use-the-browser-controls).
 
 Use `fromRemote` when a step calls another execution system. If a dry run
 contacts that system, both the adapter and remote worker must honor
@@ -236,7 +238,8 @@ For workbench commands, read [the CLI](./cli.md). For the local run UI, read
 [the studio](./studio.md). To connect historical runs to a compiled graph and handler
 release, set `implementationVersion` as shown in [tracing](../examples/tracing.ts).
 Studio's [definition history](./studio.md#definition-history-and-comparison) groups
-runs by definition and compares observed versions. Complete recorded snapshots must
+runs by definition and compares observed versions. Definition metadata remains visible
+while its run pages refresh. Complete recorded snapshots must
 match their hashes, including recorded child implementation identities, to be accepted
 by NDJSON or SQLite history.
 

@@ -1,3 +1,4 @@
+import { parseStudioPayload, studioParameterSchema } from "./run-store-ui-schema.js";
 import type { CliParameterDescriptor } from "../cli/cli.js";
 import type { PipelinePlan, PipelineRunControls } from "../core/pipeline.js";
 
@@ -6,20 +7,6 @@ interface StudioPlanInputWire {
   dryRun?: unknown;
   stepIds?: unknown;
   targets?: unknown;
-}
-
-/** Untyped wire shape of a studio parameter; fields validated before use. */
-interface StudioParameterWire {
-  choices?: unknown;
-  default?: unknown;
-  exclusive?: unknown;
-  flag?: unknown;
-  group?: unknown;
-  key?: unknown;
-  multiple?: unknown;
-  positional?: unknown;
-  required?: unknown;
-  type?: unknown;
 }
 
 export interface PipelineRunStudioCommand {
@@ -117,41 +104,5 @@ export function parseStudioPlanInput(value: unknown): PipelineRunControls | unde
 }
 
 export function isPipelineRunStudioParameter(value: unknown): value is CliParameterDescriptor {
-  if (typeof value !== "object" || value === null) return false;
-  // SAFETY: The object guard above narrows `value` to a non-null object; this
-  // wire shape only names the fields we validate below.
-  const parameter = value as StudioParameterWire;
-  if (
-    typeof parameter.key !== "string" ||
-    parameter.key.length === 0 ||
-    typeof parameter.flag !== "string" ||
-    parameter.flag.length === 0 ||
-    typeof parameter.multiple !== "boolean" ||
-    typeof parameter.positional !== "boolean" ||
-    typeof parameter.required !== "boolean" ||
-    !["boolean", "number", "path", "string"].includes(String(parameter.type))
-  ) {
-    return false;
-  }
-  if (
-    parameter.choices !== undefined &&
-    (!Array.isArray(parameter.choices) ||
-      !parameter.choices.every((choice) => typeof choice === "string"))
-  ) {
-    return false;
-  }
-  if (
-    parameter.default !== undefined &&
-    typeof parameter.default !==
-      (parameter.type === "boolean" ? "boolean" : parameter.type === "number" ? "number" : "string")
-  ) {
-    return false;
-  }
-  if (parameter.group !== undefined && parameter.group !== "execution") {
-    return false;
-  }
-  if (parameter.exclusive !== undefined && parameter.exclusive !== true) {
-    return false;
-  }
-  return true;
+  return parseStudioPayload(studioParameterSchema, value) !== undefined;
 }

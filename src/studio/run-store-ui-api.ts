@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { projectPipelineRun, type PipelineRunEventReader } from "../run-store/run-store.js";
+import type { PipelineRunEventReader } from "../run-store/run-store.js";
+import { createHash, randomUUID } from "node:crypto";
 import {
   isPipelineRunStudioParameter,
   parseStudioLaunchRequest,
@@ -52,15 +53,58 @@ export function createStudioApiHandler(
     commandById.set(command.id, command);
   }
   const eventState = new PipelineRunStudioEventState(options.store);
+  const instanceId = randomUUID();
   return async (request, response, url) => {
     try {
       if (request.method === "GET" && url.pathname === "/api/snapshot") {
-        const snapshot = await eventState.snapshot();
-        writeJson(response, {
-          ...snapshot,
-          liveRunIds: launcher?.liveRunIds?.() ?? [],
-          runs: snapshot.runs.map((run) => ({ ...run, logs: [] })),
-        });
+        const query = url.searchParams.get("query") ?? "";
+        if (query.length > 4096)
+          throw new StudioRequestError(
+            "invalid_query",
+            "Search is too long.",
+            400,
+            "Use at most 4096 characters."
+          );
+        const snapshot = await eventState.workspace(
+          query,
+          historyOffset(url),
+          url.searchParams.get("run")
+        );
+        const liveRunIds = launcher?.liveRunIds?.() ?? [];
+        const etag =
+          '"' +
+          createHash("sha256")
+            .update(JSON.stringify([instanceId, snapshot.revision, url.search, liveRunIds]))
+            .digest("hex") +
+          '"';
+        response.setHeader("ETag", etag);
+        if (request.headers["if-none-match"] === etag) {
+          response.writeHead(304);
+          response.end();
+        } else writeJson(response, { ...snapshot, liveRunIds });
+        return;
+      }
+      if (
+        request.method === "GET" &&
+        (url.pathname === "/api/definitions" || url.pathname === "/api/definitions/runs")
+      ) {
+        const pipelineId = url.searchParams.get("pipelineId") ?? "";
+        const definitionId = url.searchParams.get("definitionId") ?? undefined;
+        const result =
+          url.pathname === "/api/definitions/runs"
+            ? await eventState.definitionRuns(pipelineId, definitionId, historyOffset(url))
+            : await eventState
+                .definition(pipelineId, definitionId)
+                .then((definition) => definition && { definition });
+        if (!result)
+          writeError(
+            response,
+            404,
+            "definition_not_found",
+            "Definition not found.",
+            "Refresh the observed definitions."
+          );
+        else writeJson(response, result);
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/capabilities") {
@@ -73,8 +117,8 @@ export function createStudioApiHandler(
       const runMatch = /^\/api\/runs\/([^/]+)$/.exec(url.pathname);
       if (request.method === "GET" && runMatch) {
         const runId = decodePathSegment(runMatch[1]!);
-        const events = await eventState.readRun(runId);
-        if (events.length === 0) {
+        const detail = await eventState.detail(runId);
+        if (!detail) {
           writeError(
             response,
             404,
@@ -84,7 +128,7 @@ export function createStudioApiHandler(
           );
           return;
         }
-        writeJson(response, { run: projectPipelineRun(events) });
+        writeJson(response, detail);
         return;
       }
       const cancelMatch = /^\/api\/runs\/([^/]+)\/cancel$/.exec(url.pathname);
@@ -292,4 +336,17 @@ export function createStudioApiHandler(
       writeUnexpectedStudioError(response, error);
     }
   };
+}
+
+function historyOffset(url: URL): number {
+  const value = url.searchParams.get("offset") ?? "0";
+  const offset = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(offset))
+    throw new StudioRequestError(
+      "invalid_offset",
+      "Invalid history offset.",
+      400,
+      "Use a nonnegative safe integer."
+    );
+  return offset;
 }

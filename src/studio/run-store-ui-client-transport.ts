@@ -1,39 +1,39 @@
-import { isArtifactRecord } from "../run-store/run-store-codec.js";
+import type { StoredPipelineDefinition } from "../run-store/run-store.js";
 import type { PipelinePlan, PipelineRunControls } from "../core/pipeline.js";
 import type {
-  PipelineRunStoreSnapshot,
-  StoredPipelineLog,
-  StoredPipelineRun,
-  StoredPipelineStep,
-} from "../run-store/run-store.js";
-import {
-  isDefinitionIdentity,
-  isDefinitionSnapshot,
-  isPipelineTraceError,
-} from "../run-store/run-store-codec.js";
-import {
-  isPipelineRunStudioParameter,
-  type PipelineRunStudioCommand,
-  type PipelineRunStudioLaunchRequest,
+  PipelineRunStudioCommand,
+  PipelineRunStudioLaunchRequest,
 } from "./run-store-ui-protocol.js";
+import {
+  parseStudioPayload,
+  studioSnapshotSchema,
+  studioCommandsSchema,
+  studioPlanSchema,
+  studioRunDetailSchema,
+  studioDefinitionSchema,
+  studioDefinitionRunsSchema,
+  type StudioSnapshot,
+  type StudioRunDetail,
+  type StudioDefinitionRuns,
+} from "./run-store-ui-schema.js";
+export type {
+  StudioSnapshot,
+  StudioRunDetail,
+  StudioDefinitionRuns,
+} from "./run-store-ui-schema.js";
 
-export interface StudioSnapshot extends PipelineRunStoreSnapshot {
-  liveRunIds?: readonly string[];
+export interface StudioHistoryQuery {
+  query?: string;
+  offset?: number;
+  selectedRunId?: string | null;
 }
-
-export interface StudioRunDetail {
-  run: StoredPipelineRun;
-}
-
 interface StudioCapabilities {
   canCancel: boolean;
   canClearHistory: boolean;
 }
-
 interface StudioClearResult {
   eventCount: number;
 }
-
 export type StudioAccessDenied = 401 | 403;
 
 class StudioHttpError extends Error {
@@ -52,7 +52,13 @@ export interface StudioApi {
   loadCapabilities(): Promise<StudioCapabilities>;
   loadCommands(): Promise<PipelineRunStudioCommand[]>;
   loadRunDetail(runId: string): Promise<StudioRunDetail | null>;
-  loadSnapshot(): Promise<StudioSnapshot>;
+  loadSnapshot(query?: StudioHistoryQuery): Promise<StudioSnapshot>;
+  loadDefinition(pipelineId: string, definitionId?: string): Promise<StoredPipelineDefinition>;
+  loadDefinitionRuns(
+    pipelineId: string,
+    definitionId?: string,
+    offset?: number
+  ): Promise<StudioDefinitionRuns>;
   launch(commandId: string, values: PipelineRunStudioLaunchRequest["values"]): Promise<string>;
   previewPlan(commandId: string, input: PipelineRunControls): Promise<PipelinePlan>;
 }
@@ -65,268 +71,12 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || typeof value === "string";
-}
-
-function isOptionalFiniteNumber(value: unknown): value is number | undefined {
-  return value === undefined || isFiniteNumber(value);
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function isStoredLog(value: unknown): value is StoredPipelineLog {
-  if (!isRecord(value)) return false;
-  return (
-    isFiniteNumber(value.id) &&
-    (value.level === "error" || value.level === "log" || value.level === "warn") &&
-    typeof value.message === "string" &&
-    isFiniteNumber(value.timestampMs) &&
-    isOptionalString(value.attemptId) &&
-    isOptionalString(value.stepId)
-  );
-}
-
-function isStoredStep(value: unknown): value is StoredPipelineStep {
-  if (!isRecord(value)) return false;
-  if (
-    typeof value.id !== "string" ||
-    (value.outputSource !== undefined &&
-      value.outputSource !== "override" &&
-      value.outputSource !== "cache") ||
-    !["cancelled", "completed", "failed", "planned", "running", "skipped"].includes(
-      String(value.status)
-    ) ||
-    !isOptionalString(value.description) ||
-    !isOptionalString(value.name) ||
-    !isOptionalFiniteNumber(value.durationMs) ||
-    !isOptionalFiniteNumber(value.finishedAtMs) ||
-    !isOptionalFiniteNumber(value.startedAtMs)
-  ) {
-    return false;
-  }
-  if (value.attempt !== undefined) {
-    if (
-      !isRecord(value.attempt) ||
-      typeof value.attempt.attemptId !== "string" ||
-      !isOptionalFiniteNumber(value.attempt.durationMs) ||
-      !isOptionalFiniteNumber(value.attempt.finishedAtMs) ||
-      !Array.isArray(value.attempt.retries) ||
-      !value.attempt.retries.every(isFiniteNumber) ||
-      !isFiniteNumber(value.attempt.startedAtMs) ||
-      (value.attempt.outputSource !== undefined &&
-        value.attempt.outputSource !== "override" &&
-        value.attempt.outputSource !== "cache") ||
-      !["cancelled", "completed", "failed", "running", "skipped"].includes(
-        String(value.attempt.status)
-      )
-    ) {
-      return false;
-    }
-  }
-  if (
-    value.artifacts !== undefined &&
-    (!Array.isArray(value.artifacts) ||
-      !value.artifacts.every(
-        (entry) =>
-          isRecord(entry) &&
-          typeof entry.attemptId === "string" &&
-          isFiniteNumber(entry.timestampMs) &&
-          typeof entry.preview === "boolean" &&
-          isArtifactRecord(entry)
-      ))
-  )
-    return false;
-  if (value.progress !== undefined) {
-    if (!isRecord(value.progress) || !isFiniteNumber(value.progress.completed)) return false;
-    if (
-      !isOptionalFiniteNumber(value.progress.detailCount) ||
-      !isOptionalString(value.progress.message) ||
-      !isOptionalFiniteNumber(value.progress.total)
-    ) {
-      return false;
-    }
-    if (
-      value.progress.details !== undefined &&
-      (!Array.isArray(value.progress.details) ||
-        !value.progress.details.every(
-          (detail) =>
-            isRecord(detail) &&
-            typeof detail.id === "string" &&
-            isOptionalString(detail.label) &&
-            isOptionalString(detail.status) &&
-            (detail.outputSource === undefined ||
-              detail.outputSource === "override" ||
-              detail.outputSource === "cache")
-        ))
-    ) {
-      return false;
-    }
-  }
-  if (value.nestedPipeline !== undefined) {
-    if (
-      !isRecord(value.nestedPipeline) ||
-      !["single", "for-each", "iterate"].includes(String(value.nestedPipeline.mode)) ||
-      (value.nestedPipeline.mode === "iterate" &&
-        (!Number.isSafeInteger(value.nestedPipeline.maxIterations) ||
-          Number(value.nestedPipeline.maxIterations) < 1)) ||
-      typeof value.nestedPipeline.pipelineId !== "string" ||
-      !isFiniteNumber(value.nestedPipeline.stepCount) ||
-      !isStringArray(value.nestedPipeline.stepIds)
-    ) {
-      return false;
-    }
-  }
-  if (value.remote !== undefined) {
-    if (
-      !isRecord(value.remote) ||
-      typeof value.remote.engine !== "string" ||
-      !isOptionalString(value.remote.target)
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function isStoredStudioRun(value: unknown): value is StoredPipelineRun {
-  if (!isRecord(value)) return false;
-  return (
-    (value.definitionIdentity === undefined || isDefinitionIdentity(value.definitionIdentity)) &&
-    typeof value.dryRun === "boolean" &&
-    isFiniteNumber(value.eventCount) &&
-    isFiniteNumber(value.logCount) &&
-    Array.isArray(value.logs) &&
-    value.logs.every(isStoredLog) &&
-    typeof value.pipelineId === "string" &&
-    typeof value.runId === "string" &&
-    isFiniteNumber(value.startedAtMs) &&
-    isOptionalFiniteNumber(value.durationMs) &&
-    isOptionalFiniteNumber(value.finishedAtMs) &&
-    ["cancelled", "completed", "failed", "running"].includes(String(value.status)) &&
-    Array.isArray(value.steps) &&
-    value.steps.every(isStoredStep) &&
-    isFiniteNumber(value.version) &&
-    isOptionalString(value.correlationId) &&
-    isOptionalString(value.parentRunId) &&
-    (value.iteration === undefined ||
-      (isRecord(value.iteration) &&
-        typeof value.iteration.runId === "string" &&
-        typeof value.iteration.stepId === "string" &&
-        typeof value.iteration.attemptId === "string" &&
-        Number.isSafeInteger(value.iteration.index) &&
-        Number(value.iteration.index) > 0)) &&
-    (value.error === undefined || isPipelineTraceError(value.error))
-  );
-}
-
-function isStudioSnapshot(value: unknown): value is StudioSnapshot {
-  if (!isRecord(value)) return false;
-  if (
-    !isFiniteNumber(value.activeRunCount) ||
-    !isFiniteNumber(value.completedRunCount) ||
-    !Array.isArray(value.definitions) ||
-    !value.definitions.every(
-      (definition) =>
-        isRecord(definition) &&
-        typeof definition.pipelineId === "string" &&
-        isFiniteNumber(definition.runCount) &&
-        (definition.identity === undefined || isDefinitionIdentity(definition.identity)) &&
-        (definition.snapshot === undefined || isDefinitionSnapshot(definition.snapshot))
-    ) ||
-    !isFiniteNumber(value.failedRunCount) ||
-    !isFiniteNumber(value.generatedAtMs) ||
-    !isFiniteNumber(value.lastEventId) ||
-    !Array.isArray(value.runs) ||
-    !value.runs.every(isStoredStudioRun) ||
-    (value.liveRunIds !== undefined && !isStringArray(value.liveRunIds))
-  ) {
-    return false;
-  }
-  return true;
-}
-
 export function parseStudioSnapshot(value: unknown): StudioSnapshot | undefined {
-  return isStudioSnapshot(value) ? value : undefined;
+  return parseStudioPayload(studioSnapshotSchema, value);
 }
-
-function isStudioCommand(value: unknown): value is PipelineRunStudioCommand {
-  return (
-    isRecord(value) &&
-    typeof value.canPlan === "boolean" &&
-    typeof value.id === "string" &&
-    typeof value.name === "string" &&
-    isOptionalString(value.description) &&
-    Array.isArray(value.parameters) &&
-    value.parameters.every(isPipelineRunStudioParameter)
-  );
-}
-
 export function parseStudioCommands(value: unknown): PipelineRunStudioCommand[] | undefined {
-  if (
-    !isRecord(value) ||
-    !Array.isArray(value.commands) ||
-    !value.commands.every(isStudioCommand)
-  ) {
-    return undefined;
-  }
-  return value.commands;
+  return parseStudioPayload(studioCommandsSchema, value)?.commands;
 }
-
-function isStudioPlanPayload(value: unknown): value is { plan: PipelinePlan } {
-  if (!isRecord(value) || !isRecord(value.plan)) return false;
-  const plan = value.plan;
-  if (
-    typeof plan.dryRun !== "boolean" ||
-    !Array.isArray(plan.errors) ||
-    !plan.errors.every((error) => isRecord(error) && typeof error.message === "string") ||
-    typeof plan.ok !== "boolean" ||
-    typeof plan.pipelineId !== "string" ||
-    !Array.isArray(plan.steps)
-  ) {
-    return false;
-  }
-  for (const step of plan.steps) {
-    if (
-      !isRecord(step) ||
-      typeof step.id !== "string" ||
-      !isStringArray(step.dependencies) ||
-      typeof step.selected !== "boolean" ||
-      !isOptionalString(step.description) ||
-      !isOptionalString(step.name)
-    ) {
-      return false;
-    }
-    if (
-      step.nestedPipeline !== undefined &&
-      (!isRecord(step.nestedPipeline) ||
-        !["single", "for-each", "iterate"].includes(String(step.nestedPipeline.mode)) ||
-        (step.nestedPipeline.mode === "iterate" &&
-          (!Number.isSafeInteger(step.nestedPipeline.maxIterations) ||
-            Number(step.nestedPipeline.maxIterations) < 1)) ||
-        typeof step.nestedPipeline.pipelineId !== "string" ||
-        !isStringArray(step.nestedPipeline.stepIds))
-    ) {
-      return false;
-    }
-    if (
-      step.remote !== undefined &&
-      (!isRecord(step.remote) ||
-        typeof step.remote.engine !== "string" ||
-        !isOptionalString(step.remote.target))
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function parseStudioPlan(value: unknown): PipelinePlan | undefined {
-  return isStudioPlanPayload(value) ? value.plan : undefined;
-}
-
 function responseError(value: unknown, fallback: string, status: number): Error {
   if (!isRecord(value)) return new StudioHttpError(status, fallback);
   if (Array.isArray(value.errors) && value.errors.every((item) => typeof item === "string")) {
@@ -343,6 +93,7 @@ function invalidResponse(endpoint: string): Error {
 export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): StudioApi {
   const listeners = new Set<(status: StudioAccessDenied) => void>();
   let denied: StudioAccessDenied | undefined;
+  let cachedSnapshot: { key: string; etag: string | null; snapshot: StudioSnapshot } | undefined;
   const assertAccess = () => {
     if (denied)
       throw new StudioHttpError(denied, denied === 401 ? "Sign in to continue." : "Access denied.");
@@ -376,13 +127,45 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
         listeners.delete(listener);
       };
     },
-    async loadSnapshot() {
-      const response = await request("/api/snapshot", { cache: "no-store" });
+    async loadSnapshot({ query = "", offset = 0, selectedRunId } = {}) {
+      const params = new URLSearchParams();
+      if (query) params.set("query", query);
+      if (offset) params.set("offset", String(offset));
+      if (selectedRunId) params.set("run", selectedRunId);
+      const key = "/api/snapshot" + (params.size ? "?" + params : "");
+      const previous = cachedSnapshot?.key === key ? cachedSnapshot : undefined;
+      const response = await request(key, {
+        cache: "no-store",
+        headers: previous?.etag ? { "if-none-match": previous.etag } : undefined,
+      });
+      if (response.status === 304 && previous) return previous.snapshot;
       const payload = await readJson(response);
       if (!response.ok) throw responseError(payload, "Snapshot request failed.", response.status);
       const snapshot = parseStudioSnapshot(payload);
       if (!snapshot) throw invalidResponse("snapshot");
+      cachedSnapshot = { key, etag: response.headers.get("etag"), snapshot };
       return snapshot;
+    },
+    async loadDefinition(pipelineId, definitionId) {
+      const params = new URLSearchParams({ pipelineId });
+      if (definitionId) params.set("definitionId", definitionId);
+      const response = await request("/api/definitions?" + params, { cache: "no-store" });
+      const payload = await readJson(response);
+      if (!response.ok) throw responseError(payload, "Definition request failed.", response.status);
+      const detail = parseStudioPayload(studioDefinitionSchema, payload);
+      if (!detail) throw invalidResponse("definition");
+      return detail.definition;
+    },
+    async loadDefinitionRuns(pipelineId, definitionId, offset = 0) {
+      const params = new URLSearchParams({ pipelineId, offset: String(offset) });
+      if (definitionId) params.set("definitionId", definitionId);
+      const response = await request("/api/definitions/runs?" + params, { cache: "no-store" });
+      const payload = await readJson(response);
+      if (!response.ok)
+        throw responseError(payload, "Definition runs request failed.", response.status);
+      const page = parseStudioPayload(studioDefinitionRunsSchema, payload);
+      if (!page) throw invalidResponse("definition runs");
+      return page;
     },
     async loadRunDetail(runId) {
       const response = await request("/api/runs/" + encodeURIComponent(runId), {
@@ -391,10 +174,9 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
       const payload = await readJson(response);
       if (response.status === 404) return null;
       if (!response.ok) throw responseError(payload, "Run detail request failed.", response.status);
-      if (!isRecord(payload) || !isStoredStudioRun(payload.run)) {
-        throw invalidResponse("run detail");
-      }
-      return { run: payload.run };
+      const detail = parseStudioPayload(studioRunDetailSchema, payload);
+      if (!detail) throw invalidResponse("run detail");
+      return detail;
     },
     async loadCommands() {
       const response = await request("/api/commands", { cache: "no-store" });
@@ -433,6 +215,7 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
       if (!isRecord(payload) || payload.cleared !== true || !isFiniteNumber(payload.eventCount)) {
         throw invalidResponse("clear history");
       }
+      cachedSnapshot = undefined;
       return { eventCount: payload.eventCount };
     },
     async previewPlan(commandId, input) {
@@ -443,7 +226,9 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
       });
       const payload = await readJson(response);
       if (!response.ok) throw responseError(payload, "Plan request failed.", response.status);
-      const plan = parseStudioPlan(payload);
+      const plan = isRecord(payload)
+        ? parseStudioPayload(studioPlanSchema, payload.plan)
+        : undefined;
       if (!plan) throw invalidResponse("plan");
       return plan;
     },

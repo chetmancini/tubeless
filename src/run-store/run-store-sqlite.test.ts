@@ -15,7 +15,8 @@ import {
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { PipelineRunStudioEventState } from "../studio/run-store-ui-state.js";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite.js";
 import { createSteps, definePipeline } from "../core/pipeline.js";
 import { createPipelineTestRuntime } from "../testing/testing.js";
@@ -47,6 +48,57 @@ function startedEvent(runId: string, timestampMs: number, pipelineId = "import")
 }
 
 describe("SQLite pipeline run store", () => {
+  it("invalidates Studio history even when post-commit compaction fails", async () => {
+    const store = await openTempStore();
+    await store.export(startedEvent("clear", 1));
+    const state = new PipelineRunStudioEventState(store);
+    expect((await state.workspace()).runs).toHaveLength(1);
+    const original = DatabaseSync.prototype.exec;
+    const injected = vi.spyOn(DatabaseSync.prototype, "exec").mockImplementation(function (
+      this: DatabaseSync,
+      sql
+    ) {
+      if (sql.startsWith("VACUUM;")) throw new Error("compaction failed");
+      return original.call(this, sql);
+    });
+    try {
+      await expect(state.clear({ clear: () => store.clearHistory() })).resolves.toEqual({
+        eventCount: 1,
+        runCount: 1,
+      });
+      expect(await store.listEvents()).toEqual([]);
+      expect((await state.workspace()).runs).toEqual([]);
+    } finally {
+      injected.mockRestore();
+      await store.close();
+    }
+  });
+
+  it("preserves history and its Studio projection when deletion cannot commit", async () => {
+    const store = await openTempStore();
+    await store.export(startedEvent("clear", 1));
+    const state = new PipelineRunStudioEventState(store);
+    expect((await state.workspace()).runs).toHaveLength(1);
+    const original = DatabaseSync.prototype.exec;
+    const injected = vi.spyOn(DatabaseSync.prototype, "exec").mockImplementation(function (
+      this: DatabaseSync,
+      sql
+    ) {
+      if (sql.includes("DELETE FROM pipeline_run_events"))
+        return original.call(this, sql.replace("COMMIT;", "SELECT missing_clear_table;"));
+      return original.call(this, sql);
+    });
+    try {
+      await expect(state.clear({ clear: () => store.clearHistory() })).rejects.toThrow(
+        "missing_clear_table"
+      );
+      expect(await store.listEvents()).toHaveLength(1);
+      expect((await state.workspace()).runs).toHaveLength(1);
+    } finally {
+      injected.mockRestore();
+      await store.close();
+    }
+  });
   it("preserves iteration relations and projected history after closing and reopening", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-iteration-store-"));
     directories.push(directory);

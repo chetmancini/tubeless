@@ -1,3 +1,5 @@
+import { createRunHistoryIndex, summarizeRun } from "../run-store/run-history.js";
+import { studioRunDetail } from "./run-store-ui.test-support.js";
 import { StepArtifacts } from "./run-store-ui-artifacts.js";
 import { renderToString } from "preact-render-to-string";
 import { describe, expect, it } from "vitest";
@@ -5,7 +7,6 @@ import { RUN_MODEL_VERSION, type PipelinePlan } from "../core/pipeline.js";
 import type { StoredPipelineRun } from "../run-store/run-store.js";
 import {
   CommandFields,
-  createStudioRunIndex,
   isoTime,
   PipelinesView,
   PlanView,
@@ -88,7 +89,7 @@ describe("Studio components", () => {
         },
       ],
     });
-    const index = createStudioRunIndex([root]);
+    const index = createRunHistoryIndex([root]);
     const markup = renderToString(
       <RunsView
         canCancel={false}
@@ -98,10 +99,14 @@ describe("Studio components", () => {
         onCancel={() => {}}
         onCopyLink={() => {}}
         onSelect={() => {}}
-        roots={index.roots}
-        runIndex={index}
-        selectedRun={root}
-        selectedRunId={root.runId}
+        roots={index.roots.map((run) => summarizeRun(run, index))}
+        selection={{
+          status: "ready",
+          runId: root.runId,
+          summary: summarizeRun(root, index),
+          detail: studioRunDetail(root),
+        }}
+        latestRunId={root.runId}
         totalRunCount={1}
       />
     );
@@ -113,7 +118,7 @@ describe("Studio components", () => {
 
   it("renders run hierarchy from explicit data only", () => {
     const root = run();
-    const index = createStudioRunIndex([root]);
+    const index = createRunHistoryIndex([root]);
     const markup = renderToString(
       <RunsView
         canCancel
@@ -123,10 +128,14 @@ describe("Studio components", () => {
         onCancel={() => {}}
         onCopyLink={() => {}}
         onSelect={() => {}}
-        roots={index.roots}
-        runIndex={index}
-        selectedRun={root}
-        selectedRunId={root.runId}
+        roots={index.roots.map((run) => summarizeRun(run, index))}
+        selection={{
+          status: "ready",
+          runId: root.runId,
+          summary: summarizeRun(root, index),
+          detail: studioRunDetail(root),
+        }}
+        latestRunId={root.runId}
         totalRunCount={1}
       />
     );
@@ -140,7 +149,7 @@ describe("Studio components", () => {
 
   it("distinguishes a missing linked run from a run whose details are loading", () => {
     const root = run();
-    const index = createStudioRunIndex([root]);
+    const index = createRunHistoryIndex([root]);
     const props = {
       canCancel: false,
       cancelling: false,
@@ -149,16 +158,22 @@ describe("Studio components", () => {
       onCancel: () => {},
       onCopyLink: () => {},
       onSelect: () => {},
-      roots: index.roots,
-      runIndex: index,
-      selectedRun: null,
+      roots: index.roots.map((run) => summarizeRun(run, index)),
+      latestRunId: root.runId,
       totalRunCount: 1,
     };
-    const missing = renderToString(<RunsView {...props} selectedRunId="deleted-run" />);
+    const missing = renderToString(
+      <RunsView {...props} selection={{ status: "unavailable", runId: "deleted-run" }} />
+    );
     expect(missing).toContain("Run unavailable");
     expect(missing).toContain("deleted-run");
     expect(missing).toContain("Select latest run");
-    const loading = renderToString(<RunsView {...props} selectedRunId={root.runId} />);
+    const loading = renderToString(
+      <RunsView
+        {...props}
+        selection={{ status: "loading", runId: root.runId, summary: summarizeRun(root, index) }}
+      />
+    );
     expect(loading).toContain("Loading run");
     expect(loading).not.toContain("Run unavailable");
   });
@@ -175,7 +190,7 @@ describe("Studio components", () => {
         })),
       ],
     });
-    const index = createStudioRunIndex([root]);
+    const index = createRunHistoryIndex([root]);
     const markup = renderToString(
       <RunsView
         canCancel={false}
@@ -185,10 +200,9 @@ describe("Studio components", () => {
         onCancel={() => {}}
         onCopyLink={() => {}}
         onSelect={() => {}}
-        roots={index.roots}
-        runIndex={index}
-        selectedRun={null}
-        selectedRunId={null}
+        roots={index.roots.map((run) => summarizeRun(run, index))}
+        selection={{ status: "none" }}
+        latestRunId={root.runId}
         totalRunCount={1}
       />
     );

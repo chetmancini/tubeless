@@ -8,10 +8,11 @@ import {
   wireRefine,
   wireString,
   wireUnion,
+  type WireSchema,
 } from "../tracing/wire-schema.js";
 import { optionalToolField, toolObject } from "./default-tool-schema.js";
 import { defineTool } from "./tools.js";
-import { environmentOperation } from "./environment.js";
+import { environmentOperation, type AgentEnvironment } from "./environment.js";
 import {
   MAX_FILE_BYTES,
   MAX_OUTPUT_BYTES,
@@ -53,6 +54,25 @@ const nullValue = wireCustom<null>({ type: "null" }, (value) => {
   return null;
 });
 const written = toolObject({ path, bytes: count });
+const listEntries: WireSchema<Readonly<Awaited<ReturnType<AgentEnvironment["list"]>>["entries"]>> =
+  wireRefine(
+    wireArray(
+      wireObject({
+        name: path,
+        kind: wireEnum(["file", "directory", "symlink", "other"] as const),
+      }),
+      { maxItems: 200 }
+    ),
+    (entries) => checkOutputBytes(entries.map(({ name }) => name))
+  );
+const searchMatches: WireSchema<
+  Readonly<Awaited<ReturnType<AgentEnvironment["search"]>>["matches"]>
+> = wireRefine(
+  wireArray(wireObject({ path, line: count, text: utf8Text(MAX_SEARCH_SNIPPET_BYTES) }), {
+    maxItems: 50,
+  }),
+  (matches) => checkOutputBytes(matches.flatMap(({ path, text }) => [path, text]))
+);
 
 export const defaultTools = Object.freeze({
   read: defineTool({
@@ -125,16 +145,7 @@ export const defaultTools = Object.freeze({
     inputSchema: toolObject({ path: optionalToolField(path) }),
     outputSchema: toolObject({
       path,
-      entries: wireRefine(
-        wireArray(
-          wireObject({
-            name: path,
-            kind: wireEnum(["file", "directory", "symlink", "other"] as const),
-          }),
-          { maxItems: 200 }
-        ),
-        (entries) => checkOutputBytes(entries.map(({ name }) => name))
-      ),
+      entries: listEntries,
       truncated: wireBoolean(),
     }),
     run: (input, context) =>
@@ -150,17 +161,7 @@ export const defaultTools = Object.freeze({
       path: optionalToolField(path),
     }),
     outputSchema: toolObject({
-      matches: wireRefine(
-        wireArray(
-          wireObject({
-            path,
-            line: count,
-            text: utf8Text(MAX_SEARCH_SNIPPET_BYTES),
-          }),
-          { maxItems: 50 }
-        ),
-        (matches) => checkOutputBytes(matches.flatMap(({ path, text }) => [path, text]))
-      ),
+      matches: searchMatches,
       truncated: wireBoolean(),
       skippedFiles: count,
     }),
