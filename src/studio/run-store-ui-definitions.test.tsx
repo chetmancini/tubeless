@@ -1,7 +1,7 @@
 import { renderToString } from "preact-render-to-string";
 import { describe, expect, it } from "vitest";
 import { createSteps, definePipeline } from "../core/pipeline.js";
-import { DefinitionHistory } from "./run-store-ui-definitions.js";
+import { DefinitionHistoryView } from "./run-store-ui-definitions.js";
 import type { StoredPipelineDefinition } from "../run-store/run-store.js";
 
 function definition(version: string): StoredPipelineDefinition {
@@ -29,9 +29,15 @@ function definition(version: string): StoredPipelineDefinition {
 describe("Studio definition history", () => {
   it("renders definition selection, comparison direction and implementation changes as escaped text", () => {
     const html = renderToString(
-      <DefinitionHistory
+      <DefinitionHistoryView
         definitions={[definition("<new>"), definition("old")]}
-        runs={[]}
+        selectedKey=""
+        compareKey=""
+        detail={{ definition: definition("<new>"), runs: [], offset: 0, runCount: 0 }}
+        comparison={definition("old")}
+        onDefinition={() => {}}
+        onCompare={() => {}}
+        onPage={() => {}}
         onSelect={() => undefined}
       />
     );
@@ -46,9 +52,15 @@ describe("Studio definition history", () => {
   it("labels legacy versions and refuses to compare incomplete snapshots", () => {
     const legacy = { ...definition("old"), identity: undefined, snapshot: undefined };
     const html = renderToString(
-      <DefinitionHistory
+      <DefinitionHistoryView
         definitions={[definition("new"), legacy]}
-        runs={[]}
+        selectedKey=""
+        compareKey=""
+        detail={{ definition: definition("new"), runs: [], offset: 0, runCount: 0 }}
+        comparison={legacy}
+        onDefinition={() => {}}
+        onCompare={() => {}}
+        onPage={() => {}}
         onSelect={() => undefined}
       />
     );

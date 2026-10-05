@@ -1,3 +1,4 @@
+import { studioSnapshot as snapshot, studioRunDetail } from "./run-store-ui.test-support.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RUN_MODEL_VERSION } from "../core/pipeline.js";
 import type { StoredPipelineRun } from "../run-store/run-store.js";
@@ -39,24 +40,15 @@ function run(runId: string, eventCount = 1): StoredPipelineRun {
   };
 }
 
-function snapshot(runs: readonly StoredPipelineRun[]): StudioSnapshot {
-  return {
-    activeRunCount: runs.filter((item) => item.status === "running").length,
-    completedRunCount: runs.filter((item) => item.status === "completed").length,
-    definitions: [],
-    failedRunCount: runs.filter((item) => item.status === "failed").length,
-    generatedAtMs: 1,
-    lastEventId: runs.reduce((total, item) => total + item.eventCount, 0),
-    runs: [...runs],
-  };
-}
-
 function api(overrides: Partial<StudioApi>): StudioApi {
   return {
     cancelRun: vi.fn(async () => {}),
     clearHistory: vi.fn(async () => ({ eventCount: 0 })),
     loadCapabilities: vi.fn(async () => ({ canCancel: false, canClearHistory: false })),
     loadCommands: vi.fn(async () => []),
+    loadDefinition: vi.fn(async () => {
+      throw new Error("unused");
+    }),
     loadRunDetail: vi.fn(async () => null),
     loadSnapshot: vi.fn(async () => snapshot([])),
     launch: vi.fn(async () => "run"),
@@ -76,6 +68,29 @@ async function settle(): Promise<void> {
 afterEach(() => vi.useRealTimers());
 
 describe("StudioDataController", () => {
+  it("retires a slow history page when search or selection changes", async () => {
+    const pending = [deferred<StudioSnapshot>(), deferred<StudioSnapshot>()];
+    const loadSnapshot = vi
+      .fn()
+      .mockReturnValueOnce(pending[0]!.promise)
+      .mockReturnValueOnce(pending[1]!.promise);
+    const controller = new StudioDataController(api({ loadSnapshot }));
+    controller.setHistoryQuery({ offset: 50 });
+    controller.setHistoryQuery({ query: "child", offset: 0, selectedRunId: "nested" });
+    pending[0]!.resolve(snapshot([run("old-page")]));
+    await settle();
+    expect(controller.getState().snapshot).toBeNull();
+    expect(loadSnapshot).toHaveBeenLastCalledWith({
+      query: "child",
+      offset: 0,
+      selectedRunId: "nested",
+    });
+    pending[1]!.resolve(snapshot([run("new-page")]));
+    await settle();
+    expect(controller.getState().snapshot?.runs[0]?.runId).toBe("new-page");
+    controller.dispose();
+  });
+
   it("retains live details and coalesces same-run revisions while a read is pending", async () => {
     const requests: Deferred<StudioRunDetail | null>[] = [];
     const loadRunDetail = vi.fn(() => {
@@ -86,7 +101,7 @@ describe("StudioDataController", () => {
     const controller = new StudioDataController(api({ loadRunDetail }));
 
     controller.selectRun("live", "live:1:running");
-    requests[0]!.resolve({ run: run("live", 1) });
+    requests[0]!.resolve(studioRunDetail(run("live", 1)));
     await settle();
     controller.selectRun("live", "live:2:running");
     controller.selectRun("live", "live:3:running");
@@ -94,11 +109,11 @@ describe("StudioDataController", () => {
     expect(controller.getState().detail?.run.eventCount).toBe(1);
     expect(loadRunDetail).toHaveBeenCalledTimes(2);
 
-    requests[1]!.resolve({ run: run("live", 2) });
+    requests[1]!.resolve(studioRunDetail(run("live", 2)));
     await settle();
     expect(controller.getState().detail?.run.eventCount).toBe(2);
     expect(loadRunDetail).toHaveBeenCalledTimes(3);
-    requests[2]!.resolve({ run: run("live", 4) });
+    requests[2]!.resolve(studioRunDetail(run("live", 4)));
     await settle();
     expect(controller.getState().detail?.run.eventCount).toBe(4);
     expect(loadRunDetail).toHaveBeenCalledTimes(3);
@@ -117,7 +132,7 @@ describe("StudioDataController", () => {
       });
       const controller = new StudioDataController(api({ loadRunDetail }), 50);
       controller.selectRun("live", "live:1:running");
-      requests[0]!.resolve({ run: run("live", 1) });
+      requests[0]!.resolve(studioRunDetail(run("live", 1)));
       await settle();
       controller.selectRun("live", "live:2:running");
       if (outcome === "missing") requests[1]!.resolve(null);
@@ -128,7 +143,7 @@ describe("StudioDataController", () => {
       expect(loadRunDetail).toHaveBeenCalledTimes(2);
       await vi.advanceTimersByTimeAsync(50);
       expect(loadRunDetail).toHaveBeenCalledTimes(3);
-      requests[2]!.resolve({ run: run("live", 3) });
+      requests[2]!.resolve(studioRunDetail(run("live", 3)));
       await settle();
       expect(controller.getState().detail?.run.eventCount).toBe(3);
       controller.dispose();
@@ -146,10 +161,10 @@ describe("StudioDataController", () => {
     controller.selectRun("first", "first:1:running");
     controller.selectRun("second", "second:1:running");
     controller.selectRun("first", "first:2:running");
-    requests[2]!.resolve({ run: run("first", 2) });
+    requests[2]!.resolve(studioRunDetail(run("first", 2)));
     await settle();
-    requests[0]!.resolve({ run: run("first", 1) });
-    requests[1]!.resolve({ run: run("second", 1) });
+    requests[0]!.resolve(studioRunDetail(run("first", 1)));
+    requests[1]!.resolve(studioRunDetail(run("second", 1)));
     await settle();
     expect(controller.getState().detail?.run).toMatchObject({ runId: "first", eventCount: 2 });
     controller.dispose();
@@ -219,11 +234,11 @@ describe("StudioDataController", () => {
 
     controller.selectRun("first", "first:1:completed");
     controller.selectRun("second", "second:1:completed");
-    requests.get("second")!.resolve({ run: run("second") });
+    requests.get("second")!.resolve(studioRunDetail(run("second")));
     await settle();
     expect(controller.getState().detail?.run.runId).toBe("second");
 
-    requests.get("first")!.resolve({ run: run("first") });
+    requests.get("first")!.resolve(studioRunDetail(run("first")));
     await settle();
     expect(controller.getState().detail?.run.runId).toBe("second");
   });
@@ -240,13 +255,13 @@ describe("StudioDataController", () => {
 
     controller.selectRun("selected", "selected:1:running");
     controller.invalidate({ delayMs: 50 });
-    requests[0]!.resolve({ run: run("stale") });
+    requests[0]!.resolve(studioRunDetail(run("stale")));
     await settle();
     expect(controller.getState().detail).toBeNull();
 
     await vi.advanceTimersByTimeAsync(50);
     expect(loadRunDetail).toHaveBeenCalledTimes(2);
-    requests[1]!.resolve({ run: run("selected", 2) });
+    requests[1]!.resolve(studioRunDetail(run("selected", 2)));
     await settle();
     expect(controller.getState().detail?.run.eventCount).toBe(2);
   });
@@ -272,7 +287,7 @@ describe("StudioDataController", () => {
     await settle();
     await vi.advanceTimersByTimeAsync(50);
     expect(loadRunDetail.mock.calls.map(([runId]) => runId)).toEqual(["first", "second", "second"]);
-    requests[2]!.request.resolve({ run: run("second") });
+    requests[2]!.request.resolve(studioRunDetail(run("second")));
     await settle();
     expect(controller.getState().detail?.run.runId).toBe("second");
   });
@@ -306,7 +321,7 @@ it.each([401, 403] as const)(
     controller.refresh();
     snapshots[0]!.resolve(snapshot([run("secret")]));
     controller.selectRun("secret", "secret:1");
-    details[0]!.resolve({ run: run("secret") });
+    details[0]!.resolve(studioRunDetail(run("secret")));
     await settle();
     expect(controller.getState().snapshot?.runs).toHaveLength(1);
     expect(controller.getState().detail?.run.runId).toBe("secret");
@@ -315,7 +330,7 @@ it.each([401, 403] as const)(
     controller.selectRun("secret", "secret:2");
     deny(status);
     snapshots[1]!.resolve(snapshot([run("late")]));
-    details[1]!.resolve({ run: run("late") });
+    details[1]!.resolve(studioRunDetail(run("late")));
     await settle();
     controller.refresh(true);
     controller.invalidate({ delayMs: 20 });

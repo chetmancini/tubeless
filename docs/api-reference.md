@@ -10,18 +10,18 @@ Package: `tubeless`
 
 | Entrypoint              | Declaration                        | Surface hash                                                       | Exported symbols |
 | ----------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless/agent/node`   | `./dist/agent/node.d.ts`           | `0d4d130ba7c4b52294e96aee31c64f5c2013b38bf0b34bee7e91d1a6b3e1e411` |                1 |
-| `tubeless/agent`        | `./dist/agent/agent.d.ts`          | `61fc61ddd12badd73d47850ac4be340dbdccddc10c2e3031f789f0541849c202` |               21 |
-| `tubeless`              | `./dist/core/pipeline.d.ts`        | `f333263c7a90feb529af245f3d4a462df9e4d58d144fbce987be4dd3ce3141f8` |               78 |
-| `tubeless/cli`          | `./dist/cli/cli.d.ts`              | `6fe9230a581d033b4d6d869260acf671a8d580c7af817f77cee8795caac02f45` |               31 |
+| `tubeless/agent/node`   | `./dist/agent/node.d.ts`           | `87390214bf718308f7cac16f71fb3158b9982d532a93c4756c6b497ac7658485` |                1 |
+| `tubeless/agent`        | `./dist/agent/agent.d.ts`          | `758852000b6efe246ee2ddebd5e3b910a53106465579713b032213d999dac306` |               21 |
+| `tubeless`              | `./dist/core/pipeline.d.ts`        | `25d8777d80f5d2335f9621362af276ab04e2ff512149c21c3350df156b58b2be` |               78 |
+| `tubeless/cli`          | `./dist/cli/cli.d.ts`              | `5cdcb056974ae542d244ba45fbb053600f70fc690ef04802f926d2b5cfb46e28` |               31 |
 | `tubeless/batch`        | `./dist/utilities/batch.d.ts`      | `a09125c6849bb91b4bbba2f76c4248452d5288cf0c70671461de5846b1d17037` |                7 |
-| `tubeless/node`         | `./dist/node/node.d.ts`            | `9e5b0fa9821531901f98aeb6227f13ec42fad86e36d556812b86b48657e33c26` |               14 |
+| `tubeless/node`         | `./dist/node/node.d.ts`            | `932d0fb69db0691756ddbab525e6da8bd9fe8da508c7bef767778c9fd7ec7ce7` |               14 |
 | `tubeless/rate-limit`   | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`        | `./dist/utilities/retry.d.ts`      | `86e98c33f7e91ee1b34eff817ef6075f6583b9a57037a1ad2394dcf3f372bbcf` |                6 |
-| `tubeless/project`      | `./dist/project/project.d.ts`      | `1b8b5d492a2af8848656fe2e723a35346677a9426a332b12adc9a1d46d6afbbf` |                8 |
-| `tubeless/testing`      | `./dist/testing/testing.d.ts`      | `afd2498f7c2449b7656ae8d2d5a70452dca7fcf51be2f4e4e7195655ec397815` |               10 |
-| `tubeless/tracing`      | `./dist/tracing/tracing.d.ts`      | `5e5d5d09edd191d41a29b584a2ab368038dcb3db91b6c20709c19e6ed189fb97` |                3 |
-| `tubeless/agent/openai` | `./dist/agent/openai.d.ts`         | `03736bef631003145cc8b39459ed4a80d0ffd7a89de4b79c67779921004567d1` |                2 |
+| `tubeless/project`      | `./dist/project/project.d.ts`      | `5ded7e25918f99a79e03b8a0813bae4b1eca1ca4ba4fa4c7fef7f4cfbab74902` |                8 |
+| `tubeless/testing`      | `./dist/testing/testing.d.ts`      | `40324769f33164babfe458a1ec568b0a27f0130b7607f545f8f8169511d74f81` |               10 |
+| `tubeless/tracing`      | `./dist/tracing/tracing.d.ts`      | `ffb64a9762fb9cc7b17482c08de76b279911eed141446f040bb2b935f3427b9e` |                3 |
+| `tubeless/agent/openai` | `./dist/agent/openai.d.ts`         | `d0c4e56ff4b5facbae72ed395aa07360e8f0fb28ce2ee5920eb0c93924e04262` |                2 |
 
 ## Symbols
 

@@ -1,3 +1,5 @@
+import { createRunHistoryIndex, summarizeRun } from "../run-store/run-history.js";
+import { studioRunDetail } from "./run-store-ui.test-support.js";
 import { StepArtifacts } from "./run-store-ui-artifacts.js";
 import { renderToString } from "preact-render-to-string";
 import { describe, expect, it } from "vitest";
@@ -5,7 +7,6 @@ import { RUN_MODEL_VERSION, type PipelinePlan } from "../core/pipeline.js";
 import type { StoredPipelineRun } from "../run-store/run-store.js";
 import {
   CommandFields,
-  createStudioRunIndex,
   isoTime,
   PipelinesView,
   PlanView,
@@ -88,7 +89,7 @@ describe("Studio components", () => {
         },
       ],
     });
-    const index = createStudioRunIndex([root]);
+    const index = createRunHistoryIndex([root]);
     const markup = renderToString(
       <RunsView
         canCancel={false}
@@ -98,8 +99,10 @@ describe("Studio components", () => {
         onCancel={() => {}}
         onCopyLink={() => {}}
         onSelect={() => {}}
-        roots={index.roots}
-        runIndex={index}
+        roots={index.roots.map((run) => summarizeRun(run, index))}
+        detail={studioRunDetail(root)}
+        selectedSummary={summarizeRun(root, index)}
+        latestRunId={root.runId}
         selectedRun={root}
         selectedRunId={root.runId}
         totalRunCount={1}
@@ -113,7 +116,7 @@ describe("Studio components", () => {
 
   it("renders run hierarchy from explicit data only", () => {
     const root = run();
-    const index = createStudioRunIndex([root]);
+    const index = createRunHistoryIndex([root]);
     const markup = renderToString(
       <RunsView
         canCancel
@@ -123,8 +126,10 @@ describe("Studio components", () => {
         onCancel={() => {}}
         onCopyLink={() => {}}
         onSelect={() => {}}
-        roots={index.roots}
-        runIndex={index}
+        roots={index.roots.map((run) => summarizeRun(run, index))}
+        detail={studioRunDetail(root)}
+        selectedSummary={summarizeRun(root, index)}
+        latestRunId={root.runId}
         selectedRun={root}
         selectedRunId={root.runId}
         totalRunCount={1}
@@ -140,7 +145,7 @@ describe("Studio components", () => {
 
   it("distinguishes a missing linked run from a run whose details are loading", () => {
     const root = run();
-    const index = createStudioRunIndex([root]);
+    const index = createRunHistoryIndex([root]);
     const props = {
       canCancel: false,
       cancelling: false,
@@ -149,8 +154,9 @@ describe("Studio components", () => {
       onCancel: () => {},
       onCopyLink: () => {},
       onSelect: () => {},
-      roots: index.roots,
-      runIndex: index,
+      roots: index.roots.map((run) => summarizeRun(run, index)),
+      detail: null,
+      latestRunId: root.runId,
       selectedRun: null,
       totalRunCount: 1,
     };
@@ -158,7 +164,9 @@ describe("Studio components", () => {
     expect(missing).toContain("Run unavailable");
     expect(missing).toContain("deleted-run");
     expect(missing).toContain("Select latest run");
-    const loading = renderToString(<RunsView {...props} selectedRunId={root.runId} />);
+    const loading = renderToString(
+      <RunsView {...props} selectedSummary={summarizeRun(root, index)} selectedRunId={root.runId} />
+    );
     expect(loading).toContain("Loading run");
     expect(loading).not.toContain("Run unavailable");
   });
@@ -175,7 +183,7 @@ describe("Studio components", () => {
         })),
       ],
     });
-    const index = createStudioRunIndex([root]);
+    const index = createRunHistoryIndex([root]);
     const markup = renderToString(
       <RunsView
         canCancel={false}
@@ -185,8 +193,10 @@ describe("Studio components", () => {
         onCancel={() => {}}
         onCopyLink={() => {}}
         onSelect={() => {}}
-        roots={index.roots}
-        runIndex={index}
+        roots={index.roots.map((run) => summarizeRun(run, index))}
+        detail={studioRunDetail(root)}
+        selectedSummary={summarizeRun(root, index)}
+        latestRunId={root.runId}
         selectedRun={null}
         selectedRunId={null}
         totalRunCount={1}

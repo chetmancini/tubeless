@@ -57,7 +57,7 @@ their source files.
   Tracing shares type-only pipeline contracts with core.
 - Reporters and rendering consume core. Storage consumes core and trace contracts;
   storage never depends on the studio or workbench.
-- Studio consumes storage and accepts optional launcher/history capabilities.
+- Studio consumes storage and pure trace schemas, and accepts optional launcher/history capabilities.
   It shares type-only pipeline and CLI descriptors; it does not load command
   execution or a concrete storage adapter itself.
 - CLI adapts pipelines with Node helpers and terminal reporters. It must not load
@@ -179,7 +179,16 @@ and interactive reporter orchestration.
   older read-only stores; NDJSON follows its in-memory parent index. Cursor and
   pipeline filters apply after discovering the subtree so they cannot sever links.
 - `studio/run-store-ui-state.ts` serializes reads and history clearing; it consumes
-  only the reader's `listEvents` capability.
+  only the reader's `listEvents` capability. `run-store/run-history.ts` owns the
+  historical hierarchy, descendant activity and summary projection. Studio retains
+  that index per history revision, pages root summaries and searches the complete
+  hierarchy on the server. Selected-run reads supply ancestry and direct-child
+  summaries; definition reads supply complete snapshots and paged runs.
+- `run-store/run-store-schema.ts` validates projected storage records;
+  `studio/run-store-ui-schema.ts` defines the browser protocol. Both reuse pure
+  trace schemas. Decode at the transport boundary instead of promoting partially
+  checked objects to core or storage types. Conditional history refreshes preserve
+  the browser's current snapshot when the revision, query and live launch IDs agree.
 - `studio/run-store-ui-api.ts` owns route behavior, command validation and API state.
   `studio/run-store-ui-http.ts` owns HTTP parsing, response formatting and authority
   helpers. `studio/run-store-ui.ts` owns the listener, trusted-host enforcement,

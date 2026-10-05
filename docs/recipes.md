@@ -224,7 +224,9 @@ pipeline does not require credentials.
    custom adapters are needed. Do not infer executable modules from run history
    or the filesystem.
    Cancel only a live launch owned by the current studio process; it is not
-   crash-resume and does not abort sibling launches.
+   crash-resume and does not abort sibling launches. Studio pages top-level history;
+   search includes nested runs across all pages, and run links open recorded details
+   directly. See the [Studio controls](./studio.md#use-the-browser-controls).
 
 Use `fromRemote` when a step calls another execution system. If a dry run
 contacts that system, both the adapter and remote worker must honor

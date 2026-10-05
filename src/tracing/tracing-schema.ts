@@ -305,7 +305,7 @@ const progressDetailsSchema = wireRefine(
   }
 );
 
-const progressSchema = wireTransform(
+export const progressSchema = wireTransform(
   wireRefine(
     wireObject({
       completed: finiteNumber,
@@ -334,7 +334,7 @@ const progressSchema = wireTransform(
 
 const positiveInteger = wireNumber({ integer: true, minimum: 1 });
 const nestedModes = ["for-each", "single", "iterate"] as const;
-const nestedPipelineSchema = wireRefine(
+export const nestedPipelineSchema = wireRefine(
   wireObject({
     mode: wireEnum(nestedModes),
     maxIterations: wireOptional(positiveInteger),
@@ -352,7 +352,7 @@ const nestedPipelineSchema = wireRefine(
   }
 );
 
-const remoteSchema = wireObject({
+export const remoteSchema = wireObject({
   engine: wireString({ maxLength: PIPELINE_TRACE_STRING_LIMIT }),
   target: wireOptional(boundedString),
 });
@@ -388,14 +388,15 @@ const schemaFingerprint = wireRefine(wireString({ maxLength: 80 }), (value, path
   if (!/^sha256:[a-f0-9]{64}$/.test(value))
     throw new Error(`${path} must be a SHA-256 fingerprint`);
 });
-const agentMetadataSchema = wireObject({
-  limits: wireObject({
-    maxTurns: positiveInteger,
-    maxCalls: nonnegativeInteger,
-    maxDecisions: positiveInteger,
-    maxDepth: wireOptional(nonnegativeInteger),
-    maxConcurrency: positiveInteger,
-  }),
+export const agentLimitsSchema = wireObject({
+  maxTurns: positiveInteger,
+  maxCalls: nonnegativeInteger,
+  maxDecisions: positiveInteger,
+  maxDepth: wireOptional(nonnegativeInteger),
+  maxConcurrency: positiveInteger,
+});
+export const agentMetadataSchema = wireObject({
+  limits: agentLimitsSchema,
   resultSchemaFingerprint: schemaFingerprint,
   capabilities: wireArray(
     wireObject({
@@ -407,7 +408,7 @@ const agentMetadataSchema = wireObject({
     { maxItems: 4096 }
   ),
 });
-const iterationControlsSchema = wireObject({
+export const iterationControlsSchema = wireObject({
   cache: wireOptional(wireEnum(["use", "recompute", "bypass"])),
   dryRun: wireOptional(wireBoolean()),
   continueOnError: wireOptional(wireBoolean()),
@@ -518,7 +519,7 @@ const selectionReasonSchema = wireDiscriminatedUnion("kind", {
   "required-dependency": selectionReasonDependencySchema,
   target: selectionReasonTargetSchema,
 });
-const selectionReasonsSchema = wireArray(selectionReasonSchema, {
+export const selectionReasonsSchema = wireArray(selectionReasonSchema, {
   maxItems: PIPELINE_TRACE_LIST_LIMIT,
   noun: "reasons",
 });

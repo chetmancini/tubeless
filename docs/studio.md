@@ -39,8 +39,11 @@ and does not accept a project file or `--command`.
 
 The run list shows active runs first, followed by history. Child runs appear
 beneath their parent, and caller-owned correlation IDs remain searchable and
-visible separately from package-generated run IDs. Open a run to inspect its
-steps, progress, logs, and errors.
+visible separately from package-generated run IDs. History is paged in groups of
+50 top-level runs; search includes nested runs across the complete history.
+Open a run to inspect its steps, progress, logs, and errors. Studio loads those
+details and complete definition snapshots separately from the history summaries,
+and unchanged refreshes reuse the current history page.
 
 Run details put debugging information before the step timeline. Structured errors
 show validation issue paths, expandable cause chains, failed fan-out items, and any
@@ -76,12 +79,12 @@ When several steps in a run are active, the run list shows a count such as
 “3 steps running” and the first three names, with a remaining count for larger groups.
 A single active step keeps its progress message.
 
-| Control       | What it does                                                                      | When available                                                                       |
-| ------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Preview plan  | Shows the selected steps and dry-run behavior without starting or recording a run | A pipeline command is registered                                                     |
-| Run pipeline  | Validates the form values and starts the command                                  | A command is registered locally or in gateway mode                                   |
-| Cancel run    | Aborts the selected live run without stopping Studio or sibling runs              | This Studio process owns the top-level launch                                        |
-| Clear history | Deletes all recorded SQLite events and compacts the database after confirmation   | Local SQLite mode with the maintenance capability enabled and no known active writer |
+| Control       | What it does                                                                           | When available                                                                       |
+| ------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Preview plan  | Shows the selected steps and dry-run behavior without starting or recording a run      | A pipeline command is registered                                                     |
+| Run pipeline  | Validates the form values and starts the command                                       | A command is registered locally or in gateway mode                                   |
+| Cancel run    | Aborts the selected live run without stopping Studio or sibling runs                   | This Studio process owns the top-level launch                                        |
+| Clear history | Deletes all recorded SQLite events and attempts database compaction after confirmation | Local SQLite mode with the maintenance capability enabled and no known active writer |
 
 Preview uses the form's dry-run and step/target controls. It does not validate
 business inputs; those are checked when you run the command. A preview is
@@ -179,8 +182,10 @@ duplicate pipeline IDs fail regardless of entry form. See the
 SQLite stores an append-only stream of events. Studio builds run summaries,
 step states, logs, and graphs from those events. Normal event updates and
 deletes are blocked by database triggers. `clearHistory()` is a separate
-maintenance operation that clears the complete history, compacts the database,
-and restores the triggers in one transaction.
+maintenance operation that clears the complete history and restores the triggers
+in one transaction. Compaction follows as best-effort maintenance. Once deletion
+commits, clearing succeeds even if compaction fails, so Studio discards the deleted
+history. A deletion failure rolls back and retains the history.
 
 New SQLite stores use schema version 4 to persist iteration relations. Version 3
 stores remain readable without modification; a writable open upgrades them

@@ -496,7 +496,12 @@ export async function openSqlitePipelineRunStore(
         } catch {}
         throw error;
       }
-      database.exec("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");
+      try {
+        database.exec("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");
+      } catch {
+        // Deletion has committed. Compaction is best effort and must not make
+        // callers retain a projection of history that no longer exists.
+      }
     },
     close() {
       if (closed) return;

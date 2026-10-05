@@ -1,0 +1,27 @@
+import { createRunHistoryIndex, summarizeRun } from "../run-store/run-history.js";
+import type { StoredPipelineRun } from "../run-store/run-store.js";
+import type { StudioSnapshot, StudioRunDetail } from "./run-store-ui-schema.js";
+
+export function studioSnapshot(runs: readonly StoredPipelineRun[]): StudioSnapshot {
+  const index = createRunHistoryIndex(runs);
+  return {
+    activeRunCount: runs.filter((run) => run.status === "running").length,
+    completedRunCount: runs.filter((run) => run.status === "completed").length,
+    failedRunCount: runs.filter((run) => run.status === "failed").length,
+    definitions: [],
+    generatedAtMs: 1,
+    lastEventId: 1,
+    revision: 1,
+    runCount: runs.length,
+    eventCount: runs.reduce((sum, run) => sum + run.eventCount, 0),
+    rootRunCount: index.roots.length,
+    matchingRootCount: index.roots.length,
+    offset: 0,
+    runs: index.roots.map((run) => summarizeRun(run, index)),
+    liveRunIds: [],
+  };
+}
+
+export function studioRunDetail(run: StoredPipelineRun): StudioRunDetail {
+  return { run, ancestors: [], children: [], descendantCount: 0 };
+}

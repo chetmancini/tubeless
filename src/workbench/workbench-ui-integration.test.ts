@@ -400,19 +400,22 @@ describe("workbench UI integration", () => {
     await vi.waitFor(async () => {
       const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
         liveRunIds: string[];
-        runs: { error?: { message: string }; runId: string; status: string }[];
+        runs: { runId: string; status: string }[];
       };
       expect(snapshot.runs).toContainEqual(
         expect.objectContaining({
           runId: first.runId,
           status: "cancelled",
-          error: expect.objectContaining({ message: expect.stringContaining("run was cancelled") }),
         })
       );
       expect(snapshot.runs).toContainEqual(
         expect.objectContaining({ runId: second.runId, status: "running" })
       );
       expect(snapshot.liveRunIds).toEqual([second.runId]);
+      const detail = await fetch(`${url}/api/runs/${encodeURIComponent(first.runId)}`).then(
+        (response) => response.json()
+      );
+      expect(detail.run.error.message).toContain("run was cancelled");
     });
     const stale = await fetch(`${url}/api/runs/${encodeURIComponent(first.runId)}/cancel`, {
       headers: { "x-tubeless-studio-cancel": "1" },

@@ -3,6 +3,7 @@ import type {
   StudioAccessDenied,
   StudioRunDetail,
   StudioSnapshot,
+  StudioHistoryQuery,
 } from "./run-store-ui-client-transport.js";
 
 export interface StudioDataState {
@@ -29,6 +30,12 @@ function clearedSnapshot(snapshot: StudioSnapshot): StudioSnapshot {
     completedRunCount: 0,
     definitions: [],
     failedRunCount: 0,
+    runCount: 0,
+    eventCount: 0,
+    rootRunCount: 0,
+    matchingRootCount: 0,
+    offset: 0,
+    selectedRun: undefined,
     lastEventId: 0,
     liveRunIds: [],
     runs: [],
@@ -49,6 +56,7 @@ export class StudioDataController {
   #invalidationTimeout: ReturnType<typeof setTimeout> | undefined;
   #manualRefreshPending = false;
   #snapshotEpoch = 0;
+  #historyQuery: StudioHistoryQuery = {};
   #snapshotRefreshActive = false;
   #snapshotRefreshQueued = false;
   #state: StudioDataState = {
@@ -84,6 +92,13 @@ export class StudioDataController {
   subscribe(listener: StudioDataListener): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  setHistoryQuery(query: StudioHistoryQuery): void {
+    if (JSON.stringify(this.#historyQuery) === JSON.stringify(query)) return;
+    this.#historyQuery = query;
+    this.#snapshotEpoch += 1;
+    this.refresh(true);
   }
 
   refresh(manual = false): void {
@@ -161,7 +176,7 @@ export class StudioDataController {
     const epoch = this.#snapshotEpoch;
     this.#manualRefreshPending = false;
     void this.#api
-      .loadSnapshot()
+      .loadSnapshot(this.#historyQuery)
       .then((snapshot) => {
         if (this.#disposed || this.#state.accessDenied || epoch !== this.#snapshotEpoch) return;
         this.#update({ connected: true, snapshot });

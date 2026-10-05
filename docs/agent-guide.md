@@ -509,7 +509,10 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Studio owns gateway authentication and process-local execution; the application
   owns identity, the explicit deployed catalog, private transport, supervision,
   and persistent SQLite. Never retry uncertain launch requests. The internal JSON
-  protocol is version-coupled and is not a public application API. Cancel a live top-level launch from the running detail pane;
+  protocol is version-coupled and is not a public application API. History pages
+  contain summaries; selected-run and definition details load separately. Search
+  includes descendants across the complete history, and clearing succeeds once
+  deletion commits even if subsequent compaction fails. Cancel a live top-level launch from the running detail pane;
   that abort is process-local, leaves sibling launches running, and is not
   crash-resume.
 
