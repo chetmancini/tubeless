@@ -10,6 +10,7 @@ import {
 } from "./pipeline-module.js";
 import { definePipelineCommand } from "../cli/cli-pipeline-command.js";
 import { isPipelineProject, type AnyProjectPipeline } from "../project/pipeline-project.js";
+import { didYouMean } from "../utilities/suggest.js";
 import {
   errorMessage,
   loadPlanSource,
@@ -123,8 +124,9 @@ function createPipelineRegistration(
     source: pipeline.id,
     cwd,
     id: pipeline.id,
+    // A registered command owns presentation overrides; it plans its pipeline unchanged.
     async loadPlan() {
-      return { view: pipeline };
+      return { view: command ?? pipeline };
     },
     async loadCommand(io) {
       const commandIo = { ...io, cwd };
@@ -229,8 +231,17 @@ export async function resolveWorkbenchRegistration(
   if ("exitCode" in loaded) return loaded;
   const registration = loaded.registrations.find(({ id }) => id === target);
   if (registration) return registration;
+  const ids = loaded.registrations.flatMap(({ id }) => (id === undefined ? [] : [id]));
+  const suggestion = didYouMean(target, ids);
+  const count = loaded.registrations.length;
+  const listCommand =
+    projectFile === undefined ? "tubeless list" : `tubeless list --project ${projectFile}`;
+  const hint =
+    count === 0
+      ? "The project defines no pipelines."
+      : `Run "${listCommand}" to see its ${count} pipeline${count === 1 ? "" : "s"}.`;
   io.stderr.write(
-    `Error: Project file ${loaded.filePath} does not define pipeline ${JSON.stringify(target)}.\n`
+    `Error: Project file ${loaded.filePath} does not define pipeline ${JSON.stringify(target)}.${suggestion ? ` ${suggestion}` : ""}\n${hint}\n`
   );
   return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load };
 }

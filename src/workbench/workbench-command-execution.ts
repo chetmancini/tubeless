@@ -4,6 +4,7 @@ import { isAbortError } from "../utilities/abort.js";
 import { renderPipelineError } from "../render/render.js";
 import { causalPipelineErrors } from "../core/pipeline-diagnostics.js";
 import {
+  cliValidationReportLines,
   isCliHelpRequested,
   isCliValidationError,
   isPipelineExecutionError,
@@ -65,10 +66,7 @@ async function executePipelineCommandOperation(
       return toExitCode(error);
     }
     if (isCliValidationError(error)) {
-      for (const validationError of error.errors) {
-        io.stderr.write(`Error: ${validationError}\n`);
-      }
-      io.stderr.write(`\n${error.helpText.replace(/\n+$/, "")}\n`);
+      io.stderr.write(`${cliValidationReportLines(error.errors, error.helpText).join("\n")}\n`);
       return toExitCode(error);
     }
     if (isPipelineExecutionError(error)) {
