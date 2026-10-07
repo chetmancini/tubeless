@@ -153,6 +153,21 @@ describe("RunGraph", () => {
     expect(markup).toContain("+4 more in the timeline · 280 progress rows not recorded");
   });
 
+  it("counts only recorded direct items when dropped rows may be nested", () => {
+    const details = Array.from({ length: 10 }, (_, index) => ({ id: `row-${index}` }));
+    // The 30 dropped rows could be nested under any recorded row, so none count as items.
+    const { markup } = graph(
+      run({
+        status: "completed",
+        steps: [
+          step("batch", "completed", { progress: { completed: 10, detailCount: 40, details } }),
+        ],
+      })
+    );
+    expect(markup).toContain('aria-label="Expand batch"');
+    expect(markup).toContain('<text dy="3">10</text>');
+  });
+
   it("treats a policy skip's published output as consumed, unlike a filtered skip", async () => {
     const { step: define } = createSteps();
     const cached = define("cached", {

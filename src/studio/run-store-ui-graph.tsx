@@ -219,18 +219,13 @@ function itemTop(item: PlacedItem & { kind: string; graph?: RunScene }): number 
   return item.y + (item.kind === "run" && item.graph ? 0 : CENTER_Y - RADIUS - 3);
 }
 
-interface UnrecordedRows {
-  count: number;
-  /** Whether every dropped row is known to be a direct item of this step. */
-  items: boolean;
-}
-
 function buildExpansion(
   run: StoredPipelineRun,
   step: StoredPipelineStep,
   childRuns: readonly StoredRunSummary[],
   details: readonly PipelineStepProgressDetail[],
-  unrecorded: UnrecordedRows,
+  /** Progress rows the trace dropped; their depth is unknown, so they are not items. */
+  unrecorded: number,
   ctx: SceneContext,
   depth: number
 ): ExpansionScene {
@@ -287,10 +282,7 @@ function buildExpansion(
   const more = [
     hiddenRuns > 0 && `+${hiddenRuns} more in the run list`,
     hiddenRows > 0 && `+${hiddenRows} more in the timeline`,
-    unrecorded.count > 0 &&
-      (unrecorded.items
-        ? `+${unrecorded.count} not recorded`
-        : `${unrecorded.count} progress rows not recorded`),
+    unrecorded > 0 && `${unrecorded} progress rows not recorded`,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -359,16 +351,12 @@ function buildRunScene(
         );
     const recorded = step.progress?.details ?? [];
     // The trace keeps a prefix of progress rows. Nested steps record every child as a run,
-    // so only other steps lose information when rows are dropped.
-    const dropped = step.nestedPipeline
+    // so only other steps lose information when rows are dropped. Dropped rows may be
+    // nested at any depth, so they are reported, never counted as items.
+    const unrecorded = step.nestedPipeline
       ? 0
       : Math.max(0, (step.progress?.detailCount ?? recorded.length) - recorded.length);
-    // Dropped rows are direct items only in a flat list that no child run can mirror.
-    const unrecorded: UnrecordedRows = {
-      count: dropped,
-      items: childRuns.length === 0 && recorded.every((detail) => !detail.depth),
-    };
-    const itemCount = childRuns.length + details.length + (unrecorded.items ? unrecorded.count : 0);
+    const itemCount = childRuns.length + details.length;
     const expanded =
       itemCount > 0 &&
       depth < MAX_DEPTH &&
