@@ -29,6 +29,7 @@ one of these recipes.
 | Run a bounded in-process agent                      | [`agent.ts`](../examples/agent.ts)                                                                                             | `defineAgent`, `defineTool`, ordered outcomes, immutable state; [guide](./agents.md)                                      |
 | Resume a workspace agent after a restart            | [`agent-durable.ts`](../examples/agent-durable.ts)                                                                             | SQLite checkpoints, stable execution keys, saved conversation and outcomes; [contract](./agents.md#durable-execution)     |
 | Run a model-backed workspace agent                  | [`agent-model.ts`](../examples/agent-model.ts)                                                                                 | Default prompt, project instructions, native conversation and compaction; [setup](./agents.md#default-model-backed-agent) |
+| Run the workspace agent on Claude                   | [`agent-model-anthropic.ts`](../examples/agent-model-anthropic.ts)                                                             | `anthropicModel()`, Messages API, compaction; [providers](./agents.md#choose-a-model-provider)                            |
 | Let a real LLM choose tools and finish              | [`agent-openai.ts`](../examples/agent-openai.ts)                                                                               | Application-owned Responses callback, accumulated outcomes, validated finish; [setup](./agents.md#connect-a-model)        |
 | Delegate to subagents and ordinary pipelines        | [`agent-delegation.ts`](../examples/agent-delegation.ts)                                                                       | `pipelineTool`, private child state, shared call/decision/depth/concurrency limits                                        |
 | Embed an agent in an ordinary pipeline              | [`agent-pipeline.ts`](../examples/agent-pipeline.ts)                                                                           | `fromPipeline`, validated child answers, dependent work, credential-free previews                                         |
@@ -65,7 +66,9 @@ one of these recipes.
 The [model-agent recipe](../examples/agent-model.ts) explicitly requests high reasoning;
 omit that option when selecting a model that does not support it. The recipe loads guidance from the physical
 workspace path and uses that same cwd for all tool calls. The prompt requires nested guidance
-before file operations or task commands in its scope. Custom OpenAI tools need inline strict schemas; oversized result
+before file operations or task commands in its scope. The [Claude recipe](../examples/agent-model-anthropic.ts)
+uses the same factory with `anthropicModel()`; both adapters accept `baseUrl` for
+[compatible APIs](./agents.md#compatible-apis). Custom OpenAI tools need inline strict schemas; oversized result
 batches use explicit previews while the harness keeps complete outcomes. See the
 [model-agent contract](./agents.md#default-model-backed-agent).
 Record the [delegation recipe](../examples/agent-delegation.ts) with `--trace` or

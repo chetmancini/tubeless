@@ -263,8 +263,14 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "dfdd1a52a08d2756ad3220f71d7a707ec2cf301922f767b1a82c4ebc9fc6cd01",
+      "sha256": "7f21c66f13f3deedf7705c649829562e096a620de5bce8248aa76a44c0d26d87",
       "specifier": "tubeless/agent/openai"
+    },
+    {
+      "declaration": "./dist/agent/anthropic.d.ts",
+      "exports": ["anthropicModel", "AnthropicModelOptions"],
+      "sha256": "465640496e89c03b352dc2eac19d1b37ae2692acf948b186117bf350d04b35bb",
+      "specifier": "tubeless/agent/anthropic"
     }
   ],
   "packageName": "tubeless",
