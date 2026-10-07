@@ -1,8 +1,13 @@
 import { renderToString } from "preact-render-to-string";
 import { describe, expect, it } from "vitest";
-import { RUN_MODEL_VERSION } from "../core/pipeline.js";
+import { createSteps, definePipeline, RUN_MODEL_VERSION } from "../core/pipeline.js";
 import { createRunHistoryIndex, summarizeRun } from "../run-store/run-history.js";
-import type { StoredPipelineRun, StoredPipelineStep } from "../run-store/run-store.js";
+import {
+  projectPipelineRun,
+  type StoredPipelineEvent,
+  type StoredPipelineRun,
+  type StoredPipelineStep,
+} from "../run-store/run-store.js";
 import { RunGraph } from "./run-store-ui-graph.js";
 
 function run(overrides: Partial<StoredPipelineRun> = {}): StoredPipelineRun {
@@ -103,6 +108,37 @@ describe("RunGraph", () => {
     expect(count('class="graph-edge-group gate tripped"')).toBe(2);
     expect(markup).toContain('class="graph-edge-group optional blocked"');
     expect(count('class="graph-edge-flow"')).toBe(0);
+  });
+
+  it("treats a policy skip's published output as consumed, unlike a filtered skip", async () => {
+    const { step: define } = createSteps();
+    const cached = define("cached", {
+      skip: () => ({ reason: "already cached", value: "cached rows" }),
+      run: () => "fresh rows",
+    });
+    const absent = define("absent", { run: () => "unused rows" });
+    const report = define("report", {
+      dependsOn: [cached],
+      optionalDependsOn: [absent],
+      run: ({ cached: rows }) => rows,
+    });
+    const pipeline = definePipeline({ id: "skips", steps: [cached, absent, report] });
+    const events: StoredPipelineEvent[] = [];
+    const exporter = {
+      export: (event: object) =>
+        void events.push({ ...event, id: events.length } as StoredPipelineEvent),
+    };
+    await pipeline.runOrThrow({}, { stepIds: ["cached", "report"] }, { tracing: { exporter } });
+
+    const recorded = projectPipelineRun(events);
+    expect(recorded.steps.map(({ id, status, skipReason }) => [id, status, skipReason])).toEqual([
+      ["cached", "skipped", "policy"],
+      ["absent", "skipped", "filtered"],
+      ["report", "completed", undefined],
+    ]);
+    const { markup } = graph(recorded);
+    expect(markup).toContain('class="graph-edge-group input used"');
+    expect(markup).toContain('class="graph-edge-group optional unused"');
   });
 
   it("expands a running fan-out into its attributed child runs", () => {

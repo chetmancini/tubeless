@@ -86,7 +86,7 @@ export const PIPELINE_ERROR_PHASES = [
 ] as const;
 
 const PIPELINE_RUN_STATUSES = ["cancelled", "completed", "failed"] as const;
-const PIPELINE_STEP_SKIP_REASONS = [
+export const PIPELINE_STEP_SKIP_REASONS = [
   "dry-run",
   "failed-dependency",
   "fail-fast",

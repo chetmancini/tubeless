@@ -4,6 +4,7 @@ import type {
   PipelineDefinitionIdentity,
   PipelineDefinitionSnapshot,
   PipelineStepLifecycleStatus,
+  PipelineStepSkipReason,
   PipelineStepProgressDetail,
 } from "../core/pipeline.js";
 import type {
@@ -113,6 +114,8 @@ export interface StoredPipelineStep {
   remote?: StoredRemote;
   /** Planned failure gates: this step is skipped when one of them fails. */
   skipAfterFailureOf?: string[];
+  /** Why a skipped step did not run; `policy` skips still publish an output. */
+  skipReason?: PipelineStepSkipReason;
   progress?: {
     completed: number;
     detailCount?: number;

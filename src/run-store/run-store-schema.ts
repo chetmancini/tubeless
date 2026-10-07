@@ -7,6 +7,7 @@ import {
   pipelineDefinitionSnapshotSchema,
   pipelineTraceErrorSchema,
   progressSchema,
+  PIPELINE_STEP_SKIP_REASONS,
   remoteSchema,
 } from "../tracing/tracing-schema.js";
 import {
@@ -101,6 +102,7 @@ export const storedPipelineRunSchema: WireSchema<StoredPipelineRun> = wireObject
       optionalDependencies: wireOptional(wireArray(id)),
       remote: wireOptional(remoteSchema),
       skipAfterFailureOf: wireOptional(wireArray(id)),
+      skipReason: wireOptional(wireEnum(PIPELINE_STEP_SKIP_REASONS)),
       progress: wireOptional(progressSchema),
       attempt: wireOptional(
         wireObject({

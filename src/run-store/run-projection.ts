@@ -188,6 +188,7 @@ export class RunProjection {
       step.finishedAtMs = event.timestampMs;
       step.durationMs = event.durationMs;
       if (event.durationMs !== undefined) step.startedAtMs = event.timestampMs - event.durationMs;
+      if (event.name === "step.skipped") step.skipReason = event.payload.reason;
     }
   }
 
