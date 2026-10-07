@@ -110,6 +110,49 @@ describe("RunGraph", () => {
     expect(count('class="graph-edge-flow"')).toBe(0);
   });
 
+  it("shows inputs as used by a step its own policy skipped", () => {
+    const { markup } = graph(
+      run({
+        steps: [
+          step("source", "completed"),
+          step("policy", "skipped", { dependencies: ["source"], skipReason: "policy" }),
+          step("dry", "skipped", { optionalDependencies: ["source"], skipReason: "dry-run" }),
+        ],
+      })
+    );
+    expect(markup).toContain('class="graph-edge-group input used"');
+    expect(markup).toContain('class="graph-edge-group optional unused"');
+  });
+
+  it("says where undrawn items are and how many progress rows the trace dropped", () => {
+    const call = {
+      agentRunId: "agent",
+      turn: 1,
+      callId: "c0",
+      tool: "search",
+      parentAttemptId: "attempt",
+    };
+    const details = Array.from({ length: 20 }, (_, index) => ({
+      id: `c${index}`,
+      status: "completed" as const,
+    }));
+    const root = run({
+      agentTurn: { agentRunId: "agent", index: 1, calls: [call] },
+      steps: [
+        step("calls", "running", {
+          attempt: { attemptId: "attempt", retries: [], startedAtMs: 1_000, status: "running" },
+          progress: { completed: 20, detailCount: 300, details },
+        }),
+      ],
+    });
+    const { markup, count } = graph(root, [
+      run({ runId: "tool-run", parentRunId: "root", itemKey: "c0", agentCall: call }),
+    ]);
+    // One tool run and 15 of the 19 remaining recorded calls fill the 16 drawn slots.
+    expect(count("graph-node run ") + count("graph-node item ")).toBe(16);
+    expect(markup).toContain("+4 more in the timeline · 280 progress rows not recorded");
+  });
+
   it("treats a policy skip's published output as consumed, unlike a filtered skip", async () => {
     const { step: define } = createSteps();
     const cached = define("cached", {

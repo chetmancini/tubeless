@@ -97,6 +97,8 @@ type ItemScene = PlacedItem &
         kind: "run";
         summary: StoredRunSummary;
         label: string;
+        /** Whether the graph can draw this run's steps inline, rather than only open it. */
+        expandable: boolean;
         expanded: boolean;
         graph?: RunScene;
         unavailable: boolean;
@@ -111,7 +113,8 @@ interface ExpansionScene {
   height: number;
   items: ItemScene[];
   links: string[];
-  hidden: number;
+  /** Explains items the expansion does not draw, and where to find them. */
+  more?: string;
 }
 
 interface SceneContext {
@@ -120,6 +123,8 @@ interface SceneContext {
   /** Keys auto-expanded while running; they stay open until the user collapses them. */
   readonly opened: Set<string>;
   readonly canLoad: boolean;
+  /** Nested runs the graph can expand; deeper runs only open on their own page. */
+  readonly expandable: Set<string>;
   /** Expanded child runs whose detail must be loaded and refreshed. */
   readonly wanted: Set<string>;
   readonly runs: Map<string, StoredPipelineRun>;
@@ -153,20 +158,22 @@ function producedOutput(step: StoredPipelineStep): boolean {
 /**
  * Visual state of one dependency edge from all of its kinds and its endpoint steps.
  * Gates trip on a failed or cancelled source, matching the engine's step disposition.
+ * A step's own skip policy runs after its inputs are built, so a policy skip still
+ * received them; other skips happen before inputs exist.
  */
 function edgeState(
   kinds: readonly EdgeKind[],
   source: StoredPipelineStep,
-  target: StoredPipelineStep["status"]
+  target: StoredPipelineStep
 ): EdgeState {
   const gate = kinds.includes("gate");
   const failed = source.status === "failed" || source.status === "cancelled";
   if (gate && failed) return "tripped";
-  if (target === "planned") return "candidate";
+  if (target.status === "planned") return "candidate";
   if (kinds.length === 1 && gate) return "settled";
   if (!producedOutput(source)) return failed ? "blocked" : "unused";
-  if (target === "running") return "active";
-  return target === "skipped" ? "unused" : "used";
+  if (target.status === "running") return "active";
+  return target.status === "skipped" && target.skipReason !== "policy" ? "unused" : "used";
 }
 
 /** Draw an edge as a gate once it trips, even when the source is also an input. */
@@ -212,11 +219,18 @@ function itemTop(item: PlacedItem & { kind: string; graph?: RunScene }): number 
   return item.y + (item.kind === "run" && item.graph ? 0 : CENTER_Y - RADIUS - 3);
 }
 
+interface UnrecordedRows {
+  count: number;
+  /** Whether every dropped row is known to be a direct item of this step. */
+  items: boolean;
+}
+
 function buildExpansion(
   run: StoredPipelineRun,
   step: StoredPipelineStep,
   childRuns: readonly StoredRunSummary[],
   details: readonly PipelineStepProgressDetail[],
+  unrecorded: UnrecordedRows,
   ctx: SceneContext,
   depth: number
 ): ExpansionScene {
@@ -230,9 +244,10 @@ function buildExpansion(
   const sized: ItemScene[] = [];
   for (const summary of ordered.slice(0, ITEM_LIMIT)) {
     const label = runLabel(summary, tools);
+    const expandable = ctx.canLoad && depth + 1 < MAX_DEPTH;
+    if (expandable) ctx.expandable.add(summary.runId);
     const expanded =
-      ctx.canLoad &&
-      depth + 1 < MAX_DEPTH &&
+      expandable &&
       (ctx.toggles.get(summary.runId) ??
         autoExpand(ctx, summary.runId, summary.subtreeIsRunning && runningRuns === 1));
     const load = expanded ? ctx.loads.get(summary.runId) : undefined;
@@ -245,6 +260,7 @@ function buildExpansion(
       kind: "run",
       summary,
       label,
+      expandable,
       expanded,
       graph,
       unavailable: load === "missing",
@@ -254,6 +270,7 @@ function buildExpansion(
       height: graph ? FRAME_HEADER + graph.height + FRAME_PADDING : NODE_HEIGHT,
     });
   }
+  const drawnRuns = sized.length;
   for (const detail of details.slice(0, Math.max(0, ITEM_LIMIT - sized.length))) {
     sized.push({
       kind: "item",
@@ -265,7 +282,18 @@ function buildExpansion(
       height: NODE_HEIGHT,
     });
   }
-  const hidden = ordered.length + details.length - sized.length;
+  const hiddenRuns = ordered.length - drawnRuns;
+  const hiddenRows = details.length - (sized.length - drawnRuns);
+  const more = [
+    hiddenRuns > 0 && `+${hiddenRuns} more in the run list`,
+    hiddenRows > 0 && `+${hiddenRows} more in the timeline`,
+    unrecorded.count > 0 &&
+      (unrecorded.items
+        ? `+${unrecorded.count} not recorded`
+        : `${unrecorded.count} progress rows not recorded`),
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const columns = step.nestedPipeline?.mode === "iterate" ? 1 : ITEM_COLUMNS;
   const rows: ItemScene[][] = [];
   for (let index = 0; index < sized.length; index += columns) {
@@ -300,10 +328,10 @@ function buildExpansion(
     x: 0,
     y: NODE_HEIGHT,
     width,
-    height: contentHeight + (hidden > 0 ? MORE_HEIGHT : 0) + FRAME_PADDING,
+    height: contentHeight + (more ? MORE_HEIGHT : 0) + FRAME_PADDING,
     items: sized,
     links,
-    hidden,
+    ...(more ? { more } : {}),
   };
 }
 
@@ -329,14 +357,25 @@ function buildRunScene(
       : (step.progress?.details ?? []).filter(
           (detail) => !detail.depth && !runItems.has(detail.id)
         );
-    const itemCount = childRuns.length + details.length;
+    const recorded = step.progress?.details ?? [];
+    // The trace keeps a prefix of progress rows. Nested steps record every child as a run,
+    // so only other steps lose information when rows are dropped.
+    const dropped = step.nestedPipeline
+      ? 0
+      : Math.max(0, (step.progress?.detailCount ?? recorded.length) - recorded.length);
+    // Dropped rows are direct items only in a flat list that no child run can mirror.
+    const unrecorded: UnrecordedRows = {
+      count: dropped,
+      items: childRuns.length === 0 && recorded.every((detail) => !detail.depth),
+    };
+    const itemCount = childRuns.length + details.length + (unrecorded.items ? unrecorded.count : 0);
     const expanded =
       itemCount > 0 &&
       depth < MAX_DEPTH &&
       (ctx.toggles.get(key) ??
         autoExpand(ctx, key, step.status === "running" && childRuns.length > 0));
     const expansion = expanded
-      ? buildExpansion(run, step, childRuns, details, ctx, depth)
+      ? buildExpansion(run, step, childRuns, details, unrecorded, ctx, depth)
       : undefined;
     const width = Math.max(SLOT_WIDTH, expansion?.width ?? 0);
     if (expansion) expansion.x = (width - expansion.width) / 2;
@@ -416,7 +455,7 @@ function buildRunScene(
         from,
         to: target.step.id,
         kinds,
-        state: edgeState(kinds, stepById.get(from)!, target.step.status),
+        state: edgeState(kinds, stepById.get(from)!, target.step),
         path,
         head: `M${tx - 4} ${ty - 7}L${tx} ${ty}L${tx + 4} ${ty - 7}Z`,
       });
@@ -619,14 +658,14 @@ function ExpansionView({
               selected={sameSelection(ui.selection, selection)}
               pulse={ui.pulse(summary.runId, summary.status)}
               onSelect={() => ui.select(selection)}
-              badge={item.unavailable ? undefined : badge}
+              badge={item.unavailable || !item.expandable ? undefined : badge}
             />
           </g>
         );
       })}
-      {expansion.hidden > 0 && (
+      {expansion.more && (
         <text class="graph-more" x={expansion.width / 2} y={expansion.height - FRAME_PADDING}>
-          +{expansion.hidden} more in the run list
+          {expansion.more}
         </text>
       )}
     </g>
@@ -811,7 +850,7 @@ function Inspector({
             <button class="primary-button" type="button" onClick={() => onOpenRun(summary.runId)}>
               Open run
             </button>
-            {ctx.canLoad && (
+            {ctx.expandable.has(summary.runId) && (
               <button
                 class="secondary-button"
                 type="button"
@@ -821,6 +860,11 @@ function Inspector({
               </button>
             )}
           </div>
+          {ctx.canLoad && !ctx.expandable.has(summary.runId) && (
+            <p class="graph-hint">
+              This run is nested too deeply to draw here. Open it to see its steps.
+            </p>
+          )}
         </div>
       );
     }
@@ -867,7 +911,7 @@ function Inspector({
     const target = run.steps.find((step) => step.id === selection.to);
     const kinds = target ? incomingEdges(target).get(selection.from) : undefined;
     if (source && target && kinds) {
-      const state = edgeState(kinds, source, target.status);
+      const state = edgeState(kinds, source, target);
       return (
         <div class="graph-inspector">
           <div class="graph-kicker">Connection · {run.pipelineId}</div>
@@ -1005,6 +1049,7 @@ export function RunGraph({ detail, api, onOpenRun }: RunGraphProps) {
     toggles,
     opened: opened.current,
     canLoad: api !== undefined,
+    expandable: new Set(),
     wanted: new Set(),
     runs: new Map(),
     children: new Map(),

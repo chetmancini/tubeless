@@ -87,7 +87,7 @@ function runOrigin(
   run: StoredPipelineRun,
   index: RunHistoryIndex<StoredPipelineRun>
 ): StoredRunOrigin | undefined {
-  const parent = index.ancestorsOf(run.runId).at(-1);
+  const parent = index.parentOf(run.runId);
   if (!parent) return undefined;
   const origin: StoredRunOrigin = {};
   const { stepId, assignsItemKey } = attributeRun(run, parent);
@@ -138,6 +138,8 @@ const EMPTY_RUNS: readonly never[] = [];
 export interface RunHistoryIndex<T extends RunHistoryItem> {
   readonly roots: readonly T[];
   ancestorsOf(runId: string | null | undefined): T[];
+  /** The resolved immediate parent, without walking the ancestor chain. */
+  parentOf(runId: string | null | undefined): T | undefined;
   childrenOf(runId: string): readonly T[];
   descendantCount(runId: string): number;
   matchingRootIds(query: string): ReadonlySet<string>;
@@ -268,13 +270,15 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
   function childrenOf(runId: string): readonly T[] {
     return childrenByParentId.get(runId) ?? EMPTY_RUNS;
   }
+  function parentOf(runId: string | null | undefined) {
+    const parentRunId = runId == null ? undefined : parentIdByRunId.get(runId);
+    return parentRunId ? runsById.get(parentRunId) : undefined;
+  }
   function ancestorsOf(runId: string | null | undefined) {
     const ancestors: T[] = [];
     let current = runById(runId);
     while (current) {
-      const parentRunId = parentIdByRunId.get(current.runId);
-      if (!parentRunId) break;
-      const parent = runsById.get(parentRunId);
+      const parent = parentOf(current.runId);
       if (!parent) break;
       ancestors.unshift(parent);
       current = parent;
@@ -306,6 +310,7 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
     roots,
     ancestorsOf,
     childrenOf,
+    parentOf,
     descendantCount(runId: string) {
       return descendantCountById.get(runId) ?? 0;
     },
