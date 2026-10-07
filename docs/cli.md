@@ -284,6 +284,8 @@ tubeless inspect [options] <pipeline-id-or-file>
 - `-e, --export <name>` selects a pipeline or command export
 - `-p, --project <path>` looks up the pipeline ID in the selected project file
 - `--json` emits identity and the default plan as JSON
+- `--tag <tag>` requires a step tag; repeat it to require several
+- `--owner <owner>` and `--domain <domain>` match step metadata exactly
 
 ## Plan
 
@@ -315,6 +317,8 @@ tubeless graph [options] <pipeline-id-or-file>
 - `-d, --direction <value>` is `BT`, `LR`, `RL`, `TB`, or `TD` (default `TD`)
 - `--descriptions` includes step descriptions in node labels
 - `--markdown` wraps the result in a fenced Mermaid block
+- `--tag <tag>`, `--owner <owner>`, and `--domain <domain>` filter steps as in `inspect`
+- `--metadata` includes step metadata in node labels
 
 The same graph is available in process as `pipeline.toMermaid()` or
 `command.toMermaid()`.

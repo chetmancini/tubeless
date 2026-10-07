@@ -267,6 +267,34 @@ describe("workspace search and listing", () => {
 });
 
 describe("workspace file replacement", () => {
+  it("serializes concurrent edits to one file so neither update is lost", async () => {
+    const context = await workspace();
+    const path = join(context.cwd, "target");
+    await fs.writeFile(path, "alpha\nbeta\ngamma\n");
+    const results = await Promise.all([
+      editTool({ path: "target", oldText: "alpha", newText: "ALPHA" }, context),
+      editTool({ path: "target", oldText: "gamma", newText: "GAMMA" }, context),
+      writeTool({ path: "other", content: "independent" }, context),
+      editTool({ path: "./target", oldText: "beta", newText: "BETA" }, context),
+    ]);
+    expect(results.map((result) => result.path)).toEqual([
+      path,
+      path,
+      join(context.cwd, "other"),
+      path,
+    ]);
+    expect(await fs.readFile(path, "utf8")).toBe("ALPHA\nBETA\nGAMMA\n");
+  });
+
+  it("releases a file after a failed edit", async () => {
+    const context = await workspace();
+    await expect(
+      editTool({ path: "target", oldText: "missing", newText: "x" }, context)
+    ).rejects.toMatchObject({ code: "EDIT_NOT_FOUND" });
+    await editTool({ path: "target", oldText: "original", newText: "updated" }, context);
+    expect(await fs.readFile(join(context.cwd, "target"), "utf8")).toBe("updated content");
+  });
+
   for (const tool of ["write", "edit"] as const) {
     it(`${tool} restores setuid, setgid, and sticky bits after restoring ownership`, async () => {
       const context = await workspace();

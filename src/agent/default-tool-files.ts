@@ -140,34 +140,58 @@ async function writeDestination(path: string, signal?: AbortSignal) {
   }
 }
 
+// Serialize writes per file within this process so concurrent edits in one tool batch
+// cannot read the same original text and silently overwrite each other.
+const pathLocks = new Map<string, Promise<void>>();
+
+async function withPathLock<T>(path: string, work: () => Promise<T>): Promise<T> {
+  const key = await realpath(path).catch(() => path);
+  const previous = pathLocks.get(key) ?? Promise.resolve();
+  const current = previous.then(work);
+  const settled = current.then(
+    () => undefined,
+    () => undefined
+  );
+  pathLocks.set(key, settled);
+  try {
+    return await current;
+  } finally {
+    if (pathLocks.get(key) === settled) pathLocks.delete(key);
+  }
+}
+
+async function writeContent(path: string, content: string, context: Context) {
+  const bytes = Buffer.byteLength(content);
+  if (bytes > MAX_FILE_BYTES) throw new ToolError("FILE_TOO_LARGE", "Content exceeds 1 MiB");
+  const { destination, info } = await writeDestination(path, context.signal);
+  if (info && !info.isFile()) throw new ToolError("NOT_FILE", "Expected a regular file");
+  if (info) await access(destination, constants.W_OK);
+  const staging = await mkdtemp(join(dirname(destination), ".tubeless-write-"));
+  try {
+    const temporary = join(staging, "content");
+    const file = await open(temporary, "wx", info ? info.mode & 0o7777 : 0o666);
+    try {
+      await file.writeFile(content, { encoding: "utf8", signal: context.signal });
+      if (info) {
+        await file.chown(info.uid, info.gid);
+        // Creation and ownership changes can alter mode bits; restore them last.
+        await file.chmod(info.mode & 0o7777);
+      }
+    } finally {
+      await file.close();
+    }
+    throwIfAborted(context.signal, "Write file");
+    await rename(temporary, destination);
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
+  return { path, bytes };
+}
+
 export async function writeTool(input: { path: string; content: string }, context: Context) {
   return fileOperation(context, async () => {
     const path = resolve(context.cwd, input.path);
-    const bytes = Buffer.byteLength(input.content);
-    if (bytes > MAX_FILE_BYTES) throw new ToolError("FILE_TOO_LARGE", "Content exceeds 1 MiB");
-    const { destination, info } = await writeDestination(path, context.signal);
-    if (info && !info.isFile()) throw new ToolError("NOT_FILE", "Expected a regular file");
-    if (info) await access(destination, constants.W_OK);
-    const staging = await mkdtemp(join(dirname(destination), ".tubeless-write-"));
-    try {
-      const temporary = join(staging, "content");
-      const file = await open(temporary, "wx", info ? info.mode & 0o7777 : 0o666);
-      try {
-        await file.writeFile(input.content, { encoding: "utf8", signal: context.signal });
-        if (info) {
-          await file.chown(info.uid, info.gid);
-          // Creation and ownership changes can alter mode bits; restore them last.
-          await file.chmod(info.mode & 0o7777);
-        }
-      } finally {
-        await file.close();
-      }
-      throwIfAborted(context.signal, "Write file");
-      await rename(temporary, destination);
-    } finally {
-      await rm(staging, { recursive: true, force: true });
-    }
-    return { path, bytes };
+    return withPathLock(path, () => writeContent(path, input.content, context));
   });
 }
 
@@ -177,18 +201,19 @@ export async function editTool(
 ) {
   return fileOperation(context, async () => {
     const path = resolve(context.cwd, input.path);
-    const text = await readText(path, context.signal);
-    const index = text.indexOf(input.oldText);
-    if (index < 0) throw new ToolError("EDIT_NOT_FOUND", "oldText does not occur in the file");
-    if (text.indexOf(input.oldText, index + 1) >= 0)
-      throw new ToolError("EDIT_AMBIGUOUS", "oldText occurs more than once; include more context");
-    return writeTool(
-      {
-        path,
-        content: text.slice(0, index) + input.newText + text.slice(index + input.oldText.length),
-      },
-      context
-    );
+    return withPathLock(path, async () => {
+      const text = await readText(path, context.signal);
+      const index = text.indexOf(input.oldText);
+      if (index < 0) throw new ToolError("EDIT_NOT_FOUND", "oldText does not occur in the file");
+      if (text.indexOf(input.oldText, index + 1) >= 0)
+        throw new ToolError(
+          "EDIT_AMBIGUOUS",
+          "oldText occurs more than once; include more context"
+        );
+      const content =
+        text.slice(0, index) + input.newText + text.slice(index + input.oldText.length);
+      return writeContent(path, content, context);
+    });
   });
 }
 

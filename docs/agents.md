@@ -339,7 +339,9 @@ All defaults use the ordinary validated tool execution path, shared budgets,
 concurrency limits, and tracing. Read, list, and search run in dry runs. Write,
 edit, and bash skip live work and produce no fabricated result; an agent turn
 requiring one of these skipped results fails. Put dependent filesystem changes in
-successive turns; calls in a batch may run concurrently. Each write or edit stages
+successive turns; calls in a batch may run concurrently. Writes and edits to the same
+file run one at a time within a process, so concurrent edits each apply to the
+latest contents. Each write or edit stages
 the complete contents in a sibling temporary directory, then atomically replaces
 the destination. Cancellation or failure before replacement preserves the original;
 cancellation racing with replacement can leave the complete new file. Existing

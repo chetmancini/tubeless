@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { serialize } from "node:v8";
 import { afterEach, expect, it } from "vitest";
 import { createFileStepCache, v8StepCacheCodec } from "./node.js";
 const directories: string[] = [];
@@ -71,6 +72,25 @@ it("propagates storage failures and cancellation without replacing a valid entry
   await writeFile(file, "not a directory");
   await expect(createFileStepCache(file).get("key", {})).rejects.toThrow();
   await expect(createFileStepCache(file).set("key", entry, {})).rejects.toThrow();
+});
+
+it("rejects corrupt and foreign entries instead of serving them", async () => {
+  const root = await directory();
+  const cache = createFileStepCache(root);
+  await cache.set("key", { value: new Uint8Array([1]), createdAtMs: 0 }, {});
+  const [name] = await readdir(root);
+  const file = join(root, name!);
+  await writeFile(file, "not structured-clone bytes");
+  await expect(cache.get("key", {})).rejects.toThrow();
+  for (const entry of [
+    null,
+    { value: new Uint8Array([1]) },
+    { value: new Uint8Array([1]), createdAtMs: Number.NaN },
+    { value: [1], createdAtMs: 0 },
+  ]) {
+    await writeFile(file, serialize(entry));
+    await expect(cache.get("key", {})).rejects.toThrow("Invalid cache entry");
+  }
 });
 
 it("rejects lossy default-codec results, including nested instances and changed prototypes", () => {

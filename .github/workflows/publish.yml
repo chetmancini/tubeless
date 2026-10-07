@@ -53,13 +53,6 @@ jobs:
             git tag -a "${tag}" -m "tubeless ${version}"
             git push origin "${tag}"
           fi
-          if ! gh release view "${tag}" >/dev/null 2>&1; then
-            args=(--verify-tag --generate-notes)
-            if [[ "${tag}" == *-* ]]; then
-              args+=(--prerelease --latest=false)
-            fi
-            gh release create "${tag}" "${args[@]}"
-          fi
 
   publish:
     needs: [cut]
@@ -92,7 +85,7 @@ jobs:
       - name: Require npm CLI 11.5.1+
         run: |
           set -euo pipefail
-          npm install -g npm@11
+          npm install -g npm@11.21.0
           node -e 'const [maj, min, pat] = process.versions.node.split(".").map(Number); if (maj < 22 || (maj === 22 && min < 14)) { console.error(process.versions.node); process.exit(1) }'
           node -e 'const {execSync} = require("node:child_process"); const v = execSync("npm --version",{encoding:"utf8"}).trim(); const [maj, min] = v.split(".").map(Number); if (maj < 11 || (maj === 11 && min < 5)) { console.error(v); process.exit(1) } console.log("npm", v)'
       - name: Install
@@ -113,3 +106,27 @@ jobs:
           else
             npm publish --access public
           fi
+
+  github-release:
+    needs: [publish]
+    # Announce a release only after its version reached the registry.
+    if: always() && !cancelled() && needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="v$(node -p 'require("./package.json").version')"
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            exit 0
+          fi
+          args=(--verify-tag --generate-notes)
+          if [[ "${tag}" == *-* ]]; then
+            args+=(--prerelease --latest=false)
+          fi
+          gh release create "${tag}" "${args[@]}"

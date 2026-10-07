@@ -36,10 +36,16 @@ jobs:
           restore-keys: ${{ runner.os }}-bun-
       - name: Install
         run: bun ci
+      # Lint, formatting, typecheck, docs, and API checks do not depend on Node;
+      # run the complete gate once and only runtime checks on the other versions.
       - name: Check
+        if: matrix.node == 24
         run: make check
+      - name: Test and pack
+        if: matrix.node != 24
+        run: bun run build && bun run --silent test:run && bun run --silent pack:verify
       - name: Summarize public API report diff
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && matrix.node == 24
         run: |
           set -euo pipefail
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
@@ -47,7 +53,7 @@ jobs:
       - name: Confirm Node used for pack smoke
         run: node --version
       - name: Upload Tubeless trace
-        if: always()
+        if: always() && matrix.node == 24
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tubeless-check-node-${{ matrix.node }}

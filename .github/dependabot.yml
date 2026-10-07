@@ -17,6 +17,10 @@ updates:
       interval: weekly
     labels:
       - dependencies
+    ignore:
+      # Keep Node types at the supported engines.node floor (22).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       bun:
         patterns:
