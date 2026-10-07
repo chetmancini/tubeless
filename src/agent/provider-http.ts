@@ -11,7 +11,8 @@ export function providerBaseUrl(provider: string, value: string): string {
   } catch {
     throw new Error(`Invalid ${provider} base URL`);
   }
-  if (url.protocol !== "https:" && url.protocol !== "http:")
+  // Endpoints are appended to the path, so a query or fragment would swallow them.
+  if ((url.protocol !== "https:" && url.protocol !== "http:") || url.search || url.hash)
     throw new Error(`Invalid ${provider} base URL`);
   return url.href.replace(/\/+$/, "");
 }

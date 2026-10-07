@@ -222,6 +222,19 @@ describe("Anthropic model", () => {
     expect(body(fetcher, 2).messages).toHaveLength(3);
     expect(headers(fetcher, 2)).not.toHaveProperty("anthropic-beta");
 
+    // A compaction stop reason without a signed compaction block keeps the history.
+    fetcher
+      .mockReset()
+      .mockResolvedValueOnce(step())
+      .mockResolvedValueOnce(message([{ type: "text", text: "Summary." }], "compaction"))
+      .mockResolvedValueOnce(message([finish()]));
+    await defineModelAgent({
+      id: "malformed-summary",
+      model: anthropicModel({ apiKey: "fixture", compactAfterBytes: 1 }),
+    }).runOrThrow({ task: "Read target" }, undefined, { cwd });
+    expect(body(fetcher, 2).messages).toHaveLength(3);
+    expect(headers(fetcher, 2)).not.toHaveProperty("anthropic-beta");
+
     fetcher
       .mockReset()
       .mockResolvedValueOnce(step())
@@ -297,6 +310,8 @@ describe("Anthropic model", () => {
     { apiKey: "" },
     { baseUrl: "ftp://example.com" },
     { baseUrl: "not a url" },
+    { baseUrl: "https://gateway.example.com/anthropic?tenant=abc" },
+    { baseUrl: "https://gateway.example.com/anthropic#fragment" },
     { maxTokens: 0 },
     { compactAfterBytes: 1_048_576 },
     { timeoutMs: 0 },
