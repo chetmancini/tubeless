@@ -7,7 +7,7 @@
         "openSqliteAgentCheckpointStore",
         "SqliteAgentCheckpointStore"
       ],
-      "sha256": "a32d0ded9cd0c164fb715d568b1954977645275e6ae47585c55517c24aba9745",
+      "sha256": "7765e2988012e2ae4b34b65f00a3f67f3999a3cdca8228c9e91e3cb30195f4b6",
       "specifier": "tubeless/agent/node"
     },
     {

@@ -704,10 +704,13 @@ An environment may be a capability object or an async factory. The factory is
 resolved once per live invocation and is never called by planning or skipped
 dry runs. Model agents and agents with an explicit environment resolve cwd once
 before decisions and tools. `createNodeAgentEnvironment()` from
-`tubeless/agent/node` exposes the local adapter explicitly. Environments supply
-capabilities, not a sandbox guarantee: isolation and remote-process termination
-belong to the backend. The optional Node adapter and storage remain outside
-the provider-independent contracts.
+`tubeless/agent/node` exposes the local adapter explicitly; its default
+`node:local` id names the local filesystem authority rather than the host, so
+a recreated container or pod still resumes its checkpoints. Pass `{ id }` to
+name a distinct authority, for example one store shared by several hosts.
+Environments supply capabilities, not a sandbox guarantee: isolation and
+remote-process termination belong to the backend. The optional Node adapter and
+storage remain outside the provider-independent contracts.
 
 Run the credential-free [environment recipe](../examples/agent-environment.ts)
 to list a workspace through an explicit Node adapter, or supply your own

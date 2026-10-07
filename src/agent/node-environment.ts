@@ -1,5 +1,4 @@
 import { lstat, realpath } from "node:fs/promises";
-import { hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { throwIfAborted } from "../utilities/abort.js";
 import { bashTool } from "./default-tool-bash.js";
@@ -49,10 +48,18 @@ async function projectInstructions(
   return instructions;
 }
 
-/** Local workspace capabilities with bounded reads, atomic writes and cancellable bash. */
-export function createNodeAgentEnvironment(): AgentEnvironment {
+/**
+ * Local workspace capabilities with bounded reads, atomic writes and cancellable bash.
+ *
+ * The default `id` names this process's local filesystem authority rather than its
+ * host, so durable checkpoints still resume in a recreated container or pod. Pass
+ * `id` to name a distinct authority, for example one store shared by several hosts.
+ */
+export function createNodeAgentEnvironment(
+  options: { readonly id?: string } = {}
+): AgentEnvironment {
   return Object.freeze({
-    id: `node:${hostname()}`,
+    id: options.id ?? "node:local",
     resolveCwd: async ({ cwd, signal }: AgentEnvironmentContext) => {
       throwIfAborted(signal, "Resolve agent workspace");
       const directory = await realpath(cwd);

@@ -10,7 +10,7 @@ Package: `tubeless`
 
 | Entrypoint              | Declaration                        | Surface hash                                                       | Exported symbols |
 | ----------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless/agent/node`   | `./dist/agent/node.d.ts`           | `a32d0ded9cd0c164fb715d568b1954977645275e6ae47585c55517c24aba9745` |                3 |
+| `tubeless/agent/node`   | `./dist/agent/node.d.ts`           | `7765e2988012e2ae4b34b65f00a3f67f3999a3cdca8228c9e91e3cb30195f4b6` |                3 |
 | `tubeless/agent`        | `./dist/agent/agent.d.ts`          | `7ece65f5f269eb1341a2648adf6da398da93a2bcf38ab887b62676f782434019` |               28 |
 | `tubeless`              | `./dist/core/pipeline.d.ts`        | `575c60c9404a70f27f199c8b6ae68502718b1d018f2670bcff8536b62cb25767` |               78 |
 | `tubeless/cli`          | `./dist/cli/cli.d.ts`              | `9397e97d1c7bed6a9b86e221056ed3513bf1c7ccc58c253e5d9721143fcddeee` |               31 |
@@ -29,7 +29,7 @@ Package: `tubeless`
 
 | Symbol                                                                                                                         | Description                                                                               |
 | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| [`createNodeAgentEnvironment`](https://github.com/chetmancini/tubeless/blob/main/src/agent/node-environment.ts#L53)            | Local workspace capabilities with bounded reads, atomic writes and cancellable bash.      |
+| [`createNodeAgentEnvironment`](https://github.com/chetmancini/tubeless/blob/main/src/agent/node-environment.ts#L58)            | Local workspace capabilities with bounded reads, atomic writes and cancellable bash.      |
 | [`openSqliteAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/sqlite-checkpoint-store.ts#L37) | Open durable SQLite checkpoints; process exit automatically releases execution ownership. |
 | [`SqliteAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/sqlite-checkpoint-store.ts#L9)      | File-backed checkpoint storage using Node's built-in SQLite and per-key file locks.       |
 

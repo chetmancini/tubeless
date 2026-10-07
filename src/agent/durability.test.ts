@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import { expect, it, vi } from "vitest";
 import {
   defineAgent,
@@ -12,6 +13,9 @@ import { checkedCheckpoint } from "./checkpoint-format.js";
 import { createNodeAgentEnvironment } from "./node-environment.js";
 import { emptyInput, numberSchema, schema } from "./agent.test-support.js";
 import { createSteps, definePipeline } from "../core/pipeline.js";
+
+// Only the host-change test stubs the host name; every other call reaches the real implementation.
+vi.mock("node:os", { spy: true });
 
 function interruptWrite(
   store: AgentCheckpointStore,
@@ -319,6 +323,59 @@ it("rejects different inputs and semantic versions before replaying stored work"
   expect(await agent("1").runOrThrow({ value: 1 })).toBe(1);
   await expect(agent("1").runOrThrow({ value: 2 })).rejects.toThrow("differ");
   await expect(agent("2").runOrThrow({ value: 1 })).rejects.toThrow("differ");
+  expect(decide).toHaveBeenCalledTimes(1);
+});
+
+it("resumes a durable execution after the host identity changes", async () => {
+  const store = createMemoryAgentCheckpointStore();
+  const work = vi.fn(() => 7);
+  const agent = defineAgent({
+    id: "host-independent",
+    implementationVersion: "1",
+    inputSchema: emptyInput,
+    resultSchema: numberSchema,
+    initialState: () => 0,
+    durability: { store, key: "job" },
+    tools: {
+      work: defineTool({
+        description: "Work",
+        inputSchema: numberSchema,
+        outputSchema: numberSchema,
+        run: work,
+      }),
+    },
+    decide: (_state, context) =>
+      context.turn === 1
+        ? { kind: "continue", calls: [{ id: "work", tool: "work", input: 1 }] }
+        : { kind: "finish", result: 7 },
+    reduce: () => 0,
+  });
+  // A recreated container or pod receives a new host name; the default local
+  // workspace authority must not follow it.
+  vi.mocked(hostname).mockReturnValue("pod-a");
+  expect(await agent.runOrThrow({})).toBe(7);
+  vi.mocked(hostname).mockReturnValue("pod-b");
+  expect(await agent.runOrThrow({})).toBe(7);
+  expect(work).toHaveBeenCalledTimes(1);
+  vi.mocked(hostname).mockRestore();
+});
+
+it("rejects resuming a durable execution under a different explicit environment id", async () => {
+  const store = createMemoryAgentCheckpointStore();
+  const decide = vi.fn(() => ({ kind: "finish", result: 1 }));
+  const agent = (id: string) =>
+    defineAgent({
+      id: "scoped-authority",
+      implementationVersion: "1",
+      inputSchema: emptyInput,
+      resultSchema: numberSchema,
+      initialState: () => 0,
+      durability: { store, key: "job" },
+      environment: createNodeAgentEnvironment({ id }),
+      decide,
+    });
+  expect(await agent("worker-1").runOrThrow({})).toBe(1);
+  await expect(agent("worker-2").runOrThrow({})).rejects.toThrow("differ");
   expect(decide).toHaveBeenCalledTimes(1);
 });
 

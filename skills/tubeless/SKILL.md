@@ -163,7 +163,9 @@ Read the corresponding package recipe before using these features:
   idempotent work. Keep initialization, mapping, validators and reducers pure.
   Read `docs/agents.md` and `examples/agent-durable.ts` for SQLite acknowledgement
   and single-host ownership. Supply `environment` for remote workspace guidance,
-  files and commands; children inherit it. Custom tools should use
+  files and commands; children inherit it. The local adapter's default authority
+  id is host-independent, so recreated containers resume; pass `id` to name a
+  distinct authority. Custom tools should use
   `context.environment` and `context.execution` for workspace authority and
   durable business idempotency. Node adapters live in `tubeless/agent/node`;
   see `examples/agent-environment.ts` for the workspace adapter.

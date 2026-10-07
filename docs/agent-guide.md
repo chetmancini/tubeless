@@ -89,7 +89,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   and the [SQLite recipe](../examples/agent-durable.ts). Running unsafe calls become
   recoverable interruption outcomes; mark only repeatable or idempotent tools
   `replay: "safe"`. Supply an `AgentEnvironment` for remote guidance, files
-  and commands; children inherit it. Custom tools receive `context.environment`.
+  and commands; children inherit it. The local adapter's `node:local` authority
+  id is host-independent, so a recreated container or pod resumes; pass `id` to
+  name another authority. Custom tools receive `context.environment`.
   Environment operations preserve signal cancellation across SDK-specific errors
   and late results, while still draining active work.
   Guidance paths are nonblank and limited to 4,096 characters; guidance is checked
