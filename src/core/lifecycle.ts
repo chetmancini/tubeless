@@ -13,6 +13,7 @@ import type {
   PipelineTraceAttributes,
   PipelineTraceContext,
 } from "../tracing/tracing-contracts.js";
+import { scopeStepLogger } from "./step-log-scope.js";
 
 /** Internal canonical lifecycle stream. Hooks and tracing are projections of it. */
 export interface PipelineLifecycleObserver {
@@ -81,23 +82,24 @@ export function createPipelineLifecycleObserver(
   return {
     traceContext: trace?.context,
     logger(stepId, attemptId) {
-      if (!trace) return runtime.log;
+      if (!trace) return scopeStepLogger(runtime.log, stepId);
+      const sink = scopeStepLogger(base, stepId);
       // A child run inherits its parent's logger, but owns its own trace events.
       const log: TracedPipelineLogger = {
         error: (message, ...params) => {
           trace.log("error", message, params, stepId, attemptId);
-          base.error(message, ...params);
+          sink.error(message, ...params);
         },
         log: (message, ...params) => {
           trace.log("log", message, params, stepId, attemptId);
-          base.log(message, ...params);
+          sink.log(message, ...params);
         },
         warn: (message, ...params) => {
           trace.log("warn", message, params, stepId, attemptId);
-          base.warn(message, ...params);
+          sink.warn(message, ...params);
         },
       };
-      log[PIPELINE_LOGGER_BASE] = base;
+      log[PIPELINE_LOGGER_BASE] = sink;
       return log;
     },
     pipelineStart(plan, targetIds) {

@@ -160,7 +160,7 @@ describe("module runtime boundaries", () => {
         "utilities/abort.js",
         "utilities/tubeless-error.js",
       ],
-      "core/lifecycle.js": ["tracing/tracing-internal.js"],
+      "core/lifecycle.js": ["core/step-log-scope.js", "tracing/tracing-internal.js"],
     };
     for (const [entry, allowed] of Object.entries(contracts)) {
       for (const dependency of dependencies(resolve(dist, entry))) {

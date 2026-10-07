@@ -389,9 +389,14 @@ Logs pane to the right of the progress tree. It follows the latest eight lines
 from `context.log`, including warnings and errors, with fewer lines in short
 terminals. While the pane is visible, logs appear only there; long lines are
 clipped. The pane adapts to terminal resizing and disappears at completion.
-When it is hidden, new logs print above progress. Use `--trace` or `--store`
-when you need a complete recording.
+When a step fails, the last 50 lines it logged while the pane was visible are
+printed below the final progress tree. When the pane is hidden, new logs print
+above progress. Use `--trace` or `--store` when you need a complete recording.
 Narrow terminals, redirected output, and plain reporting keep their usual layout.
+
+Interactive output starts each step's log line with the step name, such as
+`[lint] $ oxlint .`, so lines from concurrent steps stay distinguishable. Lines
+from a nested pipeline are labeled with the parent step that invoked it.
 
 The pane is enabled automatically. Configure it per command:
 

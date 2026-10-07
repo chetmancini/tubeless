@@ -126,9 +126,9 @@ describe("createPipelineReporter", () => {
             context.log.error("\u001B[2Jfailure\u0001\tmessage");
             const frame = output.chunks.at(-1)!;
             expect(frame).toContain("╭─ Logs ");
-            expect(frame).toContain("│ ! first");
-            expect(frame).toContain("│ second");
-            expect(frame).toContain("│ ✗ failure message");
+            expect(frame).toContain("│ [work] ! first");
+            expect(frame).toContain("│ [work] second");
+            expect(frame).toContain("│ [work] ✗ failure message");
             expect(frame).not.toContain("line 0");
             expect(frame).not.toContain("\u001B[2J");
             expect(renderTerminal(frame)).toHaveLength(10);
@@ -151,6 +151,66 @@ describe("createPipelineReporter", () => {
       reporter.dispose();
     }
   });
+
+  it.each([
+    { columns: 140, tracing: false },
+    { columns: 140, tracing: true },
+    { columns: 100, tracing: true },
+  ])(
+    "attributes nested logs to the root step and keeps failed pane output for %j",
+    async ({ columns, tracing }) => {
+      const output = { ...captureOutput(true, columns), rows: 12 };
+      const reporter = createPipelineReporter({
+        color: "never",
+        log: captureLog(),
+        mode: "interactive",
+        output,
+        symbols: "ascii",
+      });
+      const { step, fromPipeline } = createSteps();
+      const inner = definePipeline({
+        id: "inner",
+        steps: [
+          step("probe", {
+            run: (_inputs, context) => {
+              context.log.log("nested detail");
+              throw new Error("probe failed");
+            },
+          }),
+        ],
+      });
+      const pipeline = definePipeline({
+        id: "attributed",
+        steps: [
+          step("quiet", { name: "Quiet", run: (_inputs, context) => context.log.log("all good") }),
+          fromPipeline("check", { pipeline: inner, mapOptions: () => ({}) }),
+        ],
+      });
+      const result = await pipeline.run({}, undefined, {
+        cwd: "/tmp",
+        hooks: reporter.hooks,
+        log: reporter.log,
+        tracing: tracing ? { exporter: { export: () => undefined } } : undefined,
+      });
+      reporter.dispose();
+
+      expect(result.status).toBe("failed");
+      const screen = renderTerminal(output.chunks.join(""), columns);
+      const failedOutput = screen.indexOf("fail check output:");
+      if (columns < 120) {
+        // Narrow terminals already printed every line to scrollback.
+        expect(screen).toContain("[Quiet] all good");
+        expect(screen).toContain("[check] nested detail");
+        expect(failedOutput).toBe(-1);
+      } else {
+        expect(screen.join("\n")).not.toContain("all good");
+        expect(screen.slice(failedOutput)).toEqual(["fail check output:", "    nested detail"]);
+        expect(screen.slice(0, failedOutput)).toContain(
+          "  fail check: Child pipeline inner failed at probe: probe failed"
+        );
+      }
+    }
+  );
 
   it.each([
     { columns: 119, rows: 24, logPane: "auto" as const },
@@ -239,7 +299,7 @@ describe("createPipelineReporter", () => {
     expect(rendered).toContain("\u001B[?25h");
     // Logs stay in scrollback while progress rows are replaced in place.
     const screen = renderTerminal(rendered);
-    expect(screen).toContain("loaded a batch");
+    expect(screen).toContain("[load] loaded a batch");
     expect(screen.join("\n")).not.toContain("40% 4/10 records");
     expect(rendered).toContain("[████░░░░░░] 40% 4/10 records");
     expect(rendered).toContain("[██████████] 100% 12/10 finishing");

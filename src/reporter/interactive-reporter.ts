@@ -9,6 +9,8 @@ import type {
   PipelineStepStatus,
 } from "../core/pipeline.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
+import { PIPELINE_FINALIZE_STEP_ID } from "../core/pipeline-step-metadata.js";
+import { STEP_LOG_SCOPE, type StepScopedLogger } from "../core/step-log-scope.js";
 import { elapsedToken, shimmerToken, SPINNER_TOKEN } from "./live-ticker-frame.js";
 import { createLiveTicker, type LiveTicker } from "./live-ticker.js";
 import {
@@ -20,6 +22,9 @@ import {
   type RunReporterConfig,
 } from "./reporter.js";
 import { safeTerminalLog, safeTerminalText } from "./terminal-text.js";
+
+/** Failed-step lines retained when they were only visible in the log pane. */
+const PANE_ONLY_LOG_LIMIT = 50;
 
 /** Rendering mode selected for pipeline lifecycle reporting. */
 export type PipelineReporterMode = "auto" | "interactive" | "plain";
@@ -235,6 +240,7 @@ function createInteractiveReporter<TResult>(
   const refreshIntervalMs = Math.max(16, Math.floor(options.refreshIntervalMs ?? 80));
   const steps = new Map<string, StepState>();
   const recentLogs: string[] = [];
+  const paneOnlyLogs = new Map<string, { dropped: number; lines: string[] }>();
   let plan: PipelinePlan | undefined;
   let result: PipelineRun<TResult> | undefined;
   let finalize: FinalizeState = { status: "idle" };
@@ -386,7 +392,27 @@ function createInteractiveReporter<TResult>(
     resizeOutput = undefined;
   };
 
-  const writeLog = (level: "error" | "log" | "warn", message?: unknown, ...args: unknown[]) => {
+  const stepLabel = (stepId: string): string => {
+    const step = steps.get(stepId)?.step;
+    if (step) return safeTerminalText(step.name ?? step.id);
+    return stepId === PIPELINE_FINALIZE_STEP_ID ? "finalize" : safeTerminalText(stepId);
+  };
+
+  const retainPaneOnlyLines = (stepId: string, lines: readonly string[]): void => {
+    const retained = paneOnlyLogs.get(stepId) ?? { dropped: 0, lines: [] };
+    retained.lines.push(...lines);
+    const excess = Math.max(0, retained.lines.length - PANE_ONLY_LOG_LIMIT);
+    retained.lines.splice(0, excess);
+    retained.dropped += excess;
+    paneOnlyLogs.set(stepId, retained);
+  };
+
+  const writeLog = (
+    level: "error" | "log" | "warn",
+    stepId: string | undefined,
+    message?: unknown,
+    ...args: unknown[]
+  ) => {
     const rendered = message === undefined && args.length === 0 ? "" : format(message, ...args);
     const safeRendered = safeTerminalLog(rendered);
     const prefix =
@@ -395,29 +421,59 @@ function createInteractiveReporter<TResult>(
         : level === "warn"
           ? `${theme.styled.skip("!")} `
           : "";
-    const text = `${prefix}${safeRendered}\n`;
+    const bodyLines = `${prefix}${safeRendered}`.split("\n").map((line) => line.slice(0, 2048));
+    const source =
+      stepId === undefined ? "" : `${theme.styled.description(`[${stepLabel(stepId)}]`)} `;
+    const lines = bodyLines.map((line) => `${source}${line}`);
+    const text = `${lines.join("\n")}\n`;
     if (disposed) {
       output.write(text);
       return;
     }
     // Retain a bounded tail for the pane, including when the terminal is resized.
-    recentLogs.push(
-      ...`${prefix}${safeRendered}`
-        .split("\n")
-        .slice(-8)
-        .map((line) => line.slice(0, 2048))
-    );
+    recentLogs.push(...lines.slice(-8));
     recentLogs.splice(0, Math.max(0, recentLogs.length - 8));
-    if (!logPaneVisible()) ensureTicker().writeLog(text);
+    if (logPaneVisible()) {
+      // The pane disappears with the final frame; keep what never reached scrollback.
+      if (stepId !== undefined) retainPaneOnlyLines(stepId, bodyLines);
+    } else {
+      ensureTicker().writeLog(text);
+    }
     progressDirty = false;
     lastProgressRedrawAt = Date.now();
     redraw();
   };
 
-  const log: PipelineLogger = {
-    error: (message, ...args) => writeLog("error", message, ...args),
-    log: (message, ...args) => writeLog("log", message, ...args),
-    warn: (message, ...args) => writeLog("warn", message, ...args),
+  const stepLog = (stepId: string | undefined): PipelineLogger => {
+    const logger: StepScopedLogger = {
+      error: (message, ...args) => writeLog("error", stepId, message, ...args),
+      log: (message, ...args) => writeLog("log", stepId, message, ...args),
+      warn: (message, ...args) => writeLog("warn", stepId, message, ...args),
+    };
+    // Child runs inherit a bound logger; their lines belong to this run's step.
+    logger[STEP_LOG_SCOPE] = stepId === undefined ? stepLog : () => logger;
+    return logger;
+  };
+  const log = stepLog(undefined);
+
+  /** Show failed steps' output that was only visible in the log pane. */
+  const writePaneOnlyFailureOutput = (run: PipelineRun<TResult>): void => {
+    const failedIds = run.steps.filter((step) => step.status === "failed").map((step) => step.id);
+    if (finalize.status === "failed") failedIds.push(PIPELINE_FINALIZE_STEP_ID);
+    const ellipsis = theme.unicodeEnabled ? "…" : "...";
+    for (const stepId of failedIds) {
+      const retained = paneOnlyLogs.get(stepId);
+      if (!retained) continue;
+      const lines = [
+        `${theme.styled.fail(theme.symbols.fail)} ${stepLabel(stepId)} output:`,
+        ...(retained.dropped > 0
+          ? [`    ${theme.styled.description(`${ellipsis} ${retained.dropped} earlier lines`)}`]
+          : []),
+        ...retained.lines.map((line) => `    ${line}`),
+      ];
+      output.write(`${lines.join("\n")}\n`);
+    }
+    paneOnlyLogs.clear();
   };
 
   const hooks: PipelineHooks<TResult> = {
@@ -489,6 +545,7 @@ function createInteractiveReporter<TResult>(
       result = nextResult;
       redraw();
       dispose();
+      writePaneOnlyFailureOutput(nextResult);
     },
   };
 
