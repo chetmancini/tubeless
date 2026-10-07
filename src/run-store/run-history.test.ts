@@ -332,4 +332,64 @@ describe("summarizeRun origin", () => {
       audit: { stepId: "audit" },
     });
   });
+
+  async function recordedOrigins(root: {
+    runOrThrow(options: object, controls: undefined, context: object): Promise<unknown>;
+  }) {
+    const events: StoredPipelineEvent[] = [];
+    const exporter = {
+      export: (event: object) =>
+        void events.push({ ...event, id: events.length } as StoredPipelineEvent),
+    };
+    // A frozen clock puts every step and child start in one millisecond.
+    await root.runOrThrow({}, undefined, { tracing: { exporter }, now: () => 0 });
+    const { runs } = projectPipelineRunStore(events, 0);
+    const index = createRunHistoryIndex(runs);
+    return runs
+      .filter((entry) => entry.parentRunId !== undefined)
+      .map((entry) => [entry.pipelineId, summarizeRun(entry, index).origin?.stepId]);
+  }
+
+  it("attributes sequential children of one pipeline that start in the same millisecond", async () => {
+    const { step } = createSteps();
+    const child = definePipeline({ id: "child", steps: [step("work", { run: () => 1 })] });
+    const { fromPipeline } = createSteps();
+    const first = fromPipeline("first", { pipeline: child, mapOptions: () => ({}) });
+    const second = fromPipeline("second", {
+      dependsOn: [first],
+      pipeline: child,
+      mapOptions: () => ({}),
+    });
+    const root = definePipeline({ id: "parent", steps: [first, second] });
+
+    expect(await recordedOrigins(root)).toEqual([
+      ["child", "first"],
+      ["child", "second"],
+    ]);
+  });
+
+  it("ignores a parent step inherited by a run its child starts by hand", async () => {
+    const { step } = createSteps();
+    const leaf = definePipeline({ id: "leaf", steps: [step("work", { run: () => 1 })] });
+    const manual = definePipeline({
+      id: "manual",
+      steps: [
+        step("launch", {
+          run: (_inputs, context) =>
+            leaf.runOrThrow({}, undefined, { ...context, parentRunId: context.runId }),
+        }),
+      ],
+    });
+    const { fromPipeline } = createSteps();
+    const root = definePipeline({
+      id: "parent",
+      steps: [fromPipeline("nested", { pipeline: manual, mapOptions: () => ({}) })],
+    });
+
+    // The leaf declares no origin; it must not reuse "nested" from its grandparent.
+    expect(await recordedOrigins(root)).toEqual([
+      ["manual", "nested"],
+      ["leaf", undefined],
+    ]);
+  });
 });

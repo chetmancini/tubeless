@@ -67,6 +67,7 @@ export const storedPipelineRunSchema: WireSchema<StoredPipelineRun> = wireObject
   definitionIdentity: wireOptional(pipelineDefinitionIdentitySchema),
   correlationId: wireOptional(text),
   parentRunId: wireOptional(text),
+  parentStepId: wireOptional(id),
   dryRun: wireBoolean(),
   durationMs: wireOptional(number),
   error: wireOptional(pipelineTraceErrorSchema),

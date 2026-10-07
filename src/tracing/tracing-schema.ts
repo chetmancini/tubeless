@@ -626,6 +626,7 @@ export const pipelineTraceEventSchemas = {
         definitionSnapshot: wireOptional(pipelineDefinitionSnapshotSchema),
         dryRun: wireBoolean(),
         planOk: wireBoolean(),
+        parentStepId: wireOptional(requiredString),
         stepCount: nonnegativeInteger,
         targetIds: stringList,
       }),
@@ -748,6 +749,13 @@ export const pipelineTraceEventSchema = wireRefine(
   (event) => {
     if (event.iteration !== undefined && event.iteration.runId !== event.parentRunId) {
       throw new Error("iteration.runId must match parentRunId");
+    }
+    if (
+      event.name === "pipeline.started" &&
+      event.payload.parentStepId !== undefined &&
+      event.parentRunId === undefined
+    ) {
+      throw new Error("payload.parentStepId requires parentRunId");
     }
     if (event.version !== 2) return;
     if (

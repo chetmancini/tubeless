@@ -143,6 +143,8 @@ export interface StoredPipelineRun {
   logCount: number;
   logs: StoredPipelineLog[];
   parentRunId?: string;
+  /** Parent-run step that started this run, when the trace recorded it. */
+  parentStepId?: string;
   pipelineId: string;
   runId: string;
   startedAtMs: number;

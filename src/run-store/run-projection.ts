@@ -53,6 +53,7 @@ export class RunProjection {
   #startObserved = false;
   #dryRun = false;
   #definitionIdentity: PipelineDefinitionIdentity | undefined;
+  #parentStepId: string | undefined;
   readonly #steps = new Map<string, StoredPipelineStep>();
   #cachedSnapshot: StoredPipelineRun | undefined;
   readonly #agent = new AgentProjection();
@@ -91,6 +92,7 @@ export class RunProjection {
       this.#definitionIdentity = event.payload.definitionIdentity
         ? { ...event.payload.definitionIdentity }
         : undefined;
+      this.#parentStepId = event.payload.parentStepId;
     }
     if (event.name === "pipeline.completed") {
       this.#completed = {
@@ -215,6 +217,7 @@ export class RunProjection {
     if (completed?.error) run.error = structuredClone(completed.error);
     if (completed) run.finishedAtMs = completed.timestampMs;
     if (this.#identity.parentRunId) run.parentRunId = this.#identity.parentRunId;
+    if (this.#parentStepId !== undefined) run.parentStepId = this.#parentStepId;
     if (this.#identity.iteration) run.iteration = { ...this.#identity.iteration };
     if (this.#identity.itemKey !== undefined) run.itemKey = this.#identity.itemKey;
     this.#cachedSnapshot = run;

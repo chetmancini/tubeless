@@ -238,7 +238,11 @@ New trace files contain version 3 events with unique execution IDs and separate
 reusable correlation IDs. Readers also accept version 2 recordings. Repeated
 children retain an `iteration` relation with the owning run, wrapper step and
 attempt, and one-based index. Live progress retains up to 32 iteration groups;
-the child-run history retains every recorded iteration.
+the child-run history retains every recorded iteration. Children started by
+`fromPipeline`, `forEachPipeline`, or an agent pipeline tool record the parent
+step in `pipeline.started` `payload.parentStepId`, so Studio places them under
+the right step even when sibling steps share one child pipeline and one
+millisecond. Older recordings fall back to matching step execution windows.
 
 ## Definition history and comparison
 

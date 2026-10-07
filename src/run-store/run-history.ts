@@ -44,17 +44,23 @@ interface RunAttribution {
 }
 
 /**
- * Attribute a nested run to the parent step that started it. Iterations and agent tool
- * calls carry explicit links; other children match the step that declares their pipeline,
- * using the step's execution window only to separate steps that share one child pipeline.
+ * Attribute a nested run to the parent step that started it. Iterations, agent tool calls,
+ * and helper-started children record explicit links. Recordings without `parentStepId`
+ * match the step that declares the child pipeline, using execution windows only to
+ * separate steps that share one child pipeline.
  */
 function attributeRun(run: StoredPipelineRun, parent: StoredPipelineRun): RunAttribution {
   if (run.iteration) return { stepId: run.iteration.stepId, assignsItemKey: false };
   const callAttemptId =
     run.agentCall?.parentAttemptId ??
     parent.agentTurn?.calls.find((call) => call.callId === run.itemKey)?.parentAttemptId;
+  if (run.parentStepId !== undefined) {
+    const step = parent.steps.find((entry) => entry.id === run.parentStepId);
+    // Agent tool calls key their child run by call ID; fan-outs key each item.
+    const assignsItemKey = callAttemptId !== undefined || step?.nestedPipeline?.mode === "for-each";
+    return { stepId: run.parentStepId, assignsItemKey };
+  }
   if (callAttemptId !== undefined) {
-    // Agent tool calls key their child run by call ID.
     const step = parent.steps.find((entry) => entry.attempt?.attemptId === callAttemptId);
     return { stepId: step?.id, assignsItemKey: true };
   }

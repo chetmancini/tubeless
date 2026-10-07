@@ -43,6 +43,11 @@ export interface PipelineTracingOptions {
   itemKey?: string;
   /** Origin of this repeated child invocation; descendants use their own parent links. */
   iteration?: PipelineTraceContext["iteration"];
+  /**
+   * Step in parent run `runId` that started this child. Traces record it only when
+   * `runId` is this run's `parentRunId`, so a context handed further down is ignored.
+   */
+  parentStep?: { readonly runId: string; readonly stepId: string };
   /** Called once on the first exporter failure without failing the run. */
   readonly onExporterError?: (error: unknown) => void;
 }

@@ -286,6 +286,9 @@ export function createPipelineTraceEmitter(
           planOk: plan.ok,
           definitionIdentity: plan.definition?.identity,
           definitionSnapshot: traceDefinition(plan),
+          ...(options.parentStep && options.parentStep.runId === identity.parentRunId
+            ? { parentStepId: options.parentStep.stepId }
+            : {}),
           stepCount: plan.steps.length,
           targetIds: targetIds.slice(0, PIPELINE_TRACE_LIST_LIMIT),
         },
