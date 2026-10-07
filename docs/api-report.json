@@ -267,6 +267,12 @@
       "specifier": "tubeless/agent/openai"
     },
     {
+      "declaration": "./dist/agent/anthropic.d.ts",
+      "exports": ["anthropicModel", "AnthropicModelOptions"],
+      "sha256": "465640496e89c03b352dc2eac19d1b37ae2692acf948b186117bf350d04b35bb",
+      "specifier": "tubeless/agent/anthropic"
+    },
+    {
       "declaration": "./dist/cloudflare/cloudflare.d.ts",
       "exports": [
         "CloudflareApp",
