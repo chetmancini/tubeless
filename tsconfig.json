@@ -19,6 +19,11 @@
     "types": ["node"],
     "verbatimModuleSyntax": true
   },
-  "exclude": ["src/**/*.test-support.ts", "src/**/*.test.ts", "src/**/*.test.tsx"],
+  "exclude": [
+    "src/**/*.test-support.ts",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/studio/run-store-ui-client-browser.ts"
+  ],
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

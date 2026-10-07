@@ -2,6 +2,11 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// This script is the only writer of the browser bundle. `tsconfig.json` excludes
+// `src/studio/run-store-ui-client-browser.ts` so `tsc` never emits a competing
+// module over that path — an unfiltered compile would overwrite the bundle with
+// an importing stub and break the served Studio client.
+
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const check = process.argv.includes("--check");
 

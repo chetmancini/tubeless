@@ -1,7 +1,8 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help list verify validate inspect plan graph run ui require-file install build lint format \
-	format-check typecheck knip test docs-check api-check api-generate pack \
+.PHONY: help list verify validate inspect plan graph run ui require-file install build \
+	lint format \
+	format-check typecheck typecheck-run knip test test-run watch docs-check studio-check api-check api-generate pack \
 	pack-verify tubeless check release website website-build
 
 export_arg = $(if $(strip $(EXPORT)),--export "$(EXPORT)",)
@@ -45,12 +46,16 @@ help:
 	@echo
 	@echo "Fast loops"
 	@echo "  make build         Compile the library"
-	@echo "  make lint          Lint sources"
+	@echo "  make lint          Lint sources without rebuilding"
 	@echo "  make format-check  Check formatting without writing"
-	@echo "  make typecheck     Type-check library, examples, and tests"
+	@echo "  make typecheck     Build, then type-check library, examples, and tests"
+	@echo "  make typecheck-run Type-check against the current build"
 	@echo "  make knip          Report unused exports, files, and dependencies"
-	@echo "  make test          Build once, run the vitest suite"
+	@echo "  make test          Build, then run the vitest suite"
+	@echo "  make test-run      Run the vitest suite against the current build"
+	@echo "  make watch         Rebuild src on change and re-run tests until interrupted"
 	@echo "  make docs-check    Validate the learning-surface docs"
+	@echo "  make studio-check  Verify the generated Studio client bundle"
 	@echo "  make api-check     Verify generated public API docs"
 	@echo "  make pack-verify   Smoke-test the publishable artifact"
 
@@ -101,14 +106,28 @@ format-check:
 typecheck:
 	bun run typecheck
 
+typecheck-run:
+	bun run typecheck:run
+
 knip:
 	bun run knip
 
 test:
 	bun run test
 
+test-run:
+	bun run test:run
+
+# `dist/` is what tests and type checks resolve `tubeless` from, so rebuild it as
+# sources change. The generated Studio client bundle still needs a full `make build`.
+watch: build
+	bun run build:watch & bun run test:watch; wait
+
 docs-check:
 	bun run docs:check
+
+studio-check:
+	bun run studio:check
 
 api-check:
 	bun run --silent build

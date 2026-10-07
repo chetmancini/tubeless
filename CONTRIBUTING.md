@@ -24,6 +24,20 @@ make check
 remaining checks as a concurrent Tubeless pipeline and record `logs/check.ndjson`.
 `make help` lists the rest. `make install` runs `bun ci`.
 
+### Fast loops
+
+`make lint` never rebuilds; linting is syntactic. Tests and type checks resolve
+`tubeless` from `dist/`, so they need a build after source changes — `make test`
+and `make typecheck` run one for you. With `dist/` current, `make test-run` runs
+only the vitest suite and `make typecheck-run` only the type checks.
+
+`make watch` builds once, then recompiles `src/` on change while vitest re-runs
+the suite; stop it with Ctrl-C. The generated Studio client bundle is the one
+artifact `tsc` does not produce, so `make watch` leaves it at the last
+`make build`: rerun `make build` after editing
+`src/studio/run-store-ui-client*`, and `make studio-check` when the served client
+looks stale.
+
 Before changing usage or public behavior, read
 [`docs/agent-guide.md`](./docs/agent-guide.md) and the repository-local
 [`tubeless` skill](./skills/tubeless/SKILL.md). Do not edit

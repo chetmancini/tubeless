@@ -14,7 +14,7 @@ function checkStep<const TId extends string>(id: TId, description: string, scrip
   });
 }
 
-const lint = checkStep("lint", "Lint package sources.", "lint:run");
+const lint = checkStep("lint", "Lint package sources.", "lint");
 const knip = checkStep("knip", "Reject unused files, dependencies, and exports.", "knip");
 const format = checkStep("format", "Verify repository formatting.", "format:check");
 const typecheck = checkStep(
