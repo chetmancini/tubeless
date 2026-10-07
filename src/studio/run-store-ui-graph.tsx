@@ -6,6 +6,7 @@ import type { StoredPipelineRun, StoredPipelineStep } from "../run-store/run-sto
 import { StepArtifacts } from "./run-store-ui-artifacts.js";
 import { layoutDag } from "./run-store-ui-graph-layout.js";
 import type { StudioApi } from "./run-store-ui-client-transport.js";
+import { DEFAULT_DETAIL_RETRY_MS } from "./run-store-ui-data-controller.js";
 import type { StudioRunDetail } from "./run-store-ui-schema.js";
 import { duration, shortId, Status, StepRow } from "./run-store-ui-steps.js";
 
@@ -45,7 +46,7 @@ const ICON_PATH: Record<string, string> = {
   skipped: "M-5 5 5-5",
 };
 
-/** Expanded child pipeline detail; `missing` once its detail is unavailable. */
+/** Expanded child pipeline detail; `missing` when the store has no record of the run. */
 type RunLoad = StudioRunDetail | "missing";
 
 type GraphSelection =
@@ -144,16 +145,25 @@ function incomingEdges(step: StoredPipelineStep): Map<string, EdgeKind[]> {
   return edges;
 }
 
-/** Visual state of one dependency edge from the statuses of its endpoints. */
-function edgeState(kind: EdgeKind, source: string, target: string): EdgeState {
-  if (kind === "gate") {
-    if (source === "failed") return "tripped";
-    return target === "planned" ? "candidate" : "settled";
-  }
+/**
+ * Visual state of one dependency edge from all of its kinds and its endpoint statuses.
+ * Gates trip on a failed or cancelled source, matching the engine's step disposition.
+ */
+function edgeState(kinds: readonly EdgeKind[], source: string, target: string): EdgeState {
+  const gate = kinds.includes("gate");
+  if (gate && (source === "failed" || source === "cancelled")) return "tripped";
   if (target === "planned") return "candidate";
+  if (kinds.length === 1 && gate) return "settled";
+  if (source !== "completed") {
+    return source === "failed" || source === "cancelled" ? "blocked" : "unused";
+  }
   if (target === "running") return "active";
-  if (source === "completed" && target !== "skipped") return "used";
-  return source === "failed" || source === "cancelled" ? "blocked" : "unused";
+  return target === "skipped" ? "unused" : "used";
+}
+
+/** Draw an edge as a gate once it trips, even when the source is also an input. */
+function edgeLook(edge: Pick<EdgeScene, "kinds" | "state">): EdgeKind {
+  return edge.state === "tripped" ? "gate" : edge.kinds[0]!;
 }
 
 const EDGE_STATE_COPY: Record<EdgeState, (from: string, to: string) => string> = {
@@ -161,8 +171,8 @@ const EDGE_STATE_COPY: Record<EdgeState, (from: string, to: string) => string> =
   blocked: (from, to) => `${from} did not produce an output, so ${to} could not use it.`,
   candidate: (from, to) =>
     `Candidate: ${to} has not started, so ${from}'s output is not consumed yet.`,
-  settled: (from) => `The gate did not trip: ${from} did not fail.`,
-  tripped: (from, to) => `${from} failed, which skips ${to}.`,
+  settled: (from) => `The gate did not trip: ${from} neither failed nor was cancelled.`,
+  tripped: (from, to) => `${from} failed or was cancelled, which skips ${to}.`,
   unused: (from, to) => `${to} did not receive ${from}'s output.`,
   used: (from, to) => `${from} completed and its output fed ${to}.`,
 };
@@ -170,7 +180,7 @@ const EDGE_STATE_COPY: Record<EdgeState, (from: string, to: string) => string> =
 const EDGE_KIND_COPY: Record<EdgeKind, (from: string, to: string) => string> = {
   input: (from, to) => `${to} receives ${from}'s output as a required typed input.`,
   optional: (from, to) => `${to} receives ${from}'s output only when ${from} produced one.`,
-  gate: (from, to) => `${to} is skipped when ${from} fails.`,
+  gate: (from, to) => `${to} is skipped when ${from} fails or is cancelled.`,
 };
 
 function nodeStatus(status: string | undefined): string {
@@ -398,7 +408,7 @@ function buildRunScene(
         from,
         to: target.step.id,
         kinds,
-        state: edgeState(kinds[0]!, statusById.get(from)!, target.step.status),
+        state: edgeState(kinds, statusById.get(from)!, target.step.status),
         path,
         head: `M${tx - 4} ${ty - 7}L${tx} ${ty}L${tx + 4} ${ty - 7}Z`,
       });
@@ -625,7 +635,7 @@ function RunSceneView({ scene, ui }: { scene: RunScene; ui: GraphUi }) {
         return (
           <g
             key={edge.from + "->" + edge.to}
-            class={`graph-edge-group ${edge.kinds[0]} ${edge.state}${sameSelection(ui.selection, selection) ? " selected" : ""}`}
+            class={`graph-edge-group ${edgeLook(edge)} ${edge.state}${sameSelection(ui.selection, selection) ? " selected" : ""}`}
             role="button"
             tabIndex={0}
             aria-label={`Connection ${edge.from} to ${edge.to}`}
@@ -849,7 +859,7 @@ function Inspector({
     const target = run.steps.find((step) => step.id === selection.to);
     const kinds = target ? incomingEdges(target).get(selection.from) : undefined;
     if (source && target && kinds) {
-      const state = edgeState(kinds[0]!, source.status, target.status);
+      const state = edgeState(kinds, source.status, target.status);
       return (
         <div class="graph-inspector">
           <div class="graph-kicker">Connection · {run.pipelineId}</div>
@@ -996,18 +1006,25 @@ export function RunGraph({ detail, api, onOpenRun }: RunGraphProps) {
   const wanted = [...ctx.wanted].sort().join("\n");
 
   // Reload expanded runs whenever the selected run's detail changes; it changes with
-  // every event recorded anywhere in its subtree.
+  // every event recorded anywhere in its subtree. A failed request is not a missing
+  // recording: keep the last loaded detail and retry, since a finished run's detail
+  // will not change again to trigger a reload.
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!api || !wanted) return;
     let current = true;
+    let retryQueued = false;
     for (const runId of wanted.split("\n")) {
       api.loadRunDetail(runId).then(
         (loaded) => {
           if (current) setLoads((previous) => new Map(previous).set(runId, loaded ?? "missing"));
         },
         () => {
-          if (current && !loads.has(runId)) {
-            setLoads((previous) => new Map(previous).set(runId, "missing"));
+          if (current && !retryQueued) {
+            retryQueued = true;
+            setTimeout(() => {
+              if (current) setRetry((count) => count + 1);
+            }, DEFAULT_DETAIL_RETRY_MS);
           }
         }
       );
@@ -1015,7 +1032,7 @@ export function RunGraph({ detail, api, onOpenRun }: RunGraphProps) {
     return () => {
       current = false;
     };
-  }, [api, detail, wanted]);
+  }, [api, detail, wanted, retry]);
 
   const ui: GraphUi = {
     selection,

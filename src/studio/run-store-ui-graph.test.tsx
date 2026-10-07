@@ -87,6 +87,24 @@ describe("RunGraph", () => {
     expect(markup.split('class="graph-edge-flow"').length - 1).toBe(1);
   });
 
+  it("trips gates on cancellation and never animates a missing optional input", () => {
+    const { markup, count } = graph(
+      run({
+        steps: [
+          step("stopped", "cancelled"),
+          step("broken", "failed"),
+          step("gated", "skipped", { skipAfterFailureOf: ["stopped"] }),
+          step("both", "skipped", { dependencies: ["broken"], skipAfterFailureOf: ["broken"] }),
+          step("fallback", "running", { optionalDependencies: ["broken"] }),
+        ],
+      })
+    );
+    // A cancelled gate source and a failed source that is both input and gate trip the gate.
+    expect(count('class="graph-edge-group gate tripped"')).toBe(2);
+    expect(markup).toContain('class="graph-edge-group optional blocked"');
+    expect(count('class="graph-edge-flow"')).toBe(0);
+  });
+
   it("expands a running fan-out into its attributed child runs", () => {
     const root = run({
       steps: [
