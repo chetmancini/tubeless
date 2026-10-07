@@ -1,10 +1,11 @@
 import { STUDIO_HISTORY_PAGE_SIZE } from "./run-store-ui-schema.js";
 import type { StoredRunSummary, StoredDefinitionSummary } from "../run-store/run-history.js";
 import { MetadataDetails, MetadataExplorer } from "./run-store-ui-metadata.js";
-import { StepArtifacts } from "./run-store-ui-artifacts.js";
+import { duration, NestedDetail, shortId, Status, StepRow } from "./run-store-ui-steps.js";
+import { RunGraph } from "./run-store-ui-graph.js";
 import { DefinitionHistory } from "./run-store-ui-definitions.js";
 import { ErrorDiagnostics, RunLogs } from "./run-store-ui-debugging.js";
-import type { ComponentChildren, TargetedEvent } from "preact";
+import type { TargetedEvent } from "preact";
 import { render } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { CliParameterDescriptor } from "../cli/cli.js";
@@ -15,7 +16,7 @@ import type {
   PipelineStepSelectionReason,
   PipelineStepSkipReason,
 } from "../core/pipeline.js";
-import type { StoredPipelineRun, StoredPipelineStep } from "../run-store/run-store.js";
+import type { StoredPipelineRun } from "../run-store/run-store.js";
 import {
   createStudioApi,
   type StudioApi,
@@ -92,18 +93,6 @@ export function serializePlanInput(
   return input as PipelineRunControls;
 }
 
-const shortId = (id: string) => (id.length > 24 ? id.slice(0, 12) + "…" + id.slice(-7) : id);
-
-function duration(ms: number | null | undefined): string {
-  return ms == null
-    ? "—"
-    : ms < 1000
-      ? Math.max(0, Math.round(ms)) + " ms"
-      : ms < 60000
-        ? (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + " s"
-        : Math.floor(ms / 60000) + "m " + Math.round((ms % 60000) / 1000) + "s";
-}
-
 function dateTime(ms: number): string {
   if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return "";
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(
@@ -122,39 +111,6 @@ function relativeTime(ms: number, nowMs: number): string {
   if (delta < 3600000) return Math.floor(delta / 60000) + "m ago";
   if (delta < 86400000) return Math.floor(delta / 3600000) + "h ago";
   return Math.floor(delta / 86400000) + "d ago";
-}
-
-function statusMark(value: string): string {
-  return value === "completed"
-    ? "✓"
-    : value === "skipped"
-      ? "×"
-      : value === "cancelled"
-        ? "■"
-        : value === "failed"
-          ? "!"
-          : value === "planned"
-            ? "…"
-            : "";
-}
-
-export function Status({
-  value,
-  outputSource,
-}: {
-  value: string;
-  outputSource?: "override" | "cache";
-}) {
-  return (
-    <span class={`status ${value}`}>
-      <i class="status-mark" aria-hidden="true">
-        {statusMark(value)}
-      </i>
-      {value}
-      {outputSource === "override" && " (overridden)"}
-      {outputSource === "cache" && " (cached)"}
-    </span>
-  );
 }
 
 function EmptyView({ copy, title }: { copy: string; title: string }) {
@@ -176,26 +132,6 @@ function EmptyView({ copy, title }: { copy: string; title: string }) {
         <strong>{title}</strong>
         <p>{copy}</p>
       </div>
-    </div>
-  );
-}
-
-interface NestedDetailProps {
-  children?: ComponentChildren;
-  label: string;
-  secondary?: string;
-  stepIds?: readonly string[];
-}
-
-function NestedDetail({ children, label, secondary, stepIds }: NestedDetailProps) {
-  return (
-    <div class="plan-nested">
-      <strong>{label}</strong>
-      {secondary && <span>{secondary}</span>}
-      {stepIds?.map((stepId) => (
-        <code key={stepId}>{stepId}</code>
-      ))}
-      {children}
     </div>
   );
 }
@@ -748,118 +684,6 @@ function RunRow({ nowMs, onSelect, run, selectedRootRunId }: RunRowProps) {
   );
 }
 
-function StepStatusIcon({ value }: { value: string }) {
-  const label = value.charAt(0).toUpperCase() + value.slice(1);
-  const icon =
-    value === "completed" ? (
-      <svg viewBox="0 0 12 12">
-        <path d="m2 6 2.4 2.4L10 3" />
-      </svg>
-    ) : value === "running" ? (
-      <i />
-    ) : value === "skipped" ? (
-      <svg viewBox="0 0 12 12">
-        <path d="m3 3 6 6M9 3 3 9" />
-      </svg>
-    ) : value === "cancelled" ? (
-      <svg viewBox="0 0 12 12">
-        <rect x="3" y="3" width="6" height="6" rx="1" fill="currentColor" stroke="none" />
-      </svg>
-    ) : value === "failed" ? (
-      "!"
-    ) : (
-      "…"
-    );
-  return (
-    <span class={`step-status-icon ${value}`} role="img" aria-label={label} title={label}>
-      {icon}
-    </span>
-  );
-}
-
-function StepRow({ step }: { step: StoredPipelineStep }) {
-  const progressTotal = step.progress?.total;
-  const progressWidth = progressTotal
-    ? Math.max(0, Math.min(100, ((step.progress?.completed ?? 0) / progressTotal) * 100))
-    : step.status === "completed"
-      ? 100
-      : 18;
-  const nested = step.nestedPipeline;
-  const nestedCount = nested ? (nested.stepCount ?? nested.stepIds.length) : 0;
-  const nestedCountLabel =
-    nested && nested.stepIds.length < nestedCount
-      ? nested.stepIds.length + " of " + nestedCount + " declared steps"
-      : nestedCount + " declared steps";
-  const detailCount = step.progress?.detailCount;
-  return (
-    <article class={`step ${step.status}`}>
-      <StepStatusIcon value={step.status} />
-      <div class="step-head">
-        <strong>{step.name || step.id}</strong>
-        {step.outputSource && <Status value={step.status} outputSource={step.outputSource} />}
-        {step.name && <code>{step.id}</code>}
-        <span class="step-duration">{duration(step.durationMs)}</span>
-      </div>
-      {step.description && <div class="step-description">{step.description}</div>}
-      {nested && (
-        <NestedDetail
-          label={nested.pipelineId}
-          secondary={`${nestedCountLabel}${nested.mode === "iterate" ? ` per iteration, at most ${nested.maxIterations} iterations` : nested.mode === "for-each" ? " per runtime item" : ""}`}
-          stepIds={nested.stepIds}
-        />
-      )}
-      {step.remote && <NestedDetail label={step.remote.engine} secondary={step.remote.target} />}
-      {step.attempt && (
-        <div class="execution">
-          <span class="execution-summary" title={step.attempt.attemptId}>
-            <b>
-              {step.attempt.outputSource === "override"
-                ? "Override validation"
-                : step.attempt.outputSource === "cache"
-                  ? "Cache validation"
-                  : "Execution"}
-            </b>{" "}
-            · {shortId(step.attempt.attemptId)}
-            {step.attempt.retries.length > 0 &&
-              ` · ${step.attempt.retries.length} retr${
-                step.attempt.retries.length === 1 ? "y" : "ies"
-              }`}
-          </span>
-        </div>
-      )}
-      {step.artifacts && <StepArtifacts artifacts={step.artifacts} stepId={step.id} />}
-      {step.progress && (
-        <>
-          <div class="progress">
-            <i class={`w${Math.round(progressWidth)}`} />
-          </div>
-          <div class="progress-copy">
-            {step.progress.message ||
-              step.progress.completed + (progressTotal ? " / " + progressTotal : "") + " complete"}
-          </div>
-          {step.progress.details && step.progress.details.length > 0 && (
-            <div class="progress-details">
-              {step.progress.details.map((detail) => (
-                <div class={`progress-detail ${detail.status || "running"}`} key={detail.id}>
-                  <b>{detail.id}</b>
-                  {detail.label && <span>{detail.label}</span>}
-                  {detail.outputSource === "override" && <span>(overridden)</span>}
-                  {detail.outputSource === "cache" && <span>(cached)</span>}
-                </div>
-              ))}
-              {detailCount && step.progress.details.length < detailCount ? (
-                <div class="progress-detail-truncated">
-                  Showing {step.progress.details.length} of {detailCount} items
-                </div>
-              ) : null}
-            </div>
-          )}
-        </>
-      )}
-    </article>
-  );
-}
-
 function stepSummary(run: StoredPipelineRun): string {
   const order = ["running", "failed", "cancelled", "skipped", "completed", "planned"] as const;
   return (
@@ -871,7 +695,10 @@ function stepSummary(run: StoredPipelineRun): string {
   );
 }
 
+type StepView = "timeline" | "graph";
+
 interface RunDetailProps {
+  api?: StudioApi;
   canCancel: boolean;
   cancelling: boolean;
   liveRunIds: readonly string[];
@@ -879,11 +706,14 @@ interface RunDetailProps {
   onCancel(id: string): void;
   onCopyLink(id: string): void;
   onSelect(id: string): void;
+  onStepView?(view: StepView): void;
   selection: StudioRunSelection;
+  stepView?: StepView;
   latestRunId?: string;
 }
 
 function RunDetail({
+  api,
   canCancel,
   cancelling,
   liveRunIds,
@@ -891,7 +721,9 @@ function RunDetail({
   onCancel,
   onCopyLink,
   onSelect,
+  onStepView,
   selection,
+  stepView = "timeline",
   latestRunId,
 }: RunDetailProps) {
   if (selection.status !== "ready") {
@@ -1056,20 +888,38 @@ function RunDetail({
         )}
         {run.logs.length > 0 && <RunLogs key={run.runId} logs={run.logs} />}
         <div class="section-title">
-          <span>Step timeline</span>
-          <span>{stepSummary(run)}</span>
+          <span>{stepView === "graph" ? "Step graph" : "Step timeline"}</span>
+          <span class="section-title-actions">
+            {stepSummary(run)}
+            {onStepView && run.steps.length > 0 && (
+              <span class="view-toggle" role="group" aria-label="Step view">
+                {(["timeline", "graph"] as const).map((view) => (
+                  <button
+                    type="button"
+                    key={view}
+                    aria-pressed={stepView === view}
+                    onClick={() => onStepView(view)}
+                  >
+                    {view === "graph" ? "Graph" : "Timeline"}
+                  </button>
+                ))}
+              </span>
+            )}
+          </span>
         </div>
-        {run.steps.length ? (
+        {run.steps.length === 0 ? (
+          <EmptyView
+            title="No planned steps"
+            copy="This run ended before a step plan was recorded."
+          />
+        ) : stepView === "graph" ? (
+          <RunGraph key={run.runId} detail={detail} api={api} onOpenRun={onSelect} />
+        ) : (
           <div class="step-list">
             {run.steps.map((step) => (
               <StepRow key={step.id} step={step} />
             ))}
           </div>
-        ) : (
-          <EmptyView
-            title="No planned steps"
-            copy="This run ended before a step plan was recorded."
-          />
         )}
       </div>
     </article>
@@ -1077,7 +927,6 @@ function RunDetail({
 }
 
 interface RunsViewProps extends RunDetailProps {
-  api?: StudioApi;
   definitions?: readonly StoredDefinitionSummary[];
   roots: readonly StoredRunSummary[];
   matchingRootCount?: number;
@@ -1087,6 +936,7 @@ interface RunsViewProps extends RunDetailProps {
 }
 
 export function RunsView(props: RunsViewProps) {
+  const [stepView, setStepView] = useState<StepView>(props.stepView ?? "timeline");
   const activeRuns = props.roots.filter((run) => run.subtreeIsRunning);
   const historicalRuns = props.roots.filter((run) => !run.subtreeIsRunning);
   const list = (label: string, runs: readonly StoredRunSummary[]) =>
@@ -1169,7 +1019,7 @@ export function RunsView(props: RunsViewProps) {
             </div>
           )}
         </section>
-        <RunDetail {...props} />
+        <RunDetail {...props} stepView={stepView} onStepView={setStepView} />
       </div>
     </>
   );

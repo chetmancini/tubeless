@@ -124,6 +124,9 @@ export class RunProjection {
     if (event.name === "step.planned") {
       step.name = event.payload.name;
       step.description = event.payload.description;
+      step.dependencies = [...event.payload.dependencies];
+      step.optionalDependencies = [...event.payload.optionalDependencies];
+      step.skipAfterFailureOf = [...event.payload.skipAfterFailureOf];
       if (event.payload.nestedPipeline) {
         step.nestedPipeline = {
           ...event.payload.nestedPipeline,

@@ -91,13 +91,16 @@ export const storedPipelineRunSchema: WireSchema<StoredPipelineRun> = wireObject
       id,
       status: stepStatus,
       outputSource,
+      dependencies: wireOptional(wireArray(id)),
       description: wireOptional(text),
       name: wireOptional(text),
       durationMs: wireOptional(number),
       finishedAtMs: wireOptional(number),
       startedAtMs: wireOptional(number),
       nestedPipeline: wireOptional(nestedPipelineSchema),
+      optionalDependencies: wireOptional(wireArray(id)),
       remote: wireOptional(remoteSchema),
+      skipAfterFailureOf: wireOptional(wireArray(id)),
       progress: wireOptional(progressSchema),
       attempt: wireOptional(
         wireObject({
@@ -174,4 +177,11 @@ export const storedRunSummarySchema: WireSchema<StoredRunSummary> = wireObject({
     names: wireArray(text, { maxItems: 3 }),
     message: wireOptional(text),
   }),
+  origin: wireOptional(
+    wireObject({
+      stepId: wireOptional(id),
+      itemKey: wireOptional(text),
+      iteration: wireOptional(positive),
+    })
+  ),
 });

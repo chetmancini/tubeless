@@ -11,9 +11,9 @@ import {
   PipelinesView,
   PlanView,
   RunsView,
-  Status,
   StudioAccessNotice,
 } from "./run-store-ui-client.js";
+import { Status } from "./run-store-ui-steps.js";
 import type { PipelineRunStudioCommand } from "./run-store-ui-protocol.js";
 
 const command: PipelineRunStudioCommand = {

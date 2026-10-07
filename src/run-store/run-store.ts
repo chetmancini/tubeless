@@ -100,13 +100,19 @@ export interface StoredPipelineStep {
   outputSource?: "override" | "cache";
   /** One execution attempt; `retries` excludes initial `reportAttempt(1)` telemetry. */
   attempt?: StoredPipelineAttempt;
+  /** Planned required inputs, bounded like other trace lists. Absent when no plan was recorded. */
+  dependencies?: string[];
   description?: string;
   durationMs?: number;
   finishedAtMs?: number;
   id: string;
   name?: string;
   nestedPipeline?: StoredNestedPipeline;
+  /** Planned inputs passed only when their step produced an output. */
+  optionalDependencies?: string[];
   remote?: StoredRemote;
+  /** Planned failure gates: this step is skipped when one of them fails. */
+  skipAfterFailureOf?: string[];
   progress?: {
     completed: number;
     detailCount?: number;
