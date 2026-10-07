@@ -23,7 +23,7 @@ let columns = data.columns;
 let lines: string[] = [];
 let logPane: readonly string[] | undefined;
 
-function paintFrame(): void {
+function paintFrame(above?: string): void {
   const painted = paintLiveLines(
     lines,
     currentSpinner(data.unicode, data.refreshIntervalMs),
@@ -33,7 +33,7 @@ function paintFrame(): void {
     data.unicode,
     logPane
   );
-  frame.redraw(painted, columns);
+  frame.redraw(painted, columns, above);
   data.framePort.postMessage(painted);
 }
 
@@ -61,9 +61,7 @@ port.on("message", (message: TickerWorkerMessage) => {
   columns = message.columns ?? columns;
   if (message.type === "log") {
     state.withWorkerOutput(() => {
-      frame.clear(columns);
-      data.framePort.postMessage([]);
-      writeSync(data.fd, message.text);
+      paintFrame(message.text);
       state.acknowledgeLog();
     });
     return;

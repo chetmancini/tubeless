@@ -21,8 +21,11 @@ describe("createLiveTicker inline resize", () => {
       columns = 80;
       if (action === "redraw") ticker.setLines(["narrow progress"]);
       else ticker.writeLog("narrow log\n");
-      expect(chunks[0]).toBe("\u001B[6F\u001B[J");
-      expect(chunks[1]).toBe(action === "redraw" ? "narrow progress\n" : "narrow log\n");
+      expect(chunks).toEqual([
+        action === "redraw"
+          ? "\u001B[?2026h\u001B[6Fnarrow progress\u001B[K\n\u001B[J\u001B[?2026l"
+          : "\u001B[?2026h\u001B[6F\u001B[Jnarrow log\nrunning\u001B[K\n\u001B[?2026l",
+      ]);
     } finally {
       ticker.dispose();
     }
@@ -101,9 +104,9 @@ describe("createLiveTicker worker fallback", () => {
       ticker.setLines(["final status"]);
       ticker.dispose();
 
-      expect(chunks[0]).toBe("\u001B[6F\u001B[J");
-      expect(chunks).toContain("final status\n");
-      if (log) expect(chunks[1]).toBe("pending log\n");
+      expect(chunks[0]?.startsWith("\u001B[?2026h\u001B[6F")).toBe(true);
+      expect(chunks.join("")).toContain("final status\u001B[K\n");
+      if (log) expect(chunks[0]).toContain("\u001B[6F\u001B[Jpending log\n");
       expect(chunks.at(-1)).toBe("\u001B[?25h");
     } finally {
       ticker.dispose();
@@ -122,7 +125,7 @@ describe("createLiveTicker worker fallback", () => {
       else if (action === "log") ticker.writeLog("narrow log\n");
       ticker.dispose();
       const output = readFileSync(path, "utf8");
-      expect(output).toContain("\u001B[6F\u001B[J");
+      expect(output).toContain("\u001B[6F");
       if (action === "log") expect(output).toContain("\u001B[6F\u001B[Jnarrow log\n");
     } finally {
       ticker.dispose();

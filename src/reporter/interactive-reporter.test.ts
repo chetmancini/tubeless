@@ -2,6 +2,7 @@ import { v8StepCacheCodec } from "../utilities/cache-storage.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPipelineTestRuntime, overrideStep } from "../testing/testing.js";
 import { createPipelineReporter, type ReporterOutput } from "./interactive-reporter.js";
+import { renderTerminal } from "./live-ticker.test-support.js";
 import { createSteps, definePipeline, type PipelineLogger } from "../core/pipeline.js";
 
 function captureOutput(isTTY = true, columns = 100): ReporterOutput & { chunks: string[] } {
@@ -97,7 +98,8 @@ describe("createPipelineReporter", () => {
       expect(result.status).toBe("failed");
       expect(result.steps).toEqual([]);
       expect(output.chunks.join("")).toContain("+- Logs ");
-      expect(output.chunks.slice(-2)).toEqual(["\u001B[3F\u001B[J", "\u001B[?25h"]);
+      expect(renderTerminal(output.chunks.join("")).join("\n")).not.toContain("Logs");
+      expect(output.chunks.at(-1)).toBe("\u001B[?25h");
     } finally {
       reporter.dispose();
     }
@@ -129,7 +131,7 @@ describe("createPipelineReporter", () => {
             expect(frame).toContain("│ ✗ failure message");
             expect(frame).not.toContain("line 0");
             expect(frame).not.toContain("\u001B[2J");
-            expect(frame.trimEnd().split("\n")).toHaveLength(10);
+            expect(renderTerminal(frame)).toHaveLength(10);
           },
         }),
       ],
@@ -184,24 +186,24 @@ describe("createPipelineReporter", () => {
     });
     try {
       reporter.log.log("before start");
-      expect(output.chunks).toContain("before start\n");
+      expect(output.chunks.join("")).toContain("before start\n");
       reporter.hooks.onPipelineStart?.(progressivePipeline().plan());
       reporter.log.log("before resize");
       expect(output.chunks.at(-1)).toContain("+- Logs ");
-      expect(output.chunks).not.toContain("before resize\n");
+      expect(output.chunks.join("")).not.toContain("before resize\n");
       output.columns = 100;
       reporter.log.log("narrow");
       expect(output.chunks.at(-1)).not.toContain(" Logs ");
-      expect(output.chunks).toContain("narrow\n");
+      expect(output.chunks.join("")).toContain("narrow\n");
       output.columns = 120;
       reporter.log.log("wide again");
       expect(output.chunks.at(-1)).toContain("| before resize");
-      expect(output.chunks).not.toContain("wide again\n");
-      expect(output.chunks.at(-1)!.trimEnd().split("\n").length).toBeLessThan(8);
+      expect(output.chunks.join("")).not.toContain("wide again\n");
+      expect(renderTerminal(output.chunks.at(-1)!).length).toBeLessThan(8);
       output.rows = 7;
       reporter.log.log("short");
       expect(output.chunks.at(-1)).not.toContain(" Logs ");
-      expect(output.chunks).toContain("short\n");
+      expect(output.chunks.join("")).toContain("short\n");
     } finally {
       reporter.dispose();
     }
@@ -235,10 +237,12 @@ describe("createPipelineReporter", () => {
     expect(reporter.mode).toBe("interactive");
     expect(rendered).toContain("\u001B[?25l");
     expect(rendered).toContain("\u001B[?25h");
-    expect(rendered).toMatch(/\u001B\[\d+F\u001B\[J/);
+    // Logs stay in scrollback while progress rows are replaced in place.
+    const screen = renderTerminal(rendered);
+    expect(screen).toContain("loaded a batch");
+    expect(screen.join("\n")).not.toContain("40% 4/10 records");
     expect(rendered).toContain("[████░░░░░░] 40% 4/10 records");
     expect(rendered).toContain("[██████████] 100% 12/10 finishing");
-    expect(rendered).toContain("loaded a batch\n");
     expect(rendered).toMatch(/✓ load \(\d+ms\)/);
     expect(rendered).toMatch(
       /Pipeline interactive-test: done in \d+ms \(status=completed, steps=2, errors=0\)/
@@ -352,9 +356,7 @@ describe("createPipelineReporter", () => {
     });
 
     const rendered = output.chunks.join("");
-    const frameLines = output.chunks
-      .filter((chunk) => chunk.endsWith("\n"))
-      .flatMap((chunk) => chunk.trimEnd().split("\n"));
+    const frameLines = output.chunks.flatMap((chunk) => renderTerminal(chunk));
     expect(rendered).toContain("[===-----] 40%");
     expect(frameLines.some((line) => line.endsWith("..."))).toBe(true);
     expect(frameLines.every((line) => !line.includes("…"))).toBe(true);
@@ -727,7 +729,7 @@ describe("createPipelineReporter", () => {
     await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
     reporter.dispose();
 
-    const frames = output.chunks.filter((chunk) => chunk.endsWith("\n"));
+    const frames = output.chunks.filter((chunk) => chunk.includes("\n"));
     const strip = (value: string) => value.replace(/\u001B\[[0-9;]*m/g, "");
     const runningLoad = frames.find(
       (chunk) => strip(chunk).includes("Load Data") && strip(chunk).includes("shard-b")

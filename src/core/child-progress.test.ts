@@ -7,6 +7,7 @@ import {
   type PipelineStepStatus,
 } from "./pipeline.js";
 import { createPipelineReporter } from "../reporter/interactive-reporter.js";
+import { renderTerminal } from "../reporter/live-ticker.test-support.js";
 import { createMappedChildProgress, createSingleChildProgress } from "./child-progress.js";
 
 const log = { log() {}, warn() {}, error() {} };
@@ -443,10 +444,7 @@ describe("nested child progress", () => {
         ["read", 3, "completed"],
         ["write", 3, "completed"],
       ]);
-      const finalFrame = chunks
-        .join("")
-        .split(/\u001B\[\d+F\u001B\[J/)
-        .at(-1)!;
+      const finalFrame = renderTerminal(chunks.join("")).join("\n");
       expect(finalFrame).toContain("    ✓ editions");
       expect(finalFrame).toContain("      ✓ a");
       expect(finalFrame).toContain("        ✓ build");

@@ -6,6 +6,7 @@ import {
   SPINNER_TOKEN,
   TickerFrame,
 } from "./live-ticker-frame.js";
+import { renderTerminal } from "./live-ticker.test-support.js";
 
 const RESET = "\u001B[0m";
 const SHIMMER_BRIGHT = "\u001B[0;1;36m";
@@ -108,8 +109,51 @@ describe("paintLiveLines", () => {
   });
 });
 
-describe("TickerFrame resize clearing", () => {
-  it("clears all reflowed pane rows before painting a narrow frame", () => {
+describe("TickerFrame painting", () => {
+  it("replaces the frame in place with one synchronized write per paint", () => {
+    const columns = 16;
+    const chunks: string[] = [];
+    const frame = new TickerFrame((chunk) => chunks.push(chunk));
+    chunks.push("earlier output\n");
+    for (const lines of [
+      ["- load running for a while", "  shard waiting", "  tail row"],
+      ["ok load", "short"],
+    ]) {
+      frame.redraw(paintLiveLines(lines, "-", 0, columns, false, false), columns);
+    }
+
+    expect(chunks).toHaveLength(3);
+    const last = chunks.at(-1)!;
+    expect(last.startsWith("\u001B[?2026h")).toBe(true);
+    expect(last.endsWith("\u001B[?2026l")).toBe(true);
+    // The old frame stays visible until each row is overwritten.
+    expect(last.indexOf("\u001B[J")).toBeGreaterThan(last.indexOf("short"));
+    expect(renderTerminal(chunks.join(""), columns)).toEqual([
+      "earlier output",
+      "ok load",
+      "short",
+    ]);
+    expect(renderTerminal(chunks.slice(0, 2).join(""), columns)).toEqual([
+      "earlier output",
+      "- load runni...",
+      "  shard waiting",
+      "  tail row",
+    ]);
+  });
+
+  it("prints scrolling text above the repainted frame in the same write", () => {
+    const chunks: string[] = [];
+    const frame = new TickerFrame((chunk) => chunks.push(chunk));
+    frame.redraw(["running", "  detail"], 80);
+    frame.redraw(["still running"], 80, "log a\nlog b\n");
+
+    expect(chunks).toHaveLength(2);
+    expect(renderTerminal(chunks.join(""), 80)).toEqual(["log a", "log b", "still running"]);
+    frame.redraw([], 80, "after frame\n");
+    expect(renderTerminal(chunks.join(""), 80)).toEqual(["log a", "log b", "after frame"]);
+  });
+
+  it("moves past all reflowed pane rows before painting a narrow frame", () => {
     const chunks: string[] = [];
     const frame = new TickerFrame((chunk) => chunks.push(chunk));
     const wide = paintLiveLines(["running"], "-", 0, 140, false, false, ["latest log"]);
@@ -118,21 +162,23 @@ describe("TickerFrame resize clearing", () => {
 
     // Three 139-column pane rows become six physical rows at 80 columns.
     frame.redraw(["narrow progress"], 80);
-    expect(chunks).toEqual(["\u001B[6F\u001B[J", "narrow progress\n"]);
+    expect(chunks).toEqual([
+      "\u001B[?2026h\u001B[6Fnarrow progress\u001B[K\n\u001B[J\u001B[?2026l",
+    ]);
     chunks.length = 0;
     frame.redraw(wide, 140);
-    expect(chunks[0]).toBe("\u001B[1F\u001B[J");
+    expect(chunks[0]?.startsWith("\u001B[?2026h\u001B[1F")).toBe(true);
   });
 
   it("counts ANSI, wide characters, combining marks, and exact-width lines", () => {
     const chunks: string[] = [];
     const frame = new TickerFrame((chunk) => chunks.push(chunk));
     frame.redraw(["\u001B[31m界界界界界\u001B[0m", "abcde\u0301", ""], 20);
-    frame.clear(5);
+    frame.redraw([], 5);
     // Wide glyphs wrap before the last column; combining marks add no column.
-    expect(chunks.at(-1)).toBe("\u001B[5F\u001B[J");
+    expect(chunks.at(-1)).toBe("\u001B[?2026h\u001B[5F\u001B[J\u001B[?2026l");
     const cleared = chunks.length;
-    frame.clear(5);
+    frame.redraw([], 5);
     expect(chunks).toHaveLength(cleared);
   });
 });

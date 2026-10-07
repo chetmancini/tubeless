@@ -45,7 +45,7 @@ function createInlineTicker(
   let lines: readonly string[] = [];
   let logPane: readonly string[] | undefined;
   const frame = new TickerFrame((chunk) => options.write(chunk), adoptedPaintedLines);
-  const redraw = (): void => {
+  const redraw = (above?: string): void => {
     if (disposed) return;
     const columns = resolveColumns(options);
     frame.redraw(
@@ -58,7 +58,8 @@ function createInlineTicker(
         options.unicode,
         logPane
       ),
-      columns
+      columns,
+      above
     );
   };
 
@@ -81,8 +82,7 @@ function createInlineTicker(
         options.write(text);
         return;
       }
-      frame.clear(resolveColumns(options));
-      options.write(text);
+      redraw(text);
     },
     dispose() {
       if (disposed) return;

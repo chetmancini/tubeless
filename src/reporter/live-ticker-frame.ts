@@ -8,9 +8,14 @@ const SHIMMER_TOKEN_END = "\u0005";
 
 export const TICKER_ANSI = {
   clearDown: "\u001B[J",
+  clearLineEnd: "\u001B[K",
   hideCursor: "\u001B[?25l",
   reset: "\u001B[0m",
   showCursor: "\u001B[?25h",
+  // Synchronized output (DEC mode 2026): supporting terminals present the
+  // enclosed bytes as one frame; others ignore the private mode.
+  syncEnd: "\u001B[?2026l",
+  syncStart: "\u001B[?2026h",
 } as const;
 
 const SHIMMER_BAND_COLUMNS = 3;
@@ -176,39 +181,52 @@ export class TickerFrame {
     this.cursorHidden = false;
   }
 
-  clear(columns?: number): void {
-    if (this.paintedLines.length === 0) return;
-    // Resizing can reflow each previously painted line across several rows.
-    // Count those rows at the current width before moving back to the frame start.
-    let rows = this.paintedLines.length;
-    if (columns !== undefined && columns > 0) {
-      rows = 0;
-      for (const line of this.paintedLines) {
-        rows += 1;
-        let column = 0;
-        for (const character of line.replace(ANSI_STYLE, "")) {
-          const width = characterWidth(character);
-          if (column + width > columns) {
-            rows += 1;
-            column = 0;
-          }
-          column += width;
-        }
-      }
+  /**
+   * Replace the painted frame with `lines` in one synchronized write. When
+   * `above` is provided, that scrolling text is printed first, ending with a
+   * newline, so it lands above the repainted frame.
+   */
+  redraw(lines: readonly string[], columns?: number, above?: string): void {
+    const rows = this.paintedRows(columns);
+    let chunk = rows > 0 ? `\u001B[${rows}F` : "";
+    if (above !== undefined) {
+      // Scrolling text cannot overwrite rows in place, so it starts from a cleared region.
+      if (rows > 0) chunk += TICKER_ANSI.clearDown;
+      chunk += above;
     }
-    this.write(`\u001B[${rows}F${TICKER_ANSI.clearDown}`);
-    this.paintedLines = [];
-  }
-
-  redraw(lines: readonly string[], columns?: number): void {
-    if (!this.cursorHidden) {
-      this.write(TICKER_ANSI.hideCursor);
+    // Overwrite rows in place so the previous frame stays visible until replaced.
+    // Fitted lines stop short of the last column, so erasing each stale tail
+    // never lands on a pending wrap.
+    for (const line of lines) chunk += `${line}${TICKER_ANSI.clearLineEnd}\n`;
+    if (above === undefined && rows > 0) chunk += TICKER_ANSI.clearDown;
+    this.paintedLines = lines;
+    if (chunk === "") return;
+    let hideCursor = "";
+    if (lines.length > 0 && !this.cursorHidden) {
+      hideCursor = TICKER_ANSI.hideCursor;
       this.cursorHidden = true;
     }
-    this.clear(columns);
-    if (lines.length === 0) return;
-    this.write(`${lines.join("\n")}\n`);
-    this.paintedLines = lines;
+    this.write(`${TICKER_ANSI.syncStart}${hideCursor}${chunk}${TICKER_ANSI.syncEnd}`);
+  }
+
+  private paintedRows(columns: number | undefined): number {
+    // Resizing can reflow each previously painted line across several rows.
+    // Count those rows at the current width before moving back to the frame start.
+    if (columns === undefined || columns <= 0) return this.paintedLines.length;
+    let rows = 0;
+    for (const line of this.paintedLines) {
+      rows += 1;
+      let column = 0;
+      for (const character of line.replace(ANSI_STYLE, "")) {
+        const width = characterWidth(character);
+        if (column + width > columns) {
+          rows += 1;
+          column = 0;
+        }
+        column += width;
+      }
+    }
+    return rows;
   }
 }
 
