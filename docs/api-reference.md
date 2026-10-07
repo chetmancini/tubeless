@@ -17,7 +17,7 @@ Package: `tubeless`
 | `tubeless/batch`        | `./dist/utilities/batch.d.ts`      | `a09125c6849bb91b4bbba2f76c4248452d5288cf0c70671461de5846b1d17037` |                7 |
 | `tubeless/node`         | `./dist/node/node.d.ts`            | `1df5330d5c0263a2b96239a6e30d0472ecb49cc60e9c15b04ab89914b8cbe183` |               14 |
 | `tubeless/rate-limit`   | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
-| `tubeless/retry`        | `./dist/utilities/retry.d.ts`      | `86e98c33f7e91ee1b34eff817ef6075f6583b9a57037a1ad2394dcf3f372bbcf` |                6 |
+| `tubeless/retry`        | `./dist/utilities/retry.d.ts`      | `52ede846e87e3601426639a7bdc2de0a440c119470dc55324deb26cb312757fd` |                6 |
 | `tubeless/project`      | `./dist/project/project.d.ts`      | `688e12b056db35c7d6ac70e1f03335f5e13c90ebd81c4226aa5d718e9f3df615` |                8 |
 | `tubeless/testing`      | `./dist/testing/testing.d.ts`      | `ea6d1d4fbc64eb57d1a93d030bff98f587e611bb5758404d58675c9b160389ba` |               10 |
 | `tubeless/tracing`      | `./dist/tracing/tracing.d.ts`      | `7518d5cc8de7fbd3766f21ece9f6d7e120c6135f95c1d9e3a83d314d7ba2046c` |                3 |
@@ -224,14 +224,14 @@ Package: `tubeless`
 
 ### `tubeless/retry`
 
-| Symbol                                                                                                 | Description                                                                     |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| [`DEFAULT_BASE_DELAY_MS`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L6) | Default `RetryOptions.baseDelayMs` when omitted.                                |
-| [`DEFAULT_MAX_ATTEMPTS`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L4)  | Default `RetryOptions.maxAttempts` when omitted.                                |
-| [`RetryAttemptContext`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L28)  | Metadata supplied to each retry operation attempt.                              |
-| [`RetryOperation`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L38)       | Operation invoked once per retry attempt until it succeeds or the policy stops. |
-| [`RetryOptions`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L9)          | Backoff, cancellation, and retry policy settings for `withRetry`.               |
-| [`withRetry`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L65)            | Retry an asynchronous operation with exponential backoff and optional jitter.   |
+| Symbol                                                                                                  | Description                                                                     |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [`DEFAULT_BASE_DELAY_MS`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L10) | Default `RetryOptions.baseDelayMs` when omitted.                                |
+| [`DEFAULT_MAX_ATTEMPTS`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L8)   | Default `RetryOptions.maxAttempts` when omitted.                                |
+| [`RetryAttemptContext`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L37)   | Metadata supplied to each retry operation attempt.                              |
+| [`RetryOperation`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L47)        | Operation invoked once per retry attempt until it succeeds or the policy stops. |
+| [`RetryOptions`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L13)          | Backoff, cancellation, and retry policy settings for `withRetry`.               |
+| [`withRetry`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/retry.ts#L77)             | Retry an asynchronous operation with exponential backoff and optional jitter.   |
 
 ### `tubeless/project`
 

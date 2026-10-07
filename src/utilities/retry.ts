@@ -1,4 +1,8 @@
-import { abortableSleep, throwIfAborted as throwIfSignalAborted } from "./abort.js";
+import {
+  abortableSleep,
+  MAX_TIMEOUT_DELAY_MS,
+  throwIfAborted as throwIfSignalAborted,
+} from "./abort.js";
 
 /** Default `RetryOptions.maxAttempts` when omitted. */
 export const DEFAULT_MAX_ATTEMPTS = 3;
@@ -11,6 +15,11 @@ export interface RetryOptions {
   maxAttempts?: number;
   /** Delay before the second attempt; doubles each attempt after. Defaults to `DEFAULT_BASE_DELAY_MS` (100). */
   baseDelayMs?: number;
+  /**
+   * Upper bound on a single backoff delay, before jitter. Defaults to no extra
+   * cap. A delay never exceeds 2^31 - 1 ms (~24.8 days), the largest `setTimeout`
+   * honors, so it cannot overflow and fire immediately.
+   */
   maxDelayMs?: number;
   jitter?: boolean;
   random?: () => number;
@@ -38,13 +47,16 @@ export interface RetryAttemptContext {
 export type RetryOperation<T> = (context: RetryAttemptContext) => Promise<T>;
 
 function computeDelayMs(attempt: number, baseDelayMs: number, options: RetryOptions): number {
+  // Bound by the timer ceiling even without an explicit maxDelayMs: a larger
+  // delay would overflow setTimeout and fire almost immediately instead of waiting.
+  const maxDelayMs = Math.min(options.maxDelayMs ?? Number.POSITIVE_INFINITY, MAX_TIMEOUT_DELAY_MS);
   const raw = baseDelayMs * 2 ** (attempt - 1);
-  const capped = options.maxDelayMs === undefined ? raw : Math.min(raw, options.maxDelayMs);
+  const capped = Math.min(raw, maxDelayMs);
   if (!options.jitter) {
     return capped;
   }
   const jittered = capped + (options.random ?? Math.random)() * capped * 0.1;
-  return options.maxDelayMs === undefined ? jittered : Math.min(jittered, options.maxDelayMs);
+  return Math.min(jittered, maxDelayMs);
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

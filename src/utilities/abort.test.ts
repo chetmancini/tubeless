@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { abortableSleep, createAbortError, isAbortError, throwIfAborted } from "./abort.js";
+import {
+  abortableSleep,
+  createAbortError,
+  isAbortError,
+  MAX_TIMEOUT_DELAY_MS,
+  throwIfAborted,
+} from "./abort.js";
 
 describe("createAbortError", () => {
   it("builds a message with just the label when reason is undefined", () => {
@@ -75,6 +81,24 @@ describe("abortableSleep", () => {
     await vi.advanceTimersByTimeAsync(1);
     await promise;
     expect(resolved).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it("clamps durations above the largest setTimeout delay instead of overflowing", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    for (const signal of [undefined, controller.signal]) {
+      const promise = abortableSleep(MAX_TIMEOUT_DELAY_MS + 1_000, signal, "Retry");
+      let resolved = false;
+      void promise.then(() => {
+        resolved = true;
+      });
+      await vi.advanceTimersByTimeAsync(MAX_TIMEOUT_DELAY_MS - 1);
+      expect(resolved).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await promise;
+      expect(resolved).toBe(true);
+    }
     vi.useRealTimers();
   });
 

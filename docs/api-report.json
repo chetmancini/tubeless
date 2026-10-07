@@ -219,7 +219,7 @@
         "RetryOptions",
         "withRetry"
       ],
-      "sha256": "86e98c33f7e91ee1b34eff817ef6075f6583b9a57037a1ad2394dcf3f372bbcf",
+      "sha256": "52ede846e87e3601426639a7bdc2de0a440c119470dc55324deb26cb312757fd",
       "specifier": "tubeless/retry"
     },
     {

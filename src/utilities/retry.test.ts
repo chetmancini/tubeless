@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { MAX_TIMEOUT_DELAY_MS } from "./abort.js";
 import { DEFAULT_BASE_DELAY_MS, DEFAULT_MAX_ATTEMPTS, withRetry } from "./retry.js";
 
 describe("withRetry", () => {
@@ -152,6 +153,59 @@ describe("withRetry", () => {
     expect(onRetry).toHaveBeenNthCalledWith(1, 1, expect.any(Error), 100);
     expect(onRetry).toHaveBeenNthCalledWith(2, 2, expect.any(Error), 150);
     vi.useRealTimers();
+  });
+
+  it("caps backoff at the largest setTimeout delay when maxDelayMs is omitted", async () => {
+    const operation = vi.fn().mockRejectedValueOnce(new Error("fail")).mockResolvedValue("ok");
+    const onRetry = vi.fn();
+    const sleeps: number[] = [];
+
+    await withRetry(
+      operation,
+      {
+        maxAttempts: 2,
+        baseDelayMs: 2 ** 31,
+        sleep: async (durationMs) => {
+          sleeps.push(durationMs);
+        },
+      },
+      onRetry
+    );
+
+    expect(sleeps).toEqual([MAX_TIMEOUT_DELAY_MS]);
+    expect(onRetry).toHaveBeenCalledWith(1, expect.any(Error), MAX_TIMEOUT_DELAY_MS);
+  });
+
+  it("bounds jittered backoff by the setTimeout ceiling", async () => {
+    const operation = vi.fn().mockRejectedValueOnce(new Error("fail")).mockResolvedValue("ok");
+    const onRetry = vi.fn();
+
+    await withRetry(
+      operation,
+      {
+        maxAttempts: 2,
+        baseDelayMs: 2 ** 31,
+        jitter: true,
+        random: () => 1,
+        sleep: async () => {},
+      },
+      onRetry
+    );
+
+    expect(onRetry).toHaveBeenCalledWith(1, expect.any(Error), MAX_TIMEOUT_DELAY_MS);
+  });
+
+  it("bounds an explicit maxDelayMs above the setTimeout ceiling", async () => {
+    const operation = vi.fn().mockRejectedValueOnce(new Error("fail")).mockResolvedValue("ok");
+    const onRetry = vi.fn();
+
+    await withRetry(
+      operation,
+      { maxAttempts: 2, baseDelayMs: 2 ** 31, maxDelayMs: 2 ** 40, sleep: async () => {} },
+      onRetry
+    );
+
+    expect(onRetry).toHaveBeenCalledWith(1, expect.any(Error), MAX_TIMEOUT_DELAY_MS);
   });
 
   it("adds up to 10% jitter on top of the backoff when jitter is enabled", async () => {

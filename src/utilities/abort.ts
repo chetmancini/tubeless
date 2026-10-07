@@ -7,6 +7,13 @@
 
 const abortErrors = new WeakSet<Error>();
 
+/**
+ * Largest delay `setTimeout` honors (2^31 - 1 ms, ~24.8 days). Node and browsers
+ * clamp larger values and fire almost immediately, which would turn a long
+ * backoff wait into a tight retry loop, so every timer-based delay is bounded by it.
+ */
+export const MAX_TIMEOUT_DELAY_MS = 2 ** 31 - 1;
+
 /** True only for standard AbortErrors or errors created from an observed abort signal. */
 export function isAbortError(cause: unknown): cause is Error {
   return cause instanceof Error && (cause.name === "AbortError" || abortErrors.has(cause));
@@ -37,8 +44,10 @@ export function abortableSleep(
     return Promise.resolve();
   }
 
+  const delayMs = Math.min(durationMs, MAX_TIMEOUT_DELAY_MS);
+
   if (!signal) {
-    return new Promise((resolve) => setTimeout(resolve, durationMs));
+    return new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 
   if (signal.aborted) {
@@ -50,7 +59,7 @@ export function abortableSleep(
     const timeout = setTimeout(() => {
       cleanup();
       resolve();
-    }, durationMs);
+    }, delayMs);
     const onAbort = () => {
       clearTimeout(timeout);
       cleanup();
