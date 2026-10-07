@@ -37,30 +37,50 @@ export type StoredDefinitionSummary = Omit<
   "steps" | "targetIds" | "snapshot"
 >;
 
+interface RunAttribution {
+  stepId?: string;
+  /** Whether the starting invocation keyed this run, rather than passing on its parent's key. */
+  assignsItemKey: boolean;
+}
+
 /**
  * Attribute a nested run to the parent step that started it. Iterations and agent tool
  * calls carry explicit links; other children match the step that declares their pipeline,
  * using the step's execution window only to separate steps that share one child pipeline.
  */
-function originStepId(run: StoredPipelineRun, parent: StoredPipelineRun): string | undefined {
-  if (run.iteration) return run.iteration.stepId;
+function attributeRun(run: StoredPipelineRun, parent: StoredPipelineRun): RunAttribution {
+  if (run.iteration) return { stepId: run.iteration.stepId, assignsItemKey: false };
   const callAttemptId =
     run.agentCall?.parentAttemptId ??
     parent.agentTurn?.calls.find((call) => call.callId === run.itemKey)?.parentAttemptId;
   if (callAttemptId !== undefined) {
-    return parent.steps.find((step) => step.attempt?.attemptId === callAttemptId)?.id;
+    // Agent tool calls key their child run by call ID.
+    const step = parent.steps.find((entry) => entry.attempt?.attemptId === callAttemptId);
+    return { stepId: step?.id, assignsItemKey: true };
   }
   const candidates = parent.steps.filter(
     (step) => step.nestedPipeline?.pipelineId === run.pipelineId
   );
-  if (candidates.length <= 1) return candidates[0]?.id;
-  const active = candidates.filter(
-    (step) =>
-      step.startedAtMs !== undefined &&
-      step.startedAtMs <= run.startedAtMs &&
-      (step.finishedAtMs ?? Number.POSITIVE_INFINITY) >= run.startedAtMs
+  if (candidates.length === 0) {
+    // Without a declaring step, only a key that differs from the parent's is provably new.
+    return { assignsItemKey: run.itemKey !== parent.itemKey };
+  }
+  const active =
+    candidates.length === 1
+      ? candidates
+      : candidates.filter(
+          (step) =>
+            step.startedAtMs !== undefined &&
+            step.startedAtMs <= run.startedAtMs &&
+            (step.finishedAtMs ?? Number.POSITIVE_INFINITY) >= run.startedAtMs
+        );
+  const step = active.length === 1 ? active[0] : undefined;
+  // Fan-out steps key each child by item, even when the key repeats the parent's;
+  // single and iterated children inherit their parent's key.
+  const assignsItemKey = (step ? [step] : candidates).every(
+    (entry) => entry.nestedPipeline?.mode === "for-each"
   );
-  return active.length === 1 ? active[0]!.id : undefined;
+  return { stepId: step?.id, assignsItemKey };
 }
 
 function runOrigin(
@@ -70,10 +90,9 @@ function runOrigin(
   const parent = index.ancestorsOf(run.runId).at(-1);
   if (!parent) return undefined;
   const origin: StoredRunOrigin = {};
-  const stepId = originStepId(run, parent);
+  const { stepId, assignsItemKey } = attributeRun(run, parent);
   if (stepId !== undefined) origin.stepId = stepId;
-  // Trace item keys are inherited by descendants; only a new key identifies this run.
-  if (run.itemKey !== undefined && run.itemKey !== parent.itemKey) origin.itemKey = run.itemKey;
+  if (run.itemKey !== undefined && assignsItemKey) origin.itemKey = run.itemKey;
   if (run.iteration) origin.iteration = run.iteration.index;
   return Object.keys(origin).length ? origin : undefined;
 }

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { RUN_MODEL_VERSION } from "../core/pipeline.js";
-import type { StoredPipelineRun, StoredPipelineRunStatus } from "./run-store.js";
-import { createRunHistoryIndex } from "./run-history.js";
+import { createSteps, definePipeline, RUN_MODEL_VERSION } from "../core/pipeline.js";
+import {
+  projectPipelineRunStore,
+  type StoredPipelineEvent,
+  type StoredPipelineRun,
+  type StoredPipelineRunStatus,
+} from "./run-store.js";
+import { createRunHistoryIndex, summarizeRun } from "./run-history.js";
 
 function run(
   overrides: Partial<StoredPipelineRun> & Pick<StoredPipelineRun, "runId">
@@ -274,5 +279,57 @@ describe("createRunHistoryIndex", () => {
       "older-active",
       "newer-idle",
     ]);
+  });
+});
+
+describe("summarizeRun origin", () => {
+  it("keeps a fan-out key that repeats its parent's and omits keys a child inherits", async () => {
+    const { step: shardStep } = createSteps();
+    const shard = definePipeline({ id: "shard", steps: [shardStep("work", { run: () => 1 })] });
+    const audit = definePipeline({ id: "audit", steps: [shardStep("check", { run: () => 1 })] });
+    const { forEachPipeline: regionFanOut, fromPipeline } = createSteps();
+    const region = definePipeline({
+      id: "region",
+      steps: [
+        regionFanOut("shards", {
+          pipeline: shard,
+          items: () => ["eu"],
+          key: (id) => String(id),
+          mapOptions: () => ({}),
+        }),
+        fromPipeline("audit", { pipeline: audit, mapOptions: () => ({}) }),
+      ],
+    });
+    const { forEachPipeline } = createSteps();
+    const root = definePipeline({
+      id: "regions",
+      steps: [
+        forEachPipeline("regions", {
+          pipeline: region,
+          items: () => ["eu"],
+          key: (id) => String(id),
+          mapOptions: () => ({}),
+        }),
+      ],
+    });
+    const events: StoredPipelineEvent[] = [];
+    const exporter = {
+      export: (event: object) =>
+        void events.push({ ...event, id: events.length } as StoredPipelineEvent),
+    };
+    await root.runOrThrow({}, undefined, { tracing: { exporter } });
+
+    const { runs } = projectPipelineRunStore(events, 0);
+    const index = createRunHistoryIndex(runs);
+    const origins = Object.fromEntries(
+      runs.map((entry) => [entry.pipelineId, summarizeRun(entry, index).origin])
+    );
+    expect(runs.find((entry) => entry.pipelineId === "audit")?.itemKey).toBe("eu");
+    expect(origins).toEqual({
+      regions: undefined,
+      region: { stepId: "regions", itemKey: "eu" },
+      shard: { stepId: "shards", itemKey: "eu" },
+      audit: { stepId: "audit" },
+    });
   });
 });
