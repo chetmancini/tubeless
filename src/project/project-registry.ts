@@ -193,6 +193,15 @@ function forEachPipelineAdapter(
       "Expected adapter concurrency to be a number or function"
     );
   }
+  if (
+    typeof adapter.concurrency === "number" &&
+    (!Number.isInteger(adapter.concurrency) || adapter.concurrency < 1)
+  ) {
+    throw new PipelineDocumentError(
+      path,
+      "Expected adapter concurrency to be a positive finite integer when it is a number"
+    );
+  }
   validateAdapterMapping(adapter, path);
   return {
     items: adapter.items,

@@ -743,11 +743,20 @@ function createStepFactory<
       >;
     }
   ) => {
+    const configuredConcurrency = config.concurrency;
+    if (
+      typeof configuredConcurrency === "number" &&
+      (!Number.isInteger(configuredConcurrency) || configuredConcurrency < 1)
+    ) {
+      throw new RangeError(
+        `forEachPipeline concurrency must be a positive finite integer, got ${configuredConcurrency}`
+      );
+    }
     const definition: StepDefinitionBody<TOptions> = {
       [STEP_NESTED_PIPELINE]: {
         mode: "for-each" as const,
         concurrency:
-          typeof config.concurrency === "function" ? "dynamic" : (config.concurrency ?? 1),
+          typeof configuredConcurrency === "function" ? "dynamic" : (configuredConcurrency ?? 1),
         pipelineId: config.pipeline.id,
         identity: config.pipeline.definition?.identity,
         stepIds: config.pipeline.stepIds,

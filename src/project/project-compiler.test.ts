@@ -488,6 +488,33 @@ describe("declarative pipelines", () => {
     });
   });
 
+  it("rejects a static fan-out adapter concurrency that is not a positive integer", () => {
+    const source: PipelineDocument = {
+      version: 1,
+      pipelines: {
+        parent: {
+          steps: [{ id: "child", forEachPipeline: { pipeline: "leaf", adapter: "child" } }],
+          finalize: { run: "result", requireOutputs: ["child"] },
+        },
+        leaf: { steps: [{ id: "work", run: "work" }], finalize: { run: "result" } },
+      },
+    };
+    const wiring: ProjectRegistry = {
+      steps: { work: () => "leaf" },
+      finalizers: { result: ({ child, work }) => child ?? work },
+      forEachPipelineAdapters: {
+        child: { items: () => ["item"], key: () => "key", mapOptions: () => ({}), concurrency: 0 },
+      },
+    };
+
+    expect(() => compilePipelineDocument(source, wiring)).toThrow(
+      new PipelineDocumentError(
+        '$.pipelines["parent"].steps[0].forEachPipeline.adapter',
+        "Expected adapter concurrency to be a positive finite integer when it is a number"
+      )
+    );
+  });
+
   it("uses core dry-run skips, dependency blocking, and required finalizers", async () => {
     const source = document();
     source.pipelines.import.steps[1].dryRun = "skip";

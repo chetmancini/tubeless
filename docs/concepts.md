@@ -149,7 +149,9 @@ order, regardless of which step finishes last.
 The limit applies to one pipeline run. A child wrapper occupies one parent slot;
 child runs retain their own limit, defaulting to `1`. Set `maxConcurrency` in child
 `controls` to opt them in separately. Fan-out `concurrency` independently limits
-simultaneous child runs. These limits multiply: four parallel fan-out steps with
+simultaneous child runs, and must be a positive finite integer; an invalid static
+value is rejected when the step is created, and an invalid callback value fails
+the step before any child starts. These limits multiply: four parallel fan-out steps with
 `concurrency: 8` can create 32 active children. Child DAG parallelism can increase
 the number of active child steps further. There is no shared semaphore; having
 parents hold slots while awaiting children that need those same slots can deadlock.

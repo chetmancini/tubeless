@@ -260,4 +260,54 @@ describe("mapped child adapter: planning and progress", () => {
     expect(result.errors[0]?.message).toContain("duplicate item keys: same");
     expect(runChild).not.toHaveBeenCalled();
   });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects static fan-out concurrency %s when the step is created",
+    (concurrency) => {
+      const { step: childStep } = createSteps();
+      const work = childStep("work", { run: () => "done" });
+      const child = definePipeline({ id: "bounded-child", steps: [work], finalize: work });
+      const { forEachPipeline: parentForEachPipeline } = createSteps();
+      const build = () =>
+        parentForEachPipeline("children", {
+          pipeline: child,
+          items: () => [1],
+          key: String,
+          concurrency,
+          mapOptions: () => ({}),
+        });
+
+      expect(build).toThrow(RangeError);
+      expect(build).toThrow(/forEachPipeline concurrency must be a positive finite integer/);
+    }
+  );
+
+  it("rejects a dynamically resolved invalid concurrency before running any child", async () => {
+    const runChild = vi.fn();
+    const { step: childStep } = createSteps();
+    const work = childStep("work", { run: runChild });
+    const child = definePipeline({ id: "bounded-child", steps: [work], finalize: work });
+    const { forEachPipeline: parentForEachPipeline } = createSteps();
+    const children = parentForEachPipeline("children", {
+      pipeline: child,
+      // Zero items must not hide the invalid bound.
+      items: () => [],
+      key: String,
+      concurrency: () => 0,
+      mapOptions: () => ({}),
+    });
+    const parent = definePipeline({
+      id: "dynamic-parent",
+      steps: [children],
+      finalize: children,
+    });
+
+    const result = await parent.run({});
+
+    expect(result.status).toBe("failed");
+    expect(result.errors[0]?.message).toContain(
+      "Mapped child pipeline bounded-child concurrency must be a positive finite integer, got 0"
+    );
+    expect(runChild).not.toHaveBeenCalled();
+  });
 });

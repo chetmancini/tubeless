@@ -202,7 +202,9 @@ Read the corresponding package recipe before using these features:
   execution; compile and plan to check handler references and graph semantics.
 
 - `fromPipeline` for an independently useful child workflow;
-  `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
+  `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency
+  (a positive finite integer; invalid static values are rejected when the step is
+  created, and an invalid callback value fails the step before any child starts).
   Omit `fromPipeline.mapOptions` when the parent's validated options satisfy the
   child's input type; it forwards them unchanged through child validation. Fan-out
   still requires explicit per-item mapping. Keep `mapOptions` limited to child

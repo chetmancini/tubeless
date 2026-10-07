@@ -258,7 +258,9 @@ Every step declares exactly one of `run`, `fromPipeline`, or
 document. The adapter is application code: a `fromPipeline` adapter supplies
 `mapOptions` and optional `controls` and `mapResult`; a `forEachPipeline` adapter supplies
 `items`, `key`, `mapOptions`, and optional `controls`, `concurrency`, `progress`, and
-`mapResult`. These are the same hooks as the TypeScript builders. Parent plans
+`mapResult`. These are the same hooks as the TypeScript builders, so a static
+adapter `concurrency` must be a positive integer and is rejected at the
+document reference. Parent plans
 still expose one opaque wrapper with `nestedPipeline` metadata, and execution
 retains the normal nested progress and failure behavior.
 

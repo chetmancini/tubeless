@@ -370,12 +370,14 @@ export function createMappedChildRunner<TParentOptions extends object>(
         `Mapped child pipeline ${config.pipeline.id} received duplicate item keys: ${duplicateKeys.join(", ")}`
       );
     }
-    const concurrency = Math.max(
-      1,
-      isConcurrencyFunction(config.concurrency)
-        ? config.concurrency(inputs, context)
-        : (config.concurrency ?? 1)
-    );
+    const concurrency = isConcurrencyFunction(config.concurrency)
+      ? config.concurrency(inputs, context)
+      : (config.concurrency ?? 1);
+    if (!Number.isInteger(concurrency) || concurrency < 1) {
+      throw new PipelineChildError(
+        `Mapped child pipeline ${config.pipeline.id} concurrency must be a positive finite integer, got ${concurrency}`
+      );
+    }
     type Outcome =
       | { key: string; ok: true; value: unknown }
       | { error: Error; key: string; index: number; ok: false };

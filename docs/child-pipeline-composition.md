@@ -115,7 +115,8 @@ same `(inputs, context)` arguments as `mapOptions`.
 ## Run a child for each item
 
 Use `items` to return the list to process, `key` for stable item IDs, and
-`concurrency` to limit simultaneous child runs. `forEachPipeline` always requires
+`concurrency` to limit simultaneous child runs; it must be a positive finite
+integer and defaults to `1`. `forEachPipeline` always requires
 an explicit per-item `mapOptions`:
 
 ```ts
@@ -232,7 +233,9 @@ by children. Set child controls explicitly with `controls` when needed.
 - `maxConcurrency` (`run(options, { maxConcurrency })`, `controls.maxConcurrency`
   on a child, or `--max-concurrency`) bounds steps in one DAG, set at run time.
 - `forEachPipeline`'s `concurrency` bounds one fan-out step's children, set at
-  authoring time.
+  authoring time. A static value is rejected when the step is created; a
+  `(inputs, context)` callback is checked before any child starts. Neither is
+  clamped, so an invalid bound never silently degrades to serial execution.
 
 Tune both independently for end-to-end throughput; neither inherits the other.
 
