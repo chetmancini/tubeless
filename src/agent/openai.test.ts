@@ -506,9 +506,12 @@ describe("OpenAI model", () => {
     ]);
   });
 
-  it.each(["ftp://example.com", "not a url"])("rejects an invalid base URL: %s", (baseUrl) => {
-    expect(() => openaiModel({ baseUrl })).toThrow("Invalid OpenAI model configuration");
-  });
+  it.each(["ftp://example.com", "not a url", "https://host/v1?tenant=abc", "https://host/v1#x"])(
+    "rejects an invalid base URL: %s",
+    (baseUrl) => {
+      expect(() => openaiModel({ baseUrl })).toThrow("Invalid OpenAI model configuration");
+    }
+  );
 
   it("never calls /responses/compact when compaction is disabled", async () => {
     const cwd = await workspace();

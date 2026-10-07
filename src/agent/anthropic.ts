@@ -193,7 +193,13 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
         await send("compaction", { ...compactRequest, messages }, true)
       );
       const [block] = summary.content;
-      if (summary.stopReason === "compaction" && summary.content.length === 1 && block) {
+      if (
+        summary.stopReason === "compaction" &&
+        summary.content.length === 1 &&
+        block?.type === "compaction" &&
+        typeof block.content === "string" &&
+        typeof block.signature === "string"
+      ) {
         // The summary replaces every message it covered; a user turn must follow tool results.
         messages = [
           {
