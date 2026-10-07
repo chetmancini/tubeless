@@ -183,6 +183,32 @@ describe("definePipeline lifecycle and scheduling", () => {
     expect(warn).toHaveBeenCalledWith("Pipeline hook failed: metrics unavailable");
   });
 
+  it("reports rejected async hooks instead of leaking unhandled rejections", async () => {
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const warn = vi.fn();
+      const result = await makePipeline("async-hooks").run({}, undefined, {
+        cwd: "/tmp",
+        hooks: {
+          onStepComplete: async ({ step }) => {
+            await Promise.resolve();
+            throw new Error(`metrics unavailable for ${step.id}`);
+          },
+        },
+        log: { error: vi.fn(), log: vi.fn(), warn },
+      });
+
+      expect(result.status).toBe("completed");
+      await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
+      expect(warn).toHaveBeenCalledWith("Pipeline hook failed: metrics unavailable for build");
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
   it("uses injected runtime timing for reports and results", async () => {
     let currentTime = 0;
     const { step } = createSteps();

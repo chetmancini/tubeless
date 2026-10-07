@@ -1,8 +1,5 @@
-import { createHash } from "node:crypto";
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { defaultCacheKey } from "./cache-key.js";
-
-vi.mock("node:crypto", { spy: true });
 
 it("sorts record keys without losing types, holes, or reference topology", () => {
   expect(defaultCacheKey({ a: 1, b: 2 }, {})).toBe(defaultCacheKey({ b: 2, a: 1 }, {}));
@@ -60,15 +57,15 @@ it("rejects unsupported keys instead of dropping information or invoking getters
     expect(() => defaultCacheKey({}, { value })).toThrow("provide cache.key");
 });
 
-it("reuses the options hash across calls sharing the same options object", () => {
-  const options = { flag: true };
-  vi.mocked(createHash).mockClear();
-
-  defaultCacheKey({ a: 1 }, options);
-  const callsAfterFirst = vi.mocked(createHash).mock.calls.length;
-  expect(callsAfterFirst).toBe(2); // one hash for inputs, one for options
-
-  defaultCacheKey({ a: 2 }, options);
-  const callsAfterSecond = vi.mocked(createHash).mock.calls.length;
-  expect(callsAfterSecond).toBe(callsAfterFirst + 1); // only the new inputs get re-hashed
+it("reflects mutations to a reused options object", () => {
+  const options: { flag: boolean; nested: { level: number } } = {
+    flag: true,
+    nested: { level: 1 },
+  };
+  const first = defaultCacheKey({ a: 1 }, options);
+  options.flag = false;
+  const second = defaultCacheKey({ a: 1 }, options);
+  options.nested.level = 2;
+  const third = defaultCacheKey({ a: 1 }, options);
+  expect(new Set([first, second, third]).size).toBe(3);
 });

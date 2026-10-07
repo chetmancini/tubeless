@@ -44,18 +44,31 @@ function basePipelineLogger(log: PipelineLogger): PipelineLogger {
   return (log as TracedPipelineLogger)[PIPELINE_LOGGER_BASE] ?? log;
 }
 
-function emitHook(runtime: PipelineRuntime, emit: (hooks: PipelineHooks) => void): void {
+function emitHook(runtime: PipelineRuntime, emit: (hooks: PipelineHooks) => unknown): void {
   if (!runtime.hooks) return;
   const hookSets = Array.isArray(runtime.hooks) ? runtime.hooks : [runtime.hooks];
+  const warn = (error: unknown) =>
+    runtime.log.warn(
+      `Pipeline hook failed: ${error instanceof Error ? error.message : String(error)}`
+    );
   for (const hooks of hookSets) {
     try {
-      emit(hooks);
+      const result = emit(hooks);
+      // Void-typed hooks may still be async; report their rejections instead of leaking them.
+      if (isPromiseLike(result)) result.then(undefined, warn);
     } catch (error) {
-      runtime.log.warn(
-        `Pipeline hook failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      warn(error);
     }
   }
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (
+    (typeof value === "object" || typeof value === "function") &&
+    value !== null &&
+    "then" in value &&
+    typeof value.then === "function"
+  );
 }
 
 function snapshotRun(result: PipelineRun<unknown>): PipelineRun<unknown> {

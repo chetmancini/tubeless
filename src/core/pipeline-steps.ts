@@ -822,7 +822,7 @@ function createStepFactory<
         context: PipelineStepContext<TOptions>
       ): TOut;
     }
-  ): BuiltStep<TId, readonly TOut[], TOptions, TInputOptions>;
+  ): BuiltStep<TId, readonly Awaited<TOut>[], TOptions, TInputOptions>;
   function forEachPipeline<
     TId extends string,
     TChildPipeline extends Pipeline<object, unknown>,
@@ -864,8 +864,8 @@ function createStepFactory<
     TOut,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
-    TDecision extends StepSkipDecision<NoInfer<readonly TOut[]>> = StepSkipDecision<
-      NoInfer<readonly TOut[]>
+    TDecision extends StepSkipDecision<NoInfer<readonly Awaited<TOut>[]>> = StepSkipDecision<
+      NoInfer<readonly Awaited<TOut>[]>
     >,
   >(
     id: TId,
@@ -877,7 +877,13 @@ function createStepFactory<
       TItem
     > & {
       skip:
-        | StepSkipPredicate<TOptions, TDeps, TOptionalDeps, NoInfer<readonly TOut[]>, TDecision>
+        | StepSkipPredicate<
+            TOptions,
+            TDeps,
+            TOptionalDeps,
+            NoInfer<readonly Awaited<TOut>[]>,
+            TDecision
+          >
         | undefined;
       mapResult(
         value: PipelineResultOf<TChildPipeline>,
@@ -887,7 +893,12 @@ function createStepFactory<
         context: PipelineStepContext<TOptions>
       ): TOut;
     }
-  ): BuiltStep<TId, PolicySkippedOutput<readonly TOut[], TDecision>, TOptions, TInputOptions>;
+  ): BuiltStep<
+    TId,
+    PolicySkippedOutput<readonly Awaited<TOut>[], TDecision>,
+    TOptions,
+    TInputOptions
+  >;
   function forEachPipeline(
     id: string,
     definition: Parameters<typeof buildMappedPipelineStep>[1]

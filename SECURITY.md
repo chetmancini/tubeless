@@ -43,7 +43,9 @@ the application gateway publicly; protect the backend transport appropriately.
 Bearer authentication does not encrypt HTTP. There is one admin trust domain:
 admitted users can access the entire configured store and command catalog.
 
-Tokens never belong in HTML, browser requests, URLs, argv, or logs. Recorded
+Tokens never belong in HTML, browser requests, URLs, argv, or logs. Studio removes
+the token from its environment after startup so launched commands and their child
+processes do not inherit it. Recorded
 pipeline data is not redacted. Preserve no-store and CSP response headers and
 exclude Studio from service-worker/shared caching. API login denials use JSON
 401/403; backend credential failures should become generic gateway 502 responses.

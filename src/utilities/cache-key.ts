@@ -1,7 +1,5 @@
 import { createHash } from "node:crypto";
 
-const optionsHashCache = new WeakMap<object, string>();
-
 function hashCanonicalValue(value: unknown): string {
   const seen = new Map<object, number>();
   const unsupported = () => {
@@ -64,20 +62,8 @@ function hashCanonicalValue(value: unknown): string {
     .digest("hex");
 }
 
-function hashOptions(options: object): string {
-  const cached = optionsHashCache.get(options);
-  if (cached !== undefined) return cached;
-  const hash = hashCanonicalValue(options);
-  optionsHashCache.set(options, hash);
-  return hash;
-}
-
 /** Canonical data-graph hash: sorted record keys, explicit types, holes, and references. */
 export function defaultCacheKey(inputs: unknown, options: unknown): string {
-  const inputsHash = hashCanonicalValue(inputs);
-  const optionsHash =
-    typeof options === "object" && options !== null
-      ? hashOptions(options)
-      : hashCanonicalValue(options);
-  return `${inputsHash}:${optionsHash}`;
+  // Hash options on every call: callers may reuse and mutate one options object across runs.
+  return `${hashCanonicalValue(inputs)}:${hashCanonicalValue(options)}`;
 }

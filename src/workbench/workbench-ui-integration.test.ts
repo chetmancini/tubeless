@@ -534,6 +534,7 @@ it("runs remote-bind commands in gateway mode and retains history without revivi
         expect(io.output.join("")).toContain("Tubeless gateway studio: " + publicUrl + "/")
       );
       expect(io.output.join("") + io.errors.join("")).not.toContain(token);
+      expect(process.env.TUBELESS_STUDIO_GATEWAY_TOKEN).toBeUndefined();
       expect((await fetch(publicUrl + "/api/health")).status).toBe(401);
       expect(
         await fetch(publicUrl + "/api/capabilities", { headers }).then((response) =>
@@ -555,6 +556,8 @@ it("runs remote-bind commands in gateway mode and retains history without revivi
       controller.abort();
       await expect(command).resolves.toBe(0);
     }
+    // Studio removes the token from its environment; a restart provisions it again.
+    process.env.TUBELESS_STUDIO_GATEWAY_TOKEN = token;
     const restartController = new AbortController();
     const restartIo = { ...captureIo(directory), signal: restartController.signal };
     const restart = runWorkbenchCli(args, restartIo);

@@ -88,11 +88,12 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
         }
 
         let hosting: ReturnType<typeof parseStudioHosting>;
+        const gatewayToken = process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
+        // Launched commands and their child processes inherit this environment;
+        // keep the backend token only in the parsed hosting configuration.
+        delete process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
         try {
-          hosting = parseStudioHosting(
-            parsed.values["public-url"],
-            process.env.TUBELESS_STUDIO_GATEWAY_TOKEN
-          );
+          hosting = parseStudioHosting(parsed.values["public-url"], gatewayToken);
         } catch (error) {
           return writeUsageError(io, errorMessage(error), UI_USAGE);
         }

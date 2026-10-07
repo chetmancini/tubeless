@@ -44,4 +44,45 @@ describe("child-pipeline composition", () => {
     expect(await parent.runOrThrow({ skipChild: false })).toBe(6);
     expect(await parent.runOrThrow({ skipChild: true })).toBe(10);
   });
+
+  it("publishes resolved async mapped child mappings and fails the step when one rejects", async () => {
+    const { step: childStep } = createSteps<{ value: number }>();
+    const child = definePipeline({
+      id: "async-mapped-child",
+      steps: [childStep("echo", { run: (_inputs, context) => context.options.value })],
+      finalize: (outputs) => outputs.echo ?? 0,
+    });
+    const { step, forEachPipeline } = createSteps<{ failAt?: number }>();
+    const mapped = forEachPipeline("mapped", {
+      pipeline: child,
+      items: () => [1, 2, 3],
+      key: (item) => String(item),
+      concurrency: 2,
+      mapOptions: (item) => ({ value: item }),
+      mapResult: async (value, _result, _item, index, context) => {
+        await Promise.resolve();
+        if (index === context.options.failAt) throw new Error(`map ${index} failed`);
+        return { doubled: value * 2 };
+      },
+    });
+    expectTypeOf(mapped).toEqualTypeOf<
+      Step<"mapped", readonly { doubled: number }[], { failAt?: number }>
+    >();
+    const consume = step("consume", {
+      dependsOn: [mapped],
+      run: ({ mapped }) => mapped.map((entry) => entry.doubled),
+    });
+    const parent = definePipeline({ id: "async-mapped-parent", steps: [mapped, consume] });
+
+    expect(await parent.runOrThrow({})).toEqual([2, 4, 6]);
+    const failed = await parent.run({ failAt: 1 });
+    expect(failed.status).toBe("failed");
+    expect(failed.steps.map((step) => [step.id, step.status])).toEqual([
+      ["mapped", "failed"],
+      ["consume", "skipped"],
+    ]);
+    expect(failed.steps[0]).toMatchObject({
+      error: { message: expect.stringContaining("map 1 failed") },
+    });
+  });
 });

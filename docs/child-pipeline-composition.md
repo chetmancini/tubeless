@@ -169,7 +169,8 @@ before the value becomes available to dependent steps. Its policy-skip value,
 if supplied, must match that resolved result type.
 
 `forEachPipeline` returns results in input order, even when child runs finish
-in a different order. `concurrency` limits the number of child runs in flight.
+in a different order. Its per-item `mapResult` is awaited the same way; a rejected
+mapper fails that item like a failed child run. `concurrency` limits the number of child runs in flight.
 Keys must be stable and unique; duplicate keys fail before any child starts.
 All running children finish or cancel before the parent step returns a failure.
 The parent therefore cannot finalize while those children are still running.

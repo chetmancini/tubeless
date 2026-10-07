@@ -338,7 +338,9 @@ admin trust domain, with no per-user isolation or user audit trail.
 Provision `TUBELESS_STUDIO_GATEWAY_TOKEN` through your host's secret management:
 32 cryptographically random bytes encoded as 64 hexadecimal characters. Share it
 only with the application gateway and Studio process. Never pass it in argv,
-browser code, URLs, logs, or cookies. Then start Studio:
+browser code, URLs, logs, or cookies. Studio reads the token once at startup and
+removes it from its environment, so launched commands and their child processes
+do not inherit it. Then start Studio:
 
 ```sh
 tubeless ui --host 0.0.0.0 --port 4317 \

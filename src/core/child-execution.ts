@@ -441,7 +441,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
           progress?.childCompleted(key);
 
           const value = config.mapResult
-            ? config.mapResult(childResult.value, childResult, item, itemIndex, context)
+            ? await config.mapResult(childResult.value, childResult, item, itemIndex, context)
             : childResult.value;
           progress?.complete(key);
           return { key, ok: true, value };
