@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { RUN_MODEL_VERSION } from "../core/pipeline.js";
-import type { StoredPipelineRun, StoredPipelineRunStatus } from "./run-store.js";
-import { createRunHistoryIndex } from "./run-history.js";
+import { createSteps, definePipeline, RUN_MODEL_VERSION } from "../core/pipeline.js";
+import {
+  projectPipelineRunStore,
+  type StoredPipelineEvent,
+  type StoredPipelineRun,
+  type StoredPipelineRunStatus,
+} from "./run-store.js";
+import { createRunHistoryIndex, summarizeRun } from "./run-history.js";
 
 function run(
   overrides: Partial<StoredPipelineRun> & Pick<StoredPipelineRun, "runId">
@@ -273,6 +278,118 @@ describe("createRunHistoryIndex", () => {
     expect(renderLike(index).roots.map((item) => item.runId)).toEqual([
       "older-active",
       "newer-idle",
+    ]);
+  });
+});
+
+describe("summarizeRun origin", () => {
+  it("keeps a fan-out key that repeats its parent's and omits keys a child inherits", async () => {
+    const { step: shardStep } = createSteps();
+    const shard = definePipeline({ id: "shard", steps: [shardStep("work", { run: () => 1 })] });
+    const audit = definePipeline({ id: "audit", steps: [shardStep("check", { run: () => 1 })] });
+    const { forEachPipeline: regionFanOut, fromPipeline } = createSteps();
+    const region = definePipeline({
+      id: "region",
+      steps: [
+        regionFanOut("shards", {
+          pipeline: shard,
+          items: () => ["eu"],
+          key: (id) => String(id),
+          mapOptions: () => ({}),
+        }),
+        fromPipeline("audit", { pipeline: audit, mapOptions: () => ({}) }),
+      ],
+    });
+    const { forEachPipeline } = createSteps();
+    const root = definePipeline({
+      id: "regions",
+      steps: [
+        forEachPipeline("regions", {
+          pipeline: region,
+          items: () => ["eu"],
+          key: (id) => String(id),
+          mapOptions: () => ({}),
+        }),
+      ],
+    });
+    const events: StoredPipelineEvent[] = [];
+    const exporter = {
+      export: (event: object) =>
+        void events.push({ ...event, id: events.length } as StoredPipelineEvent),
+    };
+    await root.runOrThrow({}, undefined, { tracing: { exporter } });
+
+    const { runs } = projectPipelineRunStore(events, 0);
+    const index = createRunHistoryIndex(runs);
+    const origins = Object.fromEntries(
+      runs.map((entry) => [entry.pipelineId, summarizeRun(entry, index).origin])
+    );
+    expect(runs.find((entry) => entry.pipelineId === "audit")?.itemKey).toBe("eu");
+    expect(origins).toEqual({
+      regions: undefined,
+      region: { stepId: "regions", itemKey: "eu" },
+      shard: { stepId: "shards", itemKey: "eu" },
+      audit: { stepId: "audit" },
+    });
+  });
+
+  async function recordedOrigins(root: {
+    runOrThrow(options: object, controls: undefined, context: object): Promise<unknown>;
+  }) {
+    const events: StoredPipelineEvent[] = [];
+    const exporter = {
+      export: (event: object) =>
+        void events.push({ ...event, id: events.length } as StoredPipelineEvent),
+    };
+    // A frozen clock puts every step and child start in one millisecond.
+    await root.runOrThrow({}, undefined, { tracing: { exporter }, now: () => 0 });
+    const { runs } = projectPipelineRunStore(events, 0);
+    const index = createRunHistoryIndex(runs);
+    return runs
+      .filter((entry) => entry.parentRunId !== undefined)
+      .map((entry) => [entry.pipelineId, summarizeRun(entry, index).origin?.stepId]);
+  }
+
+  it("attributes sequential children of one pipeline that start in the same millisecond", async () => {
+    const { step } = createSteps();
+    const child = definePipeline({ id: "child", steps: [step("work", { run: () => 1 })] });
+    const { fromPipeline } = createSteps();
+    const first = fromPipeline("first", { pipeline: child, mapOptions: () => ({}) });
+    const second = fromPipeline("second", {
+      dependsOn: [first],
+      pipeline: child,
+      mapOptions: () => ({}),
+    });
+    const root = definePipeline({ id: "parent", steps: [first, second] });
+
+    expect(await recordedOrigins(root)).toEqual([
+      ["child", "first"],
+      ["child", "second"],
+    ]);
+  });
+
+  it("ignores a parent step inherited by a run its child starts by hand", async () => {
+    const { step } = createSteps();
+    const leaf = definePipeline({ id: "leaf", steps: [step("work", { run: () => 1 })] });
+    const manual = definePipeline({
+      id: "manual",
+      steps: [
+        step("launch", {
+          run: (_inputs, context) =>
+            leaf.runOrThrow({}, undefined, { ...context, parentRunId: context.runId }),
+        }),
+      ],
+    });
+    const { fromPipeline } = createSteps();
+    const root = definePipeline({
+      id: "parent",
+      steps: [fromPipeline("nested", { pipeline: manual, mapOptions: () => ({}) })],
+    });
+
+    // The leaf declares no origin; it must not reuse "nested" from its grandparent.
+    expect(await recordedOrigins(root)).toEqual([
+      ["manual", "nested"],
+      ["leaf", undefined],
     ]);
   });
 });

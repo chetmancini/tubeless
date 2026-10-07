@@ -497,6 +497,8 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   version 2, including the bound and static child controls in their fingerprints.
   Repeated child runs carry an `iteration` relation to the owning run, step,
   attempt, and one-based index; each child still has a fresh execution ID.
+  Children started by pipeline steps or agent tools record `payload.parentStepId`
+  on `pipeline.started`; runs linked by a hand-passed `parentRunId` do not.
   Studio retains versions, groups their runs, and compares complete snapshots. Legacy
   recordings have unknown identity; oversized snapshots retain identity but cannot be
   compared. Storage rejects complete snapshots whose contents, including recorded child

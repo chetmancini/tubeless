@@ -10,6 +10,15 @@ interface RunHistoryItem {
   readonly eventCount: number;
 }
 
+/** Where a nested run started inside its parent run, as far as the trace identifies it. */
+export interface StoredRunOrigin {
+  /** Parent step that started the run; omitted when the trace cannot attribute it uniquely. */
+  stepId?: string;
+  itemKey?: string;
+  /** One-based iteration of an iterated child pipeline. */
+  iteration?: number;
+}
+
 export interface StoredRunSummary extends RunHistoryItem {
   dryRun: boolean;
   durationMs?: number;
@@ -20,6 +29,7 @@ export interface StoredRunSummary extends RunHistoryItem {
   descendantCount: number;
   subtreeIsRunning: boolean;
   activity: { count: number; names: string[]; message?: string };
+  origin?: StoredRunOrigin;
 }
 
 export type StoredDefinitionSummary = Omit<
@@ -27,12 +37,78 @@ export type StoredDefinitionSummary = Omit<
   "steps" | "targetIds" | "snapshot"
 >;
 
+interface RunAttribution {
+  stepId?: string;
+  /** Whether the starting invocation keyed this run, rather than passing on its parent's key. */
+  assignsItemKey: boolean;
+}
+
+/**
+ * Attribute a nested run to the parent step that started it. Iterations, agent tool calls,
+ * and helper-started children record explicit links. Recordings without `parentStepId`
+ * match the step that declares the child pipeline, using execution windows only to
+ * separate steps that share one child pipeline.
+ */
+function attributeRun(run: StoredPipelineRun, parent: StoredPipelineRun): RunAttribution {
+  if (run.iteration) return { stepId: run.iteration.stepId, assignsItemKey: false };
+  const callAttemptId =
+    run.agentCall?.parentAttemptId ??
+    parent.agentTurn?.calls.find((call) => call.callId === run.itemKey)?.parentAttemptId;
+  if (run.parentStepId !== undefined) {
+    const step = parent.steps.find((entry) => entry.id === run.parentStepId);
+    // Agent tool calls key their child run by call ID; fan-outs key each item.
+    const assignsItemKey = callAttemptId !== undefined || step?.nestedPipeline?.mode === "for-each";
+    return { stepId: run.parentStepId, assignsItemKey };
+  }
+  if (callAttemptId !== undefined) {
+    const step = parent.steps.find((entry) => entry.attempt?.attemptId === callAttemptId);
+    return { stepId: step?.id, assignsItemKey: true };
+  }
+  const candidates = parent.steps.filter(
+    (step) => step.nestedPipeline?.pipelineId === run.pipelineId
+  );
+  if (candidates.length === 0) {
+    // Without a declaring step, only a key that differs from the parent's is provably new.
+    return { assignsItemKey: run.itemKey !== parent.itemKey };
+  }
+  const active =
+    candidates.length === 1
+      ? candidates
+      : candidates.filter(
+          (step) =>
+            step.startedAtMs !== undefined &&
+            step.startedAtMs <= run.startedAtMs &&
+            (step.finishedAtMs ?? Number.POSITIVE_INFINITY) >= run.startedAtMs
+        );
+  const step = active.length === 1 ? active[0] : undefined;
+  // Fan-out steps key each child by item, even when the key repeats the parent's;
+  // single and iterated children inherit their parent's key.
+  const assignsItemKey = (step ? [step] : candidates).every(
+    (entry) => entry.nestedPipeline?.mode === "for-each"
+  );
+  return { stepId: step?.id, assignsItemKey };
+}
+
+function runOrigin(
+  run: StoredPipelineRun,
+  index: RunHistoryIndex<StoredPipelineRun>
+): StoredRunOrigin | undefined {
+  const parent = index.parentOf(run.runId);
+  if (!parent) return undefined;
+  const origin: StoredRunOrigin = {};
+  const { stepId, assignsItemKey } = attributeRun(run, parent);
+  if (stepId !== undefined) origin.stepId = stepId;
+  if (run.itemKey !== undefined && assignsItemKey) origin.itemKey = run.itemKey;
+  if (run.iteration) origin.iteration = run.iteration.index;
+  return Object.keys(origin).length ? origin : undefined;
+}
+
 export function summarizeRun(
   run: StoredPipelineRun,
   index: RunHistoryIndex<StoredPipelineRun>
 ): StoredRunSummary {
   const active = run.steps.filter((step) => step.status === "running");
-  return {
+  const summary: StoredRunSummary = {
     runId: run.runId,
     pipelineId: run.pipelineId,
     correlationId: run.correlationId,
@@ -53,6 +129,9 @@ export function summarizeRun(
       message: active[0]?.progress?.message,
     },
   };
+  const origin = runOrigin(run, index);
+  if (origin) summary.origin = origin;
+  return summary;
 }
 
 export function summarizeDefinition(definition: StoredPipelineDefinition): StoredDefinitionSummary {
@@ -65,6 +144,8 @@ const EMPTY_RUNS: readonly never[] = [];
 export interface RunHistoryIndex<T extends RunHistoryItem> {
   readonly roots: readonly T[];
   ancestorsOf(runId: string | null | undefined): T[];
+  /** The resolved immediate parent, without walking the ancestor chain. */
+  parentOf(runId: string | null | undefined): T | undefined;
   childrenOf(runId: string): readonly T[];
   descendantCount(runId: string): number;
   matchingRootIds(query: string): ReadonlySet<string>;
@@ -195,13 +276,15 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
   function childrenOf(runId: string): readonly T[] {
     return childrenByParentId.get(runId) ?? EMPTY_RUNS;
   }
+  function parentOf(runId: string | null | undefined) {
+    const parentRunId = runId == null ? undefined : parentIdByRunId.get(runId);
+    return parentRunId ? runsById.get(parentRunId) : undefined;
+  }
   function ancestorsOf(runId: string | null | undefined) {
     const ancestors: T[] = [];
     let current = runById(runId);
     while (current) {
-      const parentRunId = parentIdByRunId.get(current.runId);
-      if (!parentRunId) break;
-      const parent = runsById.get(parentRunId);
+      const parent = parentOf(current.runId);
       if (!parent) break;
       ancestors.unshift(parent);
       current = parent;
@@ -233,6 +316,7 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
     roots,
     ancestorsOf,
     childrenOf,
+    parentOf,
     descendantCount(runId: string) {
       return descendantCountById.get(runId) ?? 0;
     },

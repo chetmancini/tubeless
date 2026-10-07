@@ -177,6 +177,7 @@ export interface MappedChildExecutionConfig<TParentOptions extends object> {
 
 function childTracingOptions(
   context: PipelineExecutionContext<object>,
+  stepId: string,
   itemKey = context.trace?.itemKey
 ): PipelineTracingOptions | undefined {
   const tracing = context.tracing;
@@ -186,6 +187,7 @@ function childTracingOptions(
     itemKey,
     // A relation injected by this wrapper belongs to its next child, not descendants.
     iteration: tracing.iteration?.runId === context.runId ? tracing.iteration : undefined,
+    parentStep: { runId: context.runId, stepId },
   };
 }
 
@@ -211,7 +213,7 @@ export function invokeChildPipeline(
     parentRunId: context.runId,
     signal: context.signal,
     sleep: context.sleep,
-    tracing: childTracingOptions(context, invocation.itemKey),
+    tracing: childTracingOptions(context, invocation.stepId, invocation.itemKey),
     hooks: invocation.hooks,
   };
   return executeCompiledChild(
@@ -331,7 +333,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
       parentRunId: context.runId,
       signal: context.signal,
       sleep: context.sleep,
-      tracing: childTracingOptions(context),
+      tracing: childTracingOptions(context, config.stepId),
     };
     // Plan once for progress totals and execution. Invalid plans fail before child.run.
     const childPlan = config.pipeline.plan(controls);
@@ -423,7 +425,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
                 parentRunId: context.runId,
                 signal: context.signal,
                 sleep: context.sleep,
-                tracing: childTracingOptions(context, key),
+                tracing: childTracingOptions(context, config.stepId, key),
               },
               {
                 pipelineId: config.pipeline.id,

@@ -10,6 +10,7 @@ import {
   type StoredPipelineEvent,
 } from "./run-store.js";
 import { projectAgentHistory } from "./agent-history.js";
+import { createRunHistoryIndex, summarizeRun } from "./run-history.js";
 
 function fixture() {
   const child = defineAgent({
@@ -277,6 +278,45 @@ describe("agent history projection", () => {
       ["wrapped", "wrapped", "completed"],
     ]);
     expect(calls[2]!.runId).toBe("duplicate-child");
+  });
+
+  it("attributes nested runs to the step and call that started them, with planned edges", async () => {
+    const { events, run } = await record(fixture());
+    const { runs } = projectPipelineRunStore(events);
+    const index = createRunHistoryIndex(runs);
+    const byId = new Map(runs.map((entry) => [entry.runId, entry]));
+    const origins = runs
+      .filter((entry) => entry.parentRunId !== undefined)
+      .map(
+        (entry) =>
+          [
+            byId.get(entry.parentRunId!)!.pipelineId,
+            entry.pipelineId,
+            summarizeRun(entry, index).origin,
+          ] as const
+      );
+    expect(origins).toEqual(
+      expect.arrayContaining([
+        ["history-agent", "history-agent/turn", { stepId: "agent", iteration: 1 }],
+        ["history-agent", "history-agent/turn", { stepId: "agent", iteration: 3 }],
+        ["history-agent/turn", "history-agent/tool/double", { stepId: "calls", itemKey: "same" }],
+        ["history-agent/turn", "history-child", { stepId: "calls", itemKey: "left" }],
+        ["history-agent/turn", "history-wrapper", { stepId: "calls", itemKey: "wrapped" }],
+        // Descendants inherit the call's trace item key; it does not identify them.
+        ["history-wrapper", "history-child", { stepId: "nested" }],
+        ["history-child", "history-child/turn", { stepId: "agent", iteration: 1 }],
+      ])
+    );
+    expect(origins.every(([, , origin]) => origin?.stepId !== undefined)).toBe(true);
+    expect(summarizeRun(byId.get(run.runId)!, index).origin).toBeUndefined();
+    const turn = runs.find((entry) => entry.agentTurn?.agentRunId === run.runId)!;
+    expect(
+      turn.steps.map((entry) => [entry.id, entry.dependencies, entry.skipAfterFailureOf])
+    ).toEqual([
+      ["decide", [], []],
+      ["calls", ["decide"], []],
+      ["reduce", ["decide", "calls"], []],
+    ]);
   });
 
   it.each(["limit", "failed", "cancelled", "skipped"] as const)(

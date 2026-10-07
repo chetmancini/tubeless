@@ -4,6 +4,7 @@ import type {
   PipelineDefinitionIdentity,
   PipelineDefinitionSnapshot,
   PipelineStepLifecycleStatus,
+  PipelineStepSkipReason,
   PipelineStepProgressDetail,
 } from "../core/pipeline.js";
 import type {
@@ -100,13 +101,21 @@ export interface StoredPipelineStep {
   outputSource?: "override" | "cache";
   /** One execution attempt; `retries` excludes initial `reportAttempt(1)` telemetry. */
   attempt?: StoredPipelineAttempt;
+  /** Planned required inputs, bounded like other trace lists. Absent when no plan was recorded. */
+  dependencies?: string[];
   description?: string;
   durationMs?: number;
   finishedAtMs?: number;
   id: string;
   name?: string;
   nestedPipeline?: StoredNestedPipeline;
+  /** Planned inputs passed only when their step produced an output. */
+  optionalDependencies?: string[];
   remote?: StoredRemote;
+  /** Planned failure gates: this step is skipped when one of them fails. */
+  skipAfterFailureOf?: string[];
+  /** Why a skipped step did not run; `policy` skips still publish an output. */
+  skipReason?: PipelineStepSkipReason;
   progress?: {
     completed: number;
     detailCount?: number;
@@ -134,6 +143,8 @@ export interface StoredPipelineRun {
   logCount: number;
   logs: StoredPipelineLog[];
   parentRunId?: string;
+  /** Parent-run step that started this run, when the trace recorded it. */
+  parentStepId?: string;
   pipelineId: string;
   runId: string;
   startedAtMs: number;

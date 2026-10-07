@@ -81,6 +81,28 @@ When several steps in a run are active, the run list shows a count such as
 “3 steps running” and the first three names, with a remaining count for larger groups.
 A single active step keeps its progress message.
 
+The **Graph** toggle beside the step timeline draws the selected run as a
+top-to-bottom graph and stays selected while you move between runs. Each circle is
+a step; arrows lead from a dependency to the step that consumes it. Running steps
+spin, and steps that finish while you watch pulse once: green with a check when
+completed, red with a cross when failed, and amber when cancelled. Skipped steps are
+gray and planned steps have a dashed outline. Solid arrows are required inputs and
+finer arrows are optional inputs. A dashed arrow is a candidate input whose consumer
+has not started; it turns solid while the consumer runs and once it has used the
+output. Dotted arrows are failure gates (`skipAfterFailureOf`) and turn red when
+the gate trips.
+
+Steps that start nested runs carry a count badge. A running step with nested runs
+expands in place and stays open after it finishes; select the badge to expand or
+collapse any step. Fan-out items,
+iterations, agent turns, and agent tool calls appear inside the expansion, and tool
+calls are labeled by tool. Nested runs can expand again to show their own steps, up
+to six levels deep and sixteen items per step; the run list shows the rest.
+Select a step, arrow, or nested run to inspect its inputs and outputs, progress,
+attempt, artifacts, and nested runs, or to open a nested run. Recordings made before
+dependencies were recorded show steps without arrows. Animations respect the
+reduced-motion setting.
+
 | Control       | What it does                                                                           | When available                                                                       |
 | ------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Preview plan  | Shows the selected steps and dry-run behavior without starting or recording a run      | A pipeline command is registered                                                     |
@@ -216,7 +238,11 @@ New trace files contain version 3 events with unique execution IDs and separate
 reusable correlation IDs. Readers also accept version 2 recordings. Repeated
 children retain an `iteration` relation with the owning run, wrapper step and
 attempt, and one-based index. Live progress retains up to 32 iteration groups;
-the child-run history retains every recorded iteration.
+the child-run history retains every recorded iteration. Children started by
+`fromPipeline`, `forEachPipeline`, or an agent pipeline tool record the parent
+step in `pipeline.started` `payload.parentStepId`, so Studio places them under
+the right step even when sibling steps share one child pipeline and one
+millisecond. Older recordings fall back to matching step execution windows.
 
 ## Definition history and comparison
 

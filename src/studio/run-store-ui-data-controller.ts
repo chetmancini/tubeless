@@ -28,7 +28,7 @@ export interface StudioDataInvalidation {
 }
 
 type StudioDataListener = (state: StudioDataState) => void;
-const DEFAULT_DETAIL_RETRY_MS = 1_200;
+export const DEFAULT_DETAIL_RETRY_MS = 1_200;
 
 function fingerprint(summary: StoredRunSummary): string {
   return [
