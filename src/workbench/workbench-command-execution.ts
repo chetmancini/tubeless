@@ -2,6 +2,7 @@ import type { PipelineContext } from "../core/pipeline.js";
 import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import { isAbortError } from "../utilities/abort.js";
 import { renderPipelineError } from "../render/render.js";
+import { causalPipelineErrors } from "../core/pipeline-diagnostics.js";
 import {
   isCliHelpRequested,
   isCliValidationError,
@@ -71,7 +72,7 @@ async function executePipelineCommandOperation(
       return toExitCode(error);
     }
     if (isPipelineExecutionError(error)) {
-      for (const pipelineError of error.result.errors) {
+      for (const pipelineError of causalPipelineErrors(error.result)) {
         io.stderr.write(`Error: ${renderPipelineError(pipelineError)}\n`);
       }
       return toExitCode(error);

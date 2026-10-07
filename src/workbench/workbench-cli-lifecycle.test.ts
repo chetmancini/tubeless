@@ -37,6 +37,8 @@ describe("workbench CLI lifecycle", () => {
     expect(executionExit).toBe(TUBELESS_WORKBENCH_EXIT_CODE.execution);
     expect(executionIo.errors.join("")).toContain("TUBELESS_STEP_FAILED");
     expect(executionIo.errors.join("")).toContain("intentional command failure");
+    // The fixture's requireOutputs finalizer failure is a consequence, not a second cause.
+    expect(executionIo.errors.join("")).not.toContain("Required pipeline outputs missing");
     expect(cancellationExit).toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
     expect(cancellationIo.errors.join("")).toContain("TUBELESS_RUN_CANCELLED");
   });

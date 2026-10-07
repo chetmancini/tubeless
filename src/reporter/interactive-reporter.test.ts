@@ -205,8 +205,10 @@ describe("createPipelineReporter", () => {
       } else {
         expect(screen.join("\n")).not.toContain("all good");
         expect(screen.slice(failedOutput)).toEqual(["fail check output:", "    nested detail"]);
-        expect(screen.slice(0, failedOutput)).toContain(
-          "  fail check: Child pipeline inner failed at probe: probe failed"
+        expect(screen.slice(0, failedOutput)).toContainEqual(
+          expect.stringMatching(
+            /^ {2}fail check \(\d+ms\): Child pipeline inner failed at probe: probe failed$/
+          )
         );
       }
     }
@@ -304,9 +306,7 @@ describe("createPipelineReporter", () => {
     expect(rendered).toContain("[████░░░░░░] 40% 4/10 records");
     expect(rendered).toContain("[██████████] 100% 12/10 finishing");
     expect(rendered).toMatch(/✓ load \(\d+ms\)/);
-    expect(rendered).toMatch(
-      /Pipeline interactive-test: done in \d+ms \(status=completed, steps=2, errors=0\)/
-    );
+    expect(rendered).toMatch(/Pipeline interactive-test completed in \d+ms · 2 steps/);
     expect(rendered.match(/\u001B\[\?25h/g)).toHaveLength(1);
     expect(fallbackLog.messages).toEqual([]);
   });
@@ -465,8 +465,58 @@ describe("createPipelineReporter", () => {
     await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
 
     const rendered = output.chunks.join("");
-    expect(rendered).toContain("fail fail: first line second line");
+    expect(rendered).toMatch(/fail fail \(\d+ms\): first line second line/);
     expect(rendered).not.toContain("first line\nsecond line");
+  });
+
+  it("names pending dependencies, explains dependency skips, and counts outcomes", async () => {
+    const output = captureOutput(true, 100);
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      mode: "interactive",
+      output,
+      refreshIntervalMs: 10_000,
+      symbols: "ascii",
+    });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let started = 0;
+    let bothStarted!: () => void;
+    const running = new Promise<void>((resolve) => (bothStarted = resolve));
+    const begin = async (): Promise<void> => {
+      if (++started === 2) bothStarted();
+      await released;
+    };
+    const { step } = createSteps();
+    const lint = step("lint", {
+      run: async () => {
+        await begin();
+        throw new Error("lint failed");
+      },
+    });
+    const test = step("test", { run: begin });
+    const gate = step("gate", { dependsOn: [lint, test], run: () => undefined });
+    const pipeline = definePipeline({ id: "gated", steps: [lint, test, gate] });
+
+    const run = pipeline.run(
+      {},
+      { continueOnError: true, maxConcurrency: 2 },
+      { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log }
+    );
+    await running;
+    const waiting = renderTerminal(output.chunks.join(""), 100);
+    release();
+    await run;
+    reporter.dispose();
+
+    expect(waiting).toContain("  . gate waiting on lint, test");
+    expect(waiting.some((line) => line.startsWith("Pipeline gated - 0/3 done - "))).toBe(true);
+    const screen = renderTerminal(output.chunks.join(""), 100);
+    expect(screen).toContainEqual(
+      expect.stringMatching(/^Pipeline gated failed in \d+ms - 3 steps, 1 failed, 1 skipped$/)
+    );
+    expect(screen).toContain("  - gate (not run: lint failed)");
   });
 
   it("renders a step's display name instead of its id", async () => {
@@ -553,6 +603,26 @@ describe("createPipelineReporter", () => {
     expect(rendered).toContain("entry red\n");
     expect(rendered).not.toContain("pwned");
     expect(rendered).not.toContain("\u001B[31m");
+  });
+
+  it("keeps long log lines intact in scrollback", async () => {
+    const output = captureOutput(true, 100);
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      mode: "interactive",
+      output,
+      refreshIntervalMs: 10_000,
+      symbols: "ascii",
+    });
+    const line = `${"a".repeat(3000)}TAIL`;
+    const { step } = createSteps();
+    const log = step("log", { run: (_inputs, context) => context.log.log(line) });
+    const pipeline = definePipeline({ id: "logging", steps: [log], finalize: () => undefined });
+
+    await pipeline.run({}, undefined, { cwd: "/tmp", hooks: reporter.hooks, log: reporter.log });
+
+    expect(output.chunks.join("")).toContain(`[log] ${line}\n`);
   });
 
   it("sanitizes pipeline ids and policy-skip messages", async () => {

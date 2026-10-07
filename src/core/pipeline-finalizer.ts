@@ -1,6 +1,7 @@
 import type { AnyStep, StepOutput } from "./pipeline-steps.js";
 import type { StepsOptions } from "./pipeline-definition.js";
 import type { PipelineExecutionContext } from "./pipeline-types.js";
+import { REQUIRED_OUTPUTS_MISSING_CODE } from "./pipeline-diagnostics.js";
 
 const REQUIRED_FINALIZER_OUTPUTS: unique symbol = Symbol("tubeless.requiredFinalizerOutputs");
 
@@ -54,7 +55,10 @@ export function requireOutputs<const TRequiredSteps extends readonly AnyStep[], 
       (stepId) => !Object.prototype.hasOwnProperty.call(outputs, stepId)
     );
     if (missingStepIds.length > 0) {
-      throw new Error(`Required pipeline outputs missing: ${missingStepIds.join(", ")}`);
+      throw Object.assign(
+        new Error(`Required pipeline outputs missing: ${missingStepIds.join(", ")}`),
+        { code: REQUIRED_OUTPUTS_MISSING_CODE }
+      );
     }
     // SAFETY: every required step id was verified present above, so the partial
     // outputs contain all required keys and are a complete required-outputs map.

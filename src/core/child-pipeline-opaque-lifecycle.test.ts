@@ -90,8 +90,8 @@ describe("opaque child adapter: lifecycle", () => {
     });
 
     expect(renderedAfterChild).not.toContain("\u001B[?25h");
-    expect(renderedAfterChild).not.toContain("Pipeline reporter-child: done");
-    expect(renderedAfterParent).toContain("Pipeline reporter-parent: done");
+    expect(renderedAfterChild).not.toContain("Pipeline reporter-child completed");
+    expect(renderedAfterParent).toContain("Pipeline reporter-parent completed");
     expect(renderedAfterParent.match(/\u001B\[\?25h/g)).toHaveLength(1);
   });
 

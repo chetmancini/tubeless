@@ -382,6 +382,23 @@ bunx tubeless run import -- --source rows.txt --dry-run
 A dry run executes safe handlers and custom previews. To inspect selection
 without executing any handlers, use `tubeless plan` instead.
 
+## Live progress
+
+Interactive terminals show a progress tree that is redrawn in place. The header
+counts finished steps and shows elapsed time, such as
+`Pipeline check · 6/10 done · 12.4s`. Steps that haven't started list the
+dependencies they are still waiting on (`waiting on lint, test`). Failed steps
+show their duration and error. Steps skipped because of a dependency name it,
+such as `gate (not run: format failed)`. At completion the header becomes a
+summary, such as `Pipeline check failed in 15.2s · 10 steps, 1 failed, 1 skipped`.
+Steps left out by `--step` or `--target` are not counted.
+
+When a run fails, the workbench prints each causal error once. A `requireOutputs`
+failure is left out when every step without an output failed, was cancelled, or
+was skipped because of a failure, since it only repeats that failure. It is
+printed when any step was filtered out or skipped by a dry run, even if another
+step also failed, because that step may be the missing output.
+
 ## Live log pane
 
 Interactive terminals at least 120 columns wide and 8 rows tall show a small

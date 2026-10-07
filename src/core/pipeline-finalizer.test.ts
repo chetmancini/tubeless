@@ -7,6 +7,7 @@ import {
   type PipelineResult,
 } from "./pipeline.js";
 import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
+import { causalPipelineErrors, REQUIRED_OUTPUTS_MISSING_CODE } from "./pipeline-diagnostics.js";
 import { standardSchema, thrownDefinitionErrors } from "./pipeline.test-support.js";
 
 describe("pipeline finalizers", () => {
@@ -90,11 +91,51 @@ describe("pipeline finalizers", () => {
       expect(run).toMatchObject({ status: "failed", finalized: false });
       expect(run.errors[0]).toMatchObject({
         message: "Required pipeline outputs missing: write",
+        sourceCode: REQUIRED_OUTPUTS_MISSING_CODE,
         stepId: PIPELINE_FINALIZE_STEP_ID,
       });
+      // With no causal error to show instead, the derived failure stays visible.
+      expect(causalPipelineErrors(run)).toEqual(run.errors);
       await expect(pipeline.runOrThrow({}, controls)).rejects.toThrow();
     }
     await expect(pipeline.runOrThrow({})).resolves.toBe(42);
+  });
+
+  it("hides a missing-output failure only when a step failure explains it", async () => {
+    const { step } = createSteps();
+    const broken = step("broken", {
+      run: (): string => {
+        throw new Error("broken failed");
+      },
+    });
+    const missing = step("missing", { dryRun: "skip", run: () => "published" });
+    const downstream = step("downstream", { dependsOn: [missing], run: () => "published" });
+    const gated = step("gated", { dependsOn: [broken], run: () => "published" });
+    const finalizerError = { sourceCode: REQUIRED_OUTPUTS_MISSING_CODE };
+
+    // The dry run, not the unrelated failure, left `downstream` unpublished.
+    const independent = await definePipeline({
+      id: "independent",
+      steps: [broken, missing, downstream],
+      finalize: requireOutputs([downstream], (outputs) => outputs.downstream),
+    }).run({}, { continueOnError: true, dryRun: true });
+    expect(independent.errors).toEqual([
+      expect.objectContaining({ stepId: "broken" }),
+      expect.objectContaining(finalizerError),
+    ]);
+    expect(causalPipelineErrors(independent)).toEqual(independent.errors);
+
+    // `gated` was skipped because `broken` failed; the finalizer error repeats that.
+    const derived = await definePipeline({
+      id: "derived",
+      steps: [broken, gated],
+      finalize: requireOutputs([gated], (outputs) => outputs.gated),
+    }).run({}, { continueOnError: true });
+    expect(derived.errors).toEqual([
+      expect.objectContaining({ stepId: "broken" }),
+      expect.objectContaining(finalizerError),
+    ]);
+    expect(causalPipelineErrors(derived)).toEqual([derived.errors[0]]);
   });
 
   it("checks result contracts, step membership, and target compatibility", () => {

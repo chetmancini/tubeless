@@ -4,6 +4,7 @@ import type {
   PipelineHooks,
   PipelineLogger,
   PipelinePlan,
+  PipelinePlanStep,
   PipelineRun,
   PipelineStepProgress,
   PipelineStepStatus,
@@ -25,6 +26,8 @@ import { safeTerminalLog, safeTerminalText } from "./terminal-text.js";
 
 /** Failed-step lines retained when they were only visible in the log pane. */
 const PANE_ONLY_LOG_LIMIT = 50;
+/** Characters kept per log line in pane and failed-output buffers. */
+const MAX_RETAINED_LOG_LINE = 2048;
 
 /** Rendering mode selected for pipeline lifecycle reporting. */
 export type PipelineReporterMode = "auto" | "interactive" | "plain";
@@ -165,11 +168,42 @@ function renderProgressDetail(
   return `${"  ".repeat(depth + 2)}${symbol} ${paintedBody}${progress}`;
 }
 
+/** Read-only view of sibling step rows, used to explain waits and skips. */
+interface StepLookup {
+  label(stepId: string): string;
+  status(stepId: string): StepState["status"] | undefined;
+}
+
+const WAITING_NAME_LIMIT = 3;
+
+function skipDetail(state: Extract<StepState, { status: "skipped" }>, lookup: StepLookup): string {
+  if (state.dependencyId === undefined) return safeTerminalText(state.message ?? state.reason);
+  const dependency = lookup.label(state.dependencyId);
+  const outcome = lookup.status(state.dependencyId);
+  return outcome === "failed" || outcome === "cancelled" || outcome === "skipped"
+    ? `not run: ${dependency} ${outcome}`
+    : `${state.reason}: ${dependency}`;
+}
+
+function waitingDetail(step: PipelinePlanStep, lookup: StepLookup): string {
+  const pending = [...new Set([...step.dependencies, ...step.optionalDependencies])].filter(
+    (id) => {
+      const status = lookup.status(id);
+      return status === "planned" || status === "running";
+    }
+  );
+  if (pending.length === 0) return "waiting";
+  const shown = pending.slice(0, WAITING_NAME_LIMIT).map((id) => lookup.label(id));
+  const more = pending.length - shown.length;
+  return `waiting on ${shown.join(", ")}${more > 0 ? ` +${more} more` : ""}`;
+}
+
 function renderStep(
   state: StepState,
   theme: ReporterTheme,
   spinner: string,
-  progressBarWidth: number
+  progressBarWidth: number,
+  lookup: StepLookup
 ): string[] {
   const { step } = state;
   const displayName =
@@ -198,9 +232,9 @@ function renderStep(
       ];
     case "failed":
       return [
-        `  ${theme.styled.fail(theme.symbols.fail)} ${displayName}: ${safeTerminalText(
-          state.error.message
-        )}`,
+        `  ${theme.styled.fail(theme.symbols.fail)} ${displayName} ${theme.styled.duration(
+          `(${formatDurationMs(state.finishedAtMs - state.startedAtMs)})`
+        )}: ${safeTerminalText(state.error.message)}`,
       ];
     case "cancelled":
       return [
@@ -211,12 +245,14 @@ function renderStep(
     case "skipped":
       return [
         `  ${theme.styled.skip(theme.symbols.skip)} ${displayName} ${theme.styled.duration(
-          `(${safeTerminalText(state.message ?? state.reason)})`
+          `(${skipDetail(state, lookup)})`
         )}`,
       ];
     case "planned":
       return [
-        `  ${theme.styled.description(theme.symbols.pending)} ${displayName} ${theme.styled.description("waiting")}`,
+        `  ${theme.styled.description(theme.symbols.pending)} ${displayName} ${theme.styled.description(
+          waitingDetail(step, lookup)
+        )}`,
       ];
   }
 }
@@ -251,6 +287,41 @@ function createInteractiveReporter<TResult>(
   let trailingFlush: ReturnType<typeof setTimeout> | undefined;
   let exitListener: (() => void) | undefined;
   let resizeOutput: NodeJS.WriteStream | undefined;
+  let pipelineStartedAtMs = 0;
+
+  const separator = theme.unicodeEnabled ? " · " : " - ";
+  const lookup: StepLookup = {
+    label: (stepId) => stepLabel(stepId),
+    status: (stepId) => steps.get(stepId)?.status,
+  };
+
+  const liveHeader = (current: PipelinePlan): string => {
+    let done = 0;
+    for (const state of steps.values()) {
+      if (state.status !== "planned" && state.status !== "running") done += 1;
+    }
+    return [
+      `Pipeline ${safeTerminalText(current.pipelineId)}`,
+      `${done}/${steps.size} done`,
+      elapsedToken(pipelineStartedAtMs),
+      ...(current.dryRun ? ["dry run"] : []),
+    ].join(separator);
+  };
+
+  const summaryHeader = (run: PipelineRun<TResult>): string => {
+    // Steps outside the selection are not part of what the user asked to run.
+    const counted = run.steps.filter(
+      (step) => !(step.status === "skipped" && step.reason === "filtered")
+    );
+    const outcomes = (["failed", "cancelled", "skipped"] as const).flatMap((status) => {
+      const count = counted.filter((step) => step.status === status).length;
+      return count > 0 ? [`${count} ${status}`] : [];
+    });
+    const total = `${counted.length} ${counted.length === 1 ? "step" : "steps"}`;
+    return `Pipeline ${safeTerminalText(run.pipelineId)} ${run.status} in ${formatDurationMs(
+      run.finishedAtMs - run.startedAtMs
+    )}${separator}${[total, ...outcomes].join(", ")}`;
+  };
 
   const frameLines = (): string[] => {
     if (!plan) return [];
@@ -259,8 +330,8 @@ function createInteractiveReporter<TResult>(
       const header = result
         ? options.logSummary === false
           ? `Pipeline ${safeTerminalText(result.pipelineId)}`
-          : `Pipeline ${safeTerminalText(result.pipelineId)}: done in ${formatDurationMs(result.finishedAtMs - result.startedAtMs)} (status=${result.status}, steps=${result.steps.length}, errors=${result.errors.length})`
-        : `Pipeline ${safeTerminalText(plan.pipelineId)} (${plan.steps.length} steps, dryRun=${plan.dryRun})`;
+          : summaryHeader(result)
+        : liveHeader(plan);
       lines.push(
         result?.status === "completed"
           ? theme.styled.complete(header)
@@ -270,7 +341,7 @@ function createInteractiveReporter<TResult>(
       );
     }
     for (const state of steps.values()) {
-      lines.push(...renderStep(state, theme, SPINNER_TOKEN, progressBarWidth));
+      lines.push(...renderStep(state, theme, SPINNER_TOKEN, progressBarWidth, lookup));
       for (const detail of state.details ?? []) {
         lines.push(
           renderProgressDetail(detail, theme, SPINNER_TOKEN, progressBarWidth, state.status)
@@ -421,7 +492,7 @@ function createInteractiveReporter<TResult>(
         : level === "warn"
           ? `${theme.styled.skip("!")} `
           : "";
-    const bodyLines = `${prefix}${safeRendered}`.split("\n").map((line) => line.slice(0, 2048));
+    const bodyLines = `${prefix}${safeRendered}`.split("\n");
     const source =
       stepId === undefined ? "" : `${theme.styled.description(`[${stepLabel(stepId)}]`)} `;
     const lines = bodyLines.map((line) => `${source}${line}`);
@@ -430,12 +501,14 @@ function createInteractiveReporter<TResult>(
       output.write(text);
       return;
     }
+    // Retained copies are bounded; scrollback keeps the full line.
+    const bounded = (line: string): string => line.slice(0, MAX_RETAINED_LOG_LINE);
     // Retain a bounded tail for the pane, including when the terminal is resized.
-    recentLogs.push(...lines.slice(-8));
+    recentLogs.push(...lines.slice(-8).map(bounded));
     recentLogs.splice(0, Math.max(0, recentLogs.length - 8));
     if (logPaneVisible()) {
       // The pane disappears with the final frame; keep what never reached scrollback.
-      if (stepId !== undefined) retainPaneOnlyLines(stepId, bodyLines);
+      if (stepId !== undefined) retainPaneOnlyLines(stepId, bodyLines.map(bounded));
     } else {
       ensureTicker().writeLog(text);
     }
@@ -479,6 +552,7 @@ function createInteractiveReporter<TResult>(
   const hooks: PipelineHooks<TResult> = {
     onPipelineStart: (nextPlan) => {
       plan = nextPlan;
+      pipelineStartedAtMs = Date.now();
       for (const step of nextPlan.steps) {
         steps.set(step.id, { pipelineId: nextPlan.pipelineId, status: "planned", step });
       }
