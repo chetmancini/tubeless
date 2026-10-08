@@ -221,8 +221,8 @@ or servers without strict support.
 Once completed history exceeds `compactAfterBytes`, or a complete decision would exceed
 the request limit, the adapter requests
 [on-demand compaction](https://platform.claude.com/docs/en/build-with-claude/compaction-on-demand)
-with the same system prompt and tools. It replaces the history with the signed summary
-block followed by a short continuation message. The `compact-2026-09-04` beta header is
+with the same system prompt and tools. It replaces the history with the returned assistant
+message, holding the signed summary block unchanged, followed by a short user continuation message. The `compact-2026-09-04` beta header is
 sent only on that request and on later requests carrying the block. If no summary comes
 back, the decision continues with the uncompacted history and the request limit still
 applies. Set `compactAfterBytes: null` for servers or models without compaction.

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineModelAgent } from "./agent.js";
 import { anthropicModel } from "./anthropic.js";
+import { anthropicTool } from "./anthropic-protocol.js";
 
 const directories: string[] = [];
 async function workspace() {
@@ -199,10 +200,8 @@ describe("Anthropic model", () => {
     const decision = body(fetcher, 2);
     expect(headers(fetcher, 2)["anthropic-beta"]).toBe("compact-2026-09-04");
     expect(decision.messages).toEqual([
-      {
-        role: "user",
-        content: [block, { type: "text", text: "Continue the task from this summary." }],
-      },
+      { role: "assistant", content: [block] },
+      { role: "user", content: "Continue the task from this summary." },
     ]);
   });
 
@@ -351,5 +350,31 @@ describe("Anthropic model", () => {
     expect(result.status).toBe("failed");
     expect(result.errors[0]!.message).toContain("$ref is unsupported");
     expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+it("moves array constraints that strict mode rejects into descriptions", () => {
+  const schema = {
+    type: "array",
+    items: { type: "string" },
+    minItems: 1,
+    contains: { const: "x" },
+    minContains: 1,
+    maxContains: 2,
+    maxItems: 3,
+  };
+  const tool = anthropicTool("custom", "Custom", "input", schema, true);
+  const input = tool.input_schema.properties.input as Record<string, unknown>;
+  expect(input).toEqual({
+    type: "array",
+    items: { type: "string" },
+    minItems: 1,
+    description: expect.any(String),
+  });
+  expect(JSON.parse((input.description as string).replace("Constraints: ", ""))).toEqual({
+    maxItems: 3,
+    contains: { const: "x" },
+    minContains: 1,
+    maxContains: 2,
   });
 });
