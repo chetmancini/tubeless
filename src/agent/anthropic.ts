@@ -200,12 +200,11 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
         typeof block.content === "string" &&
         typeof block.signature === "string"
       ) {
-        // The summary replaces every message it covered; a user turn must follow tool results.
+        // The returned assistant message replaces every message it covered, unchanged.
+        // The summarized history ended with tool results, so a user turn must follow it.
         messages = [
-          {
-            role: "user",
-            content: [block, { type: "text", text: "Continue the task from this summary." }],
-          },
+          { role: "assistant", content: [block] },
+          { role: "user", content: "Continue the task from this summary." },
         ];
         context.log.log("Compacted agent conversation");
       } else {

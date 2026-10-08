@@ -16,6 +16,9 @@ const NUMERIC_AND_LENGTH = [
   "minProperties",
   "maxProperties",
   "uniqueItems",
+  "contains",
+  "minContains",
+  "maxContains",
 ];
 const FORMATS = new Set([
   "date-time",
