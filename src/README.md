@@ -92,6 +92,11 @@ Run `make check` after changes; it builds before checking these boundaries.
   progress. It invokes the existing child runner; it does not reschedule the
   parent DAG or own a separate lifecycle engine.
 
+- `core/pipeline-steps.ts` owns `createSteps` and its typed overloads per step kind.
+  Definition types live in `core/pipeline-step-types.ts`; runtime construction for
+  artifacts, child, mapped, remote and iteration steps lives in
+  `core/pipeline-step-builders.ts`, which receives erased definitions.
+
 - `core/pipeline-execute.ts` coordinates a run: options validation, scheduling,
   step attempts, stop policy and finalization.
 - `core/pipeline-execution-error.ts` owns execution and child error classes,
@@ -203,6 +208,11 @@ and interactive reporter orchestration.
   retain matching definition metadata without remounting its explorer.
   `run-store/run-history.ts` also attributes each nested run to the parent step that
   started it (`origin`), using iteration and agent-call links before pipeline matches.
+- `studio/run-store-ui-client.tsx` composes the browser app: view selection, URL
+  state, live refresh and history clearing. Feature views live beside it:
+  `run-store-ui-runs.tsx` (run list and detail), `run-store-ui-pipelines.tsx`
+  (command catalog and plan preview), and `run-store-ui-launch.tsx` (launch form,
+  value serialization and modal). `run-store-ui-common.tsx` holds small shared pieces.
 - `studio/run-store-ui-steps.tsx` owns step presentation shared by the timeline and
   graph. `studio/run-store-ui-graph-layout.ts` is a pure layered DAG layout;
   `studio/run-store-ui-graph.tsx` builds the run graph scene from planned step
