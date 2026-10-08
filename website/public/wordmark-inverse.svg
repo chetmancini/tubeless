@@ -1,8 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 72" fill="none" role="img" aria-label="Tubeless">
   <defs>
     <style>
-      @import url("https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700&amp;display=swap");
-      .name { font: 700 47px "Big Shoulders Display", "Arial Narrow", Impact, sans-serif; letter-spacing: 5px; }
+      .name { font: 700 47px "Arial Narrow", Impact, sans-serif; letter-spacing: 5px; }
     </style>
   </defs>
   <g transform="translate(8 8) scale(2)">
