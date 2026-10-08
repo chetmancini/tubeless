@@ -192,6 +192,87 @@ describe("Cloud HTTP client", () => {
     }
   });
 
+  it.each(["input", "result"])(
+    "rejects overflowing numeric literals in run response %s",
+    async (field) => {
+      const body = JSON.stringify({ ...run, [field]: { nested: ["overflow"] } }).replace(
+        '"overflow"',
+        "1e400"
+      );
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockImplementation(
+          async () => new Response(body, { headers: { "Content-Type": "application/json" } })
+        );
+      const client = createCloudClient({ host, token: "credential", fetch: fetcher });
+      await expect(client.getRun("workspace", "run")).rejects.toMatchObject({
+        code: "invalid_response",
+        status: 200,
+      });
+      await expect(
+        client.run("workspace", { pipelineId: "pipeline", input: {} }, "key")
+      ).rejects.toMatchObject({ code: "invalid_response", status: 200 });
+    }
+  );
+
+  it.each(["input", "result"])("rejects excessive nesting in run response %s", async (field) => {
+    const raw = '{"a":'.repeat(129) + "1" + "}".repeat(129);
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => json({ ...run, [field]: JSON.parse(raw) }));
+    const client = createCloudClient({ host, token: "credential", fetch: fetcher });
+    await expect(client.getRun("workspace", "run")).rejects.toMatchObject({
+      code: "invalid_response",
+    });
+  });
+
+  it.each([null, false, 0, "", [1, { nested: "value" }], { a: 1 }])(
+    "preserves valid JSON run result %j",
+    async (result) => {
+      const response = { ...run, result };
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(response));
+      const client = createCloudClient({ host, token: "credential", fetch: fetcher });
+      expect(await client.getRun("workspace", "run")).toEqual(response);
+    }
+  );
+
+  it("allows input and result at the nesting boundary, including absent result", async () => {
+    const raw = '{"a":'.repeat(128) + "1" + "}".repeat(128);
+    const response = { ...run, input: JSON.parse(raw), result: JSON.parse(raw) };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(response));
+    const client = createCloudClient({ host, token: "credential", fetch: fetcher });
+    expect(JSON.stringify(await client.getRun("workspace", "run"))).toBe(JSON.stringify(response));
+    const { result: _result, ...withoutResult } = response;
+    fetcher.mockResolvedValue(json(withoutResult));
+    expect(await client.getRun("workspace", "run")).toEqual(withoutResult);
+  });
+
+  it("rejects unrepresentable Date timestamps and accepts the inclusive maximum", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const client = createCloudClient({ host, token: "credential", fetch: fetcher });
+    for (const invalid of [
+      { ...run, logs: [{ ...run.logs[0], time: 8.64e15 + 1 }] },
+      { ...run, createdAt: 8.64e15 + 1 },
+      { ...run, startedAt: 8.64e15 + 1 },
+      { ...run, finishedAt: 8.64e15 + 1 },
+      {
+        ...run,
+        schedule: { id: "schedule", name: "Schedule", timezone: "UTC", scheduledAt: 8.64e15 + 1 },
+      },
+    ]) {
+      fetcher.mockResolvedValue(json(invalid));
+      await expect(client.getRun("workspace", "run")).rejects.toMatchObject({
+        code: "invalid_response",
+      });
+    }
+    fetcher.mockResolvedValue(json({ ...session, expiresAt: 8.64e15 + 1 }));
+    await expect(client.session()).rejects.toMatchObject({ code: "invalid_response" });
+    const maximum = { ...run, logs: [{ ...run.logs[0], time: 8.64e15 }] };
+    fetcher.mockResolvedValue(json(maximum));
+    const accepted = await client.getRun("workspace", "run");
+    expect(new Date(accepted.logs[0].time).toISOString()).toBe("+275760-09-13T00:00:00.000Z");
+  });
+
   it("preserves stable service errors while removing terminal controls and the active token", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       json(

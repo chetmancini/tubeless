@@ -249,6 +249,12 @@ export async function runCloud(
           return writeUsageError(io, "Pass a nonempty workspace ID.", CLOUD_USAGE);
         if (values.id !== undefined && !values.id.trim())
           return writeUsageError(io, "Pass a nonempty pipeline ID.", CLOUD_USAGE);
+        if (values["input-file"] === "")
+          return writeUsageError(
+            io,
+            "Pass a nonempty --input-file path, or - for stdin.",
+            CLOUD_USAGE
+          );
         const managed = cloudSignal(io);
         let admitted: { id: string; url: string } | undefined;
         try {
@@ -333,9 +339,10 @@ export async function runCloud(
               `Multiple pipelines match ${JSON.stringify(selector)}. Choose --id <id>:\n${matches.map((item) => `${item.slug}: ${item.name} (${item.id})`).join("\n")}`
             );
           const pipeline = matches[0]!;
-          const input = values["input-file"]
-            ? await boundedInput(values["input-file"], io.cwd, dependencies, managed.signal)
-            : {};
+          const input =
+            values["input-file"] !== undefined
+              ? await boundedInput(values["input-file"], io.cwd, dependencies, managed.signal)
+              : {};
           if (managed.signal.aborted) throw new Error("Run admission interrupted.");
           const key = randomUUID();
           let run: CliRun;

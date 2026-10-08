@@ -166,8 +166,12 @@ function optionalText(value: unknown): boolean {
   return value === undefined || text(value, true);
 }
 
-function optionalNumber(value: unknown): boolean {
-  return value === undefined || number(value);
+function timestamp(value: unknown): value is number {
+  return number(value) && value <= 8.64e15;
+}
+
+function optionalTimestamp(value: unknown): boolean {
+  return value === undefined || timestamp(value);
 }
 
 function hasTexts(value: Record<string, unknown>, fields: readonly string[]): boolean {
@@ -191,8 +195,7 @@ function parseResponse<T>(value: unknown, valid: boolean, name: string): T {
 export function parseCliSession(value: unknown): CliSession {
   const valid =
     isCloudObject(value) &&
-    number(value.expiresAt) &&
-    value.expiresAt <= 8.64e15 &&
+    timestamp(value.expiresAt) &&
     isCloudObject(value.user) &&
     hasTexts(value.user, ["id", "login", "name", "email", "avatar"]) &&
     text(value.user.id) &&
@@ -228,16 +231,18 @@ export function parseCliRun(value: unknown): CliRun {
     ) &&
     oneOf(value.status, RUN_STATUSES) &&
     oneOf(value.trigger, ["manual", "push", "rerun", "schedule"]) &&
-    number(value.createdAt) &&
+    timestamp(value.createdAt) &&
     number(value.durationMs) &&
-    optionalNumber(value.startedAt) &&
-    optionalNumber(value.finishedAt) &&
+    optionalTimestamp(value.startedAt) &&
+    optionalTimestamp(value.finishedAt) &&
     optionalText(value.error) &&
     isCloudObject(value.input) &&
+    isCloudJsonValue(value.input) &&
+    (value.result === undefined || isCloudJsonValue(value.result)) &&
     (value.schedule === undefined ||
       (isCloudObject(value.schedule) &&
         hasTexts(value.schedule, ["id", "name", "timezone"]) &&
-        number(value.schedule.scheduledAt))) &&
+        timestamp(value.schedule.scheduledAt))) &&
     Array.isArray(value.steps) &&
     value.steps.every(
       (step: unknown) =>
@@ -254,7 +259,7 @@ export function parseCliRun(value: unknown): CliRun {
     value.logs.every(
       (log: unknown) =>
         isCloudObject(log) &&
-        number(log.time) &&
+        timestamp(log.time) &&
         oneOf(log.level, ["info", "warn", "error"]) &&
         text(log.message, true)
     ) &&

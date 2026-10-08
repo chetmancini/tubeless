@@ -113,6 +113,18 @@ describe("Cloud remote commands", () => {
     expect(await runCloud(["run", "--help"], captureIo("/detached"), dependencies)).toBe(0);
     expect(dependencies.calls).toEqual([]);
   });
+
+  it.each([["--input-file", ""], ["--input-file="]])(
+    "rejects an explicitly empty input-file path before HTTP: %j",
+    async (...flags) => {
+      const dependencies = service();
+      const io = captureIo("/detached");
+      expect(await runCloud(["run", pipeline.slug, ...flags], io, dependencies)).toBe(1);
+      expect(dependencies.calls).toHaveLength(0);
+      expect(io.errors.join("")).toContain("nonempty --input-file path");
+      expect(io.output.join("")).toBe("");
+    }
+  );
   it("runs deployed code without executing a side-effecting local module", async () => {
     const root = await fixture();
     const marker = path.join(root, "unexpected.txt");

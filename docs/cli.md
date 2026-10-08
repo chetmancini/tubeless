@@ -602,7 +602,8 @@ loaded, uploaded or synchronized. Deployment and version management remain a
 separate workflow.
 
 Inputs are JSON objects up to 64 KB, with no local schema inference. Omitted input
-is `{}`. Use `--input-file -` for stdin, or a regular JSON file. Arrays, null,
+is `{}`. Use `--input-file -` for stdin, or a regular JSON file. An explicitly
+empty file path is a usage error. Arrays, null,
 scalars, malformed JSON and numbers that overflow to infinity fail before admission.
 Input supports at most 128 levels of objects and arrays, counting the root object.
 Input must fit the limit after
@@ -625,6 +626,9 @@ stderr. Foreground run JSON is the final run; detached JSON is its admission
 snapshot. `logs --follow --json` waits and returns its terminal retained snapshot.
 Human output neutralizes terminal and bidirectional controls in remote text;
 JSON output preserves the original fields.
+Run response input and result fields must contain finite JSON values within the
+same nesting limit. Invalid service payloads or out-of-range timestamps fail
+response validation before output.
 
 Cloud exit codes use the existing CLI codes: 0 success or detached admission,
 1 usage, 2 credentials/workspace selection/transport, 4 invalid JSON or request
