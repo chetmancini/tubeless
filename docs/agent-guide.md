@@ -32,106 +32,22 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 ## Choose pipeline features
 
-- Add inert `metadata` (`tags`, `owner`, `domain`, `annotations`) for discovery.
-  Use `querySteps(plan, query)`, `inspect --tag/--owner/--domain`, or
-  `toMermaid({ query })` to find steps; queries never select execution.
-  Metadata is bounded, copied, frozen, and isolated across child pipelines.
-  Definitions carrying metadata use identity version 3. Document v1 rejects
-  step/pipeline metadata. Read [graph metadata](./graph-metadata.md) and adapt
-  [the recipe](../examples/graph-metadata.ts).
+Start with steps and dependencies; the later sections are independent and can be
+read when a pipeline needs them.
 
-- For a general workspace agent, use `defineModelAgent({ id, model })` from
-  `tubeless/agent` with `openaiModel()` from `tubeless/agent/openai`. It supplies
-  task/answer schemas, a customizable coding prompt, startup AGENTS.md discovery
-  from the physical workspace directory, shared by the model and all tool calls,
-  and per-run conversation ownership. The optional provider adapter retains native
-  history and compacts it before subsequent decisions. The prompt requires project-guidance
-  reads in a separate turn before file operations or task commands in their scope;
-  filename discovery may precede them, while optional exploration follows them.
-  Add `instructions`, custom
-  `tools`, or tighter `limits` as needed; the OpenAI adapter requires inline tool
-  descriptors with strict object constraints, validated before HTTP. Large batches
-  get explicitly marked model-visible previews; the harness retains full outcomes.
-  Read [the model-agent contract](./agents.md#default-model-backed-agent)
-  and adapt [the minimal recipe](../examples/agent-model.ts). The OpenAI adapter omits
-  reasoning settings by default; the coding recipe and live evaluations explicitly
-  request `reasoningEffort: "high"`, which requires a model that supports that setting.
-  Use `bun run eval:agent`
-  for opt-in paid workspace evaluations; routine CI stays credential-free.
+- [Steps and dependencies](#steps-and-dependencies)
+- [Concurrency](#concurrency)
+- [Caching and artifacts](#caching-and-artifacts)
+- [Child pipelines and iteration](#child-pipelines-and-iteration)
+- [Remote work and worker threads](#remote-work-and-worker-threads)
+- [Run inside a host engine](#run-inside-a-host-engine)
+- [Projects and typed wrappers](#projects-and-typed-wrappers)
+- [Commands and the workbench CLI](#commands-and-the-workbench-cli)
+- [Declarative documents](#declarative-documents)
+- [Graph metadata](#graph-metadata)
+- [Agents](#agents)
 
-- Use `defineAgent`, `defineTool`, and `pipelineTool` from `tubeless/agent` for an in-process
-  decision loop over registered handlers, pipelines, and child agents. Read [agents](./agents.md) and
-  adapt the credential-free [scripted recipe](../examples/agent.ts) or the
-  [OpenAI recipe](../examples/agent-openai.ts) for a real provider callback. Keep model
-  requests and prompts in `decide`; validate every tool input/output and the final
-  result. Return `continue` with a nonempty batch or `finish` with a raw result.
-  Every agent includes `read`, `write`, `edit`, `bash`, `list`, and `search`.
-  `tools` adds capabilities or replaces defaults by name; narrow reducer outcomes
-  by `ok` and `tool`. Paths resolve from the run cwd. Follow the
-  [workspace recipe](../examples/agent-workspace.ts) for real file edits and shell checks.
-  Writes and edits stage complete files before atomic replacement, requiring a writable
-  destination directory and permission to preserve the original owner/group. These
-  permission failures leave the original intact; there is no in-place fallback. Writes follow symlinks even
-  when the target must be created. Bash bounds
-  pipe draining during cancellation; escaped descendants may outlive the tool.
-  List and search order entries by filename before applying caps. Directory
-  searches retain matches when descendants become unavailable and count skipped entries.
-  State is copied and frozen per initialization/reduction. Register children with
-  `pipelineTool`; reuse their options schema or supply `inputSchema` and
-  `mapOptions` together. Follow the [delegation recipe](../examples/agent-delegation.ts).
-  Calls, decisions, depth, and leaf concurrency obey every ancestor limit; turns
-  are local. Child options are prevalidated once for the whole batch. Add
-  `durability: { store, key }` and an explicit `implementationVersion` for checkpointed
-  decisions, outcomes, child state and budgets. Live children that inherit recovery
-  also require an explicit `implementationVersion`; bump it when their semantics
-  change. Reuse the key and inputs to resume;
-  use a new key for changed semantics. See [durable execution](./agents.md#durable-execution)
-  and the [SQLite recipe](../examples/agent-durable.ts). Running unsafe calls become
-  recoverable interruption outcomes; mark only repeatable or idempotent tools
-  `replay: "safe"`. Supply an `AgentEnvironment` for remote guidance, files
-  and commands; children inherit it. The local adapter's `node:local` authority
-  id is host-independent, so a recreated container or pod resumes; pass `id` to
-  name another authority. Custom tools receive `context.environment`.
-  Environment operations preserve signal cancellation across SDK-specific errors
-  and late results, while still draining active work.
-  Guidance paths are nonblank and limited to 4,096 characters; guidance is checked
-  against the 32 KiB UTF-8 prompt budget before each section is retained.
-  Remote tools obey the same UTF-8 byte limits as local tools. Oversized write/edit
-  arguments fail before batch dispatch; oversized read, bash, listing and search
-  results fail before state commits. See [the environment contract](./agents.md#execution-environments).
-  Use the [environment recipe](../examples/agent-environment.ts) and the optional
-  local and SQLite adapters from `tubeless/agent/node`. Dry runs skip decisions and handler tools unless both provide
-  preview handlers. Agents remain ordinary pipelines for projects and CLI use.
-  Use `fromPipeline` to feed a validated answer into ordinary dependent work;
-  the [composition recipe](../examples/agent-pipeline.ts) includes credential-free previews.
-  Resolve provider credentials only during execution, pass cancellation to the
-  HTTP request, and keep provider response parsing in application code. The
-  OpenAI recipe has no live dry-run callback; use the scripted recipe for previews.
-  Bound questions, accumulated observations, and encoded provider requests before
-  sending them. Reject oversized text without silently changing tool results.
-
-- For YAML or JSON authoring, read [declarative pipelines](./declarative-pipelines.md)
-  and adapt [the YAML recipe](../examples/yaml-pipelines.ts). Parse at the
-  application edge, then use `compilePipelineDocument(document, registry)` from
-  `tubeless/project` with explicitly registered handlers, adapters, predicates, and schemas. A
-  step declares exactly one of `run`, `fromPipeline`, or `forEachPipeline`;
-  child pipeline IDs resolve within the document, while application code owns
-  option, item, and result mapping through the matching adapter registry. Select a
-  pipeline with `compiled.get(id)`, or pass `compiled.pipelines` to `defineProject`.
-  Register only the pipelines you want to expose; compiled children need no separate
-  project entry. Export the project for CLI and Studio: Standard JSON Schema input metadata enables
-  automatic commands; custom or schema-less inputs need explicit adapters in the
-  project's entry list. Unknown fields and references fail compilation;
-  plans still do not validate domain inputs. Dynamic wiring does not infer
-  TypeScript output types, so validate or narrow unknown values in handlers.
-  Use [YAML Peloton](../examples/yaml-peloton.ts) for a larger example with
-  progress, retrying concurrent handlers, dry-run policies, and failure gates.
-  Its per-rider progress is ordinary step detail by choice; the smaller YAML
-  recipe demonstrates child-pipeline fan-out.
-  Use `tubeless validate --json <document.yaml>` for a handler-free structure
-  check, and the [document JSON Schema](./pipeline-document.schema.json) for
-  editor or agent validation. Optional document metadata is descriptive only.
-  `inspect` or `plan` on a compiled command still checks graph semantics.
+### Steps and dependencies
 
 - Use `createSteps<TDomainOptions>()` once per pipeline and destructure every
   constructor that pipeline uses: `step`, `fromPipeline`, `fromRemote`, `iteratePipeline`, and/or
@@ -142,6 +58,31 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   Omit options with `run()` or `runOrThrow()` when no input fields are required;
   each call supplies a fresh `{}` to schema validation. Pass `undefined` as the
   first argument when supplying controls without input.
+- Use `dependsOn` when the output is required, `optionalDependsOn` when absence
+  is expected, and `skipAfterFailureOf` for a failure gate that supplies no data.
+- Use `createSteps(optionsSchema)` when external domain options need Standard
+  Schema validation or transformation. Add `outputSchema` only at step
+  boundaries that receive untrusted or independently checked values, and
+  `resultSchema` when the finalized public result must be checked. Core imports
+  no schema library.
+- Set `dryRun: "skip"` on filesystem writes, database mutations, publication,
+  email, and other steps whose normal `run` must not execute in a dry run. Use a
+  typed `dryRun` handler when the step should produce a preview value instead.
+- Add `skip` to a step definition only for an intentional successful outcome.
+  A string or `{ reason }` result makes its output `T | undefined`; handle that
+  absence explicitly. If every skip branch returns `{ reason, value }`, the
+  output remains `T`.
+- For a static family sharing one implementation, adapt the recipe-local tuple
+  helper in [parameterized steps](../examples/parameterized-steps.ts). Keep IDs,
+  constants, and source step references explicit; expand synchronously before
+  `definePipeline`. Preserve literal IDs and the factory's output type. The recipe
+  uses one common output type, not an arbitrary heterogeneous callback. Use
+  `forEachPipeline` for runtime items. See [static step families](./recipes.md#static-step-families).
+- Treat a `PipelineDefinitionError` during module loading as an authoring bug;
+  static graph mistakes are rejected when `definePipeline` is called.
+
+### Concurrency
+
 - Opt in to parallel independent steps with `run(options, { maxConcurrency: 4 })`.
   `plan(controls)` validates this and all other static controls before execution;
   it still does not invoke domain schemas.
@@ -162,28 +103,19 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   integers; an invalid fan-out bound is rejected when the step is created, or
   fails the step before any child starts when a callback supplies it. See
   [the full mapping](./child-pipeline-composition.md#planning-and-execution-controls).
-- For a static family sharing one implementation, adapt the recipe-local tuple
-  helper in [parameterized steps](../examples/parameterized-steps.ts). Keep IDs,
-  constants, and source step references explicit; expand synchronously before
-  `definePipeline`. Preserve literal IDs and the factory's output type. The recipe
-  uses one common output type, not an arbitrary heterogeneous callback. Use
-  `forEachPipeline` for runtime items. See [static step families](./recipes.md#static-step-families).
-- Treat a `PipelineDefinitionError` during module loading as an authoring bug;
-  static graph mistakes are rejected when `definePipeline` is called.
-- Use `dependsOn` when the output is required, `optionalDependsOn` when absence
-  is expected, and `skipAfterFailureOf` for a failure gate that supplies no data.
-- Use `createSteps(optionsSchema)` when external domain options need Standard
-  Schema validation or transformation. Add `outputSchema` only at step
-  boundaries that receive untrusted or independently checked values, and
-  `resultSchema` when the finalized public result must be checked. Core imports
-  no schema library.
-- Set `dryRun: "skip"` on filesystem writes, database mutations, publication,
-  email, and other steps whose normal `run` must not execute in a dry run. Use a
-  typed `dryRun` handler when the step should produce a preview value instead.
-- Add `skip` to a step definition only for an intentional successful outcome.
-  A string or `{ reason }` result makes its output `T | undefined`; handle that
-  absence explicitly. If every skip branch returns `{ reason, value }`, the
-  output remains `T`.
+- Use `runConcurrent` for bounded lightweight functions that do not need child
+  lifecycle events. Use `runConcurrentPartial` when the caller needs completed
+  results and the first failure instead of a throw. Both stop scheduling after
+  failure or cancellation and drain active workers without cancelling siblings.
+  Branch on `ok`: success has a dense input-order result array; failure has sparse
+  results and the original first rejection or observed abort error, which may be
+  `undefined`. Use `completedIndexes` to distinguish successful `undefined`
+  outputs from holes. Invalid concurrency still throws as an authoring error.
+  Use `runBatched` or `runBatchedPartial` for the same throw-or-partial split
+  over fixed-size batches instead of individual items.
+
+### Caching and artifacts
+
 - Opt ordinary deterministic steps into caching with `cache: { version: "v1" }`,
   or `cache: true` to inherit the pipeline's `implementationVersion`. Defaults hash
   dependency inputs and validated options and store results under the run cwd's
@@ -211,6 +143,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   adapters. Read [artifact contracts](./artifacts.md) and adapt
   [artifact lineage](../examples/artifact-lineage.ts). Keep manifests in artifacts,
   omit secrets from metadata, and preserve domain validation outside tracing.
+
+### Child pipelines and iteration
+
 - Use `fromPipeline` for one independently useful child workflow and
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
   Omit `fromPipeline.mapOptions` when the parent's validated domain options satisfy
@@ -240,6 +175,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   for each run. Child controls are static; parent dry-run and cancellation propagate.
   Plans show the bounded region, while traces identify each actual child run.
   See [pagination](../examples/iteration.ts) and [iteration semantics](./child-pipeline-composition.md#repeat-a-child-with-bounded-state-transitions).
+
+### Remote work and worker threads
+
 - Use `fromRemote` for a unit of work that lives on another engine. Required
   fields are `adapter`, `mapInput`, and `outputSchema`. Omitting `dryRun`
   contacts the engine during a pipeline dry run; the adapter and remote
@@ -254,30 +192,6 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   unknown JSON and forwarding the signal. Use
   [`host-embedding.ts`](../examples/host-embedding.ts) for host-owned invocation;
   correlation IDs do not provide persistence or checkpoint/resume.
-  For Airflow 3, adapt [the paired Airflow examples](./airflow.md): use the public
-  REST API at the application edge, keep submission out of dry runs, verify inputs
-  before reattaching to a stable DAG run ID, and validate XCom results. Airflow owns
-  retries of hosted pipelines; a cancelled HTTP wait does not cancel a remote DAG.
-  For Temporal, follow [the Activity example](./temporal.md): invoke Tubeless inside
-  an Activity, keep Workflow imports type-only for the Activity implementation,
-  heartbeat during long waits, forward cancellation, and preserve Temporal's
-  cancellation failure when Tubeless wraps an abort. Activity retries replay the
-  whole pipeline; heartbeat progress alone does not resume its steps.
-  For Inngest, follow [the durable step example](./inngest.md): call `runOrThrow`
-  inside `step.run`, validate events before Tubeless can wrap a `NonRetriableError`,
-  and return JSON-safe values. Failed attempts repeat the whole pipeline; completed
-  durable steps reuse their saved result. Keep Inngest step tools outside Tubeless
-  handlers. Host cancellation does not abort an already executing step.
-  For Dagster, follow [the Pipes example](./dagster.md): keep the pipeline free
-  of host imports, report materializations only after successful publication,
-  require explicit Pipes materializations, and preview locally. Forward termination to
-  Tubeless, correlate retries by host run and asset, and retain raw trace events
-  for Studio. Dagster retries the entire asset invocation.
-  For AWS Step Functions, follow [the Lambda example](./step-functions.md):
-  invoke Tubeless within a synchronous Lambda Task, validate the incoming job,
-  correlate by execution and state, and let thrown failures reach Step Functions.
-  Clear deadline timers after each invocation. Host retries repeat the whole
-  pipeline; stopping a workflow does not cancel an already-running Lambda.
 - For actual CPU parallelism, use `createWorkerThreadAdapter` from `tubeless/node`
   through `fromRemote`; never serialize arbitrary handler closures. Supply an explicit
   module URL/export and cloneable payload, keep `outputSchema` on the parent step,
@@ -286,16 +200,36 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   allows cooperative cleanup then terminates unresponsive threads. Read the
   [worker protocol and lifecycle](./remote-step-composition.md#cpu-work-in-node-worker-threads)
   and the [executable recipe](../examples/worker-threads.ts).
-- Use `runConcurrent` for bounded lightweight functions that do not need child
-  lifecycle events. Use `runConcurrentPartial` when the caller needs completed
-  results and the first failure instead of a throw. Both stop scheduling after
-  failure or cancellation and drain active workers without cancelling siblings.
-  Branch on `ok`: success has a dense input-order result array; failure has sparse
-  results and the original first rejection or observed abort error, which may be
-  `undefined`. Use `completedIndexes` to distinguish successful `undefined`
-  outputs from holes. Invalid concurrency still throws as an authoring error.
-  Use `runBatched` or `runBatchedPartial` for the same throw-or-partial split
-  over fixed-size batches instead of individual items.
+
+### Run inside a host engine
+
+- For Airflow 3, adapt [the paired Airflow examples](./airflow.md): use the public
+  REST API at the application edge, keep submission out of dry runs, verify inputs
+  before reattaching to a stable DAG run ID, and validate XCom results. Airflow owns
+  retries of hosted pipelines; a cancelled HTTP wait does not cancel a remote DAG.
+- For Temporal, follow [the Activity example](./temporal.md): invoke Tubeless inside
+  an Activity, keep Workflow imports type-only for the Activity implementation,
+  heartbeat during long waits, forward cancellation, and preserve Temporal's
+  cancellation failure when Tubeless wraps an abort. Activity retries replay the
+  whole pipeline; heartbeat progress alone does not resume its steps.
+- For Inngest, follow [the durable step example](./inngest.md): call `runOrThrow`
+  inside `step.run`, validate events before Tubeless can wrap a `NonRetriableError`,
+  and return JSON-safe values. Failed attempts repeat the whole pipeline; completed
+  durable steps reuse their saved result. Keep Inngest step tools outside Tubeless
+  handlers. Host cancellation does not abort an already executing step.
+- For Dagster, follow [the Pipes example](./dagster.md): keep the pipeline free
+  of host imports, report materializations only after successful publication,
+  require explicit Pipes materializations, and preview locally. Forward termination to
+  Tubeless, correlate retries by host run and asset, and retain raw trace events
+  for Studio. Dagster retries the entire asset invocation.
+- For AWS Step Functions, follow [the Lambda example](./step-functions.md):
+  invoke Tubeless within a synchronous Lambda Task, validate the incoming job,
+  correlate by execution and state, and let thrown failures reach Step Functions.
+  Clear deadline timers after each invocation. Host retries repeat the whole
+  pipeline; stopping a workflow does not cancel an already-running Lambda.
+
+### Projects and typed wrappers
+
 - Use `defineProject` from `tubeless/project` to collect typed pipelines. Pipeline IDs
   stay literal, duplicate IDs fail during project definition, and `get(id)` returns the
   exact pipeline type. Union or widened IDs retain all matching candidate pipeline
@@ -322,6 +256,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   typing wrappers around an inferred pipeline. `PipelineInput` is the value accepted
   by `run` before options-schema transformation. A command created with
   `definePipelineCommand` exposes that same exact inferred type as `command.pipeline`.
+
+### Commands and the workbench CLI
+
 - Use `definePipelineCommand(pipeline)` from `tubeless/cli` for scripts centered on
   a pipeline. Flags are inferred from the Standard JSON Schema input metadata of
   the schema passed to `createSteps(schema)`; see [automatic CLI](../examples/automatic-cli.ts).
@@ -372,6 +309,114 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   exposes `agentHistory.agents`. The pipeline filter selects the root while its
   detail includes descendants with other pipeline IDs. Raw `--events` remains
   run-scoped. Treat missing observations as unknown, not successful execution.
+
+### Declarative documents
+
+- For YAML or JSON authoring, read [declarative pipelines](./declarative-pipelines.md)
+  and adapt [the YAML recipe](../examples/yaml-pipelines.ts). Parse at the
+  application edge, then use `compilePipelineDocument(document, registry)` from
+  `tubeless/project` with explicitly registered handlers, adapters, predicates, and schemas. A
+  step declares exactly one of `run`, `fromPipeline`, or `forEachPipeline`;
+  child pipeline IDs resolve within the document, while application code owns
+  option, item, and result mapping through the matching adapter registry. Select a
+  pipeline with `compiled.get(id)`, or pass `compiled.pipelines` to `defineProject`.
+  Register only the pipelines you want to expose; compiled children need no separate
+  project entry. Export the project for CLI and Studio: Standard JSON Schema input metadata enables
+  automatic commands; custom or schema-less inputs need explicit adapters in the
+  project's entry list. Unknown fields and references fail compilation;
+  plans still do not validate domain inputs. Dynamic wiring does not infer
+  TypeScript output types, so validate or narrow unknown values in handlers.
+  Use [YAML Peloton](../examples/yaml-peloton.ts) for a larger example with
+  progress, retrying concurrent handlers, dry-run policies, and failure gates.
+  Its per-rider progress is ordinary step detail by choice; the smaller YAML
+  recipe demonstrates child-pipeline fan-out.
+  Use `tubeless validate --json <document.yaml>` for a handler-free structure
+  check, and the [document JSON Schema](./pipeline-document.schema.json) for
+  editor or agent validation. Optional document metadata is descriptive only.
+  `inspect` or `plan` on a compiled command still checks graph semantics.
+
+### Graph metadata
+
+- Add inert `metadata` (`tags`, `owner`, `domain`, `annotations`) for discovery.
+  Use `querySteps(plan, query)`, `inspect --tag/--owner/--domain`, or
+  `toMermaid({ query })` to find steps; queries never select execution.
+  Metadata is bounded, copied, frozen, and isolated across child pipelines.
+  Definitions carrying metadata use identity version 3. Document v1 rejects
+  step/pipeline metadata. Read [graph metadata](./graph-metadata.md) and adapt
+  [the recipe](../examples/graph-metadata.ts).
+
+### Agents
+
+- For a general workspace agent, use `defineModelAgent({ id, model })` from
+  `tubeless/agent` with `openaiModel()` from `tubeless/agent/openai`. It supplies
+  task/answer schemas, a customizable coding prompt, startup AGENTS.md discovery
+  from the physical workspace directory, shared by the model and all tool calls,
+  and per-run conversation ownership. The optional provider adapter retains native
+  history and compacts it before subsequent decisions. The prompt requires project-guidance
+  reads in a separate turn before file operations or task commands in their scope;
+  filename discovery may precede them, while optional exploration follows them.
+  Add `instructions`, custom
+  `tools`, or tighter `limits` as needed; the OpenAI adapter requires inline tool
+  descriptors with strict object constraints, validated before HTTP. Large batches
+  get explicitly marked model-visible previews; the harness retains full outcomes.
+  Read [the model-agent contract](./agents.md#default-model-backed-agent)
+  and adapt [the minimal recipe](../examples/agent-model.ts). The OpenAI adapter omits
+  reasoning settings by default; the coding recipe and live evaluations explicitly
+  request `reasoningEffort: "high"`, which requires a model that supports that setting.
+  Use `bun run eval:agent`
+  for opt-in paid workspace evaluations; routine CI stays credential-free.
+
+- Use `defineAgent`, `defineTool`, and `pipelineTool` from `tubeless/agent` for an in-process
+  decision loop over registered handlers, pipelines, and child agents. Read [agents](./agents.md) and
+  adapt the credential-free [scripted recipe](../examples/agent.ts) or the
+  [OpenAI recipe](../examples/agent-openai.ts) for a real provider callback. Keep model
+  requests and prompts in `decide`; validate every tool input/output and the final
+  result. Return `continue` with a nonempty batch or `finish` with a raw result.
+  Every agent includes `read`, `write`, `edit`, `bash`, `list`, and `search`.
+  `tools` adds capabilities or replaces defaults by name; narrow reducer outcomes
+  by `ok` and `tool`. Paths resolve from the run cwd. Follow the
+  [workspace recipe](../examples/agent-workspace.ts) for real file edits and shell checks.
+  Writes and edits stage complete files before atomic replacement, requiring a writable
+  destination directory and permission to preserve the original owner/group. These
+  permission failures leave the original intact; there is no in-place fallback. Writes follow symlinks even
+  when the target must be created. Bash bounds
+  pipe draining during cancellation; escaped descendants may outlive the tool.
+  List and search order entries by filename before applying caps. Directory
+  searches retain matches when descendants become unavailable and count skipped entries.
+  State is copied and frozen per initialization/reduction. Register children with
+  `pipelineTool`; reuse their options schema or supply `inputSchema` and
+  `mapOptions` together. Follow the [delegation recipe](../examples/agent-delegation.ts).
+- Calls, decisions, depth, and leaf concurrency obey every ancestor limit; turns
+  are local. Child options are prevalidated once for the whole batch. Add
+  `durability: { store, key }` and an explicit `implementationVersion` for checkpointed
+  decisions, outcomes, child state and budgets. Live children that inherit recovery
+  also require an explicit `implementationVersion`; bump it when their semantics
+  change. Reuse the key and inputs to resume;
+  use a new key for changed semantics. See [durable execution](./agents.md#durable-execution)
+  and the [SQLite recipe](../examples/agent-durable.ts). Running unsafe calls become
+  recoverable interruption outcomes; mark only repeatable or idempotent tools
+  `replay: "safe"`.
+- Supply an `AgentEnvironment` for remote guidance, files
+  and commands; children inherit it. The local adapter's `node:local` authority
+  id is host-independent, so a recreated container or pod resumes; pass `id` to
+  name another authority. Custom tools receive `context.environment`.
+  Environment operations preserve signal cancellation across SDK-specific errors
+  and late results, while still draining active work.
+  Guidance paths are nonblank and limited to 4,096 characters; guidance is checked
+  against the 32 KiB UTF-8 prompt budget before each section is retained.
+  Remote tools obey the same UTF-8 byte limits as local tools. Oversized write/edit
+  arguments fail before batch dispatch; oversized read, bash, listing and search
+  results fail before state commits. See [the environment contract](./agents.md#execution-environments).
+  Use the [environment recipe](../examples/agent-environment.ts) and the optional
+  local and SQLite adapters from `tubeless/agent/node`. Dry runs skip decisions and handler tools unless both provide
+  preview handlers. Agents remain ordinary pipelines for projects and CLI use.
+- Use `fromPipeline` to feed a validated answer into ordinary dependent work;
+  the [composition recipe](../examples/agent-pipeline.ts) includes credential-free previews.
+  Resolve provider credentials only during execution, pass cancellation to the
+  HTTP request, and keep provider response parsing in application code. The
+  OpenAI recipe has no live dry-run callback; use the scripted recipe for previews.
+  Bound questions, accumulated observations, and encoded provider requests before
+  sending them. Reject oversized text without silently changing tool results.
 
 ## Runtime rules
 
