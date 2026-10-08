@@ -68,6 +68,7 @@ body {
 
 h1 {
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .skip {
