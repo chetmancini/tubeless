@@ -1,8 +1,5 @@
 import type { AgentHistory } from "../run-store/agent-history.js";
-
-export function terminalSafeText(value: string): string {
-  return value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, " ");
-}
+import { terminalSafeText } from "./workbench-shared.js";
 
 export function formatAgentHistory(history: AgentHistory): string {
   if (!history.agents.length) return "";

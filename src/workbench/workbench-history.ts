@@ -10,9 +10,10 @@ import {
 } from "../run-store/run-store.js";
 import { readPipelineEventPages, readPipelineRunTree } from "../run-store/run-store-reader.js";
 import { projectAgentHistory } from "../run-store/agent-history.js";
-import { formatAgentHistory, terminalSafeText } from "./workbench-agent-history.js";
+import { formatAgentHistory } from "./workbench-agent-history.js";
 import {
   DEFAULT_PIPELINE_RUN_STORE,
+  terminalSafeText,
   errorMessage,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeCliChunk,

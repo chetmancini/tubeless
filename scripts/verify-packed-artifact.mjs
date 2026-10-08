@@ -326,6 +326,11 @@ try {
     throw new Error("Packed tubeless artifact is missing the tubeless executable");
   }
   assertPackedExecutable(tubelessBin, installedPackage, consumerRoot);
+  run(
+    process.execPath,
+    [join(packageRoot, "scripts/fixtures/packed-cloud-check.mjs"), tubelessBin],
+    consumerRoot
+  );
 
   process.stdout.write(
     "Packed tubeless artifact layout, declarations, imports, and executable verified.\n"

@@ -18,6 +18,14 @@ export interface WorkbenchCliIo {
   stdout: { write(chunk: string): boolean | void };
 }
 
+/** Neutralize controls in untrusted text while keeping terminal layout caller-owned. */
+export function terminalSafeText(value: string): string {
+  return value.replace(
+    /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,
+    " "
+  );
+}
+
 function abortReason(signal?: AbortSignal): Error {
   return signal?.reason instanceof Error ? signal.reason : new Error("Aborted");
 }

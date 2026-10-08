@@ -575,6 +575,20 @@ read when a pipeline needs them.
   that abort is process-local, leaves sibling launches running, and is not
   crash-resume.
 
+## Cloud command use
+
+Use `tubeless auth login`, then `cloud list` to select an already-loaded pipeline
+by exact name or listed slug. Use `cloud run --id <id>` when selectors collide.
+A single session workspace is automatic; multiple workspaces require
+`--workspace <id>`. Load and synchronize pipelines in the dashboard.
+`cloud run` executes only the existing deployment and never reads Git, project
+configuration or local modules. Pass JSON object input via `--input-file`, use
+`--json` for automation and `--detach` for admission only. Preserve an uncertain
+admission key rather than launching a fresh run. Ctrl-C stops following;
+cancellation remains explicit in the dashboard.
+Read [the Cloud CLI contract](./cli.md#tubeless-cloud) for credentials, roles,
+workspace selection, retention and exit codes.
+
 ## Failure and safety rules
 
 - Do not use `skip` to swallow an exception.

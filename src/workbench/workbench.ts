@@ -23,6 +23,8 @@ Commands:
   tubeless run       Execute a project pipeline or a pipeline or command file
   tubeless history   Show recorded runs from the local SQLite store
   tubeless ui        Open the optional local run studio
+  tubeless auth      Sign in to Tubeless Cloud
+  tubeless cloud     List and run deployed Cloud pipelines
 
 Run tubeless <command> --help for command-specific options.
 `;
@@ -39,6 +41,14 @@ export async function runWorkbenchCli(
   }
   if (command === undefined) {
     return writeUsageError(io, "Pass a command.", WORKBENCH_USAGE);
+  }
+  if (command === "auth") {
+    const { runAuth } = await import("./workbench-auth.js");
+    return runAuth(commandArgs, io);
+  }
+  if (command === "cloud") {
+    const { runCloud } = await import("./workbench-cloud.js");
+    return runCloud(commandArgs, io);
   }
   if (command === "list") return runList(commandArgs, io);
   if (command === "validate") return runValidate(commandArgs, io);

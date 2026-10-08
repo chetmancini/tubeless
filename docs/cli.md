@@ -543,3 +543,94 @@ caching and propagates to child pipelines. Omission respects step policies;
 `recompute` refreshes entries and `bypass` avoids all cache I/O. Dry runs always
 bypass caching. The control is separate from domain options and does not change
 default keys. See [step output caching](./step-output-cache.md).
+
+## Tubeless Cloud
+
+The same Bun executable supplies first-party `auth` and `cloud` commands. Create
+or join a workspace, install the GitHub App, and connect its repository in the
+[Cloud dashboard](https://cloud.tubeless.io) first. Workspace creation, repository
+connections, pipeline loading, secrets, schedules and billing remain dashboard operations.
+
+```sh
+tubeless auth login
+tubeless auth status
+tubeless cloud list
+tubeless cloud run orders-sync --input-file input.json
+tubeless cloud run orders-sync --detach --json
+tubeless cloud logs <run-id> --follow
+tubeless auth logout
+```
+
+All Cloud commands accept `--workspace <id>` and `--host <origin>`. Without
+`--workspace`, the session's single workspace is selected automatically. If you
+have several, the command lists their names and IDs and asks for `--workspace`;
+with none, create or join a workspace in the dashboard. An explicit workspace
+is checked by the service on each request.
+
+The default host is `https://cloud.tubeless.io`; `--host` selects another origin.
+Origins require HTTPS except explicit localhost or loopback development.
+Credentials are isolated by full origin. Commands work from any directory and
+never read Git, project files or `.tubeless/cloud.json`, or write project context.
+
+`auth login --no-browser` prints the approval URL and code. Confirm the code and
+approve the device in the browser. Sessions expire after seven days and are
+revocable. Tokens are stored through Bun's experimental native `Bun.secrets`
+API in the OS credential store; the command needs a supported, unlocked native
+credential service. It reports storage failure and does not use plaintext files.
+The executable requires Bun 1.3.14 or later; Windows credential support has not
+been validated on a Windows host. Older Bun releases use the native Windows
+persistence default; Bun 1.4.2+ requests local machine persistence. For headless clients, inject an existing
+expiring session as `TUBELESS_TOKEN`. It overrides stored credentials and is
+never saved or printed. Dedicated scoped or long-lived CI tokens are not part of
+this flow. `auth logout` revokes a stored session and removes the local entry;
+when the environment token is active, remove it from the environment yourself.
+
+`cloud list` shows each loaded pipeline's slug, name, Cloud ID, availability and
+deployed commit. Run accepts an exact name or a listed slug: both
+`cloud run "Orders sync"` and `cloud run orders-sync` select the same pipeline.
+Slugs use lowercase words separated by hyphens and are derived from the current
+name, so renaming changes the slug. Accents are normalized; Unicode letters and
+numbers are retained. A name with no letters or numbers uses its Cloud ID as the
+slug. A name ending in `.ts` is still a name. Unknown selectors suggest listing
+or loading in the dashboard. Any collision between names or slugs requires
+`cloud run --id <cloud-pipeline-id>`; ID selection cannot be combined with a name
+or slug. Owners, admins and members can run; viewers can list and read logs.
+
+A run executes its **deployed revision**. The accepted run's SHA is authoritative
+and printed with its ID and dashboard URL. Local files and changes are never
+loaded, uploaded or synchronized. Deployment and version management remain a
+separate workflow.
+
+Inputs are JSON objects up to 64 KB, with no local schema inference. Omitted input
+is `{}`. Use `--input-file -` for stdin, or a regular JSON file. An explicitly
+empty file path is a usage error. Arrays, null,
+scalars, malformed JSON and numbers that overflow to infinity fail before admission.
+Input supports at most 128 levels of objects and arrays, counting the root object.
+Input must fit the limit after
+JSON normalization as well as in the original file. A run invocation uses one
+idempotency key for its bounded transport retry; local validation errors are not
+retried. If admission remains uncertain,
+the diagnostic prints that key and workspace so the request can be investigated.
+Do not start a fresh run to retry an uncertain admission.
+
+Foreground runs follow status and retained logs every two seconds. `--detach`
+prints the run ID and returns after confirmed admission; use `--detach --json`
+to read `.id` in a script. Ctrl-C stops following and prints the run ID;
+it does not cancel the remote run. Cancel from the dashboard. Run logs retain a
+bounded prefix of at most 400 entries, rather than an unlimited stream. Run
+retention follows the workspace plan (7/30/90 days for Free/Team/Scale).
+
+`cloud list --json`, `auth status --json`, `cloud run --json`, and
+`cloud logs --json` write one complete JSON value to stdout and diagnostics to
+stderr. Foreground run JSON is the final run; detached JSON is its admission
+snapshot. `logs --follow --json` waits and returns its terminal retained snapshot.
+Human output neutralizes terminal and bidirectional controls in remote text;
+JSON output preserves the original fields.
+Run response input and result fields must contain finite JSON values within the
+same nesting limit. Invalid service payloads or out-of-range timestamps fail
+response validation before output.
+
+Cloud exit codes use the existing CLI codes: 0 success or detached admission,
+1 usage, 2 credentials/workspace selection/transport, 4 invalid JSON or request
+validation, 6 rejected admission or failed execution, and 7 cancelled execution
+or local interruption.
