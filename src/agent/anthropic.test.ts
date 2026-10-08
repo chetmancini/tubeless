@@ -378,3 +378,16 @@ it("moves array constraints that strict mode rejects into descriptions", () => {
     maxContains: 2,
   });
 });
+
+it("checks strict object rules only on the schema the provider sees", () => {
+  const schema = {
+    type: "array",
+    items: { type: "string" },
+    contains: { type: "object", properties: { id: { type: "string" } } },
+  };
+  const tool = anthropicTool("custom", "Custom", "input", schema, true);
+  expect(tool.input_schema.properties.input).not.toHaveProperty("contains");
+  expect(() =>
+    anthropicTool("custom", "Custom", "input", { ...schema, items: { type: "object" } }, true)
+  ).toThrow("requires additionalProperties: false");
+});
