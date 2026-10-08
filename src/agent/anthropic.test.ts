@@ -379,6 +379,16 @@ it("moves array constraints that strict mode rejects into descriptions", () => {
   });
 });
 
+it("moves enums with complex values into descriptions", () => {
+  const complex = { type: ["array", "string"], enum: [["a"], "b"] };
+  const tool = anthropicTool("custom", "Custom", "input", complex, true);
+  const input = tool.input_schema.properties.input as Record<string, unknown>;
+  expect(input).not.toHaveProperty("enum");
+  expect(input.description).toBe(`Constraints: {"enum":[["a"],"b"]}`);
+  const scalar = anthropicTool("custom", "Custom", "input", { enum: ["a", 1, null] }, true);
+  expect(scalar.input_schema.properties.input).toEqual({ enum: ["a", 1, null] });
+});
+
 it("checks strict object rules only on the schema the provider sees", () => {
   const schema = {
     type: "array",

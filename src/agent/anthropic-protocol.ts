@@ -46,6 +46,14 @@ function strictSubset(schema: Record<string, unknown>): Record<string, unknown> 
     moved.minItems = copy.minItems;
     delete copy.minItems;
   }
+  // Strict enums accept only strings, numbers, booleans, and null.
+  if (
+    Array.isArray(copy.enum) &&
+    copy.enum.some((value) => value !== null && typeof value === "object")
+  ) {
+    moved.enum = copy.enum;
+    delete copy.enum;
+  }
   if (typeof copy.format === "string" && !FORMATS.has(copy.format)) {
     moved.format = copy.format;
     delete copy.format;
