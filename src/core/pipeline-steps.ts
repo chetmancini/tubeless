@@ -1,330 +1,54 @@
+import {
+  buildIterationStep,
+  buildLoadArtifactStep,
+  buildMappedPipelineStep,
+  buildPipelineStep,
+  buildRemoteStep,
+  buildSaveArtifactStep,
+  type IterationStepConfig,
+  type MappedChildStepConfig,
+  type RemoteStepConfig,
+  type SingleChildStepConfig,
+} from "./pipeline-step-builders.js";
+import type { ArtifactLoader, ArtifactSaver, ArtifactResult } from "./pipeline-artifacts.js";
+import type { IterationDecision, IterationState } from "./iteration.js";
+import { STEP_OPTIONS_SCHEMA } from "./pipeline-step-metadata.js";
 import type { PipelineMetadata } from "../tracing/graph-metadata.js";
-import type { CompiledStepCache, StepCache } from "./pipeline-cache.js";
-import {
-  type ArtifactLoader,
-  type ArtifactSaver,
-  type ArtifactResult,
-} from "./pipeline-artifacts.js";
-import { createMappedChildRunner, createSingleChildRunner } from "./child-execution.js";
-import { createIterationRunner, type IterationDecision, type IterationState } from "./iteration.js";
-import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.js";
-import {
-  STEP_CACHE,
-  STEP_NESTED_PIPELINE,
-  STEP_OPTIONS_SCHEMA,
-  STEP_REMOTE,
-  STEP_AGENT,
-  STEP_ORCHESTRATION,
-} from "./pipeline-step-metadata.js";
+import type {
+  AnyStep,
+  ChildPipelineStepDefinition,
+  ChildPipelineStepDefinitionBase,
+  MappedChildPipelineStepDefinition,
+  OptionalInputs,
+  PipelineOptionsOf,
+  PipelineResultOf,
+  PipelineRunControlsOf,
+  PlainStepFields,
+  PolicySkippedOutput,
+  RemoteStepDefinitionBase,
+  RequiredInputs,
+  SchemaStepFields,
+  Step,
+  StepDefinitionBody,
+  StepSkipPredicate,
+} from "./pipeline-step-types.js";
 import type {
   InferSchemaInput,
   InferSchemaOutput,
   Pipeline,
   PipelineExecutionContext,
-  PipelinePlanStep,
   PipelineRun,
-  PipelineRunControls,
   PipelineStepContext,
-  RemoteStepAdapter,
   StandardSchemaV1,
   StepSkipDecision,
 } from "./pipeline-types.js";
 
-/**
- * A step's dependencies are references to the dependency's own step object, not string ids
- * into a hand-maintained output-type map. This buys two things no amount of extra generics
- * on a string-keyed design could:
- *  - a step used before its dependency exists is a compile error (JS temporal dead zone on
- *    `const`), so out-of-order and self/cyclic dependencies are caught by the language, not
- *    a bespoke runtime check
- *  - each step only ever states its own id/deps; the output-type map is derived, never
- *    restated, and callers of `definePipeline`/`createSteps` never write out its generics
- */
-type AnyStepDryRunHandler<TOptions extends object> = {
-  bivarianceHack(
-    inputs: Record<string, unknown>,
-    context: PipelineStepContext<TOptions>
-  ): unknown | Promise<unknown>;
-}["bivarianceHack"];
-
-/** Runtime shape shared by every declared pipeline step. */
-export interface AnyStep<TOptions extends object = object> {
-  readonly [STEP_ORCHESTRATION]?: true;
-  readonly [STEP_AGENT]?: NonNullable<PipelinePlanStep["agent"]>;
-  readonly [STEP_NESTED_PIPELINE]?: NonNullable<PipelinePlanStep["nestedPipeline"]>;
-  readonly [STEP_REMOTE]?: NonNullable<PipelinePlanStep["remote"]>;
-  readonly [STEP_OPTIONS_SCHEMA]?: StandardSchemaV1;
-  readonly id: string;
-  readonly dependsOn?: readonly AnyStep<TOptions>[];
-  readonly optionalDependsOn?: readonly AnyStep<TOptions>[];
-  readonly skipAfterFailureOf?: readonly AnyStep<TOptions>[];
-  /** Optional human-facing display name. Stable machine identity remains `id`. */
-  readonly name?: string;
-  readonly description?: string;
-  readonly metadata?: PipelineMetadata;
-  /**
-   * Dry-run policy. Omitted runs the normal handler, `"skip"` structurally
-   * skips it, and a handler substitutes for `run` while preserving its output.
-   */
-  readonly dryRun?: "skip" | AnyStepDryRunHandler<TOptions>;
-  /** Optional Standard Schema for values published by this step. */
-  readonly outputSchema?: StandardSchemaV1;
-  /** Explicit output caching for ordinary deterministic steps only. */
-  readonly cache?: boolean | StepCache<Record<string, unknown>, TOptions>;
-  readonly [STEP_CACHE]?: CompiledStepCache<TOptions>;
-  /**
-   * Optional runtime skip. Return a non-empty reason (or `{ reason, value }`) to
-   * skip without calling `run`. Policy skips unlock dependents; structural skips
-   * (dry-run, filtered, …) do not use this hook.
-   */
-  skip?(
-    inputs: Record<string, unknown>,
-    context: PipelineExecutionContext<TOptions>
-  ): StepSkipDecision | Promise<StepSkipDecision>;
-  run(inputs: Record<string, unknown>, context: PipelineStepContext<TOptions>): unknown;
-}
-
-/** The step fields that `buildStep` merges onto the id-bearing shell. */
-type StepDefinitionBody<TOptions extends object> = Omit<AnyStep<TOptions>, "id">;
-
-/** Typed pipeline step carrying its stable ID, output, and option types. */
-export interface Step<
-  TId extends string,
-  TOut,
-  TOptions extends object,
-  TInputOptions extends object = TOptions,
-  TRunOut = TOut,
-  TOptionsSchema extends StandardSchemaV1 | undefined = StandardSchemaV1 | undefined,
-> extends AnyStep<TOptions> {
-  readonly [STEP_OPTIONS_SCHEMA]?: TOptionsSchema;
-  readonly id: TId;
-  run(
-    inputs: Record<string, unknown>,
-    context: PipelineStepContext<TOptions>
-  ): TRunOut | Promise<TRunOut>;
-  /** Type-only: carries this step's output type for sibling inference. Never set at runtime. */
-  readonly __outputType?: TOut;
-  /** Type-only: carries pre-validation run options for pipeline call-site inference. */
-  readonly __inputOptionsType?: TInputOptions;
-}
-
-/**
- * Extract a step's output type for dependency typing.
- * Prefer matching `Step<…, TOut, …>` over `{ __outputType?: infer T }`: optional-property
- * inference collapses `TOut | undefined` to `TOut`, which hides policy-skip widening.
- */
-export type StepOutput<S> =
-  S extends Step<string, infer TOut, infer _TOptions, infer _TInputOptions, infer _TRunOut>
-    ? TOut
-    : never;
-
-interface StepToken {
-  readonly id: string;
-  readonly __outputType?: unknown;
-}
-
-type RequiredInputs<TDeps extends readonly StepToken[]> = {
-  [S in TDeps[number] as S["id"]]: StepOutput<S>;
-};
-
-type OptionalInputs<TDeps extends readonly StepToken[]> = {
-  [S in TDeps[number] as S["id"]]?: StepOutput<S>;
-};
-
-type PipelineResultOf<TPipeline> =
-  TPipeline extends Pipeline<object, infer TResult, infer _TStepId, infer _TTargetId>
-    ? TResult
-    : never;
-
-type PipelineOptionsOf<TPipeline> =
-  TPipeline extends Pipeline<infer TOptions, unknown, infer _TStepId, infer _TTargetId>
-    ? TOptions
-    : never;
-
-type PipelineRunControlsOf<TPipeline> =
-  TPipeline extends Pipeline<infer _TOptions, unknown, infer TStepId, infer TTargetId>
-    ? PipelineRunControls<TStepId, TTargetId>
-    : never;
-
-type ChildPipelineStepDefinitionBase<
-  TParentOptions extends object,
-  TDeps extends readonly AnyStep<TParentOptions>[],
-  TOptionalDeps extends readonly AnyStep<TParentOptions>[],
-  TChildPipeline extends Pipeline<object, unknown>,
-> = {
-  pipeline: TChildPipeline;
-  dependsOn?: TDeps;
-  optionalDependsOn?: TOptionalDeps;
-  skipAfterFailureOf?: readonly AnyStep<TParentOptions>[];
-  name?: string;
-  description?: string;
-  metadata?: PipelineMetadata;
-  dryRun?: "skip";
-  controls?:
-    | PipelineRunControlsOf<TChildPipeline>
-    | ((
-        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-        context: PipelineExecutionContext<TParentOptions>
-      ) => PipelineRunControlsOf<TChildPipeline>);
-} & ([TParentOptions] extends [PipelineOptionsOf<NoInfer<TChildPipeline>>]
-  ? {
-      mapOptions?(
-        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-        context: PipelineExecutionContext<TParentOptions>
-      ): PipelineOptionsOf<TChildPipeline>;
-    }
-  : {
-      mapOptions(
-        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-        context: PipelineExecutionContext<TParentOptions>
-      ): PipelineOptionsOf<TChildPipeline>;
-    });
-
-/** Child step without policy skip (dependents see the full child result type). */
-type ChildPipelineStepDefinition<
-  TParentOptions extends object,
-  TDeps extends readonly AnyStep<TParentOptions>[],
-  TOptionalDeps extends readonly AnyStep<TParentOptions>[],
-  TChildPipeline extends Pipeline<object, unknown>,
-> = ChildPipelineStepDefinitionBase<TParentOptions, TDeps, TOptionalDeps, TChildPipeline>;
-
-/**
- * Presentation options for opaque `forEachPipeline` progress.
- * Defaults are domain-neutral (`N/M items · K running · key/step`).
- * Override `formatMessage` when a domain wants its own noun (images, shards, …).
- */
-export type MappedChildProgressOptions = ToMappedChildStepProgressOptions;
-
-type MappedChildPipelineStepDefinition<
-  TParentOptions extends object,
-  TDeps extends readonly AnyStep<TParentOptions>[],
-  TOptionalDeps extends readonly AnyStep<TParentOptions>[],
-  TChildPipeline extends Pipeline<object, unknown>,
-  TItem,
-> = {
-  pipeline: TChildPipeline;
-  dependsOn?: TDeps;
-  optionalDependsOn?: TOptionalDeps;
-  skipAfterFailureOf?: readonly AnyStep<TParentOptions>[];
-  name?: string;
-  description?: string;
-  metadata?: PipelineMetadata;
-  dryRun?: "skip";
-  items(
-    inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-    context: PipelineExecutionContext<TParentOptions>
-  ): readonly TItem[] | Promise<readonly TItem[]>;
-  key(item: TItem, index: number): string;
-  concurrency?:
-    | number
-    | ((
-        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-        context: PipelineExecutionContext<TParentOptions>
-      ) => number);
-  /**
-   * How the opaque parent step reports live fan-out progress.
-   * Purely presentational — does not change scheduling or results.
-   */
-  progress?: MappedChildProgressOptions;
-  controls?:
-    | PipelineRunControlsOf<TChildPipeline>
-    | ((
-        item: TItem,
-        index: number,
-        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-        context: PipelineExecutionContext<TParentOptions>
-      ) => PipelineRunControlsOf<TChildPipeline>);
-  mapOptions(
-    item: TItem,
-    index: number,
-    inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-    context: PipelineExecutionContext<TParentOptions>
-  ): PipelineOptionsOf<TChildPipeline>;
-};
-
-type StepSkipPredicate<
-  TOptions extends object,
-  TDeps extends readonly AnyStep<TOptions>[],
-  TOptionalDeps extends readonly AnyStep<TOptions>[],
-  TOut,
-  TDecision extends StepSkipDecision<TOut> = StepSkipDecision<TOut>,
-> = (
-  inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-  context: PipelineExecutionContext<TOptions>
-) => TDecision | Promise<TDecision>;
-
-type PolicySkippedOutput<TOut, TDecision> = [
-  Exclude<Awaited<TDecision>, false | null | undefined>,
-] extends [{ reason: string; value: unknown }]
-  ? TOut
-  : TOut | undefined;
-
-type StepDryRunPolicy<
-  TOptions extends object,
-  TDeps extends readonly AnyStep<TOptions>[],
-  TOptionalDeps extends readonly AnyStep<TOptions>[],
-  TOut,
-> =
-  | "skip"
-  | ((
-      inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-      context: PipelineStepContext<TOptions>
-    ) => TOut | Promise<TOut>);
-
-type PlainStepFields<
-  TOptions extends object,
-  TDeps extends readonly AnyStep<TOptions>[],
-  TOptionalDeps extends readonly AnyStep<TOptions>[],
-  TOut,
-> = {
-  dependsOn?: TDeps;
-  optionalDependsOn?: TOptionalDeps;
-  skipAfterFailureOf?: readonly AnyStep<TOptions>[];
-  name?: string;
-  description?: string;
-  metadata?: PipelineMetadata;
-  dryRun?: StepDryRunPolicy<TOptions, TDeps, TOptionalDeps, TOut>;
-  outputSchema?: never;
-  cache?: boolean | StepCache<RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>, TOptions>;
-  run(
-    inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-    context: PipelineStepContext<TOptions>
-  ): TOut | Promise<TOut>;
-};
-
-type SchemaStepFields<
-  TOptions extends object,
-  TDeps extends readonly AnyStep<TOptions>[],
-  TOptionalDeps extends readonly AnyStep<TOptions>[],
-  TSchema extends StandardSchemaV1,
-> = Omit<
-  PlainStepFields<TOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>>,
-  "outputSchema"
-> & {
-  outputSchema: TSchema;
-};
-
-type RemoteStepDefinitionBase<
-  TParentOptions extends object,
-  TDeps extends readonly AnyStep<TParentOptions>[],
-  TOptionalDeps extends readonly AnyStep<TParentOptions>[],
-  TPayload,
-  TSchema extends StandardSchemaV1,
-> = {
-  adapter: RemoteStepAdapter<TParentOptions, TPayload, InferSchemaInput<TSchema>>;
-  mapInput(
-    inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-    context: PipelineStepContext<TParentOptions>
-  ): TPayload;
-  outputSchema: TSchema;
-  dependsOn?: TDeps;
-  optionalDependsOn?: TOptionalDeps;
-  skipAfterFailureOf?: readonly AnyStep<TParentOptions>[];
-  name?: string;
-  description?: string;
-  metadata?: PipelineMetadata;
-  dryRun?: StepDryRunPolicy<TParentOptions, TDeps, TOptionalDeps, InferSchemaInput<TSchema>>;
-};
+export type {
+  AnyStep,
+  MappedChildProgressOptions,
+  Step,
+  StepOutput,
+} from "./pipeline-step-types.js";
 
 /** Step constructors scoped to one pipeline's domain option types. */
 type StepFactory<
@@ -448,24 +172,12 @@ function createStepFactory<
       cache?: never;
       load: ArtifactLoader<RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>, TValue, TOptions>;
     }
-  ): BuiltStep<TId, TValue, TOptions, TInputOptions> {
-    const { cache, load, dryRun, ...fields } = definition;
-    if (cache !== undefined) throw new Error("Artifact helpers cannot configure caching");
-    const wrap =
-      (handler: typeof load) =>
-      async (
-        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-        context: PipelineStepContext<TOptions>
-      ) => {
-        const loaded = await handler(inputs, context);
-        context.recordArtifact({ operation: "read", artifact: loaded.artifact });
-        return loaded.value;
-      };
-    return step(id, {
-      ...fields,
-      run: wrap(load),
-      dryRun: typeof dryRun === "function" ? wrap(dryRun) : dryRun,
-    });
+  ): BuiltStep<TId, TValue, TOptions, TInputOptions>;
+  function loadArtifact(
+    id: string,
+    definition: Parameters<typeof buildLoadArtifactStep<TOptions>>[2]
+  ): AnyStep<TOptions> {
+    return buildLoadArtifactStep(buildStep, id, definition);
   }
 
   /** Write an artifact as an ordinary step. Dry runs skip unless a preview is supplied. */
@@ -483,70 +195,13 @@ function createStepFactory<
       cache?: never;
       save: ArtifactSaver<RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>, TValue, TOptions>;
     }
-  ): BuiltStep<TId, TValue, TOptions, TInputOptions> {
-    const { cache, save, dryRun, ...fields } = definition;
-    if (cache !== undefined) throw new Error("Artifact helpers cannot configure caching");
-    const wrap =
-      (handler: typeof save) =>
-      async (
-        inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
-        context: PipelineStepContext<TOptions>
-      ) => {
-        const saved = await handler(inputs, context);
-        context.recordArtifact({ operation: "write", artifact: saved.artifact });
-        return saved.value;
-      };
-    return step(id, {
-      ...fields,
-      run: wrap(save),
-      dryRun: typeof dryRun === "function" ? wrap(dryRun) : "skip",
-    });
-  }
-
-  const buildPipelineStep = (
+  ): BuiltStep<TId, TValue, TOptions, TInputOptions>;
+  function saveArtifact(
     id: string,
-    config: ChildPipelineStepDefinitionBase<
-      TOptions,
-      readonly AnyStep<TOptions>[],
-      readonly AnyStep<TOptions>[],
-      Pipeline<object, unknown>
-    > & {
-      skip?: StepSkipPredicate<
-        TOptions,
-        readonly AnyStep<TOptions>[],
-        readonly AnyStep<TOptions>[],
-        unknown
-      >;
-      mapResult?: (
-        value: unknown,
-        result: PipelineRun<unknown>,
-        context: PipelineStepContext<TOptions>
-      ) => unknown;
-    }
-  ) => {
-    const definition: StepDefinitionBody<TOptions> = {
-      [STEP_NESTED_PIPELINE]: {
-        mode: "single" as const,
-        pipelineId: config.pipeline.id,
-        identity: config.pipeline.definition?.identity,
-        stepIds: config.pipeline.stepIds,
-      },
-      dependsOn: config.dependsOn,
-      optionalDependsOn: config.optionalDependsOn,
-      skipAfterFailureOf: config.skipAfterFailureOf,
-      name: config.name,
-      description: config.description,
-      metadata: config.metadata,
-      dryRun: config.dryRun,
-      run: createSingleChildRunner({ ...config, stepId: id }),
-    };
-
-    const skip = config.skip;
-    if (skip !== undefined) {
-      definition.skip = skip;
-    }
-    return buildStep(id, definition);
-  };
+    definition: Parameters<typeof buildSaveArtifactStep<TOptions>>[2]
+  ): AnyStep<TOptions> {
+    return buildSaveArtifactStep(buildStep, id, definition);
+  }
 
   function fromPipeline<
     TId extends string,
@@ -629,53 +284,10 @@ function createStepFactory<
   ): BuiltStep<TId, PolicySkippedOutput<Awaited<TOut>, TDecision>, TOptions, TInputOptions>;
   function fromPipeline(
     id: string,
-    definition: Parameters<typeof buildPipelineStep>[1]
+    definition: SingleChildStepConfig<TOptions>
   ): AnyStep<TOptions> {
-    return buildPipelineStep(id, definition);
+    return buildPipelineStep(buildStep, id, definition);
   }
-
-  const buildRemoteStep = (
-    id: string,
-    config: {
-      adapter: RemoteStepAdapter<object, unknown, unknown>;
-      mapInput(inputs: Record<string, unknown>, context: PipelineStepContext<TOptions>): unknown;
-      outputSchema: StandardSchemaV1;
-      dependsOn?: readonly AnyStep<TOptions>[];
-      optionalDependsOn?: readonly AnyStep<TOptions>[];
-      skipAfterFailureOf?: readonly AnyStep<TOptions>[];
-      name?: string;
-      description?: string;
-      metadata?: PipelineMetadata;
-      dryRun?: "skip" | AnyStepDryRunHandler<TOptions>;
-      skip?: StepSkipPredicate<
-        TOptions,
-        readonly AnyStep<TOptions>[],
-        readonly AnyStep<TOptions>[],
-        unknown
-      >;
-    }
-  ) => {
-    const remote: NonNullable<PipelinePlanStep["remote"]> = { engine: config.adapter.engine };
-    if (config.adapter.target !== undefined) remote.target = config.adapter.target;
-    const definition: StepDefinitionBody<TOptions> = {
-      [STEP_REMOTE]: remote,
-      dependsOn: config.dependsOn,
-      optionalDependsOn: config.optionalDependsOn,
-      skipAfterFailureOf: config.skipAfterFailureOf,
-      name: config.name,
-      description: config.description,
-      metadata: config.metadata,
-      dryRun: config.dryRun,
-      outputSchema: config.outputSchema,
-      run: (inputs: Record<string, unknown>, context: PipelineStepContext<TOptions>) =>
-        config.adapter.invoke(config.mapInput(inputs, context), context),
-    };
-    const skip = config.skip;
-    if (skip !== undefined) {
-      definition.skip = skip;
-    }
-    return buildStep(id, definition);
-  };
 
   function fromRemote<
     TId extends string,
@@ -712,71 +324,9 @@ function createStepFactory<
     TInputOptions,
     InferSchemaInput<TSchema>
   >;
-  function fromRemote(
-    id: string,
-    definition: Parameters<typeof buildRemoteStep>[1]
-  ): AnyStep<TOptions> {
-    return buildRemoteStep(id, definition);
+  function fromRemote(id: string, definition: RemoteStepConfig<TOptions>): AnyStep<TOptions> {
+    return buildRemoteStep(buildStep, id, definition);
   }
-
-  const buildMappedPipelineStep = (
-    id: string,
-    config: MappedChildPipelineStepDefinition<
-      TOptions,
-      readonly AnyStep<TOptions>[],
-      readonly AnyStep<TOptions>[],
-      Pipeline<object, unknown>,
-      unknown
-    > & {
-      mapResult?: (
-        value: unknown,
-        result: PipelineRun<unknown>,
-        item: unknown,
-        index: number,
-        context: PipelineStepContext<TOptions>
-      ) => unknown;
-      skip?: StepSkipPredicate<
-        TOptions,
-        readonly AnyStep<TOptions>[],
-        readonly AnyStep<TOptions>[],
-        unknown
-      >;
-    }
-  ) => {
-    const configuredConcurrency = config.concurrency;
-    if (
-      typeof configuredConcurrency === "number" &&
-      (!Number.isInteger(configuredConcurrency) || configuredConcurrency < 1)
-    ) {
-      throw new RangeError(
-        `forEachPipeline concurrency must be a positive finite integer, got ${configuredConcurrency}`
-      );
-    }
-    const definition: StepDefinitionBody<TOptions> = {
-      [STEP_NESTED_PIPELINE]: {
-        mode: "for-each" as const,
-        concurrency:
-          typeof configuredConcurrency === "function" ? "dynamic" : (configuredConcurrency ?? 1),
-        pipelineId: config.pipeline.id,
-        identity: config.pipeline.definition?.identity,
-        stepIds: config.pipeline.stepIds,
-      },
-      dependsOn: config.dependsOn,
-      optionalDependsOn: config.optionalDependsOn,
-      skipAfterFailureOf: config.skipAfterFailureOf,
-      name: config.name,
-      description: config.description,
-      metadata: config.metadata,
-      dryRun: config.dryRun,
-      run: createMappedChildRunner({ ...config, stepId: id }),
-    };
-
-    const skip = config.skip;
-    if (skip !== undefined) {
-      definition.skip = skip;
-    }
-    return buildStep(id, definition);
-  };
 
   function forEachPipeline<
     TId extends string,
@@ -901,9 +451,9 @@ function createStepFactory<
   >;
   function forEachPipeline(
     id: string,
-    definition: Parameters<typeof buildMappedPipelineStep>[1]
+    definition: MappedChildStepConfig<TOptions>
   ): AnyStep<TOptions> {
-    return buildMappedPipelineStep(id, definition);
+    return buildMappedPipelineStep(buildStep, id, definition);
   }
 
   function iteratePipeline<
@@ -943,40 +493,9 @@ function createStepFactory<
   ): BuiltStep<TId, Awaited<TResult>, TOptions, TInputOptions>;
   function iteratePipeline(
     id: string,
-    definition: Omit<Parameters<typeof createIterationRunner<TOptions>>[0], "stepId"> & {
-      name?: string;
-      description?: string;
-      metadata?: PipelineMetadata;
-      dependsOn?: readonly AnyStep<TOptions>[];
-      dryRun?: "skip";
-    }
+    definition: IterationStepConfig<TOptions>
   ): AnyStep<TOptions> {
-    if (!Number.isSafeInteger(definition.maxIterations) || definition.maxIterations < 1) {
-      throw new RangeError("iteratePipeline maxIterations must be a positive safe integer");
-    }
-    const controls = definition.controls ? structuredClone(definition.controls) : undefined;
-    if (controls) {
-      if (controls.targets) Object.freeze(controls.targets);
-      if (controls.stepIds) Object.freeze(controls.stepIds);
-      Object.freeze(controls);
-    }
-    const config = { ...definition, stepId: id, controls };
-    return buildStep(id, {
-      [STEP_NESTED_PIPELINE]: {
-        mode: "iterate",
-        maxIterations: config.maxIterations,
-        controls: config.controls,
-        pipelineId: config.pipeline.id,
-        identity: config.pipeline.definition?.identity,
-        stepIds: config.pipeline.stepIds,
-      },
-      name: config.name,
-      description: config.description,
-      metadata: config.metadata,
-      dependsOn: config.dependsOn,
-      dryRun: config.dryRun,
-      run: createIterationRunner(config),
-    });
+    return buildIterationStep(buildStep, id, definition);
   }
 
   const factory = {

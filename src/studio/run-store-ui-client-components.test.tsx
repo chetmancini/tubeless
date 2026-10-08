@@ -5,14 +5,10 @@ import { renderToString } from "preact-render-to-string";
 import { describe, expect, it } from "vitest";
 import { RUN_MODEL_VERSION, type PipelinePlan } from "../core/pipeline.js";
 import type { StoredPipelineRun } from "../run-store/run-store.js";
-import {
-  CommandFields,
-  isoTime,
-  PipelinesView,
-  PlanView,
-  RunsView,
-  StudioAccessNotice,
-} from "./run-store-ui-client.js";
+import { StudioAccessNotice } from "./run-store-ui-client.js";
+import { CommandFields } from "./run-store-ui-launch.js";
+import { PipelinesView, PlanView } from "./run-store-ui-pipelines.js";
+import { isoTime, RunsView } from "./run-store-ui-runs.js";
 import { Status } from "./run-store-ui-steps.js";
 import type { PipelineRunStudioCommand } from "./run-store-ui-protocol.js";
 
