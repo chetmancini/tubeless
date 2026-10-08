@@ -1,7 +1,6 @@
 import { querySteps } from "../core/pipeline.js";
 import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
-import { parseArgs, type ParseArgsConfig } from "node:util";
 import type { PipelinePlan, PipelineRunControls } from "../core/pipeline.js";
 import {
   PIPELINE_MERMAID_DIRECTIONS,
@@ -20,24 +19,17 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
+import {
+  parseSubcommandArgs,
+  REGISTRATION_OPTIONS,
+  runWorkbenchSubcommand,
+  STEP_METADATA_FILTER_OPTIONS,
+} from "./workbench-subcommand.js";
 
 const PIPELINE_FILE_POSITIONAL = {
   count: 1,
   message: "Pass exactly one pipeline or command file.",
 } as const;
-
-function parseSubcommandArgs<const T extends ParseArgsConfig["options"]>(
-  argv: readonly string[],
-  options: T
-) {
-  return parseArgs({
-    args: [...argv],
-    allowPositionals: true,
-    options,
-    strict: true,
-  });
-}
 
 async function loadParsedPlanSource(
   parsed: {
@@ -70,7 +62,6 @@ Options:
 
 function parseListArgs(argv: readonly string[]) {
   return parseSubcommandArgs(argv, {
-    help: { type: "boolean", short: "h" },
     json: { type: "boolean" },
     project: { type: "string", short: "p" },
   });
@@ -118,7 +109,6 @@ Options:
 
 function parseValidateArgs(argv: readonly string[]) {
   return parseSubcommandArgs(argv, {
-    help: { type: "boolean", short: "h" },
     json: { type: "boolean" },
   });
 }
@@ -207,13 +197,9 @@ interface WorkbenchInspection {
 
 function parseInspectArgs(argv: readonly string[]) {
   return parseSubcommandArgs(argv, {
-    tag: { type: "string", multiple: true },
-    owner: { type: "string" },
-    domain: { type: "string" },
-    export: { type: "string", short: "e" },
-    help: { type: "boolean", short: "h" },
+    ...REGISTRATION_OPTIONS,
+    ...STEP_METADATA_FILTER_OPTIONS,
     json: { type: "boolean" },
-    project: { type: "string", short: "p" },
   });
 }
 
@@ -296,10 +282,8 @@ function parsePlanArgs(argv: readonly string[]) {
   return parseSubcommandArgs(argv, {
     "dry-run": { type: "boolean" },
     explain: { type: "boolean" },
-    export: { type: "string", short: "e" },
-    help: { type: "boolean", short: "h" },
+    ...REGISTRATION_OPTIONS,
     json: { type: "boolean" },
-    project: { type: "string", short: "p" },
     step: { type: "string", short: "s", multiple: true },
     target: { type: "string", short: "t", multiple: true },
   });
@@ -362,14 +346,10 @@ function parseGraphArgs(argv: readonly string[]) {
   return parseSubcommandArgs(argv, {
     descriptions: { type: "boolean" },
     direction: { type: "string", short: "d" },
-    tag: { type: "string", multiple: true },
-    owner: { type: "string" },
-    domain: { type: "string" },
-    metadata: { type: "boolean" },
-    export: { type: "string", short: "e" },
-    help: { type: "boolean", short: "h" },
+    ...REGISTRATION_OPTIONS,
+    ...STEP_METADATA_FILTER_OPTIONS,
     markdown: { type: "boolean" },
-    project: { type: "string", short: "p" },
+    metadata: { type: "boolean" },
   });
 }
 

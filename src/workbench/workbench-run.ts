@@ -1,7 +1,6 @@
 import { createWriteStream, type WriteStream } from "node:fs";
 import { mkdir, readlink, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
-import { parseArgs } from "node:util";
 import type { PipelineRunEventStore } from "../run-store/run-store.js";
 import {
   composeTraceExporters,
@@ -19,6 +18,12 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
+import {
+  parseSubcommandArgs,
+  REGISTRATION_OPTIONS,
+  RUN_HISTORY_OPTIONS,
+  runWorkbenchSubcommand,
+} from "./workbench-subcommand.js";
 
 const RUN_USAGE = `Usage: tubeless run [options] <pipeline-id-or-file> [-- <command-args...>]
 
@@ -40,47 +45,39 @@ function parseRunArgs(argv: readonly string[]) {
   const separatorIndex = argv.indexOf("--");
   const workbenchArgs = separatorIndex === -1 ? argv : argv.slice(0, separatorIndex);
   const commandArgs = separatorIndex === -1 ? [] : argv.slice(separatorIndex + 1);
-  return {
-    commandArgs,
-    parsed: parseArgs({
-      args: [...workbenchArgs],
-      allowPositionals: true,
-      options: {
-        export: { type: "string", short: "e" },
-        help: { type: "boolean", short: "h" },
-        project: { type: "string", short: "p" },
-        store: { type: "string" },
-        trace: { type: "string" },
-      },
-      strict: true,
-    }),
-  };
+  try {
+    return {
+      ...parseSubcommandArgs(workbenchArgs, { ...REGISTRATION_OPTIONS, ...RUN_HISTORY_OPTIONS }),
+      commandArgs,
+    };
+  } catch (error) {
+    throw new Error(`${errorMessage(error)} Application flags belong after --.`, {
+      cause: error,
+    });
+  }
 }
 
 export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
-  let parsed: ReturnType<typeof parseRunArgs>;
-  try {
-    parsed = parseRunArgs(argv);
-  } catch (error) {
-    return writeUsageError(
-      io,
-      `${errorMessage(error)} Application flags belong after --.`,
-      RUN_USAGE
-    );
-  }
+  return runWorkbenchSubcommand(
+    {
+      usage: RUN_USAGE,
+      parse: parseRunArgs,
+      positionalCountError: { count: 1, message: "Pass exactly one pipeline ID or file." },
+      run: executeRun,
+    },
+    argv,
+    io
+  );
+}
 
-  if (parsed.parsed.values.help) {
-    io.stdout.write(RUN_USAGE);
-    return TUBELESS_WORKBENCH_EXIT_CODE.success;
-  }
-  if (parsed.parsed.positionals.length !== 1) {
-    return writeUsageError(io, "Pass exactly one pipeline ID or file.", RUN_USAGE);
-  }
-
+async function executeRun(
+  parsed: ReturnType<typeof parseRunArgs>,
+  io: WorkbenchCliIo
+): Promise<number> {
   const registration = await resolveWorkbenchRegistration(
-    parsed.parsed.positionals[0]!,
-    parsed.parsed.values.export,
-    parsed.parsed.values.project,
+    parsed.positionals[0]!,
+    parsed.values.export,
+    parsed.values.project,
     io,
     RUN_USAGE
   );
@@ -88,12 +85,10 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
   const loaded = await registration.loadCommand(io);
   if ("exitCode" in loaded) return loaded.exitCode;
 
-  const storePath = parsed.parsed.values.store
-    ? path.resolve(io.cwd, parsed.parsed.values.store)
-    : undefined;
+  const storePath = parsed.values.store ? path.resolve(io.cwd, parsed.values.store) : undefined;
   const tracePath =
-    parsed.parsed.values.trace && parsed.parsed.values.trace !== "-"
-      ? path.resolve(io.cwd, parsed.parsed.values.trace)
+    parsed.values.trace && parsed.values.trace !== "-"
+      ? path.resolve(io.cwd, parsed.values.trace)
       : undefined;
   if (
     storePath !== undefined &&
@@ -110,13 +105,13 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
   let exitCode: number = TUBELESS_WORKBENCH_EXIT_CODE.execution;
   try {
     const exporters: PipelineTraceExporter[] = [];
-    if (parsed.parsed.values.store) {
+    if (parsed.values.store) {
       const { openSqlitePipelineRunStore } = await import("../run-store/run-store-sqlite.js");
-      store = await openSqlitePipelineRunStore(path.resolve(io.cwd, parsed.parsed.values.store));
+      store = await openSqlitePipelineRunStore(path.resolve(io.cwd, parsed.values.store));
       exporters.push(store);
     }
-    if (parsed.parsed.values.trace) {
-      const writer = await createRunTraceWriter(parsed.parsed.values.trace, io, io.signal);
+    if (parsed.values.trace) {
+      const writer = await createRunTraceWriter(parsed.values.trace, io, io.signal);
       bindTraceSignal = writer.bindSignal;
       closeTrace = writer.close;
       exporters.push(writer.exporter);
@@ -128,7 +123,7 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
         ? { tracing: { exporter: composeTraceExporters(exporters) } }
         : undefined;
     const commandIo =
-      parsed.parsed.values.trace === "-"
+      parsed.values.trace === "-"
         ? { ...loaded.commandIo, stdout: loaded.commandIo.stderr }
         : loaded.commandIo;
     exitCode = await executePipelineCommand(

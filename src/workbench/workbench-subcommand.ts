@@ -1,9 +1,47 @@
+import { parseArgs, type ParseArgsConfig } from "node:util";
 import {
   errorMessage,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
+
+type SubcommandOptions = NonNullable<ParseArgsConfig["options"]>;
+
+/** Select a pipeline or command export from a module. */
+export const EXPORT_OPTION = { export: { type: "string", short: "e" } } as const;
+
+/** Resolve a pipeline or command export from a project file or module. */
+export const REGISTRATION_OPTIONS = {
+  ...EXPORT_OPTION,
+  project: { type: "string", short: "p" },
+} as const;
+
+/** Choose the SQLite store or NDJSON trace a command records to or reads from. */
+export const RUN_HISTORY_OPTIONS = {
+  store: { type: "string" },
+  trace: { type: "string" },
+} as const;
+
+/** Filter inspected or graphed steps by graph metadata. */
+export const STEP_METADATA_FILTER_OPTIONS = {
+  domain: { type: "string" },
+  owner: { type: "string" },
+  tag: { type: "string", multiple: true },
+} as const;
+
+/** Strict subcommand parsing with positionals; every subcommand accepts `-h, --help`. */
+export function parseSubcommandArgs<const T extends SubcommandOptions>(
+  argv: readonly string[],
+  options: T
+) {
+  return parseArgs({
+    args: [...argv],
+    allowPositionals: true,
+    options: { ...options, help: { type: "boolean", short: "h" } } as const,
+    strict: true,
+  });
+}
 
 interface ParsedSubcommand {
   values: { help?: boolean };

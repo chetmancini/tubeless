@@ -1,7 +1,6 @@
 import { cacheArtifactMetadata } from "../run-store/cache-artifact.js";
 import { stat } from "node:fs/promises";
 import * as path from "node:path";
-import { parseArgs } from "node:util";
 import {
   createPipelineRunProjector,
   type PipelineRunEventQuery,
@@ -20,7 +19,11 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
+import {
+  parseSubcommandArgs,
+  RUN_HISTORY_OPTIONS,
+  runWorkbenchSubcommand,
+} from "./workbench-subcommand.js";
 
 const HISTORY_USAGE = `Usage: tubeless history [options] [run-id]
 
@@ -39,20 +42,13 @@ Options:
 `;
 
 function parseHistoryArgs(argv: readonly string[]) {
-  return parseArgs({
-    args: [...argv],
-    allowPositionals: true,
-    options: {
-      clear: { type: "boolean" },
-      events: { type: "boolean" },
-      help: { type: "boolean", short: "h" },
-      json: { type: "boolean" },
-      pipeline: { type: "string" },
-      store: { type: "string" },
-      trace: { type: "string" },
-      yes: { type: "boolean" },
-    },
-    strict: true,
+  return parseSubcommandArgs(argv, {
+    clear: { type: "boolean" },
+    events: { type: "boolean" },
+    json: { type: "boolean" },
+    pipeline: { type: "string" },
+    ...RUN_HISTORY_OPTIONS,
+    yes: { type: "boolean" },
   });
 }
 

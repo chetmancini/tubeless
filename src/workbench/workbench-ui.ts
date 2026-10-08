@@ -1,6 +1,5 @@
 import { parseStudioHosting } from "../studio/run-store-ui-hosting.js";
 import * as path from "node:path";
-import { parseArgs } from "node:util";
 import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import { loadPipelineProjectFile, createModuleRegistration } from "./workbench-project-loader.js";
 import type { PipelineRunEventReader } from "../run-store/run-store.js";
@@ -17,7 +16,12 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
+import {
+  EXPORT_OPTION,
+  parseSubcommandArgs,
+  RUN_HISTORY_OPTIONS,
+  runWorkbenchSubcommand,
+} from "./workbench-subcommand.js";
 
 const UI_USAGE = `Usage: tubeless ui [options] [project-file]
 
@@ -37,20 +41,13 @@ Options:
 `;
 
 function parseUiArgs(argv: readonly string[]) {
-  return parseArgs({
-    args: [...argv],
-    allowPositionals: true,
-    options: {
-      command: { type: "string", multiple: true },
-      export: { type: "string", short: "e" },
-      help: { type: "boolean", short: "h" },
-      host: { type: "string" },
-      port: { type: "string" },
-      "public-url": { type: "string" },
-      store: { type: "string" },
-      trace: { type: "string" },
-    },
-    strict: true,
+  return parseSubcommandArgs(argv, {
+    command: { type: "string", multiple: true },
+    ...EXPORT_OPTION,
+    host: { type: "string" },
+    port: { type: "string" },
+    "public-url": { type: "string" },
+    ...RUN_HISTORY_OPTIONS,
   });
 }
 
