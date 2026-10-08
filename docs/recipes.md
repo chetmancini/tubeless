@@ -236,7 +236,9 @@ contacts that system, both the adapter and remote worker must honor
 it needs to own job delivery and retries; see [remote steps](./remote-step-composition.md).
 
 For dependency, failure, and selection behavior, read [core concepts](./concepts.md).
-For workbench commands, read [the CLI](./cli.md). For the local run UI, read
+For workbench commands, read [the CLI](./cli.md). For hosted execution, follow
+[Cloud authentication and deployed runs](./cli.md#tubeless-cloud); register once
+with `cloud add`, then run the stored revision with JSON input. For the local run UI, read
 [the studio](./studio.md). To connect historical runs to a compiled graph and handler
 release, set `implementationVersion` as shown in [tracing](../examples/tracing.ts).
 Studio's [definition history](./studio.md#definition-history-and-comparison) groups

@@ -530,6 +530,18 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
   that abort is process-local, leaves sibling launches running, and is not
   crash-resume.
 
+## Cloud command use
+
+Use `tubeless auth login` and `cloud link` after the user has connected a workspace
+and GitHub repository in the dashboard. `cloud add` registers committed source
+once; repeated exact adds preserve the deployed SHA. `cloud run` executes only
+the existing deployment and never imports local modules or updates source. Pass
+JSON object input via `--input-file`, use `--json` for automation and `--detach`
+for admission only. Preserve an uncertain admission key rather than launching a
+fresh run. Ctrl-C stops following; cancellation remains explicit in the dashboard.
+Read [the Cloud CLI contract](./cli.md#tubeless-cloud) for credentials, roles,
+source selectors, retention and exit codes.
+
 ## Failure and safety rules
 
 - Do not use `skip` to swallow an exception.

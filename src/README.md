@@ -129,6 +129,11 @@ Run `make check` after changes; it builds before checking these boundaries.
 
 ## Workbench execution ownership
 
+- `workbench/workbench-auth.ts` and `workbench-cloud.ts` own lazy first-party Cloud
+  command orchestration. `cloud-client.ts` validates versioned service DTOs,
+  `cloud-config.ts` owns nonsecret project links and source paths, and
+  `cloud-credentials.ts` owns lazy native credentials. These modules never import
+  selected pipeline files and remain outside public runtime entrypoints.
 - `workbench/workbench-run.ts` owns the `run` command's arguments and trace destinations.
 - `workbench/workbench-command-execution.ts` executes command arguments or validated
   values and translates failures into terminal output and exit codes. Both `run`

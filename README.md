@@ -30,8 +30,7 @@ For scheduling or crash recovery, pair it with a [queue or workflow engine](./do
 npm install tubeless
 ```
 
-The library uses ESM and requires Node.js 22.6 or later. The CLI also requires
-Bun 1.3.14 or later. Linux and macOS are supported; Windows is untested.
+The ESM library requires Node.js 22.6+. The CLI requires Bun 1.3.14+. Linux and macOS are supported; Windows is untested.
 See [installation and runtime support](./docs/getting-started.md#install).
 
 Tubeless is pre-1.0, so the public API may change between releases.
@@ -89,6 +88,9 @@ In your app, add `tubeless.project.ts` and omit `--project`. Pass application
 flags after `--`. Record runs with `--store` or `--trace`, then inspect them with
 `tubeless history` or the [local studio](./docs/studio.md).
 
+Use `tubeless auth login` and `tubeless cloud run` for registered Cloud pipelines.
+[Cloud CLI usage](./docs/cli.md#tubeless-cloud) explains dashboard setup and deployed-source execution.
+
 ## Find your route
 
 - Start with a [typed import](./examples/typed-import.ts) or add
@@ -110,10 +112,8 @@ and more. For help authoring pipelines with a coding agent, install the
 
 ## Contributing
 
-Bug reports, documentation improvements, and focused pull requests are welcome.
-Open an [issue](https://github.com/chetmancini/tubeless/issues) before starting a
-large change or changing the public API. See [CONTRIBUTING.md](./CONTRIBUTING.md)
-for local setup and checks, and [SECURITY.md](./SECURITY.md) to report a vulnerability privately.
+Open an [issue](https://github.com/chetmancini/tubeless/issues) before a large change or public API change.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for checks and [SECURITY.md](./SECURITY.md) to report vulnerabilities.
 
 ## License
 
