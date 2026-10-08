@@ -41,6 +41,13 @@ jobs:
           restore-keys: ${{ runner.os }}-bun-
       - name: Install
         run: bun ci
+      # Transform cache for test.fsModuleCache; entries are keyed by source
+      # content, and vitest clears the cache itself when the lockfile changes.
+      - name: Cache Vitest transform cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .vitest-cache
+          key: ${{ runner.os }}-vitest-${{ hashFiles('bun.lock', 'vitest.config.ts') }}
       # Lint, formatting, typecheck, docs, and API checks do not depend on Node;
       # run the complete gate once on node 24. Runtime lanes verify the package
       # against the other supported Node versions, each running half the test

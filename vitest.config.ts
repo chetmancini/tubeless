@@ -8,6 +8,10 @@ export default defineConfig({
     },
   },
   test: {
+    // Persist transformed modules between runs; vitest invalidates entries by
+    // source content and clears the whole cache when the lockfile changes.
+    fsModuleCache: true,
+    fsModuleCachePath: ".vitest-cache",
     coverage: {
       exclude: ["src/**/*.test.{ts,tsx}", "src/**/*.test-support.ts", "scripts/**"],
       include: ["src/**/*.{ts,tsx}"],
