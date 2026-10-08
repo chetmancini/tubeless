@@ -8,20 +8,21 @@ Package: `tubeless`
 
 ## Public entrypoints
 
-| Entrypoint              | Declaration                        | Surface hash                                                       | Exported symbols |
-| ----------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless/agent/node`   | `./dist/agent/node.d.ts`           | `a80a1618a64e39d83c098386aa7c647cd0e17ca89e7a3879a6e8b31bdc08ffdc` |                3 |
-| `tubeless/agent`        | `./dist/agent/agent.d.ts`          | `1ba9a2bd89f4301be6404672560c748d882b949adf7725449e099238185d46fa` |               28 |
-| `tubeless`              | `./dist/core/pipeline.d.ts`        | `bf148dfe613635da7ac884306aba04f507689f8ecf471da2fa46c11ad058f6ae` |               78 |
-| `tubeless/cli`          | `./dist/cli/cli.d.ts`              | `9765858bd755ceef8fc6c4d8dc26afe36f29131849087c3574326a5a24cc959a` |               31 |
-| `tubeless/batch`        | `./dist/utilities/batch.d.ts`      | `a09125c6849bb91b4bbba2f76c4248452d5288cf0c70671461de5846b1d17037` |                7 |
-| `tubeless/node`         | `./dist/node/node.d.ts`            | `331e7e393a58d11683f168499b038fa585925b2199161b4b411469834782df85` |               14 |
-| `tubeless/rate-limit`   | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
-| `tubeless/retry`        | `./dist/utilities/retry.d.ts`      | `52ede846e87e3601426639a7bdc2de0a440c119470dc55324deb26cb312757fd` |                6 |
-| `tubeless/project`      | `./dist/project/project.d.ts`      | `6525040d12b15f24f5215df232e2f1cb3d8c660bde2857ddd1af81c9ff52368b` |                8 |
-| `tubeless/testing`      | `./dist/testing/testing.d.ts`      | `bd6577d2f00474567d6cf37458005e5d92990f14c63e0cfeb27abc7055e2552f` |               10 |
-| `tubeless/tracing`      | `./dist/tracing/tracing.d.ts`      | `e378d1e798e86752560d4398a591826ba0b3e0af0417ffd2fd71e3ffb28aeffb` |                3 |
-| `tubeless/agent/openai` | `./dist/agent/openai.d.ts`         | `dfdd1a52a08d2756ad3220f71d7a707ec2cf301922f767b1a82c4ebc9fc6cd01` |                2 |
+| Entrypoint                 | Declaration                        | Surface hash                                                       | Exported symbols |
+| -------------------------- | ---------------------------------- | ------------------------------------------------------------------ | ---------------: |
+| `tubeless/agent/node`      | `./dist/agent/node.d.ts`           | `a80a1618a64e39d83c098386aa7c647cd0e17ca89e7a3879a6e8b31bdc08ffdc` |                3 |
+| `tubeless/agent`           | `./dist/agent/agent.d.ts`          | `1ba9a2bd89f4301be6404672560c748d882b949adf7725449e099238185d46fa` |               28 |
+| `tubeless`                 | `./dist/core/pipeline.d.ts`        | `bf148dfe613635da7ac884306aba04f507689f8ecf471da2fa46c11ad058f6ae` |               78 |
+| `tubeless/cli`             | `./dist/cli/cli.d.ts`              | `9765858bd755ceef8fc6c4d8dc26afe36f29131849087c3574326a5a24cc959a` |               31 |
+| `tubeless/batch`           | `./dist/utilities/batch.d.ts`      | `a09125c6849bb91b4bbba2f76c4248452d5288cf0c70671461de5846b1d17037` |                7 |
+| `tubeless/node`            | `./dist/node/node.d.ts`            | `331e7e393a58d11683f168499b038fa585925b2199161b4b411469834782df85` |               14 |
+| `tubeless/rate-limit`      | `./dist/utilities/rate-limit.d.ts` | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
+| `tubeless/retry`           | `./dist/utilities/retry.d.ts`      | `52ede846e87e3601426639a7bdc2de0a440c119470dc55324deb26cb312757fd` |                6 |
+| `tubeless/project`         | `./dist/project/project.d.ts`      | `6525040d12b15f24f5215df232e2f1cb3d8c660bde2857ddd1af81c9ff52368b` |                8 |
+| `tubeless/testing`         | `./dist/testing/testing.d.ts`      | `bd6577d2f00474567d6cf37458005e5d92990f14c63e0cfeb27abc7055e2552f` |               10 |
+| `tubeless/tracing`         | `./dist/tracing/tracing.d.ts`      | `e378d1e798e86752560d4398a591826ba0b3e0af0417ffd2fd71e3ffb28aeffb` |                3 |
+| `tubeless/agent/openai`    | `./dist/agent/openai.d.ts`         | `7f21c66f13f3deedf7705c649829562e096a620de5bce8248aa76a44c0d26d87` |                2 |
+| `tubeless/agent/anthropic` | `./dist/agent/anthropic.d.ts`      | `465640496e89c03b352dc2eac19d1b37ae2692acf948b186117bf350d04b35bb` |                2 |
 
 ## Symbols
 
@@ -273,5 +274,12 @@ Package: `tubeless`
 
 | Symbol                                                                                           | Description                                                                                   |
 | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L30)       | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
-| [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L8) | Responses transport settings; credentials are resolved only when a decision executes.         |
+| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L39)       | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
+| [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L9) | Responses transport settings; credentials are resolved only when a decision executes.         |
+
+### `tubeless/agent/anthropic`
+
+| Symbol                                                                                                  | Description                                                                                     |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [`anthropicModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L60)        | Create a dependency-free Anthropic Messages model with native history and on-demand compaction. |
+| [`AnthropicModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L15) | Messages API transport settings; credentials are resolved only when a decision executes.        |
