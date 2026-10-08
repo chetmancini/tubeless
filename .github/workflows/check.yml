@@ -19,7 +19,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [22, 24, 26]
+        include:
+          - node: 22
+            shard: 1/2
+          - node: 24
+          - node: 26
+            shard: 2/2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -37,13 +42,18 @@ jobs:
       - name: Install
         run: bun ci
       # Lint, formatting, typecheck, docs, and API checks do not depend on Node;
-      # run the complete gate once and only runtime checks on the other versions.
+      # run the complete gate once on node 24. Runtime lanes verify the package
+      # against the other supported Node versions, each running half the test
+      # suite via TEST_SHARD so the pair covers the full set once.
       - name: Check
         if: matrix.node == 24
         run: make check
       - name: Test and pack
         if: matrix.node != 24
-        run: bun run build && bun run --silent test:run && bun run --silent pack:verify
+        run: |
+          bun run build
+          TEST_SHARD='${{ matrix.shard }}' bun run --silent test:shard
+          bun run --silent pack:verify
       - name: Summarize public API report diff
         if: github.event_name == 'pull_request' && matrix.node == 24
         run: |
