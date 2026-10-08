@@ -1,18 +1,15 @@
 import { normalizeCloudHost } from "./cloud-config.js";
 import {
   isCloudObject,
+  isCloudToken,
   parseCliError,
-  parseCliPipeline,
   parseCliPipelines,
-  parseCliRepositories,
   parseCliRun,
   parseCliSession,
   parseCloudDeviceCode,
   parseCloudDeviceError,
   parseCloudDeviceSession,
-  type CliAddPipeline,
   type CliPipeline,
-  type CliRepository,
   type CliRun,
   type CliRunRequest,
   type CliSession,
@@ -38,6 +35,14 @@ export class CloudClientError extends Error {
   }
 }
 
+export function isCloudTransportError(error: unknown): error is CloudClientError {
+  return (
+    error instanceof CloudClientError &&
+    error.status === undefined &&
+    ["transport_error", "timeout"].includes(error.code)
+  );
+}
+
 export interface CloudClientOptions {
   host: string;
   token?: string;
@@ -50,9 +55,7 @@ export interface CloudClient {
   readonly host: string;
   session(): Promise<CliSession>;
   logout(): Promise<void>;
-  repositories(workspaceId: string): Promise<CliRepository[]>;
   pipelines(workspaceId: string): Promise<CliPipeline[]>;
-  addPipeline(workspaceId: string, request: CliAddPipeline): Promise<CliPipeline>;
   run(workspaceId: string, request: CliRunRequest, idempotencyKey: string): Promise<CliRun>;
   getRun(workspaceId: string, runId: string): Promise<CliRun>;
   deviceCode(): Promise<CloudDeviceCode>;
@@ -69,6 +72,19 @@ function abortFailure(timedOut: boolean): CloudClientError {
     timedOut ? "Cloud request timed out." : "Cloud request interrupted.",
     timedOut ? "timeout" : "cancelled"
   );
+}
+
+function validateRunInput(input: unknown): void {
+  if (!isCloudObject(input))
+    throw new CloudClientError("Cloud run input must be a JSON object.", "invalid_request");
+  let encoded: string | undefined;
+  try {
+    encoded = JSON.stringify(input);
+  } catch {
+    throw new CloudClientError("Cloud run input must contain JSON data.", "invalid_request");
+  }
+  if (encoded === undefined || Buffer.byteLength(encoded, "utf8") > CLOUD_JSON_LIMIT)
+    throw new CloudClientError("Cloud run input exceeds the 64 KB JSON limit.", "invalid_request");
 }
 
 async function responseJson(response: Response, signal: AbortSignal): Promise<unknown> {
@@ -142,10 +158,7 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
       "invalid_request"
     );
   }
-  if (
-    options.token !== undefined &&
-    (!options.token || options.token.length > 4096 || !/^[\x21-\x7e]+$/.test(options.token))
-  ) {
+  if (options.token !== undefined && !isCloudToken(options.token)) {
     throw new CloudClientError(
       "The Cloud credential is invalid. Run tubeless auth login again.",
       "unauthenticated"
@@ -160,7 +173,7 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
       nativeAuth?: boolean;
       devicePolling?: boolean;
       idempotencyKey?: string;
-      runAdmission?: boolean;
+      bodyLimit?: number;
     } = {}
   ): Promise<T> => {
     const url = new URL(pathname, host);
@@ -178,34 +191,15 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
     }
     let body: string | undefined;
     if (requestOptions.body !== undefined) {
-      if (requestOptions.runAdmission) {
-        if (!isCloudObject(requestOptions.body) || !isCloudObject(requestOptions.body.input)) {
-          throw new CloudClientError("Cloud run input must be a JSON object.", "invalid_request");
-        }
-        let input: string;
-        try {
-          input = JSON.stringify(requestOptions.body.input);
-        } catch {
-          throw new CloudClientError("Cloud run input must contain JSON data.", "invalid_request");
-        }
-        if (input === undefined || Buffer.byteLength(input, "utf8") > CLOUD_JSON_LIMIT) {
-          throw new CloudClientError(
-            "Cloud run input exceeds the 64 KB JSON limit.",
-            "invalid_request"
-          );
-        }
-      }
       try {
         body = JSON.stringify(requestOptions.body);
       } catch {
         throw new CloudClientError("Cloud request must contain JSON data.", "invalid_request");
       }
-      const bodyLimit = requestOptions.runAdmission ? RUN_ENVELOPE_LIMIT : CLOUD_JSON_LIMIT;
+      const bodyLimit = requestOptions.bodyLimit ?? CLOUD_JSON_LIMIT;
       if (body === undefined || Buffer.byteLength(body, "utf8") > bodyLimit) {
         throw new CloudClientError(
-          requestOptions.runAdmission
-            ? "Cloud run request exceeds the 66 KB JSON envelope limit."
-            : "Cloud request exceeds the 64 KB JSON limit.",
+          `Cloud request exceeds the ${bodyLimit / 1024} KB JSON limit.`,
           "invalid_request"
         );
       }
@@ -317,19 +311,16 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
         },
         { body: {} }
       ),
-    repositories: (workspace) =>
-      request(`${workspacePath(workspace)}/repositories`, parseCliRepositories),
     pipelines: (workspace) => request(`${workspacePath(workspace)}/pipelines`, parseCliPipelines),
-    addPipeline: (workspace, body) =>
-      request(`${workspacePath(workspace)}/pipelines`, parseCliPipeline, { body }),
-    run: (workspace, body, idempotencyKey) => {
-      if (!/^[A-Za-z0-9._:-]{1,128}$/.test(idempotencyKey)) {
+    run: async (workspace, body, idempotencyKey) => {
+      if (!/^[A-Za-z0-9._:-]{1,200}$/.test(idempotencyKey)) {
         throw new CloudClientError("Invalid Cloud run idempotency key.", "invalid_request");
       }
+      validateRunInput(body.input);
       return request(`${workspacePath(workspace)}/runs`, parseCliRun, {
         body,
         idempotencyKey,
-        runAdmission: true,
+        bodyLimit: RUN_ENVELOPE_LIMIT,
       });
     },
     getRun: (workspace, runId) =>

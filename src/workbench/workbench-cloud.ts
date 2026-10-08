@@ -3,16 +3,10 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
-import { createCloudClient, CloudClientError } from "./cloud-client.js";
-import {
-  resolveCloudHost,
-  readCloudConfig,
-  writeCloudConfig,
-  findGitRoot,
-  normalizeCloudSourcePath,
-} from "./cloud-config.js";
+import { createCloudClient, CloudClientError, isCloudTransportError } from "./cloud-client.js";
+import { resolveCloudHost } from "./cloud-config.js";
 import { resolveCloudCredential } from "./cloud-credentials.js";
-import type { CliRun, CliPipeline, CloudJsonValue } from "./cloud-protocol.js";
+import type { CliRun, CloudJsonValue } from "./cloud-protocol.js";
 import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 import { type WorkbenchCliIo, writeUsageError, writeCliChunk } from "./workbench-shared.js";
 import {
@@ -22,25 +16,23 @@ import {
   type CloudCommandDependencies,
 } from "./workbench-cloud-shared.js";
 
-const CLOUD_USAGE = `Usage: tubeless cloud <link|list|add|run|logs> [options]
+const CLOUD_USAGE = `Usage: tubeless cloud <list|run|logs> [options]
 
-  link --workspace <id> --repository <owner/name> [--branch <name>]
   list [--json]
-  add <path> [--name <name>] [--export <name>] [--pipeline-id <id>] [--registry <path>]
-  run <path> [--export <name>] [--pipeline-id <id>] [--input-file <path|->] [--detach] [--json]
+  run <pipeline-name-or-slug> [--input-file <path|->] [--detach] [--json]
   run --id <cloud-pipeline-id> [--input-file <path|->] [--detach] [--json]
   logs <run-id> [--follow] [--json]
 
 All commands accept --workspace <id>, --host <origin>, and --help.
+Use a listed slug or an exact name. Quote names containing spaces.
+Run watches logs by default; --detach returns after printing the run ID.
 Remote runs use deployed code. Local edits and modules are never loaded.
-Set up workspaces and GitHub repository connections in the Cloud dashboard.
+Set up and load pipelines in the Cloud dashboard.
 `;
 const COMMON_OPTIONS = ["host", "workspace", "help"];
 const COMMAND_OPTIONS: Record<string, string[]> = {
-  link: ["repository", "branch"],
   list: ["json"],
-  add: ["name", "export", "pipeline-id", "registry"],
-  run: ["id", "export", "pipeline-id", "input-file", "detach", "json"],
+  run: ["id", "input-file", "detach", "json"],
   logs: ["follow", "json"],
 };
 const INPUT_LIMIT = 64 * 1024;
@@ -159,6 +151,12 @@ function runExit(run: CliRun): number {
   return run.status === "completed" ? 0 : run.status === "cancelled" ? 7 : 6;
 }
 
+function admissionUncertain(error: unknown): boolean {
+  if (!(error instanceof CloudClientError)) return true;
+  if (error.status === undefined && error.code === "invalid_request") return false;
+  return error.status === undefined || error.status < 400 || error.status >= 500;
+}
+
 async function followRun(
   initial: CliRun,
   getRun: () => Promise<CliRun>,
@@ -186,13 +184,9 @@ async function followRun(
       current = await getRun();
       failures = 0;
     } catch (error) {
-      if (!(error instanceof CloudClientError) || error.status || ++failures >= 3) throw error;
+      if (!isCloudTransportError(error) || ++failures >= 3) throw error;
     }
   }
-}
-
-function selectionDescription(pipeline: CliPipeline): string {
-  return `${pipeline.id}: ${pipeline.path} export=${pipeline.exportName ?? "auto"} pipeline-id=${pipeline.pipelineId ?? "auto"} registry=${pipeline.registryPath ?? "none"}`;
 }
 
 export async function runCloud(
@@ -212,12 +206,6 @@ export async function runCloud(
             help: { type: "boolean", short: "h" },
             host: { type: "string" },
             workspace: { type: "string" },
-            repository: { type: "string" },
-            branch: { type: "string" },
-            name: { type: "string" },
-            export: { type: "string" },
-            "pipeline-id": { type: "string" },
-            registry: { type: "string" },
             id: { type: "string" },
             "input-file": { type: "string" },
             detach: { type: "boolean" },
@@ -228,7 +216,7 @@ export async function runCloud(
       run: async ({ values, positionals }) => {
         const [command, selector] = positionals;
         if (!command || !COMMAND_OPTIONS[command])
-          return writeUsageError(io, "Pass link, list, add, run, or logs.", CLOUD_USAGE);
+          return writeUsageError(io, "Pass list, run, or logs.", CLOUD_USAGE);
         for (const option of Object.keys(values)) {
           if (![...COMMON_OPTIONS, ...COMMAND_OPTIONS[command]!].includes(option))
             return writeUsageError(
@@ -237,21 +225,19 @@ export async function runCloud(
               CLOUD_USAGE
             );
         }
-        const wanted =
-          command === "add" || command === "logs" || (command === "run" && !values.id) ? 2 : 1;
+        const wanted = command === "logs" || (command === "run" && !values.id) ? 2 : 1;
         if (positionals.length !== wanted)
           return writeUsageError(io, "Pass exactly the required command arguments.", CLOUD_USAGE);
-        if (values.id && (selector || values.export || values["pipeline-id"]))
-          return writeUsageError(
-            io,
-            "--id cannot be combined with a path or source-selection flags.",
-            CLOUD_USAGE
-          );
+        if (values.id && selector)
+          return writeUsageError(io, "--id cannot be combined with a pipeline name.", CLOUD_USAGE);
+        if (values.workspace !== undefined && !values.workspace.trim())
+          return writeUsageError(io, "Pass a nonempty workspace ID.", CLOUD_USAGE);
+        if (values.id !== undefined && !values.id.trim())
+          return writeUsageError(io, "Pass a nonempty pipeline ID.", CLOUD_USAGE);
         const managed = cloudSignal(io);
         let admitted: { id: string; url: string } | undefined;
         try {
-          const linked = await readCloudConfig(io.cwd);
-          const host = resolveCloudHost(values.host, linked?.config);
+          const host = resolveCloudHost(values.host);
           const credential = await resolveCloudCredential(host, {
             store: dependencies.store,
             env: dependencies.env,
@@ -267,58 +253,26 @@ export async function runCloud(
             fetch: dependencies.fetch,
             signal: managed.signal,
           });
-          const workspace = values.workspace ?? linked?.config.workspaceId;
-          if (command === "link") {
+          let workspace = values.workspace;
+          if (!workspace) {
             const session = await client.session();
-            if (!values.workspace || !values.repository) {
-              for (const item of session.workspaces) {
-                io.stdout.write(`Workspace ${item.id}: ${item.name}\n`);
-                if (values.workspace && item.id !== values.workspace) continue;
-                for (const repository of await client.repositories(item.id)) {
-                  io.stdout.write(
-                    `  tubeless cloud link --host ${host} --workspace ${item.id} --repository ${repository.fullName} --branch ${repository.branch}\n`
-                  );
-                }
-              }
-              io.stdout.write("Connect missing repositories in the Cloud dashboard.\n");
-              return 0;
-            }
-            if (!session.workspaces.some((item) => item.id === values.workspace))
+            if (session.workspaces.length === 0)
               throw new Error(
-                "Workspace membership has changed. Select a workspace from cloud link or the dashboard."
+                "No Cloud workspaces are available. Create or join a workspace in the Cloud dashboard, then try again."
               );
-            const repositories = await client.repositories(values.workspace);
-            const repository = repositories.find(
-              (item) => item.fullName.toLowerCase() === values.repository!.toLowerCase()
-            );
-            if (!repository)
+            if (session.workspaces.length !== 1)
               throw new Error(
-                "Repository is not connected. Connect it in the Cloud dashboard, then link again."
+                `Choose a workspace with --workspace <id>:\n${session.workspaces.map((item) => `${item.name} (${item.id})`).join("\n")}`
               );
-            const root = await findGitRoot(io.cwd, { required: true });
-            if (!root) throw new Error("Run cloud link inside a Git repository.");
-            await writeCloudConfig(root, {
-              version: 1,
-              host,
-              workspaceId: values.workspace,
-              repositoryId: repository.id,
-              repository: repository.fullName,
-              branch: values.branch ?? repository.branch,
-            });
-            io.stdout.write(
-              `Linked ${repository.fullName} (${values.branch ?? repository.branch}) to workspace ${values.workspace} at ${host}.\n`
-            );
-            return 0;
+            workspace = session.workspaces[0]!.id;
           }
-          if (!workspace)
-            throw new Error("Select a workspace with --workspace or run tubeless cloud link.");
           if (command === "list") {
             const pipelines = await client.pipelines(workspace);
             if (values.json) io.stdout.write(`${JSON.stringify(pipelines)}\n`);
             else
               for (const pipeline of pipelines)
                 io.stdout.write(
-                  `${selectionDescription(pipeline)} branch=${pipeline.branch} commit=${pipeline.commit} ${pipeline.available ? "available" : "unavailable"}\n`
+                  `${pipeline.slug}: ${pipeline.name} (${pipeline.id}) ${pipeline.available ? "available" : "unavailable"} commit=${pipeline.commit} branch=${pipeline.branch}\n`
                 );
             return 0;
           }
@@ -348,55 +302,19 @@ export async function runCloud(
             else io.stdout.write(`Run ${run.id}: ${run.status}\n${admitted.url}\n`);
             return values.follow ? runExit(run) : 0;
           }
-          let pipeline: CliPipeline;
-          if (values.id) {
-            const pipelines = await client.pipelines(workspace);
-            const match = pipelines.find((item) => item.id === values.id);
-            if (!match)
-              throw new Error(
-                "Cloud pipeline not found in this workspace. Use cloud list to select it."
-              );
-            pipeline = match;
-          } else {
-            if (!linked)
-              throw new Error("Path selection requires a project link. Run tubeless cloud link.");
-            const sourcePath = normalizeCloudSourcePath(linked.root, io.cwd, selector!);
-            if (command === "add") {
-              pipeline = await client.addPipeline(workspace, {
-                repositoryId: linked.config.repositoryId,
-                branch: linked.config.branch,
-                path: sourcePath,
-                name:
-                  values.name ?? path.posix.basename(sourcePath, path.posix.extname(sourcePath)),
-                ...(values.export ? { exportName: values.export } : {}),
-                ...(values["pipeline-id"] ? { pipelineId: values["pipeline-id"] } : {}),
-                ...(values.registry
-                  ? { registryPath: normalizeCloudSourcePath(linked.root, io.cwd, values.registry) }
-                  : {}),
-              });
-              io.stdout.write(
-                `Registered ${pipeline.name} (${pipeline.id})\nWorkspace: ${workspace}\nDeployed commit: ${pipeline.commit}\n`
-              );
-              return 0;
-            }
-            const matches = (await client.pipelines(workspace)).filter(
-              (item) =>
-                item.repositoryId === linked.config.repositoryId &&
-                item.branch === linked.config.branch &&
-                item.path === sourcePath &&
-                (!values.export || item.exportName === values.export) &&
-                (!values["pipeline-id"] || item.pipelineId === values["pipeline-id"])
+          const pipelines = await client.pipelines(workspace);
+          const matches = pipelines.filter((item) =>
+            values.id ? item.id === values.id : item.name === selector || item.slug === selector
+          );
+          if (matches.length === 0)
+            throw new Error(
+              "Cloud pipeline not found in this workspace. Use tubeless cloud list or the Cloud dashboard to select a loaded pipeline."
             );
-            if (matches.length === 0)
-              throw new Error(
-                `No registration for ${sourcePath}. Register it with tubeless cloud add ${sourcePath}.`
-              );
-            if (matches.length !== 1)
-              throw new Error(
-                `Ambiguous source selection. Choose --export, --pipeline-id, or --id:\n${matches.map(selectionDescription).join("\n")}`
-              );
-            pipeline = matches[0]!;
-          }
+          if (matches.length !== 1)
+            throw new Error(
+              `Multiple pipelines match ${JSON.stringify(selector)}. Choose --id <id>:\n${matches.map((item) => `${item.slug}: ${item.name} (${item.id})`).join("\n")}`
+            );
+          const pipeline = matches[0]!;
           const input = values["input-file"]
             ? await boundedInput(values["input-file"], io.cwd, dependencies, managed.signal)
             : {};
@@ -407,15 +325,13 @@ export async function runCloud(
             try {
               run = await client.run(workspace, { pipelineId: pipeline.id, input }, key);
             } catch (error) {
-              if (!(error instanceof CloudClientError) || error.status || managed.signal.aborted)
-                throw error;
+              if (!isCloudTransportError(error) || managed.signal.aborted) throw error;
               run = await client.run(workspace, { pipelineId: pipeline.id, input }, key);
             }
           } catch (error) {
-            // Only an explicit 4xx establishes a rejected request. A 5xx,
-            // unusable success response or interruption can follow admission.
-            const status = error instanceof CloudClientError ? error.status : undefined;
-            if (status === undefined || status < 400 || status >= 500) {
+            // Local validation and explicit 4xx responses establish rejection.
+            // A 5xx, unusable response or interrupted POST can follow admission.
+            if (admissionUncertain(error)) {
               io.stderr.write(
                 `Admission could not be confirmed. Workspace: ${workspace}; idempotency key: ${key}. Retry only with this same key through the API.\n`
               );

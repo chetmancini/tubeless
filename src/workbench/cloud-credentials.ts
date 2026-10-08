@@ -1,5 +1,5 @@
 import { normalizeCloudHost } from "./cloud-config.js";
-import { isCloudObject } from "./cloud-protocol.js";
+import { isCloudObject, isCloudToken } from "./cloud-protocol.js";
 
 export interface CloudCredential {
   token: string;
@@ -29,19 +29,10 @@ interface NativeSecrets {
   delete(options: NativeSecretOptions): Promise<boolean>;
 }
 
-function validToken(token: unknown): token is string {
-  return (
-    typeof token === "string" &&
-    token.length > 0 &&
-    token.length <= 4096 &&
-    /^[\x21-\x7e]+$/.test(token)
-  );
-}
-
 function parseCredential(value: unknown): CloudCredential {
   if (
     !isCloudObject(value) ||
-    !validToken(value.token) ||
+    !isCloudToken(value.token) ||
     typeof value.expiresAt !== "number" ||
     !Number.isFinite(value.expiresAt) ||
     value.expiresAt <= 0
@@ -153,7 +144,7 @@ export async function resolveCloudCredential(
   const origin = normalizeCloudHost(host);
   const environmentToken = (options.env ?? process.env).TUBELESS_TOKEN;
   if (environmentToken !== undefined) {
-    if (!validToken(environmentToken)) {
+    if (!isCloudToken(environmentToken)) {
       throw new Error(
         "TUBELESS_TOKEN is empty or invalid. Remove it or supply an active Cloud session token."
       );

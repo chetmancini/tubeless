@@ -24,7 +24,7 @@ Commands:
   tubeless history   Show recorded runs from the local SQLite store
   tubeless ui        Open the optional local run studio
   tubeless auth      Sign in to Tubeless Cloud
-  tubeless cloud     Register and run deployed Cloud pipelines
+  tubeless cloud     List and run deployed Cloud pipelines
 
 Run tubeless <command> --help for command-specific options.
 `;

@@ -88,7 +88,7 @@ In your app, add `tubeless.project.ts` and omit `--project`. Pass application
 flags after `--`. Record runs with `--store` or `--trace`, then inspect them with
 `tubeless history` or the [local studio](./docs/studio.md).
 
-Use `tubeless auth login` and `tubeless cloud run` for registered Cloud pipelines.
+Use `tubeless auth login` and `tubeless cloud list` to select a Cloud pipeline by name or slug.
 [Cloud CLI usage](./docs/cli.md#tubeless-cloud) explains dashboard setup and deployed-source execution.
 
 ## Find your route

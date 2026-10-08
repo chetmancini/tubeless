@@ -1,12 +1,12 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCloud } from "./workbench-cloud.js";
 import { captureIo } from "./workbench.test-support.js";
-import type { CliRun, CliPipeline } from "./cloud-protocol.js";
+import type { CliRun, CliPipeline, CliWorkspace } from "./cloud-protocol.js";
 
 const host = "http://localhost:8787";
 const roots: string[] = [];
@@ -16,8 +16,7 @@ afterEach(async () => {
 const pipeline: CliPipeline = {
   id: "cloud-orders",
   name: "Orders",
-  repositoryId: "repo",
-  path: "pipelines/orders.ts",
+  slug: "orders",
   branch: "main",
   commit: "stored-sha",
   enabled: true,
@@ -42,24 +41,14 @@ const baseRun: CliRun = {
 async function fixture(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "tubeless-cloud-command-"));
   roots.push(root);
-  await promisify(execFile)("git", ["init", "--quiet"], { cwd: root });
   await mkdir(path.join(root, ".tubeless"));
-  await writeFile(
-    path.join(root, ".tubeless/cloud.json"),
-    JSON.stringify({
-      version: 1,
-      host,
-      workspaceId: "workspace",
-      repositoryId: "repo",
-      repository: "owner/repo",
-      branch: "main",
-    })
-  );
+  await writeFile(path.join(root, ".tubeless/cloud.json"), "stale malformed project configuration");
   return root;
 }
 function service(
   options: {
     pipelines?: CliPipeline[];
+    workspaces?: CliWorkspace[];
     runs?: CliRun[];
     admissionStatus?: number;
     admissionError?: string;
@@ -79,10 +68,20 @@ function service(
       body: init?.body ? JSON.parse(String(init.body)) : undefined,
       key: headers.get("Idempotency-Key") ?? undefined,
     });
-    if (url.pathname.endsWith("/pipelines")) {
-      if (method === "POST") return Response.json(pipeline, { status: 201 });
-      return Response.json(options.pipelines ?? [pipeline]);
-    }
+    if (url.pathname === "/api/v1/session")
+      return Response.json({
+        user: { id: "user", login: "user", name: "User", email: "user@example.com", avatar: "" },
+        expiresAt: Date.now() + 60000,
+        workspaces: options.workspaces ?? [
+          {
+            id: "workspace",
+            name: "Workspace",
+            slug: "workspace",
+            role: "owner",
+          },
+        ],
+      });
+    if (url.pathname.endsWith("/pipelines")) return Response.json(options.pipelines ?? [pipeline]);
     if (url.pathname.endsWith("/runs")) {
       if (options.admissionError)
         return Response.json(
@@ -115,17 +114,17 @@ describe("Cloud remote commands", () => {
   });
   it("runs deployed code without executing a side-effecting local module", async () => {
     const root = await fixture();
-    await mkdir(path.join(root, "pipelines"));
     const marker = path.join(root, "unexpected.txt");
     await writeFile(
-      path.join(root, pipeline.path),
+      path.join(root, pipeline.name),
       `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'bad'); throw new Error('local source must not load');`
     );
     const io = captureIo(root);
     const dependencies = service();
-    expect(await runCloud(["run", pipeline.path, "--json"], io, dependencies)).toBe(0);
+    expect(await runCloud(["run", pipeline.name, "--json"], io, dependencies)).toBe(0);
     await expect(access(marker)).rejects.toThrow();
     expect(dependencies.calls.map((call) => `${call.method} ${call.url}`)).toEqual([
+      "GET /api/v1/session",
       "GET /api/v1/workspaces/workspace/pipelines",
       "POST /api/v1/workspaces/workspace/runs",
       "GET /api/v1/workspaces/workspace/runs/run-1",
@@ -137,19 +136,6 @@ describe("Cloud remote commands", () => {
     expect(io.errors.join("")).toContain("Local changes are not used");
     expect(io.errors.join("")).toContain("workspace=workspace");
     expect(io.output.join("")).not.toContain("fixture-secret");
-  });
-  it("resolves a missing local source path from a nested invocation", async () => {
-    const root = await fixture();
-    await mkdir(path.join(root, "nested"));
-    const dependencies = service();
-    expect(
-      await runCloud(
-        ["run", "../pipelines/orders.ts", "--detach", "--json"],
-        captureIo(path.join(root, "nested")),
-        dependencies
-      )
-    ).toBe(0);
-    expect(dependencies.calls).toHaveLength(2);
   });
   it("explicit IDs work outside a Git repository", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "tubeless-detached-"));
@@ -163,40 +149,15 @@ describe("Cloud remote commands", () => {
       )
     ).toBe(0);
   });
-  it("missing or ambiguous selections never admit or automatically add", async () => {
+  it("unknown or duplicate names never admit", async () => {
     const root = await fixture();
-    for (const pipelines of [[], [pipeline, { ...pipeline, id: "other", exportName: "Other" }]]) {
+    for (const pipelines of [[], [pipeline, { ...pipeline, id: "other" }]]) {
       const io = captureIo(root);
       const dependencies = service({ pipelines });
-      expect(await runCloud(["run", pipeline.path], io, dependencies)).toBe(2);
+      expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(2);
       expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
-      expect(io.errors.join("")).toMatch(/cloud add|Ambiguous/);
+      expect(io.errors.join("")).toMatch(/cloud list|Multiple pipelines/);
     }
-  });
-  it("add registers only and reports the stored revision", async () => {
-    const root = await fixture();
-    const dependencies = service();
-    const io = captureIo(root);
-    expect(
-      await runCloud(
-        ["add", pipeline.path, "--export", "Orders", "--pipeline-id", "orders"],
-        io,
-        dependencies
-      )
-    ).toBe(0);
-    expect(dependencies.calls).toHaveLength(1);
-    expect(dependencies.calls[0]).toMatchObject({
-      method: "POST",
-      body: {
-        path: pipeline.path,
-        repositoryId: "repo",
-        branch: "main",
-        name: "orders",
-        exportName: "Orders",
-        pipelineId: "orders",
-      },
-    });
-    expect(io.output.join("")).toContain("stored-sha");
   });
   it("invalid/oversized JSON input fails before admission", async () => {
     const root = await fixture();
@@ -209,7 +170,7 @@ describe("Cloud remote commands", () => {
     ]) {
       const dependencies = { ...service(), readStdin: async () => input };
       expect(
-        await runCloud(["run", pipeline.path, "--input-file", "-"], captureIo(root), dependencies)
+        await runCloud(["run", pipeline.name, "--input-file", "-"], captureIo(root), dependencies)
       ).toBe(4);
       expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
     }
@@ -222,7 +183,7 @@ describe("Cloud remote commands", () => {
     };
     expect(
       await runCloud(
-        ["run", pipeline.path, "--input-file", "-", "--detach"],
+        ["run", pipeline.name, "--input-file", "-", "--detach"],
         captureIo(root),
         dependencies
       )
@@ -232,11 +193,22 @@ describe("Cloud remote commands", () => {
     expect(admissions[0]!.key).toBe(admissions[1]!.key);
     expect(admissions[0]!.body).toEqual({ pipelineId: pipeline.id, input: { hello: "world" } });
   });
+  it("does not retry or report uncertain admission when normalized JSON exceeds the input budget", async () => {
+    const input = `{"values":[${Array(4000).fill("1e20").join(",")}]}`;
+    expect(Buffer.byteLength(input)).toBeLessThan(65536);
+    expect(Buffer.byteLength(JSON.stringify(JSON.parse(input)))).toBeGreaterThan(65536);
+    const dependencies = { ...service(), readStdin: async () => input };
+    const io = captureIo(await fixture());
+    expect(await runCloud(["run", pipeline.name, "--input-file", "-"], io, dependencies)).toBe(4);
+    expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
+    expect(io.errors.join("")).not.toContain("idempotency key");
+    expect(io.errors.join("")).not.toContain("Admission could not be confirmed");
+  });
   it("reports a recoverable key after a server error following the POST", async () => {
     const root = await fixture();
     const dependencies = service({ admissionError: "internal_error", admissionStatus: 500 });
     const io = captureIo(root);
-    expect(await runCloud(["run", pipeline.path, "--json"], io, dependencies)).toBe(2);
+    expect(await runCloud(["run", pipeline.name, "--json"], io, dependencies)).toBe(2);
     const admissions = dependencies.calls.filter((call) => call.method === "POST");
     expect(admissions).toHaveLength(1);
     expect(io.errors.join("")).toContain(
@@ -255,7 +227,7 @@ describe("Cloud remote commands", () => {
         : response;
     }) as typeof fetch;
     const io = captureIo(root);
-    expect(await runCloud(["run", pipeline.path], io, dependencies)).toBe(2);
+    expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(2);
     const admissions = dependencies.calls.filter((call) => call.method === "POST");
     expect(admissions).toHaveLength(1);
     expect(io.errors.join("")).toContain(`idempotency key: ${admissions[0]!.key}`);
@@ -276,7 +248,7 @@ describe("Cloud remote commands", () => {
       return new Promise<Response>(() => {});
     }) as typeof fetch;
     const io = { ...captureIo(root), signal: controller.signal };
-    const result = runCloud(["run", pipeline.path, "--json"], io, dependencies);
+    const result = runCloud(["run", pipeline.name, "--json"], io, dependencies);
     await posted;
     controller.abort();
     expect(await result).toBe(7);
@@ -297,7 +269,7 @@ describe("Cloud remote commands", () => {
       return response;
     }) as typeof fetch;
     const io = captureIo(root);
-    expect(await runCloud(["run", pipeline.path], io, dependencies)).toBe(2);
+    expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(2);
     const admissions = dependencies.calls.filter((call) => call.method === "POST");
     expect(admissions).toHaveLength(2);
     expect(admissions[0]!.key).toBe(admissions[1]!.key);
@@ -308,7 +280,7 @@ describe("Cloud remote commands", () => {
     const root = await fixture();
     const dependencies = service({ admissionError: "invalid_request", admissionStatus: 400 });
     const io = captureIo(root);
-    expect(await runCloud(["run", pipeline.path], io, dependencies)).toBe(4);
+    expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(4);
     expect(dependencies.calls.filter((call) => call.method === "POST")).toHaveLength(1);
     expect(io.errors.join("")).not.toContain("idempotency key");
   });
@@ -332,14 +304,14 @@ describe("Cloud remote commands", () => {
   ] as const)("maps remote %s to %i", async (status, exit) => {
     const root = await fixture();
     const dependencies = service({ runs: [{ ...baseRun, status }] });
-    expect(await runCloud(["run", pipeline.path, "--json"], captureIo(root), dependencies)).toBe(
+    expect(await runCloud(["run", pipeline.name, "--json"], captureIo(root), dependencies)).toBe(
       exit
     );
   });
   it("rate-limited admission exits execution failure without retry", async () => {
     const root = await fixture();
     const dependencies = service({ admissionError: "rate_limited" });
-    expect(await runCloud(["run", pipeline.path], captureIo(root), dependencies)).toBe(6);
+    expect(await runCloud(["run", pipeline.name], captureIo(root), dependencies)).toBe(6);
     expect(dependencies.calls.filter((call) => call.method === "POST")).toHaveLength(1);
   });
   it("interrupting foreground follow prints the run ID without cancellation", async () => {
@@ -353,7 +325,7 @@ describe("Cloud remote commands", () => {
       },
     };
     const io = { ...captureIo(root), signal: controller.signal };
-    expect(await runCloud(["run", pipeline.path], io, dependencies)).toBe(7);
+    expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(7);
     expect(io.errors.join("")).toContain("Run run-1");
     expect(dependencies.calls.filter((call) => call.method === "POST")).toHaveLength(1);
   });
@@ -372,24 +344,12 @@ describe("Cloud remote commands", () => {
       },
     };
     const io = { ...captureIo(root), signal: controller.signal };
-    const result = runCloud(["run", pipeline.path, "--input-file", "-"], io, dependencies);
+    const result = runCloud(["run", pipeline.name, "--input-file", "-"], io, dependencies);
     await started;
     controller.abort();
     expect(await result).toBe(7);
     expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
     expect(io.errors.join("")).not.toContain("idempotency key");
-  });
-  it("keeps automatic source selection distinct from an explicit default export", async () => {
-    const root = await fixture();
-    const dependencies = service();
-    const io = captureIo(root);
-    expect(await runCloud(["list"], io, dependencies)).toBe(0);
-    expect(io.output.join("")).toContain("export=auto");
-    const explicit = service();
-    expect(
-      await runCloud(["run", pipeline.path, "--export", "default"], captureIo(root), explicit)
-    ).toBe(2);
-    expect(explicit.calls.every((call) => call.method === "GET")).toBe(true);
   });
   it("stops foreground following after bounded transport failures and keeps the run URL", async () => {
     const root = await fixture();
@@ -400,7 +360,7 @@ describe("Cloud remote commands", () => {
       return original(url, init);
     }) as typeof fetch;
     const io = captureIo(root);
-    expect(await runCloud(["run", pipeline.path], io, dependencies)).toBe(2);
+    expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(2);
     expect(io.errors.join("")).toContain("Run run-1");
     expect(io.errors.join("")).toContain("/app/runs/run-1?workspace=workspace");
   });
@@ -434,7 +394,7 @@ describe("Cloud remote commands", () => {
       const dependencies = service();
       expect(
         await runCloud(
-          ["run", pipeline.path, "--input-file", "input.json"],
+          ["run", pipeline.name, "--input-file", "input.json"],
           captureIo(root),
           dependencies
         )
@@ -442,11 +402,145 @@ describe("Cloud remote commands", () => {
       expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
     }
   );
-  it("rejects illegal ID/selector and unrelated flag combinations before HTTP", async () => {
+  it("lists slugs, names and IDs before deployment availability", async () => {
+    const io = captureIo(await fixture());
+    expect(await runCloud(["list"], io, service())).toBe(0);
+    expect(io.output.join("")).toBe(
+      "orders: Orders (cloud-orders) available commit=stored-sha branch=main\n"
+    );
+  });
+  it.each(["Orders sync", "pipelines/cli.ts"])(
+    "treats %s as an exact name without requiring a file",
+    async (name) => {
+      const root = await fixture();
+      const dependencies = service({
+        pipelines: [
+          { ...pipeline, name, slug: name === "Orders sync" ? "orders-sync" : "pipelines-cli-ts" },
+        ],
+      });
+      expect(await runCloud(["run", name, "--detach"], captureIo(root), dependencies)).toBe(0);
+      expect((await readdir(root)).sort()).toEqual([".tubeless"]);
+      expect(await readFile(path.join(root, ".tubeless/cloud.json"), "utf8")).toBe(
+        "stale malformed project configuration"
+      );
+    }
+  );
+  it("requires an exact name or slug and offers IDs for duplicate names", async () => {
+    for (const [name, pipelines, diagnostic] of [
+      ["ORDERS", [pipeline], "cloud list"],
+      ["Orders", [pipeline, { ...pipeline, id: "other" }], "Choose --id"],
+    ] as const) {
+      const io = captureIo(await fixture());
+      const dependencies = service({ pipelines: [...pipelines] });
+      expect(await runCloud(["run", name], io, dependencies)).toBe(2);
+      expect(io.errors.join("")).toContain(diagnostic);
+      expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
+      if (pipelines.length > 1) {
+        expect(io.errors.join("")).toContain("cloud-orders");
+        expect(io.errors.join("")).toContain("other");
+        expect(
+          await runCloud(
+            ["run", "--id", "other", "--detach"],
+            captureIo(await fixture()),
+            dependencies
+          )
+        ).toBe(0);
+      }
+    }
+  });
+  it("runs by slug and watches retained logs by default", async () => {
+    const dependencies = service({
+      runs: [
+        {
+          ...baseRun,
+          status: "completed",
+          logs: [{ time: 1000, level: "info", message: "synced" }],
+        },
+      ],
+    });
+    const io = captureIo(await fixture());
+    expect(await runCloud(["run", pipeline.slug], io, dependencies)).toBe(0);
+    expect(io.output.join("")).toContain("info: synced");
+    expect(dependencies.calls.filter((call) => call.method === "POST")[0]!.body).toEqual({
+      pipelineId: pipeline.id,
+      input: {},
+    });
+    expect(dependencies.calls.some((call) => call.url.endsWith("/runs/run-1"))).toBe(true);
+  });
+  it("returns the admitted run ID without polling when detached", async () => {
     const dependencies = service();
-    const io = captureIo("/detached");
-    expect(await runCloud(["run", "pipeline.ts", "--id", "cloud"], io, dependencies)).toBe(1);
-    expect(await runCloud(["list", "--input-file", "input.json"], io, dependencies)).toBe(1);
+    const io = captureIo(await fixture());
+    expect(await runCloud(["run", pipeline.slug, "--detach", "--json"], io, dependencies)).toBe(0);
+    expect(JSON.parse(io.output.join(""))).toMatchObject({ id: "run-1", status: "queued" });
+    expect(dependencies.calls.some((call) => call.url.endsWith("/runs/run-1"))).toBe(false);
+  });
+  it("requires IDs when slugs collide, including an exact-name collision", async () => {
+    const dependencies = service({
+      pipelines: [
+        { ...pipeline, name: "Orders sync", slug: "orders-sync" },
+        { ...pipeline, id: "other", name: "orders-sync", slug: "orders-sync" },
+      ],
+    });
+    const io = captureIo(await fixture());
+    expect(await runCloud(["run", "orders-sync"], io, dependencies)).toBe(2);
+    expect(io.errors.join("")).toContain("cloud-orders");
+    expect(io.errors.join("")).toContain("other");
+    expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
+    expect(
+      await runCloud(["run", "--id", "other", "--detach"], captureIo(await fixture()), dependencies)
+    ).toBe(0);
+    expect(dependencies.calls.find((call) => call.method === "POST")!.body).toEqual({
+      pipelineId: "other",
+      input: {},
+    });
+  });
+  it("fails before listing or admission when automatic workspace selection is unavailable", async () => {
+    const second: CliWorkspace = {
+      id: "other",
+      name: "Other",
+      slug: "other",
+      role: "owner",
+    };
+    for (const workspaces of [[], [second, { ...second, id: "third", name: "Third" }]]) {
+      for (const args of [["run", pipeline.name], ["list"], ["logs", "run-1"]]) {
+        const dependencies = service({ workspaces });
+        const io = captureIo(await fixture());
+        expect(await runCloud(args, io, dependencies)).toBe(2);
+        expect(dependencies.calls.map((call) => call.url)).toEqual(["/api/v1/session"]);
+        expect(io.errors.join("")).toContain(workspaces.length ? "--workspace" : "Cloud dashboard");
+        if (workspaces.length) expect(io.errors.join("")).toContain("Other (other)");
+      }
+    }
+  });
+  it("explicit workspace bypasses session enumeration and remains authoritative", async () => {
+    const dependencies = service({ workspaces: [] });
+    expect(
+      await runCloud(
+        ["run", pipeline.name, "--workspace", "chosen", "--detach"],
+        captureIo(await fixture()),
+        dependencies
+      )
+    ).toBe(0);
+    expect(dependencies.calls.map((call) => call.url)).toEqual([
+      "/api/v1/workspaces/chosen/pipelines",
+      "/api/v1/workspaces/chosen/runs",
+    ]);
+  });
+  it.each([
+    ["link"],
+    ["add", "pipeline.ts"],
+    ...["export", "pipeline-id", "registry", "repository", "branch", "name", "project"].map(
+      (flag) => ["run", "Orders", `--${flag}`, "value"]
+    ),
+    ["run", "Orders", "--id", "cloud"],
+    ["run", "Orders", "--id", ""],
+    ["run", "--id", "   "],
+    ["run", "Orders", "--workspace", ""],
+    ["list", "--workspace", "   "],
+    ["list", "--input-file", "input.json"],
+  ])("rejects obsolete commands and invalid combinations before HTTP: %j", async (...args) => {
+    const dependencies = service();
+    expect(await runCloud(args, captureIo("/detached"), dependencies)).toBe(1);
     expect(dependencies.calls).toHaveLength(0);
   });
 });

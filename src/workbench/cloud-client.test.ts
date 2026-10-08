@@ -13,9 +13,6 @@ const session: CliSession = {
       id: "workspace",
       name: "Workspace",
       slug: "workspace",
-      plan: "free",
-      createdAt: 100,
-      spendCap: 0,
       role: "owner",
     },
   ],
@@ -131,6 +128,7 @@ describe("Cloud HTTP client", () => {
       { ...session, expiresAt: "tomorrow" },
       { ...session, user: { id: "only-id" } },
       { ...session, workspaces: [{ ...session.workspaces[0], role: "superuser" }] },
+      { ...session, workspaces: [{ ...session.workspaces[0], role: ["owner"] }] },
     ]) {
       fetcher.mockResolvedValue(json(invalid));
       await expect(client.session()).rejects.toMatchObject({ code: "invalid_response" });
@@ -139,6 +137,22 @@ describe("Cloud HTTP client", () => {
     await expect(client.getRun("workspace", "run")).rejects.toMatchObject({
       code: "invalid_response",
     });
+    for (const invalid of [
+      { ...run, status: ["completed"] },
+      { ...run, trigger: ["manual"] },
+      { ...run, logs: [{ ...run.logs[0], level: ["info"] }] },
+      {
+        ...run,
+        steps: [
+          { id: "step", name: "Step", status: ["completed"], durationMs: 1, dependencies: [] },
+        ],
+      },
+    ]) {
+      fetcher.mockResolvedValue(json(invalid));
+      await expect(client.getRun("workspace", "run")).rejects.toMatchObject({
+        code: "invalid_response",
+      });
+    }
     fetcher.mockResolvedValue(json({ ...run, logs: [{ message: "missing-fields" }] }));
     await expect(client.getRun("workspace", "run")).rejects.toMatchObject({
       code: "invalid_response",
@@ -149,6 +163,33 @@ describe("Cloud HTTP client", () => {
     await expect(client.getRun("workspace", "run")).rejects.toMatchObject({
       code: "invalid_response",
     });
+  });
+
+  it("validates loaded pipeline summaries without requiring source selectors", async () => {
+    const pipeline = {
+      id: "cloud-id",
+      name: "Orders sync",
+      slug: "orders-sync",
+      branch: "main",
+      commit: "stored-sha",
+      enabled: true,
+      available: true,
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json([pipeline]));
+    const client = createCloudClient({ host, token: "credential", fetch: fetcher });
+    expect(await client.pipelines("workspace")).toEqual([pipeline]);
+    for (const invalid of [
+      { ...pipeline, name: undefined },
+      { ...pipeline, slug: undefined },
+      { ...pipeline, slug: "" },
+      { ...pipeline, available: "yes" },
+      { ...pipeline, enabled: undefined },
+    ]) {
+      fetcher.mockResolvedValue(json([invalid]));
+      await expect(client.pipelines("workspace")).rejects.toMatchObject({
+        code: "invalid_response",
+      });
+    }
   });
 
   it("preserves stable service errors while removing terminal controls and the active token", async () => {
@@ -181,10 +222,20 @@ describe("Cloud HTTP client", () => {
         "key"
       )
     ).rejects.toMatchObject({ code: "invalid_request" });
-    expect(() =>
-      client.run("workspace", { pipelineId: "pipeline", input: {} }, "key\nHeader: secret")
-    ).toThrow("idempotency key");
+    for (const key of ["key\nHeader: secret", "x".repeat(201)])
+      await expect(
+        client.run("workspace", { pipelineId: "pipeline", input: {} }, key)
+      ).rejects.toThrow("idempotency key");
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("accepts the service's full 200-character idempotency key budget", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(run));
+    const client = createCloudClient({ host, token: "credential", fetch: fetcher });
+    await expect(
+      client.run("workspace", { pipelineId: "pipeline", input: {} }, "x".repeat(200))
+    ).resolves.toEqual(run);
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("Idempotency-Key")).toHaveLength(200);
   });
 
   it("allows a full 64 KiB multibyte input with the run envelope and rejects the next byte", async () => {

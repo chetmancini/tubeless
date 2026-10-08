@@ -532,15 +532,17 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
 
 ## Cloud command use
 
-Use `tubeless auth login` and `cloud link` after the user has connected a workspace
-and GitHub repository in the dashboard. `cloud add` registers committed source
-once; repeated exact adds preserve the deployed SHA. `cloud run` executes only
-the existing deployment and never imports local modules or updates source. Pass
-JSON object input via `--input-file`, use `--json` for automation and `--detach`
-for admission only. Preserve an uncertain admission key rather than launching a
-fresh run. Ctrl-C stops following; cancellation remains explicit in the dashboard.
+Use `tubeless auth login`, then `cloud list` to select an already-loaded pipeline
+by exact name or listed slug. Use `cloud run --id <id>` when selectors collide.
+A single session workspace is automatic; multiple workspaces require
+`--workspace <id>`. Load and synchronize pipelines in the dashboard.
+`cloud run` executes only the existing deployment and never reads Git, project
+configuration or local modules. Pass JSON object input via `--input-file`, use
+`--json` for automation and `--detach` for admission only. Preserve an uncertain
+admission key rather than launching a fresh run. Ctrl-C stops following;
+cancellation remains explicit in the dashboard.
 Read [the Cloud CLI contract](./cli.md#tubeless-cloud) for credentials, roles,
-source selectors, retention and exit codes.
+workspace selection, retention and exit codes.
 
 ## Failure and safety rules
 

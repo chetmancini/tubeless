@@ -14,9 +14,6 @@ export interface CliWorkspace {
   id: string;
   name: string;
   slug: string;
-  plan: "free" | "team" | "scale";
-  createdAt: number;
-  spendCap: number;
   role: CloudRole;
 }
 
@@ -26,35 +23,14 @@ export interface CliSession {
   workspaces: CliWorkspace[];
 }
 
-export interface CliRepository {
-  id: string;
-  fullName: string;
-  branch: string;
-}
-
 export interface CliPipeline {
   id: string;
   name: string;
-  repositoryId: string;
-  path: string;
-  registryPath?: string;
-  exportName?: string;
-  pipelineId?: string;
+  slug: string;
   branch: string;
   commit: string;
   enabled: boolean;
-  headState?: "present" | "missing";
   available: boolean;
-}
-
-export interface CliAddPipeline {
-  repositoryId: string;
-  branch?: string;
-  path: string;
-  name?: string;
-  registryPath?: string;
-  exportName?: string;
-  pipelineId?: string;
 }
 
 export interface CliRunRequest {
@@ -92,7 +68,6 @@ export interface CliRun {
   }[];
   logs: CliLogLine[];
   artifacts: { name: string; size: number; contentType: string }[];
-  artifactStorageId?: string;
   result?: CloudJsonValue;
   error?: string;
   input: Record<string, CloudJsonValue>;
@@ -167,6 +142,14 @@ function hasTexts(value: Record<string, unknown>, fields: readonly string[]): bo
   return fields.every((field) => text(value[field], true));
 }
 
+function oneOf(value: unknown, allowed: readonly string[]): boolean {
+  return typeof value === "string" && allowed.includes(value);
+}
+
+export function isCloudToken(value: unknown): value is string {
+  return text(value) && value.length <= 4096 && /^[\x21-\x7e]+$/.test(value);
+}
+
 function parseResponse<T>(value: unknown, valid: boolean, name: string): T {
   if (!valid) throw new Error(`Invalid Cloud ${name} response.`);
   // SAFETY: each caller checks the complete transport shape before returning it.
@@ -187,42 +170,18 @@ export function parseCliSession(value: unknown): CliSession {
         isCloudObject(workspace) &&
         hasTexts(workspace, ["id", "name", "slug"]) &&
         text(workspace.id) &&
-        ["free", "team", "scale"].includes(String(workspace.plan)) &&
-        ["owner", "admin", "member", "viewer"].includes(String(workspace.role)) &&
-        number(workspace.createdAt) &&
-        number(workspace.spendCap)
+        oneOf(workspace.role, ["owner", "admin", "member", "viewer"])
     );
   return parseResponse(value, valid, "session");
-}
-
-export function parseCliRepositories(value: unknown): CliRepository[] {
-  return parseResponse(
-    value,
-    Array.isArray(value) &&
-      value.every(
-        (repository: unknown) =>
-          isCloudObject(repository) &&
-          ["id", "fullName", "branch"].every((field) => text(repository[field]))
-      ),
-    "repositories"
-  );
 }
 
 function isPipeline(value: unknown): boolean {
   return (
     isCloudObject(value) &&
-    ["id", "name", "repositoryId", "path", "branch", "commit"].every((field) =>
-      text(value[field])
-    ) &&
-    ["registryPath", "exportName", "pipelineId"].every((field) => optionalText(value[field])) &&
+    ["id", "name", "slug", "branch", "commit"].every((field) => text(value[field])) &&
     typeof value.enabled === "boolean" &&
-    typeof value.available === "boolean" &&
-    (value.headState === undefined || ["present", "missing"].includes(String(value.headState)))
+    typeof value.available === "boolean"
   );
-}
-
-export function parseCliPipeline(value: unknown): CliPipeline {
-  return parseResponse(value, isPipeline(value), "pipeline");
 }
 
 export function parseCliPipelines(value: unknown): CliPipeline[] {
@@ -235,14 +194,13 @@ export function parseCliRun(value: unknown): CliRun {
     ["id", "pipelineId", "pipelineName", "commit", "branch", "actor"].every((field) =>
       text(value[field])
     ) &&
-    RUN_STATUSES.includes(String(value.status)) &&
-    ["manual", "push", "rerun", "schedule"].includes(String(value.trigger)) &&
+    oneOf(value.status, RUN_STATUSES) &&
+    oneOf(value.trigger, ["manual", "push", "rerun", "schedule"]) &&
     number(value.createdAt) &&
     number(value.durationMs) &&
     optionalNumber(value.startedAt) &&
     optionalNumber(value.finishedAt) &&
     optionalText(value.error) &&
-    optionalText(value.artifactStorageId) &&
     isCloudObject(value.input) &&
     (value.schedule === undefined ||
       (isCloudObject(value.schedule) &&
@@ -253,7 +211,7 @@ export function parseCliRun(value: unknown): CliRun {
       (step: unknown) =>
         isCloudObject(step) &&
         hasTexts(step, ["id", "name"]) &&
-        [...RUN_STATUSES, "pending", "skipped"].includes(String(step.status)) &&
+        oneOf(step.status, [...RUN_STATUSES, "pending", "skipped"]) &&
         number(step.durationMs) &&
         optionalText(step.error) &&
         Array.isArray(step.dependencies) &&
@@ -265,7 +223,7 @@ export function parseCliRun(value: unknown): CliRun {
       (log: unknown) =>
         isCloudObject(log) &&
         number(log.time) &&
-        ["info", "warn", "error"].includes(String(log.level)) &&
+        oneOf(log.level, ["info", "warn", "error"]) &&
         text(log.message, true)
     ) &&
     Array.isArray(value.artifacts) &&
@@ -297,9 +255,7 @@ export function parseCloudDeviceSession(value: unknown): CloudDeviceSession {
   return parseResponse(
     value,
     isCloudObject(value) &&
-      text(value.access_token) &&
-      value.access_token.length <= 4096 &&
-      /^[\x21-\x7e]+$/.test(value.access_token) &&
+      isCloudToken(value.access_token) &&
       value.token_type === "Bearer" &&
       number(value.expires_in) &&
       value.expires_in > 0 &&
@@ -313,7 +269,7 @@ export function parseCliError(value: unknown): { code: CliErrorCode; message: st
   if (
     !isCloudObject(value) ||
     !isCloudObject(value.error) ||
-    !ERROR_CODES.includes(String(value.error.code)) ||
+    !oneOf(value.error.code, ERROR_CODES) ||
     !text(value.error.message)
   ) {
     return undefined;

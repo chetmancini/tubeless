@@ -8,8 +8,7 @@ const token = "packed-fixture-session";
 const pipeline = {
   id: "packed",
   name: "Packed Cloud",
-  repositoryId: "repo",
-  path: "missing.ts",
+  slug: "packed-cloud",
   branch: "main",
   commit: "deployed-fixture",
   enabled: true,
@@ -45,7 +44,14 @@ const server = createServer(async (request, response) => {
     return send({
       user: { id: "user", login: "user", name: "User", email: "user@example.com", avatar: "" },
       expiresAt: Date.now() + 60000,
-      workspaces: [],
+      workspaces: [
+        {
+          id: "workspace",
+          name: "Workspace",
+          slug: "workspace",
+          role: "owner",
+        },
+      ],
     });
   if (request.url.endsWith("/pipelines")) return send([pipeline]);
   if (request.url.endsWith("/runs") && request.method === "POST") {
@@ -71,13 +77,13 @@ const command = async (args) => {
 try {
   const status = await command(["auth", "status", "--host", origin, "--json"]);
   assert.equal(status.credentialSource, "environment");
+  const pipelines = await command(["cloud", "list", "--host", origin, "--json"]);
+  assert.equal(pipelines[0].name, "Packed Cloud");
+  assert.equal(pipelines[0].slug, "packed-cloud");
   const accepted = await command([
     "cloud",
     "run",
-    "--id",
-    "packed",
-    "--workspace",
-    "workspace",
+    pipeline.slug,
     "--host",
     origin,
     "--detach",
@@ -96,6 +102,9 @@ try {
   ]);
   assert.equal(logs.logs[0].message, "packed log");
   assert.deepEqual(routes, [
+    "GET /api/v1/session",
+    "GET /api/v1/session",
+    "GET /api/v1/workspaces/workspace/pipelines",
     "GET /api/v1/session",
     "GET /api/v1/workspaces/workspace/pipelines",
     "POST /api/v1/workspaces/workspace/runs",

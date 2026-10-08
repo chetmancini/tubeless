@@ -549,26 +549,28 @@ default keys. See [step output caching](./step-output-cache.md).
 The same Bun executable supplies first-party `auth` and `cloud` commands. Create
 or join a workspace, install the GitHub App, and connect its repository in the
 [Cloud dashboard](https://cloud.tubeless.io) first. Workspace creation, repository
-connections, secrets, schedules and billing remain dashboard operations.
+connections, pipeline loading, secrets, schedules and billing remain dashboard operations.
 
 ```sh
 tubeless auth login
 tubeless auth status
-tubeless cloud link --workspace <workspace-id> --repository owner/repo
 tubeless cloud list
-tubeless cloud add pipelines/orders.ts --name "Orders sync"
-tubeless cloud run pipelines/orders.ts --input-file input.json
+tubeless cloud run orders-sync --input-file input.json
+tubeless cloud run orders-sync --detach --json
 tubeless cloud logs <run-id> --follow
 tubeless auth logout
 ```
 
-`cloud link` without flags lists available workspaces and exact selection
-commands. It writes a versioned, nonsecret `.tubeless/cloud.json` at the Git root,
-containing the Cloud origin, workspace, repository and branch. It does not load a
-project file. All Cloud commands accept `--workspace <id>` and `--host <origin>`;
-explicit host overrides the link, which otherwise overrides
-`https://cloud.tubeless.io`. Origins require HTTPS except explicit localhost or
-loopback development. Credentials are isolated by full origin.
+All Cloud commands accept `--workspace <id>` and `--host <origin>`. Without
+`--workspace`, the session's single workspace is selected automatically. If you
+have several, the command lists their names and IDs and asks for `--workspace`;
+with none, create or join a workspace in the dashboard. An explicit workspace
+is checked by the service on each request.
+
+The default host is `https://cloud.tubeless.io`; `--host` selects another origin.
+Origins require HTTPS except explicit localhost or loopback development.
+Credentials are isolated by full origin. Commands work from any directory and
+never read Git, project files or `.tubeless/cloud.json`, or write project context.
 
 `auth login --no-browser` prints the approval URL and code. Confirm the code and
 approve the device in the browser. Sessions expire after seven days and are
@@ -583,31 +585,34 @@ never saved or printed. Dedicated scoped or long-lived CI tokens are not part of
 this flow. `auth logout` revokes a stored session and removes the local entry;
 when the environment token is active, remove it from the environment yourself.
 
-`cloud add` initially compiles one committed GitHub source and registers it. It
-does not run it. An exact repeated add returns the same registration and preserves
-its deployed source and commit, even when GitHub HEAD has changed. The default
-name is the file stem. Select a named export with `--export`, a project member
-with `--pipeline-id`, and a YAML handler registry with `--registry`. Registration
-requires an owner or admin; members can run and viewers can list/read.
+`cloud list` shows each loaded pipeline's slug, name, Cloud ID, availability and
+deployed commit. Run accepts an exact name or a listed slug: both
+`cloud run "Orders sync"` and `cloud run orders-sync` select the same pipeline.
+Slugs use lowercase words separated by hyphens and are derived from the current
+name, so renaming changes the slug. Accents are normalized; Unicode letters and
+numbers are retained. A name with no letters or numbers uses its Cloud ID as the
+slug. A name ending in `.ts` is still a name. Unknown selectors suggest listing
+or loading in the dashboard. Any collision between names or slugs requires
+`cloud run --id <cloud-pipeline-id>`; ID selection cannot be combined with a name
+or slug. Owners, admins and members can run; viewers can list and read logs.
 
-`cloud run` resolves an existing registration by the linked repository, branch
-and source path. It executes its **deployed revision**: local files and changes
-are never loaded, uploaded or synchronized, and the local file need not exist.
-The accepted run's SHA is authoritative and printed with its ID and dashboard
-URL. Deployment/version management is a separate workflow. Missing registrations
-suggest `cloud add`; ambiguous paths require `--export`, `--pipeline-id`, or
-`--id <cloud-pipeline-id>`. Explicit IDs need only host and workspace and work
-outside a Git checkout; they cannot be combined with a source path or selectors.
+A run executes its **deployed revision**. The accepted run's SHA is authoritative
+and printed with its ID and dashboard URL. Local files and changes are never
+loaded, uploaded or synchronized. Deployment and version management remain a
+separate workflow.
 
 Inputs are JSON objects up to 64 KB, with no local schema inference. Omitted input
 is `{}`. Use `--input-file -` for stdin, or a regular JSON file. Arrays, null,
-scalars and malformed JSON fail before admission. A run invocation uses one
-idempotency key for its bounded admission retry. If admission remains uncertain,
+scalars and malformed JSON fail before admission. Input must fit the limit after
+JSON normalization as well as in the original file. A run invocation uses one
+idempotency key for its bounded transport retry; local validation errors are not
+retried. If admission remains uncertain,
 the diagnostic prints that key and workspace so the request can be investigated.
 Do not start a fresh run to retry an uncertain admission.
 
 Foreground runs follow status and retained logs every two seconds. `--detach`
-returns after confirmed admission. Ctrl-C stops following and prints the run ID;
+prints the run ID and returns after confirmed admission; use `--detach --json`
+to read `.id` in a script. Ctrl-C stops following and prints the run ID;
 it does not cancel the remote run. Cancel from the dashboard. Run logs retain a
 bounded prefix of at most 400 entries, rather than an unlimited stream. Run
 retention follows the workspace plan (7/30/90 days for Free/Team/Scale).
@@ -618,6 +623,6 @@ stderr. Foreground run JSON is the final run; detached JSON is its admission
 snapshot. `logs --follow --json` waits and returns its terminal retained snapshot.
 
 Cloud exit codes use the existing CLI codes: 0 success or detached admission,
-1 usage, 2 credentials/configuration/transport, 4 invalid JSON or request
+1 usage, 2 credentials/workspace selection/transport, 4 invalid JSON or request
 validation, 6 rejected admission or failed execution, and 7 cancelled execution
 or local interruption.

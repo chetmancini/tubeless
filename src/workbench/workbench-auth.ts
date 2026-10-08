@@ -75,13 +75,11 @@ export async function runAuth(
               signal: managed.signal,
             });
             const code = await client.deviceCode();
-            const verification = new URL(
-              cloudVerificationUrl(host, code.verification_uri_complete ?? code.verification_uri)
-            );
-            io.stdout.write(`Open ${verification.href}\nConfirm code: ${code.user_code}\n`);
+            const verification = cloudVerificationUrl(host, code.verification_uri_complete);
+            io.stdout.write(`Open ${verification}\nConfirm code: ${code.user_code}\n`);
             if (!values["no-browser"]) {
               try {
-                await (dependencies.openBrowser ?? openBrowser)(verification.href);
+                await (dependencies.openBrowser ?? openBrowser)(verification);
               } catch {
                 io.stderr.write("Could not open a browser. Open the printed URL to continue.\n");
               }
