@@ -76,15 +76,18 @@ export function anthropicTool(
     });
     return { name, description, input_schema: wrapParameter(field, schema) };
   }
-  strictParameter(field, schema, `tool ${name}`, {
-    provider: "Anthropic",
-    closedObjects: true,
-    requireEveryProperty: false,
-  });
+  // Check the schema the provider will see: stripped constraints are enforced only by
+  // the harness, so their subschemas need not meet strict-mode object rules.
+  // SAFETY: mapSchema returns a copied record when given a record.
+  const visible = mapSchema(schema, strictSubset) as Record<string, unknown>;
   return {
     name,
     description,
-    input_schema: wrapParameter(field, mapSchema(schema, strictSubset)),
+    input_schema: strictParameter(field, visible, `tool ${name}`, {
+      provider: "Anthropic",
+      closedObjects: true,
+      requireEveryProperty: false,
+    }),
     strict: true,
   };
 }
