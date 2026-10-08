@@ -169,6 +169,48 @@ describe("Cloud authentication commands", () => {
     expect(fetcher).not.toHaveBeenCalled();
     expect(io.errors.join("")).toContain("Remove it");
   });
+
+  it("sanitizes human session identity and preserves JSON identity", async () => {
+    const remote = "remote\u001b[2J\u009b\u202e\nspoof";
+    const response = { ...session, user: { ...session.user, name: remote, email: remote } };
+    for (const json of [false, true]) {
+      const io = captureIo("/detached");
+      expect(
+        await runAuth(["status", "--host", host, ...(json ? ["--json"] : [])], io, {
+          env: { TUBELESS_TOKEN: "secret" },
+          store: storeFixture(),
+          fetch: async () => Response.json(response),
+        })
+      ).toBe(0);
+      if (json) expect(JSON.parse(io.output.join("")).user).toEqual(response.user);
+      else {
+        expect(io.output.join("")).not.toMatch(/[\u001b\u009b\u202e]/);
+        expect(io.output.join("")).toContain("remote [2J   spoof (remote [2J   spoof)\n");
+      }
+    }
+  });
+
+  it("sanitizes the displayed device code", async () => {
+    const remote = "ABCD\u001b[2J\u009b\u202e\nspoof";
+    const original = loginFetch([{ error: "access_denied" }]);
+    const io = captureIo("/detached");
+    const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
+      const response = await original(url, init);
+      if (String(url).endsWith("/device/code"))
+        return Response.json({ ...(await response.json()), user_code: remote });
+      return response;
+    }) as typeof fetch;
+    expect(
+      await runAuth(["login", "--host", host, "--no-browser"], io, {
+        env: {},
+        store: storeFixture(),
+        sleep: async () => {},
+        fetch: fetcher,
+      })
+    ).toBe(2);
+    expect(io.output.join("")).toContain("Confirm code: ABCD [2J   spoof\n");
+    expect(io.output.join("")).not.toMatch(/[\u001b\u009b\u202e]/);
+  });
   it("logout clears the local entry even if remote revocation fails", async () => {
     const io = captureIo("/detached");
     const store = storeFixture();

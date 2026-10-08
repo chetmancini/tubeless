@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CloudClientError, cloudVerificationUrl, createCloudClient } from "./cloud-client.js";
-import type { CliRun, CliSession } from "./cloud-protocol.js";
+import type { CliRun, CliSession, CloudJsonValue } from "./cloud-protocol.js";
 
 afterEach(() => vi.useRealTimers());
 
@@ -193,19 +193,22 @@ describe("Cloud HTTP client", () => {
   });
 
   it("preserves stable service errors while removing terminal controls and the active token", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        json(
-          { error: { code: "forbidden", message: "Membership removed. secret-token\u001b[31m" } },
-          403
-        )
-      );
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      json(
+        {
+          error: {
+            code: "forbidden",
+            message: "Membership removed. secret-token\u001b[31m\u009b\u202e",
+          },
+        },
+        403
+      )
+    );
     const client = createCloudClient({ host, token: "secret-token", fetch: fetcher });
     await expect(client.session()).rejects.toMatchObject({
       status: 403,
       code: "forbidden",
-      message: "Membership removed. [redacted] [31m",
+      message: "Membership removed. [redacted] [31m  ",
     });
     fetcher.mockRejectedValue(new Error("Request authorization secret-token was rejected"));
     await expect(client.session()).rejects.toMatchObject({ code: "transport_error" });
@@ -236,6 +239,52 @@ describe("Cloud HTTP client", () => {
       client.run("workspace", { pipelineId: "pipeline", input: {} }, "x".repeat(200))
     ).resolves.toEqual(run);
     expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("Idempotency-Key")).toHaveLength(200);
+  });
+
+  it.each([Infinity, -Infinity, NaN])(
+    "rejects nested non-finite input %s before HTTP",
+    async (value) => {
+      const fetcher = vi.fn<typeof fetch>();
+      const client = createCloudClient({ host, token: "credential", fetch: fetcher });
+      await expect(
+        client.run("workspace", { pipelineId: "pipeline", input: { nested: [{ value }] } }, "key")
+      ).rejects.toMatchObject({
+        code: "invalid_request",
+        message: expect.stringContaining("finite"),
+      });
+      expect(fetcher).not.toHaveBeenCalled();
+    }
+  );
+
+  it("rejects cyclic and overly nested input but permits shared objects and the nesting limit", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => json(run));
+    const client = createCloudClient({ host, token: "credential", fetch: fetcher });
+    const cyclic: Record<string, CloudJsonValue> = {};
+    cyclic.self = cyclic;
+    await expect(
+      client.run("workspace", { pipelineId: "pipeline", input: cyclic }, "cyclic")
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    expect(fetcher).not.toHaveBeenCalled();
+    const shared = { value: 1 };
+    await client.run(
+      "workspace",
+      { pipelineId: "pipeline", input: { a: shared, b: shared } },
+      "shared"
+    );
+    const deepJson = '{"a":'.repeat(128) + "1" + "}".repeat(128);
+    const input: Record<string, CloudJsonValue> = JSON.parse(deepJson);
+    await client.run("workspace", { pipelineId: "pipeline", input }, "deep");
+    expect(fetcher.mock.calls[1][1]?.body).toBe(`{"pipelineId":"pipeline","input":${deepJson}}`);
+    const excessive: Record<string, CloudJsonValue> = JSON.parse(
+      '{"a":'.repeat(129) + "1" + "}".repeat(129)
+    );
+    await expect(
+      client.run("workspace", { pipelineId: "pipeline", input: excessive }, "excessive")
+    ).rejects.toMatchObject({
+      code: "invalid_request",
+      message: expect.stringContaining("128 levels"),
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("allows a full 64 KiB multibyte input with the run envelope and rejects the next byte", async () => {

@@ -1,7 +1,12 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { CloudCredentialStore } from "./cloud-credentials.js";
 import { CloudClientError } from "./cloud-client.js";
-import { errorMessage, onFirstProcessSignal, type WorkbenchCliIo } from "./workbench-shared.js";
+import {
+  errorMessage,
+  onFirstProcessSignal,
+  terminalSafeText,
+  type WorkbenchCliIo,
+} from "./workbench-shared.js";
 
 /** Small I/O seams keep CLI tests away from production and the machine keychain. */
 export interface CloudCommandDependencies {
@@ -30,7 +35,7 @@ export function cloudErrorExit(error: unknown, io: WorkbenchCliIo, signal: Abort
     io.stderr.write("Stopped following Cloud activity. Remote work continues.\n");
     return 7;
   }
-  io.stderr.write(`Error: ${errorMessage(error)}\n`);
+  io.stderr.write(`Error: ${terminalSafeText(errorMessage(error))}\n`);
   if (error instanceof CloudClientError) {
     if (error.code === "invalid_request") return 4;
     if (["conflict", "quota_exceeded", "unavailable", "rate_limited"].includes(error.code))

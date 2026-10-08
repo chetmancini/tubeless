@@ -603,7 +603,9 @@ separate workflow.
 
 Inputs are JSON objects up to 64 KB, with no local schema inference. Omitted input
 is `{}`. Use `--input-file -` for stdin, or a regular JSON file. Arrays, null,
-scalars and malformed JSON fail before admission. Input must fit the limit after
+scalars, malformed JSON and numbers that overflow to infinity fail before admission.
+Input supports at most 128 levels of objects and arrays, counting the root object.
+Input must fit the limit after
 JSON normalization as well as in the original file. A run invocation uses one
 idempotency key for its bounded transport retry; local validation errors are not
 retried. If admission remains uncertain,
@@ -621,6 +623,8 @@ retention follows the workspace plan (7/30/90 days for Free/Team/Scale).
 `cloud logs --json` write one complete JSON value to stdout and diagnostics to
 stderr. Foreground run JSON is the final run; detached JSON is its admission
 snapshot. `logs --follow --json` waits and returns its terminal retained snapshot.
+Human output neutralizes terminal and bidirectional controls in remote text;
+JSON output preserves the original fields.
 
 Cloud exit codes use the existing CLI codes: 0 success or detached admission,
 1 usage, 2 credentials/workspace selection/transport, 4 invalid JSON or request

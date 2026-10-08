@@ -6,9 +6,19 @@ import { parseArgs } from "node:util";
 import { createCloudClient, CloudClientError, isCloudTransportError } from "./cloud-client.js";
 import { resolveCloudHost } from "./cloud-config.js";
 import { resolveCloudCredential } from "./cloud-credentials.js";
-import type { CliRun, CloudJsonValue } from "./cloud-protocol.js";
+import {
+  CLOUD_INPUT_MAX_DEPTH,
+  isCloudJsonValue,
+  type CliRun,
+  type CloudJsonValue,
+} from "./cloud-protocol.js";
 import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
-import { type WorkbenchCliIo, writeUsageError, writeCliChunk } from "./workbench-shared.js";
+import {
+  type WorkbenchCliIo,
+  writeUsageError,
+  writeCliChunk,
+  terminalSafeText,
+} from "./workbench-shared.js";
 import {
   cloudErrorExit,
   cloudSignal,
@@ -135,7 +145,12 @@ async function boundedInput(
   }
   if (value === null || typeof value !== "object" || Array.isArray(value))
     throw new CloudClientError("Input must be a JSON object.", "invalid_request");
-  // SAFETY: JSON.parse produced JSON and the object shape was checked above.
+  if (!isCloudJsonValue(value))
+    throw new CloudClientError(
+      `Input must contain JSON data with finite numbers and at most ${CLOUD_INPUT_MAX_DEPTH} levels of objects and arrays.`,
+      "invalid_request"
+    );
+  // SAFETY: The object shape and every JSON value were checked above.
   return value as Record<string, CloudJsonValue>;
 }
 
@@ -173,7 +188,7 @@ async function followRun(
       for (const log of current.logs.slice(printed))
         await writeCliChunk(
           output,
-          `${new Date(log.time).toISOString()} ${log.level}: ${log.message}\n`,
+          `${new Date(log.time).toISOString()} ${log.level}: ${terminalSafeText(log.message)}\n`,
           signal
         );
       printed = Math.max(printed, current.logs.length);
@@ -272,7 +287,7 @@ export async function runCloud(
             else
               for (const pipeline of pipelines)
                 io.stdout.write(
-                  `${pipeline.slug}: ${pipeline.name} (${pipeline.id}) ${pipeline.available ? "available" : "unavailable"} commit=${pipeline.commit} branch=${pipeline.branch}\n`
+                  `${terminalSafeText(pipeline.slug)}: ${terminalSafeText(pipeline.name)} (${terminalSafeText(pipeline.id)}) ${pipeline.available ? "available" : "unavailable"} commit=${terminalSafeText(pipeline.commit)} branch=${terminalSafeText(pipeline.branch)}\n`
                 );
             return 0;
           }
@@ -292,14 +307,17 @@ export async function runCloud(
               for (const log of run.logs)
                 await writeCliChunk(
                   io.stdout,
-                  `${new Date(log.time).toISOString()} ${log.level}: ${log.message}\n`,
+                  `${new Date(log.time).toISOString()} ${log.level}: ${terminalSafeText(log.message)}\n`,
                   managed.signal
                 );
             if (values.json)
               io.stdout.write(
                 `${JSON.stringify({ id: run.id, pipelineId: run.pipelineId, status: run.status, logs: run.logs })}\n`
               );
-            else io.stdout.write(`Run ${run.id}: ${run.status}\n${admitted.url}\n`);
+            else
+              io.stdout.write(
+                `Run ${terminalSafeText(run.id)}: ${run.status}\n${terminalSafeText(admitted.url)}\n`
+              );
             return values.follow ? runExit(run) : 0;
           }
           const pipelines = await client.pipelines(workspace);
@@ -333,7 +351,7 @@ export async function runCloud(
             // A 5xx, unusable response or interrupted POST can follow admission.
             if (admissionUncertain(error)) {
               io.stderr.write(
-                `Admission could not be confirmed. Workspace: ${workspace}; idempotency key: ${key}. Retry only with this same key through the API.\n`
+                `Admission could not be confirmed. Workspace: ${terminalSafeText(workspace)}; idempotency key: ${key}. Retry only with this same key through the API.\n`
               );
             }
             throw error;
@@ -341,7 +359,7 @@ export async function runCloud(
           admitted = { id: run.id, url: runUrl(host, workspace, run.id) };
           const progress = values.json ? io.stderr : io.stdout;
           progress.write(
-            `Run ${run.id}: ${run.pipelineName}\nWorkspace: ${workspace}\nDeployed commit: ${run.commit}\n${admitted.url}\nLocal changes are not used.\n`
+            `Run ${terminalSafeText(run.id)}: ${terminalSafeText(run.pipelineName)}\nWorkspace: ${terminalSafeText(workspace)}\nDeployed commit: ${terminalSafeText(run.commit)}\n${terminalSafeText(admitted.url)}\nLocal changes are not used.\n`
           );
           if (values.detach) {
             if (values.json) io.stdout.write(`${JSON.stringify(run)}\n`);
@@ -357,13 +375,17 @@ export async function runCloud(
           );
           if (values.json) io.stdout.write(`${JSON.stringify(run)}\n`);
           else {
-            io.stdout.write(`Run ${run.id}: ${run.status}\n`);
-            if (run.result !== undefined) io.stdout.write(`${JSON.stringify(run.result)}\n`);
-            if (run.error) io.stderr.write(`${run.error}\n`);
+            io.stdout.write(`Run ${terminalSafeText(run.id)}: ${run.status}\n`);
+            if (run.result !== undefined)
+              io.stdout.write(`${terminalSafeText(JSON.stringify(run.result))}\n`);
+            if (run.error) io.stderr.write(`${terminalSafeText(run.error)}\n`);
           }
           return runExit(run);
         } catch (error) {
-          if (admitted) io.stderr.write(`Run ${admitted.id}\n${admitted.url}\n`);
+          if (admitted)
+            io.stderr.write(
+              `Run ${terminalSafeText(admitted.id)}\n${terminalSafeText(admitted.url)}\n`
+            );
           return cloudErrorExit(error, io, managed.signal);
         } finally {
           managed.cleanup();

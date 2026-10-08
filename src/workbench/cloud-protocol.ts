@@ -8,6 +8,7 @@ export type CloudJsonValue =
   | { [key: string]: CloudJsonValue };
 
 export type CloudRole = "owner" | "admin" | "member" | "viewer";
+export const CLOUD_INPUT_MAX_DEPTH = 128;
 export type CloudRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
 export interface CliWorkspace {
@@ -120,6 +121,37 @@ const ERROR_CODES = [
 
 export function isCloudObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Check finite, depth-bounded JSON without recursion or silently dropping data. */
+export function isCloudJsonValue(value: unknown): value is CloudJsonValue {
+  const pending: ({ value: unknown; depth: number } | { leave: object })[] = [{ value, depth: 1 }];
+  const ancestors = new WeakSet<object>();
+  while (pending.length) {
+    const next = pending.pop()!;
+    if ("leave" in next) {
+      ancestors.delete(next.leave);
+      continue;
+    }
+    const current = next.value;
+    if (current === null || typeof current === "string" || typeof current === "boolean") continue;
+    if (typeof current === "number") {
+      if (!Number.isFinite(current)) return false;
+      continue;
+    }
+    if (typeof current !== "object") return false;
+    if (next.depth > CLOUD_INPUT_MAX_DEPTH) return false;
+    if (!Array.isArray(current)) {
+      const prototype: unknown = Object.getPrototypeOf(current);
+      if (prototype !== Object.prototype && prototype !== null) return false;
+    }
+    if (ancestors.has(current)) return false;
+    ancestors.add(current);
+    pending.push({ leave: current });
+    for (const child of Array.isArray(current) ? current : Object.values(current))
+      pending.push({ value: child, depth: next.depth + 1 });
+  }
+  return true;
 }
 
 function text(value: unknown, allowEmpty = false): value is string {

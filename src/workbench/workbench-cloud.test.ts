@@ -50,6 +50,7 @@ function service(
     pipelines?: CliPipeline[];
     workspaces?: CliWorkspace[];
     runs?: CliRun[];
+    admission?: CliRun;
     admissionStatus?: number;
     admissionError?: string;
     lostAcknowledgement?: boolean;
@@ -92,9 +93,9 @@ function service(
         admitted = true;
         throw new Error("lost response");
       }
-      return Response.json(baseRun, { status: 202 });
+      return Response.json(options.admission ?? baseRun, { status: 202 });
     }
-    if (url.pathname.endsWith("/runs/run-1"))
+    if (url.pathname.endsWith(`/runs/${encodeURIComponent(options.admission?.id ?? baseRun.id)}`))
       return Response.json(runs.length > 1 ? runs.shift() : runs[0]);
     throw new Error("Unexpected route");
   }) as typeof fetch;
@@ -192,6 +193,127 @@ describe("Cloud remote commands", () => {
     expect(admissions).toHaveLength(2);
     expect(admissions[0]!.key).toBe(admissions[1]!.key);
     expect(admissions[0]!.body).toEqual({ pipelineId: pipeline.id, input: { hello: "world" } });
+  });
+
+  it.each(["-", "input.json"])(
+    "rejects overflowing numbers and excessive nesting from %s without admission or retries",
+    async (file) => {
+      const root = await fixture();
+      for (const input of [
+        '{"threshold":1e400}',
+        '{"nested":[{"threshold":-1e400}]}',
+        '{"a":'.repeat(129) + "1" + "}".repeat(129),
+      ]) {
+        await writeFile(path.join(root, "input.json"), input);
+        const dependencies = { ...service(), readStdin: async () => input };
+        const io = captureIo(root);
+        expect(await runCloud(["run", pipeline.name, "--input-file", file], io, dependencies)).toBe(
+          4
+        );
+        expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
+        expect(io.errors.join("")).toContain("finite numbers");
+        expect(io.errors.join("")).not.toContain("Admission could not be confirmed");
+        expect(io.errors.join("")).not.toContain("idempotency key");
+      }
+    }
+  );
+
+  it("sanitizes human pipeline fields while preserving JSON fields", async () => {
+    const remote = `remote\u001b]52;c;clipboard\u0007\u009b31m\u061c\u200e\u200f\u202e\u2066\nspoof`;
+    const unsafe = {
+      ...pipeline,
+      id: remote,
+      name: remote,
+      slug: remote,
+      branch: remote,
+      commit: remote,
+    };
+    const human = captureIo(await fixture());
+    expect(await runCloud(["list"], human, service({ pipelines: [unsafe] }))).toBe(0);
+    expect(human.output.join("").slice(0, -1)).not.toMatch(
+      /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/
+    );
+    expect(human.output.join("").split("\n")).toHaveLength(2);
+    const machine = captureIo(await fixture());
+    expect(await runCloud(["list", "--json"], machine, service({ pipelines: [unsafe] }))).toBe(0);
+    expect(JSON.parse(machine.output.join(""))).toEqual([unsafe]);
+  });
+
+  it.each([[], ["--follow"]])(
+    "sanitizes retained and followed logs while preserving JSON %j",
+    async (...flags) => {
+      const remote = "before\u001b]8;;https://evil.example\u0007link\u009b31m\u202e\nafter";
+      const log = { time: 1000, level: "info" as const, message: remote };
+      const run = { ...baseRun, status: "completed" as const, logs: [log] };
+      const human = captureIo(await fixture());
+      expect(await runCloud(["logs", run.id, ...flags], human, service({ runs: [run] }))).toBe(0);
+      expect(human.output.join("")).toContain(
+        "info: before ]8;;https://evil.example link 31m  after\n"
+      );
+      const machine = captureIo(await fixture());
+      expect(
+        await runCloud(["logs", run.id, ...flags, "--json"], machine, service({ runs: [run] }))
+      ).toBe(0);
+      expect(JSON.parse(machine.output.join("")).logs).toEqual([log]);
+    }
+  );
+
+  it("sanitizes run progress, results and failures without changing machine snapshots", async () => {
+    const remote = "remote\u001b[2J\u009b\u202e\nspoof";
+    const run: CliRun = {
+      ...baseRun,
+      id: remote,
+      pipelineName: remote,
+      commit: remote,
+      status: "failed",
+      result: { value: remote },
+      error: remote,
+    };
+    for (const json of [false, true]) {
+      const io = captureIo(await fixture());
+      expect(
+        await runCloud(
+          ["run", pipeline.name, ...(json ? ["--json"] : [])],
+          io,
+          service({ admission: run })
+        )
+      ).toBe(6);
+      const human = json ? io.errors.join("") : io.output.join("") + io.errors.join("");
+      expect(human).not.toMatch(/[\u001b\u009b\u202e]/);
+      expect(human).toContain("Run remote [2J   spoof: remote [2J   spoof\n");
+      expect(human).toContain("Deployed commit: remote [2J   spoof\n");
+      if (json) expect(JSON.parse(io.output.join(""))).toEqual(run);
+      else expect(io.errors.join("")).toBe("remote [2J   spoof\n");
+    }
+  });
+
+  it("sanitizes workspace choices and admitted run diagnostics", async () => {
+    const remote = "remote\u001b[2J\u009b\u202e\nspoof";
+    const choices = service({
+      workspaces: [
+        { id: remote, name: remote, slug: "workspace", role: "owner" },
+        { id: "other", name: "Other", slug: "other", role: "owner" },
+      ],
+    });
+    const selection = captureIo(await fixture());
+    expect(await runCloud(["list"], selection, choices)).toBe(2);
+    expect(selection.errors.join("")).not.toMatch(/[\u001b\u009b\u202e]/);
+    expect(selection.errors.join("")).toContain("Other (other)");
+    const dependencies = service({ admission: { ...baseRun, id: remote } });
+    const original = dependencies.fetch;
+    dependencies.fetch = (async (url: string | URL | Request, init?: RequestInit) =>
+      init?.method === "POST" ||
+      String(url).endsWith("/session") ||
+      String(url).endsWith("/pipelines")
+        ? original(url, init)
+        : Response.json(
+            { error: { code: "not_found", message: remote } },
+            { status: 404 }
+          )) as typeof fetch;
+    const failed = captureIo(await fixture());
+    expect(await runCloud(["run", pipeline.name], failed, dependencies)).toBe(2);
+    expect(failed.errors.join("")).not.toMatch(/[\u001b\u009b\u202e]/);
+    expect(failed.errors.join("")).toContain("Run remote [2J   spoof\n");
   });
   it("does not retry or report uncertain admission when normalized JSON exceeds the input budget", async () => {
     const input = `{"values":[${Array(4000).fill("1e20").join(",")}]}`;

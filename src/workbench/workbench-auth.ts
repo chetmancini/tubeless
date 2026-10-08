@@ -5,7 +5,7 @@ import { createCloudClient, cloudVerificationUrl } from "./cloud-client.js";
 import { resolveCloudHost } from "./cloud-config.js";
 import { createNativeCredentialStore, resolveCloudCredential } from "./cloud-credentials.js";
 import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
-import { type WorkbenchCliIo, writeUsageError } from "./workbench-shared.js";
+import { type WorkbenchCliIo, writeUsageError, terminalSafeText } from "./workbench-shared.js";
 import {
   cloudErrorExit,
   cloudSignal,
@@ -76,7 +76,9 @@ export async function runAuth(
             });
             const code = await client.deviceCode();
             const verification = cloudVerificationUrl(host, code.verification_uri_complete);
-            io.stdout.write(`Open ${verification}\nConfirm code: ${code.user_code}\n`);
+            io.stdout.write(
+              `Open ${terminalSafeText(verification)}\nConfirm code: ${terminalSafeText(code.user_code)}\n`
+            );
             if (!values["no-browser"]) {
               try {
                 await (dependencies.openBrowser ?? openBrowser)(verification);
@@ -168,7 +170,7 @@ export async function runAuth(
           if (values.json) io.stdout.write(`${JSON.stringify(status)}\n`);
           else
             io.stdout.write(
-              `${session.user.name} (${session.user.email})\nHost: ${host}\nSession expires: ${new Date(session.expiresAt).toISOString()}\nCredential: ${credential.source}\n`
+              `${terminalSafeText(session.user.name)} (${terminalSafeText(session.user.email)})\nHost: ${host}\nSession expires: ${new Date(session.expiresAt).toISOString()}\nCredential: ${credential.source}\n`
             );
           return 0;
         } catch (error) {

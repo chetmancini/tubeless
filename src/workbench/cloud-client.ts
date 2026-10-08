@@ -1,5 +1,7 @@
 import { normalizeCloudHost } from "./cloud-config.js";
 import {
+  CLOUD_INPUT_MAX_DEPTH,
+  isCloudJsonValue,
   isCloudObject,
   isCloudToken,
   parseCliError,
@@ -17,6 +19,7 @@ import {
   type CloudDeviceError,
   type CloudDeviceSession,
 } from "./cloud-protocol.js";
+import { terminalSafeText } from "./workbench-shared.js";
 
 const CLOUD_JSON_LIMIT = 64 * 1024;
 const RUN_ENVELOPE_LIMIT = 66 * 1024;
@@ -64,7 +67,7 @@ export interface CloudClient {
 
 function safeMessage(message: string, token?: string): string {
   const redacted = token ? message.split(token).join("[redacted]") : message;
-  return redacted.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 1024);
+  return terminalSafeText(redacted).slice(0, 1024);
 }
 
 function abortFailure(timedOut: boolean): CloudClientError {
@@ -77,6 +80,11 @@ function abortFailure(timedOut: boolean): CloudClientError {
 function validateRunInput(input: unknown): void {
   if (!isCloudObject(input))
     throw new CloudClientError("Cloud run input must be a JSON object.", "invalid_request");
+  if (!isCloudJsonValue(input))
+    throw new CloudClientError(
+      `Cloud run input must contain JSON data with finite numbers and at most ${CLOUD_INPUT_MAX_DEPTH} levels of objects and arrays.`,
+      "invalid_request"
+    );
   let encoded: string | undefined;
   try {
     encoded = JSON.stringify(input);
