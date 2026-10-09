@@ -391,6 +391,25 @@ it("moves enums with complex values into descriptions", () => {
   expect(scalar.input_schema.properties.input).toEqual({ enum: ["a", 1, null] });
 });
 
+it("keeps only strict-supported keywords and rewrites oneOf to anyOf", () => {
+  const schema = {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    oneOf: [
+      { type: "string", pattern: "^a" },
+      { type: "array", prefixItems: [{ type: "string" }] },
+    ],
+    not: { type: "null" },
+  };
+  const tool = anthropicTool("custom", "Custom", "input", schema, true);
+  expect(tool.input_schema.properties.input).toEqual({
+    anyOf: [
+      { type: "string", description: `Constraints: {"pattern":"^a"}` },
+      { type: "array", description: `Constraints: {"prefixItems":[{"type":"string"}]}` },
+    ],
+    description: `Constraints: {"not":{"type":"null"}}`,
+  });
+});
+
 it("checks strict object rules only on the schema the provider sees", () => {
   const schema = {
     type: "array",
