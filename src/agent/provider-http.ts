@@ -17,16 +17,6 @@ export function providerBaseUrl(provider: string, value: string): string {
   return url.href.replace(/\/+$/, "");
 }
 
-export function isBaseUrl(value: unknown): boolean {
-  if (typeof value !== "string") return false;
-  try {
-    providerBaseUrl("", value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** Read a bounded JSON body. The caller labels abort and size errors with `provider`. */
 export async function readProviderJson(
   response: Response,

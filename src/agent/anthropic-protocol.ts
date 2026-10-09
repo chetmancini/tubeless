@@ -1,4 +1,4 @@
-import { mapSchema, record, strictParameter, wrapParameter } from "./provider-schema.js";
+import { mapSchema, record, strictParameter } from "./provider-schema.js";
 
 export const COMPACTION_BETA = "compact-2026-09-04";
 
@@ -77,12 +77,15 @@ export function anthropicTool(
 ) {
   if (!strict) {
     // Wrapping still relocates the reference root, so references stay rejected.
-    strictParameter(field, schema, `tool ${name}`, {
-      provider: "Anthropic",
-      closedObjects: false,
-      requireEveryProperty: false,
-    });
-    return { name, description, input_schema: wrapParameter(field, schema) };
+    return {
+      name,
+      description,
+      input_schema: strictParameter(field, schema, `tool ${name}`, {
+        provider: "Anthropic",
+        closedObjects: false,
+        requireEveryProperty: false,
+      }),
+    };
   }
   // Check the schema the provider will see: stripped constraints are enforced only by
   // the harness, so their subschemas need not meet strict-mode object rules.

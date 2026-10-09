@@ -1,7 +1,5 @@
 import { record, strictParameter } from "./provider-schema.js";
 
-export { record } from "./provider-schema.js";
-
 export function outputItems(body: unknown): Record<string, unknown>[] {
   if (!record(body) || !Array.isArray(body.output) || !body.output.every(record))
     throw new Error("OpenAI returned invalid output items");

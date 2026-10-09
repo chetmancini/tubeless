@@ -317,7 +317,9 @@ describe("Anthropic model", () => {
     { reasoningEffort: "minimal" },
   ])("rejects invalid configuration locally: %j", (options) => {
     // @ts-expect-error Exercise the boundary for JavaScript callers.
-    expect(() => anthropicModel(options)).toThrow("Invalid Anthropic model configuration");
+    expect(() => anthropicModel(options)).toThrow(
+      /^Invalid Anthropic (model configuration|base URL)$/
+    );
   });
 
   it("rejects relocated references before any request", async () => {

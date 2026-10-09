@@ -1,11 +1,9 @@
 import { throwIfAborted } from "../utilities/abort.js";
-import { record } from "./openai-protocol.js";
+import { record } from "./provider-schema.js";
 import { providerBaseUrl, providerRequest, readProviderJson } from "./provider-http.js";
 
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 const MAX_ERROR_RESPONSE_BYTES = 16_384;
-
-export { MAX_REQUEST_BYTES } from "./provider-http.js";
 
 async function authenticationFailure(response: Response, signal: AbortSignal): Promise<string> {
   let body: unknown;
