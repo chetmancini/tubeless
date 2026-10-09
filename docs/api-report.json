@@ -265,6 +265,20 @@
       "exports": ["openaiModel", "OpenAIModelOptions"],
       "sha256": "dfdd1a52a08d2756ad3220f71d7a707ec2cf301922f767b1a82c4ebc9fc6cd01",
       "specifier": "tubeless/agent/openai"
+    },
+    {
+      "declaration": "./dist/agent/mcp.d.ts",
+      "exports": [
+        "connectMcpServers",
+        "McpHttpOptions",
+        "McpServer",
+        "McpServers",
+        "McpStdioOptions",
+        "McpTool",
+        "McpToolResult"
+      ],
+      "sha256": "3a3274d18722ab45ca2aa785d893b1a25695403ccea7c1035189875ba8367373",
+      "specifier": "tubeless/agent/mcp"
     }
   ],
   "packageName": "tubeless",

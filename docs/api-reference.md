@@ -22,6 +22,7 @@ Package: `tubeless`
 | `tubeless/testing`      | `./dist/testing/testing.d.ts`      | `bd6577d2f00474567d6cf37458005e5d92990f14c63e0cfeb27abc7055e2552f` |               10 |
 | `tubeless/tracing`      | `./dist/tracing/tracing.d.ts`      | `e378d1e798e86752560d4398a591826ba0b3e0af0417ffd2fd71e3ffb28aeffb` |                3 |
 | `tubeless/agent/openai` | `./dist/agent/openai.d.ts`         | `dfdd1a52a08d2756ad3220f71d7a707ec2cf301922f767b1a82c4ebc9fc6cd01` |                2 |
+| `tubeless/agent/mcp`    | `./dist/agent/mcp.d.ts`            | `3a3274d18722ab45ca2aa785d893b1a25695403ccea7c1035189875ba8367373` |                7 |
 
 ## Symbols
 
@@ -275,3 +276,15 @@ Package: `tubeless`
 | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
 | [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L30)       | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
 | [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L8) | Responses transport settings; credentials are resolved only when a decision executes.         |
+
+### `tubeless/agent/mcp`
+
+| Symbol                                                                                            | Description                                                                                    |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [`connectMcpServers`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L167)    | Connect MCP servers and expose their tools to an agent, named `<server>__<tool>`.              |
+| [`McpHttpOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp-http.ts#L11)   | A remote server reached over Streamable HTTP.                                                  |
+| [`McpServer`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L26)             | A Streamable HTTP endpoint (`url`) or a local stdio command (`command`).                       |
+| [`McpServers`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L33)            | Connected servers whose tools are named `<server>__<tool>`; close them after the agent's runs. |
+| [`McpStdioOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp-stdio.ts#L10) | A local server process speaking JSON-RPC over stdin and stdout.                                |
+| [`McpTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L30)               | A tool discovered on an MCP server, called with its validated JSON arguments.                  |
+| [`McpToolResult`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp-schema.ts#L151) | Content and optional structured data returned by an MCP tool call.                             |

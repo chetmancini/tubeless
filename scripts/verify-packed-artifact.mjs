@@ -178,6 +178,7 @@ try {
     "examples/agent-delegation.ts",
     "examples/agent-pipeline.ts",
     "examples/agent-openai.ts",
+    "examples/agent-mcp.ts",
     "docs/remote-step-composition.md",
     "docs/cli.md",
     "docs/concepts.md",
