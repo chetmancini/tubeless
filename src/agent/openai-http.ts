@@ -1,7 +1,5 @@
 import { providerBaseUrl, providerRequest } from "./provider-http.js";
 
-export { MAX_REQUEST_BYTES } from "./provider-http.js";
-
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 
 export async function openaiRequest(

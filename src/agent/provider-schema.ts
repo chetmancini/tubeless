@@ -96,10 +96,6 @@ export function strictParameter(
   rules: StrictSchemaRules
 ) {
   assertParameterSchema(schema, label, rules);
-  return wrapParameter(name, schema);
-}
-
-export function wrapParameter(name: string, schema: unknown) {
   return {
     type: "object",
     properties: { [name]: schema },

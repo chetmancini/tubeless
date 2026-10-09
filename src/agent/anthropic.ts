@@ -6,7 +6,7 @@ import {
   carriesCompaction,
   COMPACTION_BETA,
 } from "./anthropic-protocol.js";
-import { isBaseUrl, MAX_REQUEST_BYTES, providerBaseUrl, providerRequest } from "./provider-http.js";
+import { MAX_REQUEST_BYTES, providerBaseUrl, providerRequest } from "./provider-http.js";
 import { record } from "./provider-schema.js";
 import { boundedToolOutputs } from "./provider-tool-outputs.js";
 import { throwIfAborted } from "../utilities/abort.js";
@@ -86,14 +86,19 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
     (authToken !== undefined && (typeof authToken !== "string" || !authToken.trim())) ||
     (model !== undefined && (typeof model !== "string" || !model.trim())) ||
     (apiKey !== undefined && (typeof apiKey !== "string" || !apiKey.trim())) ||
-    (baseUrl !== undefined && !isBaseUrl(baseUrl)) ||
+    (baseUrl !== undefined && typeof baseUrl !== "string") ||
     (reasoningEffort !== null && !EFFORTS.includes(reasoningEffort))
   )
     throw new Error("Invalid Anthropic model configuration");
+  if (baseUrl !== undefined) providerBaseUrl("Anthropic", baseUrl);
   return async (request, context) => {
     const selectedModel = (model ?? process.env.ANTHROPIC_MODEL)?.trim() || "claude-opus-5-5";
     const timeout = AbortSignal.timeout(timeoutMs);
     const signal = context.signal ? AbortSignal.any([context.signal, timeout]) : timeout;
+    const base = providerBaseUrl(
+      "Anthropic",
+      baseUrl ?? (process.env.ANTHROPIC_BASE_URL?.trim() || DEFAULT_BASE_URL)
+    );
     throwIfAborted(signal, "Anthropic decision");
     // Validate descriptors before either compaction or a decision can perform I/O.
     const tools = [
@@ -121,7 +126,7 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
       providerRequest(
         "Anthropic",
         endpointLabel,
-        `${resolveBaseUrl(baseUrl)}/v1/messages`,
+        `${base}/v1/messages`,
         {
           ...credentials(apiKey, authToken),
           "anthropic-version": "2023-06-01",
@@ -229,13 +234,6 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
       messages = [...messages, { role: "user", content: TOOL_RULE }];
     }
   };
-}
-
-function resolveBaseUrl(baseUrl: string | undefined): string {
-  return providerBaseUrl(
-    "Anthropic",
-    baseUrl ?? (process.env.ANTHROPIC_BASE_URL?.trim() || DEFAULT_BASE_URL)
-  );
 }
 
 function credentials(

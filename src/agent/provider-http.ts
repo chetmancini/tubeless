@@ -17,16 +17,6 @@ export function providerBaseUrl(provider: string, value: string): string {
   return url.href.replace(/\/+$/, "");
 }
 
-export function isBaseUrl(value: unknown): boolean {
-  if (typeof value !== "string") return false;
-  try {
-    providerBaseUrl("", value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** POST bounded JSON to a model provider; error bodies never reach diagnostics. */
 export async function providerRequest(
   provider: string,

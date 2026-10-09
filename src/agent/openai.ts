@@ -1,7 +1,8 @@
 import type { AgentModel } from "./model-types.js";
-import { MAX_REQUEST_BYTES, openaiRequest } from "./openai-http.js";
-import { isBaseUrl } from "./provider-http.js";
-import { openaiDecision, outputItems, parameter, record } from "./openai-protocol.js";
+import { openaiRequest } from "./openai-http.js";
+import { MAX_REQUEST_BYTES, providerBaseUrl } from "./provider-http.js";
+import { record } from "./provider-schema.js";
+import { openaiDecision, outputItems, parameter } from "./openai-protocol.js";
 import { openaiToolOutputs } from "./openai-tool-outputs.js";
 import { throwIfAborted } from "../utilities/abort.js";
 
@@ -50,7 +51,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
       (!Number.isSafeInteger(compactAfterBytes) ||
         compactAfterBytes < 1 ||
         compactAfterBytes >= MAX_REQUEST_BYTES)) ||
-    (baseUrl !== undefined && !isBaseUrl(baseUrl)) ||
+    (baseUrl !== undefined && typeof baseUrl !== "string") ||
     !Number.isSafeInteger(timeoutMs) ||
     timeoutMs < 1 ||
     timeoutMs > 2_147_483_647 ||
@@ -60,6 +61,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
       !["none", "minimal", "low", "medium", "high", "xhigh", "max"].includes(reasoningEffort))
   )
     throw new Error("Invalid OpenAI model configuration");
+  if (baseUrl !== undefined) providerBaseUrl("OpenAI", baseUrl);
   return async (request, context) => {
     const selectedModel = (model ?? process.env.OPENAI_MODEL)?.trim() || "gpt-5.4-mini";
     const timeout = AbortSignal.timeout(timeoutMs);

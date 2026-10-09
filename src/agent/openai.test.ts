@@ -509,7 +509,7 @@ describe("OpenAI model", () => {
   it.each(["ftp://example.com", "not a url", "https://host/v1?tenant=abc", "https://host/v1#x"])(
     "rejects an invalid base URL: %s",
     (baseUrl) => {
-      expect(() => openaiModel({ baseUrl })).toThrow("Invalid OpenAI model configuration");
+      expect(() => openaiModel({ baseUrl })).toThrow("Invalid OpenAI base URL");
     }
   );
 
