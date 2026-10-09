@@ -150,6 +150,11 @@
       "types": "./dist/agent/openai.d.ts",
       "import": "./dist/agent/openai.js",
       "default": "./dist/agent/openai.js"
+    },
+    "./agent/anthropic": {
+      "types": "./dist/agent/anthropic.d.ts",
+      "import": "./dist/agent/anthropic.js",
+      "default": "./dist/agent/anthropic.js"
     }
   }
 }
