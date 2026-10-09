@@ -1,25 +1,7 @@
-import { mapSchema, record, strictParameter } from "./provider-schema.js";
+import { record, strictParameter } from "./provider-schema.js";
 
 export const COMPACTION_BETA = "compact-2026-09-04";
 
-// Strict tool use rejects these constraints. The harness still validates the original
-// schema, so they move into the description instead of reaching the grammar compiler.
-const NUMERIC_AND_LENGTH = [
-  "minimum",
-  "maximum",
-  "exclusiveMinimum",
-  "exclusiveMaximum",
-  "multipleOf",
-  "minLength",
-  "maxLength",
-  "maxItems",
-  "minProperties",
-  "maxProperties",
-  "uniqueItems",
-  "contains",
-  "minContains",
-  "maxContains",
-];
 const FORMATS = new Set([
   "date-time",
   "time",
@@ -32,39 +14,56 @@ const FORMATS = new Set([
   "ipv6",
   "uuid",
 ]);
+// Annotations with no model-facing meaning; references are rejected, so definitions are unused.
+const DROPPED = new Set(["$schema", "$id", "$comment", "$defs", "definitions"]);
+const KEPT = new Set([
+  "type",
+  "title",
+  "description",
+  "default",
+  "required",
+  "additionalProperties",
+  // Kept so strictParameter rejects them instead of hiding them in a description.
+  "$ref",
+  "$dynamicRef",
+  "$recursiveRef",
+]);
+const scalar = (value: unknown) => value === null || typeof value !== "object";
 
-function strictSubset(schema: Record<string, unknown>): Record<string, unknown> {
+// Strict tool use compiles only a subset of JSON Schema. The harness still validates the
+// original schema, so every other keyword moves into the description instead.
+function strictSubset(schema: unknown): unknown {
+  if (!record(schema)) return schema;
+  const kept: Record<string, unknown> = {};
   const moved: Record<string, unknown> = {};
-  const copy = { ...schema };
-  for (const keyword of NUMERIC_AND_LENGTH) {
-    if (Object.hasOwn(copy, keyword)) {
-      moved[keyword] = copy[keyword];
-      delete copy[keyword];
-    }
+  for (const [keyword, value] of Object.entries(schema)) {
+    if (DROPPED.has(keyword)) continue;
+    if (keyword === "properties" && record(value))
+      kept.properties = Object.fromEntries(
+        Object.entries(value).map(([name, child]) => [name, strictSubset(child)])
+      );
+    else if (keyword === "items" && record(value)) kept.items = strictSubset(value);
+    else if ((keyword === "anyOf" || keyword === "allOf") && Array.isArray(value))
+      kept[keyword] = value.map(strictSubset);
+    else if (keyword === "oneOf" && Array.isArray(value) && !Array.isArray(schema.anyOf))
+      kept.anyOf = value.map(strictSubset);
+    else if (
+      KEPT.has(keyword) ||
+      (keyword === "minItems" && (value === 0 || value === 1)) ||
+      (keyword === "format" && FORMATS.has(value as string)) ||
+      (keyword === "const" && scalar(value)) ||
+      (keyword === "enum" && Array.isArray(value) && value.every(scalar))
+    )
+      kept[keyword] = value;
+    else moved[keyword] = value;
   }
-  if (typeof copy.minItems === "number" && copy.minItems > 1) {
-    moved.minItems = copy.minItems;
-    delete copy.minItems;
-  }
-  // Strict enums accept only strings, numbers, booleans, and null.
-  if (
-    Array.isArray(copy.enum) &&
-    copy.enum.some((value) => value !== null && typeof value === "object")
-  ) {
-    moved.enum = copy.enum;
-    delete copy.enum;
-  }
-  if (typeof copy.format === "string" && !FORMATS.has(copy.format)) {
-    moved.format = copy.format;
-    delete copy.format;
-  }
-  if (Object.keys(moved).length === 0) return copy;
+  if (Object.keys(moved).length === 0) return kept;
   const note = `Constraints: ${JSON.stringify(moved)}`;
-  copy.description =
-    typeof copy.description === "string" && copy.description
-      ? `${copy.description}\n${note}`
+  kept.description =
+    typeof kept.description === "string" && kept.description
+      ? `${kept.description}\n${note}`
       : note;
-  return copy;
+  return kept;
 }
 
 /** Build a Messages API tool whose arguments carry the value in one wrapped field. */
@@ -89,8 +88,8 @@ export function anthropicTool(
   }
   // Check the schema the provider will see: stripped constraints are enforced only by
   // the harness, so their subschemas need not meet strict-mode object rules.
-  // SAFETY: mapSchema returns a copied record when given a record.
-  const visible = mapSchema(schema, strictSubset) as Record<string, unknown>;
+  // SAFETY: strictSubset returns a record when given a record.
+  const visible = strictSubset(schema) as Record<string, unknown>;
   return {
     name,
     description,

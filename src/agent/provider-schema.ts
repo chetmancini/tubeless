@@ -103,23 +103,3 @@ export function strictParameter(
     additionalProperties: false,
   };
 }
-
-/** Copy schema positions, applying `transform` to every subschema after its children. */
-export function mapSchema(
-  schema: unknown,
-  transform: (schema: Record<string, unknown>) => Record<string, unknown>
-): unknown {
-  if (Array.isArray(schema)) return schema.map((child) => mapSchema(child, transform));
-  if (!record(schema)) return schema;
-  const copy: Record<string, unknown> = { ...schema };
-  for (const keyword of SCHEMA_MAPS) {
-    const children = schema[keyword];
-    if (record(children))
-      copy[keyword] = Object.fromEntries(
-        Object.entries(children).map(([name, child]) => [name, mapSchema(child, transform)])
-      );
-  }
-  for (const keyword of SCHEMA_VALUES)
-    if (Object.hasOwn(schema, keyword)) copy[keyword] = mapSchema(schema[keyword], transform);
-  return transform(copy);
-}

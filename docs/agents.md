@@ -211,9 +211,12 @@ the cached prefix.
 With `strict: true` (the default), tools use
 [strict tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use).
 Every object must set `additionalProperties: false`; unlike OpenAI, optional properties
-are allowed. Length, numeric, and item-count constraints, which strict mode does not
-accept, are removed from the schema the model sees and recorded in that schema's
-`description`. Tubeless still validates every argument against the full schema.
+are allowed. The schema the model sees keeps only what strict mode accepts: types,
+`properties`, `required`, `items`, `anyOf`, `allOf` (`oneOf` becomes `anyOf`), scalar
+`enum` and `const`, `default`, supported string formats, and `minItems` of 0 or 1.
+Every other keyword, such as length, numeric, and pattern constraints, is recorded in
+that schema's `description` instead. Tubeless still validates every argument against
+the full schema.
 Strict mode allows at most 20 strict tools per request, including `_finish`, plus
 limits on optional and union-typed parameters. Set `strict: false` for larger tool sets
 or servers without strict support.
