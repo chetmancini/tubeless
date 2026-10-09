@@ -19,7 +19,7 @@
   --chalk: #ece8dc;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", menlo, monaco, monospace;
   --sans: "IBM Plex Sans", "Helvetica Neue", arial, sans-serif;
-  --display: "Big Shoulders Display", "Arial Narrow", impact, sans-serif;
+  --display: "Arial Narrow", Impact, sans-serif;
   --space: min(5vw, 4.5rem);
   --gutter: min(6vw, 5.5rem);
   --max: 74rem;
@@ -64,6 +64,11 @@ body {
 
 :is(h1, h2, h3, h4, [id]) {
   scroll-margin-top: 5.75rem;
+}
+
+h1 {
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .skip {
@@ -250,7 +255,7 @@ a:hover {
   margin: 0;
   font-family: var(--display);
   font-size: clamp(3.6rem, 7.3vw, 6.4rem);
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 0.98;
   text-wrap: balance;
