@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import * as path from "node:path";
+import type { Readable } from "node:stream";
 import type { CliContext } from "../cli/cli.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE } from "../cli/cli-exit.js";
 import type { PipelineContext } from "../core/pipeline.js";
@@ -14,8 +15,14 @@ export const DEFAULT_PIPELINE_RUN_STORE = ".tubeless/runs.sqlite";
 export interface WorkbenchCliIo {
   cwd: string;
   signal?: AbortSignal;
+  stdin?: Readable & { isTTY?: boolean };
   stderr: { write(chunk: string): boolean | void };
-  stdout: { write(chunk: string): boolean | void };
+  stdout: {
+    write(chunk: string): boolean | void;
+    isTTY?: boolean;
+    columns?: number;
+    rows?: number;
+  };
 }
 
 /** Neutralize controls in untrusted text while keeping terminal layout caller-owned. */
@@ -165,8 +172,8 @@ export function commandContext(
   io: WorkbenchCliIo,
   signal: AbortSignal,
   pipelineContext?: Omit<PipelineContext, "cwd" | "log" | "signal">
-): Partial<CliContext> {
-  const context: Partial<CliContext> = {
+): CliContext {
+  const context: CliContext = {
     cwd: io.cwd,
     log: {
       error: (message, ...params) =>

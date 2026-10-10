@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help list verify validate inspect plan graph run ui require-file install build \
+.PHONY: help list verify validate inspect plan graph run agent ui require-file install build \
 	lint format \
 	format-check typecheck typecheck-run knip test test-run watch docs-check studio-check api-check api-generate pack \
 	pack-verify tubeless check release website website-build
@@ -31,6 +31,8 @@ help:
 	@echo "      Generate the pipeline or command Mermaid graph"
 	@echo "  make run FILE=path/to/pipeline.ts ARGS=\"--source input.json\""
 	@echo "      Run a project pipeline or exported pipeline or command"
+	@echo "  make agent ARGS=\"--model gpt-5.4-mini\""
+	@echo "      Prompt a workspace agent with live pipeline reporting"
 	@echo "  make ui [STUDIO=path/to/tubeless.project.ts] [COMMAND=path/to/command.ts]"
 	@echo "      Open the local run studio; a project or COMMAND enables browser launches"
 	@echo
@@ -84,6 +86,9 @@ graph: require-file
 
 run: require-file
 	bun run tubeless -- run $(export_arg) $(project_arg) $(store_arg) "$(FILE)" -- $(ARGS)
+
+agent:
+	$(if $(filter agent,$(tubeless_command)),@:,bun run tubeless -- agent $(ARGS))
 
 ui:
 	$(if $(filter ui,$(tubeless_command)),@:,bun run tubeless -- ui $(ui_command_arg) $(export_arg) $(store_arg) $(port_arg) $(ARGS) $(studio_arg))

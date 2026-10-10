@@ -2,6 +2,7 @@ import type { PipelineMetadata } from "../tracing/graph-metadata.js";
 import type { ArtifactLoader, ArtifactSaver } from "./pipeline-artifacts.js";
 import { createMappedChildRunner, createSingleChildRunner } from "./child-execution.js";
 import { createIterationRunner } from "./iteration.js";
+import { awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
 import { STEP_NESTED_PIPELINE, STEP_REMOTE } from "./pipeline-step-metadata.js";
 import type {
   AnyStep,
@@ -28,6 +29,33 @@ export type BuildStep<TOptions extends object> = (
   id: string,
   definition: StepDefinitionBody<TOptions>
 ) => AnyStep<TOptions>;
+
+/** Wait on an application-owned input source using ordinary lifecycle and validation. */
+export function buildInputStep<TOptions extends object>(
+  buildStep: BuildStep<TOptions>,
+  id: string,
+  definition: Omit<StepDefinitionBody<TOptions>, "run" | "cache" | "skip"> & {
+    cache?: never;
+    skip?: never;
+    read: AnyStep<TOptions>["run"];
+  }
+): AnyStep<TOptions> {
+  const { read, dryRun = "skip", ...fields } = definition;
+  if (typeof read !== "function" || fields.cache !== undefined)
+    throw new TypeError("Input steps require a read callback and cannot be cached.");
+  if (fields.skip !== undefined)
+    throw new TypeError("Input steps cannot use policy skips; gate dependent work instead.");
+  return buildStep(id, {
+    ...fields,
+    dryRun,
+    run: async (inputs, context) => {
+      throwIfAborted(context.signal, "Wait for input");
+      context.reportProgress({ completed: 0, message: "Waiting for input" });
+      const pending = Promise.resolve(read(inputs, context));
+      return context.signal ? awaitWithAbort(pending, context.signal, "Wait for input") : pending;
+    },
+  });
+}
 
 type AnyDeps<TOptions extends object> = readonly AnyStep<TOptions>[];
 type AnySkip<TOptions extends object> = StepSkipPredicate<

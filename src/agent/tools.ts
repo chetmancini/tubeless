@@ -3,6 +3,7 @@ import { createSteps, definePipeline } from "../core/pipeline.js";
 import type { PipelineStepContext, StandardSchemaV1 } from "../core/pipeline-types.js";
 import { agentError, checkDescription, checkSchema, jsonDescriptor } from "./agent-state.js";
 import { agentScope } from "./execution-scope.js";
+import { startToolActivity, type ToolActivity, type ToolActivityFormat } from "./tool-progress.js";
 import type { AgentTool, AgentToolContext, Awaitable, Input, Output } from "./agent-types.js";
 
 /** A handler may throw this error to return a recoverable observation to its agent. */
@@ -37,6 +38,7 @@ const tools = new WeakMap<
   object,
   ToolDefinition<StandardSchemaV1, StandardSchemaV1> & {
     inputJsonSchema: Readonly<Record<string, unknown>>;
+    activity?: ToolActivityFormat;
   }
 >();
 
@@ -45,6 +47,24 @@ export function defineTool<
   const Arguments extends StandardSchemaV1,
   const Result extends StandardSchemaV1,
 >(definition: ToolDefinition<Arguments, Result>): AgentTool<Input<Arguments>, Output<Result>> {
+  return createTool(definition);
+}
+
+/** Internal workspace presentation; keep formatter callbacks out of the public tool API. */
+export function defineToolWithActivity<
+  const Arguments extends StandardSchemaV1,
+  const Result extends StandardSchemaV1,
+>(
+  definition: ToolDefinition<Arguments, Result> &
+    ToolActivityFormat<Output<Arguments>, Output<Result>>
+): AgentTool<Input<Arguments>, Output<Result>> {
+  return createTool(definition, definition);
+}
+
+function createTool<Arguments extends StandardSchemaV1, Result extends StandardSchemaV1>(
+  definition: ToolDefinition<Arguments, Result>,
+  activity?: ToolActivityFormat<Output<Arguments>, Output<Result>>
+): AgentTool<Input<Arguments>, Output<Result>> {
   checkDescription(definition.description);
   checkSchema(definition.outputSchema, "Tool output");
   if (
@@ -67,7 +87,7 @@ export function defineTool<
   );
   // SAFETY: the private WeakMap brands this opaque descriptor and keeps its validators/handlers.
   const tool = Object.freeze({}) as AgentTool<Input<Arguments>, Output<Result>>;
-  tools.set(tool, { ...definition, inputJsonSchema });
+  tools.set(tool, { ...definition, inputJsonSchema, activity });
   return tool;
 }
 
@@ -75,6 +95,7 @@ export interface ToolInvocation {
   input: unknown;
   execution: AgentToolContext["execution"];
   attributes: Readonly<Record<string, string | number>>;
+  onActivity?(activity: ToolActivity): void;
 }
 
 export function compileTool(agentId: string, name: string, tool: AgentTool<unknown, unknown>) {
@@ -94,19 +115,24 @@ export function compileTool(agentId: string, name: string, tool: AgentTool<unkno
     inputJsonSchema,
     description,
     replay = "unsafe",
+    activity,
   } = definition;
   const invoke = async (handler: typeof run, context: PipelineStepContext<ToolInvocation>) => {
     context.reportAttempt(1, context.options.attributes);
     const scope = agentScope(context)!;
-    return handler(context.options.input, {
+    const toolContext = {
       ...context,
       options: {},
       environment: scope.environment,
       execution: context.options.execution,
-    });
+    };
+    if (activity)
+      context.options.onActivity?.(startToolActivity(activity, context.options.input, toolContext));
+    return handler(context.options.input, toolContext);
   };
   const { step } = createSteps<ToolInvocation>();
   const call = step("tool", {
+    name,
     description,
     outputSchema,
     run: (_inputs, context) => invoke(run, context),

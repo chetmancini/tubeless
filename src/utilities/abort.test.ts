@@ -1,11 +1,48 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   abortableSleep,
+  awaitWithAbort,
   createAbortError,
   isAbortError,
   MAX_TIMEOUT_DELAY_MS,
   throwIfAborted,
 } from "./abort.js";
+
+describe("awaitWithAbort", () => {
+  it("preserves settlement and removes its abort listener", async () => {
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    await expect(
+      awaitWithAbort(Promise.resolve("ready"), controller.signal, "Setup")
+    ).resolves.toBe("ready");
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+    const failure = new Error("setup failed");
+    await expect(awaitWithAbort(Promise.reject(failure), controller.signal, "Setup")).rejects.toBe(
+      failure
+    );
+  });
+
+  it("stops waiting for a pending operation and still observes its late rejection", async () => {
+    const controller = new AbortController();
+    let rejectOperation!: (error: Error) => void;
+    const operation = new Promise<string>((_resolve, reject) => {
+      rejectOperation = reject;
+    });
+    const pending = awaitWithAbort(operation, controller.signal, "Setup");
+    controller.abort("stop");
+    await expect(pending).rejects.toThrow("Setup aborted: stop");
+    rejectOperation(new Error("late failure"));
+    await Promise.resolve();
+  });
+
+  it("observes rejected operations even when already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort("stop");
+    await expect(
+      awaitWithAbort(Promise.reject(new Error("late failure")), controller.signal, "Setup")
+    ).rejects.toThrow("Setup aborted: stop");
+  });
+});
 
 describe("createAbortError", () => {
   it("builds a message with just the label when reason is undefined", () => {

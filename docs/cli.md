@@ -15,6 +15,155 @@ on Node.js 22.6 or later without Bun.
 
 ## Commands
 
+### Prompt a workspace agent
+
+Export `OPENAI_API_KEY` to child processes, then start the terminal prompt loop:
+
+```sh
+export OPENAI_API_KEY # If the key is already set in your shell.
+tubeless agent --model gpt-5.4-mini
+# From this checkout: bun run tubeless -- agent --model gpt-5.4-mini
+```
+
+Seeing a value with `echo $OPENAI_API_KEY` does not prove it is exported. Without
+`export`, child processes cannot see a shell variable. The built-in provider
+checks that credentials are present before opening the REPL and explains how to
+fix a missing key. OpenAI validates the key when the model makes a request.
+
+Alternatively, keep credentials in a local dotenv file and select it explicitly:
+
+```dotenv
+# .env.agent (keep this file out of version control)
+OPENAI_API_KEY="your-api-key"
+OPENAI_MODEL=gpt-5.4-mini
+```
+
+```sh
+tubeless agent --env-file .env.agent
+# From this checkout: bun run tubeless -- agent --env-file .env.agent
+```
+
+`--env-file` resolves relative to the workspace directory. Tubeless uses Node's
+built-in dotenv parser, supporting quotes, comments, whitespace, and an optional
+`export` prefix. It treats values as literal text, without shell execution or
+variable expansion. Existing process environment values take precedence over the
+file, including empty values; `--model` overrides `OPENAI_MODEL`. Runtime-loaded
+environment values, such as Bun's automatic dotenv loading, count as existing
+values too. File values are passed to the model factory without changing
+`process.env`. The built-in provider trims the key and rejects internal whitespace
+or control characters. Credential and file-loading diagnostics omit secret values.
+This checkout ignores `.env` and `.env.*` except `.env.example`.
+
+If a model request fails with HTTP 401, the credential reached OpenAI and
+authentication was rejected. `[invalid_api_key]` means OpenAI rejected the key;
+replace it with an active key for the correct project.
+`[ip_not_authorized]` means the request's network address is outside the project
+or organization IP allowlist. Other 401 responses advise checking the key,
+project and organization access, and allowed network. See the
+[official OpenAI error guide](https://developers.openai.com/api/docs/guides/error-codes).
+Tubeless reads at most 16 KiB of an authentication error body and emits only
+known codes and safe advice, with a validated request ID when available; raw
+provider messages and unknown codes are omitted because they can contain keys.
+Restart the agent after updating credentials. If you use `--env-file`, remove a
+stale exported `OPENAI_API_KEY` that would override the new file value.
+
+Type a task and press Enter. Tubeless runs its model-backed workspace agent,
+prints the answer, and returns to the bike-inspired `◯╱◯ ❯` prompt. The prompt
+and welcome line use cyan accents in interactive terminals and honor `NO_COLOR`.
+Use `/model <name>` to select the model for the next task, `/model` to show it,
+`/clear` to start a fresh conversation, `/help` for commands, and `/quit` or `/exit` to exit.
+Press Tab to complete a slash command, such as `/mo` → `/model `; press Tab twice
+after `/` to list `/model`, `/clear`, `/help`, `/quit`, and `/exit`. Completion applies only
+to the command name, leaving model names and task text alone. Pipes have no
+interactive prompt or completion.
+Ctrl-C cancels active work and returns to the prompt after tools drain; at an
+idle prompt it exits. EOF ends the session. Interactive input typed during a run
+is discarded. Prompts share a session: completed answers, tool history, and provider
+conversation carry into the next prompt, including after `/model` changes. Finishing
+an answer returns control to the user; `/quit`, EOF, or an idle Ctrl-C ends the session.
+Each prompt has fresh execution budgets. A failed or cancelled prompt keeps the last
+completed conversation; file changes remain in the workspace. `/clear` resets context
+while keeping the selected model. Session context is held in memory for this CLI process.
+`--prompt` starts a fresh, single-shot invocation. V1 accepts one line per REPL prompt.
+
+Agent runs use the same pipeline reporter as `tubeless run`. In a capable terminal,
+the live execution tree shows numbered turns, “Plan next action”, “Tool calls”,
+and “Update context”. Calls display their tool names and concrete workspace
+activity: file paths for reads, writes, and edits; command previews for bash;
+directory paths and query previews for listing and searching. Completed activity
+includes line ranges, byte counts, command exit codes, or result counts. The same
+activity appears in scoped tool logs, including failures and cancellations. For example:
+
+```text
+Read "src/app.ts": completed (lines 1-80 of 80)
+Write "src/new.ts": completed (128 bytes)
+Run bash "bun test": completed (exit 0)
+```
+
+Previews retain at most 160 input characters, escape controls, and omit file
+contents and command output. Running work shimmers with the
+usual colors, spinners, elapsed time, and progress counts. Wide terminals show
+recent logs beside the tree; smaller terminals keep active work visible and write
+logs above it. The reporter honors `NO_COLOR`, `FORCE_COLOR`, `TERM`, and `CI`.
+Redirected output uses ordinary append-only pipeline logs without cursor controls.
+Use `--no-graph` to hide pipeline reporting while keeping model/tool logs and answers.
+
+For one task, including a multiline task, use `--prompt`:
+
+```sh
+tubeless agent --model gpt-5.4-mini --prompt 'Find and fix the failing test, then verify it'
+```
+
+Piped input runs one task per line serially. A failed task reports its error and
+allows another prompt. The command returns the last task's exit code: 0 for
+success, 6 for execution failure, or 7 for cancellation. An external abort or
+SIGTERM ends the session with 7. `--max-turns`, `--max-calls`, and
+`--max-concurrency` override the ordinary agent budgets; `--instructions` appends
+instructions to the default prompt. Model selection defaults to `OPENAI_MODEL`
+or the OpenAI adapter's default. The agent reads project guidance and has the
+standard `read`, `write`, `edit`, `bash`, `list`, and `search` tools with the host's
+permissions. See [agents](./agents.md#default-model-backed-agent) for their contracts.
+
+To plug in another provider, pass `--model-module ./model.ts`. The trusted local
+module must default-export a factory accepting `{ model: string, signal: AbortSignal, env: Readonly<NodeJS.ProcessEnv> }` and returning
+an `AgentModel`, synchronously or asynchronously. Tubeless calls the factory for
+each task with the currently selected model, that task's cancellation signal,
+and the resolved environment. Custom factories use `env` for provider credentials
+and need no OpenAI key unless they use that provider.
+Async setup must pass the signal into its I/O and release setup resources on abort.
+Cancellation stops waiting for setup and never invokes a model returned afterward.
+The callback receives the usual
+instructions, task, conversation, tool outcomes, and decision context. On
+`context.turn === 1`, append the new user task even when conversation is already
+present or the user repeats the same text. Later decisions consume tool outcomes
+without appending the task again. Return a complete, plain-data conversation,
+including the final answer, to retain it for the next prompt. Supported models
+within one factory share that provider's conversation format.
+The agent validates decisions and owns frozen conversation snapshots. For example:
+
+```ts
+import type { AgentModel } from "tubeless/agent";
+import { openaiModel } from "tubeless/agent/openai";
+
+export default function createModel({
+  model,
+  signal,
+  env,
+}: {
+  readonly model: string;
+  readonly signal: AbortSignal;
+  readonly env: Readonly<NodeJS.ProcessEnv>;
+}): AgentModel {
+  signal.throwIfAborted();
+  return openaiModel({ model, apiKey: env.OPENAI_API_KEY }); // Replace with your own transport.
+}
+```
+
+The [compiled plugin example](../examples/agent-repl-model.ts) uses public imports.
+This command needs no project file, UI server, storage adapter, or TUI dependency.
+Its prompt source uses native async iteration over readline input. Other pipelines
+can use [input steps](./concepts.md#wait-for-user-or-application-input) with their own UI adapters.
+
 ### Turn a pipeline into a CLI
 
 Start with one import and one call:

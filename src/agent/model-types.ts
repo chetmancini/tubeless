@@ -4,12 +4,12 @@ import type { AgentDecisionContext, AgentOutcome, Awaitable, Tools } from "./age
 export interface AgentModelRequest {
   readonly instructions: string;
   readonly task: string;
-  /** Provider-owned plain data; null on the first decision. */
+  /** Provider-owned plain data; null at the start of a fresh conversation. */
   readonly conversation: unknown;
   readonly outcomes: readonly AgentOutcome<Tools>[];
 }
 
-/** An untrusted harness decision and plain-data conversation to retain after the batch succeeds. */
+/** An untrusted decision and complete plain-data conversation, including any final answer. */
 export interface AgentModelResponse {
   readonly decision: unknown;
   readonly conversation: unknown;

@@ -320,6 +320,98 @@ are `string`. Narrow them
 or validate at the application boundary. Schemas validate runtime values; the
 compiler does not prove compatibility between two schemas.
 
+## User decisions, confirmations, and text
+
+Declarative pipelines can wait for user input through registered async `run`
+handlers. Use `waitForInput(...).run` from `createSteps` to give those handlers
+the same waiting progress and cancellation behavior as TypeScript input steps.
+The application supplies a terminal, browser form, or other input adapter.
+
+| Question                        | Adapter reply                        | Output validation                                |
+| ------------------------------- | ------------------------------------ | ------------------------------------------------ |
+| Select a/b/c from a list        | A stable choice value, such as `"b"` | An allowed-value schema                          |
+| Yes/no or “confirm proceeding?” | `true` or `false`                    | A boolean schema                                 |
+| Open text                       | A string                             | A string schema with any application constraints |
+
+Version 1 uses ordinary `run` references; it has no YAML `waitForInput`,
+`question`, or `choices` fields. Messages, choices, input normalization, and UI
+rendering belong to the registered handler and its adapter. CLI and Studio do
+not automatically render these questions.
+
+For example, a confirmation can refer to an upstream result:
+
+```yaml
+- id: approval
+  run: confirmProceeding
+  dependsOn: [output]
+  outputSchema: yesNo
+  dryRun: skip
+- id: proceed
+  run: proceed
+  dependsOn: [output, approval]
+  skip: declined
+  dryRun: skip
+```
+
+Register the input handler, output schema, and decline predicate:
+
+```ts
+import { createSteps } from "tubeless";
+import type { ProjectRegistry } from "tubeless/project";
+
+const { waitForInput } = createSteps<object>();
+const registry: ProjectRegistry = {
+  steps: {
+    prepareOutput: () => "xyz",
+    confirmProceeding: waitForInput("approval", {
+      read: ({ output }: Record<string, unknown>, context) => {
+        if (typeof output !== "string") throw new Error("Expected output");
+        return readFromYourUI(`Output was ${output}. Confirm proceeding?`, context.signal);
+      },
+    }).run,
+    proceed: ({ output }) => output,
+  },
+  schemas: {
+    yesNo: {
+      "~standard": {
+        version: 1,
+        vendor: "example",
+        validate: (value) =>
+          typeof value === "boolean"
+            ? { value }
+            : { issues: [{ message: "Expected a boolean confirmation" }] },
+      },
+    },
+  },
+  skipPredicates: {
+    declined: ({ approval }) => (approval === false ? "User declined" : false),
+  },
+  finalizers: {},
+};
+```
+
+The UI adapter should return an actual boolean, converting its yes/no text or
+button selection as needed. A `false` confirmation is a valid answer: the
+predicate skips `proceed` and the pipeline can finish successfully. Invalid
+answers fail output validation before dependent work starts. To keep asking
+after invalid input, put that retry behavior in the adapter.
+
+The YAML compiler registers the helper's `.run` callback only. Declare
+`dependsOn`, `outputSchema`, and `dryRun` in the document; the helper's default
+dry-run skip does not carry over. Use `dryRun: skip` to avoid prompting, or
+`dryRun: { run: previewApproval }` with a registered preview handler. If skipped
+input leaves outputs absent, choose a finalizer that handles that absence, or
+require those outputs when a missing answer must prevent finalization.
+
+While input is pending the run stays active. Forward `context.signal` to the
+adapter so cancellation releases its UI/I/O resources; a late reply is ignored.
+The application owns persistence and recovery across process restarts.
+
+The complete [YAML input recipe](../examples/yaml-user-input.ts) and
+[document](../examples/declarative/user-input.yaml) demonstrate all three
+question types, confirmation of `xyz`, declined execution, and a finalizer that
+distinguishes an unanswered question from a deliberate `false`.
+
 ## Validation and limits
 
 Parsing errors belong to the YAML parser. Configure duplicate-key rejection

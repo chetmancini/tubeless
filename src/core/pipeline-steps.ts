@@ -1,4 +1,5 @@
 import {
+  buildInputStep,
   buildIterationStep,
   buildLoadArtifactStep,
   buildMappedPipelineStep,
@@ -155,6 +156,40 @@ function createStepFactory<
   ): BuiltStep<TId, TOut, TOptions, TInputOptions>;
   function step(id: string, definition: StepDefinitionBody<TOptions>): AnyStep<TOptions> {
     return buildStep(id, definition);
+  }
+
+  /** Await terminal, UI, or application input; skips dry runs unless given a preview. */
+  function waitForInput<
+    TId extends string,
+    TSchema extends StandardSchemaV1,
+    const TDeps extends readonly AnyStep<TOptions>[] = [],
+    const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
+  >(
+    id: TId,
+    definition: Omit<SchemaStepFields<TOptions, TDeps, TOptionalDeps, TSchema>, "run" | "cache"> & {
+      cache?: never;
+      skip?: never;
+      read: SchemaStepFields<TOptions, TDeps, TOptionalDeps, TSchema>["run"];
+    }
+  ): BuiltStep<TId, InferSchemaOutput<TSchema>, TOptions, TInputOptions, InferSchemaInput<TSchema>>;
+  function waitForInput<
+    TId extends string,
+    const TDeps extends readonly AnyStep<TOptions>[] = [],
+    const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
+    TOut = unknown,
+  >(
+    id: TId,
+    definition: Omit<PlainStepFields<TOptions, TDeps, TOptionalDeps, TOut>, "run" | "cache"> & {
+      cache?: never;
+      skip?: never;
+      read: PlainStepFields<TOptions, TDeps, TOptionalDeps, TOut>["run"];
+    }
+  ): BuiltStep<TId, TOut, TOptions, TInputOptions>;
+  function waitForInput(
+    id: string,
+    definition: Parameters<typeof buildInputStep<TOptions>>[2]
+  ): AnyStep<TOptions> {
+    return buildInputStep(buildStep, id, definition);
   }
 
   /** Read an artifact as an ordinary step, publishing only its typed value. */
@@ -500,6 +535,7 @@ function createStepFactory<
 
   const factory = {
     step,
+    waitForInput,
     loadArtifact,
     saveArtifact,
     fromPipeline,

@@ -26,7 +26,7 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 ## Authoring decisions
 
 - Use `createSteps<TDomainOptions>()` per pipeline and destructure every
-  constructor it needs: `step`, `fromPipeline`, `fromRemote`, `iteratePipeline`, and/or
+  constructor it needs: `step`, `waitForInput`, `fromPipeline`, `fromRemote`, `iteratePipeline`, and/or
   `forEachPipeline`. Domain options contain business inputs; pass built-in
   controls separately to `run(options, controls?)`.
   Use `run()` or `runOrThrow()` when all input fields are optional; omitted input
@@ -118,6 +118,13 @@ the installed declarations before using them; do not silently upgrade Tubeless.
 
 Read the corresponding package recipe before using these features:
 
+- `waitForInput(id, { read })` from `createSteps` for a human or application input
+  boundary. Inject a terminal, web form, or other adapter as the read callback;
+  forward `context.signal` so it releases resources on cancellation. Add
+  `outputSchema` for untrusted input. Input skips dry runs unless given a preview
+  callback and rejects caching and policy skips; gate dependent actions with
+  ordinary steps. See `docs/concepts.md` and `examples/user-input.ts`.
+
 - `defineModelAgent({ id, model })` from `tubeless/agent` for a ready-to-run
   workspace agent. `openaiModel()` from `tubeless/agent/openai` supplies the optional
   Responses adapter. Reasoning settings are omitted unless explicitly configured;
@@ -175,6 +182,9 @@ Read the corresponding package recipe before using these features:
   dependent file operations belong in successive turns. Read/list/search work in
   dry runs; write/edit/bash skip live execution. See `examples/agent-workspace.ts`
   and the bounds documented in `docs/agents.md`.
+  Default tools publish paths, command/query previews, and result counts in progress
+  and scoped logs. Custom handlers can use `context.reportProgress` and `context.log`
+  for matching activity detail; keep previews bounded and omit file contents.
   Read provider credentials inside `decide`, forward cancellation, and test the
   HTTP boundary with fixtures. The OpenAI recipe has no preview decision source;
   its dry run skips model work and has no final answer. Provider schemas and
@@ -197,6 +207,11 @@ Read the corresponding package recipe before using these features:
   enables automatic commands; custom or schema-less inputs need explicit adapters
   in the project's entry list. Handler inputs and pipeline results are
   unknown; validate or narrow them. Plans still do not validate business inputs.
+  For choice, boolean, or text questions, register `waitForInput(...).run` and
+  declare dependencies, output schemas, and dry-run skips in the document.
+  The application adapter owns messages, choices, normalization, and rendering;
+  version 1 has no inline question fields. See `examples/yaml-user-input.ts` and
+  the user-input section in `docs/declarative-pipelines.md`.
   Use `tubeless validate --json <document.yaml>` for a structure-only check
   without handlers. Fetch `https://tubeless.io/schemas/pipeline-document-v1.schema.json`
   for editor and agent validation, or use packaged `docs/pipeline-document.schema.json`.
@@ -226,6 +241,8 @@ Read the corresponding package recipe before using these features:
   by contract; required dependencies feed initialization/mapping. Static child
   controls remain separate from domain input. Cancellation drains the active child;
   dry-run propagates. Plans show the bounded region, not future execution IDs.
+  Set the child pipeline's `name` for numbered progress labels; unnamed children
+  use `Iteration 1`.
   Read `docs/child-pipeline-composition.md` and `examples/iteration.ts`.
 - `createSteps(optionsSchema)`, `outputSchema`, or `resultSchema` for runtime
   validation at untrusted boundaries. Reuse the project's Standard Schema

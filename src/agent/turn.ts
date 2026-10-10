@@ -5,6 +5,7 @@ import { expectedToolFailure } from "./tool-failure.js";
 import { createSteps, definePipeline, type IterationDecision } from "../core/pipeline.js";
 import { invokeChildPipeline } from "../core/child-execution.js";
 import { createMappedChildProgress } from "../core/child-progress.js";
+import { formatMappedChildProgressMessage } from "../core/mapped-child-progress.js";
 import {
   PipelineExecutionError,
   isPipelineCancellation,
@@ -28,6 +29,7 @@ import type {
 import type { CallOutcome } from "./checkpoint-format.js";
 import type { RuntimeAgentDefinition } from "./compile-agent.js";
 import type { CompiledTool, ToolInvocation } from "./tools.js";
+import type { ToolActivity } from "./tool-progress.js";
 
 export interface TurnState<State> {
   state: AgentState<State>;
@@ -40,11 +42,12 @@ function childInvocation(
   call: PreparedCall,
   context: PipelineStepContext<object>,
   attributes: ToolInvocation["attributes"],
-  execution: ToolInvocation["execution"]
+  execution: ToolInvocation["execution"],
+  onActivity: ToolInvocation["onActivity"]
 ): { options: object; context: PipelineStepContext<object>; preparedOptions?: PreparedOptions } {
   if (call.kind === "handler")
     return {
-      options: { input: call.input, attributes, execution } satisfies ToolInvocation,
+      options: { input: call.input, attributes, execution, onActivity } satisfies ToolInvocation,
       context,
     };
   const childContext = { ...context };
@@ -69,6 +72,7 @@ export function createAgentTurn<
     | { kind: "continue"; calls: PreparedCall[]; state: AgentState<State> };
   const { step } = createSteps<TurnOptions>();
   const decide = step("decide", {
+    name: "Plan next action",
     description: "Request and validate one decision, including the complete call batch.",
     run: async (_inputs, context): Promise<Decision> => {
       const { execution, options, agentRunId } = context.options;
@@ -133,6 +137,7 @@ export function createAgentTurn<
     },
   });
   const calls = step("calls", {
+    name: "Tool calls",
     dependsOn: [decide],
     description: "Dispatch validated calls and drain active work before advancing state.",
     run: async ({ decide: decision }, context): Promise<readonly CallOutcome[]> => {
@@ -149,11 +154,27 @@ export function createAgentTurn<
         "agent.callsAdmitted": admitted,
         "agent.callCount": decision.calls.length,
       });
+      const toolNames = new Map(decision.calls.map((call) => [call.id, call.tool.name]));
       const progress = createMappedChildProgress(
         decision.calls.map(({ id }) => id),
         limits.maxConcurrency,
-        { detailLimit: 32 },
-        context.reportProgress
+        {
+          detailLimit: 32,
+          formatMessage: (snapshot) =>
+            formatMappedChildProgressMessage(
+              { ...snapshot, spotlight: undefined },
+              { itemNoun: "tool calls" }
+            ),
+        },
+        (snapshot) =>
+          context.reportProgress({
+            ...snapshot,
+            details: snapshot.details?.map((row) =>
+              (row.depth ?? 0) === 0 && toolNames.has(row.id)
+                ? { ...row, name: toolNames.get(row.id) }
+                : row
+            ),
+          })
       );
       progress.publish();
       const partial = await runConcurrentPartial(
@@ -161,6 +182,7 @@ export function createAgentTurn<
         { concurrency: limits.maxConcurrency, signal: context.signal },
         async (call) => {
           progress.start(call.id);
+          let activity: ToolActivity | undefined;
           try {
             const attributes = {
               "agent.runId": agentRunId,
@@ -171,9 +193,9 @@ export function createAgentTurn<
             };
             // Record the selected alias for pipeline tools as well as handlers.
             context.reportAttempt(1, attributes);
-            const complete = async (outcome: CallOutcome) => {
+            const complete = async (outcome: CallOutcome, label?: string) => {
               await journal?.completeCall(scope.agentKey, call.id, outcome);
-              if (outcome.ok) progress.complete(call.id);
+              if (outcome.ok) progress.complete(call.id, label);
               return outcome;
             };
             const admission = await journal?.startCall(scope.agentKey, call.id, call.tool.replay);
@@ -189,7 +211,10 @@ export function createAgentTurn<
               call,
               context,
               attributes,
-              scope.identity(execution.turn, call.id)
+              scope.identity(execution.turn, call.id),
+              (started) => {
+                activity = started;
+              }
             );
             const result = await invokeChildPipeline(
               call.tool.pipeline,
@@ -204,17 +229,25 @@ export function createAgentTurn<
               }
             );
             if (result.status === "completed" && result.finalized) {
+              const label = activity?.complete(result.value);
+              if (label !== undefined) context.log.log(label);
+              activity = undefined;
               progress.childCompleted(call.id);
-              return complete({
-                id: call.id,
-                tool: call.tool.name,
-                ok: true,
-                value: result.value,
-              });
+              return complete(
+                {
+                  id: call.id,
+                  tool: call.tool.name,
+                  ok: true,
+                  value: result.value,
+                },
+                label
+              );
             }
             const failure = new PipelineExecutionError(result);
             const expected = !context.signal?.aborted && expectedToolFailure(result);
             if (expected) {
+              if (activity) context.log.warn(`${activity.action}: failed`);
+              activity = undefined;
               progress.fail(call.id, failure, false);
               return complete({
                 id: call.id,
@@ -225,10 +258,13 @@ export function createAgentTurn<
             }
             throw failure;
           } catch (error) {
+            const cancelled = isPipelineCancellation(error, context);
+            if (activity)
+              context.log.warn(`${activity.action}: ${cancelled ? "cancelled" : "failed"}`);
             progress.fail(
               call.id,
               error instanceof Error ? error : new Error(String(error)),
-              isPipelineCancellation(error, context)
+              cancelled
             );
             throw error;
           }
@@ -241,6 +277,7 @@ export function createAgentTurn<
     },
   });
   const reduce = step("reduce", {
+    name: "Update context",
     dependsOn: [decide, calls],
     description: "Commit one owned state snapshot, or publish the validated finish result.",
     run: async (
@@ -280,6 +317,7 @@ export function createAgentTurn<
     Object.defineProperty(step, STEP_ORCHESTRATION, { value: true });
   return definePipeline({
     id: `${definition.id}/turn`,
+    name: "Turn",
     steps: [decide, calls, reduce],
     finalize: reduce,
   });

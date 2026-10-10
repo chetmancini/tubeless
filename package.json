@@ -1,7 +1,7 @@
 {
   "name": "tubeless",
   "version": "0.3.3",
-  "description": "Typed pipeline primitives for composable data-processing workflows.",
+  "description": "Typed pipelines and bounded conversational workspace agents with inspectable execution graphs.",
   "author": {
     "name": "Chet Mancini",
     "url": "https://github.com/chetmancini"
@@ -18,6 +18,10 @@
   "keywords": [
     "pipeline",
     "workflow",
+    "agent",
+    "repl",
+    "interactive",
+    "dag",
     "typescript",
     "cli",
     "esm"

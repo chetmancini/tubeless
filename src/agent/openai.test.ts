@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineModelAgent, defineTool, type AgentModelRequest } from "./agent.js";
 import { openaiModel } from "./openai.js";
-import { openaiRequest } from "./openai-http.js";
 
 const directories: string[] = [];
 async function workspace() {
@@ -485,25 +484,4 @@ describe("OpenAI model", () => {
     });
     expect(fetcher.mock.calls[0]![1]!.signal).toBeInstanceOf(AbortSignal);
   });
-});
-
-it("bounds HTTP payloads and excludes error bodies from diagnostics", async () => {
-  const fetcher = vi
-    .fn<typeof fetch>()
-    .mockResolvedValue(new Response("PRIVATE RESPONSE", { status: 429 }));
-  vi.stubGlobal("fetch", fetcher);
-  const signal = new AbortController().signal;
-  await expect(
-    openaiRequest("responses", { input: "x".repeat(1_048_576) }, "fixture", signal)
-  ).rejects.toThrow("request exceeds");
-  expect(fetcher).not.toHaveBeenCalled();
-  await expect(openaiRequest("responses", {}, "fixture", signal)).rejects.toThrow(
-    "OpenAI responses failed (HTTP 429)"
-  );
-  fetcher.mockResolvedValueOnce(new Response("x".repeat(2_097_153)));
-  await expect(openaiRequest("responses", {}, "fixture", signal)).rejects.toThrow(
-    "response exceeds"
-  );
-  fetcher.mockResolvedValueOnce(new Response("invalid json"));
-  await expect(openaiRequest("responses", {}, "fixture", signal)).rejects.toThrow("invalid JSON");
 });

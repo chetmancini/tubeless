@@ -299,9 +299,13 @@ export function createMappedChildProgress(
       // statuses. Reconcile their selected steps before mapping the result.
       terminalChildSteps += children.get(key)?.complete() ?? 0;
     },
-    complete(key: string): void {
+    complete(key: string, label?: string): void {
       active.delete(key);
-      itemRows.set(key, { id: key, status: "completed" });
+      itemRows.set(key, {
+        id: key,
+        status: "completed",
+        ...(label === undefined ? {} : { label }),
+      });
       finishedItems += 1;
       publish(`${key}: completed`);
     },

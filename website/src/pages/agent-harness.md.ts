@@ -11,6 +11,24 @@ Tool calls are steps. Subagents are child pipelines. You can trace the whole run
 
 Each model turn can choose a new batch of registered tools or finish. [Watch an illustrated run](${absUrl("agent-harness")}) to see tool calls branch, a subagent run its own pipeline, and results feed the next model turn.
 
+## Prompt an agent in your terminal
+
+Export OPENAI_API_KEY to child processes, then run from your workspace:
+
+\`\`\`sh
+bunx tubeless agent --model gpt-5.4-mini
+\`\`\`
+
+Or keep the key in a local dotenv file and run \`bunx tubeless agent --env-file .env.agent\`. Existing environment values take precedence over the file. If the key is already set in your shell, \`export OPENAI_API_KEY\` makes it available to Tubeless.
+
+Enter a task, watch its pipeline execution, read the answer, and prompt again. Agent mode uses the same reporter as \`tubeless run\`: shimmer, colors, spinners, elapsed time, and logs alongside nested model turns and tool calls. Wide terminals show a separate log pane; redirected output uses plain pipeline logs.
+
+Tool activity shows what is happening: file paths for reads, writes, and edits; command previews for bash; paths and queries for listing and searching. The tree and logs include completion summaries such as bytes written, lines read, and command exit codes.
+
+The bike-inspired \`◯╱◯ ❯\` prompt has cyan accents. Press Tab to complete a slash command, or Tab twice after / to list commands. Completed prompts retain conversation, answers, and tool history. Use /model <name> to change models, /clear to start fresh, or /quit to exit. Ctrl-C cancels active work and returns to the prompt. Plug in another provider with --model-module ./model.ts, or run one task with --prompt. [Read the agent CLI guide](${absUrl("docs/cli.md#prompt-a-workspace-agent")}).
+
+Other pipelines can use \`createSteps().waitForInput\` to wait for terminal, web, or application input through a pluggable read callback. [Read the input-step guide](${absUrl("docs/concepts.md#wait-for-user-or-application-input")}).
+
 ## Use agents wherever you use pipelines
 
 A pipeline can ask an agent to investigate a problem, then pass its answer to the next step. An agent can call an existing pipeline as a tool, or delegate work to another agent.

@@ -11,8 +11,10 @@ import {
   type WireSchema,
 } from "../tracing/wire-schema.js";
 import { optionalToolField, toolObject } from "./default-tool-schema.js";
-import { defineTool } from "./tools.js";
+import { defineToolWithActivity } from "./tools.js";
 import { environmentOperation, type AgentEnvironment } from "./environment.js";
+import { toolPreview } from "./tool-progress.js";
+import type { AgentToolContext } from "./agent-types.js";
 import {
   MAX_FILE_BYTES,
   MAX_OUTPUT_BYTES,
@@ -74,8 +76,21 @@ const searchMatches: WireSchema<
   (matches) => checkOutputBytes(matches.flatMap(({ path, text }) => [path, text]))
 );
 
+// Read-only handlers run identically in live executions and previews.
+function read(input: Parameters<AgentEnvironment["read"]>[0], context: AgentToolContext) {
+  return environmentOperation(context, () => context.environment.read(input, context));
+}
+
+function list(input: Parameters<AgentEnvironment["list"]>[0], context: AgentToolContext) {
+  return environmentOperation(context, () => context.environment.list(input, context));
+}
+
+function search(input: Parameters<AgentEnvironment["search"]>[0], context: AgentToolContext) {
+  return environmentOperation(context, () => context.environment.search(input, context));
+}
+
 export const defaultTools = Object.freeze({
-  read: defineTool({
+  read: defineToolWithActivity({
     replay: "safe",
     description:
       "Read a UTF-8 file up to 1 MiB. Paths resolve from the run cwd. startLine is 1-based (default 1); maxLines defaults to 200. Output is capped at 16 KiB. Use null for defaults.",
@@ -92,20 +107,25 @@ export const defaultTools = Object.freeze({
       totalLines: count,
       truncated: wireBoolean(),
     }),
-    run: (input, context) =>
-      environmentOperation(context, () => context.environment.read(input, context)),
-    dryRun: (input, context) =>
-      environmentOperation(context, () => context.environment.read(input, context)),
+    run: read,
+    dryRun: read,
+    action: (input) => `Read ${toolPreview(input.path)}`,
+    summarize: (result) =>
+      result.totalLines === 0
+        ? "empty file"
+        : `lines ${result.startLine}-${result.endLine} of ${result.totalLines}${result.truncated ? ", truncated" : ""}`,
   }),
-  write: defineTool({
+  write: defineToolWithActivity({
     description:
       "Create or replace a UTF-8 file (up to 1 MiB), creating parent directories and following symlinks, including missing targets. Paths resolve from the run cwd. Atomic replacement requires a writable parent directory and permission to preserve existing ownership. Skipped in dry runs.",
     inputSchema: toolObject({ path, content: text }),
     outputSchema: written,
     run: (input, context) =>
       environmentOperation(context, () => context.environment.write(input, context)),
+    action: (input) => `Write ${toolPreview(input.path)}`,
+    summarize: (result) => `${result.bytes} bytes`,
   }),
-  edit: defineTool({
+  edit: defineToolWithActivity({
     description:
       "Replace one exact occurrence of oldText with newText in a UTF-8 file up to 1 MiB. Missing or ambiguous matches fail without writing. Atomic replacement requires a writable parent directory and permission to preserve existing ownership. Skipped in dry runs.",
     inputSchema: toolObject({
@@ -116,8 +136,10 @@ export const defaultTools = Object.freeze({
     outputSchema: written,
     run: (input, context) =>
       environmentOperation(context, () => context.environment.edit(input, context)),
+    action: (input) => `Edit ${toolPreview(input.path)}`,
+    summarize: (result) => `${result.bytes} bytes`,
   }),
-  bash: defineTool({
+  bash: defineToolWithActivity({
     description:
       "Run bash in the run cwd or a supplied cwd. Return stdout, stderr, exitCode, signal, timedOut and truncated. timeoutMs defaults to 30000 (maximum 300000); combined output is capped at 16 KiB. Use null for defaults. Skipped in dry runs.",
     inputSchema: toolObject({
@@ -139,8 +161,12 @@ export const defaultTools = Object.freeze({
     ),
     run: (input, context) =>
       environmentOperation(context, () => context.environment.bash(input, context)),
+    action: (input) =>
+      `Run bash ${toolPreview(input.command)}${input.cwd ? ` in ${toolPreview(input.cwd)}` : ""}`,
+    summarize: (result) =>
+      `exit ${result.exitCode ?? result.signal ?? "unknown"}${result.timedOut ? ", timed out" : ""}${result.truncated ? ", output truncated" : ""}`,
   }),
-  list: defineTool({
+  list: defineToolWithActivity({
     replay: "safe",
     description:
       "List up to 200 entries in filename order, defaulting to the run cwd. Retained names are capped at 16 KiB. Return names and file/directory/symlink kinds. Use null for the default path.",
@@ -150,12 +176,13 @@ export const defaultTools = Object.freeze({
       entries: listEntries,
       truncated: wireBoolean(),
     }),
-    run: (input, context) =>
-      environmentOperation(context, () => context.environment.list(input, context)),
-    dryRun: (input, context) =>
-      environmentOperation(context, () => context.environment.list(input, context)),
+    run: list,
+    dryRun: list,
+    action: (input) => `List ${toolPreview(input.path ?? ".")}`,
+    summarize: (result) =>
+      `${result.entries.length} ${result.entries.length === 1 ? "entry" : "entries"}${result.truncated ? ", truncated" : ""}`,
   }),
-  search: defineTool({
+  search: defineToolWithActivity({
     replay: "safe",
     description:
       "Search for literal, case-sensitive text in a file or directory (default run cwd), traversing entries in filename order. Skip .git, node_modules and nested symlinks. Count binary/oversized files (over 1 MiB) and unavailable descendants in skippedFiles. Examine at most 2000 entries and 32 directory levels; return up to 50 matching lines and 16 KiB. Long-line snippets shift to the match and cap at 1024 bytes. Use null for the default path.",
@@ -168,10 +195,11 @@ export const defaultTools = Object.freeze({
       truncated: wireBoolean(),
       skippedFiles: count,
     }),
-    run: (input, context) =>
-      environmentOperation(context, () => context.environment.search(input, context)),
-    dryRun: (input, context) =>
-      environmentOperation(context, () => context.environment.search(input, context)),
+    run: search,
+    dryRun: search,
+    action: (input) => `Search ${toolPreview(input.query)} in ${toolPreview(input.path ?? ".")}`,
+    summarize: (result) =>
+      `${result.matches.length} ${result.matches.length === 1 ? "match" : "matches"}${result.truncated ? ", truncated" : ""}, ${result.skippedFiles} files skipped`,
   }),
 });
 

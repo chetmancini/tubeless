@@ -21,6 +21,7 @@ Commands:
   tubeless plan      Preview step selection without executing the pipeline
   tubeless graph     Generate Mermaid flowchart source
   tubeless run       Execute a project pipeline or a pipeline or command file
+  tubeless agent     Prompt a workspace agent with a live execution DAG
   tubeless history   Show recorded runs from the local SQLite store
   tubeless ui        Open the optional local run studio
   tubeless auth      Sign in to Tubeless Cloud
@@ -49,6 +50,10 @@ export async function runWorkbenchCli(
   if (command === "cloud") {
     const { runCloud } = await import("./workbench-cloud.js");
     return runCloud(commandArgs, io);
+  }
+  if (command === "agent") {
+    const { runAgent } = await import("./workbench-agent.js");
+    return runAgent(commandArgs, io);
   }
   if (command === "list") return runList(commandArgs, io);
   if (command === "validate") return runValidate(commandArgs, io);
