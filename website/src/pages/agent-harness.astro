@@ -25,6 +25,18 @@ const composition = readFileSync(join(__REPO_ROOT__, "examples/agent-pipeline.ts
     <AgentGraph />
     <p class="graph-note">Each model turn can choose a new batch of tools or finish. The graph grows as the agent works; the turns above show one possible run.</p>
 
+    <section class="section" id="terminal">
+      <h2>Prompt an agent in your terminal.</h2>
+      <p>Export <code>OPENAI_API_KEY</code> to child processes, then start the prompt loop from your workspace:</p>
+      <CodeBlock code="bunx tubeless agent --model gpt-5.4-mini" lang="sh" />
+      <p>Or keep the key in a local dotenv file and run <code>bunx tubeless agent --env-file .env.agent</code>. Existing environment values take precedence over the file. If the key is already set in your shell, <code>export OPENAI_API_KEY</code> makes it available to Tubeless.</p>
+      <p>Enter a task, watch its pipeline execution, read the answer, and prompt again. Agent mode uses the same reporter as <code>tubeless run</code>: shimmer, colors, spinners, elapsed time, and logs alongside nested model turns and tool calls. Wide terminals show a separate log pane; redirected output uses plain pipeline logs.</p>
+      <p>Tool activity shows what is happening: file paths for reads, writes, and edits; command previews for bash; paths and queries for listing and searching. The tree and logs include completion summaries such as bytes written, lines read, and command exit codes.</p>
+      <p>The bike-inspired <code>◯╱◯ ❯</code> prompt has cyan accents. Press Tab to complete a slash command, or Tab twice after <code>/</code> to list commands. Completed prompts retain conversation, answers, and tool history. Use <code>/model &lt;name&gt;</code> to change models, <code>/clear</code> to start fresh, or <code>/quit</code> to exit. Ctrl-C cancels active work and returns to the prompt.</p>
+      <p>Other pipelines can use <code>createSteps().waitForInput</code> to wait for terminal, web, or application input through a pluggable read callback. <a href={href("docs/concepts") + "#wait-for-user-or-application-input"}>Read the input-step guide.</a></p>
+      <p>Plug in another provider with <code>--model-module ./model.ts</code>, or run one task with <code>--prompt</code>. <a href={href("docs/cli") + "#prompt-a-workspace-agent"}>Read the agent CLI guide.</a></p>
+    </section>
+
     <section class="section" id="compose">
       <div class="section-head">
         <h2>Use agents wherever you use pipelines.</h2>

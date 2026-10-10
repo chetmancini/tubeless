@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
+import { awaitWithAbort } from "../utilities/abort.js";
 import { createCloudClient, CloudClientError, isCloudTransportError } from "./cloud-client.js";
 import { resolveCloudHost } from "./cloud-config.js";
 import { resolveCloudCredential } from "./cloud-credentials.js";
@@ -47,27 +48,6 @@ const COMMAND_OPTIONS: Record<string, string[]> = {
 };
 const INPUT_LIMIT = 64 * 1024;
 
-async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) throw new Error("Input read interrupted.");
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => {
-      signal.removeEventListener("abort", onAbort);
-      reject(new Error("Input read interrupted."));
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-    void promise.then(
-      (value) => {
-        signal.removeEventListener("abort", onAbort);
-        resolve(value);
-      },
-      (error: unknown) => {
-        signal.removeEventListener("abort", onAbort);
-        reject(error);
-      }
-    );
-  });
-}
-
 async function boundedInput(
   file: string,
   cwd: string,
@@ -76,7 +56,8 @@ async function boundedInput(
 ): Promise<Record<string, CloudJsonValue>> {
   let text: string;
   if (file === "-") {
-    if (dependencies.readStdin) text = await abortable(dependencies.readStdin(), signal);
+    if (dependencies.readStdin)
+      text = await awaitWithAbort(dependencies.readStdin(), signal, "Input read");
     else {
       text = await new Promise<string>((resolve, reject) => {
         const chunks: Buffer[] = [];

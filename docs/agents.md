@@ -21,6 +21,14 @@ the default model-backed factory below.
 
 ## Default model-backed agent
 
+For a terminal prompt loop with model selection and the live pipeline reporter, use
+`tubeless agent --model gpt-5.4-mini`. Enter a task, read the answer, then prompt
+again; `/model <name>` changes the next task's model while retaining context.
+Completed prompts share conversation state; `/clear` starts fresh.
+`--prompt 'task'` runs once, and `--model-module ./model.ts`
+loads a custom provider factory. See the [agent CLI](./cli.md#prompt-a-workspace-agent)
+for setup, cancellation, budgets, and the plugin contract.
+
 For general workspace tasks, supply a model and an ID:
 
 ```ts
@@ -97,6 +105,11 @@ explicit blank model is rejected locally. API keys are trimmed before use.
 Environment credentials are read at execution, so imports, plans, and dry
 runs need no API key. Live runs make paid API requests and execute workspace tools
 with the host's existing permissions. Dry runs skip the model and have no final answer.
+HTTP 401 failures distinguish known `invalid_api_key` and `ip_not_authorized`
+codes and otherwise suggest checking credentials, project and organization access,
+and the IP allowlist. Error-body reads are limited to 16 KiB; raw messages and
+unknown codes are omitted, while validated request IDs support troubleshooting.
+See [OpenAI's error guide](https://developers.openai.com/api/docs/guides/error-codes).
 
 Custom tool descriptors must be inline and support OpenAI's strict JSON Schema
 subset. The adapter wraps each argument in `{ input }`; reference keywords
@@ -141,8 +154,12 @@ count callbacks, not these HTTP requests or tokens. Encoded requests are capped 
 If prior history or schemas leave no room even for the output markers, the run
 fails explicitly rather than dropping a call's result.
 Compaction failure, a still-oversized request, refusal, malformed output, or an
-incomplete response fails without silently dropping history or retrying. No streaming,
-cross-run chat session, or crash-safe resume is added by this helper.
+incomplete response fails without silently dropping history or retrying. Streaming
+and crash-safe resume are outside this helper's contract. `tubeless agent` owns an in-memory
+REPL session around it, retaining completed conversation across user prompts.
+The adapter appends each new task on the first decision of a prompt, closes its
+synthetic `_finish` function call, and can compact completed history before
+appending the next user message. Direct `defineModelAgent` runs remain isolated.
 
 The executable [model agent recipe](../examples/agent-model.ts) is registered as
 `coding-agent` in the example project. Run it from the workspace it should change:
@@ -305,6 +322,20 @@ the required report step from running.
 | `bash`   | `command`, optional `cwd` and `timeoutMs`   | stdout, stderr, exit code, signal, timeout and truncation flags. Defaults to 30 seconds; maximum 5 minutes. Combined output is capped at 16 KiB. |
 | `list`   | optional `path`                             | Up to 200 directory entries with file/directory/symlink kinds and a truncation flag.                                                             |
 | `search` | `query`, optional `path`                    | Case-sensitive literal search with paths and line numbers; up to 50 matches and 16 KiB of path/text content.                                     |
+
+Workspace tools publish their actions through step progress and scoped pipeline
+logs. Reads, writes, and edits show file paths; bash shows a command preview;
+list and search show their paths and query. Completion includes line ranges,
+bytes, exit codes, or result counts after output validation succeeds; failure and cancellation receive explicit
+log entries. Previews retain at most 160 input characters and escape control
+characters. File contents, edit replacements, and command output stay out of these
+activity summaries. This works with the standard pipeline reporter, including
+the agent REPL's live tree and redirected or `--no-graph` logs.
+
+Turns display “Plan next action”, “Tool calls”, and “Update context”; individual
+calls display registered tool names. Custom handlers can add detail with
+`context.reportProgress({ completed: 0, message: "Your action" })` and
+`context.log`, using the same reporter.
 
 File reads, edits and writes support regular UTF-8 files up to 1 MiB; named pipes
 and devices are rejected. `read` rejects binary files. `search` skips binary and

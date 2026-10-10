@@ -77,9 +77,10 @@ export function createIterationRunner<TOptions extends object>(config: Iteration
     for (let index = 1; index <= config.maxIterations; index++) {
       throwIfAborted(context.signal, "Pipeline iteration");
       const key = `iteration-${index}`;
+      const name = `${config.pipeline.name ?? "Iteration"} ${index}`;
       let latest: PipelineStepProgress | undefined;
       const rows = (status: PipelineStepProgressDetail["status"]): PipelineStepProgressDetail[] => [
-        { id: key, status, completed: latest?.completed, total: latest?.total },
+        { id: key, name, status, completed: latest?.completed, total: latest?.total },
         ...(latest?.details ?? []).map((row) => ({
           ...row,
           id: `${key}/${row.id}`,
@@ -90,7 +91,7 @@ export function createIterationRunner<TOptions extends object>(config: Iteration
         const omitted = index - 1 - retained.length;
         context.reportProgress({
           completed: status === "completed" ? index : index - 1,
-          message: `Iteration ${index} of at most ${config.maxIterations}${latest?.message ? `: ${latest.message}` : ""}`,
+          message: `${name} of at most ${config.maxIterations}${latest?.message ? `: ${latest.message}` : ""}`,
           details: [
             // Traces retain a prefix: keep the current group and newest history first.
             ...rows(status),

@@ -96,7 +96,7 @@ Use `tubeless auth login` and `tubeless cloud list` to select a Cloud pipeline b
 - Start with a [typed import](./examples/typed-import.ts) or add
   [dry runs and write gates](./examples/publish-with-gates.ts) to a publishing job.
 - Build workflows with [child pipelines](./examples/child-pipeline.ts) and [fan-out](./examples/fan-out-progress.ts).
-- Run bounded model decisions, workspace tools, custom tools, and subagents with [agents](./docs/agents.md), optional durable checkpoints, and local or remote execution environments.
+- Run `tubeless agent --model gpt-5.4-mini` for a [conversation loop with live pipeline reporting](./docs/cli.md#prompt-a-workspace-agent), or build [agents](./docs/agents.md) with custom tools, subagents, and durable checkpoints.
 - Optional: the [peloton example](./examples/peloton.ts) is a cycling-themed kitchen sink for the live TUI.
 
 The [recipe index](./docs/recipes.md) covers validation, retries, tracing, testing,

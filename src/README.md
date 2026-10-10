@@ -36,7 +36,11 @@ their source files.
   handlers; orchestration steps hold no permit. The internal child invocation
   boundary returns full reports for handler-origin error classification.
   `agent/default-tools.ts` supplies the standard registry against the typed
-  `AgentEnvironment`. `node-environment.ts` loads local filesystem, commands and
+  environment and supplies typed activity formatters to the private tool compiler.
+  `tool-progress.ts` starts action previews inside handlers; `turn.ts` publishes
+  result summaries only after child output validation, using ordinary progress
+  and scoped logging. Completion labels belong to the mapped call group.
+  `node-environment.ts` loads local filesystem, commands and
   guidance; explicit environments supply remote authority without local fallback.
   Custom names override defaults with matching type inference.
   `compile-agent.ts` compiles both custom-decision and model-backed agents through
@@ -52,7 +56,9 @@ their source files.
   Storage and lossless codecs are separate contracts; `tubeless/agent/node` supplies local environment and SQLite
   adapters. Traces remain best-effort inspection, independent of recovery.
   The optional `tubeless/agent/openai` entrypoint owns HTTP, provider protocol and
-  compaction. The provider-independent agent entrypoint never imports it.
+  compaction. `openai-http.ts` bounds successful responses and authentication
+  error-body reads, exposing known rejection codes and safe advice without raw
+  provider messages. The provider-independent agent entrypoint never imports it.
   `testing/agent.example.test.ts` covers public recipes, including ordinary pipeline
   composition. Workbench history tests and the packed-artifact check exercise those
   recipes through the CLI; live model evaluations remain an opt-in script outside CI.
@@ -87,6 +93,10 @@ list narrow when adding modules.
 Run `make check` after changes; it builds before checking these boundaries.
 
 ## Execution ownership
+
+- `createSteps().waitForInput` constructs an ordinary step with an application-owned
+  read callback, cancellation, output validation, and dry-run skipping by default.
+  It adds no terminal or UI dependency to core.
 
 - `core/iteration.ts` owns bounded state transitions and retained iteration
   progress. It invokes the existing child runner; it does not reschedule the
@@ -133,6 +143,24 @@ Run `make check` after changes; it builds before checking these boundaries.
   instances, composition cycle detection and immutable collection metadata.
 
 ## Workbench execution ownership
+
+- `workbench/workbench-agent.ts` owns agent command validation and model-module loading.
+  `workbench-agent-environment.ts` parses explicitly selected dotenv files and
+  merges them with the process environment without mutating global values.
+  `workbench-agent-commands.ts` owns shared slash command declarations, help,
+  parsing, and readline completion so these interfaces stay aligned.
+  `workbench-agent-session.ts` owns prompt sequencing through native async iteration, REPL
+  commands, retained conversation, and session cancellation. `workbench-agent-prompt.ts`
+  owns one cancellable model initialization
+  and agent run, disposing the standard pipeline reporter before publishing its
+  outcome. It snapshots the finish conversation and commits it to the session only
+  after successful finalization. Nested turns and tool calls use existing progress hooks.
+  It composes the existing model agent and optional OpenAI transport without
+  changing their ownership.
+  `workbench-agent-input.ts` uses readline's prompt API for terminals and bounded
+  iteration for pipes; it owns the themed prompt, native Tab completion, and
+  interactive input while work runs. Presentation reuses the reporter theme;
+  execution uses the same interactive/plain reporter as pipeline CLI commands.
 
 - `workbench/workbench-auth.ts` and `workbench-cloud.ts` own lazy first-party Cloud
   command orchestration and name/slug selection. `cloud-client.ts` owns bounded

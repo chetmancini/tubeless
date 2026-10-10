@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://tubeless.io/schemas/pipeline-document-v1.schema.json
+version: 1
+pipelines:
+  user-review:
+    name: Review an output before proceeding
+    steps:
+      - id: output
+        run: prepareOutput
+      - id: decision
+        run: askDecision
+        dependsOn: [output]
+        outputSchema: decision
+        dryRun: skip
+      - id: note
+        run: askText
+        dependsOn: [decision]
+        outputSchema: text
+        dryRun: skip
+      - id: approval
+        run: confirmProceeding
+        dependsOn: [output, decision, note]
+        outputSchema: yesNo
+        dryRun: skip
+      - id: proceed
+        run: proceed
+        dependsOn: [output, decision, note, approval]
+        skip: declined
+        dryRun: skip
+    finalize:
+      run: reviewResult

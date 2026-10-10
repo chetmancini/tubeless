@@ -174,6 +174,8 @@ read when a pipeline needs them.
   bound fails without another child. Keep state read-only and initialize it fresh
   for each run. Child controls are static; parent dry-run and cancellation propagate.
   Plans show the bounded region, while traces identify each actual child run.
+  Set the child pipeline's `name` for numbered progress labels such as `Page 1`;
+  unnamed children use `Iteration 1`.
   See [pagination](../examples/iteration.ts) and [iteration semantics](./child-pipeline-composition.md#repeat-a-child-with-bounded-state-transitions).
 
 ### Remote work and worker threads
@@ -334,6 +336,13 @@ read when a pipeline needs them.
   check, and the [document JSON Schema](./pipeline-document.schema.json) for
   editor or agent validation. Optional document metadata is descriptive only.
   `inspect` or `plan` on a compiled command still checks graph semantics.
+- For user choices, boolean confirmation, or open text in a declarative pipeline,
+  register `waitForInput(...).run` as an ordinary handler. Declare dependencies,
+  output schemas, and `dryRun: skip` in the document; helper configuration does
+  not transfer with the callback. The application supplies question rendering
+  and normalization. Use a skip predicate for a declined confirmation. See
+  [input questions](./declarative-pipelines.md#user-decisions-confirmations-and-text)
+  and the [YAML input recipe](../examples/yaml-user-input.ts).
 
 ### Graph metadata
 
@@ -346,6 +355,37 @@ read when a pipeline needs them.
   [the recipe](../examples/graph-metadata.ts).
 
 ### Agents
+
+- Use `waitForInput` from `createSteps` for a pluggable user/application input
+  boundary in any pipeline. It uses ordinary lifecycle and output validation,
+  remains pending until input arrives, honors cancellation, and skips dry runs
+  unless given a preview callback. Input steps reject caching and policy skips;
+  gate dependent actions with ordinary steps. See [input steps](./concepts.md#wait-for-user-or-application-input).
+
+- Use `tubeless agent --model <name>` for a workspace prompt loop using the same
+  pipeline reporter as `tubeless run`, including nested turn/tool progress,
+  shimmer, colors, timing, and logs. Tool activity includes paths, command previews,
+  and completion summaries in both the DAG and scoped logs. Custom handlers use
+  `context.reportProgress` and `context.log` for their own activity detail.
+  Completed prompts share conversation state;
+  each prompt has fresh budgets. `/model` changes the next run's model while
+  retaining context; `/clear` starts a fresh conversation. `--prompt` runs once,
+  and `--no-graph` hides pipeline reporting. The interactive bike-inspired prompt
+  supports Tab completion of `/model`, `/clear`,
+  `/help`, `/quit`, and `/exit`; double Tab lists matching commands.
+  `--model-module` loads a trusted factory returning the public `AgentModel`
+  callback. Export `OPENAI_API_KEY` for the built-in provider or select a dotenv
+  file with `--env-file`; existing process environment values take precedence.
+  Missing-key checks are local; OpenAI authenticates model requests. HTTP 401
+  diagnostics expose known rejection codes and safe recovery advice without raw
+  provider messages. Restart the CLI after replacing credentials.
+  Factories receive `{ model, signal, env }` with the resolved environment;
+  asynchronous setup must honor cancellation and release its resources.
+  Adapters append the new task on `context.turn === 1` and return the full final
+  conversation. Failed/cancelled prompts retain the previous completed context.
+  Ordinary `defineModelAgent` pipeline invocations remain isolated per run.
+  See [agent CLI usage](./cli.md#prompt-a-workspace-agent) and the
+  [provider plugin example](../examples/agent-repl-model.ts).
 
 - For a general workspace agent, use `defineModelAgent({ id, model })` from
   `tubeless/agent` with `openaiModel()` from `tubeless/agent/openai`. It supplies

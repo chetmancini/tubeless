@@ -75,10 +75,10 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
       (!Array.isArray(request.conversation) || !request.conversation.every(record))
     )
       throw new Error("Invalid OpenAI conversation state");
-    let input: unknown[] =
-      request.conversation === null
-        ? [{ role: "user", content: request.task }]
-        : [...request.conversation];
+    const newPrompt = context.turn === 1 && request.outcomes.length === 0;
+    let input: unknown[] = request.conversation === null ? [] : [...request.conversation];
+    if (request.conversation === null || newPrompt)
+      input.push({ role: "user", content: request.task });
     const compactRequest = { model: selectedModel, instructions: request.instructions, input };
     const decisionRequest = {
       model: selectedModel,
@@ -94,7 +94,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
     };
     const completedInput = [...input, ...openaiToolOutputs(request.outcomes, MAX_REQUEST_BYTES)];
     const shouldCompact =
-      request.outcomes.length > 0 &&
+      (request.outcomes.length > 0 || (newPrompt && request.conversation !== null)) &&
       (Buffer.byteLength(JSON.stringify(completedInput)) > compactAfterBytes ||
         Buffer.byteLength(JSON.stringify({ ...decisionRequest, input: completedInput })) >
           MAX_REQUEST_BYTES);
@@ -113,6 +113,8 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
             ),
           ];
     if (shouldCompact) {
+      // Keep the new user request verbatim, outside the completed history window.
+      if (newPrompt) input = input.slice(0, -1);
       const compacted = await openaiRequest(
         "responses/compact",
         { ...compactRequest, input },
@@ -123,12 +125,24 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
         throw new Error("OpenAI returned invalid compaction");
       input = outputItems(compacted);
       if (input.length === 0) throw new Error("OpenAI returned empty compaction");
+      if (newPrompt) input.push({ role: "user", content: request.task });
       context.log.log("Compacted agent conversation");
     }
     const body = await openaiRequest("responses", { ...decisionRequest, input }, apiKey, signal);
     if (!record(body) || body.status !== "completed")
       throw new Error("OpenAI did not return a completed response");
     const output = outputItems(body);
-    return { decision: openaiDecision(output), conversation: [...input, ...output] };
+    const decision = openaiDecision(output);
+    const conversation = [...input, ...output];
+    // A completed user prompt may be continued later. Close the adapter's
+    // synthetic tool call before another user message enters native history.
+    const finish = output.find((item) => item.type === "function_call" && item.name === "_finish");
+    if (finish)
+      conversation.push({
+        type: "function_call_output",
+        call_id: finish.call_id,
+        output: JSON.stringify(decision.result),
+      });
+    return { decision, conversation };
   };
 }

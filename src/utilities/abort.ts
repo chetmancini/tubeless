@@ -35,6 +35,34 @@ export function throwIfAborted(signal: AbortSignal | undefined, label: string): 
   }
 }
 
+/** Stop waiting on abort; the operation owner must use the signal to release its resources. */
+export function awaitWithAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+  label: string
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    const onAbort = () => {
+      cleanup();
+      reject(createAbortError(signal, label));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    // Always observe settlement, including a late rejection after cancellation.
+    void promise.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error: unknown) => {
+        cleanup();
+        reject(error);
+      }
+    );
+    if (signal.aborted) onAbort();
+  });
+}
+
 export function abortableSleep(
   durationMs: number,
   signal: AbortSignal | undefined,

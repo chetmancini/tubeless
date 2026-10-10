@@ -109,6 +109,7 @@ export function compileAgent<
   const turn = createAgentTurn(config, registry, limits, { capabilities, resultJsonSchema });
   const { iteratePipeline } = createSteps(config.inputSchema);
   const agent = iteratePipeline("agent", {
+    name: "Agent",
     pipeline: turn,
     maxIterations: limits.maxTurns,
     dryRun: config.dryRun ? undefined : "skip",

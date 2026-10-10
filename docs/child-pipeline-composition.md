@@ -71,6 +71,9 @@ are not selectable step IDs. Each actual child gets a fresh run ID and a trace
 relation containing the owning run, wrapper step/attempt, and one-based iteration
 index. This relation belongs only to the directly repeated child; descendants
 keep their `parentRunId` links, and nested iterations supply their own relation.
+Live progress labels each group with the child pipeline's `name` and a one-based
+number, such as `Page 1`, or `Iteration 1` when no name is set. Stable group IDs
+remain `iteration-1`, `iteration-2`, and so on.
 Live progress retains the latest 32 iteration groups, newest first, plus
 an omitted-count row. The current iteration stays first so recorded progress
 retains it when detail rows are truncated; traces preserve each child lifecycle.

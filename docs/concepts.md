@@ -21,6 +21,37 @@ Keep IDs stable: dependencies, output keys, selection, and traces use them.
 Set `name` when a step needs a different label in plans and progress reports.
 Changing the label does not change the ID.
 
+## Wait for user or application input
+
+Use `waitForInput` from the same `createSteps` factory to pause one branch until
+an application-owned input adapter replies:
+
+```ts
+const { step, waitForInput } = createSteps<{ draft: string }>();
+const draft = step("draft", { run: (_inputs, context) => context.options.draft });
+const feedback = waitForInput("feedback", {
+  dependsOn: [draft],
+  read: ({ draft }, context) => readFromYourUI(draft, context.signal),
+});
+```
+
+The `read(inputs, context)` callback can use a terminal, web form, or any asynchronous
+input source. Its typed result feeds dependents like an ordinary step. The pipeline
+stays active while input is pending, reports `Waiting for input`, then continues
+through its normal dependencies and finalizer. Add `outputSchema` to validate or
+transform untrusted input before dependent work starts.
+
+Input steps skip dry runs by default; a `dryRun` callback can supply preview input.
+They cannot be cached or use policy `skip` predicates. Gate dependent work with
+an ordinary step when an input response should prevent an action.
+Cancellation stops waiting and ignores a late reply or
+rejection. Forward `context.signal` into the adapter to release its UI/I/O resources.
+The application owns the input source and any persistence across process restarts.
+See the [review pipeline recipe](../examples/user-input.ts). Declarative YAML and
+JSON pipelines use registered input handlers with output schemas; see
+[decisions, confirmations, and text](./declarative-pipelines.md#user-decisions-confirmations-and-text)
+and the [YAML input recipe](../examples/yaml-user-input.ts).
+
 ## Dependency choices
 
 | Field                | Supplies data | Blocks after failure | Typical use                         |

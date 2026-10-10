@@ -13,6 +13,7 @@ import { standardSchema } from "./pipeline.test-support.js";
 function fixture(
   options: {
     maxIterations?: number;
+    childName?: string;
     initialState?: () => number;
     child?: (context: PipelineStepContext<{ value: number }>) => number | Promise<number>;
     transition?: (
@@ -34,7 +35,12 @@ function fixture(
     dryRun: options.childDryRun,
     run: (_inputs, context) => execute(context),
   });
-  const child = definePipeline({ id: "child", steps: [compute], finalize: compute });
+  const child = definePipeline({
+    id: "child",
+    name: options.childName,
+    steps: [compute],
+    finalize: compute,
+  });
   const { iteratePipeline } = createSteps();
   const initialState = vi.fn(options.initialState ?? (() => 0));
   const transition = vi.fn(
@@ -62,24 +68,37 @@ function fixture(
 }
 
 describe("bounded child iteration", () => {
-  it("finishes on the bound, publishes once, and initializes once per invocation", async () => {
-    const { pipeline, execute, initialState, transition } = fixture();
-    const runtime = createPipelineTestRuntime();
-    expect(await runtime.runOrThrow(pipeline, {})).toBe(3);
-    expect(execute.mock.calls.map(([context]) => context.options.value)).toEqual([0, 1, 2]);
-    expect(new Set(execute.mock.calls.map(([context]) => context.runId)).size).toBe(3);
-    expect(initialState).toHaveBeenCalledOnce();
-    expect(transition).toHaveBeenCalledTimes(3);
-    expect(
-      runtime.statuses.filter((event) => event.status === "completed").map((event) => event.step.id)
-    ).toEqual(["repeat"]);
-    expect(
-      runtime.latestProgress
-        .get("repeat")
-        ?.details?.filter((row) => row.depth === undefined)
-        .map((row) => row.id)
-    ).toEqual(["iteration-3", "iteration-2", "iteration-1"]);
-  });
+  it.each([undefined, "Page"])(
+    "finishes on the bound with child name %s, publishes once, and initializes once per invocation",
+    async (childName) => {
+      const { pipeline, execute, initialState, transition } = fixture({ childName });
+      const runtime = createPipelineTestRuntime();
+      expect(await runtime.runOrThrow(pipeline, {})).toBe(3);
+      expect(execute.mock.calls.map(([context]) => context.options.value)).toEqual([0, 1, 2]);
+      expect(new Set(execute.mock.calls.map(([context]) => context.runId)).size).toBe(3);
+      expect(initialState).toHaveBeenCalledOnce();
+      expect(transition).toHaveBeenCalledTimes(3);
+      expect(
+        runtime.statuses
+          .filter((event) => event.status === "completed")
+          .map((event) => event.step.id)
+      ).toEqual(["repeat"]);
+      expect(
+        runtime.latestProgress
+          .get("repeat")
+          ?.details?.filter((row) => row.depth === undefined)
+          .map((row) => ({ id: row.id, name: row.name }))
+      ).toEqual(
+        [3, 2, 1].map((index) => ({
+          id: `iteration-${index}`,
+          name: `${childName ?? "Iteration"} ${index}`,
+        }))
+      );
+      expect(runtime.latestProgress.get("repeat")?.message).toContain(
+        `${childName ?? "Iteration"} 3 of at most 3`
+      );
+    }
+  );
 
   it("returns a precise undefined result on the first iteration", async () => {
     const { step } = createSteps();

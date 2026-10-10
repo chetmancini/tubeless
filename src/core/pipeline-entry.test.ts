@@ -28,7 +28,18 @@ const allowedDependencies: Record<string, readonly string[]> = {
   cli: ["core", "node", "reporter", "utilities"],
   testing: ["core", "utilities"],
   project: ["core", "utilities"],
-  workbench: ["cli", "core", "project", "render", "run-store", "studio", "tracing", "utilities"],
+  workbench: [
+    "agent",
+    "cli",
+    "core",
+    "project",
+    "render",
+    "reporter",
+    "run-store",
+    "studio",
+    "tracing",
+    "utilities",
+  ],
 };
 
 function moduleName(file: string): string {
