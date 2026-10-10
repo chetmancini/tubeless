@@ -188,9 +188,8 @@ describe("agent credentials and dotenv files", () => {
 
   it("provides the export diagnostic to a real child process with an unexported shell variable", async () => {
     const { stdout, stderr } = await execFileAsync(
-      "zsh",
+      "sh",
       [
-        "-f",
         "-c",
         `
       unset OPENAI_API_KEY
