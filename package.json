@@ -85,6 +85,7 @@
     "@types/aws-lambda": "8.10.164",
     "@types/node": "22.20.5",
     "@vitest/coverage-v8": "5.0.3",
+    "cf": "1.0.0-beta.13",
     "inngest": "4.22.0",
     "knip": "6.40.0",
     "miniflare": "5.20261006.0-alpha",
