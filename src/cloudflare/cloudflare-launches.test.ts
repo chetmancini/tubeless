@@ -89,6 +89,33 @@ describe("launch registry", () => {
       error: { code: "TUBELESS_RUN_CANCELLED", kind: "cancellation", phase: "execution" },
     });
     expect(registry.get("l1")?.state).toBe("failed");
+    expect(registry.get("l1")?.lastBatch).toBe(1);
+    expect(registry.acceptBatch("l1", 1, [completed("r1")])).toEqual({
+      duplicate: true,
+      terminal: true,
+    });
+    expect(await store.listEvents()).toHaveLength(2);
+  });
+
+  it("requires strictly serial batches", async () => {
+    const { registry, store } = setup();
+    registry.create("l1", "demo", 100);
+    registry.acceptBatch("l1", 0, [started("r1")]);
+    expect(() => registry.acceptBatch("l1", 2, [completed("r1")])).toThrow(
+      "Launch l1 expected batch 1 but received 2."
+    );
+    expect(await store.listEvents()).toHaveLength(1);
+    expect(registry.get("l1")).toMatchObject({ lastBatch: 0, state: "running" });
+    expect(registry.acceptBatch("l1", 1, [completed("r1")]).terminal).toBe(true);
+  });
+
+  it("stops resolving a run to its launch once the launch is finished", async () => {
+    const { registry } = setup();
+    registry.create("l1", "demo", 100);
+    registry.acceptBatch("l1", 0, [started("r1")]);
+    expect(registry.launchIdForRun("r1")).toBe("l1");
+    registry.acceptBatch("l1", 1, [completed("r1")]);
+    expect(registry.launchIdForRun("r1")).toBeUndefined();
   });
 
   it("fails unbound launches without inventing history and lists stale launches", async () => {

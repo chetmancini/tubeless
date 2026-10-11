@@ -99,6 +99,10 @@ export class LaunchRegistry {
     };
   }
 
+  /**
+   * Batches are strictly serial: a sequence at or below the last accepted batch is an idempotent
+   * duplicate, and the next batch must be exactly `lastBatch + 1`. A gap throws without writing.
+   */
   acceptBatch(
     launchId: string,
     sequence: number,
@@ -109,6 +113,10 @@ export class LaunchRegistry {
       if (!launch) throw new Error(`Unknown launch ${JSON.stringify(launchId)}.`);
       if (sequence <= launch.lastBatch)
         return { duplicate: true, terminal: TERMINAL.has(launch.state) };
+      if (sequence > launch.lastBatch + 1)
+        throw new Error(
+          `Launch ${launchId} expected batch ${launch.lastBatch + 1} but received ${sequence}.`
+        );
       if (TERMINAL.has(launch.state)) {
         // A reconciled failure already closed this run; keep exactly one completion in history.
         this.storage.sql.exec(
