@@ -25,7 +25,8 @@ export function createR2CacheStore(
     async get(key) {
       const object = await bucket.get(prefix + key);
       if (!object) return undefined;
-      const recorded = Number(object.customMetadata?.createdAtMs);
+      const raw = object.customMetadata?.createdAtMs ?? "";
+      const recorded = raw.trim() === "" ? Number.NaN : Number(raw);
       return {
         value: new Uint8Array(await object.arrayBuffer()),
         createdAtMs: Number.isFinite(recorded) ? recorded : object.uploaded.getTime(),
@@ -39,34 +40,92 @@ export function createR2CacheStore(
   };
 }
 
-function assertPlainJson(value: unknown, path: string): void {
-  const reject = (): never => {
-    throw new Error(
-      `jsonCacheCodec cannot store ${path}: only plain objects, arrays, strings, finite numbers, booleans and null round-trip.`
+function roundTripError(path: string, reason: string): Error {
+  return new Error(`jsonCacheCodec cannot store ${path}: ${reason}`);
+}
+
+/** Read an own data property without invoking accessors. */
+function dataValue(descriptor: PropertyDescriptor | undefined, path: string): unknown {
+  if (!descriptor) throw roundTripError(path, "only own data properties round-trip.");
+  if (!("value" in descriptor))
+    throw roundTripError(path, "accessor properties do not round-trip.");
+  if (!descriptor.enumerable)
+    throw roundTripError(path, "non-enumerable properties do not round-trip.");
+  return descriptor.value;
+}
+
+/** Canonical array index: "0", "1", ... but not "01", "-0" or "1.5". */
+function isArrayIndexKey(key: string): boolean {
+  const index = Number(key);
+  return Number.isInteger(index) && index >= 0 && index < 2 ** 32 - 1 && String(index) === key;
+}
+
+function assertPlainArray(value: unknown[], path: string, seen: Set<object>): void {
+  if (Object.getPrototypeOf(value) !== Array.prototype) {
+    throw roundTripError(path, "array subclasses do not round-trip.");
+  }
+  for (const key of Reflect.ownKeys(value)) {
+    if (key !== "length" && (typeof key !== "string" || !isArrayIndexKey(key))) {
+      throw roundTripError(path, "arrays may only own index and length properties.");
+    }
+  }
+  for (let index = 0; index < value.length; index++) {
+    const itemPath = `${path}[${index}]`;
+    const descriptor = Object.getOwnPropertyDescriptor(value, index);
+    if (!descriptor) throw roundTripError(itemPath, "sparse arrays do not round-trip.");
+    assertPlainJson(dataValue(descriptor, itemPath), itemPath, seen);
+  }
+}
+
+function assertPlainObject(value: object, path: string, seen: Set<object>): void {
+  if (Object.getPrototypeOf(value) !== Object.prototype) {
+    throw roundTripError(path, "only objects with Object.prototype round-trip.");
+  }
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key === "symbol") throw roundTripError(path, "symbol keys do not round-trip.");
+    const itemPath = `${path}.${key}`;
+    assertPlainJson(
+      dataValue(Object.getOwnPropertyDescriptor(value, key), itemPath),
+      itemPath,
+      seen
     );
-  };
+  }
+}
+
+/**
+ * Reject every value that would not come back identical from JSON.stringify and JSON.parse.
+ * Inspects own properties through descriptors so no user getter runs during validation.
+ * `seen` rejects shared and circular references, which JSON would duplicate or fail on.
+ */
+function assertPlainJson(value: unknown, path: string, seen: Set<object>): void {
   if (value === null || typeof value === "string" || typeof value === "boolean") return;
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) reject();
+    if (!Number.isFinite(value))
+      throw roundTripError(path, "NaN and infinities do not round-trip.");
+    if (Object.is(value, -0)) throw roundTripError(path, "-0 does not round-trip.");
     return;
   }
+  if (typeof value !== "object") {
+    throw roundTripError(
+      path,
+      "only plain objects, arrays, strings, finite numbers, booleans and null round-trip."
+    );
+  }
+  if (seen.has(value)) {
+    throw roundTripError(path, "shared or circular references do not round-trip.");
+  }
+  seen.add(value);
   if (Array.isArray(value)) {
-    value.forEach((item, index) => assertPlainJson(item, `${path}[${index}]`));
-    return;
+    assertPlainArray(value, path, seen);
+  } else {
+    assertPlainObject(value, path, seen);
   }
-  if (typeof value === "object") {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) reject();
-    for (const [key, item] of Object.entries(value)) assertPlainJson(item, `${path}.${key}`);
-    return;
-  }
-  reject();
 }
 
 /** Lossless JSON codec for Workers, where the default V8 codec is unavailable. */
 export const jsonCacheCodec: StepCacheCodec = {
   encode(value) {
-    assertPlainJson(value, "value");
+    assertPlainJson(value, "value", new Set());
     return new TextEncoder().encode(JSON.stringify(value));
   },
   decode(bytes) {
