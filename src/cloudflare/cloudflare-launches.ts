@@ -1,0 +1,210 @@
+import { PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
+import type { PipelineTraceEvent } from "../tracing/tracing.js";
+import type { DurableRunStore } from "./cloudflare-run-store.js";
+import type { DurableStorageLike } from "./cloudflare-storage.js";
+
+export type LaunchState = "starting" | "running" | "finished" | "failed";
+
+export interface LaunchRecord {
+  readonly launchId: string;
+  readonly commandId: string;
+  readonly runId?: string;
+  readonly pipelineId?: string;
+  readonly dryRun: boolean;
+  readonly stepCount: number;
+  readonly state: LaunchState;
+  readonly lastBatch: number;
+  readonly createdAtMs: number;
+}
+
+export interface BatchOutcome {
+  readonly duplicate: boolean;
+  readonly boundRunId?: string;
+  readonly terminal: boolean;
+}
+
+const TERMINAL: ReadonlySet<LaunchState> = new Set(["finished", "failed"]);
+
+function hostTerminatedEvent(
+  launch: LaunchRecord,
+  message: string,
+  nowMs: number
+): PipelineTraceEvent {
+  if (!launch.runId || !launch.pipelineId)
+    throw new Error("Only a bound launch has a run to terminate.");
+  return {
+    version: PIPELINE_TRACE_VERSION,
+    name: "pipeline.completed",
+    runId: launch.runId,
+    pipelineId: launch.pipelineId,
+    timestampMs: nowMs,
+    payload: {
+      dryRun: launch.dryRun,
+      errorCount: 1,
+      finalized: false,
+      status: "failed",
+      stepCount: launch.stepCount,
+    },
+    error: { code: "TUBELESS_RUN_CANCELLED", kind: "cancellation", message, phase: "execution" },
+  };
+}
+
+/** Owns launch admission state in the Studio object; all transitions are transactional. */
+export class LaunchRegistry {
+  constructor(
+    private readonly storage: Pick<DurableStorageLike, "sql" | "transactionSync">,
+    private readonly store: DurableRunStore
+  ) {
+    storage.sql.exec(`CREATE TABLE IF NOT EXISTS tubeless_launches (
+      launch_id TEXT PRIMARY KEY,
+      command_id TEXT NOT NULL,
+      run_id TEXT,
+      pipeline_id TEXT,
+      dry_run INTEGER NOT NULL DEFAULT 0,
+      step_count INTEGER NOT NULL DEFAULT 0,
+      state TEXT NOT NULL,
+      last_batch INTEGER NOT NULL DEFAULT -1,
+      created_at_ms INTEGER NOT NULL
+    )`);
+    storage.sql.exec(
+      "CREATE INDEX IF NOT EXISTS tubeless_launches_run_id_idx ON tubeless_launches(run_id)"
+    );
+  }
+
+  create(launchId: string, commandId: string, nowMs: number): void {
+    this.storage.sql.exec(
+      "INSERT INTO tubeless_launches (launch_id, command_id, state, created_at_ms) VALUES (?, ?, 'starting', ?)",
+      launchId,
+      commandId,
+      nowMs
+    );
+  }
+
+  get(launchId: string): LaunchRecord | undefined {
+    const row = this.storage.sql
+      .exec("SELECT * FROM tubeless_launches WHERE launch_id = ?", launchId)
+      .toArray()[0];
+    if (!row) return undefined;
+    return {
+      launchId: String(row.launch_id),
+      commandId: String(row.command_id),
+      ...(row.run_id == null ? {} : { runId: String(row.run_id) }),
+      ...(row.pipeline_id == null ? {} : { pipelineId: String(row.pipeline_id) }),
+      dryRun: Number(row.dry_run) === 1,
+      stepCount: Number(row.step_count),
+      // SAFETY: state is only ever written from LaunchState literals in this class.
+      state: row.state as LaunchState,
+      lastBatch: Number(row.last_batch),
+      createdAtMs: Number(row.created_at_ms),
+    };
+  }
+
+  acceptBatch(
+    launchId: string,
+    sequence: number,
+    events: readonly PipelineTraceEvent[]
+  ): BatchOutcome {
+    return this.storage.transactionSync(() => {
+      const launch = this.get(launchId);
+      if (!launch) throw new Error(`Unknown launch ${JSON.stringify(launchId)}.`);
+      if (sequence <= launch.lastBatch)
+        return { duplicate: true, terminal: TERMINAL.has(launch.state) };
+      if (TERMINAL.has(launch.state)) {
+        // A reconciled failure already closed this run; keep exactly one completion in history.
+        this.storage.sql.exec(
+          "UPDATE tubeless_launches SET last_batch = ? WHERE launch_id = ?",
+          sequence,
+          launchId
+        );
+        return { duplicate: false, terminal: true };
+      }
+      this.store.append(events);
+      let { runId, pipelineId, dryRun, stepCount, state } = launch;
+      let boundRunId: string | undefined;
+      for (const event of events) {
+        if (
+          runId === undefined &&
+          event.name === "pipeline.started" &&
+          event.parentRunId === undefined
+        ) {
+          runId = event.runId;
+          pipelineId = event.pipelineId;
+          dryRun = event.payload.dryRun;
+          stepCount = event.payload.stepCount;
+          state = "running";
+          boundRunId = runId;
+        } else if (
+          runId !== undefined &&
+          event.name === "pipeline.completed" &&
+          event.runId === runId
+        ) {
+          state = "finished";
+        }
+      }
+      this.storage.sql.exec(
+        `UPDATE tubeless_launches
+         SET run_id = ?, pipeline_id = ?, dry_run = ?, step_count = ?, state = ?, last_batch = ?
+         WHERE launch_id = ?`,
+        runId ?? null,
+        pipelineId ?? null,
+        dryRun ? 1 : 0,
+        stepCount,
+        state,
+        sequence,
+        launchId
+      );
+      return {
+        duplicate: false,
+        ...(boundRunId ? { boundRunId } : {}),
+        terminal: TERMINAL.has(state),
+      };
+    });
+  }
+
+  fail(launchId: string, message: string, nowMs: number): void {
+    this.storage.transactionSync(() => {
+      const launch = this.get(launchId);
+      if (!launch || TERMINAL.has(launch.state)) return;
+      if (launch.runId && launch.pipelineId)
+        this.store.append([hostTerminatedEvent(launch, message, nowMs)]);
+      this.storage.sql.exec(
+        "UPDATE tubeless_launches SET state = 'failed' WHERE launch_id = ?",
+        launchId
+      );
+    });
+  }
+
+  liveRunIds(): string[] {
+    return this.storage.sql
+      .exec(
+        "SELECT run_id FROM tubeless_launches WHERE state = 'running' AND run_id IS NOT NULL ORDER BY created_at_ms"
+      )
+      .toArray()
+      .map((row) => String(row.run_id));
+  }
+
+  launchIdForRun(runId: string): string | undefined {
+    const row = this.storage.sql
+      .exec("SELECT launch_id FROM tubeless_launches WHERE run_id = ? AND state = 'running'", runId)
+      .toArray()[0];
+    return row ? String(row.launch_id) : undefined;
+  }
+
+  stale(cutoffMs: number): string[] {
+    return this.storage.sql
+      .exec(
+        "SELECT launch_id FROM tubeless_launches WHERE state IN ('starting', 'running') AND created_at_ms < ?",
+        cutoffMs
+      )
+      .toArray()
+      .map((row) => String(row.launch_id));
+  }
+
+  hasActive(): boolean {
+    return (
+      this.storage.sql
+        .exec("SELECT 1 FROM tubeless_launches WHERE state IN ('starting', 'running') LIMIT 1")
+        .toArray().length > 0
+    );
+  }
+}
