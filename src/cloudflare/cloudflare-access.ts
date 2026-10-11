@@ -79,8 +79,11 @@ function denial(request: Request, status: 401 | 403): Response {
   });
 }
 
+// Bound the certificate request so a hung fetch cannot stall requests sharing the refresh.
+const CERTS_TIMEOUT_MS = 5_000;
+
 async function defaultFetchJson(url: string): Promise<unknown> {
-  const response = await fetch(url);
+  const response = await fetch(url, { signal: AbortSignal.timeout(CERTS_TIMEOUT_MS) });
   if (!response.ok) throw new Error(`Access certificates request failed with ${response.status}.`);
   return response.json();
 }

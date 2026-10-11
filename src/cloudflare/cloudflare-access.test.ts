@@ -204,6 +204,50 @@ describe("Access authenticator", () => {
     expect((await auth(request(await token({}))))?.status).toBe(401);
   });
 
+  it("denies once the default certificate request hangs for five seconds", async () => {
+    vi.useFakeTimers();
+    // Node's AbortSignal.timeout uses internal timers that fake timers cannot advance.
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(
+        () => controller.abort(new DOMException("The operation timed out.", "TimeoutError")),
+        ms
+      );
+      return controller.signal;
+    });
+    const hungFetch = vi.fn(
+      (_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+        })
+    );
+    vi.stubGlobal("fetch", hungFetch);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const auth = createAccessAuthenticator(config, { now: () => NOW });
+      let settled = false;
+      const outcome = auth(request(await token({}))).finally(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(hungFetch).toHaveBeenCalledOnce();
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect((await outcome)?.status).toBe(401);
+      expect(timeout).toHaveBeenCalledWith(5_000);
+      expect(hungFetch).toHaveBeenCalledWith(config.certsUrl, {
+        signal: expect.any(AbortSignal),
+      });
+      expect(errors).toHaveBeenCalledWith("The operation timed out.");
+    } finally {
+      errors.mockRestore();
+      vi.unstubAllGlobals();
+      timeout.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("denies without throwing when WebCrypto verification throws", async () => {
     const auth = authenticator();
     expect(await auth(request(await token({})))).toBeUndefined();
