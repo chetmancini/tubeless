@@ -209,6 +209,6 @@ export function unexpectedStudioErrorResponse(error: unknown): Response {
     500,
     "studio_internal_error",
     "The studio hit an unexpected error.",
-    "Inspect the Studio host logs and retry after fixing the reported cause."
+    "Inspect the local Studio process logs and retry after fixing the reported cause."
   );
 }

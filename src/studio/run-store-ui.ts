@@ -16,6 +16,7 @@ import {
   PIPELINE_RUN_STUDIO_SCRIPT,
   PIPELINE_RUN_STUDIO_STYLE,
 } from "./run-store-ui-page.js";
+import { toFetchRequest, writeFetchResponse } from "./run-store-ui-node.js";
 import { createStudioApiHandler, type PipelineRunStudioApiOptions } from "./run-store-ui-api.js";
 import { hasStudioOrigin, studioRoute, type StudioHosting } from "./run-store-ui-hosting.js";
 export type {
@@ -154,7 +155,11 @@ export async function startPipelineRunStudio(
         response.end(request.method === "HEAD" ? undefined : studioHtml(hosting?.mount ?? ""));
         return;
       }
-      await handleApi(request, response, url);
+      await writeFetchResponse(
+        response,
+        await handleApi(toFetchRequest(request), url),
+        request.method ?? "GET"
+      );
     } catch (error) {
       writeUnexpectedStudioError(response, error);
     }
