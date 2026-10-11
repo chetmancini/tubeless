@@ -51,7 +51,8 @@ answers every non-local request with `503 access_not_configured`. To finish:
 
 1. In the dashboard, open Workers & Pages, your Worker, Settings, Domains & Routes,
    and choose **Enable Cloudflare Access**. Add a policy for the people who may use
-   Studio.
+   Studio. Access must cover every hostname that reaches the Worker, including the
+   `workers.dev` URL the scaffold enables.
 2. Copy the team domain (`<team>.cloudflareaccess.com`) and the application
    audience tag. Find the tag under Zero Trust, Access, Applications, your
    application, Additional settings, **Application Audience (AUD) Tag**.
@@ -128,23 +129,69 @@ under `/tmp`.
 
 The default cache store writes files and the default codec uses `v8.serialize`.
 Neither works on Workers, so a cached step with no explicit store fails. Give each
-cached step an R2 store and the JSON codec:
+cached step an R2 store and the JSON codec.
+
+Import them from `tubeless/cloudflare/cache`, which loads anywhere.
+`tubeless/cloudflare` loads only in workerd, and your step definitions also load in
+Node whenever `tubeless init cloudflare`, `tubeless run`, `tubeless ui` or your tests
+import the project. Keep the bucket in a small module and bind it from the Worker
+entry:
 
 ```ts
-import { env } from "cloudflare:workers";
-import { createR2CacheStore, jsonCacheCodec } from "tubeless/cloudflare";
+// r2-cache.ts
+import { createR2CacheStore, jsonCacheCodec, type R2BucketLike } from "tubeless/cloudflare/cache";
 
+let bucket: R2BucketLike | undefined;
+
+export function bindCacheBucket(value: R2BucketLike): void {
+  bucket = value;
+}
+
+export const r2Cache = {
+  store: createR2CacheStore(() => {
+    if (!bucket) {
+      throw new Error(
+        "Bind the R2 cache bucket in cloudflare/worker.ts before running cached steps."
+      );
+    }
+    return bucket;
+  }),
+  codec: jsonCacheCodec,
+};
+```
+
+```ts
+// In a pipeline module
 const load = step("load", {
-  cache: { version: "v1", store: createR2CacheStore(env.TUBELESS_BUCKET), codec: jsonCacheCodec },
+  cache: { version: "v1", ...r2Cache },
   run: async () => fetchRows(),
 });
 ```
 
-`createR2CacheStore(bucket, { prefix })` keeps entries under `tubeless-cache/` unless
-you pass another prefix. `jsonCacheCodec` rejects values that would not come back
-identical: dates, maps, class instances, `undefined`, `NaN`, infinities, `-0`, sparse
-arrays, shared or circular references, and objects without the standard prototype.
-Return plain data from cached steps, or supply your own reconstructing codec. See
+```ts
+// cloudflare/worker.ts
+import { env } from "cloudflare:workers";
+import { createCloudflareApp } from "tubeless/cloudflare";
+import { bindCacheBucket } from "../r2-cache.ts";
+import project from "../tubeless.project.ts";
+
+bindCacheBucket(env.TUBELESS_BUCKET);
+const app = createCloudflareApp(project);
+
+export default app.worker;
+export const { TubelessStudio, TubelessRun } = app.durableObjects;
+```
+
+The store calls the getter on every read and write. Locally nothing binds the
+bucket, so these cached steps fail when they run in Node. For local runs, bind
+another `R2BucketLike` or give those steps a different cache store.
+
+`createR2CacheStore(bucket, { prefix })` accepts a bucket or a getter and keeps
+entries under `tubeless-cache/` unless you pass another prefix. `jsonCacheCodec`
+rejects values that would not come back identical: dates, maps, class instances,
+`undefined`, `NaN`, infinities, `-0`, sparse arrays, shared or circular references,
+and objects without the standard prototype. Return plain data from cached steps, or
+supply your own reconstructing codec. See
 [step output caching](./step-output-cache.md) for versions, keys and `maxAge`.
 
 ## Security model
@@ -178,13 +225,14 @@ runs, host your pipelines in a [host engine](#run-limits) instead.
 
 ## Troubleshooting
 
-| Symptom                                                                | Cause and fix                                                                                                                                                                |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `503 access_not_configured`                                            | `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` are both empty. Enable Access, set both, and redeploy.                                                                                 |
-| `503 access_misconfigured`                                             | Only one is set, or the team domain is not `<team>.cloudflareaccess.com`. Fix `cloudflare.config.ts` and redeploy.                                                           |
-| Studio keeps asking you to sign in, or API calls return 401            | Requests reach the Worker without an Access token. Access is not enabled on the route you are using (check Domains & Routes), or the AUD tag belongs to another application. |
-| 403 `access_denied` (or a plain 403 page)                              | The token is valid but its issuer or audience does not match, or your Access policy does not include you. Compare `ACCESS_AUD` with the application's AUD tag.               |
-| "did not record a start within 30 seconds… may still start"            | The launch was not acknowledged. Check history before launching again; the run may still appear.                                                                             |
-| Run shows failed with `TUBELESS_RUN_CANCELLED` and a host-stop message | The platform stopped the run object before it finished, for example at the time limit. See [Run limits](#run-limits). The run object or Studio records the failure.          |
-| A cached step fails                                                    | It uses the default file store or V8 codec. Pass `createR2CacheStore` and `jsonCacheCodec`.                                                                                  |
-| `untrusted_origin` on launch or cancel                                 | The request's `Origin` does not match the page. Use the deployed hostname directly, without a proxy that rewrites it.                                                        |
+| Symptom                                                                                                      | Cause and fix                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `503 access_not_configured`                                                                                  | `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` are both empty. Enable Access, set both, and redeploy.                                                                                                                                        |
+| `503 access_misconfigured`                                                                                   | Only one is set, or the team domain is not `<team>.cloudflareaccess.com`. Fix `cloudflare.config.ts` and redeploy.                                                                                                                  |
+| API calls return 401, or pages show a plain 403 "Access sign-in is required" page                            | No valid Access token reached the Worker. Access is not enabled on the hostname you are using. It must cover every hostname that reaches the Worker, including the `workers.dev` URL the scaffold enables (check Domains & Routes). |
+| 403 `access_denied`, or a plain 403 "Access denied this request" page                                        | The token is valid but its issuer or audience does not match, or your Access policy does not include you. Compare `ACCESS_AUD` with the application's AUD tag.                                                                      |
+| "did not record a start within 30 seconds… may still start" or "could not confirm the run started"           | The launch was not acknowledged. Check history before launching again; the run may still appear.                                                                                                                                    |
+| Run shows failed with `TUBELESS_RUN_CANCELLED` and a host-stop message                                       | The platform stopped the run object before it finished, for example at the time limit. See [Run limits](#run-limits). The run object or Studio records the failure.                                                                 |
+| A cached step fails                                                                                          | It uses the default file store or V8 codec, or nothing bound the R2 bucket. Use the [R2 cache pattern](#caching-on-workers) and call `bindCacheBucket` in `cloudflare/worker.ts`.                                                   |
+| Local commands fail to load the project (`ERR_UNSUPPORTED_ESM_URL_SCHEME` or `cloudflare:workers` not found) | A module the project loads imports `tubeless/cloudflare` or `cloudflare:workers`. Import cache helpers from `tubeless/cloudflare/cache`, and keep `cloudflare:workers` in `cloudflare/worker.ts` or behind an adapter.              |
+| `untrusted_origin` on launch or cancel                                                                       | The request's `Origin` does not match the page. Use the deployed hostname directly, without a proxy that rewrites it.                                                                                                               |

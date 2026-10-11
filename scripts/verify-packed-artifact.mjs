@@ -219,6 +219,10 @@ try {
     readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cloudflare.ts"))
   );
   writeFileSync(
+    join(consumerRoot, "cloudflare-cache.ts"),
+    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cloudflare-cache.ts"))
+  );
+  writeFileSync(
     join(consumerRoot, "tsconfig.json"),
     JSON.stringify({
       compilerOptions: {
@@ -230,20 +234,25 @@ try {
         target: "ES2022",
         types: [],
       },
-      files: ["cli.ts", "project.ts", "cloudflare.ts"],
+      files: ["cli.ts", "project.ts", "cloudflare.ts", "cloudflare-cache.ts"],
     })
   );
   run(join(packageRoot, "node_modules/.bin/tsc"), ["-p", "tsconfig.json"], consumerRoot);
   run("node", ["--experimental-strip-types", "project.ts"], consumerRoot);
+  // The cache entry stays free of cloudflare:workers so projects using it load in Node.
+  run("node", ["--experimental-strip-types", "cloudflare-cache.ts"], consumerRoot);
 
   // The Cloudflare entry imports cloudflare:workers, which only workerd resolves; its
-  // runtime loading is covered by src/cloudflare/cloudflare-app.test.ts.
+  // runtime loading is covered by src/cloudflare/cloudflare-app.test.ts. The
+  // tubeless/cloudflare/cache entry is not workerd-only and is imported below.
   const workerdOnlyExports = new Set(["./cloudflare"]);
   for (const relativePath of [
     "dist/cloudflare/cloudflare.js",
     "dist/cloudflare/cloudflare.d.ts",
     "dist/cloudflare/cloudflare-studio-client.js",
     "dist/cloudflare/cloudflare-studio-client.d.ts",
+    "dist/cloudflare/cloudflare-cache.js",
+    "dist/cloudflare/cloudflare-cache.d.ts",
   ]) {
     if (!existsSync(join(installedPackage, relativePath))) {
       throw new Error(`Packed tubeless artifact is missing ${relativePath}`);

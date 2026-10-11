@@ -279,8 +279,14 @@
         "R2BucketLike",
         "R2ObjectLike"
       ],
-      "sha256": "6ca603d2b5fdeee1ae9625834cf051c43221ae6c7d2dd130605a1f2cc2ff69e2",
+      "sha256": "4ad15d4c8feeedf6decc5490e12a7c5b495bc4abcc7fbbeebf7a3fd5a6c01867",
       "specifier": "tubeless/cloudflare"
+    },
+    {
+      "declaration": "./dist/cloudflare/cloudflare-cache.d.ts",
+      "exports": ["createR2CacheStore", "jsonCacheCodec", "R2BucketLike", "R2ObjectLike"],
+      "sha256": "1ef4f5fbc3032f0fa2f61f3985d20cb41491c3d0477ba2757e5af97bb83364c9",
+      "specifier": "tubeless/cloudflare/cache"
     }
   ],
   "packageName": "tubeless",

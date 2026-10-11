@@ -17,15 +17,19 @@ export interface R2BucketLike {
   ): Promise<unknown>;
 }
 
-/** Step cache entries in R2. Core still enforces versions, keys and maxAge. */
+/**
+ * Step cache entries in R2. Core still enforces versions, keys and maxAge.
+ * Pass a getter to bind the bucket later; it is resolved on every read and write.
+ */
 export function createR2CacheStore(
-  bucket: R2BucketLike,
+  bucket: R2BucketLike | (() => R2BucketLike),
   options: { readonly prefix?: string } = {}
 ): StepCacheStore {
   const prefix = options.prefix ?? "tubeless-cache/";
+  const resolve = typeof bucket === "function" ? bucket : () => bucket;
   return {
     async get(key) {
-      const object = await bucket.get(prefix + key);
+      const object = await resolve().get(prefix + key);
       if (!object) return undefined;
       const raw = object.customMetadata?.createdAtMs ?? "";
       const recorded = raw.trim() === "" ? Number.NaN : Number(raw);
@@ -35,7 +39,7 @@ export function createR2CacheStore(
       };
     },
     async set(key, entry) {
-      await bucket.put(prefix + key, entry.value, {
+      await resolve().put(prefix + key, entry.value, {
         customMetadata: { createdAtMs: String(entry.createdAtMs) },
       });
     },

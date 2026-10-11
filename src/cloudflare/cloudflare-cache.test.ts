@@ -43,6 +43,25 @@ describe("R2 cache store", () => {
     expect((await createR2CacheStore(bucket).get("k", {}))?.createdAtMs).toBe(5);
   });
 
+  it("resolves a bucket getter on every read and write", async () => {
+    const buckets = [memoryBucket(), memoryBucket()];
+    let current: R2BucketLike | undefined;
+    let resolutions = 0;
+    const store = createR2CacheStore(() => {
+      resolutions += 1;
+      if (!current) throw new Error("bucket is not bound");
+      return current;
+    });
+    expect(resolutions).toBe(0);
+    await expect(store.get("k", {})).rejects.toThrow("bucket is not bound");
+    current = buckets[0];
+    await store.set("k", { value: new Uint8Array([1]), createdAtMs: 42 }, {});
+    current = buckets[1];
+    expect(await store.get("k", {})).toBeUndefined();
+    expect(buckets.map((bucket) => bucket.keys())).toEqual([["tubeless-cache/k"], []]);
+    expect(resolutions).toBe(3);
+  });
+
   it("falls back to the upload time when createdAtMs metadata is empty", async () => {
     const bucket = memoryBucket();
     await bucket.put("tubeless-cache/k", new Uint8Array([1]), {
@@ -75,7 +94,15 @@ describe("JSON cache codec", () => {
   });
 
   it.each([
-    ["a sparse array", [1, , 3], "value[1]"],
+    [
+      "a sparse array",
+      (() => {
+        const sparse = [1, 2, 3];
+        delete sparse[1];
+        return sparse;
+      })(),
+      "value[1]",
+    ],
     ["-0", { n: -0 }, "value.n"],
     ["a symbol key", { [Symbol("s")]: 1 }, "value"],
     ["an extra array property", Object.assign([1], { foo: 1 }), "value"],

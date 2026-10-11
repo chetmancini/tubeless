@@ -161,6 +161,11 @@
       "types": "./dist/cloudflare/cloudflare.d.ts",
       "import": "./dist/cloudflare/cloudflare.js",
       "default": "./dist/cloudflare/cloudflare.js"
+    },
+    "./cloudflare/cache": {
+      "types": "./dist/cloudflare/cloudflare-cache.d.ts",
+      "import": "./dist/cloudflare/cloudflare-cache.js",
+      "default": "./dist/cloudflare/cloudflare-cache.js"
     }
   }
 }

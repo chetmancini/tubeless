@@ -240,9 +240,13 @@ read when a pipeline needs them.
   `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD`.
 - Keep handlers Workers-compatible: no durable filesystem writes, no `v8` serialization.
   Read bindings through `import { env } from "cloudflare:workers"`.
-- Give every cached step an explicit store and codec: `cache: { version, store:
-  createR2CacheStore(env.TUBELESS_BUCKET), codec: jsonCacheCodec }` from
-  `tubeless/cloudflare`. The default file store and V8 codec fail on Workers, and
+- Give every cached step an explicit store and codec from `tubeless/cloudflare/cache`,
+  never from `tubeless/cloudflare`, which loads only in workerd while step definitions
+  also load in Node. Follow the guide's pattern: a small module passes a bucket getter
+  to `createR2CacheStore`, exports `bindCacheBucket` and `r2Cache`, and
+  `cloudflare/worker.ts` calls `bindCacheBucket(env.TUBELESS_BUCKET)`. Steps use
+  `cache: { version, ...r2Cache }`. Those steps fail in local Node runs unless another
+  bucket or store is supplied. The default file store and V8 codec fail on Workers, and
   `jsonCacheCodec` accepts only plain JSON data.
 - Respect the run limit: one run executes in one Durable Object alarm and is aborted at
   14 minutes (`limits.maxRunDurationMs` cannot raise it). Keep single steps short, put

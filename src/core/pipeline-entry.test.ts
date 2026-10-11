@@ -297,6 +297,25 @@ describe("module runtime boundaries", () => {
     );
   });
 
+  it("keeps the Cloudflare cache entrypoint loadable outside workerd", () => {
+    const pending = [resolve(dist, "cloudflare/cloudflare-cache.js")];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      for (const specifier of externalSpecifiers(file)) {
+        expect(specifier, `${relative(dist, file)} imports ${specifier}`).not.toMatch(
+          /^cloudflare:/
+        );
+      }
+      pending.push(...dependencies(file));
+    }
+    expect(readFileSync(resolve(dist, "cloudflare/cloudflare-cache.d.ts"), "utf8")).not.toMatch(
+      /cloudflare:|@cloudflare\//
+    );
+  });
+
   it("keeps CLI authoring independent of workbench, storage and Studio", () => {
     const pending = [resolve(dist, "cli/cli.js")];
     const visited = new Set<string>();

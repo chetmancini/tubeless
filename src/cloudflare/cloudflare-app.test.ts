@@ -10,9 +10,15 @@ const AUD = "a".repeat(64);
 const ISSUER = "https://test.cloudflareaccess.com";
 
 const WORKER = String.raw`
+import { env } from "cloudflare:workers";
 import { createSteps, definePipeline } from "./core/pipeline.js";
 import { defineProject } from "./project/project.js";
 import { createCloudflareApp } from "./cloudflare/cloudflare.js";
+import { createR2CacheStore, jsonCacheCodec } from "./cloudflare/cloudflare-cache.js";
+// The documented pattern: step definitions hold a getter; the Worker entry binds the bucket.
+let bucket;
+const bindCacheBucket = (value) => { bucket = value; };
+const r2Cache = { store: createR2CacheStore(() => { if (!bucket) throw new Error("Bind the R2 cache bucket in cloudflare/worker.ts before running cached steps."); return bucket; }), codec: jsonCacheCodec };
 const schema = (validate, input) => ({ "~standard": { vendor: "test", version: 1, validate, jsonSchema: { input: () => input } } });
 const nameInput = { type: "object", properties: { name: { type: "string" } }, required: ["name"] };
 const emptyInput = { type: "object", properties: {} };
@@ -22,11 +28,14 @@ const slowSteps = createSteps(schema((v) => ({ value: v ?? {} }), emptyInput));
 const wait = slowSteps.step("wait", { run: (_i, c) => new Promise((resolve, reject) => { const t = setTimeout(resolve, 20000, "done"); c.signal.addEventListener("abort", () => { clearTimeout(t); reject(c.signal.reason); }, { once: true }); }) });
 const cachedSteps = createSteps(schema((v) => ({ value: v ?? {} }), emptyInput));
 const cached = cachedSteps.step("cached", { cache: { version: "v1" }, run: () => ({ ok: true }) });
+const r2Cached = cachedSteps.step("r2-cached", { cache: { version: "v1", ...r2Cache }, run: () => ({ rows: [1, 2, 3] }) });
 const app = createCloudflareApp(defineProject("worker-test", [
   definePipeline({ id: "greeting", name: "Greeting", steps: [greet], finalize: greet }),
   definePipeline({ id: "slow", steps: [wait], finalize: wait }),
   definePipeline({ id: "cached", steps: [cached], finalize: cached }),
+  definePipeline({ id: "r2-cached", steps: [r2Cached], finalize: r2Cached }),
 ]));
+bindCacheBucket(env.TUBELESS_BUCKET);
 export default app.worker;
 export const { TubelessStudio, TubelessRun } = app.durableObjects;
 `;
@@ -294,7 +303,12 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
     const { commands } = (await (await call("/api/commands")).json()) as {
       commands: { id: string }[];
     };
-    expect(commands.map((command) => command.id)).toEqual(["greeting", "slow", "cached"]);
+    expect(commands.map((command) => command.id)).toEqual([
+      "greeting",
+      "slow",
+      "cached",
+      "r2-cached",
+    ]);
   });
 
   it("rejects cross-origin mutations", async () => {
@@ -321,19 +335,12 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
     expect(detail).toContain("hello ada");
   });
 
-  it("resolves a launch whose command exits before recording a run", async () => {
+  it("records an options-schema rejection as a failed run", async () => {
+    // The run object parses values first, then core records the schema failure as a run.
     const response = await launch("greeting", { name: "ab" });
-    const body = (await response.json()) as {
-      accepted: boolean;
-      runId?: string;
-      errors?: string[];
-    };
-    if (body.accepted)
-      expect(await runStatus(body.runId!, (status) => status !== "running")).toBe("failed");
-    else
-      expect(body.errors?.join("\n")).toMatch(
-        /Expected at least 3 characters|before recording a run/
-      );
+    expect(response.status).toBe(202);
+    const { runId } = (await response.json()) as { runId: string };
+    expect(await runStatus(runId, (status) => status !== "running")).toBe("failed");
   });
 
   it("cancels a live run", async () => {
@@ -346,6 +353,21 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
     );
     expect(cancel.status).toBe(202);
     expect(await runStatus(runId, (status) => status !== "running")).toBe("cancelled");
+  });
+
+  it("reuses a cached step through R2 bound from the Worker entry", async () => {
+    const stepSource = async () => {
+      const response = await launch("r2-cached", {});
+      expect(response.status).toBe(202);
+      const { runId } = (await response.json()) as { runId: string };
+      expect(await runStatus(runId, (status) => status !== "running")).toBe("completed");
+      const { run } = (await (await call(`/api/runs/${encodeURIComponent(runId)}`)).json()) as {
+        run: { steps: { id: string; outputSource?: string }[] };
+      };
+      return run.steps.find((step) => step.id === "r2-cached")?.outputSource;
+    };
+    expect(await stepSource()).toBeUndefined();
+    expect(await stepSource()).toBe("cache");
   });
 
   it("fails a cached step that has no Workers cache store without breaking Studio", async () => {
