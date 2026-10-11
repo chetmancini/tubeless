@@ -211,6 +211,8 @@ and interactive reporter orchestration.
 - `run-store/run-store.ts` defines the storage and snapshot contracts and coordinates
   incremental projection and caching. It groups runs by definition without reaching
   into a projection's mutable state.
+- `run-store/run-store-sql.ts` owns the shared schema, statements, row mapping and list query
+  for SQLite drivers; it imports no driver.
 - `run-store/run-projection.ts` owns one run's metadata, attempts, progress and logs.
   It retains only required fields and copies retained identities and errors at the
   boundary. `run-store/definition-projection.ts` owns definition replacement and
