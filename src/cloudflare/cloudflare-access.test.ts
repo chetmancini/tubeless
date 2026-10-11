@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   createAccessAuthenticator,
   parseAccessConfig,
@@ -8,21 +8,36 @@ import {
 const AUD = "4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2";
 const config = parseAccessConfig("https://team.cloudflareaccess.com/", AUD) as AccessConfig;
 let keys: CryptoKeyPair;
-let jwk: JsonWebKey;
+type TestJwk = JsonWebKey & { readonly kid: string };
+let jwk: TestJwk;
 const NOW = 1_800_000_000_000;
+const MAX_KEY_AGE_MS = 3_600_000;
 
 const encode = (value: unknown) =>
   btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 
-async function token(claims: Record<string, unknown>, kid = "k1", key = keys.privateKey) {
-  const head = encode({ alg: "RS256", kid, typ: "JWT" });
+function base64url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+}
+
+/** Sign an arbitrary header and claim set with the test key; claims default to a valid token at NOW. */
+async function sign(
+  header: Record<string, unknown>,
+  claims: Record<string, unknown>,
+  key = keys.privateKey
+) {
+  const head = encode(header);
   const body = encode({ iss: config.issuer, aud: [AUD], exp: NOW / 1000 + 300, ...claims });
   const signature = new Uint8Array(
     await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(`${head}.${body}`))
   );
-  let binary = "";
-  for (const byte of signature) binary += String.fromCharCode(byte);
-  return `${head}.${body}.${btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "")}`;
+  return `${head}.${body}.${base64url(signature)}`;
+}
+
+async function token(claims: Record<string, unknown>, kid = "k1", key = keys.privateKey) {
+  return sign({ alg: "RS256", kid, typ: "JWT" }, claims, key);
 }
 
 const request = (jwt?: string, path = "/api/snapshot") =>
@@ -42,17 +57,31 @@ beforeAll(async () => {
     true,
     ["sign", "verify"]
   )) as CryptoKeyPair;
-  jwk = { ...(await crypto.subtle.exportKey("jwk", keys.publicKey)), kid: "k1" } as JsonWebKey;
+  jwk = { ...(await crypto.subtle.exportKey("jwk", keys.publicKey)), kid: "k1" } as TestJwk;
 });
 
-function authenticator(fetchCount = { value: 0 }) {
+interface Harness {
+  readonly count?: { value: number };
+  readonly clock?: { now: number };
+  readonly jwks?: TestJwk[];
+  readonly fetchJson?: (url: string) => Promise<unknown>;
+  readonly refreshIntervalMs?: number;
+}
+
+function authenticator(harness: Harness = {}) {
+  const count = harness.count ?? { value: 0 };
+  const clock = harness.clock ?? { now: NOW };
+  const jwks = harness.jwks ?? [jwk];
   return createAccessAuthenticator(config, {
-    now: () => NOW,
-    fetchJson: async (url) => {
-      expect(url).toBe("https://team.cloudflareaccess.com/cdn-cgi/access/certs");
-      fetchCount.value += 1;
-      return { keys: [jwk] };
-    },
+    now: () => clock.now,
+    refreshIntervalMs: harness.refreshIntervalMs,
+    fetchJson:
+      harness.fetchJson ??
+      (async (url) => {
+        expect(url).toBe("https://team.cloudflareaccess.com/cdn-cgi/access/certs");
+        count.value += 1;
+        return { keys: jwks };
+      }),
   });
 }
 
@@ -106,6 +135,20 @@ describe("Access authenticator", () => {
     ).toBe(401);
   });
 
+  it("rejects RS512 headers and missing kid even when the signature is valid", async () => {
+    const auth = authenticator();
+    expect(
+      (await auth(request(await sign({ alg: "RS512", kid: "k1", typ: "JWT" }, {}))))?.status
+    ).toBe(401);
+    expect((await auth(request(await sign({ alg: "RS256", typ: "JWT" }, {}))))?.status).toBe(401);
+  });
+
+  it("rejects tokens with a missing or non-numeric exp", async () => {
+    const auth = authenticator();
+    expect((await auth(request(await token({ exp: undefined }))))?.status).toBe(401);
+    expect((await auth(request(await token({ exp: "soon" }))))?.status).toBe(401);
+  });
+
   it("returns 403 for a foreign issuer or audience", async () => {
     expect((await authenticator()(request(await token({ aud: ["other"] }))))?.status).toBe(403);
     expect(
@@ -118,16 +161,121 @@ describe("Access authenticator", () => {
     const response = await authenticator()(request(undefined, "/"));
     expect(response?.status).toBe(403);
     expect(response?.headers.get("content-type")).toMatch(/^text\/plain/);
+    expect(await response?.text()).toMatch(/sign-in is required/);
+  });
+
+  it("answers page requests denied by issuer or audience with an administrator message", async () => {
+    const response = await authenticator()(request(await token({ aud: ["other"] }), "/"));
+    expect(response?.status).toBe(403);
+    expect(await response?.text()).toMatch(/denied this request/);
   });
 
   it("caches keys and rate-limits refetches for unknown key ids", async () => {
     const count = { value: 0 };
-    const auth = authenticator(count);
+    const auth = authenticator({ count });
     await auth(request(await token({})));
     await auth(request(await token({})));
     expect(count.value).toBe(1);
     expect((await auth(request(await token({}, "unknown"))))?.status).toBe(401);
     expect((await auth(request(await token({}, "unknown"))))?.status).toBe(401);
     expect(count.value).toBe(1);
+  });
+
+  it("refetches a new kid once refreshIntervalMs has elapsed", async () => {
+    const count = { value: 0 };
+    const clock = { now: NOW };
+    const jwks = [jwk];
+    const auth = authenticator({ count, clock, jwks });
+    await auth(request(await token({})));
+    jwks.push({ ...jwk, kid: "k2" });
+    expect((await auth(request(await token({}, "k2"))))?.status).toBe(401);
+    expect(count.value).toBe(1);
+    clock.now = NOW + 30_000;
+    expect(await auth(request(await token({}, "k2")))).toBeUndefined();
+    expect(count.value).toBe(2);
+  });
+
+  it("denies without throwing when the certificate fetch rejects", async () => {
+    const auth = authenticator({
+      fetchJson: async () => {
+        throw new Error("network down");
+      },
+    });
+    expect((await auth(request(await token({}))))?.status).toBe(401);
+  });
+
+  it("denies without throwing when WebCrypto verification throws", async () => {
+    const auth = authenticator();
+    expect(await auth(request(await token({})))).toBeUndefined();
+    const verify = vi
+      .spyOn(crypto.subtle, "verify")
+      .mockRejectedValueOnce(new DOMException("operation failed", "OperationError"));
+    try {
+      expect((await auth(request(await token({}))))?.status).toBe(401);
+    } finally {
+      verify.mockRestore();
+    }
+  });
+
+  it("shares one fetch between concurrent first requests", async () => {
+    const count = { value: 0 };
+    const auth = authenticator({ count });
+    const [first, second] = [await token({}), await token({})];
+    const results = await Promise.all([auth(request(first)), auth(request(second))]);
+    expect(results).toEqual([undefined, undefined]);
+    expect(count.value).toBe(1);
+  });
+
+  it("keeps the other keys when one JWK fails to import", async () => {
+    // Node's importKey accepts most malformed RSA JWKs, so the first import is forced to reject.
+    const auth = authenticator({
+      jwks: [{ kid: "bad", kty: "RSA", n: "AAAA", e: "AQAB" } as TestJwk, jwk],
+    });
+    const importKey = vi
+      .spyOn(crypto.subtle, "importKey")
+      .mockRejectedValueOnce(new DOMException("malformed key", "DataError"));
+    try {
+      expect(await auth(request(await token({})))).toBeUndefined();
+    } finally {
+      importKey.mockRestore();
+    }
+  });
+
+  it("stops trusting keys that have aged out of the JWKS", async () => {
+    const clock = { now: NOW };
+    const jwks = [jwk];
+    const auth = authenticator({ clock, jwks });
+    expect(await auth(request(await token({})))).toBeUndefined();
+    clock.now = NOW + MAX_KEY_AGE_MS;
+    const exp = clock.now / 1000 + 300;
+    jwks.splice(0, jwks.length, { ...jwk, kid: "k2" });
+    expect((await auth(request(await token({ exp }))))?.status).toBe(401);
+    expect(await auth(request(await token({ exp }, "k2")))).toBeUndefined();
+  });
+
+  it("keeps accepting an aged key that is still in the JWKS", async () => {
+    const clock = { now: NOW };
+    const auth = authenticator({ clock });
+    expect(await auth(request(await token({})))).toBeUndefined();
+    clock.now = NOW + MAX_KEY_AGE_MS;
+    const exp = clock.now / 1000 + 300;
+    expect(await auth(request(await token({ exp })))).toBeUndefined();
+  });
+
+  it("denies stale keys when the refresh after aging fails", async () => {
+    const clock = { now: NOW };
+    let failing = false;
+    const auth = authenticator({
+      clock,
+      fetchJson: async () => {
+        if (failing) throw new Error("network down");
+        return { keys: [jwk] };
+      },
+    });
+    expect(await auth(request(await token({})))).toBeUndefined();
+    failing = true;
+    clock.now = NOW + MAX_KEY_AGE_MS;
+    const exp = clock.now / 1000 + 300;
+    expect((await auth(request(await token({ exp }))))?.status).toBe(401);
   });
 });

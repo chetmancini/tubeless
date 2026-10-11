@@ -13,6 +13,8 @@ export interface AccessAuthenticatorOptions {
 }
 
 const CLOCK_SKEW_SECONDS = 60;
+// Keys older than this are not trusted, so rotated-out keys stop verifying without a restart.
+const MAX_KEY_AGE_MS = 3_600_000;
 const TEAM_DOMAIN = /^[a-z0-9-]+\.cloudflareaccess\.com$/;
 const RSA_PARAMETERS = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" } as const;
 
@@ -67,7 +69,11 @@ function denial(request: Request, status: 401 | 403): Response {
           "Ask an administrator for access to this Studio."
         );
   }
-  return new Response("Cloudflare Access sign-in is required. Open Studio again to sign in.\n", {
+  const message =
+    status === 401
+      ? "Cloudflare Access sign-in is required. Open Studio again to sign in.\n"
+      : "Cloudflare Access denied this request. Ask an administrator for access.\n";
+  return new Response(message, {
     status: 403,
     headers: { "cache-control": "no-store", "content-type": "text/plain; charset=utf-8" },
   });
@@ -88,10 +94,20 @@ export function createAccessAuthenticator(
   const now = options.now ?? Date.now;
   const refreshIntervalMs = options.refreshIntervalMs ?? 30_000;
   let keys = new Map<string, CryptoKey>();
+  // Start time of the last successful refresh; governs key trust.
+  let keysFetchedAtMs: number | undefined;
+  // Start time of the last attempt; governs the refetch rate limit.
   let fetchedAtMs: number | undefined;
+  // In-flight refresh shared by concurrent callers, so one fetch serves them all.
+  let pending: Promise<void> | undefined;
+
+  function keysAreFresh(): boolean {
+    return keysFetchedAtMs !== undefined && now() - keysFetchedAtMs < MAX_KEY_AGE_MS;
+  }
 
   async function refresh(): Promise<void> {
-    fetchedAtMs = now();
+    const startedAt = now();
+    fetchedAtMs = startedAt;
     const body = await fetchJson(config.certsUrl);
     const next = new Map<string, CryptoKey>();
     const entries =
@@ -109,26 +125,38 @@ export function createAccessAuthenticator(
         typeof jwk.e !== "string"
       )
         continue;
-      next.set(
-        jwk.kid,
-        await crypto.subtle.importKey(
+      let key: CryptoKey;
+      try {
+        key = await crypto.subtle.importKey(
           "jwk",
           { kty: "RSA", n: jwk.n, e: jwk.e, alg: "RS256", ext: true },
           RSA_PARAMETERS,
           false,
           ["verify"]
-        )
-      );
+        );
+      } catch {
+        // One malformed key must not drop the rest of the set.
+        continue;
+      }
+      next.set(jwk.kid, key);
     }
     keys = next;
+    keysFetchedAtMs = startedAt;
   }
 
   async function keyFor(kid: string): Promise<CryptoKey | undefined> {
     const cached = keys.get(kid);
-    if (cached) return cached;
-    if (fetchedAtMs !== undefined && now() - fetchedAtMs < refreshIntervalMs) return undefined;
-    await refresh();
-    return keys.get(kid);
+    if (cached && keysAreFresh()) return cached;
+    if (!pending) {
+      if (fetchedAtMs !== undefined && now() - fetchedAtMs < refreshIntervalMs) return undefined;
+      pending = refresh().finally(() => {
+        pending = undefined;
+      });
+    }
+    await pending;
+    // Stale keys after a failed refresh must deny, so freshness is checked again here.
+    const refreshed = keys.get(kid);
+    return refreshed && keysAreFresh() ? refreshed : undefined;
   }
 
   return async (request) => {
@@ -156,12 +184,17 @@ export function createAccessAuthenticator(
       return denial(request, 401);
     }
     if (!key) return denial(request, 401);
-    const valid = await crypto.subtle.verify(
-      RSA_PARAMETERS.name,
-      key,
-      signature,
-      new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`)
-    );
+    let valid: boolean;
+    try {
+      valid = await crypto.subtle.verify(
+        RSA_PARAMETERS.name,
+        key,
+        signature,
+        new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`)
+      );
+    } catch {
+      return denial(request, 401);
+    }
     if (!valid) return denial(request, 401);
     const seconds = now() / 1000;
     if (typeof payload.exp !== "number" || seconds > payload.exp + CLOCK_SKEW_SECONDS)
