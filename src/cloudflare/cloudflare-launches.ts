@@ -204,7 +204,7 @@ export class LaunchRegistry {
   stale(cutoffMs: number): string[] {
     return this.storage.sql
       .exec(
-        "SELECT launch_id FROM tubeless_launches WHERE state IN ('starting', 'running') AND created_at_ms < ?",
+        "SELECT launch_id FROM tubeless_launches WHERE state IN ('starting', 'running') AND created_at_ms <= ? ORDER BY created_at_ms",
         cutoffMs
       )
       .toArray()

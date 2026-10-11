@@ -251,9 +251,13 @@ beforeAll(async () => {
           compatibilityDate: "2026-10-01",
           manifest: { mainModule: "worker.js", modules: manifestModules(GATE_ROUTER) },
           env: Object.fromEntries(
-            ["tubeless-open", "tubeless-blank", "tubeless-half", "tubeless-limits"].map(
-              (worker) => [worker, { type: "worker", worker }]
-            )
+            [
+              "tubeless-open",
+              "tubeless-blank",
+              "tubeless-half",
+              "tubeless-limits",
+              "tubeless-no-studio",
+            ].map((worker) => [worker, { type: "worker", worker }])
           ),
         },
       },
@@ -263,6 +267,8 @@ beforeAll(async () => {
         ACCESS_AUD: { type: "text", value: " " },
       }),
       gateWorker("tubeless-half", { ACCESS_AUD: { type: "text", value: AUD } }),
+      // A Studio binding that cannot be reached makes the forward throw.
+      gateWorker("tubeless-no-studio", { TUBELESS_STUDIO: { type: "text", value: "unbound" } }),
       {
         config: {
           name: "tubeless-limits",
@@ -401,6 +407,17 @@ describe("tubeless/cloudflare Worker gate and limits on workerd", { timeout: 60_
       expect(response.status).toBe(503);
       expect(await response.json()).toMatchObject({ code: "access_misconfigured" });
     }
+  });
+
+  it("answers 503 when the Studio object cannot be reached", async () => {
+    const api = await gate("tubeless-no-studio", "http://localhost/api/snapshot");
+    expect(api.status).toBe(503);
+    expect(await api.json()).toMatchObject({ code: "studio_unavailable" });
+    const page = await gate("tubeless-no-studio", "http://localhost/");
+    expect(page.status).toBe(503);
+    expect(page.headers.get("content-type")).toMatch(/^text\/plain/);
+    expect(await page.text()).toMatch(/Studio is temporarily unavailable/);
+    expect(workerLogs.join("\n")).toMatch(/getByName/);
   });
 
   it("validates limits.maxRunDurationMs", async () => {

@@ -58,6 +58,8 @@ function setup(
     now?: () => number;
     storage?: ReturnType<typeof createFakeDurableStorage>;
     start?: (job: RunJob, run: RunObjectCore) => Promise<void>;
+    commands?: typeof commands;
+    startTimeoutMs?: number;
   } = {}
 ) {
   const runs = new Map<string, RunObjectCore>();
@@ -91,11 +93,11 @@ function setup(
   };
   studio = new StudioObjectCore({
     storage: studioStorage,
-    commands,
+    commands: options.commands ?? commands,
     clientScript: "",
     maxRunDurationMs: 60_000,
     runStub,
-    startTimeoutMs: 200,
+    startTimeoutMs: options.startTimeoutMs ?? 200,
     ...(options.now ? { now: options.now } : {}),
   });
   const api = (path: string, init?: RequestInit) =>
@@ -144,26 +146,16 @@ describe("Studio object", () => {
     expect(rejected.status).toBe(400);
   });
 
-  it("answers a command that exits before recording a run", async () => {
+  it("records an options-schema rejection as a failed run", async () => {
     const { api, launch, settled } = setup();
     const response = await launch("greeting", { name: "ab" });
     await Promise.all(settled);
-    expect([202, 400]).toContain(response.status);
-    const body = (await response.json()) as {
-      accepted: boolean;
-      runId?: string;
-      errors?: string[];
+    expect(response.status).toBe(202);
+    const { runId } = (await response.json()) as { runId: string };
+    const detail = (await (await api(`/api/runs/${encodeURIComponent(runId)}`)).json()) as {
+      run: { status: string };
     };
-    if (body.accepted) {
-      const detail = (await (
-        await api(`/api/runs/${encodeURIComponent(body.runId ?? "")}`)
-      ).json()) as { run: { status: string } };
-      expect(detail.run.status).toBe("failed");
-    } else {
-      expect(body.errors?.join("\n")).toMatch(
-        /Expected at least 3 characters|before recording a run/
-      );
-    }
+    expect(detail.run.status).toBe("failed");
   });
 
   it("cancels a live run through its run object", async () => {
@@ -264,6 +256,35 @@ describe("Studio object", () => {
     expect(response.status).toBe(400);
     expect(JSON.stringify(await response.json())).toMatch(/could not start/);
     expect(starts).toEqual([]);
+  });
+
+  it("rejects values whose parsing throws before starting a run", async () => {
+    const real = commands.get("greeting")!;
+    const throwing = new Map([
+      [
+        "greeting",
+        {
+          descriptor: real.descriptor,
+          command: {
+            ...real.command,
+            parseValues: () => {
+              throw new Error("values could not be parsed");
+            },
+          },
+        },
+      ],
+    ]);
+    const { launch, starts } = setup({ commands: throwing });
+    const response = await launch("greeting", { name: "ada" });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ errors: ["values could not be parsed"] });
+    expect(starts).toEqual([]);
+  });
+
+  it("names a one-second start timeout in the singular", async () => {
+    const { launch } = setup({ start: () => new Promise<void>(() => {}), startTimeoutMs: 1_000 });
+    const response = await launch("greeting", { name: "ada" });
+    expect(JSON.stringify(await response.json())).toMatch(/within 1 second\./);
   });
 
   it("answers a hung start within the start timeout", async () => {

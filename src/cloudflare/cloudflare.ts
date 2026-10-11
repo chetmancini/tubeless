@@ -77,6 +77,21 @@ function maxRunDuration(value: number | undefined): number {
   return value;
 }
 
+function studioUnavailable(request: Request): Response {
+  if (new URL(request.url).pathname.startsWith("/api/")) {
+    return errorResponse(
+      503,
+      "studio_unavailable",
+      "Studio is temporarily unavailable.",
+      "Retry in a moment."
+    );
+  }
+  return new Response("Studio is temporarily unavailable. Retry in a moment.\n", {
+    status: 503,
+    headers: { "cache-control": "no-store", "content-type": "text/plain; charset=utf-8" },
+  });
+}
+
 /** Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects. */
 export function createCloudflareApp(
   project: PipelineProject<string, readonly AnyProjectPipeline[]>,
@@ -120,8 +135,13 @@ export function createCloudflareApp(
           "Enable Cloudflare Access for this Worker, set ACCESS_TEAM_DOMAIN and ACCESS_AUD, then redeploy."
         );
       }
-      // Forward the original request: the Studio host checks mutation Origin against its URL.
-      return env.TUBELESS_STUDIO.getByName("default").fetch(request);
+      try {
+        // Forward the original request: the Studio host checks mutation Origin against its URL.
+        return await env.TUBELESS_STUDIO.getByName("default").fetch(request);
+      } catch (error) {
+        console.error(error);
+        return studioUnavailable(request);
+      }
     },
   };
 

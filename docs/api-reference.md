@@ -286,7 +286,7 @@ Package: `tubeless`
 | [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L25)         | Options for createCloudflareApp.                                                          |
 | [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L38) | Durable Object class to export from the Worker entry under its binding's export name.     |
 | [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L33)             | Worker module handler to use as the Worker entry's default export.                        |
-| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L81)          | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects. |
+| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L96)          | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects. |
 | [`createR2CacheStore`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L24)     | Step cache entries in R2.                                                                 |
 | [`jsonCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L132)        | Lossless JSON codec for Workers, where the default V8 codec is unavailable.               |
 | [`R2BucketLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L11)           | Structural subset of an R2 bucket binding that the cache store uses.                      |

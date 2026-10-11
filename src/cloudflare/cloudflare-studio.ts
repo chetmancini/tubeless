@@ -23,7 +23,7 @@ const START_FAILED = "The run host could not start the run.";
 const START_UNCONFIRMED =
   "The run host could not confirm the run started. It may have started; check history before launching again.";
 const formatDuration = (ms: number) =>
-  ms >= 1000 && ms % 1000 === 0 ? `${ms / 1000} seconds` : `${ms} ms`;
+  ms === 1000 ? "1 second" : ms > 1000 && ms % 1000 === 0 ? `${ms / 1000} seconds` : `${ms} ms`;
 const SILENT_OUTPUT: HostedOutput = {
   cwd: "/tmp",
   stdout: { write: () => {} },
@@ -69,10 +69,15 @@ class DurableStudioLauncher implements PipelineRunStudioLauncher {
   ): Promise<PipelineRunStudioLaunchResult> {
     const entry = this.deps.commands.get(commandId);
     if (!entry) return { accepted: false, errors: ["Pipeline command not found."] };
-    const parsed = entry.command.parseValues(
-      values,
-      hostedCommandContext(SILENT_OUTPUT, new AbortController().signal)
-    );
+    let parsed: ReturnType<HostedCommand["command"]["parseValues"]>;
+    try {
+      parsed = entry.command.parseValues(
+        values,
+        hostedCommandContext(SILENT_OUTPUT, new AbortController().signal)
+      );
+    } catch (error) {
+      return { accepted: false, errors: [error instanceof Error ? error.message : String(error)] };
+    }
     if (parsed.kind === "error") return { accepted: false, errors: parsed.errors };
     if (parsed.kind === "help")
       return { accepted: false, errors: ["Help is not a launchable value set."] };

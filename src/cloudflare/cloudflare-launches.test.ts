@@ -145,8 +145,9 @@ describe("launch registry", () => {
   it("fails unbound launches without inventing history and lists stale launches", async () => {
     const { registry, store } = setup();
     registry.create("old", "demo", 100);
+    registry.create("edge", "demo", 5_000);
     registry.create("new", "demo", 10_000);
-    expect(registry.stale(5_000)).toEqual(["old"]);
+    expect(registry.stale(5_000)).toEqual(["old", "edge"]);
     expect(registry.hasActive()).toBe(true);
     registry.fail("old", "Pipeline command exited (2) before recording a run.", 6_000);
     expect(await store.listEvents()).toEqual([]);
