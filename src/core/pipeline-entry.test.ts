@@ -35,10 +35,12 @@ const allowedDependencies: Record<string, readonly string[]> = {
   cli: ["core", "node", "reporter", "utilities"],
   testing: ["core", "utilities"],
   project: ["core", "utilities"],
+  hosting: ["cli", "core", "project", "render", "studio", "tracing", "utilities"],
   workbench: [
     "agent",
     "cli",
     "core",
+    "hosting",
     "project",
     "render",
     "reporter",
@@ -247,11 +249,33 @@ describe("module runtime boundaries", () => {
       visited.add(file);
       const name = relative(dist, file).split(sep).join("/");
       expect(
-        ["cli", "core", "node", "reporter", "render", "tracing", "utilities"].includes(
+        ["cli", "core", "hosting", "node", "reporter", "render", "tracing", "utilities"].includes(
           moduleName(file)
         ) || workbenchInternals.has(name),
         `Studio launch execution reaches an entrypoint or concrete adapter: ${name}`
       ).toBe(true);
+      pending.push(...dependencies(file));
+    }
+    expect(visited.size).toBeGreaterThan(1);
+  });
+
+  it("keeps the hosting kit free of workbench, storage adapters and the HTTP listener", () => {
+    const pending = [resolve(dist, "hosting/hosting-commands.js")];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      const name = relative(dist, file).split(sep).join("/");
+      expect(moduleName(file), `Hosting reaches ${name}`).not.toBe("workbench");
+      expect(name).not.toMatch(
+        /^run-store\/run-store-(sqlite|ndjson)\.js$|^studio\/run-store-ui(-node|-page-node)?\.js$/
+      );
+      for (const specifier of externalSpecifiers(file)) {
+        if (moduleName(file) === "hosting") {
+          expect(specifier, `${name} imports ${specifier}`).not.toMatch(/^node:/);
+        }
+      }
       pending.push(...dependencies(file));
     }
     expect(visited.size).toBeGreaterThan(1);

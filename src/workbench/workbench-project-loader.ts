@@ -4,11 +4,10 @@ import {
   importModuleNamespace,
   isWorkbenchPipelineCommand,
   selectUniqueExport,
-  type WorkbenchExecutablePipeline,
   type WorkbenchPipeline,
   type WorkbenchPipelineCommand,
 } from "./pipeline-module.js";
-import { definePipelineCommand } from "../cli/cli-pipeline-command.js";
+import { commandForPipeline } from "../hosting/hosting-commands.js";
 import { isPipelineProject, type AnyProjectPipeline } from "../project/pipeline-project.js";
 import {
   errorMessage,
@@ -79,37 +78,13 @@ function derivePipelineCommand(
   source: "directly loaded" | "project"
 ): { command: WorkbenchPipelineCommand; commandIo: WorkbenchCliIo } | LoadFailure {
   try {
-    if (!isExecutablePipeline(pipeline)) {
-      throw new Error("The selected pipeline does not expose executable run methods.");
-    }
-    // A missing runtime schema cannot prove that the erased pipeline input is empty.
-    if (pipeline.optionsSchema === undefined) {
-      const adapterLocation =
-        source === "project"
-          ? "register a definePipelineCommand with explicit params in the project entry list"
-          : "export a definePipelineCommand with explicit params";
-      throw new Error(
-        `Automatic commands require Standard JSON Schema input metadata. Use createSteps(schema), or ${adapterLocation}.`
-      );
-    }
-    return { command: definePipelineCommand(pipeline), commandIo: io };
+    return { command: commandForPipeline(pipeline, source), commandIo: io };
   } catch (error) {
     io.stderr.write(
       `Error: Cannot derive a CLI for ${source} pipeline ${JSON.stringify(pipeline.id)}: ${errorMessage(error)}\n`
     );
     return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.load };
   }
-}
-
-function isExecutablePipeline(
-  pipeline: WorkbenchPipeline
-): pipeline is WorkbenchExecutablePipeline {
-  return (
-    "run" in pipeline &&
-    typeof pipeline.run === "function" &&
-    "runOrThrow" in pipeline &&
-    typeof pipeline.runOrThrow === "function"
-  );
 }
 
 function createPipelineRegistration(

@@ -15,10 +15,7 @@ import { toFetchHeaders, toFetchRequest, writeFetchResponse } from "./run-store-
 import { createStudioRequestHandler, untrustedHostResponse } from "./run-store-ui-handler.js";
 import { createStudioApiHandler, type PipelineRunStudioApiOptions } from "./run-store-ui-api.js";
 import type { StudioHosting } from "./run-store-ui-hosting.js";
-export type {
-  PipelineRunStudioCommand,
-  PipelineRunStudioLaunchResult,
-} from "./run-store-ui-protocol.js";
+export type { PipelineRunStudioLaunchResult } from "./run-store-ui-protocol.js";
 
 export interface PipelineRunStudioOptions extends PipelineRunStudioApiOptions {
   store: PipelineRunEventReader | PipelineRunEventStore;
