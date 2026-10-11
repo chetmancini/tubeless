@@ -1,18 +1,26 @@
-import { basename, join, relative, sep } from "node:path";
+import { basename, isAbsolute, join, relative, sep } from "node:path";
 import type { DeployTargetScaffold } from "./workbench-init.js";
 
+/**
+ * Worker names must be at most 63 characters and R2 bucket names 3-63 characters that start and end
+ * with a letter or number. The bucket appends "-artifacts" (10 characters), so the base stops at 53.
+ */
 function workerName(cwd: string): string {
   const base = basename(cwd)
     .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 54);
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, 53)
+    .replace(/^-+|-+$/g, "");
   return base || "tubeless";
 }
 
 function importPath(fromDirectory: string, file: string): string {
-  const path = relative(fromDirectory, file).split(sep).join("/");
-  return path.startsWith(".") ? path : `./${path}`;
+  const path = relative(fromDirectory, file);
+  if (isAbsolute(path)) {
+    throw new Error(`Cannot import ${file} from ${fromDirectory}: they are on different drives.`);
+  }
+  const specifier = path.split(sep).join("/");
+  return specifier.startsWith("./") || specifier.startsWith("../") ? specifier : `./${specifier}`;
 }
 
 export const cloudflareScaffold: DeployTargetScaffold = {
@@ -27,7 +35,7 @@ export const cloudflareScaffold: DeployTargetScaffold = {
       {
         path: "cloudflare/worker.ts",
         contents: `import { createCloudflareApp } from "tubeless/cloudflare";
-import project from "${importPath(workerDirectory, projectFile)}";
+import project from ${JSON.stringify(importPath(workerDirectory, projectFile))};
 
 const app = createCloudflareApp(project);
 

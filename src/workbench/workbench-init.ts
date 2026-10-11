@@ -6,6 +6,7 @@ import {
   loadPipelineProjectFile,
 } from "./workbench-project-loader.js";
 import {
+  errorMessage,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
   type WorkbenchCliIo,
@@ -44,12 +45,13 @@ Options:
   -h, --help            Show this help
 `;
 
-async function exists(path: string): Promise<boolean> {
+/** Anything but a clean "not found" (for example ENOTDIR) counts as occupied, so init never writes through it. */
+async function occupied(path: string): Promise<boolean> {
   try {
     await stat(path);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ENOENT";
   }
 }
 
@@ -78,20 +80,35 @@ export async function runInit(argv: readonly string[], io: WorkbenchCliIo): Prom
           const command = await registration.loadCommand(commandIo);
           if ("exitCode" in command) return command.exitCode;
         }
-        const files = target.files({ cwd: commandIo.cwd, projectFile: loaded.filePath });
+        let files: readonly DeployTargetFile[];
+        try {
+          files = target.files({ cwd: commandIo.cwd, projectFile: loaded.filePath });
+        } catch (error) {
+          commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
+          return TUBELESS_WORKBENCH_EXIT_CODE.usage;
+        }
         const conflicts: string[] = [];
         for (const file of files)
-          if (await exists(resolve(commandIo.cwd, file.path))) conflicts.push(file.path);
+          if (await occupied(resolve(commandIo.cwd, file.path))) conflicts.push(file.path);
         if (conflicts.length > 0) {
           commandIo.stderr.write(
             `Error: Refusing to overwrite existing files: ${conflicts.join(", ")}\n`
           );
           return TUBELESS_WORKBENCH_EXIT_CODE.usage;
         }
+        const created: string[] = [];
         for (const file of files) {
           const path = resolve(commandIo.cwd, file.path);
-          await mkdir(dirname(path), { recursive: true });
-          await writeFile(path, file.contents, { flag: "wx" });
+          try {
+            await mkdir(dirname(path), { recursive: true });
+            await writeFile(path, file.contents, { flag: "wx" });
+          } catch (error) {
+            commandIo.stderr.write(`Error: Could not write ${file.path}: ${errorMessage(error)}\n`);
+            if (created.length > 0)
+              commandIo.stderr.write(`Already created: ${created.join(", ")}\n`);
+            return TUBELESS_WORKBENCH_EXIT_CODE.execution;
+          }
+          created.push(file.path);
           commandIo.stdout.write(`Created ${file.path}\n`);
         }
         commandIo.stdout.write(

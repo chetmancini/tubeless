@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -85,5 +85,95 @@ describe("tubeless init", () => {
     })) {
       expect(readFileSync(join(root, file.path), "utf8"), file.path).toBe(file.contents);
     }
+  });
+
+  it("reports write failures without a stack trace and lists what was created", async () => {
+    const { cwd, io, err } = workspace();
+    // A file where the cloudflare/ directory belongs makes the worker.ts target unwritable (ENOTDIR).
+    writeFileSync(join(cwd, "cloudflare"), "not a directory");
+    expect(await init(io)).not.toBe(0);
+    expect(err.join("")).toContain("cloudflare/worker.ts");
+    expect(err.join("")).not.toMatch(/\n\s+at /);
+    expect(existsSync(join(cwd, "cloudflare.config.ts"))).toBe(false);
+  });
+
+  it("reports files already created when a later write fails", async () => {
+    const { cwd, io, err } = workspace();
+    // A dangling symlink is not "occupied" for stat but still refuses an exclusive create.
+    symlinkSync(join(cwd, "nowhere"), join(cwd, "cloudflare.config.ts"));
+    expect(await init(io)).not.toBe(0);
+    expect(err.join("")).toContain("Could not write cloudflare.config.ts");
+    expect(err.join("")).toContain("Already created: cloudflare/worker.ts");
+  });
+});
+
+describe("cloudflare scaffold naming and imports", () => {
+  const generate = (base: string, projectFile?: string) => {
+    const cwd = join(tmpdir(), base);
+    const files = cloudflareScaffold.files({
+      cwd,
+      projectFile: projectFile ?? join(cwd, "tubeless.project.ts"),
+    });
+    const config = files.find((file) => file.path === "cloudflare.config.ts")!.contents;
+    return {
+      worker: /name: "([^"]*)"/.exec(config)![1]!,
+      bucket: /bindings\.r2\(\{ name: "([^"]*)" \}\)/.exec(config)![1]!,
+    };
+  };
+
+  it("keeps worker and bucket names within Cloudflare limits for long names", () => {
+    const { worker, bucket } = generate("a".repeat(100));
+    expect(worker.length).toBeLessThanOrEqual(53);
+    expect(bucket.length).toBeLessThanOrEqual(63);
+    expect(bucket).toMatch(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/);
+    expect(bucket).not.toContain("--");
+  });
+
+  it("does not leave a trailing dash when the cut lands on a separator", () => {
+    // 52 letters, a separator at the 53rd character, then more text.
+    const { worker, bucket } = generate(`${"a".repeat(52)} tail`);
+    expect(worker).toBe("a".repeat(52));
+    expect(bucket).toBe(`${"a".repeat(52)}-artifacts`);
+    expect(bucket.length).toBeLessThanOrEqual(63);
+  });
+
+  it("falls back to tubeless for names without letters or digits", () => {
+    expect(generate("!!!").worker).toBe("tubeless");
+    expect(generate("!!!").bucket).toBe("tubeless-artifacts");
+  });
+
+  it("allows digit-leading names", () => {
+    expect(generate("2024 Reports").worker).toBe("2024-reports");
+    expect(generate("2024 Reports").bucket).toBe("2024-reports-artifacts");
+  });
+
+  const workerImportFor = (projectFile: string) => {
+    const cwd = join(tmpdir(), "app");
+    const files = cloudflareScaffold.files({ cwd, projectFile: join(cwd, projectFile) });
+    return files[0]!.contents;
+  };
+
+  it("imports a project file from a subdirectory", () => {
+    expect(workerImportFor("src/tubeless.project.ts")).toContain(
+      'import project from "../src/tubeless.project.ts";'
+    );
+  });
+
+  it("imports a project file from a parent directory", () => {
+    expect(workerImportFor("../tubeless.project.ts")).toContain(
+      'import project from "../../tubeless.project.ts";'
+    );
+  });
+
+  it("prefixes dot-directories beside the worker with ./", () => {
+    expect(workerImportFor("cloudflare/.hidden/tubeless.project.ts")).toContain(
+      'import project from "./.hidden/tubeless.project.ts";'
+    );
+  });
+
+  it("escapes the project specifier", () => {
+    expect(workerImportFor('we"ird/tubeless.project.ts')).toContain(
+      'import project from "../we\\"ird/tubeless.project.ts";'
+    );
   });
 });
