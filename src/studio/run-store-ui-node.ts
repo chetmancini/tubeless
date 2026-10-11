@@ -8,8 +8,8 @@ interface NodeStreamingRequestInit extends RequestInit {
 
 /**
  * Convert a Node request into a Fetch request. The URL is a fixed placeholder:
- * routing uses the raw request target supplied separately, so no Host-derived
- * value is trusted here.
+ * the listener passes `request.url` as the handler's `rawTarget` and
+ * `request.headers.host` as its `authority`, so no Host-derived value is trusted here.
  */
 export function toFetchRequest(request: IncomingMessage): Request {
   const headers = new Headers();

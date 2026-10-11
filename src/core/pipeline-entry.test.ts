@@ -15,6 +15,13 @@ function dependencies(file: string): string[] {
     .map((specifier) => resolve(dirname(file), specifier));
 }
 
+function externalSpecifiers(file: string): string[] {
+  const source = readFileSync(file, "utf8");
+  return [...source.matchAll(/(?:\bfrom\s+|\bimport\s*(?:\(\s*)?)["']([^"']+)["']/g)]
+    .map((match) => match[1]!)
+    .filter((specifier) => !specifier.startsWith("."));
+}
+
 const allowedDependencies: Record<string, readonly string[]> = {
   agent: ["core", "tracing", "utilities"],
   core: ["tracing", "utilities"],
@@ -96,6 +103,25 @@ describe("module runtime boundaries", () => {
       pending.push(...dependencies(file));
     }
     expect(visited.size).toBe(allowed.size);
+  });
+
+  it("keeps the Studio request pipeline, page and API free of Node built-ins", () => {
+    const pending = [
+      resolve(dist, "studio/run-store-ui-handler.js"),
+      resolve(dist, "studio/run-store-ui-page.js"),
+      resolve(dist, "studio/run-store-ui-api.js"),
+    ];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      expect(externalSpecifiers(file), `${relative(dist, file)} imports a platform module`).toEqual(
+        []
+      );
+      pending.push(...dependencies(file));
+    }
+    expect(visited.size).toBeGreaterThan(3);
   });
 
   it("keeps history projection and Studio API routes free of execution, adapters and page assets", () => {

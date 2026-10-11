@@ -14,7 +14,7 @@ import {
 import {
   jsonResponse,
   errorResponse,
-  readRequestJson,
+  readJsonBody,
   decodePathSegment,
   StudioRequestError,
   unexpectedStudioErrorResponse,
@@ -190,7 +190,7 @@ export function createStudioApiHandler(
             "Send application/json with x-tubeless-studio-plan: 1 from the Studio origin."
           );
         }
-        const input = parseStudioPlanInput(await readRequestJson(request));
+        const input = parseStudioPlanInput(await readJsonBody(request));
         if (!input) {
           return errorResponse(
             400,
@@ -222,7 +222,7 @@ export function createStudioApiHandler(
             "Send application/json with x-tubeless-studio-launch: 1 from the Studio origin."
           );
         }
-        const launch = parseStudioLaunchRequest(await readRequestJson(request));
+        const launch = parseStudioLaunchRequest(await readJsonBody(request));
         if (!launch) {
           return errorResponse(
             400,

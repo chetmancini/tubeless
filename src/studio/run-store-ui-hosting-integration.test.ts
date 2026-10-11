@@ -2,9 +2,12 @@ import { createHash } from "node:crypto";
 import { createServer, request as httpRequest, type Server } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
-import { PIPELINE_RUN_STUDIO_SCRIPT, PIPELINE_RUN_STUDIO_STYLE } from "./run-store-ui-page.js";
+import { PIPELINE_RUN_STUDIO_STYLE } from "./run-store-ui-page.js";
+import { readStudioClientScript } from "./run-store-ui-page-node.js";
 import { parseStudioHosting } from "./run-store-ui-hosting.js";
 import { startPipelineRunStudio } from "./run-store-ui.js";
+
+const PIPELINE_RUN_STUDIO_SCRIPT = readStudioClientScript();
 
 const token = "a1".repeat(32);
 const cleanups: (() => Promise<void>)[] = [];

@@ -2,12 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   errorResponse,
   formatHttpUrlHost,
-  isLiteralOrLocalhostHttpHost,
   isUnspecifiedHttpHost,
   jsonResponse,
   normalizeHttpAuthority,
   parseHttpAuthority,
-  readRequestJson,
+  readJsonBody,
   StudioRequestError,
   unexpectedStudioErrorResponse,
 } from "./run-store-ui-http.js";
@@ -38,17 +37,6 @@ describe("studio HTTP authorities", () => {
     expect(isUnspecifiedHttpHost("::")).toBe(true);
     expect(isUnspecifiedHttpHost("127.0.0.1")).toBe(false);
     expect(isUnspecifiedHttpHost("::1")).toBe(false);
-  });
-
-  it("accepts localhost and literal IPs as wildcard Host names", () => {
-    expect(isLiteralOrLocalhostHttpHost("localhost")).toBe(true);
-    expect(isLiteralOrLocalhostHttpHost("LOCALHOST")).toBe(true);
-    expect(isLiteralOrLocalhostHttpHost("127.0.0.1")).toBe(true);
-    expect(isLiteralOrLocalhostHttpHost("192.0.2.10")).toBe(true);
-    expect(isLiteralOrLocalhostHttpHost("::1")).toBe(true);
-    expect(isLiteralOrLocalhostHttpHost("[::1]")).toBe(true);
-    expect(isLiteralOrLocalhostHttpHost("evil.example")).toBe(false);
-    expect(isLiteralOrLocalhostHttpHost("0.0.0.0")).toBe(true);
   });
 
   it("splits a normalized authority into hostname and port", () => {
@@ -90,9 +78,9 @@ describe("fetch-native Studio responses", () => {
 
   it("reads bounded JSON request bodies", async () => {
     const ok = new Request("http://studio.local/", { method: "POST", body: '{"a":1}' });
-    expect(await readRequestJson(ok)).toEqual({ a: 1 });
+    expect(await readJsonBody(ok)).toEqual({ a: 1 });
     const invalid = new Request("http://studio.local/", { method: "POST", body: "{" });
-    await expect(readRequestJson(invalid)).rejects.toMatchObject({
+    await expect(readJsonBody(invalid)).rejects.toMatchObject({
       code: "invalid_json",
       status: 400,
     });
@@ -100,9 +88,9 @@ describe("fetch-native Studio responses", () => {
       method: "POST",
       body: JSON.stringify({ text: "x".repeat(70_000) }),
     });
-    await expect(readRequestJson(large)).rejects.toBeInstanceOf(StudioRequestError);
+    await expect(readJsonBody(large)).rejects.toBeInstanceOf(StudioRequestError);
     await expect(
-      readRequestJson(
+      readJsonBody(
         new Request("http://studio.local/", { method: "POST", body: "x".repeat(70_000) })
       )
     ).rejects.toMatchObject({ code: "request_body_too_large", status: 413 });

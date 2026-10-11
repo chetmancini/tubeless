@@ -255,10 +255,14 @@ and interactive reporter orchestration.
   the browser's current snapshot when the revision, query and live launch IDs agree.
 - `studio/run-store-ui-api.ts` owns route behavior, command validation and API state.
   `studio/run-store-ui-http.ts` owns HTTP parsing, response formatting and authority
-  helpers. `studio/run-store-ui.ts` owns the listener, trusted-host enforcement,
-  page assets, CSP and server closure. Keep API handling behind the listener's
-  host and gateway checks. `studio/run-store-ui-hosting.ts` validates operator
-  configuration, raw mount paths, gateway credentials, and browser Origin without
+  helpers. `studio/run-store-ui-handler.ts` owns the platform-neutral request order:
+  authentication, trusted host, Origin on mutations, mount, health, page, then API.
+  `studio/run-store-ui-page.ts` builds the page and CSP from an injected client script;
+  `run-store-ui-page-node.ts` loads that script on Node. `studio/run-store-ui-node.ts`
+  bridges Node requests and responses to Fetch, and `studio/run-store-ui.ts` is only the
+  Node listener adapter: bind address, wildcard Host trust and server closure. Keep API
+  handling behind the handler's host and gateway checks. `studio/run-store-ui-hosting.ts`
+  validates operator configuration, raw mount paths and gateway credentials without
   loading stores or execution. Only the nonsecret mount enters page metadata;
   authentication remains outside core and the browser import graph.
 
