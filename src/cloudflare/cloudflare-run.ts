@@ -32,6 +32,8 @@ export interface BatchingOptions {
   readonly sleep?: (ms: number) => Promise<void>;
 }
 
+const boundedDuration = (job: RunJob) => Math.min(job.maxRunDurationMs, MAX_RUN_DURATION_MS);
+
 const isTopLevelStart = (event: PipelineTraceEvent) =>
   event.name === "pipeline.started" && event.parentRunId === undefined;
 
@@ -134,6 +136,7 @@ export async function runHostedJob(options: {
     return;
   }
   let recorded = false;
+  let deliveryFailure: { readonly error: unknown } | undefined;
   const batches = new BatchingTraceExporter(
     (sequence, events) => ingest.appendEvents(job.launchId, sequence, events),
     {
@@ -141,7 +144,10 @@ export async function runHostedJob(options: {
       maxDelayMs: 250,
       retries: 4,
       retryDelayMs: 250,
-      onFailure: (error) => controller.abort(error),
+      onFailure: (error) => {
+        deliveryFailure = { error };
+        controller.abort(error);
+      },
     }
   );
   const exporter: PipelineTraceExporter = {
@@ -154,7 +160,7 @@ export async function runHostedJob(options: {
   const deadline = setTimeout(
     () =>
       controller.abort(new DOMException("The run exceeded its maximum duration.", "TimeoutError")),
-    job.maxRunDurationMs
+    boundedDuration(job)
   );
   let exitCode: number;
   try {
@@ -163,9 +169,19 @@ export async function runHostedJob(options: {
     });
   } finally {
     clearTimeout(deadline);
+    // Drain pending events so no timer can deliver after the job's cleanup.
+    await batches.flush().catch(() => {});
   }
-  await batches.flush().catch(() => {});
-  if (!recorded) {
+  if (deliveryFailure) {
+    // The run may be fully recorded locally yet unknown to Studio; tell it, best effort.
+    const { error } = deliveryFailure;
+    const message = error instanceof Error ? error.message : String(error);
+    await ingest
+      .reportFailure(job.launchId, `Run events could not be delivered to Studio: ${message}`)
+      .catch((reportError: unknown) => {
+        console.error(reportError);
+      });
+  } else if (!recorded) {
     const detail = output.tail();
     await ingest.reportFailure(
       job.launchId,
@@ -206,6 +222,15 @@ export class RunObjectCore {
   }
 
   async alarm(): Promise<void> {
+    try {
+      await this.#runAlarm();
+    } catch (error) {
+      // Workers retries a throwing alarm up to 6 times; never re-run user code.
+      console.error(error);
+    }
+  }
+
+  async #runAlarm(): Promise<void> {
     const { storage } = this.deps;
     const job = await storage.get<RunJob>("job");
     if (!job) return;
@@ -221,7 +246,7 @@ export class RunObjectCore {
     }
     await storage.put("state", "running");
     // Post-mortem watchdog: fires only if this invocation is killed before clearing it.
-    await storage.setAlarm(this.#now() + job.maxRunDurationMs + 60_000);
+    await storage.setAlarm(this.#now() + boundedDuration(job) + 60_000);
     const controller = new AbortController();
     this.#controller = controller;
     try {
