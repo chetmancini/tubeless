@@ -64,6 +64,9 @@ export function createFakeDurableStorage(): DurableStorageLike & {
     async put(key, value) {
       values.set(key, structuredClone(value));
     },
+    async getAlarm() {
+      return alarm ?? null;
+    },
     async setAlarm(time) {
       alarm = time;
     },

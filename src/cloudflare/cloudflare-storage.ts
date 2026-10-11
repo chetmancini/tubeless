@@ -9,6 +9,7 @@ export interface DurableStorageLike {
   transactionSync<T>(fn: () => T): T;
   get<T>(key: string): Promise<T | undefined>;
   put(key: string, value: unknown): Promise<void>;
+  getAlarm(): Promise<number | null>;
   setAlarm(scheduledTimeMs: number): Promise<void>;
   deleteAlarm(): Promise<void>;
   deleteAll(): Promise<void>;

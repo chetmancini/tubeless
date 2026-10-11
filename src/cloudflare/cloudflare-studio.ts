@@ -19,6 +19,9 @@ import type { DurableStorageLike } from "./cloudflare-storage.js";
 
 const RECONCILE_GRACE_MS = 120_000;
 const HOST_TERMINATED = "The Cloudflare run host stopped before the run finished.";
+const START_FAILED = "The run host could not start the run.";
+const formatDuration = (ms: number) =>
+  ms >= 1000 && ms % 1000 === 0 ? `${ms / 1000} seconds` : `${ms} ms`;
 const SILENT_OUTPUT: HostedOutput = {
   cwd: "/tmp",
   stdout: { write: () => {} },
@@ -82,31 +85,44 @@ class DurableStudioLauncher implements PipelineRunStudioLauncher {
         this.settle(launchId, {
           accepted: false,
           errors: [
-            `The run did not record a start within ${Math.round(timeoutMs / 1000)} seconds. It may still start; check history before launching again.`,
+            `The run did not record a start within ${formatDuration(timeoutMs)}. It may still start; check history before launching again.`,
           ],
         }),
       timeoutMs
     );
     try {
-      await this.deps.runStub(launchId).start({
-        launchId,
-        commandId,
-        values,
-        maxRunDurationMs: this.deps.maxRunDurationMs,
-      });
-      await this.deps.storage.setAlarm(
-        this.now() + this.deps.maxRunDurationMs + RECONCILE_GRACE_MS
-      );
+      // Schedule the reconciler before the run can exist so a started run is never unreconciled.
+      await this.#scheduleReconcile();
     } catch (error) {
-      console.error(error instanceof Error ? error.message : error);
-      this.registry.fail(launchId, "The run host could not start the run.", this.now());
-      this.settle(launchId, { accepted: false, errors: ["The run host could not start the run."] });
+      clearTimeout(timeout);
+      this.#failStart(launchId, error);
+      return await acknowledged;
     }
+    void Promise.resolve()
+      .then(() =>
+        this.deps
+          .runStub(launchId)
+          .start({ launchId, commandId, values, maxRunDurationMs: this.deps.maxRunDurationMs })
+      )
+      .catch((error: unknown) => this.#failStart(launchId, error));
     try {
       return await acknowledged;
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  /** Keep the earliest pending reconcile so steady launches cannot postpone it. */
+  async #scheduleReconcile(): Promise<void> {
+    const target = this.now() + this.deps.maxRunDurationMs + RECONCILE_GRACE_MS;
+    const pending = await this.deps.storage.getAlarm();
+    if (pending === null || pending > target) await this.deps.storage.setAlarm(target);
+  }
+
+  #failStart(launchId: string, error: unknown): void {
+    console.error(error);
+    this.registry.fail(launchId, START_FAILED, this.now());
+    this.settle(launchId, { accepted: false, errors: [START_FAILED] });
   }
 
   settle(launchId: string, result: PipelineRunStudioLaunchResult): void {

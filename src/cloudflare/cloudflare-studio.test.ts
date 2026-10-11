@@ -51,11 +51,19 @@ const commands = new Map(
   ])
 );
 
-function setup(options: { startRuns?: boolean; now?: () => number } = {}) {
+function setup(
+  options: {
+    startRuns?: boolean;
+    now?: () => number;
+    storage?: ReturnType<typeof createFakeDurableStorage>;
+    start?: (job: RunJob) => Promise<void>;
+  } = {}
+) {
   const runs = new Map<string, RunObjectCore>();
   const settled: Promise<void>[] = [];
   let studio!: StudioObjectCore;
-  const studioStorage = createFakeDurableStorage();
+  const studioStorage = options.storage ?? createFakeDurableStorage();
+  const starts: RunJob[] = [];
   const runStub = (launchId: string): RunStubLike => {
     let core = runs.get(launchId);
     if (!core) {
@@ -69,6 +77,8 @@ function setup(options: { startRuns?: boolean; now?: () => number } = {}) {
     const run = core;
     return {
       async start(job: RunJob) {
+        starts.push(job);
+        if (options.start) return options.start(job);
         await run.start(job);
         if (options.startRuns !== false) settled.push(run.alarm());
       },
@@ -96,7 +106,7 @@ function setup(options: { startRuns?: boolean; now?: () => number } = {}) {
       },
       body: JSON.stringify({ values }),
     });
-  return { studio, storage: studioStorage, api, launch, settled };
+  return { studio, storage: studioStorage, api, launch, settled, starts };
 }
 
 describe("Studio object", () => {
@@ -184,5 +194,53 @@ describe("Studio object", () => {
     expect(
       ((await (await api("/api/snapshot")).json()) as { liveRunIds: string[] }).liveRunIds
     ).toEqual([]);
+  });
+
+  it("answers a rejected start as a failed launch that is not live", async () => {
+    const { api, launch } = setup({ start: () => Promise.reject(new Error("boom")) });
+    const response = await launch("greeting", { name: "ada" });
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toMatch(/could not start/);
+    expect(
+      ((await (await api("/api/snapshot")).json()) as { liveRunIds: string[] }).liveRunIds
+    ).toEqual([]);
+  });
+
+  it("does not touch the run object when the reconcile alarm cannot be scheduled", async () => {
+    const storage = createFakeDurableStorage();
+    storage.setAlarm = () => Promise.reject(new Error("alarm unavailable"));
+    const { launch, starts } = setup({ storage });
+    const response = await launch("greeting", { name: "ada" });
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toMatch(/could not start/);
+    expect(starts).toEqual([]);
+  });
+
+  it("answers a hung start within the start timeout", async () => {
+    const { launch } = setup({ start: () => new Promise<void>(() => {}) });
+    const response = await launch("greeting", { name: "ada" });
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toMatch(/within 200 ms.*may still start/);
+  });
+
+  it("keeps the earliest reconcile alarm across launches", async () => {
+    let now = 1_000;
+    const { launch, storage } = setup({ startRuns: false, now: () => now });
+    await launch("greeting", { name: "ada" });
+    expect(storage.alarmAtMs()).toBe(181_000);
+    now += 30_000;
+    await launch("greeting", { name: "ada" });
+    expect(storage.alarmAtMs()).toBe(181_000);
+  });
+
+  it("reschedules the reconcile alarm while a fresh launch remains active", async () => {
+    let now = 1_000;
+    const { launch, studio, storage } = setup({ startRuns: false, now: () => now });
+    await launch("greeting", { name: "ada" });
+    now += 100_000;
+    await launch("greeting", { name: "ada" });
+    now += 81_001;
+    await studio.alarm();
+    expect(storage.alarmAtMs()).toBe(now + 60_000 + 120_000);
   });
 });
