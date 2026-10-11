@@ -280,6 +280,9 @@ Read the corresponding package recipe before using these features:
   are needed. Preserve existing consumer conventions.
 - Keep storage and Studio optional. Read `docs/studio.md` before adding them;
   read the composition guides before adding child or remote execution.
+- To host Studio and a project on Cloudflare, use `tubeless init cloudflare` and read
+  `docs/deploy-cloudflare.md`: runs are limited to 14 minutes, cached steps need
+  `createR2CacheStore` and `jsonCacheCodec`, and secrets stay out of config text bindings.
 - Use `context.recordArtifact({ operation, artifact })` within ordinary steps to
   record successful reads, writes, or verified reuse without changing domain outputs.
   Multiple reports support batches; earlier reports survive later failure. Keep
