@@ -9,22 +9,23 @@ behind the bundled executable; their implementation modules are not public subpa
 Directory names describe internal ownership. Keep implementation tests beside
 their source files.
 
-| Directory    | Responsibility                                                                                   |
-| ------------ | ------------------------------------------------------------------------------------------------ |
-| `core/`      | Pipeline definitions, graph planning, execution, lifecycle and progress                          |
-| `agent/`     | In-process decision validation, handler/pipeline tools, owned state, shared subtree admission    |
-| `tracing/`   | Trace contracts, internal emission and exporter composition                                      |
-| `utilities/` | Domain-independent cancellation, collections, batching, retry, rate limits and error branding    |
-| `cli/`       | Argument parsing, command declarations and pipeline adaptation                                   |
-| `reporter/`  | Terminal reporting and live ticker rendering                                                     |
-| `render/`    | Plan and error formatting                                                                        |
-| `run-store/` | Event reader/store contracts, projection, SQLite and NDJSON adapters                             |
-| `studio/`    | HTTP server, browser client, page, state and UI protocol                                         |
-| `project/`   | Typed pipeline projects and parsed pipeline document compilation                                 |
-| `hosting/`   | Platform-neutral deployment hosting: project commands, hosted execution, Studio host composition |
-| `workbench/` | Module loading, executable integration and adapter wiring                                        |
-| `node/`      | Optional filesystem, path, environment, checkpoints and Node worker execution                    |
-| `testing/`   | Test runtime and executable-example integration tests                                            |
+| Directory     | Responsibility                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| `core/`       | Pipeline definitions, graph planning, execution, lifecycle and progress                          |
+| `agent/`      | In-process decision validation, handler/pipeline tools, owned state, shared subtree admission    |
+| `tracing/`    | Trace contracts, internal emission and exporter composition                                      |
+| `utilities/`  | Domain-independent cancellation, collections, batching, retry, rate limits and error branding    |
+| `cli/`        | Argument parsing, command declarations and pipeline adaptation                                   |
+| `reporter/`   | Terminal reporting and live ticker rendering                                                     |
+| `render/`     | Plan and error formatting                                                                        |
+| `run-store/`  | Event reader/store contracts, projection, SQLite and NDJSON adapters                             |
+| `studio/`     | HTTP server, browser client, page, state and UI protocol                                         |
+| `project/`    | Typed pipeline projects and parsed pipeline document compilation                                 |
+| `hosting/`    | Platform-neutral deployment hosting: project commands, hosted execution, Studio host composition |
+| `cloudflare/` | Cloudflare Workers deployment target: Worker entry, Access, Durable Objects and R2 cache store   |
+| `workbench/`  | Module loading, executable integration and adapter wiring                                        |
+| `node/`       | Optional filesystem, path, environment, checkpoints and Node worker execution                    |
+| `testing/`    | Test runtime and executable-example integration tests                                            |
 
 ## Dependency direction
 
@@ -88,6 +89,9 @@ their source files.
 - Hosting composes CLI command adapters, project, Studio and storage contracts for
   deployment targets. It never imports workbench, concrete storage adapters, the Node
   HTTP listener or platform modules. Workbench and deploy-target entrypoints consume it.
+- The Cloudflare target composes hosting, Studio and storage contracts inside Durable
+  Objects. Only `cloudflare/cloudflare.ts` imports `cloudflare:workers`; nothing outside
+  `cloudflare/` imports it, and its public declarations stay structural.
 - Type-only imports can share contracts without loading their implementation.
   Avoid creating new cross-module contracts unless the consumer needs them.
 

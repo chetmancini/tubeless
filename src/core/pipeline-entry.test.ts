@@ -282,6 +282,21 @@ describe("module runtime boundaries", () => {
     expect(visited.size).toBeGreaterThan(1);
   });
 
+  it("confines cloudflare:workers to the Cloudflare entrypoint", () => {
+    for (const name of readdirSync(dist, { recursive: true, encoding: "utf8" })) {
+      if (!name.endsWith(".js")) continue;
+      const specifiers = externalSpecifiers(resolve(dist, name));
+      if (specifiers.some((specifier) => specifier.startsWith("cloudflare:"))) {
+        expect(name.split(sep).join("/"), `${name} imports a Cloudflare platform module`).toBe(
+          "cloudflare/cloudflare.js"
+        );
+      }
+    }
+    expect(readFileSync(resolve(dist, "cloudflare/cloudflare.d.ts"), "utf8")).not.toMatch(
+      /cloudflare:|@cloudflare\//
+    );
+  });
+
   it("keeps CLI authoring independent of workbench, storage and Studio", () => {
     const pending = [resolve(dist, "cli/cli.js")];
     const visited = new Set<string>();

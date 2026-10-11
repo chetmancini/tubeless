@@ -1,11 +1,13 @@
 import type { StepCacheCodec, StepCacheStore } from "../core/pipeline.js";
 
+/** Structural subset of an R2 object body that the cache store reads. */
 export interface R2ObjectLike {
   arrayBuffer(): Promise<ArrayBuffer>;
   readonly customMetadata?: Record<string, string>;
   readonly uploaded: Date;
 }
 
+/** Structural subset of an R2 bucket binding that the cache store uses. */
 export interface R2BucketLike {
   get(key: string): Promise<R2ObjectLike | null>;
   put(

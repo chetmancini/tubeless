@@ -232,7 +232,21 @@ try {
   run(join(packageRoot, "node_modules/.bin/tsc"), ["-p", "tsconfig.json"], consumerRoot);
   run("node", ["--experimental-strip-types", "project.ts"], consumerRoot);
 
+  // The Cloudflare entry imports cloudflare:workers, which only workerd resolves; its
+  // runtime loading is covered by src/cloudflare/cloudflare-app.test.ts.
+  const workerdOnlyExports = new Set(["./cloudflare"]);
+  for (const relativePath of [
+    "dist/cloudflare/cloudflare.js",
+    "dist/cloudflare/cloudflare.d.ts",
+    "dist/cloudflare/cloudflare-studio-client.js",
+    "dist/cloudflare/cloudflare-studio-client.d.ts",
+  ]) {
+    if (!existsSync(join(installedPackage, relativePath))) {
+      throw new Error(`Packed tubeless artifact is missing ${relativePath}`);
+    }
+  }
   const smokeProgram = Object.keys(packageJson.exports)
+    .filter((subpath) => !workerdOnlyExports.has(subpath))
     .map((subpath) =>
       JSON.stringify(subpath === "." ? packageJson.name : `${packageJson.name}/${subpath.slice(2)}`)
     )
