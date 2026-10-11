@@ -78,6 +78,7 @@ export function parseStudioHosting(
   };
 }
 
+/** Precondition: already-validated even-length hex (callers match the 64-hex pattern first). */
 function hexBytes(hex: string): Uint8Array {
   const bytes = new Uint8Array(hex.length / 2);
   for (let index = 0; index < bytes.length; index += 1) {

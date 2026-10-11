@@ -6,21 +6,29 @@ interface NodeStreamingRequestInit extends RequestInit {
   duplex: "half";
 }
 
+/** Copy raw request headers except Host; the placeholder URL is the only authority. */
+export function toFetchHeaders(request: IncomingMessage): Headers {
+  const headers = new Headers();
+  for (let index = 0; index < request.rawHeaders.length; index += 2) {
+    const name = request.rawHeaders[index]!;
+    if (name.toLowerCase() === "host") continue;
+    headers.append(name, request.rawHeaders[index + 1]!);
+  }
+  return headers;
+}
+
 /**
  * Convert a Node request into a Fetch request. The URL is a fixed placeholder:
  * the listener passes `request.url` as the handler's `rawTarget` and
  * `request.headers.host` as its `authority`, so no Host-derived value is trusted here.
  */
 export function toFetchRequest(request: IncomingMessage): Request {
-  const headers = new Headers();
-  for (let index = 0; index < request.rawHeaders.length; index += 2) {
-    const name = request.rawHeaders[index]!;
-    // The placeholder URL above is the only authority; a client-supplied Host is not forwarded.
-    if (name.toLowerCase() === "host") continue;
-    headers.append(name, request.rawHeaders[index + 1]!);
-  }
   const method = request.method ?? "GET";
-  const init: NodeStreamingRequestInit = { duplex: "half", headers, method };
+  const init: NodeStreamingRequestInit = {
+    duplex: "half",
+    headers: toFetchHeaders(request),
+    method,
+  };
   if (method !== "GET" && method !== "HEAD") {
     // SAFETY: Readable.toWeb returns a byte stream for an IncomingMessage.
     init.body = Readable.toWeb(request) as ReadableStream<Uint8Array>;

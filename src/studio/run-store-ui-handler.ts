@@ -2,6 +2,16 @@ import { errorResponse, jsonResponse, unexpectedStudioErrorResponse } from "./ru
 import { studioRoute } from "./run-store-ui-hosting.js";
 import type { StudioPage } from "./run-store-ui-page.js";
 
+/** Response for a request whose Host is not trusted. */
+export function untrustedHostResponse(): Response {
+  return errorResponse(
+    403,
+    "untrusted_host",
+    "The request host is not trusted.",
+    "Use the exact local Studio URL printed by tubeless ui."
+  );
+}
+
 export interface StudioRequestContext {
   /** Raw request target (path and query) exactly as received. */
   readonly rawTarget: string;
@@ -33,12 +43,7 @@ export function createStudioRequestHandler(
       const denial = await options.authenticate?.(request);
       if (denial) return denial;
       if (!options.trustsAuthority(context.authority)) {
-        return errorResponse(
-          403,
-          "untrusted_host",
-          "The request host is not trusted.",
-          "Use the exact local Studio URL printed by tubeless ui."
-        );
+        return untrustedHostResponse();
       }
       const method = request.method;
       if (

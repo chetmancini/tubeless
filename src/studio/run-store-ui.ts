@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server } from "node:http";
 import { isIP } from "node:net";
 import type { PipelineRunEventReader, PipelineRunEventStore } from "../run-store/run-store.js";
 import {
@@ -11,8 +11,8 @@ import {
 } from "./run-store-ui-http.js";
 import { createStudioPage } from "./run-store-ui-page.js";
 import { readStudioClientScript } from "./run-store-ui-page-node.js";
-import { toFetchRequest, writeFetchResponse } from "./run-store-ui-node.js";
-import { createStudioRequestHandler } from "./run-store-ui-handler.js";
+import { toFetchHeaders, toFetchRequest, writeFetchResponse } from "./run-store-ui-node.js";
+import { createStudioRequestHandler, untrustedHostResponse } from "./run-store-ui-handler.js";
 import { createStudioApiHandler, type PipelineRunStudioApiOptions } from "./run-store-ui-api.js";
 import type { StudioHosting } from "./run-store-ui-hosting.js";
 export type {
@@ -84,34 +84,61 @@ export async function startPipelineRunStudio(
       isLiteralOrLocalhostHttpHost(requestParts.hostname)
     );
   };
+  const authenticate = hosting
+    ? (request: Request): Response | undefined =>
+        hosting.authenticates(request)
+          ? undefined
+          : errorResponse(
+              401,
+              "gateway_authentication_required",
+              "Gateway authentication failed.",
+              "Check the application gateway configuration."
+            )
+    : undefined;
   const handle = createStudioRequestHandler({
     api,
     page,
     mount: hosting?.mount ?? "",
-    authenticate: hosting
-      ? (request) =>
-          hosting.authenticates(request)
-            ? undefined
-            : errorResponse(
-                401,
-                "gateway_authentication_required",
-                "Gateway authentication failed.",
-                "Check the application gateway configuration."
-              )
-      : undefined,
+    authenticate,
     trustsAuthority,
     allowedOrigin: hosting ? () => hosting.origin : undefined,
     isReady: () => ready,
   });
+  /** Fetch cannot represent methods such as TRACE; apply the gateway order without a body. */
+  const rejectUnconvertible = async (request: IncomingMessage): Promise<Response> => {
+    const denial = await authenticate?.(
+      new Request("http://studio.local/", { headers: toFetchHeaders(request) })
+    );
+    if (denial) return denial;
+    if (!trustsAuthority(request.headers.host)) return untrustedHostResponse();
+    return errorResponse(
+      405,
+      "method_not_allowed",
+      "Method not allowed.",
+      "Read the Studio guide at https://tubeless.io/docs/studio."
+    );
+  };
   const server = createServer(async (request, response) => {
     const method = request.method ?? "GET";
     try {
-      const result = await handle(toFetchRequest(request), {
-        rawTarget: request.url ?? "/",
-        authority: request.headers.host,
-      });
+      let fetchRequest: Request | undefined;
+      try {
+        fetchRequest = toFetchRequest(request);
+      } catch {
+        fetchRequest = undefined;
+      }
+      const result = fetchRequest
+        ? await handle(fetchRequest, {
+            rawTarget: request.url ?? "/",
+            authority: request.headers.host,
+          })
+        : await rejectUnconvertible(request);
       await writeFetchResponse(response, result, method);
     } catch (error) {
+      if (response.headersSent) {
+        response.destroy();
+        return;
+      }
       await writeFetchResponse(response, unexpectedStudioErrorResponse(error), method);
     }
   });
