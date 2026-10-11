@@ -137,3 +137,78 @@ export function writeUnexpectedStudioError(
     "Inspect the local Studio process logs and retry after fixing the reported cause."
   );
 }
+
+const JSON_HEADERS = {
+  "cache-control": "no-store",
+  "content-type": "application/json; charset=utf-8",
+  "x-content-type-options": "nosniff",
+} as const;
+
+const MAX_REQUEST_BODY_BYTES = 65_536;
+
+export function jsonResponse(
+  value: unknown,
+  status = 200,
+  headers: Record<string, string> = {}
+): Response {
+  return new Response(JSON.stringify(value), { status, headers: { ...JSON_HEADERS, ...headers } });
+}
+
+export function errorResponse(
+  status: number,
+  code: string,
+  message: string,
+  hint: string
+): Response {
+  return jsonResponse({ code, hint, message }, status);
+}
+
+/** Read at most 64 KiB of JSON without assuming a runtime-specific body helper. */
+export async function readRequestJson(request: Request): Promise<unknown> {
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  const reader = request.body?.getReader();
+  if (reader) {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > MAX_REQUEST_BODY_BYTES) {
+        await reader.cancel();
+        throw new StudioRequestError(
+          "request_body_too_large",
+          "Request body exceeds 64 KiB.",
+          413,
+          "Send a JSON body no larger than 64 KiB."
+        );
+      }
+      chunks.push(value);
+    }
+  }
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new StudioRequestError(
+      "invalid_json",
+      "Request body must be valid JSON.",
+      400,
+      "Send a valid JSON object with content-type application/json."
+    );
+  }
+}
+
+export function unexpectedStudioErrorResponse(error: unknown): Response {
+  console.error(error instanceof Error ? (error.stack ?? error.message) : error);
+  return errorResponse(
+    500,
+    "studio_internal_error",
+    "The studio hit an unexpected error.",
+    "Inspect the Studio host logs and retry after fixing the reported cause."
+  );
+}
