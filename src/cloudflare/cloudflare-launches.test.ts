@@ -47,6 +47,7 @@ describe("launch registry", () => {
     registry.create("l1", "demo", 100);
     expect(registry.acceptBatch("l1", 0, [started("r1")])).toEqual({
       duplicate: false,
+      dropped: false,
       boundRunId: "r1",
       terminal: false,
     });
@@ -54,7 +55,11 @@ describe("launch registry", () => {
     expect(registry.get("l1")).toMatchObject({ runId: "r1", state: "running", stepCount: 2 });
     expect(registry.liveRunIds()).toEqual(["r1"]);
     expect(registry.launchIdForRun("r1")).toBe("l1");
-    expect(registry.acceptBatch("l1", 2, [completed("r1")]).terminal).toBe(true);
+    expect(registry.acceptBatch("l1", 2, [completed("r1")])).toEqual({
+      duplicate: false,
+      dropped: false,
+      terminal: true,
+    });
     expect(registry.liveRunIds()).toEqual([]);
   });
 
@@ -81,7 +86,11 @@ describe("launch registry", () => {
     registry.acceptBatch("l1", 0, [started("r1")]);
     registry.fail("l1", "The Cloudflare run host stopped before the run finished.", 500);
     registry.fail("l1", "again", 600);
-    registry.acceptBatch("l1", 1, [completed("r1")]);
+    expect(registry.acceptBatch("l1", 1, [completed("r1")])).toEqual({
+      duplicate: false,
+      dropped: true,
+      terminal: true,
+    });
     const events = await store.listEvents();
     expect(events.map((event) => event.name)).toEqual(["pipeline.started", "pipeline.completed"]);
     expect(events[1]).toMatchObject({
@@ -92,9 +101,24 @@ describe("launch registry", () => {
     expect(registry.get("l1")?.lastBatch).toBe(1);
     expect(registry.acceptBatch("l1", 1, [completed("r1")])).toEqual({
       duplicate: true,
+      dropped: false,
       terminal: true,
     });
     expect(await store.listEvents()).toHaveLength(2);
+  });
+
+  it("drops the first batch of a launch that failed before it started", async () => {
+    const { registry, store } = setup();
+    registry.create("l1", "demo", 100);
+    registry.fail("l1", "The run host could not confirm the run started.", 200);
+    expect(registry.acceptBatch("l1", 0, [started("r1")])).toEqual({
+      duplicate: false,
+      dropped: true,
+      terminal: true,
+    });
+    expect(registry.acceptBatch("l1", 0, [started("r1")]).dropped).toBe(false);
+    expect(await store.listEvents()).toEqual([]);
+    expect(registry.launchIdForRun("r1")).toBeUndefined();
   });
 
   it("requires strictly serial batches", async () => {

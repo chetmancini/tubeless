@@ -3,6 +3,7 @@ import { createSteps, definePipeline, type StandardSchemaV1 } from "../core/pipe
 import { defineProject } from "../project/project.js";
 import { hostedProjectCommands } from "../hosting/hosting-commands.js";
 import { createFakeDurableStorage } from "./cloudflare-storage.test-support.js";
+import { openDurableRunStore } from "./cloudflare-run-store.js";
 import { RunObjectCore, type RunJob } from "./cloudflare-run.js";
 import { StudioObjectCore, type RunStubLike } from "./cloudflare-studio.js";
 
@@ -56,7 +57,7 @@ function setup(
     startRuns?: boolean;
     now?: () => number;
     storage?: ReturnType<typeof createFakeDurableStorage>;
-    start?: (job: RunJob) => Promise<void>;
+    start?: (job: RunJob, run: RunObjectCore) => Promise<void>;
   } = {}
 ) {
   const runs = new Map<string, RunObjectCore>();
@@ -64,11 +65,14 @@ function setup(
   let studio!: StudioObjectCore;
   const studioStorage = options.storage ?? createFakeDurableStorage();
   const starts: RunJob[] = [];
+  const runStorages = new Map<string, ReturnType<typeof createFakeDurableStorage>>();
   const runStub = (launchId: string): RunStubLike => {
     let core = runs.get(launchId);
     if (!core) {
+      const storage = createFakeDurableStorage();
+      runStorages.set(launchId, storage);
       core = new RunObjectCore({
-        storage: createFakeDurableStorage(),
+        storage,
         commands,
         ingest: () => studio,
       });
@@ -78,7 +82,7 @@ function setup(
     return {
       async start(job: RunJob) {
         starts.push(job);
-        if (options.start) return options.start(job);
+        if (options.start) return options.start(job, run);
         await run.start(job);
         if (options.startRuns !== false) settled.push(run.alarm());
       },
@@ -106,7 +110,7 @@ function setup(
       },
       body: JSON.stringify({ values }),
     });
-  return { studio, storage: studioStorage, api, launch, settled, starts };
+  return { studio, storage: studioStorage, api, launch, settled, starts, runStorages };
 }
 
 describe("Studio object", () => {
@@ -200,10 +204,56 @@ describe("Studio object", () => {
     const { api, launch } = setup({ start: () => Promise.reject(new Error("boom")) });
     const response = await launch("greeting", { name: "ada" });
     expect(response.status).toBe(400);
-    expect(JSON.stringify(await response.json())).toMatch(/could not start/);
+    expect(await response.json()).toMatchObject({
+      errors: [
+        "The run host could not confirm the run started. It may have started; check history before launching again.",
+      ],
+    });
     expect(
       ((await (await api("/api/snapshot")).json()) as { liveRunIds: string[] }).liveRunIds
     ).toEqual([]);
+  });
+
+  it("stops a run whose start call failed after the run object stored it", async () => {
+    const alarms: Promise<void>[] = [];
+    const { api, launch, storage, runStorages } = setup({
+      start: async (job, run) => {
+        await run.start(job);
+        alarms.push(run.alarm());
+        throw new Error("start RPC lost");
+      },
+    });
+    const response = await launch("slow", { name: "" });
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toMatch(/could not confirm the run started/);
+    await Promise.all(alarms);
+    const runStorage = [...runStorages.values()][0]!;
+    expect(await runStorage.get("job")).toBeUndefined();
+    expect(runStorage.alarmAtMs()).toBeUndefined();
+    const events = await openDurableRunStore(storage).listEvents();
+    expect(events).toEqual([]);
+    expect(
+      ((await (await api("/api/snapshot")).json()) as { liveRunIds: string[] }).liveRunIds
+    ).toEqual([]);
+  });
+
+  it("logs instead of throwing when recording a failed start fails", async () => {
+    const storage = createFakeDurableStorage();
+    const { launch } = setup({
+      storage,
+      start: async () => {
+        storage.transactionSync = () => {
+          throw new Error("storage down");
+        };
+        throw new Error("start RPC lost");
+      },
+    });
+    const response = await launch("greeting", { name: "ada" });
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toMatch(/could not confirm the run started/);
+    expect(console.error).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "storage down" })
+    );
   });
 
   it("does not touch the run object when the reconcile alarm cannot be scheduled", async () => {

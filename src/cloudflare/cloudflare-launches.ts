@@ -19,6 +19,8 @@ export interface LaunchRecord {
 
 export interface BatchOutcome {
   readonly duplicate: boolean;
+  /** The launch was already terminal, so this new batch was not appended. */
+  readonly dropped: boolean;
   readonly boundRunId?: string;
   readonly terminal: boolean;
 }
@@ -112,7 +114,7 @@ export class LaunchRegistry {
       const launch = this.get(launchId);
       if (!launch) throw new Error(`Unknown launch ${JSON.stringify(launchId)}.`);
       if (sequence <= launch.lastBatch)
-        return { duplicate: true, terminal: TERMINAL.has(launch.state) };
+        return { duplicate: true, dropped: false, terminal: TERMINAL.has(launch.state) };
       if (sequence > launch.lastBatch + 1)
         throw new Error(
           `Launch ${launchId} expected batch ${launch.lastBatch + 1} but received ${sequence}.`
@@ -124,7 +126,7 @@ export class LaunchRegistry {
           sequence,
           launchId
         );
-        return { duplicate: false, terminal: true };
+        return { duplicate: false, dropped: true, terminal: true };
       }
       this.store.append(events);
       let { runId, pipelineId, dryRun, stepCount, state } = launch;
@@ -163,6 +165,7 @@ export class LaunchRegistry {
       );
       return {
         duplicate: false,
+        dropped: false,
         ...(boundRunId ? { boundRunId } : {}),
         terminal: TERMINAL.has(state),
       };

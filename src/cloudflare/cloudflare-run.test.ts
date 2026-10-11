@@ -72,7 +72,10 @@ function ingest() {
   const batches: { sequence: number; events: PipelineTraceEvent[] }[] = [];
   const failures: string[] = [];
   const studio: StudioIngest = {
-    appendEvents: async (_launchId, sequence, events) => void batches.push({ sequence, events }),
+    appendEvents: async (_launchId, sequence, events) => {
+      batches.push({ sequence, events });
+      return { accepted: true };
+    },
     reportFailure: async (_launchId, message) => void failures.push(message),
   };
   return { studio, batches, failures };
@@ -386,6 +389,31 @@ describe("hosted job", () => {
     expect(controller.signal.aborted).toBe(true);
     expect(controller.signal.reason).toMatchObject({ message: "studio unreachable" });
     expect(failures).toEqual(["Run events could not be delivered to Studio: studio unreachable"]);
+  });
+
+  it("stops the run without retrying when Studio refuses its events", async () => {
+    const controller = new AbortController();
+    const sequences: number[] = [];
+    const failures: string[] = [];
+    const refusing: StudioIngest = {
+      appendEvents: async (_launchId, sequence) => {
+        sequences.push(sequence);
+        return { accepted: false };
+      },
+      reportFailure: async (_launchId, message) => void failures.push(message),
+    };
+    await runHostedJob({
+      job: { ...job({ name: "ada" }), commandId: "waiting" },
+      commands,
+      ingest: refusing,
+      controller,
+    });
+    expect(controller.signal.reason).toMatchObject({
+      message: "Studio closed this launch; stopping the run.",
+    });
+    expect(sequences[0]).toBe(0);
+    expect(new Set(sequences).size).toBe(sequences.length);
+    expect(failures).toEqual([]);
   });
 
   it("logs instead of throwing when the delivery failure report also fails", async () => {

@@ -20,6 +20,8 @@ import type { DurableStorageLike } from "./cloudflare-storage.js";
 const RECONCILE_GRACE_MS = 120_000;
 const HOST_TERMINATED = "The Cloudflare run host stopped before the run finished.";
 const START_FAILED = "The run host could not start the run.";
+const START_UNCONFIRMED =
+  "The run host could not confirm the run started. It may have started; check history before launching again.";
 const formatDuration = (ms: number) =>
   ms >= 1000 && ms % 1000 === 0 ? `${ms / 1000} seconds` : `${ms} ms`;
 const SILENT_OUTPUT: HostedOutput = {
@@ -95,7 +97,7 @@ class DurableStudioLauncher implements PipelineRunStudioLauncher {
       await this.#scheduleReconcile();
     } catch (error) {
       clearTimeout(timeout);
-      this.#failStart(launchId, error);
+      this.#failStart(launchId, error, START_FAILED);
       return await acknowledged;
     }
     void Promise.resolve()
@@ -104,7 +106,7 @@ class DurableStudioLauncher implements PipelineRunStudioLauncher {
           .runStub(launchId)
           .start({ launchId, commandId, values, maxRunDurationMs: this.deps.maxRunDurationMs })
       )
-      .catch((error: unknown) => this.#failStart(launchId, error));
+      .catch((error: unknown) => this.#failStart(launchId, error, START_UNCONFIRMED));
     try {
       return await acknowledged;
     } finally {
@@ -119,10 +121,16 @@ class DurableStudioLauncher implements PipelineRunStudioLauncher {
     if (pending === null || pending > target) await this.deps.storage.setAlarm(target);
   }
 
-  #failStart(launchId: string, error: unknown): void {
+  /** Runs inside a voided promise chain, so it must never throw. */
+  #failStart(launchId: string, error: unknown, message: string): void {
     console.error(error);
-    this.registry.fail(launchId, START_FAILED, this.now());
-    this.settle(launchId, { accepted: false, errors: [START_FAILED] });
+    try {
+      this.registry.fail(launchId, message, this.now());
+    } catch (failError) {
+      // The reconcile alarm fails the launch later.
+      console.error(failError);
+    }
+    this.settle(launchId, { accepted: false, errors: [message] });
   }
 
   settle(launchId: string, result: PipelineRunStudioLaunchResult): void {
@@ -173,10 +181,11 @@ export class StudioObjectCore implements StudioIngest {
     launchId: string,
     sequence: number,
     events: PipelineTraceEvent[]
-  ): Promise<void> {
+  ): Promise<{ accepted: boolean }> {
     const outcome = this.#registry.acceptBatch(launchId, sequence, events);
     if (outcome.boundRunId)
       this.#launcher.settle(launchId, { accepted: true, runId: outcome.boundRunId });
+    return { accepted: !outcome.dropped };
   }
 
   async reportFailure(launchId: string, message: string): Promise<void> {

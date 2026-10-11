@@ -145,7 +145,11 @@ export function createCloudflareApp(
       return this.#core.fetch(request);
     }
 
-    appendEvents(launchId: string, sequence: number, events: PipelineTraceEvent[]): Promise<void> {
+    appendEvents(
+      launchId: string,
+      sequence: number,
+      events: PipelineTraceEvent[]
+    ): Promise<{ accepted: boolean }> {
       return this.#core.appendEvents(launchId, sequence, events);
     }
 

@@ -19,7 +19,12 @@ export interface RunJob {
 }
 
 export interface StudioIngest {
-  appendEvents(launchId: string, sequence: number, events: PipelineTraceEvent[]): Promise<void>;
+  /** `accepted` is false when Studio already closed the launch and refused the batch. */
+  appendEvents(
+    launchId: string,
+    sequence: number,
+    events: PipelineTraceEvent[]
+  ): Promise<{ readonly accepted: boolean }>;
   reportFailure(launchId: string, message: string): Promise<void>;
 }
 
@@ -138,7 +143,12 @@ export async function runHostedJob(options: {
   let recorded = false;
   let deliveryFailure: { readonly error: unknown } | undefined;
   const batches = new BatchingTraceExporter(
-    (sequence, events) => ingest.appendEvents(job.launchId, sequence, events),
+    async (sequence, events) => {
+      const { accepted } = await ingest.appendEvents(job.launchId, sequence, events);
+      // Studio already failed this launch (for example, after an unconfirmed start), so
+      // nothing more would be recorded and the run could not be cancelled.
+      if (!accepted) controller.abort(new Error("Studio closed this launch; stopping the run."));
+    },
     {
       maxEvents: 50,
       maxDelayMs: 250,
