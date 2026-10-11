@@ -31,6 +31,41 @@ export default app.worker;
 export const { TubelessStudio, TubelessRun } = app.durableObjects;
 `;
 
+// Gate checks: the same app without Access bindings, or with only one of them.
+const OPEN_WORKER = String.raw`
+import { createSteps, definePipeline } from "./core/pipeline.js";
+import { defineProject } from "./project/project.js";
+import { createCloudflareApp } from "./cloudflare/cloudflare.js";
+const schema = { "~standard": { vendor: "test", version: 1, validate: (v) => ({ value: v ?? {} }), jsonSchema: { input: () => ({ type: "object", properties: {} }) } } };
+const echo = createSteps(schema).step("echo", { run: () => "ok" });
+const app = createCloudflareApp(defineProject("open-test", [definePipeline({ id: "echo", steps: [echo], finalize: echo })]));
+export default app.worker;
+export const { TubelessStudio, TubelessRun } = app.durableObjects;
+`;
+
+// Reports whether createCloudflareApp accepts limits.maxRunDurationMs from the query string.
+const LIMITS_WORKER = String.raw`
+import { defineProject } from "./project/project.js";
+import { createCloudflareApp } from "./cloudflare/cloudflare.js";
+const project = defineProject("limits-test", []);
+export default {
+  fetch(request) {
+    const maxRunDurationMs = Number(new URL(request.url).searchParams.get("ms"));
+    try {
+      createCloudflareApp(project, { limits: { maxRunDurationMs } });
+      return new Response("accepted");
+    } catch (error) {
+      return new Response(error.message, { status: 400 });
+    }
+  },
+};
+`;
+
+// dispatchFetch reaches the first worker, so it forwards each request unchanged to the named one.
+const GATE_ROUTER = String.raw`
+export default { fetch: (request, env) => env[request.headers.get("x-gate-target")].fetch(request) };
+`;
+
 function relativeImports(source: string, directory: string): string[] {
   return [...source.matchAll(/(?:\bfrom\s+|\bimport\s*(?:\(\s*)?)["'](\.[^"']+)["']/g)].map(
     (match) => posix.normalize(posix.join(directory, match[1]!))
@@ -53,9 +88,10 @@ function manifestModules(entry: string): Record<string, { type: "esm"; contents:
 }
 
 let mf: Miniflare;
+let gates: Miniflare;
 // Worker console output is kept quiet and replayed only for the test that failed.
 let workerLogs: string[] = [];
-let persist: string;
+let persist: string | undefined;
 let keys: CryptoKeyPair;
 let jwk: JsonWebKey;
 
@@ -175,11 +211,67 @@ beforeAll(async () => {
       },
     ],
   });
+  const gateWorker = (name: string, env: Record<string, unknown>) => ({
+    config: {
+      name,
+      compatibilityDate: "2026-10-01",
+      compatibilityFlags: ["nodejs_compat"],
+      manifest: { mainModule: "worker.js", modules: manifestModules(OPEN_WORKER) },
+      env: {
+        TUBELESS_STUDIO: { type: "durable-object", worker: name, exportName: "TubelessStudio" },
+        TUBELESS_RUN: { type: "durable-object", worker: name, exportName: "TubelessRun" },
+        ...env,
+      },
+      exports: {
+        TubelessStudio: { type: "durable-object", storage: "sqlite" },
+        TubelessRun: { type: "durable-object", storage: "sqlite" },
+      },
+    },
+  });
+  gates = new Miniflare({
+    resourcePersistencePath: join(persist, "gates"),
+    telemetry: { enabled: false },
+    log: new NoOpLog(),
+    handleStructuredLogs: ({ level, message }: WorkerdStructuredLog) => {
+      workerLogs.push(`[${level}] ${message}`);
+    },
+    workers: [
+      {
+        config: {
+          name: "gate-router",
+          compatibilityDate: "2026-10-01",
+          manifest: { mainModule: "worker.js", modules: manifestModules(GATE_ROUTER) },
+          env: Object.fromEntries(
+            ["tubeless-open", "tubeless-blank", "tubeless-half", "tubeless-limits"].map(
+              (worker) => [worker, { type: "worker", worker }]
+            )
+          ),
+        },
+      },
+      gateWorker("tubeless-open", {}),
+      gateWorker("tubeless-blank", {
+        ACCESS_TEAM_DOMAIN: { type: "text", value: "" },
+        ACCESS_AUD: { type: "text", value: " " },
+      }),
+      gateWorker("tubeless-half", { ACCESS_AUD: { type: "text", value: AUD } }),
+      {
+        config: {
+          name: "tubeless-limits",
+          compatibilityDate: "2026-10-01",
+          compatibilityFlags: ["nodejs_compat"],
+          manifest: { mainModule: "worker.js", modules: manifestModules(LIMITS_WORKER) },
+        },
+      },
+    ],
+  });
 }, 60_000);
 
 afterAll(async () => {
-  await mf?.dispose();
-  rmSync(persist, { recursive: true, force: true });
+  try {
+    await Promise.all([mf?.dispose(), gates?.dispose()]);
+  } finally {
+    if (persist) rmSync(persist, { recursive: true, force: true });
+  }
 });
 
 beforeEach(() => {
@@ -215,6 +307,7 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
       },
     });
     expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "untrusted_origin" });
   });
 
   it("launches a run, acknowledges with its id, and records completion and logs", async () => {
@@ -258,6 +351,43 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
   it("fails a cached step that has no Workers cache store without breaking Studio", async () => {
     const { runId } = (await (await launch("cached", {})).json()) as { runId: string };
     expect(await runStatus(runId, (status) => status !== "running")).toBe("failed");
+    const { run } = (await (await call(`/api/runs/${encodeURIComponent(runId)}`)).json()) as {
+      run: { error?: { message: string; cause?: { message: string } } };
+    };
+    expect(run.error?.message).toMatch(/cache encode failed/i);
+    expect(run.error?.cause?.message).toMatch(/serialize|not implemented/i);
     expect((await call("/api/snapshot")).status).toBe(200);
+  });
+});
+
+describe("tubeless/cloudflare Worker gate and limits on workerd", { timeout: 60_000 }, () => {
+  const gate = (worker: string, url: string) =>
+    gates.dispatchFetch(url, { headers: { "x-gate-target": worker } });
+
+  it("fails closed without Access bindings except on loopback hosts", async () => {
+    for (const worker of ["tubeless-open", "tubeless-blank"]) {
+      const remote = await gate(worker, "https://studio.example.com/api/snapshot");
+      expect(remote.status).toBe(503);
+      expect(await remote.json()).toMatchObject({ code: "access_not_configured" });
+    }
+    expect((await gate("tubeless-open", "http://localhost/api/snapshot")).status).toBe(200);
+  });
+
+  it("rejects a half-configured Access binding pair", async () => {
+    for (const origin of ["https://studio.example.com", "http://localhost"]) {
+      const response = await gate("tubeless-half", `${origin}/api/snapshot`);
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({ code: "access_misconfigured" });
+    }
+  });
+
+  it("validates limits.maxRunDurationMs", async () => {
+    for (const ms of [840_001, 0, 1.5]) {
+      const response = await gate("tubeless-limits", `http://localhost/?ms=${ms}`);
+      expect(response.status).toBe(400);
+      expect(await response.text()).toMatch(/no greater than 840000/);
+    }
+    const accepted = await gate("tubeless-limits", "http://localhost/?ms=840000");
+    expect(await accepted.text()).toBe("accepted");
   });
 });

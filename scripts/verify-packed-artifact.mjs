@@ -215,6 +215,10 @@ try {
     readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/project.ts"))
   );
   writeFileSync(
+    join(consumerRoot, "cloudflare.ts"),
+    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cloudflare.ts"))
+  );
+  writeFileSync(
     join(consumerRoot, "tsconfig.json"),
     JSON.stringify({
       compilerOptions: {
@@ -226,7 +230,7 @@ try {
         target: "ES2022",
         types: [],
       },
-      files: ["cli.ts", "project.ts"],
+      files: ["cli.ts", "project.ts", "cloudflare.ts"],
     })
   );
   run(join(packageRoot, "node_modules/.bin/tsc"), ["-p", "tsconfig.json"], consumerRoot);
