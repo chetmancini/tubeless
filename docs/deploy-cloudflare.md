@@ -95,9 +95,11 @@ resume either: a run that is cut off is recorded as failed. To fit the limit:
 - Use a host engine for multi-hour workflows: [Temporal](./temporal.md),
   [Inngest](./inngest.md) or [AWS Step Functions](./step-functions.md).
 
-A future release may add an executor backed by Cloudflare Workflows. It would split
-a run into durable segments and reuse completed steps through the R2 cache. That is
-a direction, not a feature of this version, and it carries no date.
+A future release may add an executor backed by Cloudflare Workflows for long-running
+orchestration. It would save explicit execution checkpoints with defined retry
+behavior; the step cache is not a resume mechanism. Adopting it may require new
+bindings or scaffold changes. That is a direction, not a feature of this version,
+and it carries no date.
 
 ## Using bindings in handlers
 
