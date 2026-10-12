@@ -39,6 +39,7 @@ when the project is not `./tubeless.project.ts`. Then run the steps it prints:
 
 ```sh
 bun add tubeless && bun add -d cf@1.0.0-beta.13 vite@8.3.4 @cloudflare/vite-plugin@2.0.0-beta.sha-52b0dc0e9   # or npm/pnpm equivalents
+echo ".cloudflare/" >> .gitignore   # cf build output and generated types
 npx cf auth login
 npx cf dev            # Studio on http://localhost:8787 (Access is skipped only on localhost)
 npx cf deploy         # creates the Worker, Durable Objects and R2 bucket
@@ -50,6 +51,21 @@ npx cf deploy         # creates the Worker, Durable Objects and R2 bucket
 scaffold pins all three packages to versions verified together, plus the
 compatibility date (`2026-10-01`, with `nodejs_compat`). Install those exact
 versions with npm or pnpm too (`npm install -D -E …`, `pnpm add -D -E …`).
+
+The Vite plugin writes generated types to `.cloudflare/types/`, and `cf build` (the
+first step of `cf deploy`) writes the Build Output to `.cloudflare/output/`. Keep
+`.cloudflare/` out of version control; the scaffold prints the line to add but never
+edits your `.gitignore`.
+
+If the project already has a `vite.config.ts`, `init` names it as a conflict and writes
+nothing. Rename yours for the moment, run `init`, then replace the generated file with
+yours and add `cloudflare()` to its existing `plugins` array:
+
+```diff
++import { cloudflare } from "@cloudflare/vite-plugin";
+-  plugins: [react()],
++  plugins: [react(), cloudflare()],
+```
 
 The first deploy is not safe to open yet: until Access is configured, the Worker
 answers every non-local request with `503 access_not_configured`. To finish:

@@ -127,6 +127,7 @@ export default defineConfig(() => {
   },
   nextSteps: [
     `bun add tubeless && bun add -d ${devDependencyInstall}   # or npm/pnpm equivalents`,
+    'echo ".cloudflare/" >> .gitignore   # cf build output and generated types',
     "npx cf auth login",
     "npx cf dev            # Studio on http://localhost:8787 (Access is skipped only on localhost)",
     "npx cf deploy         # creates the Worker, Durable Objects and R2 bucket",

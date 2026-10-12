@@ -57,6 +57,8 @@ describe("tubeless init", () => {
     const steps = out.join("");
     for (const [name, version] of Object.entries(CLOUDFLARE_DEV_DEPENDENCIES))
       expect(steps).toContain(` ${name}@${version}`);
+    // cf dev and cf build write generated types and Build Output there.
+    expect(steps).toContain('echo ".cloudflare/" >> .gitignore');
     expect(steps).toContain("npx cf deploy");
   });
 
