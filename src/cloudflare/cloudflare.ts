@@ -165,6 +165,10 @@ export function createCloudflareApp(
       return this.#core.fetch(request);
     }
 
+    admit(launchId: string): Promise<{ admitted: boolean }> {
+      return this.#core.admit(launchId);
+    }
+
     appendEvents(
       launchId: string,
       sequence: number,

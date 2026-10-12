@@ -130,7 +130,8 @@ class DurableStudioLauncher implements PipelineRunStudioLauncher {
   #failStart(launchId: string, error: unknown, message: string): void {
     console.error(error);
     try {
-      this.registry.fail(launchId, message, this.now());
+      // An admitted run is executing user code; it records its own outcome or is reconciled.
+      if (!this.registry.get(launchId)?.admitted) this.registry.fail(launchId, message, this.now());
     } catch (failError) {
       // The reconcile alarm fails the launch later.
       console.error(failError);
@@ -180,6 +181,10 @@ export class StudioObjectCore implements StudioIngest {
       clientScript: this.deps.clientScript,
     });
     return (await this.#host).fetch(request);
+  }
+
+  async admit(launchId: string): Promise<{ admitted: boolean }> {
+    return { admitted: this.#registry.admit(launchId) };
   }
 
   async appendEvents(

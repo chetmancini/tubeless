@@ -4,7 +4,7 @@ import { defineProject } from "../project/project.js";
 import { hostedProjectCommands } from "../hosting/hosting-commands.js";
 import { createFakeDurableStorage } from "./cloudflare-storage.test-support.js";
 import { openDurableRunStore } from "./cloudflare-run-store.js";
-import { RunObjectCore, type RunJob } from "./cloudflare-run.js";
+import { RunObjectCore, type RunJob, type StudioIngest } from "./cloudflare-run.js";
 import { StudioObjectCore, type RunStubLike } from "./cloudflare-studio.js";
 
 const inputSchema = (minimum: number): StandardSchemaV1<{ name: string }, { name: string }> => ({
@@ -60,6 +60,7 @@ function setup(
     start?: (job: RunJob, run: RunObjectCore) => Promise<void>;
     commands?: typeof commands;
     startTimeoutMs?: number;
+    ingest?: (studio: StudioObjectCore) => StudioIngest;
   } = {}
 ) {
   const runs = new Map<string, RunObjectCore>();
@@ -76,7 +77,7 @@ function setup(
       core = new RunObjectCore({
         storage,
         commands,
-        ingest: () => studio,
+        ingest: () => options.ingest?.(studio) ?? studio,
       });
       runs.set(launchId, core);
     }
@@ -227,6 +228,84 @@ describe("Studio object", () => {
     expect(
       ((await (await api("/api/snapshot")).json()) as { liveRunIds: string[] }).liveRunIds
     ).toEqual([]);
+  });
+
+  // Hold admission open until the launch request has been answered, so the start failure is
+  // handled at a known point relative to admission.
+  function gatedAdmission() {
+    let admitted!: () => void;
+    let release!: () => void;
+    const admittedPromise = new Promise<void>((resolve) => (admitted = resolve));
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const alarms: Promise<void>[] = [];
+    return {
+      alarms,
+      release,
+      admittedPromise,
+      ingest: (studio: StudioObjectCore): StudioIngest => ({
+        appendEvents: (launchId, sequence, events) =>
+          studio.appendEvents(launchId, sequence, events),
+        reportFailure: (launchId, message) => studio.reportFailure(launchId, message),
+        admit: async (launchId) => {
+          const result = await studio.admit(launchId);
+          admitted();
+          await released;
+          return result;
+        },
+      }),
+      startAfterAdmission: async (job: RunJob, run: RunObjectCore) => {
+        await run.start(job);
+        alarms.push(run.alarm());
+        await admittedPromise;
+        throw new Error("start RPC lost");
+      },
+      startBeforeAdmission: async (job: RunJob, run: RunObjectCore) => {
+        await run.start(job);
+        alarms.push(run.alarm());
+        throw new Error("start RPC lost");
+      },
+    };
+  }
+
+  it("keeps an admitted run whose start call failed and records its outcome", async () => {
+    const gate = gatedAdmission();
+    const { api, launch, storage } = setup({
+      ingest: gate.ingest,
+      start: gate.startAfterAdmission,
+    });
+    const response = await launch("greeting", { name: "ada" });
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toMatch(/could not confirm the run started/);
+    gate.release();
+    await Promise.all(gate.alarms);
+    const events = await openDurableRunStore(storage).listEvents();
+    const completions = events.filter((event) => event.name === "pipeline.completed");
+    expect(completions).toHaveLength(1);
+    expect(completions[0]?.payload).toMatchObject({ status: "completed" });
+    const runId = completions[0]!.runId;
+    const detail = (await (await api(`/api/runs/${encodeURIComponent(runId)}`)).json()) as {
+      run: { status: string };
+    };
+    expect(detail.run.status).toBe("completed");
+    expect(
+      ((await (await api("/api/snapshot")).json()) as { liveRunIds: string[] }).liveRunIds
+    ).toEqual([]);
+  });
+
+  it("fails a launch whose start call failed before the run was admitted", async () => {
+    const gate = gatedAdmission();
+    const { launch, storage, runStorages } = setup({
+      ingest: gate.ingest,
+      start: gate.startBeforeAdmission,
+    });
+    const response = await launch("greeting", { name: "ada" });
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toMatch(/could not confirm the run started/);
+    await gate.admittedPromise;
+    gate.release();
+    await Promise.all(gate.alarms);
+    expect(await openDurableRunStore(storage).listEvents()).toEqual([]);
+    expect(await [...runStorages.values()][0]!.get("job")).toBeUndefined();
   });
 
   it("logs instead of throwing when recording a failed start fails", async () => {

@@ -13,6 +13,8 @@ export interface LaunchRecord {
   readonly dryRun: boolean;
   readonly stepCount: number;
   readonly state: LaunchState;
+  /** The run object was cleared to execute user code; a start failure must not close it. */
+  readonly admitted: boolean;
   readonly lastBatch: number;
   readonly createdAtMs: number;
 }
@@ -65,6 +67,7 @@ export class LaunchRegistry {
       dry_run INTEGER NOT NULL DEFAULT 0,
       step_count INTEGER NOT NULL DEFAULT 0,
       state TEXT NOT NULL,
+      admitted INTEGER NOT NULL DEFAULT 0,
       last_batch INTEGER NOT NULL DEFAULT -1,
       created_at_ms INTEGER NOT NULL
     )`);
@@ -96,9 +99,23 @@ export class LaunchRegistry {
       stepCount: Number(row.step_count),
       // SAFETY: state is only ever written from LaunchState literals in this class.
       state: row.state as LaunchState,
+      admitted: Number(row.admitted) === 1,
       lastBatch: Number(row.last_batch),
       createdAtMs: Number(row.created_at_ms),
     };
+  }
+
+  /** Clear an open launch to execute; a closed or unknown launch must never run user code. */
+  admit(launchId: string): boolean {
+    return this.storage.transactionSync(() => {
+      const launch = this.get(launchId);
+      if (!launch || TERMINAL.has(launch.state)) return false;
+      this.storage.sql.exec(
+        "UPDATE tubeless_launches SET admitted = 1 WHERE launch_id = ?",
+        launchId
+      );
+      return true;
+    });
   }
 
   /**

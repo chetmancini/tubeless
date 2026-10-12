@@ -19,6 +19,8 @@ export interface RunJob {
 }
 
 export interface StudioIngest {
+  /** Studio's consent to execute; false when the launch is unknown or already closed. */
+  admit(launchId: string): Promise<{ readonly admitted: boolean }>;
   /** `accepted` is false when Studio already closed the launch and refused the batch. */
   appendEvents(
     launchId: string,
@@ -115,6 +117,16 @@ function capturingOutput(): HostedOutput & { tail(): string } {
   };
 }
 
+/** Ask Studio to admit the launch; any failure to confirm admission means do not execute. */
+async function admitted(ingest: StudioIngest, launchId: string): Promise<boolean> {
+  try {
+    return (await ingest.admit(launchId)).admitted;
+  } catch (error) {
+    console.error(error);
+    return false;
+  }
+}
+
 /** Execute one admitted job; report failures that never produced a recorded run. */
 export async function runHostedJob(options: {
   readonly job: RunJob;
@@ -140,6 +152,9 @@ export async function runHostedJob(options: {
     );
     return;
   }
+  // Core does not await exporters, so a refused batch could arrive after a step's side effects.
+  // Admission happens before any user code runs; a refused launch was already closed by Studio.
+  if (!(await admitted(ingest, job.launchId))) return;
   let recorded = false;
   let deliveryFailure: { readonly error: unknown } | undefined;
   const batches = new BatchingTraceExporter(

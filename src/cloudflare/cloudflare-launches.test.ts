@@ -142,6 +142,23 @@ describe("launch registry", () => {
     expect(registry.launchIdForRun("r1")).toBeUndefined();
   });
 
+  it("admits a known, open launch and refuses unknown or closed ones", () => {
+    const { registry } = setup();
+    expect(registry.admit("missing")).toBe(false);
+    registry.create("l1", "demo", 100);
+    expect(registry.get("l1")?.admitted).toBe(false);
+    expect(registry.admit("l1")).toBe(true);
+    expect(registry.get("l1")).toMatchObject({ admitted: true, state: "starting" });
+    expect(registry.admit("l1")).toBe(true);
+    registry.create("closed", "demo", 100);
+    registry.fail("closed", "The run host could not confirm the run started.", 200);
+    expect(registry.admit("closed")).toBe(false);
+    expect(registry.get("closed")?.admitted).toBe(false);
+    registry.create("done", "demo", 100);
+    registry.acceptBatch("done", 0, [started("r1"), completed("r1")]);
+    expect(registry.admit("done")).toBe(false);
+  });
+
   it("fails unbound launches without inventing history and lists stale launches", async () => {
     const { registry, store } = setup();
     registry.create("old", "demo", 100);

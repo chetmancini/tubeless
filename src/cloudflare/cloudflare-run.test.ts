@@ -45,8 +45,11 @@ const hold = step("hold", {
     }),
 });
 const Waiting = definePipeline({ id: "waiting", steps: [hold], finalize: hold });
+const sideEffect = vi.fn();
+const effect = step("effect", { run: () => void sideEffect() });
+const Effect = definePipeline({ id: "effect", steps: [effect], finalize: effect });
 const commands = new Map(
-  hostedProjectCommands(defineProject("p", [Greeting, Waiting])).map((entry) => [
+  hostedProjectCommands(defineProject("p", [Greeting, Waiting, Effect])).map((entry) => [
     entry.descriptor.id,
     entry,
   ])
@@ -68,10 +71,11 @@ const logEvent: PipelineTraceEvent = {
   payload: { level: "log", message: "x" },
 };
 
-function ingest() {
+function ingest(admit: StudioIngest["admit"] = async () => ({ admitted: true })) {
   const batches: { sequence: number; events: PipelineTraceEvent[] }[] = [];
   const failures: string[] = [];
   const studio: StudioIngest = {
+    admit,
     appendEvents: async (_launchId, sequence, events) => {
       batches.push({ sequence, events });
       return { accepted: true };
@@ -244,6 +248,49 @@ describe("run object", () => {
     expect(await storage.get("job")).toBeUndefined();
   });
 
+  it("never executes a job that Studio does not admit", async () => {
+    sideEffect.mockClear();
+    const storage = createFakeDurableStorage();
+    const { studio, batches, failures } = ingest(async () => ({ admitted: false }));
+    const core = new RunObjectCore({ storage, commands, ingest: () => studio });
+    await core.start({ ...job({ name: "ada" }), commandId: "effect" });
+    await core.alarm();
+    expect(sideEffect).not.toHaveBeenCalled();
+    expect(batches).toEqual([]);
+    expect(failures).toEqual([]);
+    expect(await storage.get("job")).toBeUndefined();
+    expect(storage.alarmAtMs()).toBeUndefined();
+  });
+
+  it("never executes a job whose admission could not be confirmed", async () => {
+    sideEffect.mockClear();
+    const storage = createFakeDurableStorage();
+    const { studio, batches, failures } = ingest(async () => {
+      throw new Error("admission RPC lost");
+    });
+    const core = new RunObjectCore({ storage, commands, ingest: () => studio });
+    await core.start({ ...job({ name: "ada" }), commandId: "effect" });
+    await core.alarm();
+    expect(sideEffect).not.toHaveBeenCalled();
+    expect(batches).toEqual([]);
+    expect(failures).toEqual([]);
+    expect(console.error).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "admission RPC lost" })
+    );
+    expect(await storage.get("job")).toBeUndefined();
+  });
+
+  it("executes an admitted job", async () => {
+    sideEffect.mockClear();
+    const storage = createFakeDurableStorage();
+    const { studio, failures } = ingest();
+    const core = new RunObjectCore({ storage, commands, ingest: () => studio });
+    await core.start({ ...job({ name: "ada" }), commandId: "effect" });
+    await core.alarm();
+    expect(sideEffect).toHaveBeenCalledTimes(1);
+    expect(failures).toEqual([]);
+  });
+
   it("ignores duplicate starts and cancels only a live run", async () => {
     const storage = createFakeDurableStorage();
     const core = new RunObjectCore({ storage, commands, ingest: () => ingest().studio });
@@ -368,6 +415,7 @@ describe("hosted job", () => {
     const controller = new AbortController();
     const { failures } = ingest();
     const failing: StudioIngest = {
+      admit: async () => ({ admitted: true }),
       appendEvents: async () => {
         throw new Error("studio unreachable");
       },
@@ -396,6 +444,7 @@ describe("hosted job", () => {
     const sequences: number[] = [];
     const failures: string[] = [];
     const refusing: StudioIngest = {
+      admit: async () => ({ admitted: true }),
       appendEvents: async (_launchId, sequence) => {
         sequences.push(sequence);
         return { accepted: false };
@@ -418,6 +467,7 @@ describe("hosted job", () => {
 
   it("logs instead of throwing when the delivery failure report also fails", async () => {
     const failing: StudioIngest = {
+      admit: async () => ({ admitted: true }),
       appendEvents: async () => {
         throw new Error("studio unreachable");
       },
