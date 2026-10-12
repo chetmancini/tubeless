@@ -57,6 +57,8 @@ describe("tubeless init", () => {
     const steps = out.join("");
     for (const [name, version] of Object.entries(CLOUDFLARE_DEV_DEPENDENCIES))
       expect(steps).toContain(` ${name}@${version}`);
+    // Package managers save ^ranges by default; the verified beta toolchain must stay exact.
+    expect(steps).toContain("bun add -d --exact ");
     // cf dev and cf build write generated types and Build Output there.
     // Idempotent and safe when .gitignore lacks a trailing newline.
     expect(steps).toContain(

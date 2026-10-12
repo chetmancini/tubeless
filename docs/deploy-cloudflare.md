@@ -39,7 +39,7 @@ already exists, or any other Vite config file (`vite.config.js`, `.mjs`, `.cjs`,
 when the project is not `./tubeless.project.ts`. Then run the steps it prints:
 
 ```sh
-bun add tubeless && bun add -d cf@1.0.0-beta.13 vite@8.3.4 @cloudflare/vite-plugin@2.0.0-beta.sha-52b0dc0e9   # or npm/pnpm equivalents
+bun add tubeless && bun add -d --exact cf@1.0.0-beta.13 vite@8.3.4 @cloudflare/vite-plugin@2.0.0-beta.sha-52b0dc0e9   # npm install -D -E … / pnpm add -D -E …
 grep -qxF '.cloudflare/' .gitignore 2>/dev/null || printf '\n.cloudflare/\n' >> .gitignore   # cf build output and generated types
 npx cf auth login
 npx cf dev            # Studio on http://localhost:8787 (Access is skipped only on localhost)
@@ -53,7 +53,8 @@ and is in beta. `cf dev`, `cf build` and
 `@cloudflare/vite-plugin` and the `vite.config.ts` that registers the plugin. The
 scaffold pins all three packages to versions verified together, plus the
 compatibility date (`2026-10-01`, with `nodejs_compat`). Install those exact
-versions with npm or pnpm too (`npm install -D -E …`, `pnpm add -D -E …`).
+versions with `--exact` (or `-E` for npm and pnpm): package managers save `^` ranges by
+default, and a range can later resolve to an untested beta release.
 
 The Vite plugin writes generated types to `.cloudflare/types/`, and `cf build` (the
 first step of `cf deploy`) writes the Build Output to `.cloudflare/output/`. Keep
