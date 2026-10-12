@@ -1,3 +1,8 @@
+import {
+  openSubtreeStartsQuery,
+  storedRunEvent,
+  type RunEventRecord,
+} from "../run-store/run-store-sql.js";
 import { PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import type { DurableRunStore } from "./cloudflare-run-store.js";
@@ -29,25 +34,30 @@ export interface BatchOutcome {
 
 const TERMINAL: ReadonlySet<LaunchState> = new Set(["finished", "failed"]);
 
+type PipelineStartedEvent = Extract<PipelineTraceEvent, { name: "pipeline.started" }>;
+
+/** A failed completion mirroring the identity core gives a run's own completion event. */
 function hostTerminatedEvent(
-  launch: LaunchRecord,
+  started: PipelineStartedEvent,
   message: string,
   nowMs: number
 ): PipelineTraceEvent {
-  if (!launch.runId || !launch.pipelineId)
-    throw new Error("Only a bound launch has a run to terminate.");
   return {
     version: PIPELINE_TRACE_VERSION,
     name: "pipeline.completed",
-    runId: launch.runId,
-    pipelineId: launch.pipelineId,
+    runId: started.runId,
+    pipelineId: started.pipelineId,
+    ...(started.parentRunId === undefined ? {} : { parentRunId: started.parentRunId }),
+    ...(started.correlationId === undefined ? {} : { correlationId: started.correlationId }),
+    ...(started.itemKey === undefined ? {} : { itemKey: started.itemKey }),
+    ...(started.iteration === undefined ? {} : { iteration: started.iteration }),
     timestampMs: nowMs,
     payload: {
-      dryRun: launch.dryRun,
+      dryRun: started.payload.dryRun,
       errorCount: 1,
       finalized: false,
       status: "failed",
-      stepCount: launch.stepCount,
+      stepCount: started.payload.stepCount,
     },
     error: { code: "TUBELESS_RUN_CANCELLED", kind: "cancellation", message, phase: "execution" },
   };
@@ -193,13 +203,29 @@ export class LaunchRegistry {
     this.storage.transactionSync(() => {
       const launch = this.get(launchId);
       if (!launch || TERMINAL.has(launch.state)) return;
-      if (launch.runId && launch.pipelineId)
-        this.store.append([hostTerminatedEvent(launch, message, nowMs)]);
+      if (launch.runId)
+        this.store.append(this.#openSubtreeCompletions(launch.runId, message, nowMs));
       this.storage.sql.exec(
         "UPDATE tubeless_launches SET state = 'failed' WHERE launch_id = ?",
         launchId
       );
     });
+  }
+
+  /** Close the bound run and every nested run it left open, children before parents. */
+  #openSubtreeCompletions(rootRunId: string, message: string, nowMs: number) {
+    const { sql, params } = openSubtreeStartsQuery(rootRunId);
+    // SAFETY: SELECT * over the owned pipeline_run_events table returns RunEventRecord rows.
+    const rows = this.storage.sql.exec(sql, ...params).toArray() as unknown as RunEventRecord[];
+    const closed = new Set<string>();
+    const completions: PipelineTraceEvent[] = [];
+    for (const row of rows) {
+      const started = storedRunEvent(row);
+      if (started.name !== "pipeline.started" || closed.has(started.runId)) continue;
+      closed.add(started.runId);
+      completions.push(hostTerminatedEvent(started, message, nowMs));
+    }
+    return completions;
   }
 
   liveRunIds(): string[] {

@@ -134,6 +134,33 @@ export function storedRunEvent(row: RunEventRecord): StoredPipelineEvent {
   return { ...decodeStoredTraceEvent(encoded), id: Number(row.id) };
 }
 
+// Binds the root run ID. UNION visits each run once, including cyclic or duplicate parent links.
+// SQLite can build a transient join index for older read-only stores.
+const RUN_TREE_CTE = `WITH RECURSIVE run_tree(run_id) AS (
+      SELECT ?
+      UNION
+      SELECT event.run_id FROM pipeline_run_events AS event
+      JOIN run_tree AS parent ON event.parent_run_id = parent.run_id
+    )`;
+
+/**
+ * Start events of runs in a subtree that have no completion. Latest start first: a nested run
+ * starts after its parent, so every child precedes its parent and the root comes last.
+ */
+export function openSubtreeStartsQuery(rootRunId: string): { sql: string; params: unknown[] } {
+  return {
+    sql: `${RUN_TREE_CTE} SELECT * FROM pipeline_run_events AS started
+      WHERE started.event_name = 'pipeline.started'
+        AND started.run_id IN (SELECT run_id FROM run_tree)
+        AND NOT EXISTS (
+          SELECT 1 FROM pipeline_run_events AS done
+          WHERE done.run_id = started.run_id AND done.event_name = 'pipeline.completed'
+        )
+      ORDER BY started.id DESC`,
+    params: [rootRunId],
+  };
+}
+
 export function runEventListQuery(query: PipelineRunEventQuery): {
   sql: string;
   params: unknown[];
@@ -142,14 +169,7 @@ export function runEventListQuery(query: PipelineRunEventQuery): {
   const params: unknown[] = [];
   let subtree = "";
   if (query.rootRunId !== undefined) {
-    // UNION visits each run once, including cyclic or duplicate parent links.
-    // SQLite can build a transient join index for older read-only stores.
-    subtree = `WITH RECURSIVE run_tree(run_id) AS (
-      SELECT ?
-      UNION
-      SELECT event.run_id FROM pipeline_run_events AS event
-      JOIN run_tree AS parent ON event.parent_run_id = parent.run_id
-    )`;
+    subtree = RUN_TREE_CTE;
     params.push(query.rootRunId);
     predicates.push("run_id IN (SELECT run_id FROM run_tree)");
   }

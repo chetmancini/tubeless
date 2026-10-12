@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { createRunHistoryIndex } from "../run-store/run-history.js";
+import { projectPipelineRunStore } from "../run-store/run-store.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { createFakeDurableStorage } from "./cloudflare-storage.test-support.js";
 import { openDurableRunStore } from "./cloudflare-run-store.js";
 import { LaunchRegistry } from "./cloudflare-launches.js";
 
 const base = { version: 3 as const, pipelineId: "demo", timestampMs: 1 };
-const started = (runId: string, parentRunId?: string): PipelineTraceEvent => ({
+const started = (runId: string, parentRunId?: string, stepCount = 2): PipelineTraceEvent => ({
   ...base,
   runId,
   ...(parentRunId ? { parentRunId } : {}),
   name: "pipeline.started",
-  payload: { dryRun: false, planOk: true, stepCount: 2, targetIds: [] },
+  payload: { dryRun: false, planOk: true, stepCount, targetIds: [] },
 });
 const completed = (runId: string): PipelineTraceEvent => ({
   ...base,
@@ -157,6 +159,68 @@ describe("launch registry", () => {
     registry.create("done", "demo", 100);
     registry.acceptBatch("done", 0, [started("r1"), completed("r1")]);
     expect(registry.admit("done")).toBe(false);
+  });
+
+  it("closes every open run in the launch subtree, children before the root", async () => {
+    const { registry, store } = setup();
+    registry.create("l1", "demo", 100);
+    const child: PipelineTraceEvent = {
+      ...started("child", "r1", 3),
+      pipelineId: "nested",
+      correlationId: "corr-1",
+      itemKey: "item-1",
+    };
+    const grandchild: PipelineTraceEvent = {
+      ...started("grandchild", "child", 5),
+      pipelineId: "leaf",
+      iteration: { runId: "child", stepId: "loop", attemptId: "a1", index: 1 },
+    };
+    const finishedChild: PipelineTraceEvent = {
+      ...completed("done-child"),
+      parentRunId: "r1",
+    };
+    registry.acceptBatch("l1", 0, [started("r1")]);
+    registry.acceptBatch("l1", 1, [child, grandchild, started("done-child", "r1"), finishedChild]);
+    const before = (await store.listEvents()).length;
+    registry.fail("l1", "The Cloudflare run host stopped before the run finished.", 900);
+    const events = await store.listEvents();
+    const appended = events.slice(before);
+    expect(appended.map((event) => [event.name, event.runId])).toEqual([
+      ["pipeline.completed", "grandchild"],
+      ["pipeline.completed", "child"],
+      ["pipeline.completed", "r1"],
+    ]);
+    const cancelled = {
+      code: "TUBELESS_RUN_CANCELLED",
+      kind: "cancellation",
+      message: "The Cloudflare run host stopped before the run finished.",
+      phase: "execution",
+    };
+    expect(appended[0]).toMatchObject({
+      pipelineId: "leaf",
+      parentRunId: "child",
+      iteration: { runId: "child", stepId: "loop", attemptId: "a1", index: 1 },
+      timestampMs: 900,
+      payload: { status: "failed", errorCount: 1, finalized: false, stepCount: 5, dryRun: false },
+      error: cancelled,
+    });
+    expect(appended[1]).toMatchObject({
+      pipelineId: "nested",
+      parentRunId: "r1",
+      correlationId: "corr-1",
+      itemKey: "item-1",
+      payload: { status: "failed", stepCount: 3 },
+      error: cancelled,
+    });
+    expect(appended[2]).toMatchObject({
+      pipelineId: "demo",
+      payload: { status: "failed", stepCount: 2 },
+      error: cancelled,
+    });
+    expect(appended[2]).not.toHaveProperty("parentRunId");
+    const { runs } = projectPipelineRunStore(events);
+    expect(runs.filter((run) => run.status === "running")).toEqual([]);
+    expect(createRunHistoryIndex(runs).subtreeIsRunning("r1")).toBe(false);
   });
 
   it("fails unbound launches without inventing history and lists stale launches", async () => {
