@@ -1,7 +1,16 @@
 import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { runInit } from "./workbench-init.js";
@@ -67,6 +76,47 @@ function isolatedEnv(home: string): NodeJS.ProcessEnv {
   };
 }
 
+/**
+ * Preloaded into every Node process the build spawns (via NODE_OPTIONS): any outbound,
+ * non-loopback connection is logged and refused, so a tooling change that starts
+ * downloading or calling Cloudflare fails this test instead of passing online only.
+ */
+const NETWORK_GUARD = `
+import net from "node:net";
+import { appendFileSync } from "node:fs";
+const log = process.env.TUBELESS_TEST_NETWORK_LOG;
+const loopback = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+const connect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function (...args) {
+  const first = Array.isArray(args[0]) ? args[0][0] : args[0];
+  const options = typeof first === "object" && first !== null ? first : undefined;
+  const host = options
+    ? (options.path ? undefined : (options.host ?? options.hostname ?? "localhost"))
+    : typeof first === "number"
+      ? (typeof args[1] === "string" ? args[1] : "localhost")
+      : undefined;
+  if (host !== undefined && !loopback.has(host)) {
+    appendFileSync(log, "connect " + host + "\\n");
+    throw new Error("Network access is blocked in this offline test: " + host);
+  }
+  return connect.apply(this, args);
+};
+`;
+
+/** Environment that preloads the network guard and records blocked attempts in `log`. */
+function offlineEnv(env: NodeJS.ProcessEnv, guard: string, log: string): NodeJS.ProcessEnv {
+  const preload = `--import=${pathToFileURL(guard).href}`;
+  return {
+    ...env,
+    // Miniflare (inside @cloudflare/vite-plugin) downloads optional request.cf metadata from
+    // workers.cloudflare.com and falls back when offline; disable only that known fetch so any
+    // other outbound connection still fails this test.
+    CLOUDFLARE_CF_FETCH_ENABLED: "false",
+    NODE_OPTIONS: env.NODE_OPTIONS ? `${env.NODE_OPTIONS} ${preload}` : preload,
+    TUBELESS_TEST_NETWORK_LOG: log,
+  };
+}
+
 describe("cloudflare scaffold build", () => {
   // `cf build` produces Build Output locally without an account or network; it is the step
   // `cf deploy` runs first. The pinned versions must stay in lockstep with this checkout.
@@ -91,14 +141,28 @@ describe("cloudflare scaffold build", () => {
     ).toBe(0);
     const home = join(cwd, ".home");
     mkdirSync(home);
+    const guard = join(cwd, "network-guard.mjs");
+    const networkLog = join(cwd, "network.log");
+    writeFileSync(guard, NETWORK_GUARD);
+    const env = offlineEnv(isolatedEnv(home), guard, networkLog);
+    // The guard must be active: a plain outbound fetch from the same environment fails and is logged.
+    await expect(
+      run(process.execPath, ["-e", "await fetch('https://example.com')"], { cwd, env })
+    ).rejects.toThrow();
+    expect(readFileSync(networkLog, "utf8")).toContain("connect example.com");
+    rmSync(networkLog);
     const build = await run(process.execPath, [join(repo, "node_modules/cf/bin/cf"), "build"], {
       cwd,
-      env: isolatedEnv(home),
+      env,
       timeout: 90_000,
       maxBuffer: 16 * 1024 * 1024,
     }).catch((error: { code?: unknown; stdout?: string; stderr?: string }) => {
       throw new Error(`cf build failed (${String(error.code)}):\n${error.stdout}\n${error.stderr}`);
     });
+    expect(
+      existsSync(networkLog) ? readFileSync(networkLog, "utf8") : "",
+      "cf build attempted outbound network access"
+    ).toBe("");
     const output = join(cwd, ".cloudflare/output/v0/workers/default");
     const config = JSON.parse(readFileSync(join(output, "worker.config.json"), "utf8")) as {
       exports: Record<string, unknown>;
