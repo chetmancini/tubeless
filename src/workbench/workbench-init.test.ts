@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { runInit } from "./workbench-init.js";
+import { nodeVersionAtLeast, runInit } from "./workbench-init.js";
 import { CLOUDFLARE_DEV_DEPENDENCIES, cloudflareScaffold } from "./workbench-init-cloudflare.js";
 
 const roots: string[] = [];
@@ -58,7 +58,11 @@ describe("tubeless init", () => {
     for (const [name, version] of Object.entries(CLOUDFLARE_DEV_DEPENDENCIES))
       expect(steps).toContain(` ${name}@${version}`);
     // cf dev and cf build write generated types and Build Output there.
-    expect(steps).toContain('echo ".cloudflare/" >> .gitignore');
+    // Idempotent and safe when .gitignore lacks a trailing newline.
+    expect(steps).toContain(
+      "grep -qxF '.cloudflare/' .gitignore 2>/dev/null || printf '\\n.cloudflare/\\n' >> .gitignore"
+    );
+    expect(steps).toContain("Node 22.12 or later");
     expect(steps).toContain("npx cf deploy");
   });
 
@@ -106,6 +110,30 @@ describe("tubeless init", () => {
     expect(existsSync(join(cwd, "cloudflare/worker.ts"))).toBe(false);
     expect(existsSync(join(cwd, "cloudflare.config.ts"))).toBe(false);
     expect(err.join("")).toContain("Refusing to overwrite existing files: vite.config.ts");
+  });
+
+  it.each([
+    "vite.config.js",
+    "vite.config.mjs",
+    "vite.config.cjs",
+    "vite.config.mts",
+    "vite.config.cts",
+  ])("refuses to add a competing Vite config next to %s", async (name) => {
+    const { cwd, io, err } = workspace();
+    writeFileSync(join(cwd, name), "keep");
+    expect(await init(io)).not.toBe(0);
+    expect(readFileSync(join(cwd, name), "utf8")).toBe("keep");
+    expect(existsSync(join(cwd, "vite.config.ts"))).toBe(false);
+    expect(existsSync(join(cwd, "cloudflare.config.ts"))).toBe(false);
+    expect(err.join("")).toContain(`${name} already exists. Vite loads only one config file`);
+  });
+
+  it("compares Node versions for the deploy tooling warning", () => {
+    expect(nodeVersionAtLeast("22.12.0", "22.12.0")).toBe(true);
+    expect(nodeVersionAtLeast("v24.1.0", "22.12.0")).toBe(true);
+    expect(nodeVersionAtLeast("22.11.9", "22.12.0")).toBe(false);
+    expect(nodeVersionAtLeast("22.6.0", "22.12.0")).toBe(false);
+    expect(nodeVersionAtLeast("23.0.0-pre", "22.12.0")).toBe(true);
   });
 
   it("validates the project before writing anything", async () => {

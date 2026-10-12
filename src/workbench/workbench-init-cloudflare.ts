@@ -125,9 +125,25 @@ export default defineConfig(() => {
       { path: "vite.config.ts", contents: VITE_CONFIG },
     ];
   },
+  // Vite loads exactly one of these names, so another config would shadow or be shadowed by ours.
+  conflictsWith: [
+    "vite.config.js",
+    "vite.config.mjs",
+    "vite.config.cjs",
+    "vite.config.mts",
+    "vite.config.cts",
+  ].map((path) => ({
+    path,
+    hint: "Vite loads only one config file: rename it, run init again, then add cloudflare() from @cloudflare/vite-plugin to your config (see the Cloudflare guide).",
+  })),
+  minimumNode: {
+    version: "22.12.0",
+    reason: "cf needs Node 22 or later and Vite 8 needs Node 22.12 or later",
+  },
   nextSteps: [
+    "node --version   # cf and Vite 8 need Node 22.12 or later",
     `bun add tubeless && bun add -d ${devDependencyInstall}   # or npm/pnpm equivalents`,
-    'echo ".cloudflare/" >> .gitignore   # cf build output and generated types',
+    "grep -qxF '.cloudflare/' .gitignore 2>/dev/null || printf '\\n.cloudflare/\\n' >> .gitignore   # cf build output and generated types",
     "npx cf auth login",
     "npx cf dev            # Studio on http://localhost:8787 (Access is skipped only on localhost)",
     "npx cf deploy         # creates the Worker, Durable Objects and R2 bucket",

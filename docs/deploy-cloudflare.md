@@ -34,18 +34,21 @@ tubeless init cloudflare
 This writes `cloudflare/worker.ts`, `cloudflare.config.ts` and `vite.config.ts`. It
 loads your project and derives every command first, so a broken project fails here
 and not at deploy time. It never overwrites existing files: if any of the three
-already exists, it names the conflicts and writes nothing. Pass `-p <project-file>`
+already exists, or any other Vite config file (`vite.config.js`, `.mjs`, `.cjs`,
+`.mts`, `.cts`), it names the conflicts and writes nothing. Pass `-p <project-file>`
 when the project is not `./tubeless.project.ts`. Then run the steps it prints:
 
 ```sh
 bun add tubeless && bun add -d cf@1.0.0-beta.13 vite@8.3.4 @cloudflare/vite-plugin@2.0.0-beta.sha-52b0dc0e9   # or npm/pnpm equivalents
-echo ".cloudflare/" >> .gitignore   # cf build output and generated types
+grep -qxF '.cloudflare/' .gitignore 2>/dev/null || printf '\n.cloudflare/\n' >> .gitignore   # cf build output and generated types
 npx cf auth login
 npx cf dev            # Studio on http://localhost:8787 (Access is skipped only on localhost)
 npx cf deploy         # creates the Worker, Durable Objects and R2 bucket
 ```
 
-`cf` is the Cloudflare configuration CLI and is in beta. `cf dev`, `cf build` and
+Deploying needs Node 22.12 or later: `cf` requires Node 22 and Vite 8 requires 22.12.
+`init` warns when it runs on an older Node. `cf` is the Cloudflare configuration CLI
+and is in beta. `cf dev`, `cf build` and
 `cf deploy` build the Worker through Vite, so the project needs `vite`,
 `@cloudflare/vite-plugin` and the `vite.config.ts` that registers the plugin. The
 scaffold pins all three packages to versions verified together, plus the
@@ -57,9 +60,10 @@ first step of `cf deploy`) writes the Build Output to `.cloudflare/output/`. Kee
 `.cloudflare/` out of version control; the scaffold prints the line to add but never
 edits your `.gitignore`.
 
-If the project already has a `vite.config.ts`, `init` names it as a conflict and writes
-nothing. Rename yours for the moment, run `init`, then replace the generated file with
-yours and add `cloudflare()` to its existing `plugins` array:
+If the project already has a Vite config (`vite.config.ts` or any other supported
+name), `init` names it as a conflict and writes nothing, because Vite loads only one
+config file. Rename yours for the moment, run `init`, then replace the generated
+`vite.config.ts` with yours and add `cloudflare()` to its existing `plugins` array:
 
 ```diff
 +import { cloudflare } from "@cloudflare/vite-plugin";
