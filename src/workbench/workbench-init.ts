@@ -25,6 +25,8 @@ export interface DeployTargetScaffold {
   files(context: {
     readonly cwd: string;
     readonly projectFile: string;
+    /** "default" or the named export the project file exposes the project under. */
+    readonly projectExport: string;
   }): readonly DeployTargetFile[];
   readonly nextSteps: readonly string[];
 }
@@ -82,7 +84,11 @@ export async function runInit(argv: readonly string[], io: WorkbenchCliIo): Prom
         }
         let files: readonly DeployTargetFile[];
         try {
-          files = target.files({ cwd: commandIo.cwd, projectFile: loaded.filePath });
+          files = target.files({
+            cwd: commandIo.cwd,
+            projectFile: loaded.filePath,
+            projectExport: loaded.exportName,
+          });
         } catch (error) {
           commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
           return TUBELESS_WORKBENCH_EXIT_CODE.usage;

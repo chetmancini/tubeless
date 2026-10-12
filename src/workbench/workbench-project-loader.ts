@@ -38,6 +38,8 @@ export interface WorkbenchRegistration {
 
 interface WorkbenchProjectFile {
   filePath: string;
+  /** The module export the project was selected from: "default" or its one named export. */
+  exportName: string;
   registrations: readonly WorkbenchRegistration[];
   inventory: Record<string, unknown>;
 }
@@ -126,13 +128,13 @@ export async function loadPipelineProjectFile(
 ): Promise<WorkbenchProjectFile | LoadFailure> {
   return loadWorkbenchModule(fileArgument, io, async (filePath) => {
     const moduleExports = await importModuleNamespace(filePath);
-    const root = selectUniqueExport(
+    const { exportName, value: root } = selectUniqueExport(
       moduleExports,
       Object.hasOwn(moduleExports, "default") ? "default" : undefined,
       isPipelineProject,
       "project",
       { hintExport: false }
-    ).value;
+    );
     const cwd = path.resolve(path.dirname(filePath), root.cwd ?? ".");
     const commands = new Map<string, WorkbenchPipelineCommand>();
     for (const command of root.commands) {
@@ -143,6 +145,7 @@ export async function loadPipelineProjectFile(
     }
     return {
       filePath,
+      exportName,
       registrations: root.pipelines.map((pipeline) =>
         createPipelineRegistration(pipeline, filePath, cwd, commands.get(pipeline.id))
       ),

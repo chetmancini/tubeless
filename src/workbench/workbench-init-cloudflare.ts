@@ -23,19 +23,36 @@ function importPath(fromDirectory: string, file: string): string {
   return specifier.startsWith("./") || specifier.startsWith("../") ? specifier : `./${specifier}`;
 }
 
+/** An import specifier names any IdentifierName, reserved words included, before `as`. */
+const IDENTIFIER_NAME = /^[\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*$/u;
+
+function projectImport(projectExport: string, specifier: string): string {
+  const from = JSON.stringify(specifier);
+  if (projectExport === "default") return `import project from ${from};`;
+  if (!IDENTIFIER_NAME.test(projectExport)) {
+    throw new Error(
+      `The project export ${JSON.stringify(projectExport)} is not a JavaScript identifier; export the project as default or under an identifier name.`
+    );
+  }
+  return projectExport === "project"
+    ? `import { project } from ${from};`
+    : `import { ${projectExport} as project } from ${from};`;
+}
+
 export const cloudflareScaffold: DeployTargetScaffold = {
   id: "cloudflare",
   description: "Worker, Durable Objects and R2 with Studio behind Cloudflare Access",
-  files({ cwd, projectFile }) {
+  files({ cwd, projectFile, projectExport }) {
     const name = workerName(cwd);
     const workerDirectory = join(cwd, "cloudflare");
+    const importProject = projectImport(projectExport, importPath(workerDirectory, projectFile));
     // Interpolated so the runtime graph checks do not mistake template text for an import of this module.
     const workerImport = importPath(cwd, join(workerDirectory, "worker.ts"));
     return [
       {
         path: "cloudflare/worker.ts",
         contents: `import { createCloudflareApp } from "tubeless/cloudflare";
-import project from ${JSON.stringify(importPath(workerDirectory, projectFile))};
+${importProject}
 
 const app = createCloudflareApp(project);
 

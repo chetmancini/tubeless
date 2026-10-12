@@ -12,7 +12,7 @@ afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true
 const coreUrl = pathToFileURL(resolve("dist/core/pipeline.js")).href;
 const projectUrl = pathToFileURL(resolve("dist/project/project.js")).href;
 
-function projectSource(withSchema: boolean): string {
+function projectSource(withSchema: boolean, exportClause = "export default"): string {
   return `
     import { createSteps, definePipeline } from ${JSON.stringify(coreUrl)};
     import { defineProject } from ${JSON.stringify(projectUrl)};
@@ -20,7 +20,7 @@ function projectSource(withSchema: boolean): string {
       jsonSchema: { input: () => ({ type: "object", properties: {} }) } } };
     const { step } = ${withSchema ? "createSteps(schema)" : "createSteps()"};
     const only = step("only", { run: () => 1 });
-    export default defineProject("init-test", [definePipeline({ id: "only", steps: [only], finalize: only })]);
+    ${exportClause} defineProject("init-test", [definePipeline({ id: "only", steps: [only], finalize: only })]);
   `;
 }
 
@@ -53,6 +53,32 @@ describe("tubeless init", () => {
     expect(out.join("")).toContain("npx cf deploy");
   });
 
+  it("imports a project selected from a named export", async () => {
+    const { cwd, io } = workspace(projectSource(true, "export const initProject ="));
+    expect(await init(io)).toBe(0);
+    const worker = readFileSync(join(cwd, "cloudflare/worker.ts"), "utf8");
+    expect(worker).toContain('import { initProject as project } from "../tubeless.project.mjs";');
+    expect(worker).toContain("const app = createCloudflareApp(project);");
+  });
+
+  it("imports a named export called project without an alias", async () => {
+    const { cwd, io } = workspace(projectSource(true, "export const project ="));
+    expect(await init(io)).toBe(0);
+    expect(readFileSync(join(cwd, "cloudflare/worker.ts"), "utf8")).toContain(
+      'import { project } from "../tubeless.project.mjs";'
+    );
+  });
+
+  it("refuses a project export that is not an identifier before writing", async () => {
+    const { cwd, io, err } = workspace(
+      projectSource(true, "const named =") + '\nexport { named as "init-project" };\n'
+    );
+    expect(await init(io)).not.toBe(0);
+    expect(err.join("")).toContain('"init-project"');
+    expect(existsSync(join(cwd, "cloudflare/worker.ts"))).toBe(false);
+    expect(existsSync(join(cwd, "cloudflare.config.ts"))).toBe(false);
+  });
+
   it("never overwrites existing files", async () => {
     const { cwd, io, err } = workspace();
     writeFileSync(join(cwd, "cloudflare.config.ts"), "keep");
@@ -82,6 +108,7 @@ describe("tubeless init", () => {
     for (const file of cloudflareScaffold.files({
       cwd: root,
       projectFile: join(root, "tubeless.project.ts"),
+      projectExport: "default",
     })) {
       expect(readFileSync(join(root, file.path), "utf8"), file.path).toBe(file.contents);
     }
@@ -113,6 +140,7 @@ describe("cloudflare scaffold naming and imports", () => {
     const files = cloudflareScaffold.files({
       cwd,
       projectFile: projectFile ?? join(cwd, "tubeless.project.ts"),
+      projectExport: "default",
     });
     const config = files.find((file) => file.path === "cloudflare.config.ts")!.contents;
     return {
@@ -149,7 +177,11 @@ describe("cloudflare scaffold naming and imports", () => {
 
   const workerImportFor = (projectFile: string) => {
     const cwd = join(tmpdir(), "app");
-    const files = cloudflareScaffold.files({ cwd, projectFile: join(cwd, projectFile) });
+    const files = cloudflareScaffold.files({
+      cwd,
+      projectFile: join(cwd, projectFile),
+      projectExport: "default",
+    });
     return files[0]!.contents;
   };
 
