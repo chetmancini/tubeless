@@ -31,20 +31,25 @@ You need a Cloudflare account and a project with a `tubeless.project.ts`
 tubeless init cloudflare
 ```
 
-This writes `cloudflare/worker.ts` and `cloudflare.config.ts`. It loads your project
-and derives every command first, so a broken project fails here and not at deploy
-time. It never overwrites existing files. Pass `-p <project-file>` when the project
-is not `./tubeless.project.ts`. Then run the steps it prints:
+This writes `cloudflare/worker.ts`, `cloudflare.config.ts` and `vite.config.ts`. It
+loads your project and derives every command first, so a broken project fails here
+and not at deploy time. It never overwrites existing files: if any of the three
+already exists, it names the conflicts and writes nothing. Pass `-p <project-file>`
+when the project is not `./tubeless.project.ts`. Then run the steps it prints:
 
 ```sh
-bun add tubeless && bun add -d cf@1.0.0-beta.13   # or npm/pnpm equivalents
+bun add tubeless && bun add -d cf@1.0.0-beta.13 vite@8.3.4 @cloudflare/vite-plugin@2.0.0-beta.sha-52b0dc0e9   # or npm/pnpm equivalents
 npx cf auth login
 npx cf dev            # Studio on http://localhost:8787 (Access is skipped only on localhost)
 npx cf deploy         # creates the Worker, Durable Objects and R2 bucket
 ```
 
-`cf` is the Cloudflare configuration CLI and is in beta. The scaffold pins its
-version and the compatibility date (`2026-10-01`, with `nodejs_compat`).
+`cf` is the Cloudflare configuration CLI and is in beta. `cf dev`, `cf build` and
+`cf deploy` build the Worker through Vite, so the project needs `vite`,
+`@cloudflare/vite-plugin` and the `vite.config.ts` that registers the plugin. The
+scaffold pins all three packages to versions verified together, plus the
+compatibility date (`2026-10-01`, with `nodejs_compat`). Install those exact
+versions with npm or pnpm too (`npm install -D -E …`, `pnpm add -D -E …`).
 
 The first deploy is not safe to open yet: until Access is configured, the Worker
 answers every non-local request with `503 access_not_configured`. To finish:
@@ -239,3 +244,5 @@ runs, host your pipelines in a [host engine](#run-limits) instead.
 | A cached step fails                                                                                          | It uses the default file store or V8 codec, or nothing bound the R2 bucket. Use the [R2 cache pattern](#caching-on-workers) and call `bindCacheBucket` in `cloudflare/worker.ts`.                                                   |
 | Local commands fail to load the project (`ERR_UNSUPPORTED_ESM_URL_SCHEME` or `cloudflare:workers` not found) | A module the project loads imports `tubeless/cloudflare` or `cloudflare:workers`. Import cache helpers from `tubeless/cloudflare/cache`, and keep `cloudflare:workers` in `cloudflare/worker.ts` or behind an adapter.              |
 | `untrusted_origin` on launch or cancel                                                                       | The request's `Origin` does not match the page. Use the deployed hostname directly, without a proxy that rewrites it.                                                                                                               |
+| `No Cloudflare dev-server is installed` from `cf dev`, `cf build` or `cf deploy`                             | `package.json` does not declare `@cloudflare/vite-plugin`. Run the install step `tubeless init cloudflare` prints; it pins `cf`, `vite` and the plugin.                                                                             |
+| `Cannot resolve entry module index.html` from `cf build` or `cf deploy`                                      | `vite.config.ts` is missing or does not register `cloudflare()`. Restore it from the [example](../examples/cloudflare/vite.config.ts).                                                                                              |

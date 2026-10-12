@@ -671,7 +671,8 @@ tubeless init <target> [-p, --project <path>]
 ```
 
 Scaffold deployment files for a project. The one target today is `cloudflare`,
-which writes `cloudflare/worker.ts` and `cloudflare.config.ts`; the
+which writes `cloudflare/worker.ts`, `cloudflare.config.ts` and `vite.config.ts`, and
+prints an install step that pins `cf`, `vite` and `@cloudflare/vite-plugin`; the
 [Cloudflare guide](./deploy-cloudflare.md) covers deploying them.
 `--project` selects the project file (default `./tubeless.project.ts`).
 
