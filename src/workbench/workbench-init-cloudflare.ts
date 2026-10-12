@@ -39,6 +39,26 @@ function projectImport(projectExport: string, specifier: string): string {
     : `import { ${projectExport} as project } from ${from};`;
 }
 
+/**
+ * Exact tooling versions the scaffold is verified against: `cf deploy` builds through
+ * `@cloudflare/vite-plugin`, so all three are required and pinned together.
+ */
+export const CLOUDFLARE_DEV_DEPENDENCIES = {
+  cf: "1.0.0-beta.13",
+  vite: "8.3.4",
+  "@cloudflare/vite-plugin": "2.0.0-beta.sha-52b0dc0e9",
+} as const;
+
+const devDependencyInstall = Object.entries(CLOUDFLARE_DEV_DEPENDENCIES)
+  .map(([name, version]) => `${name}@${version}`)
+  .join(" ");
+
+const VITE_CONFIG = `import { defineConfig } from "vite";
+import { cloudflare } from "@cloudflare/vite-plugin";
+
+export default defineConfig({ plugins: [cloudflare()] });
+`;
+
 export const cloudflareScaffold: DeployTargetScaffold = {
   id: "cloudflare",
   description: "Worker, Durable Objects and R2 with Studio behind Cloudflare Access",
@@ -102,10 +122,11 @@ export default defineConfig(() => {
 });
 `,
       },
+      { path: "vite.config.ts", contents: VITE_CONFIG },
     ];
   },
   nextSteps: [
-    "bun add tubeless && bun add -d cf@1.0.0-beta.13   # or npm/pnpm equivalents",
+    `bun add tubeless && bun add -d ${devDependencyInstall}   # or npm/pnpm equivalents`,
     "npx cf auth login",
     "npx cf dev            # Studio on http://localhost:8787 (Access is skipped only on localhost)",
     "npx cf deploy         # creates the Worker, Durable Objects and R2 bucket",

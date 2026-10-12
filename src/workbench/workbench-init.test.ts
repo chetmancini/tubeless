@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { runInit } from "./workbench-init.js";
-import { cloudflareScaffold } from "./workbench-init-cloudflare.js";
+import { CLOUDFLARE_DEV_DEPENDENCIES, cloudflareScaffold } from "./workbench-init-cloudflare.js";
 
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
@@ -50,7 +50,14 @@ describe("tubeless init", () => {
     const config = readFileSync(join(cwd, "cloudflare.config.ts"), "utf8");
     expect(config).toMatch(/name: "my-app-[a-z0-9-]+"/);
     expect(config).toContain('storage: "sqlite"');
-    expect(out.join("")).toContain("npx cf deploy");
+    // cf build and cf deploy delegate to Vite and refuse a project without the Cloudflare plugin.
+    const vite = readFileSync(join(cwd, "vite.config.ts"), "utf8");
+    expect(vite).toContain('import { cloudflare } from "@cloudflare/vite-plugin";');
+    expect(vite).toContain("plugins: [cloudflare()]");
+    const steps = out.join("");
+    for (const [name, version] of Object.entries(CLOUDFLARE_DEV_DEPENDENCIES))
+      expect(steps).toContain(` ${name}@${version}`);
+    expect(steps).toContain("npx cf deploy");
   });
 
   it("imports a project selected from a named export", async () => {
@@ -85,7 +92,18 @@ describe("tubeless init", () => {
     expect(await init(io)).not.toBe(0);
     expect(readFileSync(join(cwd, "cloudflare.config.ts"), "utf8")).toBe("keep");
     expect(existsSync(join(cwd, "cloudflare/worker.ts"))).toBe(false);
+    expect(existsSync(join(cwd, "vite.config.ts"))).toBe(false);
     expect(err.join("")).toContain("cloudflare.config.ts");
+  });
+
+  it("treats an existing vite.config.ts as a conflict", async () => {
+    const { cwd, io, err } = workspace();
+    writeFileSync(join(cwd, "vite.config.ts"), "keep");
+    expect(await init(io)).not.toBe(0);
+    expect(readFileSync(join(cwd, "vite.config.ts"), "utf8")).toBe("keep");
+    expect(existsSync(join(cwd, "cloudflare/worker.ts"))).toBe(false);
+    expect(existsSync(join(cwd, "cloudflare.config.ts"))).toBe(false);
+    expect(err.join("")).toContain("Refusing to overwrite existing files: vite.config.ts");
   });
 
   it("validates the project before writing anything", async () => {
@@ -105,11 +123,17 @@ describe("tubeless init", () => {
 
   it("keeps the checked-in example identical to the scaffold output", () => {
     const root = resolve("examples/cloudflare");
-    for (const file of cloudflareScaffold.files({
+    const files = cloudflareScaffold.files({
       cwd: root,
       projectFile: join(root, "tubeless.project.ts"),
       projectExport: "default",
-    })) {
+    });
+    expect(files.map((file) => file.path)).toEqual([
+      "cloudflare/worker.ts",
+      "cloudflare.config.ts",
+      "vite.config.ts",
+    ]);
+    for (const file of files) {
       expect(readFileSync(join(root, file.path), "utf8"), file.path).toBe(file.contents);
     }
   });
