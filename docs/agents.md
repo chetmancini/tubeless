@@ -216,7 +216,11 @@ rejected locally, requests are capped at 1 MiB and responses at 2 MiB, and large
 batches receive the same marked previews.
 
 The adapter keeps every returned content block, including thinking blocks and their
-signatures, and appends one user message of `tool_result` blocks per batch.
+signatures, and appends one user message of `tool_result` blocks per batch. A later
+prompt on the same conversation closes `_finish` with a `tool_result` and adds the new
+task to that user message, because the Messages API cannot follow a user message with
+another user message. Compaction runs on that completed history before the new task is
+appended, and the task stays verbatim. Direct `defineModelAgent` runs remain isolated.
 Recoverable tool failures set `is_error: true`. History is never edited except by
 compaction, which keeps it valid for models that check replayed thinking. Current
 Claude models reject forced tool choice, so the adapter sends `tool_choice: "auto"` and
@@ -231,9 +235,13 @@ Every object must set `additionalProperties: false`; unlike OpenAI, optional pro
 are allowed. The schema the model sees keeps only what strict mode accepts: types,
 `properties`, `required`, `items`, `anyOf`, `allOf` (`oneOf` becomes `anyOf`), scalar
 `enum` and `const`, `default`, supported string formats, and `minItems` of 0 or 1.
-Every other keyword, such as length, numeric, and pattern constraints, is recorded in
-that schema's `description` instead. Tubeless still validates every argument against
-the full schema.
+A schema with scalar `enum` or `const` and no type gets one: a shared type when every
+value agrees, `number` when the values are only integers and numbers, or `anyOf` of
+typed enums when the values mix types. A schema with neither a type nor `anyOf`/`allOf`
+is rejected locally. Every other keyword, such as length, numeric, and pattern
+constraints, is recorded in that schema's `description` instead. Tubeless still
+validates every argument against the full schema. Tool names longer than 64 characters
+are rejected locally; the harness itself allows 128.
 Strict mode allows at most 20 strict tools per request, including `_finish`, plus
 limits on optional and union-typed parameters. Set `strict: false` for larger tool sets
 or servers without strict support.

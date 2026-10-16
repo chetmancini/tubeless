@@ -118,10 +118,17 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
       (!Array.isArray(request.conversation) || !request.conversation.every(record))
     )
       throw new Error("Invalid Anthropic conversation state");
+    // A restored session starts a new prompt with no tool outcomes. Close _finish
+    // before appending that prompt; the Messages API rejects a second user message.
+    const newPrompt = context.turn === 1 && request.outcomes.length === 0;
     let messages: unknown[] =
       request.conversation === null
-        ? [{ role: "user", content: request.task }]
-        : [...request.conversation];
+        ? []
+        : newPrompt
+          ? closeFinishedTools(request.conversation)
+          : [...request.conversation];
+    const withPrompt = (history: readonly unknown[]) =>
+      newPrompt ? appendUserText(history, request.task) : [...history];
     const send = (endpointLabel: string, payload: { messages: unknown[] }, beta: boolean) =>
       providerRequest(
         "Anthropic",
@@ -177,22 +184,25 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
               ),
             },
           ];
-    const completed = [...messages, ...results(MAX_REQUEST_BYTES)];
+    const history = [...messages, ...results(MAX_REQUEST_BYTES)];
+    const completed = withPrompt(history);
     const shouldCompact =
       compactAfterBytes !== null &&
-      request.outcomes.length > 0 &&
+      (request.outcomes.length > 0 || (newPrompt && request.conversation !== null)) &&
       (Buffer.byteLength(JSON.stringify(completed)) > compactAfterBytes ||
         Buffer.byteLength(JSON.stringify({ ...decisionRequest, messages: completed })) >
           MAX_REQUEST_BYTES);
+    // Compaction covers completed history only. The new prompt stays verbatim.
     const nextRequest = shouldCompact ? compactRequest : decisionRequest;
-    messages =
-      Buffer.byteLength(JSON.stringify({ ...nextRequest, messages: completed })) <=
-      MAX_REQUEST_BYTES
-        ? completed
-        : [
-            ...messages,
-            ...results(MAX_REQUEST_BYTES - Buffer.byteLength(JSON.stringify(nextRequest))),
-          ];
+    const payload = shouldCompact ? history : completed;
+    const fits =
+      Buffer.byteLength(JSON.stringify({ ...nextRequest, messages: payload })) <= MAX_REQUEST_BYTES;
+    messages = fits
+      ? payload
+      : [
+          ...messages,
+          ...results(MAX_REQUEST_BYTES - Buffer.byteLength(JSON.stringify(nextRequest))),
+        ];
     if (shouldCompact) {
       const summary = anthropicMessage(
         await send("compaction", { ...compactRequest, messages }, true)
@@ -216,6 +226,7 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
         context.log.log(`Anthropic compaction returned no summary (${summary.stopReason})`);
       }
     }
+    if (newPrompt && (shouldCompact || !fits)) messages = withPrompt(messages);
     for (let attempt = 0; ; attempt++) {
       const response = anthropicMessage(
         await send("messages", { ...decisionRequest, messages }, false)
@@ -234,6 +245,47 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
       messages = [...messages, { role: "user", content: TOOL_RULE }];
     }
   };
+}
+
+/** Pair each pending `_finish` call with a tool_result so the next user prompt is valid. */
+function closeFinishedTools(messages: readonly unknown[]): unknown[] {
+  const last = messages.at(-1);
+  if (!record(last) || last.role !== "assistant" || !Array.isArray(last.content))
+    return [...messages];
+  const uses = last.content.filter((block) => record(block) && block.type === "tool_use");
+  if (uses.length === 0) return [...messages];
+  if (uses.some((block) => block.name !== "_finish"))
+    throw new Error("Anthropic conversation has unfinished tool calls");
+  return [
+    ...messages,
+    {
+      role: "user",
+      content: uses.map((block) => ({
+        type: "tool_result",
+        tool_use_id: block.id,
+        content: JSON.stringify(
+          record(block.input) && Object.hasOwn(block.input, "result")
+            ? block.input.result
+            : block.input
+        ),
+      })),
+    },
+  ];
+}
+
+/** Add a user prompt, extending a trailing user message so roles keep alternating. */
+function appendUserText(messages: readonly unknown[], text: string): unknown[] {
+  const last = messages.at(-1);
+  if (record(last) && last.role === "user") {
+    const content = Array.isArray(last.content)
+      ? [...last.content, { type: "text", text }]
+      : [
+          { type: "text", text: last.content },
+          { type: "text", text },
+        ];
+    return [...messages.slice(0, -1), { role: "user", content }];
+  }
+  return [...messages, { role: "user", content: text }];
 }
 
 function credentials(

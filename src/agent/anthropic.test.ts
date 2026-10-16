@@ -205,6 +205,71 @@ describe("Anthropic model", () => {
     ]);
   });
 
+  it("closes _finish and keeps a continued prompt outside compaction", async () => {
+    const block = { type: "compaction", content: "Summary.", signature: "sig-c" };
+    const previous = [
+      { role: "user", content: "remember this" },
+      {
+        role: "assistant",
+        content: [use("_finish", { answer: "Remembered" }, "toolu_finish")],
+      },
+    ];
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(message([block], "compaction"))
+      .mockResolvedValueOnce(message([finish()]));
+    vi.stubGlobal("fetch", fetcher);
+    const transport = anthropicModel({ apiKey: "fixture", compactAfterBytes: 1 });
+    await defineModelAgent({
+      id: "continue",
+      projectContext: false,
+      model: (request, context) =>
+        transport({ ...request, conversation: previous, outcomes: [] }, context),
+    }).runOrThrow({ task: "follow up" });
+    const compact = body(fetcher, 0);
+    expect(compact.messages).toEqual([
+      ...previous,
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_finish",
+            content: '{"answer":"Remembered"}',
+          },
+        ],
+      },
+    ]);
+    expect(body(fetcher, 1).messages).toEqual([
+      { role: "assistant", content: [block] },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Continue the task from this summary." },
+          { type: "text", text: "follow up" },
+        ],
+      },
+    ]);
+
+    fetcher.mockReset();
+    const unfinished = await defineModelAgent({
+      id: "unfinished",
+      projectContext: false,
+      model: (request, context) =>
+        transport(
+          {
+            ...request,
+            conversation: [{ role: "assistant", content: [use("read", { path: "target" })] }],
+            outcomes: [],
+          },
+          context
+        ),
+    }).run({ task: "follow up" });
+    expect(unfinished.status).toBe("failed");
+    expect(unfinished.errors[0]!.message).toContain("unfinished tool calls");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("continues uncompacted when no summary is returned, and never compacts when disabled", async () => {
     const cwd = await workspace();
     const step = () => message([use("read", { path: "target", startLine: null, maxLines: null })]);
@@ -388,7 +453,38 @@ it("moves enums with complex values into descriptions", () => {
   expect(input).not.toHaveProperty("enum");
   expect(input.description).toBe(`Constraints: {"enum":[["a"],"b"]}`);
   const scalar = anthropicTool("custom", "Custom", "input", { enum: ["a", 1, null] }, true);
-  expect(scalar.input_schema.properties.input).toEqual({ enum: ["a", 1, null] });
+  expect(scalar.input_schema.properties.input).toEqual({
+    anyOf: [
+      { type: "string", enum: ["a"] },
+      { type: "integer", enum: [1] },
+      { type: "null", enum: [null] },
+    ],
+  });
+  expect(
+    anthropicTool("custom", "Custom", "input", { enum: ["a", "b"], const: "a" }, true).input_schema
+      .properties.input
+  ).toEqual({ type: "string", const: "a", enum: ["a", "b"] });
+  expect(
+    anthropicTool("custom", "Custom", "input", { enum: [1, 1.5] }, true).input_schema.properties
+      .input
+  ).toEqual({ type: "number", enum: [1, 1.5] });
+});
+
+it("rejects strict schemas that have no type and no combinator", () => {
+  expect(() => anthropicTool("custom", "Custom", "input", { description: "bare" }, true)).toThrow(
+    "requires a type"
+  );
+});
+
+it("rejects tool names the Messages API will not accept", () => {
+  const name = `tool_${"a".repeat(60)}`;
+  expect(name).toHaveLength(65);
+  expect(() => anthropicTool(name, "Custom", "input", { type: "string" }, false)).toThrow(
+    "exceeds 64 characters"
+  );
+  expect(
+    anthropicTool("a".repeat(64), "Custom", "input", { type: "string" }, false).name
+  ).toHaveLength(64);
 });
 
 it("keeps only strict-supported keywords and rewrites oneOf to anyOf", () => {

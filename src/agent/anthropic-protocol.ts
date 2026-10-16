@@ -30,6 +30,50 @@ const KEPT = new Set([
 ]);
 const scalar = (value: unknown) => value === null || typeof value !== "object";
 
+function jsonType(
+  value: unknown
+): "null" | "boolean" | "integer" | "number" | "string" | undefined {
+  if (value === null) return "null";
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "string") return "string";
+  if (typeof value === "number" && Number.isFinite(value))
+    return Number.isInteger(value) ? "integer" : "number";
+  return undefined;
+}
+
+/** Anthropic's grammar requires a type unless a combinator is present. */
+function withStrictType(schema: Record<string, unknown>): Record<string, unknown> {
+  if (
+    schema.type !== undefined ||
+    schema.anyOf !== undefined ||
+    schema.allOf !== undefined ||
+    // Leave references in place so the shared checker rejects them before I/O.
+    ["$ref", "$dynamicRef", "$recursiveRef"].some((keyword) => Object.hasOwn(schema, keyword))
+  )
+    return schema;
+  if (Object.hasOwn(schema, "const")) {
+    const type = jsonType(schema.const);
+    if (type !== undefined) return { type, ...schema };
+  }
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) {
+    const types = schema.enum.map(jsonType);
+    if (types.every((type) => type !== undefined)) {
+      const unique = [...new Set(types)];
+      if (unique.length === 1 || unique.every((type) => type === "integer" || type === "number"))
+        return { type: unique.length === 1 ? unique[0] : "number", ...schema };
+      const groups = new Map<string, unknown[]>();
+      for (const [index, type] of types.entries()) {
+        const values = groups.get(type!) ?? [];
+        values.push(schema.enum[index]);
+        groups.set(type!, values);
+      }
+      const { enum: _enum, ...rest } = schema;
+      return { ...rest, anyOf: [...groups].map(([type, values]) => ({ type, enum: values })) };
+    }
+  }
+  throw new Error("Anthropic strict schema requires a type when anyOf and allOf are absent");
+}
+
 // Strict tool use compiles only a subset of JSON Schema. The harness still validates the
 // original schema, so every other keyword moves into the description instead.
 function strictSubset(schema: unknown): unknown {
@@ -57,13 +101,14 @@ function strictSubset(schema: unknown): unknown {
       kept[keyword] = value;
     else moved[keyword] = value;
   }
-  if (Object.keys(moved).length === 0) return kept;
-  const note = `Constraints: ${JSON.stringify(moved)}`;
-  kept.description =
-    typeof kept.description === "string" && kept.description
-      ? `${kept.description}\n${note}`
-      : note;
-  return kept;
+  if (Object.keys(moved).length > 0) {
+    const note = `Constraints: ${JSON.stringify(moved)}`;
+    kept.description =
+      typeof kept.description === "string" && kept.description
+        ? `${kept.description}\n${note}`
+        : note;
+  }
+  return withStrictType(kept);
 }
 
 /** Build a Messages API tool whose arguments carry the value in one wrapped field. */
@@ -74,6 +119,8 @@ export function anthropicTool(
   schema: Readonly<Record<string, unknown>>,
   strict: boolean
 ) {
+  // The Messages API accepts at most 64 characters. The harness allows 128.
+  if (name.length > 64) throw new Error(`Anthropic tool name exceeds 64 characters: ${name}`);
   if (!strict) {
     // Wrapping still relocates the reference root, so references stay rejected.
     return {
