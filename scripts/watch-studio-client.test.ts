@@ -237,8 +237,11 @@ describe("startStudioClientWatch", () => {
       expect(pending).toHaveLength(0);
 
       // A directory where the entry file was makes readFileSync throw EISDIR.
+      // Linux does not report that replacement, so edit a bundled file to deliver
+      // the event. The scan throws, and the watcher must still rebuild.
       rmSync(entry);
       mkdirSync(entry);
+      writeFileSync(leaf, 'export const label = "Studio 2";\n');
       await waitForCount(pending, 1);
       let resolved = 0;
       const start = Date.now();
@@ -247,7 +250,7 @@ describe("startStudioClientWatch", () => {
           pending[resolved]?.();
           resolved += 1;
         }
-        await delay(120);
+        await delay(150);
         if (resolved === pending.length) break;
         if (Date.now() - start > 2000) {
           throw new Error(`watch did not settle, saw ${pending.length} generates`);
@@ -255,9 +258,9 @@ describe("startStudioClientWatch", () => {
       }
       const afterError = pending.length;
 
-      writeFileSync(leaf, 'export const label = "Studio 2";\n');
+      writeFileSync(leaf, 'export const label = "Studio 3";\n');
       await waitForCount(pending, afterError + 1);
-      await delay(120);
+      await delay(150);
       expect(pending).toHaveLength(afterError + 1);
     } finally {
       handle.close();
