@@ -706,6 +706,154 @@ describe("local pipeline run studio", () => {
     );
   });
 
+  it("reads only the new page when an open run gains events", async () => {
+    const queries: { afterId?: number; runId?: string }[] = [];
+    const stored: StoredPipelineEvent[] = [
+      storedEvent({
+        id: 1,
+        name: "pipeline.started",
+        pipelineId: "studio-fixture",
+        runId: "run-1",
+        timestampMs: 10,
+        version: 2,
+      }),
+      storedEvent({
+        id: 2,
+        name: "pipeline.log",
+        payload: { level: "log", message: "loaded rows" },
+        pipelineId: "studio-fixture",
+        runId: "run-1",
+        stepId: "load",
+        timestampMs: 12,
+        version: 2,
+      }),
+    ];
+    for (let id = 3; id <= 30; id += 1) {
+      stored.push(
+        storedEvent({
+          id,
+          name: "pipeline.log",
+          payload: { level: "log", message: `row ${id}` },
+          pipelineId: "studio-fixture",
+          runId: "run-1",
+          stepId: "load",
+          timestampMs: id,
+          version: 2,
+        })
+      );
+    }
+    stored.push(
+      storedEvent({
+        id: 31,
+        name: "step.artifact",
+        pipelineId: "studio-fixture",
+        runId: "run-1",
+        stepId: "write",
+        attemptId: "run-1-attempt",
+        timestampMs: 31,
+        version: 2,
+        payload: {
+          operation: "write",
+          preview: false,
+          artifact: { id: "early", metadata: { text: "early-body" } },
+        },
+      }),
+      storedEvent({
+        id: 32,
+        name: "pipeline.started",
+        pipelineId: "other",
+        runId: "run-2",
+        timestampMs: 32,
+        version: 2,
+      })
+    );
+    const store: PipelineRunEventStore = {
+      close() {},
+      export() {},
+      async listEvents(query = {}) {
+        queries.push({ afterId: query.afterId, runId: query.runId });
+        return stored
+          .filter(
+            (event) =>
+              (query.runId === undefined || event.runId === query.runId) &&
+              (query.afterId === undefined || event.id > query.afterId)
+          )
+          .slice(0, query.limit);
+      },
+    };
+    const server = await startPipelineRunStudio({ port: 0, store });
+    servers.push(server);
+    await fetch(`${server.url}/api/snapshot`);
+
+    queries.length = 0;
+    const first = await fetch(`${server.url}/api/runs/run-1`).then((response) => response.json());
+    const opened = queries.filter((query) => query.runId === "run-1");
+    expect(opened.some((query) => query.afterId === undefined)).toBe(true);
+    expect(JSON.stringify(first)).toContain("loaded rows");
+    expect(JSON.stringify(first)).toContain("early-body");
+    expect(JSON.stringify(first)).not.toContain("run-2");
+
+    const lastSeen = 31;
+    queries.length = 0;
+    await fetch(`${server.url}/api/runs/run-1`);
+    const idle = queries.filter((query) => query.runId === "run-1");
+    expect(idle.length).toBeGreaterThan(0);
+    expect(idle.every((query) => query.afterId !== undefined && query.afterId >= lastSeen)).toBe(
+      true
+    );
+
+    stored.push(
+      storedEvent({
+        id: 33,
+        name: "pipeline.log",
+        payload: { level: "warn", message: "other later" },
+        pipelineId: "other",
+        runId: "run-2",
+        timestampMs: 33,
+        version: 2,
+      }),
+      storedEvent({
+        id: 34,
+        name: "pipeline.log",
+        payload: { level: "log", message: "new row" },
+        pipelineId: "studio-fixture",
+        runId: "run-1",
+        stepId: "load",
+        timestampMs: 34,
+        version: 2,
+      }),
+      storedEvent({
+        id: 35,
+        name: "step.artifact",
+        pipelineId: "studio-fixture",
+        runId: "run-1",
+        stepId: "write",
+        attemptId: "run-1-attempt",
+        timestampMs: 35,
+        version: 2,
+        payload: {
+          operation: "write",
+          preview: false,
+          artifact: { id: "late", metadata: { text: "late-body" } },
+        },
+      })
+    );
+    queries.length = 0;
+    const second = await fetch(`${server.url}/api/runs/run-1`).then((response) => response.json());
+    const appended = queries.filter((query) => query.runId === "run-1");
+    expect(appended.length).toBeGreaterThan(0);
+    expect(
+      appended.every((query) => query.afterId !== undefined && query.afterId >= lastSeen)
+    ).toBe(true);
+    expect(appended.some((query) => query.afterId === lastSeen)).toBe(true);
+    const body = JSON.stringify(second);
+    expect(body).toContain("loaded rows");
+    expect(body).toContain("new row");
+    expect(body).toContain("early-body");
+    expect(body).toContain("late-body");
+    expect(body).not.toContain("other later");
+  });
+
   it("loads batch artifacts only in selected run details as workspace history grows", async () => {
     const stored: StoredPipelineEvent[] = [];
     const server = await startPipelineRunStudio({ port: 0, store: memoryStore(stored) });
@@ -973,6 +1121,7 @@ describe("local pipeline run studio", () => {
     expect(forgedHost.status).toBe(403);
     expect(forgedHost.body).toEqual(untrustedHostError);
     expect(clearCount).toBe(0);
+    expect((await fetch(`${server.url}/api/runs/run-1`)).status).toBe(200);
     const response = await fetch(`${server.url}/api/history`, {
       headers: { "x-tubeless-studio-clear-history": "1" },
       method: "DELETE",
@@ -987,6 +1136,7 @@ describe("local pipeline run studio", () => {
     await expect(
       fetch(`${server.url}/api/snapshot`).then((snapshot) => snapshot.json())
     ).resolves.toMatchObject({ lastEventId: 0, runs: [] });
+    expect((await fetch(`${server.url}/api/runs/run-1`)).status).toBe(404);
   });
 
   it("clears a persisted run left active by an interrupted process", async () => {
