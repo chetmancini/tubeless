@@ -153,4 +153,115 @@ describe("startStudioClientWatch", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("follows a literal dynamic import and rebuilds when that module changes", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tubeless-studio-watch-"));
+    mkdirSync(join(root, "src/studio"), { recursive: true });
+    mkdirSync(join(root, "dist/studio"), { recursive: true });
+    mkdirSync(join(root, "dist/cloudflare"), { recursive: true });
+    writeFileSync(join(root, "src/studio/panel.ts"), 'export const panel = "panel";\n');
+    writeFileSync(join(root, "src/studio/comment-panel.ts"), "export const hidden = true;\n");
+    writeFileSync(
+      join(root, "src/studio/run-store-ui-client-browser.ts"),
+      [
+        '// import("./comment-panel.js");',
+        '/* import("./comment-panel.js"); */',
+        'import("node:net");',
+        'const load = () => import("./panel.js");',
+        "export const text = load;",
+        "",
+      ].join("\n")
+    );
+    writeFileSync(join(root, "dist/studio/run-store-ui-client-browser.js"), "ok\n");
+    writeFileSync(join(root, "dist/cloudflare/cloudflare-studio-client.js"), "ok\n");
+
+    const relativeSources = [...studioClientSources(root)].map((file) => relative(root, file));
+    expect(relativeSources).toContain("src/studio/panel.ts");
+    expect(relativeSources).not.toContain("src/studio/comment-panel.ts");
+
+    const pending: Array<() => void> = [];
+    let warmup = true;
+    const handle = startStudioClientWatch({
+      packageRoot: root,
+      debounceMs: 40,
+      generate: () =>
+        new Promise<void>((resolve) => {
+          if (warmup) resolve();
+          else pending.push(resolve);
+        }),
+    });
+    try {
+      await delay(400);
+      warmup = false;
+      await delay(80);
+      expect(pending).toHaveLength(0);
+
+      writeFileSync(join(root, "src/studio/panel.ts"), 'export const panel = "panel 2";\n');
+      await waitForCount(pending, 1);
+      await delay(80);
+      expect(pending).toHaveLength(1);
+      pending[0]?.();
+    } finally {
+      handle.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps watching when a source scan throws", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tubeless-studio-watch-"));
+    mkdirSync(join(root, "src/studio"), { recursive: true });
+    mkdirSync(join(root, "dist/studio"), { recursive: true });
+    mkdirSync(join(root, "dist/cloudflare"), { recursive: true });
+    const entry = join(root, "src/studio/run-store-ui-client-browser.ts");
+    const leaf = join(root, "src/studio/leaf.ts");
+    writeFileSync(leaf, 'export const label = "Studio";\n');
+    writeFileSync(entry, 'import { label } from "./leaf.js";\nexport const text = label;\n');
+    writeFileSync(join(root, "dist/studio/run-store-ui-client-browser.js"), "ok\n");
+    writeFileSync(join(root, "dist/cloudflare/cloudflare-studio-client.js"), "ok\n");
+
+    const pending: Array<() => void> = [];
+    let warmup = true;
+    const handle = startStudioClientWatch({
+      packageRoot: root,
+      debounceMs: 40,
+      generate: () =>
+        new Promise<void>((resolve) => {
+          if (warmup) resolve();
+          else pending.push(resolve);
+        }),
+    });
+    try {
+      await delay(400);
+      warmup = false;
+      await delay(80);
+      expect(pending).toHaveLength(0);
+
+      // A directory where the entry file was makes readFileSync throw EISDIR.
+      rmSync(entry);
+      mkdirSync(entry);
+      await waitForCount(pending, 1);
+      let resolved = 0;
+      const start = Date.now();
+      while (true) {
+        while (resolved < pending.length) {
+          pending[resolved]?.();
+          resolved += 1;
+        }
+        await delay(120);
+        if (resolved === pending.length) break;
+        if (Date.now() - start > 2000) {
+          throw new Error(`watch did not settle, saw ${pending.length} generates`);
+        }
+      }
+      const afterError = pending.length;
+
+      writeFileSync(leaf, 'export const label = "Studio 2";\n');
+      await waitForCount(pending, afterError + 1);
+      await delay(120);
+      expect(pending).toHaveLength(afterError + 1);
+    } finally {
+      handle.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

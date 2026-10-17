@@ -77,7 +77,13 @@ export function startStudioClientWatch({
   const onChange = (file) => {
     if (closed) return;
     const previous = sources;
-    sources = studioClientSources(packageRoot);
+    try {
+      sources = studioClientSources(packageRoot);
+    } catch {
+      // The file can disappear between the existence check and the read.
+      schedule();
+      return;
+    }
     if (file !== undefined && !previous.has(file) && !sources.has(file)) return;
     schedule();
   };
@@ -121,6 +127,9 @@ function runtimeSpecifiers(source) {
     if (isRuntimeEdge(head)) specifiers.push(match[1]);
   }
   for (const match of cleaned.matchAll(/(?:^|[;\n])\s*import\s+["'](\.[^"']+)["']/g)) {
+    specifiers.push(match[1]);
+  }
+  for (const match of cleaned.matchAll(/\bimport\s*\(\s*["'](\.[^"']+)["']\s*\)/g)) {
     specifiers.push(match[1]);
   }
   return specifiers;
