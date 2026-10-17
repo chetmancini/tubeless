@@ -29,6 +29,12 @@ export interface PipelineRunStudioHistoryMaintenance {
   isBusy?(): boolean | Promise<boolean>;
 }
 
+/**
+ * Detail projectors retain log and artifact bodies. This keeps the selected run
+ * and the expanded children touched most recently; an older open is rebuilt on demand.
+ */
+export const STUDIO_OPEN_RUN_LIMIT = 32;
+
 export class PipelineRunStudioHistoryBusyError extends Error {
   constructor() {
     super("Wait for active runs to finish before clearing history.");
@@ -41,7 +47,7 @@ export class PipelineRunStudioEventState {
   #lastEventId: number | undefined;
   #operation: Promise<void> = Promise.resolve();
   #projector = createPipelineRunProjector({ retainLogs: false, retainArtifacts: false });
-  /** Open runs keep log and artifact bodies and resume from the last applied event id. */
+  /** Recent opens, oldest first. Each entry keeps log and artifact bodies for one run. */
   #runs = new Map<string, { lastEventId: number | undefined; projector: PipelineRunProjector }>();
   #revision = 0;
   #history:
@@ -95,8 +101,22 @@ export class PipelineRunStudioEventState {
       seen = true;
     }
     if (!seen) return undefined;
-    this.#runs.set(runId, cached);
+    this.#retainRun(runId, cached);
     return cached.projector.snapshot().runs.find((entry) => entry.runId === runId);
+  }
+
+  /** Remember a run and drop the oldest projector once retention is full. */
+  #retainRun(
+    runId: string,
+    cached: { lastEventId: number | undefined; projector: PipelineRunProjector }
+  ): void {
+    this.#runs.delete(runId);
+    this.#runs.set(runId, cached);
+    while (this.#runs.size > STUDIO_OPEN_RUN_LIMIT) {
+      const oldest = this.#runs.keys().next().value;
+      if (oldest === undefined) return;
+      this.#runs.delete(oldest);
+    }
   }
 
   #indexedHistory() {

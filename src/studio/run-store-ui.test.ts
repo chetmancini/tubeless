@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import type { PipelineRunEventStore, StoredPipelineEvent } from "../run-store/run-store.js";
+import { STUDIO_OPEN_RUN_LIMIT } from "./run-store-ui-state.js";
 import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { PIPELINE_RUN_STUDIO_STYLE } from "./run-store-ui-page.js";
@@ -852,6 +853,70 @@ describe("local pipeline run studio", () => {
     expect(body).toContain("early-body");
     expect(body).toContain("late-body");
     expect(body).not.toContain("other later");
+  });
+
+  it("rebuilds an open run after newer opens fill the detail cache", async () => {
+    const queries: { afterId?: number; runId?: string }[] = [];
+    const stored: StoredPipelineEvent[] = [];
+    const runCount = STUDIO_OPEN_RUN_LIMIT + 1;
+    for (let index = 0; index < runCount; index += 1) {
+      const runId = `run-${index}`;
+      stored.push(
+        storedEvent({
+          id: stored.length + 1,
+          name: "pipeline.started",
+          pipelineId: "studio-fixture",
+          runId,
+          timestampMs: stored.length + 1,
+          version: 2,
+        })
+      );
+      stored.push(
+        storedEvent({
+          id: stored.length + 1,
+          name: "pipeline.log",
+          payload: { level: "log", message: `body ${runId}` },
+          pipelineId: "studio-fixture",
+          runId,
+          stepId: "load",
+          timestampMs: stored.length + 1,
+          version: 2,
+        })
+      );
+    }
+    const store: PipelineRunEventStore = {
+      close() {},
+      export() {},
+      async listEvents(query = {}) {
+        queries.push({ afterId: query.afterId, runId: query.runId });
+        return stored
+          .filter(
+            (event) =>
+              (query.runId === undefined || event.runId === query.runId) &&
+              (query.afterId === undefined || event.id > query.afterId)
+          )
+          .slice(0, query.limit);
+      },
+    };
+    const server = await startPipelineRunStudio({ port: 0, store });
+    servers.push(server);
+    await fetch(`${server.url}/api/snapshot`);
+    for (let index = 0; index < runCount; index += 1) {
+      expect((await fetch(`${server.url}/api/runs/run-${index}`)).status).toBe(200);
+    }
+
+    queries.length = 0;
+    const rebuilt = await fetch(`${server.url}/api/runs/run-0`).then((response) => response.json());
+    const reread = queries.filter((query) => query.runId === "run-0");
+    expect(reread.some((query) => query.afterId === undefined)).toBe(true);
+    expect(JSON.stringify(rebuilt)).toContain("body run-0");
+
+    queries.length = 0;
+    const recentId = `run-${STUDIO_OPEN_RUN_LIMIT}`;
+    await fetch(`${server.url}/api/runs/${recentId}`);
+    const recent = queries.filter((query) => query.runId === recentId);
+    expect(recent.length).toBeGreaterThan(0);
+    expect(recent.every((query) => query.afterId !== undefined)).toBe(true);
   });
 
   it("loads batch artifacts only in selected run details as workspace history grows", async () => {
