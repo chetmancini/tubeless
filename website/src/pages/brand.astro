@@ -68,7 +68,10 @@ const logos = [
           <p>1200 × 630 · JPEG</p>
           <div class="social-actions">
             <a class="btn ghost" href={SOCIAL_IMAGE_HREF} download="tubeless-social.jpg">Download JPEG</a>
-            <button class="btn ghost" type="button" data-copy={SOCIAL_IMAGE_URL}>Copy image URL</button>
+            <button class="btn ghost social-copy" type="button" data-copy={SOCIAL_IMAGE_URL}>
+              <span class="copy-idle">Copy image URL</span>
+              <span class="copy-done">Copied</span>
+            </button>
           </div>
         </div>
       </article>
@@ -94,6 +97,10 @@ const logos = [
   .social-card { margin-top: 1.8rem; }
   .social-preview { display: block; width: 100%; height: auto; border-bottom: 1px solid var(--line); }
   .social-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+  .social-copy { display: inline-grid; place-items: center; }
+  .social-copy span { grid-area: 1 / 1; }
+  .social-copy .copy-done, .social-copy[data-copied] .copy-idle { visibility: hidden; }
+  .social-copy[data-copied] .copy-done { visibility: visible; }
 
   @media (max-width: 700px) {
     .brand-grid { grid-template-columns: 1fr; }
