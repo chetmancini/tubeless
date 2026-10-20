@@ -5,6 +5,7 @@ import type { StoredRunSummary } from "../run-store/run-history.js";
 import type { StoredPipelineRun, StoredPipelineStep } from "../run-store/run-store.js";
 import { StepArtifacts } from "./run-store-ui-artifacts.js";
 import { layoutDag } from "./run-store-ui-graph-layout.js";
+import { preferredScrollBehavior } from "./run-store-ui-common.js";
 import type { StudioApi } from "./run-store-ui-client-transport.js";
 import { DEFAULT_DETAIL_RETRY_MS } from "./run-store-ui-data-controller.js";
 import {
@@ -1095,7 +1096,7 @@ export function RunGraph({ detail, api, onOpenRun, focus }: RunGraphProps) {
   useEffect(() => {
     if (!focus) return;
     setSelection({ kind: "step", runId: detail.run.runId, stepId: focus.stepId });
-    inspector.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    inspector.current?.scrollIntoView({ block: "nearest", behavior: preferredScrollBehavior() });
   }, [focus?.request]);
   const ctx: SceneContext = {
     loads,

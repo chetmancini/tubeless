@@ -8,6 +8,7 @@ import { RUN_MODEL_VERSION, type PipelinePlan } from "../core/pipeline.js";
 import type { StoredPipelineRun } from "../run-store/run-store.js";
 import { StudioAccessNotice } from "./run-store-ui-client.js";
 import { CommandFields } from "./run-store-ui-launch.js";
+import { preferredScrollBehavior } from "./run-store-ui-common.js";
 import { PipelinesView, PlanView } from "./run-store-ui-pipelines.js";
 import type { StudioApi } from "./run-store-ui-client-transport.js";
 import { isoTime, RunsView, runOutcome } from "./run-store-ui-runs.js";
@@ -669,4 +670,10 @@ describe("run detail hierarchy", () => {
     expect(markup).toContain('<details class="form-section execution-controls">');
     expect(markup.indexOf("Pipeline inputs")).toBeLessThan(markup.indexOf("Execution controls"));
   });
+});
+
+it("scrolls instantly when the user prefers reduced motion", () => {
+  expect(preferredScrollBehavior(() => ({ matches: true }))).toBe("auto");
+  expect(preferredScrollBehavior(() => ({ matches: false }))).toBe("smooth");
+  expect(preferredScrollBehavior(undefined)).toBe("smooth");
 });

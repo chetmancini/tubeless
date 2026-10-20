@@ -7,7 +7,7 @@ import { useEffect, useState } from "preact/hooks";
 import type { StoredPipelineRun } from "../run-store/run-store.js";
 import type { StudioApi } from "./run-store-ui-client-transport.js";
 import type { StudioRunSelection } from "./run-store-ui-data-controller.js";
-import { EmptyView } from "./run-store-ui-common.js";
+import { EmptyView, preferredScrollBehavior } from "./run-store-ui-common.js";
 
 function dateTime(ms: number): string {
   if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return "";
@@ -275,7 +275,7 @@ function RunDetail({
       `.step-list [data-step-id="${CSS.escape(focus.stepId)}"]`
     );
     if (!row) return;
-    row.scrollIntoView({ block: "center", behavior: "smooth" });
+    row.scrollIntoView({ block: "center", behavior: preferredScrollBehavior() });
     row.classList.remove("focused");
     void row.offsetWidth;
     row.classList.add("focused");
