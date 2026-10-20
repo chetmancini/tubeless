@@ -136,7 +136,7 @@ function ClearHistoryModal({ api, onCleared, onClose, snapshot }: ClearHistoryMo
   );
 }
 
-type StudioView = "pipelines" | "runs" | "definitions";
+export type StudioView = "pipelines" | "runs" | "definitions";
 
 const viewHeadings: Record<StudioView, { title: string; lede: string }> = {
   pipelines: { title: "Pipelines", lede: "Choose a declared workflow to configure and run." },
@@ -170,6 +170,14 @@ export function studioRunUrl(href: string, runId: string): string {
   const url = new URL(href);
   url.searchParams.set("run", runId);
   return url.href;
+}
+
+/** Leave the Definitions view once a loaded history has none, e.g. after Clear history. */
+export function resolveStudioView(
+  view: StudioView,
+  snapshot: { readonly definitions: readonly unknown[] } | null | undefined
+): StudioView {
+  return view === "definitions" && snapshot && snapshot.definitions.length === 0 ? "runs" : view;
 }
 
 export function resolveSelectedRunId(
@@ -281,6 +289,11 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
   }, [toast]);
 
   const roots = snapshot?.runs ?? [];
+
+  useEffect(() => {
+    const next = resolveStudioView(view, snapshot);
+    if (next !== view) setView(next);
+  }, [snapshot, view]);
 
   useEffect(() => {
     if (!snapshot || !commandsLoaded || view !== "runs" || selectedRunId) return;
