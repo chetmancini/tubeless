@@ -221,9 +221,16 @@ in one transaction. Compaction follows as best-effort maintenance. Once deletion
 commits, clearing succeeds even if compaction fails, so Studio discards the deleted
 history. A deletion failure rolls back and retains the history.
 
-New SQLite stores use schema version 4 to persist iteration relations. Version 3
-stores remain readable without modification; a writable open upgrades them
-transactionally while preserving existing events and append-only protection.
+New SQLite stores use schema version 4. A writable open upgrades schema versions
+1, 2, and 3 before it appends. Version 3 adds the iteration column. Versions 1
+and 2 still store scalar attributes in `attributes_json`; the upgrade copies
+each event into the current payload column, keeps its id, and rewrites a retired
+`PIPES_` error code to the `TUBELESS_` prefix. The upgrade commits once, so a
+failure leaves the previous schema and its append-only triggers in place.
+Read-only opens of versions 1 through 3 decode those rows without writing. Any
+other schema version is refused. The next schema version needs a new step in
+`src/run-store/run-store-migrate.ts` in the same change as
+`RUN_EVENT_STORE_VERSION`; opening a store fails until that step exists.
 
 The SQLite writer buffers events in batches of 64. `export()` can return before
 an event reaches disk. Pending events become visible to other connections after

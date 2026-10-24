@@ -633,7 +633,9 @@ included regardless of their pipeline IDs; `--events` remains scoped to the
 requested run only. Missing observations stay unknown, and missing terminal
 events stay recorded as running. See [agent history](./agents.md#inspection-and-recordings).
 A missing store exits `2`. A store also exits `2` with an error if it has a pending SQLite `-wal` or
-`-journal` file, has multiple hard links, or is not a supported run store. An unknown run id exits `1`. `tubeless run --store` flushes pending events at completion. A process crash
+`-journal` file, has multiple hard links, or is not a supported run store. Schema versions 1 through 4
+are supported. History reads an older store without writing; `tubeless run --store` and
+`tubeless history --clear` upgrade it to the current schema. An unknown run id exits `1`. `tubeless run --store` flushes pending events at completion. A process crash
 before a flush can lose up to 63 buffered events. See [storage behavior](./studio.md#storage-behavior)
 for programmatic writers and read-only access.
 NDJSON files are opened read-only and validated before their events are
