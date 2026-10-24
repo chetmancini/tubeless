@@ -3,8 +3,10 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { upgradeLegacyAttributeRow, type LegacyAttributeRow } from "./legacy-trace-event.js";
 import {
+  assertRunStoreMigrationConfigured,
   readSqliteUserVersion,
   runStoreColumnNames,
+  runStoreUpgradeRequired,
   supportedRunStoreLayout,
   unsupportedRunStoreSchema,
   upgradeSqliteRunStore,
@@ -228,12 +230,36 @@ export interface OpenSqlitePipelineRunStoreOptions {
 }
 
 /**
+ * Rewrite an existing SQLite run store to the current schema.
+ * This is the only writer of that upgrade. A writable open refuses an older file.
+ */
+export async function upgradeSqlitePipelineRunStore(
+  filename: string
+): Promise<{ from: number; to: number }> {
+  assertRunStoreMigrationConfigured();
+  const resolvedFilename = path.resolve(filename);
+  const database = await openDatabase(resolvedFilename, { create: false });
+  try {
+    const version = readSqliteUserVersion(database);
+    if (version === 0) throw new Error(`${resolvedFilename} is not a pipeline run store.`);
+    const columns = runStoreColumnNames(database);
+    if (!supportedRunStoreLayout(version, columns)) throw unsupportedRunStoreSchema(version);
+    if (version < RUN_EVENT_STORE_VERSION) upgradeSqliteRunStore(database);
+    return { from: version, to: RUN_EVENT_STORE_VERSION };
+  } finally {
+    database.close();
+  }
+}
+
+/**
  * Open the optional local SQLite trace store used by `tubeless run --store`,
  * `tubeless history`, and `tubeless ui`. The main executor never imports this
- * module. `export()` buffers up to 64 events and commits them in one
- * transaction, plus on `flush()`, same-instance `listEvents`/`clearHistory`,
- * and `close()`. Other connections cannot see the unflushed tail; a crash can
- * lose it. Finished `tubeless run --store` invocations flush at completion.
+ * module. An older schema is left unchanged: read-only opens decode it, and a
+ * writable open throws until `tubeless upgrade --yes` rewrites the file.
+ * `export()` buffers up to 64 events and commits them in one transaction, plus
+ * on `flush()`, same-instance `listEvents`/`clearHistory`, and `close()`.
+ * Other connections cannot see the unflushed tail; a crash can lose it.
+ * Finished `tubeless run --store` invocations flush at completion.
  */
 export async function openSqlitePipelineRunStore(
   filename: string,
@@ -255,12 +281,15 @@ export async function openSqlitePipelineRunStore(
   const database = await openDatabase(resolvedFilename, { create: initialize, readOnly });
   let legacyAttributes = false;
   try {
+    if (!readOnly) assertRunStoreMigrationConfigured();
     const version = readSqliteUserVersion(database);
     if (version !== 0) {
       const columns = runStoreColumnNames(database);
       if (!supportedRunStoreLayout(version, columns)) throw unsupportedRunStoreSchema(version);
       if (readOnly) legacyAttributes = columns.has("attributes_json");
-      else if (version < RUN_EVENT_STORE_VERSION) upgradeSqliteRunStore(database);
+      else if (version < RUN_EVENT_STORE_VERSION) {
+        throw runStoreUpgradeRequired(resolvedFilename, version);
+      }
     }
     if (!initialize && version === 0) {
       throw new Error(`${resolvedFilename} is not a pipeline run store.`);

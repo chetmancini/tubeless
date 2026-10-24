@@ -20,7 +20,7 @@ interface RunStoreDatabase {
 /**
  * Highest schema version this file knows how to produce.
  * `RUN_EVENT_STORE_VERSION` must stay equal to it. Bump both in the same change
- * and append a step below; a writable open runs every missing step in order.
+ * and append a step below. `tubeless upgrade` runs every missing step in order.
  */
 const MIGRATED_STORE_VERSION = 4;
 
@@ -30,6 +30,25 @@ const PAYLOAD_STORE_VERSION = 3;
 export function unsupportedRunStoreSchema(version: number): Error {
   return new Error(
     `Unsupported pipeline run store schema version ${version}; expected ${RUN_EVENT_STORE_VERSION}.`
+  );
+}
+
+/** Fail closed when the stamped schema has no migration step in this file. */
+export function assertRunStoreMigrationConfigured(
+  storeVersion: number = RUN_EVENT_STORE_VERSION,
+  migratedVersion: number = MIGRATED_STORE_VERSION
+): void {
+  if (storeVersion !== migratedVersion) {
+    throw new Error(
+      `Add a pipeline run store migration for schema version ${storeVersion} before opening the store.`
+    );
+  }
+}
+
+/** Writable opens refuse an older file. `tubeless upgrade --yes` is the writer. */
+export function runStoreUpgradeRequired(filename: string, version: number): Error {
+  return new Error(
+    `${filename} is pipeline run store schema version ${version}. Run \`tubeless upgrade --yes --store ${filename}\` before writing. The upgrade rewrites the history file and cannot be undone.`
   );
 }
 
@@ -68,11 +87,7 @@ export function supportedRunStoreLayout(version: number, columns: ReadonlySet<st
  * previous schema, events, and append-only triggers in place.
  */
 export function upgradeSqliteRunStore(database: RunStoreDatabase): void {
-  if (RUN_EVENT_STORE_VERSION !== MIGRATED_STORE_VERSION) {
-    throw new Error(
-      `Add a pipeline run store migration for schema version ${RUN_EVENT_STORE_VERSION} before opening the store.`
-    );
-  }
+  assertRunStoreMigrationConfigured();
   const steps: Partial<Record<number, (database: RunStoreDatabase) => void>> = {
     1: addCorrelationColumn,
     2: rewriteAttributeEvents,
@@ -228,26 +243,51 @@ function rewriteAttributeEvents(database: RunStoreDatabase): void {
       errorJson
     );
   }
+  // Read the counter before DROP. Dropping the table deletes its sqlite_sequence row,
+  // and a cleared store can have a counter ahead of MAX(id).
+  const preservedSeq = savedEventSequence(database);
   database.exec("DROP TABLE pipeline_run_events");
   database.exec("ALTER TABLE pipeline_run_events_next RENAME TO pipeline_run_events");
   for (const sql of RUN_EVENT_TABLE_STATEMENTS) {
     if (sql.startsWith("CREATE INDEX")) database.exec(sql);
   }
   for (const sql of RUN_EVENT_TRIGGER_STATEMENTS) database.exec(sql);
-  resetEventSequence(database);
+  resetEventSequence(database, preservedSeq);
   database.exec(`PRAGMA user_version = ${PAYLOAD_STORE_VERSION}`);
 }
 
-function resetEventSequence(database: RunStoreDatabase): void {
-  const present = statement(
+function savedEventSequence(database: RunStoreDatabase): number {
+  if (!hasSqliteSequence(database)) return 0;
+  const row = statement(
     database,
-    "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'"
-  ).all();
-  if (present.length === 0) return;
-  database.exec(`
-    DELETE FROM sqlite_sequence
-    WHERE name IN ('pipeline_run_events', 'pipeline_run_events_next');
-    INSERT INTO sqlite_sequence(name, seq)
-    SELECT 'pipeline_run_events', COALESCE(MAX(id), 0) FROM pipeline_run_events;
-  `);
+    "SELECT seq FROM sqlite_sequence WHERE name = 'pipeline_run_events'"
+  ).all()[0] as { seq?: number | bigint } | undefined;
+  const seq = Number(row?.seq ?? 0);
+  return Number.isFinite(seq) ? seq : 0;
+}
+
+function resetEventSequence(database: RunStoreDatabase, preservedSeq: number): void {
+  if (!hasSqliteSequence(database)) return;
+  const row = statement(
+    database,
+    "SELECT COALESCE(MAX(id), 0) AS max_id FROM pipeline_run_events"
+  ).all()[0] as { max_id?: number | bigint } | undefined;
+  const maxId = Number(row?.max_id ?? 0);
+  const seq = Math.max(preservedSeq, Number.isFinite(maxId) ? maxId : 0);
+  database.exec(
+    "DELETE FROM sqlite_sequence WHERE name IN ('pipeline_run_events', 'pipeline_run_events_next')"
+  );
+  statement(
+    database,
+    "INSERT INTO sqlite_sequence(name, seq) VALUES ('pipeline_run_events', ?)"
+  ).run(seq);
+}
+
+function hasSqliteSequence(database: RunStoreDatabase): boolean {
+  return (
+    statement(
+      database,
+      "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'"
+    ).all().length > 0
+  );
 }

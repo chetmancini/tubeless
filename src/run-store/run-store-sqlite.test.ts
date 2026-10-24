@@ -17,7 +17,8 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PipelineRunStudioEventState } from "../studio/run-store-ui-state.js";
-import { openSqlitePipelineRunStore } from "./run-store-sqlite.js";
+import { assertRunStoreMigrationConfigured } from "./run-store-migrate.js";
+import { openSqlitePipelineRunStore, upgradeSqlitePipelineRunStore } from "./run-store-sqlite.js";
 import { createSteps, definePipeline } from "../core/pipeline.js";
 import { createPipelineTestRuntime } from "../testing/testing.js";
 import { projectPipelineRunStore, type StoredPipelineEvent } from "./run-store.js";
@@ -273,7 +274,7 @@ describe("SQLite pipeline run store", () => {
   });
 
   it.each([true, false])(
-    "reads legacy stores without writing and migrates writable opens (initialize=%s)",
+    "reads schema version 3 without writing and appends after an explicit upgrade (initialize=%s)",
     async (initialize) => {
       const directory = await mkdtemp(path.join(tmpdir(), "tubeless-legacy-iteration-store-"));
       directories.push(directory);
@@ -305,6 +306,12 @@ describe("SQLite pipeline run store", () => {
         iteration,
         version: 3 as const,
       };
+      await expect(openSqlitePipelineRunStore(filename, { initialize })).rejects.toThrow(
+        "tubeless upgrade --yes"
+      );
+      expect(await readFile(filename)).toEqual(before);
+
+      await upgradeSqlitePipelineRunStore(filename);
       const writer = await openSqlitePipelineRunStore(filename, { initialize });
       try {
         await writer.export(child);
@@ -331,6 +338,13 @@ describe("SQLite pipeline run store", () => {
       }
     }
   );
+
+  it("refuses to stamp a store when the schema version has no migration", () => {
+    expect(() => assertRunStoreMigrationConfigured(5, 4)).toThrow(
+      "Add a pipeline run store migration for schema version 5 before opening the store."
+    );
+    expect(() => assertRunStoreMigrationConfigured(4, 4)).not.toThrow();
+  });
 
   it.each([1, 2, 5])("refuses unsupported store schema version %i", async (storeVersion) => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-version-"));
@@ -435,6 +449,10 @@ describe("SQLite pipeline run store", () => {
       }),
     ]);
 
+    await expect(openSqlitePipelineRunStore(filename)).rejects.toThrow("tubeless upgrade --yes");
+    expect(await readFile(filename)).toEqual(before);
+
+    await upgradeSqlitePipelineRunStore(filename);
     const writer = await openSqlitePipelineRunStore(filename);
     try {
       expect(await writer.listEvents()).toEqual(legacyEvents);
@@ -482,11 +500,85 @@ describe("SQLite pipeline run store", () => {
     });
     database.close();
 
+    await upgradeSqlitePipelineRunStore(filename);
     const store = await openSqlitePipelineRunStore(filename, { initialize: false });
     try {
       expect(await store.listEvents()).toEqual([
         expect.objectContaining({ correlationId: "job-1", id: 1, version: 2 }),
       ]);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it("keeps a saved id counter that is ahead of the copied rows", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-sequence-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const database = new DatabaseSync(filename);
+    database.exec(LEGACY_ATTRIBUTE_STORE_SQL);
+    database.exec("PRAGMA user_version = 1");
+    insertLegacy(database, {
+      attributes: { dry_run: false, plan_ok: true, step_count: 0, target_ids: "[]" },
+      id: 7,
+      name: "pipeline.started",
+    });
+    database.exec("UPDATE sqlite_sequence SET seq = 80 WHERE name = 'pipeline_run_events'");
+    expect(
+      database.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'pipeline_run_events'").get()
+    ).toMatchObject({ seq: 80 });
+    database.close();
+
+    await upgradeSqlitePipelineRunStore(filename);
+    const store = await openSqlitePipelineRunStore(filename, { initialize: false });
+    try {
+      await store.export(startedEvent("run-2", 12));
+      expect((await store.listEvents()).map((event) => event.id)).toEqual([7, 81]);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it("does not move the id counter backwards when it is behind the copied rows", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-sequence-behind-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const database = new DatabaseSync(filename);
+    database.exec(LEGACY_ATTRIBUTE_STORE_SQL);
+    database.exec("PRAGMA user_version = 1");
+    insertLegacy(database, {
+      attributes: { dry_run: false, plan_ok: true, step_count: 0, target_ids: "[]" },
+      id: 7,
+      name: "pipeline.started",
+    });
+    database.exec("UPDATE sqlite_sequence SET seq = 3 WHERE name = 'pipeline_run_events'");
+    database.close();
+
+    await upgradeSqlitePipelineRunStore(filename);
+    const store = await openSqlitePipelineRunStore(filename, { initialize: false });
+    try {
+      await store.export(startedEvent("run-2", 12));
+      expect((await store.listEvents()).map((event) => event.id)).toEqual([7, 8]);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it("keeps the id counter of a cleared older store", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-cleared-sequence-"));
+    directories.push(directory);
+    const filename = path.join(directory, "runs.sqlite");
+    const database = new DatabaseSync(filename);
+    database.exec(LEGACY_ATTRIBUTE_STORE_SQL);
+    database.exec("PRAGMA user_version = 1");
+    database.exec("INSERT INTO sqlite_sequence(name, seq) VALUES ('pipeline_run_events', 80)");
+    database.close();
+
+    await upgradeSqlitePipelineRunStore(filename);
+    const store = await openSqlitePipelineRunStore(filename, { initialize: false });
+    try {
+      await store.export(startedEvent("run-2", 12));
+      expect((await store.listEvents()).map((event) => event.id)).toEqual([81]);
     } finally {
       await store.close();
     }
@@ -511,7 +603,7 @@ describe("SQLite pipeline run store", () => {
     });
     database.close();
 
-    await expect(openSqlitePipelineRunStore(filename)).rejects.toThrow(
+    await expect(upgradeSqlitePipelineRunStore(filename)).rejects.toThrow(
       "Cannot upgrade pipeline run event 2 (pipeline.completed)"
     );
     const unchanged = new DatabaseSync(filename);
