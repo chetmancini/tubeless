@@ -2,6 +2,7 @@ import type { PipelineStepContext, StandardSchemaV1 } from "../core/pipeline-typ
 import type { AgentEnvironment, AgentEnvironmentProvider } from "./environment.js";
 import type { AgentDurability, AgentExecutionIdentity } from "./checkpoint-types.js";
 import type { DefaultAgentTools } from "./default-tools.js";
+import type { CodemodeExecutor } from "./codemode-executor.js";
 
 export type Awaitable<T> = T | Promise<T>;
 export type Input<S extends StandardSchemaV1> = NonNullable<S["~standard"]["types"]>["input"];
@@ -38,6 +39,16 @@ export interface CodemodeResult {
   readonly logs: readonly string[];
   readonly logsTruncated: boolean;
 }
+
+/** Code-mode settings; the executor defaults to a Node worker thread. */
+export interface CodemodeOptions {
+  /** Where scripts run, such as `createWorkerLoaderCodemodeExecutor` on Cloudflare. */
+  readonly executor?: CodemodeExecutor;
+}
+
+/** `true` or options enable code mode; `false` or omission advertises the registry. */
+export type CodemodeSetting = boolean | CodemodeOptions;
+type CodemodeEnabled<Setting extends CodemodeSetting> = Setting extends false ? false : true;
 
 /** The only capability a code-mode agent advertises; its scripts reach the registry. */
 type CodemodeTools = {
@@ -133,7 +144,7 @@ export interface AgentDefinition<
   Result extends StandardSchemaV1,
   State,
   Registry extends Tools,
-  Codemode extends boolean = false,
+  Codemode extends CodemodeSetting = false,
   Defaults extends DefaultAgentToolName = DefaultAgentToolName,
 > {
   readonly id: Id;
@@ -153,7 +164,8 @@ export interface AgentDefinition<
   readonly defaultTools?: readonly Defaults[];
   /**
    * Advertise one `codemode` tool instead of the registry. Its JavaScript scripts call every
-   * registered tool; decisions and outcomes then name only `codemode`. Defaults to false.
+   * registered tool; decisions and outcomes then name only `codemode`. Pass `{ executor }` to
+   * run scripts somewhere other than a Node worker thread. Defaults to false.
    */
   readonly codemode?: Codemode;
   readonly limits?: AgentLimits;
@@ -168,7 +180,7 @@ export interface AgentDefinition<
   ): Awaitable<unknown>;
   reduce?(
     state: AgentState<NoInfer<State>>,
-    outcomes: readonly AgentOutcome<Registry, Codemode, Defaults>[]
+    outcomes: readonly AgentOutcome<Registry, CodemodeEnabled<Codemode>, Defaults>[]
   ): NoInfer<State>;
   dryRun?(
     state: AgentState<NoInfer<State>>,

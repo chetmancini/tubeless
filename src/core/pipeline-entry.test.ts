@@ -36,7 +36,18 @@ const allowedDependencies: Record<string, readonly string[]> = {
   testing: ["core", "utilities"],
   project: ["core", "utilities"],
   hosting: ["cli", "core", "project", "render", "studio", "tracing", "utilities"],
-  cloudflare: ["cli", "core", "hosting", "project", "run-store", "studio", "tracing", "utilities"],
+  // The Worker Loader code-mode executor embeds agent's dependency-free script realm setup.
+  cloudflare: [
+    "agent",
+    "cli",
+    "core",
+    "hosting",
+    "project",
+    "run-store",
+    "studio",
+    "tracing",
+    "utilities",
+  ],
   workbench: [
     "agent",
     "cli",

@@ -58,24 +58,37 @@ Studio and budgets show what the script did.
   Read-only defaults run; tools without preview handlers skip, and awaiting a skipped result
   fails the preview, as a direct call would.
 
-## Sandbox
+## Executors
 
-The Node/Bun executor lives in a lazily loaded module and starts one worker thread per script,
-with resource limits. Inside the worker, the script runs in a `node:vm` context. String code
-generation (`eval`, `Function`) and WebAssembly are disabled, and there are no timers, `fetch`,
-`process` or `require`. The bridge crosses realms only as JSON strings, and the in-realm
-`tools`/`console` objects are created inside the context. That keeps host-realm objects out of
-reach of the script. The host terminates the worker on timeout, cancellation or a fatal nested
-failure.
+`codemode-executor.ts` splits the sandbox in two. The platform-neutral harness owns the deadline,
+cancellation, tool dispatch, draining of calls the script did not await, fatal and recoverable
+failure classification, and JSON-only replies. A `CodemodeExecutor` only runs one script with a
+JSON-text `call(name, input)` bridge, and stops when its signal aborts. The harness stops waiting
+for an executor that ignores the signal and rejects its later calls with `CODEMODE_STOPPED`.
+Executors share the in-sandbox setup in `codemode-realm.ts`, so `tools`, `console`, reply decoding
+and log bounds behave the same everywhere.
 
-This is best-effort isolation, not a security boundary. The same holds for the default `bash`
-tool, which already runs with host permissions. Platforms without `worker_threads`/`vm`, such as
-Cloudflare Workers, cannot use code mode yet.
+- **Node or Bun (default):** `createNodeCodemodeExecutor()` starts one worker thread per script,
+  with resource limits. Inside the worker, the script runs in a `node:vm` context. String code
+  generation and WebAssembly are disabled, and there are no timers, `fetch`, `process` or
+  `require`. Only JSON text crosses the realm boundary, so host-realm objects stay out of reach.
+  The host terminates the worker on stop. Runtimes without file-based worker threads, such as
+  Workers with `nodejs_compat`, fail when the executor is created, so the run fails with
+  `TUBELESS_AGENT_CODEMODE_UNAVAILABLE` instead of every script failing recoverably.
+- **Cloudflare:** `createWorkerLoaderCodemodeExecutor(env.LOADER)` loads a fresh Dynamic Worker
+  per script with `globalOutbound: null`, no `env` and a CPU budget, and passes the bridge as an
+  RPC function. workerd compiles all modules at load, so a syntax error fails the load; the
+  executor maps that load failure to a script error with its line. A Dynamic Worker cannot be
+  terminated from the host, so stops rely on the harness ignoring late calls and on the CPU
+  budget. Miniflare does not enforce that budget. A Miniflare test runs a real agent with code mode
+  inside workerd.
+
+Neither is a security boundary in the strict sense, though a Dynamic Worker isolate is a much
+stronger one than `node:vm`. The default `bash` tool already runs with host permissions.
 
 ## Deferred
 
-- A pluggable executor (for example a Cloudflare Worker Loader or a remote sandbox), shaped as
-  `codemode: { executor }`.
+- Remote sandbox executors (for example a container service) built on the same contract.
 - Deterministic replay of nested calls from a call log, as in pi-durable and Cloudflare's
   `CodemodeRuntime`.
 - Tool discovery (`search`/`describe`) for inventories whose declarations exceed the description

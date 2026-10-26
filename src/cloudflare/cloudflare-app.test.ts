@@ -1,11 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, posix } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { Miniflare, NoOpLog, type WorkerdStructuredLog } from "miniflare";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFailed } from "vitest";
+import { manifestModules } from "./cloudflare-workerd.test-support.js";
 
-const dist = fileURLToPath(new URL("../../dist/", import.meta.url));
 const AUD = "a".repeat(64);
 const ISSUER = "https://test.cloudflareaccess.com";
 
@@ -74,27 +73,6 @@ export default {
 const GATE_ROUTER = String.raw`
 export default { fetch: (request, env) => env[request.headers.get("x-gate-target")].fetch(request) };
 `;
-
-function relativeImports(source: string, directory: string): string[] {
-  return [...source.matchAll(/(?:\bfrom\s+|\bimport\s*(?:\(\s*)?)["'](\.[^"']+)["']/g)].map(
-    (match) => posix.normalize(posix.join(directory, match[1]!))
-  );
-}
-
-function manifestModules(entry: string): Record<string, { type: "esm"; contents: string }> {
-  const modules: Record<string, { type: "esm"; contents: string }> = {
-    "worker.js": { type: "esm", contents: entry },
-  };
-  const pending = relativeImports(entry, "");
-  while (pending.length > 0) {
-    const name = pending.pop()!;
-    if (modules[name]) continue;
-    const contents = readFileSync(join(dist, name), "utf8");
-    modules[name] = { type: "esm", contents };
-    pending.push(...relativeImports(contents, posix.dirname(name)));
-  }
-  return modules;
-}
 
 let mf: Miniflare;
 let gates: Miniflare;

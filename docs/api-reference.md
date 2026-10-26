@@ -10,8 +10,8 @@ Package: `tubeless`
 
 | Entrypoint                  | Declaration                               | Surface hash                                                       | Exported symbols |
 | --------------------------- | ----------------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless/agent/node`       | `./dist/agent/node.d.ts`                  | `9a81f6b8a1e23fb4902b70d5488e99b236a8318b458878a0e3ddaad1118ce3ce` |                3 |
-| `tubeless/agent`            | `./dist/agent/agent.d.ts`                 | `bea717e3280d7c475b941ae5fed970a3fd427d7d3115a4f0d2e5c621b6abf21b` |               32 |
+| `tubeless/agent/node`       | `./dist/agent/node.d.ts`                  | `8a2e6e64527d3bf4393a6db1ee5cbb678c4457dd3fbe11825488f4f40bdc53e4` |                4 |
+| `tubeless/agent`            | `./dist/agent/agent.d.ts`                 | `1c344e15bd71503d9a3abbd86798bc9b3f807731a1f670fa94bc3cc20e61aaa5` |               38 |
 | `tubeless`                  | `./dist/core/pipeline.d.ts`               | `21a47f32cea22c902fc976a4f22ec43ef3f4e9967759e8413c136fd55bc4cb6a` |               78 |
 | `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `714ac8387a62cfc03974cd028db1302da14595ce577571113047aa88cac385fa` |               31 |
 | `tubeless/batch`            | `./dist/utilities/batch.d.ts`             | `a09125c6849bb91b4bbba2f76c4248452d5288cf0c70671461de5846b1d17037` |                7 |
@@ -21,54 +21,61 @@ Package: `tubeless`
 | `tubeless/project`          | `./dist/project/project.d.ts`             | `b97bbe2c1cf666a9bd9a7423ecc1eb8d9d5506966fd5012a1c396c8e17cda3b5` |                8 |
 | `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `b6fb6647dda2500375b1e7dd4909dbd4cfe4c610bcaf65db4a0cc3f8ca24f983` |               10 |
 | `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `e378d1e798e86752560d4398a591826ba0b3e0af0417ffd2fd71e3ffb28aeffb` |                3 |
-| `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `aec864c5880d5d6861cff05bc1225c3b410e090dfc769ab7cd033de0208a621d` |                2 |
-| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `1d90b0ed133e9b37833f5130eeaf383e784413d29b57fa863a20e497938c2f67` |                7 |
-| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `dedc6e74b760a7d92aed5fd33ae27398f96d4e2c1d75edfd0a6030aadd06fecf` |                2 |
-| `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `72b67d75510318c9c0fb5d331a4716a9a75809614ec3141d1ec2073383d010f0` |                9 |
+| `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `f4d28b8a71e092eab617b511afac844e8c46649d0376d1116c2b14f5abaf5ae7` |                2 |
+| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `0f4817c69bee8504317d31c82cd2863ca8d21e3b3f36725f6d33d5f925b4059f` |                7 |
+| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `cfc24598f09d18a26c782bf1401015b1cdf8abd455b82c88971701ed1a92c9e3` |                2 |
+| `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `1eadca8b17e304c012a3571c63f2bc9cf6e06e379cfb1c5f245f068b05d89943` |               12 |
 | `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `9f789b4e64f4be547a4d005e17326db879fd2249ab08ddad267cf2a9c2b064f8` |                4 |
 
 ## Symbols
 
 ### `tubeless/agent/node`
 
-| Symbol                                                                                                                         | Description                                                                               |
-| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| [`createNodeAgentEnvironment`](https://github.com/chetmancini/tubeless/blob/main/src/agent/node-environment.ts#L58)            | Local workspace capabilities with bounded reads, atomic writes and cancellable bash.      |
-| [`openSqliteAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/sqlite-checkpoint-store.ts#L37) | Open durable SQLite checkpoints; process exit automatically releases execution ownership. |
-| [`SqliteAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/sqlite-checkpoint-store.ts#L9)      | File-backed checkpoint storage using Node's built-in SQLite and per-key file locks.       |
+| Symbol                                                                                                                         | Description                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`createNodeAgentEnvironment`](https://github.com/chetmancini/tubeless/blob/main/src/agent/node-environment.ts#L58)            | Local workspace capabilities with bounded reads, atomic writes and cancellable bash.                                                                                                              |
+| [`createNodeCodemodeExecutor`](https://github.com/chetmancini/tubeless/blob/main/src/agent/codemode-node.ts#L30)               | Run each code-mode script in a fresh Node or Bun worker thread with heap limits, inside a `node:vm` context without string code generation, WebAssembly, `process`, `require`, `fetch` or timers. |
+| [`openSqliteAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/sqlite-checkpoint-store.ts#L37) | Open durable SQLite checkpoints; process exit automatically releases execution ownership.                                                                                                         |
+| [`SqliteAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/sqlite-checkpoint-store.ts#L9)      | File-backed checkpoint storage using Node's built-in SQLite and per-key file locks.                                                                                                               |
 
 ### `tubeless/agent`
 
 | Symbol                                                                                                                          | Description                                                                                      |
 | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| [`AgentCall`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L51)                                   | One selected default or custom call with raw model arguments; custom names replace defaults.     |
+| [`AgentCall`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L62)                                   | One selected default or custom call with raw model arguments; custom names replace defaults.     |
 | [`AgentCheckpointCodec`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-types.ts#L16)                   | Lossless serialization for persisted state, validated arguments and outcomes.                    |
 | [`AgentCheckpointLease`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-types.ts#L2)                    | Exclusive ownership of one execution's acknowledged checkpoint bytes.                            |
 | [`AgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-types.ts#L11)                   | Pluggable checkpoint persistence.                                                                |
-| [`AgentDecision`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L80)                               | A nonempty batch of independent calls, or the raw input to the final-result schema.              |
-| [`AgentDecisionContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L117)                       | Model-facing descriptors and ordinary step services, without executable tools.                   |
+| [`AgentDecision`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L91)                               | A nonempty batch of independent calls, or the raw input to the final-result schema.              |
+| [`AgentDecisionContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L128)                       | Model-facing descriptors and ordinary step services, without executable tools.                   |
 | [`AgentDurability`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-types.ts#L22)                        | Resume the same execution key on subsequent invocations with the same definition and inputs.     |
 | [`AgentEnvironment`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L15)                            | Filesystem and command capabilities supplied by a local or remote workspace.                     |
 | [`AgentEnvironmentContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L6)                      | Workspace and cancellation shared by an agent's environment operations.                          |
 | [`AgentEnvironmentProvider`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L79)                    | A workspace capability or a factory resolved once per live agent invocation.                     |
 | [`AgentExecutionIdentity`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-types.ts#L30)                 | Stable durable identities for business idempotency and cross-attempt correlation.                |
-| [`AgentLimits`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L97)                                 | Finite limits for this agent and its descendants; child limits may only tighten them.            |
+| [`AgentLimits`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L108)                                | Finite limits for this agent and its descendants; child limits may only tighten them.            |
 | [`AgentModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-types.ts#L19)                                  | Pluggable model transport; the harness owns and isolates its returned conversation per run.      |
 | [`AgentModelRequest`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-types.ts#L4)                            | Per-run provider context and the latest ordered tool outcomes, never executable handlers.        |
 | [`AgentModelResponse`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-types.ts#L13)                          | An untrusted decision and complete plain-data conversation, including any final answer.          |
-| [`AgentOutcome`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L71)                                | Input-order result or deliberately recoverable handler failure, including selected defaults.     |
+| [`AgentOutcome`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L82)                                | Input-order result or deliberately recoverable handler failure, including selected defaults.     |
 | [`AgentProjectInstruction`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L9)                      | One scoped guidance file, loaded by the workspace that owns it.                                  |
 | [`AgentSession`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-session.ts#L30)                              | Sequential runs of one model-backed agent that continue a single conversation.                   |
-| [`AgentState`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L10)                                  | Deeply read-only view of the owned plain-data state supplied to agent callbacks.                 |
-| [`AgentTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L14)                                   | Opaque capability created by defineTool or pipelineTool; model decisions contain data only.      |
-| [`AgentToolContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L111)                           | Step services and the workspace capability available to a registered tool.                       |
-| [`CodemodeResult`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L36)                              | A code-mode script's JSON return value and bounded console lines.                                |
+| [`AgentState`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L11)                                  | Deeply read-only view of the owned plain-data state supplied to agent callbacks.                 |
+| [`AgentTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L15)                                   | Opaque capability created by defineTool or pipelineTool; model decisions contain data only.      |
+| [`AgentToolContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L122)                           | Step services and the workspace capability available to a registered tool.                       |
+| [`CodemodeExecution`](https://github.com/chetmancini/tubeless/blob/main/src/agent/codemode-executor.ts#L4)                      | One script for an executor to run, with the JSON-text bridge to its tools.                       |
+| [`CodemodeExecutionResult`](https://github.com/chetmancini/tubeless/blob/main/src/agent/codemode-executor.ts#L20)               | A script's JSON result text and console lines, or the error that ended it.                       |
+| [`CodemodeExecutor`](https://github.com/chetmancini/tubeless/blob/main/src/agent/codemode-executor.ts#L39)                      | Runs code-mode scripts in an isolated sandbox.                                                   |
+| [`CodemodeOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L44)                             | Code-mode settings; the executor defaults to a Node worker thread.                               |
+| [`CodemodeReply`](https://github.com/chetmancini/tubeless/blob/main/src/agent/codemode-executor.ts#L44)                         | The value or failure of one script call, as JSON text crossing into the sandbox.                 |
+| [`CodemodeResult`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L37)                              | A code-mode script's JSON return value and bounded console lines.                                |
+| [`CodemodeSetting`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L50)                             | `true` or options enable code mode; `false` or omission advertises the registry.                 |
 | [`createAgentSession`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-session.ts#L54)                        | Continue one conversation across sequential runs of a `defineAgent` agent, such as chat prompts. |
 | [`createMemoryAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/memory-checkpoint-store.ts#L6) | In-memory checkpoint store with exclusive leases, useful for tests and embedded hosts.           |
-| [`DefaultAgentToolName`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L20)                        | A standard workspace tool an agent's setup may select.                                           |
+| [`DefaultAgentToolName`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L21)                        | A standard workspace tool an agent's setup may select.                                           |
 | [`DefaultAgentTools`](https://github.com/chetmancini/tubeless/blob/main/src/agent/default-tools.ts#L207)                        | The read, write, edit, bash, list and search tools included in every agent.                      |
-| [`defineAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-agent.ts#L75)                                 | Prompt a model with `{ task }` and finish with the result schema, `{ answer }` by default.       |
-| [`defineAgentLoop`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent.ts#L44)                                   | Build a bounded in-process agent as an ordinary pipeline with one target, agent.                 |
+| [`defineAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-agent.ts#L79)                                 | Prompt a model with `{ task }` and finish with the result schema, `{ answer }` by default.       |
+| [`defineAgentLoop`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent.ts#L57)                                   | Build a bounded in-process agent as an ordinary pipeline with one target, agent.                 |
 | [`defineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L57)                                        | Declare a validated handler capability; tools skip live work in dry runs by default.             |
 | [`pipelineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/pipeline-tool.ts#L25)                              | Reuse a compiled child's options schema and exact final result.                                  |
 | [`plainAgentCheckpointCodec`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-codec.ts#L101)             | Lossless, tagged JSON codec for finite plain data; preserves undefined and sparse arrays.        |
@@ -305,17 +312,20 @@ Package: `tubeless`
 
 ### `tubeless/cloudflare`
 
-| Symbol                                                                                                               | Description                                                                               |
-| -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [`CloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L41)                | Worker handler and Durable Object classes that a Worker entry exports.                    |
-| [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L25)         | Options for createCloudflareApp.                                                          |
-| [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L38) | Durable Object class to export from the Worker entry under its binding's export name.     |
-| [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L33)             | Worker module handler to use as the Worker entry's default export.                        |
-| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L96)          | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects. |
-| [`createR2CacheStore`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L24)     | Step cache entries in R2.                                                                 |
-| [`jsonCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L132)        | Lossless JSON codec for Workers, where the default V8 codec is unavailable.               |
-| [`R2BucketLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L11)           | Structural subset of an R2 bucket binding that the cache store uses.                      |
-| [`R2ObjectLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L4)            | Structural subset of an R2 object body that the cache store reads.                        |
+| Symbol                                                                                                                               | Description                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| [`CloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L47)                                | Worker handler and Durable Object classes that a Worker entry exports.                          |
+| [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L31)                         | Options for createCloudflareApp.                                                                |
+| [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L44)                 | Durable Object class to export from the Worker entry under its binding's export name.           |
+| [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L39)                             | Worker module handler to use as the Worker entry's default export.                              |
+| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L102)                         | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects.       |
+| [`createR2CacheStore`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L24)                     | Step cache entries in R2.                                                                       |
+| [`createWorkerLoaderCodemodeExecutor`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-codemode.ts#L107) | Run each code-mode script in a fresh Cloudflare Dynamic Worker from a `worker_loaders` binding. |
+| [`jsonCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L132)                        | Lossless JSON codec for Workers, where the default V8 codec is unavailable.                     |
+| [`R2BucketLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L11)                           | Structural subset of an R2 bucket binding that the cache store uses.                            |
+| [`R2ObjectLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L4)                            | Structural subset of an R2 object body that the cache store reads.                              |
+| [`WorkerLoaderCodemodeOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-codemode.ts#L22)         | Options for createWorkerLoaderCodemodeExecutor.                                                 |
+| [`WorkerLoaderLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-codemode.ts#L11)                    | The `worker_loaders` binding's `load` method, as used by the code-mode executor.                |
 
 ### `tubeless/cloudflare/cache`
 

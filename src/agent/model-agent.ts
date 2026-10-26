@@ -8,6 +8,7 @@ import type {
 import type {
   AgentLimits,
   AgentOutcome,
+  CodemodeSetting,
   DefaultAgentToolName,
   Input,
   Output,
@@ -56,8 +57,11 @@ interface AgentConfig<Id extends string, Result extends StandardSchemaV1, Regist
   readonly tools?: Registry;
   /** Standard workspace tools this agent may use; defaults to all six. `[]` grants none. */
   readonly defaultTools?: readonly DefaultAgentToolName[];
-  /** Advertise one `codemode` tool whose JavaScript calls every registered tool. Defaults to false. */
-  readonly codemode?: boolean;
+  /**
+   * Advertise one `codemode` tool whose JavaScript calls every registered tool. Pass
+   * `{ executor }` to run scripts somewhere other than a Node worker thread. Defaults to false.
+   */
+  readonly codemode?: CodemodeSetting;
   readonly limits?: AgentLimits;
   readonly environment?: AgentEnvironmentProvider;
 }
@@ -128,7 +132,6 @@ function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
     typeof model !== "function" ||
     (instructions !== undefined && typeof instructions !== "string") ||
     typeof projectContext !== "boolean" ||
-    typeof codemode !== "boolean" ||
     (typedInput ? typeof task !== "function" : task !== undefined)
   )
     throw agentError(
@@ -153,7 +156,7 @@ function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
     StandardSchemaV1,
     ModelState,
     Tools,
-    boolean
+    CodemodeSetting
   >(
     {
       ...config,
@@ -175,7 +178,7 @@ function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
             projectContext,
             context.signal,
             context.environment,
-            codemode
+            codemode !== false
           ));
         const response = await model(
           {

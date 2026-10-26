@@ -21,6 +21,7 @@ import type {
   AgentLimits,
   AgentOutcome,
   AgentState,
+  CodemodeSetting,
   DefaultAgentToolName,
   Output,
   Tools,
@@ -42,7 +43,7 @@ export function createAgentTurn<
   Result extends StandardSchemaV1,
   State,
   Registry extends Tools,
-  Codemode extends boolean,
+  Codemode extends CodemodeSetting,
   Defaults extends DefaultAgentToolName,
 >(
   definition: RuntimeAgentDefinition<string, Options, Result, State, Registry, Codemode, Defaults>,
@@ -271,7 +272,11 @@ export function createAgentTurn<
       const { execution } = context.options;
       throwIfAborted(context.signal, "Agent reduction");
       // SAFETY: registered tools validated outcomes before persistence; recovery matched their definitions.
-      const typedOutcomes = outcomes as readonly AgentOutcome<Registry, Codemode, Defaults>[];
+      const typedOutcomes = outcomes as readonly AgentOutcome<
+        Registry,
+        Codemode extends false ? false : true,
+        Defaults
+      >[];
       const state = definition.reduce
         ? ownState(definition.reduce(decision.state, typedOutcomes))
         : decision.state;
