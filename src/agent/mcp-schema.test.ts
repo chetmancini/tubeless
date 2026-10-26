@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mcpInputSchema } from "./mcp-schema.js";
+import { mcpInputSchema, mcpResultSchema } from "./mcp-schema.js";
 import { parameter } from "./openai-protocol.js";
 
 describe("MCP input schemas", () => {
@@ -356,5 +356,64 @@ describe("MCP input schemas", () => {
         $defs: { loop: { $ref: "#/$defs/loop" } },
       })
     ).toThrow("Recursive MCP schema reference");
+  });
+});
+
+describe("MCP result descriptors", () => {
+  const descriptor = (outputSchema?: unknown) =>
+    mcpResultSchema(outputSchema)["~standard"].jsonSchema!.output!({ target: "draft-2020-12" });
+  const generic = descriptor();
+
+  it("types structuredContent from an object outputSchema and hoists its definitions", () => {
+    expect(
+      descriptor({
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        properties: { item: { $ref: "#/definitions/item" } },
+        definitions: { item: { type: "string" } },
+      })
+    ).toEqual({
+      ...generic,
+      definitions: { item: { type: "string" } },
+      properties: {
+        ...(generic.properties as object),
+        structuredContent: { type: "object", properties: { item: { $ref: "#/definitions/item" } } },
+      },
+      required: ["content", "structuredContent"],
+    });
+  });
+
+  it("keeps the generic shape for missing, non-object, cyclic or oversized schemas", () => {
+    const cyclic: Record<string, unknown> = { type: "object" };
+    cyclic.properties = { self: cyclic };
+    for (const outputSchema of [
+      undefined,
+      { type: "array" },
+      "object",
+      cyclic,
+      { type: "object", description: "x".repeat(20_000) },
+    ])
+      expect(descriptor(outputSchema)).toEqual(generic);
+  });
+
+  it("measures the serialized limit in UTF-8 bytes", () => {
+    const multibyte = { type: "object", description: "界".repeat(6000) };
+    expect(JSON.stringify(multibyte).length).toBeLessThan(16_384);
+    expect(descriptor(multibyte)).toEqual(generic);
+  });
+
+  it("keeps the generic shape when references expand past the declaration limit", () => {
+    const fields = Object.fromEntries(
+      Array.from({ length: 100 }, (_, index) => [`f${index}`, { type: "string" }])
+    );
+    const compact = {
+      type: "object",
+      properties: Object.fromEntries(
+        Array.from({ length: 100 }, (_, index) => [`p${index}`, { $ref: "#/$defs/row" }])
+      ),
+      $defs: { row: { type: "object", properties: fields } },
+    };
+    expect(new TextEncoder().encode(JSON.stringify(compact)).length).toBeLessThan(16_384);
+    expect(descriptor(compact)).toEqual(generic);
   });
 });

@@ -1,5 +1,6 @@
 import type { StandardSchemaV1 } from "../core/pipeline-types.js";
 import { canonicalJsonValue } from "../utilities/canonical-json.js";
+import { renderSchemaType } from "./codemode-declarations.js";
 import { isRecord } from "./mcp-session.js";
 
 type Json = Readonly<Record<string, unknown>>;
@@ -274,29 +275,74 @@ const mcpResultJsonSchema = {
   required: ["content"],
 };
 
-/** Validate a raw `tools/call` result into the content the agent observes. */
-export const mcpResultSchema: StandardSchemaV1<unknown, McpToolResult> = {
-  "~standard": {
-    version: 1,
-    vendor: "tubeless-mcp",
-    // Validation selects fields without transforming them, so both descriptors match.
-    jsonSchema: { input: () => mcpResultJsonSchema, output: () => mcpResultJsonSchema },
-    validate(value) {
-      if (
-        !isRecord(value) ||
-        !Array.isArray(value.content) ||
-        !value.content.every((item) => isRecord(item) && typeof item.type === "string") ||
-        (value.structuredContent !== undefined && !isRecord(value.structuredContent))
-      )
-        return { issues: [{ message: "MCP tool returned an invalid result" }] };
-      return {
-        value: {
-          content: value.content as McpToolResult["content"],
-          ...(value.structuredContent === undefined
-            ? {}
-            : { structuredContent: value.structuredContent as Json }),
-        },
-      };
+const MAX_OUTPUT_SCHEMA_BYTES = 16_384;
+const utf8 = (text: string) => new TextEncoder().encode(text).length;
+
+/**
+ * Describe `structuredContent` with a tool's declared `outputSchema`, which servers must honor.
+ * Its `$defs` and `definitions` move to the descriptor root so local references still resolve.
+ * Missing, non-object or unserializable schemas keep the generic shape, as do schemas over
+ * 16 KiB of UTF-8 either serialized or rendered as a declaration, where references expand.
+ */
+function resultDescriptor(outputSchema: unknown): Json {
+  if (!isRecord(outputSchema) || outputSchema.type !== "object") return mcpResultJsonSchema;
+  let text: string | undefined;
+  try {
+    text = JSON.stringify(outputSchema);
+  } catch {
+    return mcpResultJsonSchema;
+  }
+  if (text === undefined || utf8(text) > MAX_OUTPUT_SCHEMA_BYTES) return mcpResultJsonSchema;
+  // SAFETY: the parsed copy of a stringified record is an owned plain JSON object.
+  const {
+    $defs,
+    definitions,
+    $schema: _schema,
+    $id: _id,
+    ...structured
+  } = JSON.parse(text) as Json;
+  const descriptor = {
+    ...mcpResultJsonSchema,
+    ...(isRecord($defs) ? { $defs } : {}),
+    ...(isRecord(definitions) ? { definitions } : {}),
+    properties: { ...mcpResultJsonSchema.properties, structuredContent: structured },
+    required: ["content", "structuredContent"],
+  };
+  const declared = renderSchemaType(descriptor, MAX_OUTPUT_SCHEMA_BYTES);
+  return declared === undefined || utf8(declared) > MAX_OUTPUT_SCHEMA_BYTES
+    ? mcpResultJsonSchema
+    : descriptor;
+}
+
+/**
+ * Validate a raw `tools/call` result into the content the agent observes. Declarations type
+ * `structuredContent` from the tool's `outputSchema` when it is usable; it is not validated.
+ */
+export function mcpResultSchema(outputSchema?: unknown): StandardSchemaV1<unknown, McpToolResult> {
+  const descriptor = resultDescriptor(outputSchema);
+  return {
+    "~standard": {
+      version: 1,
+      vendor: "tubeless-mcp",
+      // Validation selects fields without transforming them, so both descriptors match.
+      jsonSchema: { input: () => descriptor, output: () => descriptor },
+      validate(value) {
+        if (
+          !isRecord(value) ||
+          !Array.isArray(value.content) ||
+          !value.content.every((item) => isRecord(item) && typeof item.type === "string") ||
+          (value.structuredContent !== undefined && !isRecord(value.structuredContent))
+        )
+          return { issues: [{ message: "MCP tool returned an invalid result" }] };
+        return {
+          value: {
+            content: value.content as McpToolResult["content"],
+            ...(value.structuredContent === undefined
+              ? {}
+              : { structuredContent: value.structuredContent as Json }),
+          },
+        };
+      },
     },
-  },
-};
+  };
+}

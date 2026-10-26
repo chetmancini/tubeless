@@ -22,7 +22,7 @@ Package: `tubeless`
 | `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `b6fb6647dda2500375b1e7dd4909dbd4cfe4c610bcaf65db4a0cc3f8ca24f983` |               10 |
 | `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `e378d1e798e86752560d4398a591826ba0b3e0af0417ffd2fd71e3ffb28aeffb` |                3 |
 | `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `f4d28b8a71e092eab617b511afac844e8c46649d0376d1116c2b14f5abaf5ae7` |                2 |
-| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `0f4817c69bee8504317d31c82cd2863ca8d21e3b3f36725f6d33d5f925b4059f` |                7 |
+| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `57bba70c36de6010d338acca815965728cde23c1971a4830e88bfdf5601dd10f` |                7 |
 | `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `cfc24598f09d18a26c782bf1401015b1cdf8abd455b82c88971701ed1a92c9e3` |                2 |
 | `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `1eadca8b17e304c012a3571c63f2bc9cf6e06e379cfb1c5f245f068b05d89943` |               12 |
 | `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `9f789b4e64f4be547a4d005e17326db879fd2249ab08ddad267cf2a9c2b064f8` |                4 |
@@ -295,13 +295,13 @@ Package: `tubeless`
 
 | Symbol                                                                                            | Description                                                                                    |
 | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [`connectMcpServers`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L182)    | Connect MCP servers and expose their tools to an agent, named `<server>__<tool>`.              |
+| [`connectMcpServers`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L188)    | Connect MCP servers and expose their tools to an agent, named `<server>__<tool>`.              |
 | [`McpHttpOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp-http.ts#L10)   | A remote server reached over Streamable HTTP.                                                  |
 | [`McpServer`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L27)             | A Streamable HTTP endpoint (`url`) or a local stdio command (`command`).                       |
 | [`McpServers`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L34)            | Connected servers whose tools are named `<server>__<tool>`; close them after the agent's runs. |
 | [`McpStdioOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp-stdio.ts#L10) | A local server process speaking JSON-RPC over stdin and stdout.                                |
 | [`McpTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L31)               | A tool discovered on an MCP server, called with its validated JSON arguments.                  |
-| [`McpToolResult`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp-schema.ts#L255) | Content and optional structured data returned by an MCP tool call.                             |
+| [`McpToolResult`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp-schema.ts#L256) | Content and optional structured data returned by an MCP tool call.                             |
 
 ### `tubeless/agent/anthropic`
 

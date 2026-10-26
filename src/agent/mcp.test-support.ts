@@ -50,6 +50,19 @@ const tools = [
         },
       },
     },
+    outputSchema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: { point: { $ref: "#/$defs/point", description: "The echoed point" } },
+      required: ["point"],
+      $defs: {
+        point: {
+          type: "object",
+          properties: { x: { type: "number" }, label: { type: "string" } },
+          required: ["x"],
+        },
+      },
+    },
   },
 ];
 

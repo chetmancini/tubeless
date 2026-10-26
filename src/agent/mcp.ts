@@ -50,6 +50,7 @@ interface McpToolInfo {
   readonly name: string;
   readonly description?: string;
   readonly inputSchema: unknown;
+  readonly outputSchema?: unknown;
 }
 
 const MAX_TOOLS = 4096;
@@ -92,7 +93,12 @@ async function discover(session: McpSession, label: string, signal?: AbortSignal
       if (!isRecord(tool) || !nonblank(tool.name))
         throw new Error(`MCP server ${label} listed a tool without a name`);
       const description = [tool.description, tool.title].find(nonblank);
-      tools.push({ name: tool.name, description, inputSchema: tool.inputSchema });
+      tools.push({
+        name: tool.name,
+        description,
+        inputSchema: tool.inputSchema,
+        outputSchema: tool.outputSchema,
+      });
     }
     if (tools.length > MAX_TOOLS) throw new Error(`MCP server ${label} exceeds ${MAX_TOOLS} tools`);
     if (page.nextCursor !== undefined && !nonblank(page.nextCursor))
@@ -119,12 +125,12 @@ function errorText(content: unknown): string {
 function bridge(
   session: McpSession,
   label: string,
-  { name, description, inputSchema }: McpToolInfo
+  { name, description, inputSchema, outputSchema }: McpToolInfo
 ) {
   return defineTool({
     description: (description ?? `Call ${name} on MCP server ${label}`).slice(0, 4096),
     inputSchema: mcpInputSchema(inputSchema),
-    outputSchema: mcpResultSchema,
+    outputSchema: mcpResultSchema(outputSchema),
     run: async (args, context) => {
       let result: unknown;
       try {
