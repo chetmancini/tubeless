@@ -247,9 +247,10 @@ export interface StandardSchemaV1<TInput = unknown, TOutput = TInput> {
 
 /** Standard Schema V1 metadata and validation contract consumed by Tubeless. */
 interface StandardSchemaV1Props<TInput = unknown, TOutput = TInput> {
-  /** Optional Standard JSON Schema input converter, used to infer CLI flags. */
+  /** Optional Standard JSON Schema converters: input infers CLI flags; output types agent tool results. */
   readonly jsonSchema?: {
     readonly input: (options: { readonly target: "draft-2020-12" }) => Record<string, unknown>;
+    readonly output?: (options: { readonly target: "draft-2020-12" }) => Record<string, unknown>;
   };
   readonly types?: { readonly input: TInput; readonly output: TOutput };
   readonly validate: (
