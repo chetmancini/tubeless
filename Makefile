@@ -125,7 +125,7 @@ test-run:
 
 # `dist/` is what tests and type checks resolve `tubeless` from, so rebuild it as
 # sources change. The Studio client bundle is not a tsc output; regenerate it
-# when a bundled source changes.
+# when any file under src changes.
 watch: build
 	bun run studio:watch & bun run build:watch & bun run test:watch; wait
 

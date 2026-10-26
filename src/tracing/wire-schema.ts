@@ -7,7 +7,6 @@ const wireType = Symbol("tubeless.wire-schema.type");
 export interface WireSchema<T> {
   readonly [wireType]?: T;
   readonly jsonSchema: WireJsonSchema;
-  readonly optionalInput: boolean;
   readonly optionalOutput: boolean;
   decode(value: unknown, path: string): T;
 }
@@ -44,12 +43,11 @@ interface ArrayOptions {
 function schema<T>(
   jsonSchema: WireJsonSchema,
   decode: WireSchema<T>["decode"],
-  options: { readonly optionalInput?: boolean; readonly optionalOutput?: boolean } = {}
+  options: { readonly optionalOutput?: boolean } = {}
 ): WireSchema<T> {
   return {
     decode,
     jsonSchema,
-    optionalInput: options.optionalInput ?? false,
     optionalOutput: options.optionalOutput ?? false,
   };
 }
@@ -131,15 +129,13 @@ export function wireOptional<T>(inner: WireSchema<T>): WireSchema<T | undefined>
   return schema(
     inner.jsonSchema,
     (value, path) => (value === undefined ? undefined : inner.decode(value, path)),
-    { optionalInput: true, optionalOutput: true }
+    { optionalOutput: true }
   );
 }
 
 export function wireDefault<T>(inner: WireSchema<T>, fallback: T): WireSchema<T> {
-  return schema(
-    inner.jsonSchema,
-    (value, path) => (value === undefined ? fallback : inner.decode(value, path)),
-    { optionalInput: true }
+  return schema(inner.jsonSchema, (value, path) =>
+    value === undefined ? fallback : inner.decode(value, path)
   );
 }
 
@@ -243,7 +239,7 @@ export function wireRefine<T>(
       check(decoded, path);
       return decoded;
     },
-    { optionalInput: inner.optionalInput, optionalOutput: inner.optionalOutput }
+    { optionalOutput: inner.optionalOutput }
   );
 }
 
@@ -252,7 +248,6 @@ export function wireTransform<TInput, TOutput>(
   transform: (value: TInput) => TOutput
 ): WireSchema<TOutput> {
   return schema(inner.jsonSchema, (value, path) => transform(inner.decode(value, path)), {
-    optionalInput: inner.optionalInput,
     optionalOutput: inner.optionalOutput,
   });
 }

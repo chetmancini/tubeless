@@ -10,22 +10,22 @@ Package: `tubeless`
 
 | Entrypoint                  | Declaration                               | Surface hash                                                       | Exported symbols |
 | --------------------------- | ----------------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless/agent/node`       | `./dist/agent/node.d.ts`                  | `8a2e6e64527d3bf4393a6db1ee5cbb678c4457dd3fbe11825488f4f40bdc53e4` |                4 |
-| `tubeless/agent`            | `./dist/agent/agent.d.ts`                 | `e54c7791114e7c8d1231b1e3cf4a7d25f3db23df5deaf13c92785699b03a2b56` |               39 |
-| `tubeless`                  | `./dist/core/pipeline.d.ts`               | `21a47f32cea22c902fc976a4f22ec43ef3f4e9967759e8413c136fd55bc4cb6a` |               78 |
-| `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `714ac8387a62cfc03974cd028db1302da14595ce577571113047aa88cac385fa` |               31 |
+| `tubeless/agent/node`       | `./dist/agent/node.d.ts`                  | `e0558b4bf12753bf66e687621f7c6573605046c77e99f41ec26cd711a7bcf2d7` |                4 |
+| `tubeless/agent`            | `./dist/agent/agent.d.ts`                 | `5fa21302535eefeea4d86fb8325ce267e793391b3c595ef29402314e4b17d5c6` |               39 |
+| `tubeless`                  | `./dist/core/pipeline.d.ts`               | `e19783e82012183aef5c87abd1d91cb1cfde70e105204c87abc73670577aace2` |               78 |
+| `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `5a027c5810d08524a21e7ab66d43f11553e03e86547d118af85965b7a57deb84` |               31 |
 | `tubeless/batch`            | `./dist/utilities/batch.d.ts`             | `a09125c6849bb91b4bbba2f76c4248452d5288cf0c70671461de5846b1d17037` |                7 |
-| `tubeless/node`             | `./dist/node/node.d.ts`                   | `0a679eb61deedf5123c664987e8f9bbd764f723895a7e3cf03031e57b9f23fa7` |               14 |
+| `tubeless/node`             | `./dist/node/node.d.ts`                   | `9c928ce580452f11c6acdc228c2923ef98fa853ffa2e70cd1dacae8164c1dc0f` |               14 |
 | `tubeless/rate-limit`       | `./dist/utilities/rate-limit.d.ts`        | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`            | `./dist/utilities/retry.d.ts`             | `52ede846e87e3601426639a7bdc2de0a440c119470dc55324deb26cb312757fd` |                6 |
-| `tubeless/project`          | `./dist/project/project.d.ts`             | `b97bbe2c1cf666a9bd9a7423ecc1eb8d9d5506966fd5012a1c396c8e17cda3b5` |                8 |
-| `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `b6fb6647dda2500375b1e7dd4909dbd4cfe4c610bcaf65db4a0cc3f8ca24f983` |               10 |
-| `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `e378d1e798e86752560d4398a591826ba0b3e0af0417ffd2fd71e3ffb28aeffb` |                3 |
-| `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `d380eacd0d996e0fb1f3ceb29755063dc63df4224e154cf6751f2755a4c89fb1` |                2 |
-| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `57bba70c36de6010d338acca815965728cde23c1971a4830e88bfdf5601dd10f` |                7 |
-| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `64f5c346c084bdbb31a0d9c645720df7d044ed52d2622027aa0f49ad3e0bc579` |                2 |
-| `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `1eadca8b17e304c012a3571c63f2bc9cf6e06e379cfb1c5f245f068b05d89943` |               12 |
-| `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `9f789b4e64f4be547a4d005e17326db879fd2249ab08ddad267cf2a9c2b064f8` |                4 |
+| `tubeless/project`          | `./dist/project/project.d.ts`             | `77b0836e88c61d98d8dd795c92795bbb17a7ddbac9001522c92f2a33feca206b` |                8 |
+| `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `f1c9d6699246a6f91329d1d23c53d310e4a18d5b136375c109d128126165d038` |               10 |
+| `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `9b7b2835a4ffa8bdce42233c0ff22ca28fe2a51de95208d895f6fc1904d2bad0` |                3 |
+| `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `8e08fe480b86de80ede5e03d7f30fff3a46f9da7ce9d5261441e961bea6678ac` |                2 |
+| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `dc3bfb16ef93c725830400845b7389277e3dc16f7906b6b6095f670d54884f36` |                7 |
+| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `51fc37d127b384327979df8f47e29125977cb2ae0f87fe8676d916d7bf30011f` |                2 |
+| `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `8424e7173bc9a7e0b5ef203057eb5d4ae61988507ee960a2a0fafdb643ace61d` |               12 |
+| `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `a9a03a7a9a1b62cd3fe611ef83b864c876f61b8d74ece137761ed2a3ef98bc38` |                4 |
 
 ## Symbols
 

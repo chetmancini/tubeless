@@ -205,43 +205,14 @@ function rewriteAttributeEvents(database: RunStoreDatabase): void {
   );
   for (const row of rows) {
     const event = upgradeLegacyAttributeRow(row);
-    const [
-      version,
-      runId,
-      correlationId,
-      parentRunId,
-      pipelineId,
-      stepId,
-      attemptId,
-      itemKey,
-      name,
-      timestampMs,
-      durationMs,
-      payloadJson,
-      errorJson,
-      iterationJson,
-    ] = runEventRow(event);
+    const values = [...runEventRow(event)];
+    const iterationJson = values.pop();
     if (iterationJson !== null) {
       throw new Error(
         `Cannot upgrade pipeline run event ${String(row.id)} (${row.event_name}): iteration metadata is not stored before schema version ${MIGRATED_STORE_VERSION}.`
       );
     }
-    insert.run(
-      Number(row.id),
-      version,
-      runId,
-      correlationId,
-      parentRunId,
-      pipelineId,
-      stepId,
-      attemptId,
-      itemKey,
-      name,
-      timestampMs,
-      durationMs,
-      payloadJson,
-      errorJson
-    );
+    insert.run(Number(row.id), ...values);
   }
   // Read the counter before DROP. Dropping the table deletes its sqlite_sequence row,
   // and a cleared store can have a counter ahead of MAX(id).
