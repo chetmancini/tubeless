@@ -48,7 +48,7 @@ function idPrefix(callId: string): string {
 
 const usage = `Run a JavaScript async function body that calls tools and returns a JSON value.
 Call tools as \`await tools.name(input)\`; quote names that are not identifiers, as in \`tools["server__a-b"](input)\`.
-Each script costs a turn, so do as much as you can in one: read related files together with Promise.all, loop over listings, and chain calls whose inputs the script can compute, such as an edit followed by its check. Start another script only when you must see a result before deciding what to do next.
+Each script is one call, and waiting to read its result costs a model round trip, so do related work in one script: read related files together with Promise.all, loop over listings, and chain calls whose inputs the script can compute, such as an edit followed by its check. Keep unrelated work in separate scripts, which may run in the same batch, and start a later script only when you must see a result before deciding what to do next.
 \`return\` only the facts you need, such as relevant lines, fields or exit codes, rather than whole tool results (at most ${MAX_OUTPUT_BYTES} bytes of JSON). console.log output is returned as logs.
 A failed call throws an Error with code and message. Wrap calls that may fail, such as reading an optional file, in try/catch and return what happened, so one missing file does not fail the whole script.
 To pass text containing backticks or \`\${\`, such as source code for a file, build it from quoted strings or an array of lines joined with "\\n"; a template literal would interpolate it.

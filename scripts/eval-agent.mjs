@@ -64,7 +64,7 @@ const cases = [
     id: "aggregate-files",
     task: "Sum the amount field across every JSON file in data/ and report the result exactly as Total: <number>. Do not edit any files.",
     readOnly: true,
-    expectAnswer: "Total: 1362",
+    exactAnswer: "Total: 1362",
     files: {
       "data/item-01.json": JSON.stringify({ id: 1, amount: 20 }) + "\n",
       "data/item-02.json": JSON.stringify({ id: 2, amount: 37 }) + "\n",
@@ -95,6 +95,14 @@ const cases = [
     },
   },
 ];
+
+/** Fixtures require either an exact answer or a phrase within a longer one. */
+function assertAnswer(fixture, answer) {
+  if (fixture.exactAnswer !== undefined)
+    assert(answer.trim() === fixture.exactAnswer, `Answer must be exactly ${fixture.exactAnswer}`);
+  if (fixture.expectAnswer !== undefined)
+    assert(answer.includes(fixture.expectAnswer), `Answer must include ${fixture.expectAnswer}`);
+}
 
 function locatesConfiguration(outcome, root) {
   if (!outcome.ok) return false;
@@ -206,11 +214,7 @@ for (const fixture of cases) {
           startupGuidanceLoaded,
           "Startup guidance must be included in the first model request"
         );
-      if (fixture.expectAnswer)
-        assert(
-          answer.includes(fixture.expectAnswer),
-          `Answer must include ${fixture.expectAnswer}`
-        );
+      assertAnswer(fixture, answer);
       if (fixture.compactAfterBytes)
         assert(compactions > 0, "Conversation must compact and still complete");
     } else {
@@ -240,11 +244,7 @@ for (const fixture of cases) {
           "Startup-guidance task must pass verification without learning from failed checks"
         );
       }
-      if (fixture.expectAnswer)
-        assert(
-          answer.includes(fixture.expectAnswer),
-          `Answer must include ${fixture.expectAnswer}`
-        );
+      assertAnswer(fixture, answer);
       if (fixture.id === "nested-guidance") {
         assert(
           calls.every((call) => ["read", "list", "search"].includes(call.tool)),

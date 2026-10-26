@@ -37,7 +37,7 @@ const sequences = {
     [["_finish", {answer: "Scoped code: cobalt"}]],
   ],
 };
-if (process.env.EVAL_RECOVERY === "aggregate-wrong") sequences["aggregate-files"][1][0][1].answer = "Total: 1360";
+if (process.env.EVAL_RECOVERY === "aggregate-wrong") sequences["aggregate-files"][1][0][1].answer = "Total: 13620";
 const guidance = sequences["nested-guidance"];
 if (process.env.EVAL_RECOVERY === "guidance-skipped") guidance.shift();
 if (process.env.EVAL_RECOVERY === "guidance-batched") guidance.splice(0, 2, [...guidance[0], ...guidance[1]]);
@@ -211,11 +211,11 @@ it.each([
       const recovery = results["recover-and-compact"];
       expect(results["aggregate-files"]).toMatchObject({
         passed: !aggregateFailure,
-        answer: aggregateFailure ? "Total: 1360" : "Total: 1362",
+        answer: aggregateFailure ? "Total: 13620" : "Total: 1362",
         verification: "aggregate checks passed",
       });
       expect(results["aggregate-files"].error).toBe(
-        aggregateFailure ? "Answer must include Total: 1362" : undefined
+        aggregateFailure ? "Answer must be exactly Total: 1362" : undefined
       );
       expect(price.passed).toBe(true);
       expect(project).toMatchObject({
