@@ -473,8 +473,8 @@ const triage = (id, task) => ({
       resultSchema: plainSchema(
         strictObject({ urgent: { type: "array", items: { type: "string" } } })
       ),
+      // No tools for a script to call: code mode adds nothing, so both modes run directly.
       defaultTools: [],
-      codemode,
       limits: { maxTurns: 4, maxCalls: 8, maxDecisions: 4 },
     }),
   input: { tickets },
