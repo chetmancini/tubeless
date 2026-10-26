@@ -86,6 +86,17 @@ and log bounds behave the same everywhere.
 Neither is a security boundary in the strict sense, though a Dynamic Worker isolate is a much
 stronger one than `node:vm`. The default `bash` tool already runs with host permissions.
 
+## Evidence
+
+The live evaluations (#217, #228) ran `gpt-5.4-mini` with high reasoning effort.
+
+- **Reliability:** after the guidance was tuned, code mode passed every case, with no failed scripts in the final rounds.
+- **Small coding tasks:** it matched direct calls on turns and time but did not beat them. The workspace prompt's rule that guidance reads come first forces separate turns in both modes.
+- **Typed agent without tools:** code mode only added a turn, so it now requires at least one tool.
+- **49-tool inventory:** both modes chose the two needed tools directly, and declarations took about 10 KB. Code mode did not chain the dependent calls, because the first tool's output was untyped.
+
+So code mode stays opt-in. Its value is in loops, aggregation, chains through typed outputs, and large inventories.
+
 ## Deferred
 
 - Remote sandbox executors (for example a container service) built on the same contract.

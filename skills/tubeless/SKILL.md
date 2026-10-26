@@ -172,8 +172,9 @@ Read the corresponding package recipe before using these features:
 - `codemode: true` on `defineAgent` or `defineAgentLoop` (CLI: `tubeless agent --codemode`),
   a setup-level permission, to offer one
   `codemode` tool: a JavaScript async function body calling every registered tool as
-  `await tools.<name>(input)` and returning JSON. Prefer it for large MCP inventories or
-  many chained calls. Type decisions as `AgentDecision<Registry, Result, true>`; outcomes carry
+  `await tools.<name>(input)` and returning JSON. It is off by default: use it for loops and
+  aggregation, chains through tools with typed outputs, or large MCP inventories, not for small
+  coding tasks or short lookups, where evals showed no gain. It needs at least one tool. Type decisions as `AgentDecision<Registry, Result, true>`; outcomes carry
   `CodemodeResult`. Script calls are budgeted child runs; read `docs/agents.md#code-mode`
   and `examples/agent-codemode.ts`. Isolation is best-effort. The default executor needs Node or Bun; on Cloudflare pass
   `codemode: { executor: createWorkerLoaderCodemodeExecutor(env.LOADER) }` from `tubeless/cloudflare`.

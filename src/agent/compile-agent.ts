@@ -136,6 +136,12 @@ export function compileAgent<
       return [name, compileTool(config.id, name, tool)];
     })
   );
+  // Without tools, a script can only compute its answer; that costs a turn and adds nothing.
+  if (config.codemode && tools.size === 0)
+    throw agentError(
+      "TUBELESS_AGENT_INVALID_DEFINITION",
+      "Code mode needs at least one tool for scripts to call; remove codemode or grant tools"
+    );
   const registry: ReadonlyMap<string, CompiledTool> = config.codemode
     ? new Map([
         [

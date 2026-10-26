@@ -61,49 +61,54 @@ const triage: StandardSchemaV1<Triage> = {
 };
 
 /**
- * A credential-free stand-in that writes the script a model would. Replace it with
- * `openaiModel()` or `anthropicModel()`; the agent definition stays the same.
+ * A credential-free stand-in that decides as a model would: read every file in one batch,
+ * then classify the results. Replace it with `openaiModel()` or `anthropicModel()`; the agent
+ * definition stays the same.
  */
 const scriptedModel: AgentModel = (request) => {
-  const outcome = request.outcomes[0];
-  if (outcome)
+  if (request.outcomes.length > 0)
     return {
       conversation: null,
-      decision: outcome.ok
-        ? { kind: "finish", result: { files: (outcome.value as { result: unknown }).result } }
-        : { kind: "finish", result: { files: [] } },
+      decision: {
+        kind: "finish",
+        result: {
+          files: request.outcomes.map((outcome) => {
+            const content = outcome.ok ? (outcome.value as { content: string }).content : "";
+            const kind = content.trim() === "" ? "empty" : content.length < 80 ? "short" : "long";
+            return { path: outcome.id, kind };
+          }),
+        },
+      },
     };
   const paths = request.task
     .split("\n")
     .flatMap((line) => (line.startsWith("- ") ? [line.slice(2)] : []));
-  const code = `
-const files = [];
-for (const path of ${JSON.stringify(paths)}) {
-  const { content } = await tools.read({ path, startLine: null, maxLines: null });
-  const kind = content.trim() === "" ? "empty" : content.length < 80 ? "short" : "long";
-  files.push({ path, kind });
-}
-return files;`;
   return {
     conversation: null,
-    decision: { kind: "continue", calls: [{ id: "triage", tool: "codemode", input: { code } }] },
+    decision: {
+      kind: "continue",
+      calls: paths.map((path) => ({
+        id: path,
+        tool: "read",
+        input: { path, startLine: null, maxLines: null },
+      })),
+    },
   };
 };
 
 /** Typed in, typed out: the agent receives the extract step's output and returns a triage. */
 export const TriageAgent = defineAgent({
   id: "triage-agent",
-  description: "Classify extracted files with one code-mode script.",
+  description: "Classify extracted files from one batch of reads.",
   model: scriptedModel,
   inputSchema: extracted,
   resultSchema: triage,
   task: ({ files }) =>
     `Classify each extracted file as empty, short or long:\n${files.map((file) => `- ${file}`).join("\n")}`,
-  codemode: true,
-  // Read-only permission: the script can read files but not write or run commands.
+  // Read-only permission: the agent can read files but not write or run commands.
   defaultTools: ["read"],
   projectContext: false,
-  limits: { maxTurns: 2, maxCalls: 50 },
+  limits: { maxTurns: 2, maxCalls: 50, maxConcurrency: 4 },
 });
 
 const { step, fromPipeline } = createSteps<{}>();
