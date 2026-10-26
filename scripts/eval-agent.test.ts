@@ -37,7 +37,14 @@ const sequences = {
     [["_finish", {answer: "Scoped code: cobalt"}]],
   ],
 };
-if (process.env.EVAL_RECOVERY === "aggregate-wrong") sequences["aggregate-files"][1][0][1].answer = "Total: 13620";
+const aggregate = sequences["aggregate-files"];
+if (process.env.EVAL_RECOVERY === "aggregate-wrong") aggregate[1][0][1].answer = "Total: 13620";
+if (process.env.EVAL_RECOVERY === "aggregate-create")
+  aggregate.splice(1, 0, [["bash", {command: "node -e \"require('fs').writeFileSync('data/extra.txt', 'scratch')\""}]]);
+if (process.env.EVAL_RECOVERY === "aggregate-restore")
+  aggregate.splice(1, 0,
+    [["edit", {path: "data/README.txt", oldText: "Notes", newText: "Changed"}]],
+    [["edit", {path: "data/README.txt", oldText: "Changed", newText: "Notes"}]]);
 const guidance = sequences["nested-guidance"];
 if (process.env.EVAL_RECOVERY === "guidance-skipped") guidance.shift();
 if (process.env.EVAL_RECOVERY === "guidance-batched") guidance.splice(0, 2, [...guidance[0], ...guidance[1]]);
@@ -124,6 +131,8 @@ const startupError = "Startup-guidance task must access only greet.mjs and run n
 it.each([
   ["ordered", undefined, undefined],
   ["aggregate-wrong", undefined, undefined],
+  ["aggregate-create", undefined, undefined],
+  ["aggregate-restore", undefined, undefined],
   ["list-root", recoveryError, undefined],
   ["list-config", undefined, undefined],
   ["search", undefined, undefined],
@@ -197,7 +206,12 @@ it.each([
           }
         );
       const guidanceFailure = expectedGuidanceError !== undefined;
-      const aggregateFailure = mode === "aggregate-wrong";
+      const aggregateError = {
+        "aggregate-wrong": "Answer must be exactly Total: 1362",
+        "aggregate-create": "Read-only task must not change workspace files",
+        "aggregate-restore": "Read-only task must not call write or edit",
+      }[mode as string];
+      const aggregateFailure = aggregateError !== undefined;
       if (expectedError || guidanceFailure || expectedStartupError || aggregateFailure)
         expect(run).toThrow();
       else run();
@@ -211,12 +225,10 @@ it.each([
       const recovery = results["recover-and-compact"];
       expect(results["aggregate-files"]).toMatchObject({
         passed: !aggregateFailure,
-        answer: aggregateFailure ? "Total: 13620" : "Total: 1362",
+        answer: mode === "aggregate-wrong" ? "Total: 13620" : "Total: 1362",
         verification: "aggregate checks passed",
       });
-      expect(results["aggregate-files"].error).toBe(
-        aggregateFailure ? "Answer must be exactly Total: 1362" : undefined
-      );
+      expect(results["aggregate-files"].error).toBe(aggregateError);
       expect(price.passed).toBe(true);
       expect(project).toMatchObject({
         passed: expectedStartupError === undefined,

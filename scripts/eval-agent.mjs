@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { defineAgent } from "tubeless/agent";
 import { openaiModel } from "tubeless/agent/openai";
 
@@ -96,6 +96,27 @@ const cases = [
   },
 ];
 
+/** Hash every workspace file except .git, to detect created, changed or removed files. */
+async function snapshot(root) {
+  const files = [];
+  const walk = async (directory) => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (directory === root && entry.name === ".git") continue;
+      if (entry.isDirectory()) await walk(path);
+      else
+        files.push([
+          relative(root, path),
+          createHash("sha256")
+            .update(await readFile(path))
+            .digest("hex"),
+        ]);
+    }
+  };
+  await walk(root);
+  return JSON.stringify(files.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
 /** Fixtures require either an exact answer or a phrase within a longer one. */
 function assertAnswer(fixture, answer) {
   if (fixture.exactAnswer !== undefined)
@@ -146,6 +167,7 @@ for (const fixture of cases) {
       await mkdir(dirname(join(root, name)), { recursive: true });
       await writeFile(join(root, name), content);
     }
+    const workspaceBefore = fixture.readOnly ? await snapshot(root) : undefined;
     const transport = openaiModel({
       reasoningEffort: "high",
       compactAfterBytes: fixture.compactAfterBytes,
@@ -342,6 +364,19 @@ for (const fixture of cases) {
         );
         assert(compactions > 0, "Conversation must compact and still complete");
       }
+    }
+    // Read-only tasks may run read-only commands, but must leave no trace in the workspace.
+    // Direct mode also rejects writes and edits, even if a later call restores the file.
+    if (fixture.readOnly) {
+      if (!codemode)
+        assert(
+          !outcomes.some((outcome) => outcome.ok && ["write", "edit"].includes(outcome.tool)),
+          "Read-only task must not call write or edit"
+        );
+      assert(
+        (await snapshot(root)) === workspaceBefore,
+        "Read-only task must not change workspace files"
+      );
     }
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
