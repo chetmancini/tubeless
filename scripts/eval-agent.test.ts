@@ -27,6 +27,13 @@ const sequences = {
     [["edit", {path: "config/current.json", oldText: '"retries":0', newText: '"retries":3'}]],
     [["bash", {command: "node check.mjs"}]],
   ],
+  "typed-triage-text": [[["_finish", {urgent: ["T6", "T2", "T4"]}]]],
+  "typed-triage-json": [[["_finish", {urgent: ["T2", "T4", "T6"]}]]],
+  "large-inventory": [
+    [["support__get_ticket", {id: "S-1042"}]],
+    [["billing__get_balance", {customerId: "C-77"}]],
+    [["_finish", {answer: "Balance: 1234.56 USD"}]],
+  ],
   "aggregate-files": [
     Array.from({length: 12}, (_, index) => ["read", {path: "data/item-" + String(index + 1).padStart(2, "0") + ".json"}]),
     [["_finish", {answer: "Total: 1362"}]],
@@ -37,7 +44,10 @@ const sequences = {
     [["_finish", {answer: "Scoped code: cobalt"}]],
   ],
 };
+if (process.env.EVAL_RECOVERY === "triage-wrong") sequences["typed-triage-json"][0][0][1].urgent = ["T2", "T4"];
 const aggregate = sequences["aggregate-files"];
+// Read-only answers may come from a command rather than read calls.
+if (process.env.EVAL_RECOVERY === "aggregate-bash") aggregate[0] = [["bash", {command: "cat data/*.json"}]];
 if (process.env.EVAL_RECOVERY === "aggregate-wrong") aggregate[1][0][1].answer = "Total: 13620";
 if (process.env.EVAL_RECOVERY === "aggregate-create")
   aggregate.splice(1, 0, [["bash", {command: "node -e \"require('fs').writeFileSync('data/extra.txt', 'scratch')\""}]]);
@@ -131,6 +141,8 @@ const startupError = "Startup-guidance task must access only greet.mjs and run n
 it.each([
   ["ordered", undefined, undefined],
   ["aggregate-wrong", undefined, undefined],
+  ["aggregate-bash", undefined, undefined],
+  ["triage-wrong", undefined, undefined],
   ["aggregate-create", undefined, undefined],
   ["aggregate-restore", undefined, undefined],
   ["list-root", recoveryError, undefined],
@@ -212,7 +224,14 @@ it.each([
         "aggregate-restore": "Read-only task must not call write or edit",
       }[mode as string];
       const aggregateFailure = aggregateError !== undefined;
-      if (expectedError || guidanceFailure || expectedStartupError || aggregateFailure)
+      const triageFailure = mode === "triage-wrong";
+      if (
+        expectedError ||
+        guidanceFailure ||
+        expectedStartupError ||
+        aggregateFailure ||
+        triageFailure
+      )
         expect(run).toThrow();
       else run();
       const report = JSON.parse(await readFile(reportPath, "utf8"));
@@ -229,6 +248,24 @@ it.each([
         verification: "aggregate checks passed",
       });
       expect(results["aggregate-files"].error).toBe(aggregateError);
+      expect(results["typed-triage-text"]).toMatchObject({
+        passed: true,
+        output: { urgent: ["T6", "T2", "T4"] },
+        toolCount: 0,
+      });
+      expect(results["typed-triage-json"]).toMatchObject({
+        passed: !triageFailure,
+        ...(triageFailure
+          ? { error: "Urgent tickets must be exactly T2, T4 and T6; got T2, T4" }
+          : {}),
+      });
+      expect(results["large-inventory"]).toMatchObject({
+        passed: true,
+        output: { answer: "Balance: 1234.56 USD" },
+        toolCount: 49,
+        turnCount: 3,
+      });
+      expect(results["large-inventory"].toolDescriptorBytes).toBeGreaterThan(5000);
       expect(price.passed).toBe(true);
       expect(project).toMatchObject({
         passed: expectedStartupError === undefined,

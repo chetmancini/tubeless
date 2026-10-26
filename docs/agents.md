@@ -422,7 +422,8 @@ Run the opt-in live evaluations from the package root with `bun run eval:agent`.
 They create disposable workspaces and check investigation, actual edits, successful
 verification, startup project instructions, nested guidance discovered before a
 requested file read, aggregation across many files, recovery from a missing file,
-and forced compaction. They
+forced compaction, a typed agent given its input as task text or JSON, and a
+49-tool inventory. Reports record each case's tool count and descriptor bytes. They
 also require existing tests and unrelated work to remain intact.
 `bun run eval:agent -- --codemode` runs the same cases through one `codemode` tool.
 Its checks are objective: fixture checks pass, preserved files stay intact, answers
