@@ -561,7 +561,13 @@ branches must all decode identically, including branches with server-validated
 constraints such as patterns and ranges. Conflicting branch or sibling
 interpretations fail validation before a tool call is dispatched.
 
-Results are `{ content, structuredContent? }` from the server. A result with
+Results are `{ content, structuredContent? }` from the server. When a tool lists an
+object `outputSchema`, [code-mode declarations](#code-mode) type `structuredContent`
+with it, required as the MCP specification requires. Local `$defs` and `definitions`
+references still resolve. Schemas that are missing, not object schemas,
+unserializable or over 16 KiB keep the generic `Record<string, unknown>`. The schema
+describes results for the model; Tubeless does not validate `structuredContent`
+against it. A result with
 `isError` becomes a recoverable `MCP_TOOL_ERROR` observation, and JSON-RPC errors
 such as unknown arguments become `MCP_PROTOCOL_ERROR`. Timeouts, transport
 failures and exited servers are fatal. Cancellation sends
@@ -619,7 +625,7 @@ declare const tools: {
 
 Inputs come from each tool's JSON Schema descriptor. Outputs come from the output
 schema's Standard JSON Schema converter when it has one; otherwise they are
-`unknown`. Names that are not identifiers are quoted; reach them with bracket
+`unknown`; MCP tools declare `structuredContent` from their `outputSchema`. Names that are not identifiers are quoted; reach them with bracket
 access, such as `tools["docs__search-pages"]`. Declarations are bounded to 48 KiB; expose
 fewer tools, for example with MCP `tools` allowlists, if the inventory exceeds it.
 The model-backed prompt adds code-mode guidance, including reading AGENTS.md in its

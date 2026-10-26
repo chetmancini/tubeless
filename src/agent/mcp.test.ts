@@ -95,6 +95,20 @@ describe("MCP servers", () => {
     }[];
     structuredContent?: Record<string, unknown>;
   }>;`);
+    // A declared outputSchema types structuredContent, with its local references resolved.
+    expect(description).toContain(`  }): Promise<{
+    content: {
+      type: string;
+      text?: string;
+    }[];
+    structuredContent: {
+      /** The echoed point */
+      point: {
+        x: number;
+        label?: string;
+      };
+    };
+  }>;`);
   });
 
   it("exposes stdio tools with strict descriptors and maps results and tool errors", async () => {

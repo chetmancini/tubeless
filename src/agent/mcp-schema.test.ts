@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mcpInputSchema } from "./mcp-schema.js";
+import { mcpInputSchema, mcpResultSchema } from "./mcp-schema.js";
 import { parameter } from "./openai-protocol.js";
 
 describe("MCP input schemas", () => {
@@ -356,5 +356,43 @@ describe("MCP input schemas", () => {
         $defs: { loop: { $ref: "#/$defs/loop" } },
       })
     ).toThrow("Recursive MCP schema reference");
+  });
+});
+
+describe("MCP result descriptors", () => {
+  const descriptor = (outputSchema?: unknown) =>
+    mcpResultSchema(outputSchema)["~standard"].jsonSchema!.output!({ target: "draft-2020-12" });
+  const generic = descriptor();
+
+  it("types structuredContent from an object outputSchema and hoists its definitions", () => {
+    expect(
+      descriptor({
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        properties: { item: { $ref: "#/definitions/item" } },
+        definitions: { item: { type: "string" } },
+      })
+    ).toEqual({
+      ...generic,
+      definitions: { item: { type: "string" } },
+      properties: {
+        ...(generic.properties as object),
+        structuredContent: { type: "object", properties: { item: { $ref: "#/definitions/item" } } },
+      },
+      required: ["content", "structuredContent"],
+    });
+  });
+
+  it("keeps the generic shape for missing, non-object, cyclic or oversized schemas", () => {
+    const cyclic: Record<string, unknown> = { type: "object" };
+    cyclic.properties = { self: cyclic };
+    for (const outputSchema of [
+      undefined,
+      { type: "array" },
+      "object",
+      cyclic,
+      { type: "object", description: "x".repeat(20_000) },
+    ])
+      expect(descriptor(outputSchema)).toEqual(generic);
   });
 });

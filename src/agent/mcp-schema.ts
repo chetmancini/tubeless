@@ -274,29 +274,68 @@ const mcpResultJsonSchema = {
   required: ["content"],
 };
 
-/** Validate a raw `tools/call` result into the content the agent observes. */
-export const mcpResultSchema: StandardSchemaV1<unknown, McpToolResult> = {
-  "~standard": {
-    version: 1,
-    vendor: "tubeless-mcp",
-    // Validation selects fields without transforming them, so both descriptors match.
-    jsonSchema: { input: () => mcpResultJsonSchema, output: () => mcpResultJsonSchema },
-    validate(value) {
-      if (
-        !isRecord(value) ||
-        !Array.isArray(value.content) ||
-        !value.content.every((item) => isRecord(item) && typeof item.type === "string") ||
-        (value.structuredContent !== undefined && !isRecord(value.structuredContent))
-      )
-        return { issues: [{ message: "MCP tool returned an invalid result" }] };
-      return {
-        value: {
-          content: value.content as McpToolResult["content"],
-          ...(value.structuredContent === undefined
-            ? {}
-            : { structuredContent: value.structuredContent as Json }),
-        },
-      };
+const MAX_OUTPUT_SCHEMA_CHARACTERS = 16_384;
+
+/**
+ * Describe `structuredContent` with a tool's declared `outputSchema`, which servers must honor.
+ * Its `$defs` and `definitions` move to the descriptor root so local references still resolve.
+ * Missing, non-object, unserializable or oversized schemas keep the generic shape.
+ */
+function resultDescriptor(outputSchema: unknown): Json {
+  if (!isRecord(outputSchema) || outputSchema.type !== "object") return mcpResultJsonSchema;
+  let text: string | undefined;
+  try {
+    text = JSON.stringify(outputSchema);
+  } catch {
+    return mcpResultJsonSchema;
+  }
+  if (text === undefined || text.length > MAX_OUTPUT_SCHEMA_CHARACTERS) return mcpResultJsonSchema;
+  // SAFETY: the parsed copy of a stringified record is an owned plain JSON object.
+  const {
+    $defs,
+    definitions,
+    $schema: _schema,
+    $id: _id,
+    ...structured
+  } = JSON.parse(text) as Json;
+  return {
+    ...mcpResultJsonSchema,
+    ...(isRecord($defs) ? { $defs } : {}),
+    ...(isRecord(definitions) ? { definitions } : {}),
+    properties: { ...mcpResultJsonSchema.properties, structuredContent: structured },
+    required: ["content", "structuredContent"],
+  };
+}
+
+/**
+ * Validate a raw `tools/call` result into the content the agent observes. Declarations type
+ * `structuredContent` from the tool's `outputSchema` when it is usable; it is not validated.
+ */
+export function mcpResultSchema(outputSchema?: unknown): StandardSchemaV1<unknown, McpToolResult> {
+  const descriptor = resultDescriptor(outputSchema);
+  return {
+    "~standard": {
+      version: 1,
+      vendor: "tubeless-mcp",
+      // Validation selects fields without transforming them, so both descriptors match.
+      jsonSchema: { input: () => descriptor, output: () => descriptor },
+      validate(value) {
+        if (
+          !isRecord(value) ||
+          !Array.isArray(value.content) ||
+          !value.content.every((item) => isRecord(item) && typeof item.type === "string") ||
+          (value.structuredContent !== undefined && !isRecord(value.structuredContent))
+        )
+          return { issues: [{ message: "MCP tool returned an invalid result" }] };
+        return {
+          value: {
+            content: value.content as McpToolResult["content"],
+            ...(value.structuredContent === undefined
+              ? {}
+              : { structuredContent: value.structuredContent as Json }),
+          },
+        };
+      },
     },
-  },
-};
+  };
+}
