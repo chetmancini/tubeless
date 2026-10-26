@@ -45,6 +45,12 @@ const sequences = {
   ],
 };
 if (process.env.EVAL_RECOVERY === "triage-wrong") sequences["typed-triage-json"][0][0][1].urgent = ["T2", "T4"];
+// Offline code mode: one script chains both inventory tools through the Node executor.
+if (process.env.EVAL_CODEMODE === "1")
+  sequences["large-inventory"] = [
+    [["codemode", {code: "const ticket = await tools.support__get_ticket({ id: 'S-1042' });\nreturn await tools.billing__get_balance({ customerId: ticket.customerId });"}]],
+    [["_finish", {answer: "Balance: 1234.56 USD"}]],
+  ];
 const aggregate = sequences["aggregate-files"];
 // Read-only answers may come from a command rather than read calls.
 if (process.env.EVAL_RECOVERY === "aggregate-bash") aggregate[0] = [["bash", {command: "cat data/*.json"}]];
@@ -248,6 +254,13 @@ it.each([
         verification: "aggregate checks passed",
       });
       expect(results["aggregate-files"].error).toBe(aggregateError);
+      for (const result of report.results)
+        expect(result).toEqual(
+          expect.objectContaining({
+            toolCount: expect.any(Number),
+            toolDescriptorBytes: expect.any(Number),
+          })
+        );
       expect(results["typed-triage-text"]).toMatchObject({
         passed: true,
         output: { urgent: ["T6", "T2", "T4"] },
@@ -361,3 +374,55 @@ it.each([
     }
   }
 );
+
+it("runs selected cases offline in code mode through generated declarations", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-report-"));
+  try {
+    const mockPath = join(directory, "provider.mjs");
+    const reportPath = join(directory, "report.json");
+    await writeFile(mockPath, preload);
+    execFileSync(
+      process.execPath,
+      [
+        "--import",
+        mockPath,
+        "scripts/eval-agent.mjs",
+        "--codemode",
+        "--only=large-inventory,typed-triage-json",
+        reportPath,
+      ],
+      {
+        encoding: "utf8",
+        timeout: 30_000,
+        env: {
+          ...process.env,
+          OPENAI_API_KEY: "offline-fixture",
+          OPENAI_MODEL: "offline-fixture",
+          EVAL_CODEMODE: "1",
+        },
+      }
+    );
+    const report = JSON.parse(await readFile(reportPath, "utf8"));
+    expect(report.codemode).toBe(true);
+    expect(report.results.map(({ id }: { id: string }) => id)).toEqual([
+      "typed-triage-json",
+      "large-inventory",
+    ]);
+    const [triage, inventory] = report.results;
+    expect(triage).toMatchObject({ passed: true, toolCount: 0 });
+    expect(inventory).toMatchObject({
+      passed: true,
+      toolCount: 1,
+      output: { answer: "Balance: 1234.56 USD" },
+      calls: [{ tool: "codemode" }],
+    });
+    expect(inventory.toolDescriptorBytes).toBeGreaterThan(5000);
+    expect(inventory.outcomes[0]).toMatchObject({
+      tool: "codemode",
+      ok: true,
+      value: { result: { customerId: "C-77", balance: 1234.56, currency: "USD" } },
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

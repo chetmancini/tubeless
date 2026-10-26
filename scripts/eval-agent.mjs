@@ -11,8 +11,18 @@ import { openaiModel } from "tubeless/agent/openai";
 if (!process.env.OPENAI_API_KEY)
   throw new Error("Set OPENAI_API_KEY to run live agent evaluations");
 // `--codemode` runs every case through one codemode tool instead of direct tool calls.
+// `--only=<id>,<id>` runs only the named cases.
 const args = process.argv.slice(2);
 const codemode = args.includes("--codemode");
+const onlyArg = args.find((arg) => arg.startsWith("--only="));
+const only = onlyArg && new Set(onlyArg.slice("--only=".length).split(",").filter(Boolean));
+const selected = (fixture) => !only || only.has(fixture.id);
+
+/** The count and UTF-8 bytes of tool descriptors the model sees, for declaration budgets. */
+const measureDescriptors = (context) => ({
+  toolCount: context.capabilities.length,
+  toolDescriptorBytes: Buffer.byteLength(JSON.stringify(context.capabilities)),
+});
 const sourceHashes = Object.fromEntries(
   await Promise.all(
     ["src/agent/model-prompt.ts", "src/agent/openai.ts", "scripts/eval-agent.mjs"].map(
@@ -143,13 +153,189 @@ function locatesConfiguration(outcome, root) {
   }
 }
 
+// Typed agents and large tool inventories: evidence for structured task input (#218) and
+// for code-mode declaration budgets (#220). These cases need no workspace files.
+const plainSchema = (descriptor) => ({
+  "~standard": {
+    version: 1,
+    vendor: "eval",
+    validate: (value) => ({ value }),
+    jsonSchema: { input: () => descriptor, output: () => descriptor },
+  },
+});
+const strictObject = (properties) => ({
+  type: "object",
+  properties,
+  required: Object.keys(properties),
+  additionalProperties: false,
+});
+const tickets = [
+  { id: "T1", title: "Update profile photo", body: "The avatar upload button is greyed out." },
+  {
+    id: "T2",
+    title: "Checkout returns 500",
+    body: "Every customer gets a server error at checkout.",
+  },
+  { id: "T3", title: "Typo on pricing page", body: "'Anual' should be 'Annual'." },
+  {
+    id: "T4",
+    title: "Unknown admin login",
+    body: "An admin session started from an unrecognized country.",
+  },
+  { id: "T5", title: "Dark mode", body: "Please add a dark theme." },
+  {
+    id: "T6",
+    title: "Card payments failing",
+    body: "All card charges have been declined since 09:00.",
+  },
+  { id: "T7", title: "Slow CSV export", body: "Exports take about two minutes." },
+  { id: "T8", title: "Invoice date question", body: "Why is my invoice dated the 1st?" },
+];
+const triage = (id, task) => ({
+  id,
+  define: (model) =>
+    defineAgent({
+      id,
+      model,
+      instructions: "Mark a ticket urgent only for outages, security incidents or failed payments.",
+      inputSchema: plainSchema(
+        strictObject({
+          tickets: {
+            type: "array",
+            items: strictObject({
+              id: { type: "string" },
+              title: { type: "string" },
+              body: { type: "string" },
+            }),
+          },
+        })
+      ),
+      task,
+      resultSchema: plainSchema(
+        strictObject({ urgent: { type: "array", items: { type: "string" } } })
+      ),
+      // No tools for a script to call: code mode adds nothing, so both modes run directly.
+      defaultTools: [],
+      limits: { maxTurns: 4, maxCalls: 8, maxDecisions: 4 },
+    }),
+  input: { tickets },
+  check: (result) => {
+    const urgent = [...(result?.urgent ?? [])].sort();
+    assert(
+      JSON.stringify(urgent) === JSON.stringify(["T2", "T4", "T6"]),
+      `Urgent tickets must be exactly T2, T4 and T6; got ${urgent.join(", ") || "none"}`
+    );
+  },
+});
+const domains = [
+  ["crm", "contact"],
+  ["billing", "account"],
+  ["support", "ticket"],
+  ["inventory", "item"],
+  ["hr", "employee"],
+  ["analytics", "report"],
+];
+const operations = [
+  ["get", "Get one {noun} by id.", { id: { type: "string" } }],
+  ["list", "List {noun}s, newest first.", { limit: { type: "integer" } }],
+  ["search", "Search {noun}s by free text.", { query: { type: "string" } }],
+  ["create", "Create a {noun} from JSON fields.", { fields: { type: "string" } }],
+  [
+    "update",
+    "Update a {noun}'s JSON fields.",
+    { id: { type: "string" }, fields: { type: "string" } },
+  ],
+  ["delete", "Delete a {noun} by id.", { id: { type: "string" } }],
+  ["count", "Count {noun}s matching a filter.", { filter: { type: "string" } }],
+  ["export", "Export {noun}s as CSV text.", { filter: { type: "string" } }],
+];
+function inventoryTools() {
+  const tools = {};
+  for (const [domain, noun] of domains)
+    for (const [operation, description, properties] of operations)
+      tools[`${domain}__${operation}_${noun}`] = defineTool({
+        description: `${description.replaceAll("{noun}", noun)} Part of the ${domain} service.`,
+        inputSchema: plainSchema(strictObject(properties)),
+        outputSchema: plainSchema({ type: "object" }),
+        run: (input) => {
+          if (["create", "update", "delete"].includes(operation))
+            throw new ToolError("READ_ONLY", "This evaluation's services are read-only");
+          if (domain === "support" && operation === "get" && input.id === "S-1042")
+            return {
+              id: "S-1042",
+              subject: "Invoice question",
+              status: "open",
+              customerId: "C-77",
+            };
+          if (operation === "get") throw new ToolError("NOT_FOUND", `No ${noun} ${input.id}`);
+          return { results: [] };
+        },
+      });
+  tools.billing__get_balance = defineTool({
+    description: "Get a billing customer's outstanding balance by customer id.",
+    inputSchema: plainSchema(strictObject({ customerId: { type: "string" } })),
+    outputSchema: plainSchema(
+      strictObject({
+        customerId: { type: "string" },
+        balance: { type: "number" },
+        currency: { type: "string" },
+      })
+    ),
+    run: ({ customerId }) => {
+      if (customerId !== "C-77") throw new ToolError("NOT_FOUND", `No customer ${customerId}`);
+      return { customerId, balance: 1234.56, currency: "USD" };
+    },
+  });
+  return tools;
+}
+const structuredCases = [
+  triage(
+    "typed-triage-text",
+    ({ tickets }) =>
+      `Triage these support tickets and list the urgent ones by id:\n${tickets
+        .map((ticket) => `- ${ticket.id}: ${ticket.title}. ${ticket.body}`)
+        .join("\n")}`
+  ),
+  triage(
+    "typed-triage-json",
+    (options) =>
+      `Triage these support tickets and list the urgent ones by id. Tickets as JSON:\n${JSON.stringify(options)}`
+  ),
+  {
+    id: "large-inventory",
+    define: (model) =>
+      defineAgent({
+        id: "large-inventory",
+        model,
+        projectContext: false,
+        defaultTools: [],
+        tools: inventoryTools(),
+        codemode,
+        limits: { maxTurns: 6, maxCalls: 12, maxDecisions: 6 },
+      }),
+    input: {
+      task: "Support ticket S-1042 was opened by a customer. What is that customer's outstanding billing balance? Reply exactly as Balance: <amount> USD.",
+    },
+    check: (result) =>
+      assert(
+        result?.answer?.trim() === "Balance: 1234.56 USD",
+        "Answer must be exactly Balance: 1234.56 USD"
+      ),
+  },
+];
+// Reject unknown --only names before any paid request.
+const unknownCases = [...(only ?? [])].filter(
+  (id) => ![...cases, ...structuredCases].some((fixture) => fixture.id === id)
+);
+if (unknownCases.length > 0) throw new Error(`Unknown --only case: ${unknownCases.join(", ")}`);
 const results = [];
-for (const fixture of cases) {
+for (const fixture of cases.filter(selected)) {
   const root = await realpath(await mkdtemp(join(tmpdir(), `tubeless-eval-${fixture.id}-`)));
   const started = Date.now();
   const calls = [];
   const outcomes = [];
   const turns = [];
+  let descriptors;
   let compactions = 0;
   let startupGuidanceLoaded = false;
   let answer;
@@ -177,6 +363,7 @@ for (const fixture of cases) {
       limits: { maxTurns: 12, maxCalls: 24, maxDecisions: 12 },
       codemode,
       model: async (request, context) => {
+        descriptors ??= measureDescriptors(context);
         if (fixture.id === "project-context" && turns.length === 0) {
           startupGuidanceLoaded = ["AGENTS.md", "src/AGENTS.md"].every((path) =>
             request.instructions.includes(files[path])
@@ -397,6 +584,7 @@ for (const fixture of cases) {
     outcomes,
     turns,
     compactions,
+    ...descriptors,
     turnCount: turns.length,
     durationMs: Date.now() - started,
   };
@@ -412,177 +600,7 @@ for (const fixture of cases) {
     })
   );
 }
-// Typed agents and large tool inventories: evidence for structured task input (#218) and
-// for code-mode declaration budgets (#220). These cases need no workspace files.
-const plainSchema = (descriptor) => ({
-  "~standard": {
-    version: 1,
-    vendor: "eval",
-    validate: (value) => ({ value }),
-    jsonSchema: { input: () => descriptor, output: () => descriptor },
-  },
-});
-const strictObject = (properties) => ({
-  type: "object",
-  properties,
-  required: Object.keys(properties),
-  additionalProperties: false,
-});
-const tickets = [
-  { id: "T1", title: "Update profile photo", body: "The avatar upload button is greyed out." },
-  {
-    id: "T2",
-    title: "Checkout returns 500",
-    body: "Every customer gets a server error at checkout.",
-  },
-  { id: "T3", title: "Typo on pricing page", body: "'Anual' should be 'Annual'." },
-  {
-    id: "T4",
-    title: "Unknown admin login",
-    body: "An admin session started from an unrecognized country.",
-  },
-  { id: "T5", title: "Dark mode", body: "Please add a dark theme." },
-  {
-    id: "T6",
-    title: "Card payments failing",
-    body: "All card charges have been declined since 09:00.",
-  },
-  { id: "T7", title: "Slow CSV export", body: "Exports take about two minutes." },
-  { id: "T8", title: "Invoice date question", body: "Why is my invoice dated the 1st?" },
-];
-const triage = (id, task) => ({
-  id,
-  define: (model) =>
-    defineAgent({
-      id,
-      model,
-      instructions: "Mark a ticket urgent only for outages, security incidents or failed payments.",
-      inputSchema: plainSchema(
-        strictObject({
-          tickets: {
-            type: "array",
-            items: strictObject({
-              id: { type: "string" },
-              title: { type: "string" },
-              body: { type: "string" },
-            }),
-          },
-        })
-      ),
-      task,
-      resultSchema: plainSchema(
-        strictObject({ urgent: { type: "array", items: { type: "string" } } })
-      ),
-      // No tools for a script to call: code mode adds nothing, so both modes run directly.
-      defaultTools: [],
-      limits: { maxTurns: 4, maxCalls: 8, maxDecisions: 4 },
-    }),
-  input: { tickets },
-  check: (result) => {
-    const urgent = [...(result?.urgent ?? [])].sort();
-    assert(
-      JSON.stringify(urgent) === JSON.stringify(["T2", "T4", "T6"]),
-      `Urgent tickets must be exactly T2, T4 and T6; got ${urgent.join(", ") || "none"}`
-    );
-  },
-});
-const domains = [
-  ["crm", "contact"],
-  ["billing", "account"],
-  ["support", "ticket"],
-  ["inventory", "item"],
-  ["hr", "employee"],
-  ["analytics", "report"],
-];
-const operations = [
-  ["get", "Get one {noun} by id.", { id: { type: "string" } }],
-  ["list", "List {noun}s, newest first.", { limit: { type: "integer" } }],
-  ["search", "Search {noun}s by free text.", { query: { type: "string" } }],
-  ["create", "Create a {noun} from JSON fields.", { fields: { type: "string" } }],
-  [
-    "update",
-    "Update a {noun}'s JSON fields.",
-    { id: { type: "string" }, fields: { type: "string" } },
-  ],
-  ["delete", "Delete a {noun} by id.", { id: { type: "string" } }],
-  ["count", "Count {noun}s matching a filter.", { filter: { type: "string" } }],
-  ["export", "Export {noun}s as CSV text.", { filter: { type: "string" } }],
-];
-function inventoryTools() {
-  const tools = {};
-  for (const [domain, noun] of domains)
-    for (const [operation, description, properties] of operations)
-      tools[`${domain}__${operation}_${noun}`] = defineTool({
-        description: `${description.replaceAll("{noun}", noun)} Part of the ${domain} service.`,
-        inputSchema: plainSchema(strictObject(properties)),
-        outputSchema: plainSchema({ type: "object" }),
-        run: (input) => {
-          if (["create", "update", "delete"].includes(operation))
-            throw new ToolError("READ_ONLY", "This evaluation's services are read-only");
-          if (domain === "support" && operation === "get" && input.id === "S-1042")
-            return {
-              id: "S-1042",
-              subject: "Invoice question",
-              status: "open",
-              customerId: "C-77",
-            };
-          if (operation === "get") throw new ToolError("NOT_FOUND", `No ${noun} ${input.id}`);
-          return { results: [] };
-        },
-      });
-  tools.billing__get_balance = defineTool({
-    description: "Get a billing customer's outstanding balance by customer id.",
-    inputSchema: plainSchema(strictObject({ customerId: { type: "string" } })),
-    outputSchema: plainSchema(
-      strictObject({
-        customerId: { type: "string" },
-        balance: { type: "number" },
-        currency: { type: "string" },
-      })
-    ),
-    run: ({ customerId }) => {
-      if (customerId !== "C-77") throw new ToolError("NOT_FOUND", `No customer ${customerId}`);
-      return { customerId, balance: 1234.56, currency: "USD" };
-    },
-  });
-  return tools;
-}
-const structuredCases = [
-  triage(
-    "typed-triage-text",
-    ({ tickets }) =>
-      `Triage these support tickets and list the urgent ones by id:\n${tickets
-        .map((ticket) => `- ${ticket.id}: ${ticket.title}. ${ticket.body}`)
-        .join("\n")}`
-  ),
-  triage(
-    "typed-triage-json",
-    (options) =>
-      `Triage these support tickets and list the urgent ones by id. Tickets as JSON:\n${JSON.stringify(options)}`
-  ),
-  {
-    id: "large-inventory",
-    define: (model) =>
-      defineAgent({
-        id: "large-inventory",
-        model,
-        projectContext: false,
-        defaultTools: [],
-        tools: inventoryTools(),
-        codemode,
-        limits: { maxTurns: 6, maxCalls: 12, maxDecisions: 6 },
-      }),
-    input: {
-      task: "Support ticket S-1042 was opened by a customer. What is that customer's outstanding billing balance? Reply exactly as Balance: <amount> USD.",
-    },
-    check: (result) =>
-      assert(
-        result?.answer?.trim() === "Balance: 1234.56 USD",
-        "Answer must be exactly Balance: 1234.56 USD"
-      ),
-  },
-];
-for (const fixture of structuredCases) {
+for (const fixture of structuredCases.filter(selected)) {
   const root = await realpath(await mkdtemp(join(tmpdir(), `tubeless-eval-${fixture.id}-`)));
   const started = Date.now();
   const calls = [];
@@ -595,11 +613,7 @@ for (const fixture of structuredCases) {
     const transport = openaiModel({ reasoningEffort: "high" });
     const model = Object.assign(
       async (request, context) => {
-        // The bytes and count of tool descriptors the model sees, for declaration budgets.
-        descriptors ??= {
-          toolCount: context.capabilities.length,
-          toolDescriptorBytes: Buffer.byteLength(JSON.stringify(context.capabilities)),
-        };
+        descriptors ??= measureDescriptors(context);
         const turn = { outcomes: request.outcomes };
         turns.push(turn);
         outcomes.push(...request.outcomes);

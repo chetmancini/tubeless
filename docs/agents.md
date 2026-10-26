@@ -423,7 +423,8 @@ They create disposable workspaces and check investigation, actual edits, success
 verification, startup project instructions, nested guidance discovered before a
 requested file read, aggregation across many files, recovery from a missing file,
 forced compaction, a typed agent given its input as task text or JSON, and a
-49-tool inventory. Reports record each case's tool count and descriptor bytes. They
+49-tool inventory. Reports record each case's tool count and descriptor bytes.
+Add `--only=<id>,<id>` to rerun selected cases. They
 also require existing tests and unrelated work to remain intact.
 `bun run eval:agent -- --codemode` runs the same cases through one `codemode` tool.
 Its checks are objective: fixture checks pass, preserved files stay intact, answers
