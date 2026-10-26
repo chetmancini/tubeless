@@ -24,6 +24,15 @@ import { runCodemodeScript as runWith, type CodemodeExecutor } from "./codemode-
 import { createNodeCodemodeExecutor } from "./codemode-node.js";
 
 const node = createNodeCodemodeExecutor();
+
+/** A promise the test resolves when a condition it waits for has happened. */
+function signal() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 const runCodemodeScript = (script: Parameters<typeof runWith>[1]) => runWith(node, script);
 import { remote } from "./environment.test-support.js";
 
@@ -453,21 +462,32 @@ describe("code-mode Node executor", () => {
   const base = { tools: ["echo"], maxLogLines: 200, maxLogCharacters: 4096 };
 
   it("terminates scripts that exceed their deadline and aborts their calls", async () => {
-    const aborted = vi.fn();
-    const outcome = await runCodemodeScript({
-      ...base,
-      code: `tools.echo({}); while (true) {}`,
-      timeoutMs: 200,
-      call: (_name, _input, signal) =>
-        new Promise((_resolve, reject) =>
-          signal.addEventListener("abort", () => {
-            aborted();
-            reject(new Error("aborted"));
-          })
-        ),
-    });
-    expect(outcome).toMatchObject({ ok: false, code: "CODEMODE_TIMEOUT" });
-    expect(aborted).toHaveBeenCalledOnce();
+    // Fake only the harness deadline, and fire it once the call has started.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const started = signal();
+      const aborted = vi.fn();
+      const running = runCodemodeScript({
+        ...base,
+        code: `tools.echo({}); while (true) {}`,
+        timeoutMs: 200,
+        call: (_name, _input, callSignal) => {
+          started.resolve();
+          return new Promise((_resolve, reject) =>
+            callSignal.addEventListener("abort", () => {
+              aborted();
+              reject(new Error("aborted"));
+            })
+          );
+        },
+      });
+      await started.promise;
+      vi.advanceTimersByTime(200);
+      expect(await running).toMatchObject({ ok: false, code: "CODEMODE_TIMEOUT" });
+      expect(aborted).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("propagates cancellation after terminating the worker", async () => {
@@ -528,38 +548,59 @@ describe("code-mode Node executor", () => {
       const aborted = vi.fn();
       return {
         aborted,
-        call: (_name: string, _input: unknown, signal: AbortSignal) =>
+        call: (_name: string, _input: unknown, callSignal: AbortSignal) =>
           new Promise<never>((_resolve, reject) =>
-            signal.addEventListener("abort", () => {
+            callSignal.addEventListener("abort", () => {
               aborted();
               reject(new Error("aborted"));
             })
           ),
       };
     };
+    // Report when the script itself has finished, so stops land during the drain.
+    const finishing = () => {
+      const finished = signal();
+      const executor: CodemodeExecutor = {
+        execute: async (execution, executorSignal) => {
+          const result = await node.execute(execution, executorSignal);
+          finished.resolve();
+          return result;
+        },
+      };
+      return { executor, finished: finished.promise };
+    };
     const controller = new AbortController();
     const cancelled = pending();
-    const running = runCodemodeScript({
+    const draining = finishing();
+    const running = runWith(draining.executor, {
       ...base,
       code: `tools.echo({}); return "early";`,
       timeoutMs: 10_000,
       signal: controller.signal,
       call: cancelled.call,
     });
-    setTimeout(() => controller.abort(new Error("stop")), 100);
+    await draining.finished;
+    controller.abort(new Error("stop"));
     await expect(running).rejects.toThrow("stop");
     expect(cancelled.aborted).toHaveBeenCalledOnce();
 
-    const late = pending();
-    expect(
-      await runCodemodeScript({
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const late = pending();
+      const lateDrain = finishing();
+      const timed = runWith(lateDrain.executor, {
         ...base,
         code: `tools.echo({}); return "early";`,
         timeoutMs: 200,
         call: late.call,
-      })
-    ).toMatchObject({ ok: false, code: "CODEMODE_TIMEOUT" });
-    expect(late.aborted).toHaveBeenCalledOnce();
+      });
+      await lateDrain.finished;
+      vi.advanceTimersByTime(200);
+      expect(await timed).toMatchObject({ ok: false, code: "CODEMODE_TIMEOUT" });
+      expect(late.aborted).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("returns unserializable tool results to the script as recoverable errors", async () => {
