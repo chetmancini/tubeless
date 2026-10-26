@@ -51,6 +51,8 @@ if (process.env.EVAL_CODEMODE === "1")
     [["codemode", {code: "const ticket = await tools.support__get_ticket({ id: 'S-1042' });\nreturn await tools.billing__get_balance({ customerId: ticket.customerId });"}]],
     [["_finish", {answer: "Balance: 1234.56 USD"}]],
   ];
+if (process.env.EVAL_RECOVERY === "inventory-guess")
+  sequences["large-inventory"] = [[["_finish", {answer: "Balance: 1234.56 USD"}]]];
 const aggregate = sequences["aggregate-files"];
 // Read-only answers may come from a command rather than read calls.
 if (process.env.EVAL_RECOVERY === "aggregate-bash") aggregate[0] = [["bash", {command: "cat data/*.json"}]];
@@ -151,6 +153,7 @@ it.each([
   ["aggregate-bash", undefined, undefined],
   ["aggregate-guess", undefined, undefined],
   ["triage-wrong", undefined, undefined],
+  ["inventory-guess", undefined, undefined],
   ["aggregate-create", undefined, undefined],
   ["aggregate-restore", undefined, undefined],
   ["list-root", recoveryError, undefined],
@@ -234,12 +237,14 @@ it.each([
       }[mode as string];
       const aggregateFailure = aggregateError !== undefined;
       const triageFailure = mode === "triage-wrong";
+      const inventoryFailure = mode === "inventory-guess";
       if (
         expectedError ||
         guidanceFailure ||
         expectedStartupError ||
         aggregateFailure ||
-        triageFailure
+        triageFailure ||
+        inventoryFailure
       )
         expect(run).toThrow();
       else run();
@@ -275,12 +280,26 @@ it.each([
           ? { error: "Urgent tickets must be exactly T2, T4 and T6; got T2, T4" }
           : {}),
       });
-      expect(results["large-inventory"]).toMatchObject({
-        passed: true,
-        output: { answer: "Balance: 1234.56 USD" },
-        toolCount: 49,
-        turnCount: 3,
-      });
+      expect(results["large-inventory"]).toMatchObject(
+        inventoryFailure
+          ? {
+              passed: false,
+              error: "Agent must look up ticket S-1042, then the balance of its customer",
+            }
+          : {
+              passed: true,
+              codemode: false,
+              output: { answer: "Balance: 1234.56 USD" },
+              toolCount: 49,
+              turnCount: 3,
+              toolLog: [
+                { tool: "support__get_ticket", ok: true },
+                { tool: "billing__get_balance", ok: true, input: { customerId: "C-77" } },
+              ],
+            }
+      );
+      expect(results["typed-triage-text"].codemode).toBe(false);
+      expect(results["investigate-edit-verify"].codemode).toBe(false);
       expect(results["large-inventory"].toolDescriptorBytes).toBeGreaterThan(5000);
       expect(price.passed).toBe(true);
       expect(project).toMatchObject({
@@ -412,10 +431,12 @@ it("runs selected cases offline in code mode through generated declarations", as
       "large-inventory",
     ]);
     const [triage, inventory] = report.results;
-    expect(triage).toMatchObject({ passed: true, toolCount: 0 });
+    expect(triage).toMatchObject({ passed: true, toolCount: 0, codemode: false });
     expect(inventory).toMatchObject({
       passed: true,
+      codemode: true,
       toolCount: 1,
+      toolLog: [{ tool: "support__get_ticket" }, { tool: "billing__get_balance" }],
       output: { answer: "Balance: 1234.56 USD" },
       calls: [{ tool: "codemode" }],
     });

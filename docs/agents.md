@@ -426,7 +426,9 @@ forced compaction, a typed agent given its input as task text or JSON, and a
 49-tool inventory. Reports record each case's tool count and descriptor bytes.
 Add `--only=<id>,<id>` to rerun selected cases. They
 also require existing tests and unrelated work to remain intact.
-`bun run eval:agent -- --codemode` runs the same cases through one `codemode` tool.
+`bun run eval:agent -- --codemode` runs the same cases through one `codemode` tool,
+except the typed triage cases: they have no tools, so they run directly in both modes.
+Each result records its effective `codemode`.
 Its checks are objective: fixture checks pass, preserved files stay intact, answers
 follow guidance and compaction still completes. Call-order assertions apply only to
 direct calls, since script calls are child runs; the report keeps every script for

@@ -210,6 +210,8 @@ const tickets = [
 ];
 const triage = (id, task) => ({
   id,
+  // No tools for a script to call, so these cases run directly in both modes.
+  usesCodemode: false,
   define: (model) =>
     defineAgent({
       id,
@@ -266,7 +268,24 @@ const operations = [
   ["count", "Count {noun}s matching a filter.", { filter: { type: "string" } }],
   ["export", "Export {noun}s as CSV text.", { filter: { type: "string" } }],
 ];
-function inventoryTools() {
+/**
+ * Wrap a handler to record each call in order. Handlers run for direct calls and for
+ * code-mode script calls alike, so the log shows what the agent actually looked up.
+ */
+function logged(log, tool, run) {
+  return async (input, context) => {
+    try {
+      const value = await run(input, context);
+      log.push({ tool, input, ok: true, value });
+      return value;
+    } catch (error) {
+      log.push({ tool, input, ok: false, code: error?.code });
+      throw error;
+    }
+  };
+}
+
+function inventoryTools(log) {
   const tools = {};
   for (const [domain, noun] of domains)
     for (const [operation, description, properties] of operations)
@@ -274,7 +293,7 @@ function inventoryTools() {
         description: `${description.replaceAll("{noun}", noun)} Part of the ${domain} service.`,
         inputSchema: plainSchema(strictObject(properties)),
         outputSchema: plainSchema({ type: "object" }),
-        run: (input) => {
+        run: logged(log, `${domain}__${operation}_${noun}`, (input) => {
           if (["create", "update", "delete"].includes(operation))
             throw new ToolError("READ_ONLY", "This evaluation's services are read-only");
           if (domain === "support" && operation === "get" && input.id === "S-1042")
@@ -286,7 +305,7 @@ function inventoryTools() {
             };
           if (operation === "get") throw new ToolError("NOT_FOUND", `No ${noun} ${input.id}`);
           return { results: [] };
-        },
+        }),
       });
   tools.billing__get_balance = defineTool({
     description: "Get a billing customer's outstanding balance by customer id.",
@@ -298,10 +317,10 @@ function inventoryTools() {
         currency: { type: "string" },
       })
     ),
-    run: ({ customerId }) => {
+    run: logged(log, "billing__get_balance", ({ customerId }) => {
       if (customerId !== "C-77") throw new ToolError("NOT_FOUND", `No customer ${customerId}`);
       return { customerId, balance: 1234.56, currency: "USD" };
-    },
+    }),
   });
   return tools;
 }
@@ -320,24 +339,41 @@ const structuredCases = [
   ),
   {
     id: "large-inventory",
-    define: (model) =>
+    usesCodemode: codemode,
+    define: (model, toolLog) =>
       defineAgent({
         id: "large-inventory",
         model,
         projectContext: false,
         defaultTools: [],
-        tools: inventoryTools(),
+        tools: inventoryTools(toolLog),
         codemode,
         limits: { maxTurns: 6, maxCalls: 12, maxDecisions: 6 },
       }),
     input: {
       task: "Support ticket S-1042 was opened by a customer. What is that customer's outstanding billing balance? Reply exactly as Balance: <amount> USD.",
     },
-    check: (result) =>
+    check: (result, toolLog) => {
+      // The answer must come from the lookups, not a memorized or guessed balance.
+      const ticket = toolLog.findIndex(
+        (entry) => entry.tool === "support__get_ticket" && entry.ok && entry.input.id === "S-1042"
+      );
+      const balance = toolLog.findIndex(
+        (entry, index) =>
+          index > ticket &&
+          entry.tool === "billing__get_balance" &&
+          entry.ok &&
+          entry.input.customerId === toolLog[ticket].value.customerId
+      );
+      assert(
+        ticket >= 0 && balance > ticket,
+        "Agent must look up ticket S-1042, then the balance of its customer"
+      );
       assert(
         result?.answer?.trim() === "Balance: 1234.56 USD",
         "Answer must be exactly Balance: 1234.56 USD"
-      ),
+      );
+    },
   },
 ];
 // Reject unknown --only names before any paid request.
@@ -605,6 +641,7 @@ for (const fixture of cases.filter(selected)) {
     outcomes,
     turns,
     compactions,
+    codemode,
     ...descriptors,
     turnCount: turns.length,
     durationMs: Date.now() - started,
@@ -627,6 +664,7 @@ for (const fixture of structuredCases.filter(selected)) {
   const calls = [];
   const outcomes = [];
   const turns = [];
+  const toolLog = [];
   let descriptors;
   let output;
   let failure;
@@ -645,11 +683,11 @@ for (const fixture of structuredCases.filter(selected)) {
       },
       { checkDescriptors: transport.checkDescriptors }
     );
-    output = await fixture.define(model).runOrThrow(fixture.input, undefined, {
+    output = await fixture.define(model, toolLog).runOrThrow(fixture.input, undefined, {
       cwd: root,
       signal: AbortSignal.timeout(180_000),
     });
-    fixture.check(output);
+    fixture.check(output, toolLog);
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
   } finally {
@@ -659,7 +697,9 @@ for (const fixture of structuredCases.filter(selected)) {
     id: fixture.id,
     passed: failure === undefined,
     error: failure,
+    codemode: fixture.usesCodemode,
     output,
+    toolLog,
     ...descriptors,
     calls,
     outcomes,
