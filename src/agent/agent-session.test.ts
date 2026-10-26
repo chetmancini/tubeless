@@ -127,4 +127,24 @@ describe("agent sessions", () => {
     expect((await running).status).toBe("completed");
     expect(session.conversation).toBeNull();
   });
+
+  it("commits an observed undefined conversation instead of keeping stale context", async () => {
+    const requests: AgentModelRequest[] = [];
+    let conversation: unknown = ["first"];
+    const session = createAgentSession(
+      agent((request) => {
+        requests.push(request);
+        return {
+          decision: { kind: "finish", result: { answer: request.task } },
+          conversation,
+        };
+      })
+    );
+    await session.runOrThrow({ task: "one" });
+    conversation = undefined;
+    await session.runOrThrow({ task: "two" });
+    await session.runOrThrow({ task: "three" });
+    expect(requests.map((request) => request.conversation)).toEqual([null, ["first"], null]);
+    expect(session.conversation).toBeNull();
+  });
 });

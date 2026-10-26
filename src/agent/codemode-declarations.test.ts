@@ -62,18 +62,20 @@ describe("code-mode declarations", () => {
               items: false,
             },
             open: { type: "array", prefixItems: [{ type: "string" }], items: { type: "boolean" } },
+            union: { type: "array", prefixItems: [{ type: ["string", "number"] }], items: false },
             mixed: {
               type: "object",
               properties: { name: { type: "string" } },
               additionalProperties: { type: "number" },
             },
           },
-          required: ["exact", "open", "mixed"],
+          required: ["exact", "open", "union", "mixed"],
         },
       },
     ]);
     expect(text).toContain("exact: [string, number];");
     expect(text).toContain("open: [string?, ...boolean[]];");
+    expect(text).toContain("union: [(string | number)?];");
     expect(text).toContain("name?: string;\n      [key: string]: number | string;");
   });
 

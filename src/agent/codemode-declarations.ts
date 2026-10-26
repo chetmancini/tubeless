@@ -96,7 +96,7 @@ function tuple(
 ): string {
   const required = typeof schema.minItems === "number" ? schema.minItems : 0;
   const entries = prefix.map(
-    (item, index) => `${render(item, root, indent, depth + 1)}${index < required ? "" : "?"}`
+    (item, index) => `${wrap(render(item, root, indent, depth + 1))}${index < required ? "" : "?"}`
   );
   if (schema.items !== false)
     entries.push(`...${wrap(render(schema.items ?? true, root, indent, depth + 1))}[]`);

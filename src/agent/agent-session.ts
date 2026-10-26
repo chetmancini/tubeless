@@ -62,7 +62,9 @@ export function createAgentSession<Input extends object, Result>(
       "createAgentSession requires an agent from defineAgent"
     );
   let committed: unknown = ownState(options.conversation ?? null);
+  // Track observation separately: a provider may legitimately return an undefined conversation.
   let latest: unknown;
+  let observed = false;
   let running = false;
   // clear() during a run discards that run's conversation instead of reviving it later.
   let generation = 0;
@@ -71,6 +73,7 @@ export function createAgentSession<Input extends object, Result>(
     seed: () => committed,
     observe: (conversation) => {
       latest = ownState(conversation);
+      observed = true;
     },
   }) as unknown as Pipeline<Input, Result, "agent", "agent", string>;
   const run: AgentSession<Input, Result>["run"] = async (input, controls, context) => {
@@ -78,16 +81,12 @@ export function createAgentSession<Input extends object, Result>(
       throw agentError("TUBELESS_AGENT_SESSION_BUSY", "Agent session is already running");
     running = true;
     latest = undefined;
+    observed = false;
     const started = generation;
     try {
       const result = await compiled.run(input, controls, context);
-      if (
-        result.status === "completed" &&
-        result.finalized &&
-        latest !== undefined &&
-        generation === started
-      )
-        committed = latest;
+      if (result.status === "completed" && result.finalized && observed && generation === started)
+        committed = latest ?? null;
       return result;
     } finally {
       running = false;
