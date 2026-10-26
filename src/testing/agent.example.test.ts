@@ -51,10 +51,20 @@ describe("public agent recipe", () => {
       await writeFile(join(cwd, "a.txt"), "hi\n");
       await writeFile(join(cwd, "b.txt"), "");
       await writeFile(join(cwd, "c.txt"), "x".repeat(100));
+      await writeFile(join(cwd, "d.txt"), "x".repeat(1_100_000));
       await writeFile(join(cwd, "skip.md"), "not extracted");
       expect(await ExtractTriagePipeline.runOrThrow({}, undefined, { cwd })).toBe(
-        "a.txt: short\nb.txt: empty\nc.txt: long"
+        "a.txt: short\nb.txt: empty\nc.txt: long\nd.txt: unreadable"
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+  it("finishes the extract recipe without reads when nothing was extracted", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "tubeless-extract-empty-"));
+    try {
+      await writeFile(join(cwd, "skip.md"), "not extracted");
+      expect(await ExtractTriagePipeline.runOrThrow({}, undefined, { cwd })).toBe("");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

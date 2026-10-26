@@ -7,7 +7,7 @@ interface Extracted {
   files: string[];
 }
 interface Triage {
-  files: { path: string; kind: "empty" | "short" | "long" }[];
+  files: { path: string; kind: "empty" | "short" | "long" | "unreadable" }[];
 }
 
 const extracted: StandardSchemaV1<Extracted> = {
@@ -46,7 +46,7 @@ const triage: StandardSchemaV1<Triage> = {
               type: "object",
               properties: {
                 path: { type: "string" },
-                kind: { enum: ["empty", "short", "long"] },
+                kind: { enum: ["empty", "short", "long", "unreadable"] },
               },
               required: ["path", "kind"],
               additionalProperties: false,
@@ -61,49 +61,59 @@ const triage: StandardSchemaV1<Triage> = {
 };
 
 /**
- * A credential-free stand-in that writes the script a model would. Replace it with
- * `openaiModel()` or `anthropicModel()`; the agent definition stays the same.
+ * A credential-free stand-in that decides as a model would: read every file in one batch,
+ * then classify the results. Replace it with `openaiModel()` or `anthropicModel()`; the agent
+ * definition stays the same.
  */
 const scriptedModel: AgentModel = (request) => {
-  const outcome = request.outcomes[0];
-  if (outcome)
+  if (request.outcomes.length > 0)
     return {
       conversation: null,
-      decision: outcome.ok
-        ? { kind: "finish", result: { files: (outcome.value as { result: unknown }).result } }
-        : { kind: "finish", result: { files: [] } },
+      decision: {
+        kind: "finish",
+        result: {
+          files: request.outcomes.map((outcome) => {
+            // A failed read, such as a file over the read tool's 1 MiB limit, is reported as such.
+            if (!outcome.ok) return { path: outcome.id, kind: "unreadable" };
+            const { content } = outcome.value as { content: string };
+            const kind = content.trim() === "" ? "empty" : content.length < 80 ? "short" : "long";
+            return { path: outcome.id, kind };
+          }),
+        },
+      },
     };
   const paths = request.task
     .split("\n")
     .flatMap((line) => (line.startsWith("- ") ? [line.slice(2)] : []));
-  const code = `
-const files = [];
-for (const path of ${JSON.stringify(paths)}) {
-  const { content } = await tools.read({ path, startLine: null, maxLines: null });
-  const kind = content.trim() === "" ? "empty" : content.length < 80 ? "short" : "long";
-  files.push({ path, kind });
-}
-return files;`;
+  // An empty batch is not a valid decision: with nothing extracted, finish at once.
+  if (paths.length === 0)
+    return { conversation: null, decision: { kind: "finish", result: { files: [] } } };
   return {
     conversation: null,
-    decision: { kind: "continue", calls: [{ id: "triage", tool: "codemode", input: { code } }] },
+    decision: {
+      kind: "continue",
+      calls: paths.map((path) => ({
+        id: path,
+        tool: "read",
+        input: { path, startLine: null, maxLines: null },
+      })),
+    },
   };
 };
 
 /** Typed in, typed out: the agent receives the extract step's output and returns a triage. */
 export const TriageAgent = defineAgent({
   id: "triage-agent",
-  description: "Classify extracted files with one code-mode script.",
+  description: "Classify extracted files from one batch of reads.",
   model: scriptedModel,
   inputSchema: extracted,
   resultSchema: triage,
   task: ({ files }) =>
     `Classify each extracted file as empty, short or long:\n${files.map((file) => `- ${file}`).join("\n")}`,
-  codemode: true,
-  // Read-only permission: the script can read files but not write or run commands.
+  // Read-only permission: the agent can read files but not write or run commands.
   defaultTools: ["read"],
   projectContext: false,
-  limits: { maxTurns: 2, maxCalls: 50 },
+  limits: { maxTurns: 2, maxCalls: 50, maxConcurrency: 4 },
 });
 
 const { step, fromPipeline } = createSteps<{}>();

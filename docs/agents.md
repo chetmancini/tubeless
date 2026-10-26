@@ -133,7 +133,7 @@ const TriageAgent = defineAgent({
   inputSchema: extracted, // { files: string[] }
   resultSchema: triage, // { files: { path, kind }[] }
   task: ({ files }) => `Classify each extracted file:\n${files.map((f) => `- ${f}`).join("\n")}`,
-  codemode: true,
+  defaultTools: ["read"],
 });
 const classify = fromPipeline("classify", {
   pipeline: TriageAgent,
@@ -597,14 +597,35 @@ authority outside `AgentEnvironment`.
 
 ## Code mode
 
-Set `codemode: true` on `defineAgent` or `defineAgentLoop`, or pass
-`tubeless agent --codemode`, to advertise one `codemode` tool instead of the
-registry. Code mode is a setup-level permission: an autonomous pipeline agent
-uses it only when its definition opts in. Each call runs a JavaScript async
-function body that calls the registered tools as typed async functions and
-returns a JSON value. Registered tools include the defaults, custom tools,
-pipeline tools and MCP tools. A script can chain dependent calls, loop and filter
-results without a decision per call, so large MCP inventories cost one tool slot.
+Code mode is off by default. Set `codemode: true` on `defineAgent` or
+`defineAgentLoop`, or pass `tubeless agent --codemode`, to advertise one `codemode`
+tool instead of the registry. Each call runs a JavaScript async function body that
+calls the registered tools as typed async functions and returns a JSON value.
+Registered tools include the defaults, custom tools, pipeline tools and MCP tools.
+An agent needs at least one of them; code mode without tools fails at definition.
+
+### When to use code mode
+
+Measure before enabling it. In the live evaluations (`bun run eval:agent`, with
+and without `--codemode`), code mode matched direct tool calls on reliability. It did not reduce turns or time
+for small coding tasks, typed agents with no tools, or a two-call lookup across 49
+tools. Most turns exist because the model has to see a result before deciding the
+next step, and a script can't remove that. Code mode helps when a script can do
+work the model doesn't need to see:
+
+- **Loops and aggregation.** Read every file in a listing, filter records or sum
+  fields, and return only the total.
+- **Chains through typed outputs.** An output schema helps the model write reliable
+  chains by showing what each tool returns. This includes MCP tools with an
+  `outputSchema`. Scripts can also chain generic outputs when the model knows their
+  shape; otherwise, it may need a separate turn to inspect the result.
+- **Large inventories.** One `codemode` tool replaces many function descriptors.
+  Declarations take about 10 KB per 50 tools, so the 48 KiB budget fits roughly
+  200 or more.
+
+Leave it off for interactive coding, agents with a handful of tools, and tasks whose
+steps each depend on reading the previous result. Code mode also runs each script in
+a sandbox and needs an executor on platforms without Node worker threads.
 
 ```ts
 await using mcp = await connectMcpServers({ docs: { url: "https://mcp.example.com/mcp" } });

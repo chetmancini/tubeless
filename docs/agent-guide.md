@@ -469,9 +469,12 @@ read when a pipeline needs them.
   Read [MCP servers](./agents.md#connect-mcp-servers) and adapt the
   [MCP recipe](../examples/agent-mcp.ts).
 
-- To let an agent chain many tools without a decision per call, set `codemode: true`
-  on `defineAgent` or `defineAgentLoop` (or run `tubeless agent --codemode`). It is a
-  setup-level permission; `AgentCall`/`AgentDecision`/`AgentOutcome` then take `true`
+- Code mode is off by default; enable it only when scripts can do work the model need
+  not see: loops and aggregation, chains through tools with typed outputs, or large
+  tool inventories. Live evaluations found no gain for small coding tasks or short
+  lookups; see [when to use code mode](./agents.md#when-to-use-code-mode). Set
+  `codemode: true` on `defineAgent` or `defineAgentLoop` (or run
+  `tubeless agent --codemode`); it needs at least one tool. It is a setup-level permission; `AgentCall`/`AgentDecision`/`AgentOutcome` then take `true`
   as their code-mode parameter and name only `codemode`. The model sees one
   `codemode` tool whose description declares every registered tool as
   `tools.<name>(input): Promise<output>`; its JavaScript script calls them and returns

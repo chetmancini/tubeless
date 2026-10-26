@@ -443,6 +443,12 @@ describe("code mode on defineAgentLoop", () => {
     expect(run.errors[0]!.message).toContain("Required pipeline outputs missing");
   });
 
+  it("rejects code mode without any tool for scripts to call", () => {
+    expect(() =>
+      defineAgent({ id: "no-tools", model: scripted().model, defaultTools: [], codemode: true })
+    ).toThrow("Code mode needs at least one tool for scripts to call");
+  });
+
   it("rejects an invalid codemode setting", () => {
     expect(() =>
       defineAgentLoop({
