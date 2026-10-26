@@ -126,20 +126,20 @@ export interface CompiledHandlerTool {
   };
 }
 
-/** Read an output descriptor when the schema offers one; declarations fall back to unknown. */
+/**
+ * Read the Standard JSON Schema output descriptor when the schema offers one. Input
+ * descriptors are not substituted: a transforming schema's input differs from its result.
+ */
 function outputDescriptor(schema: StandardSchemaV1): Readonly<Record<string, unknown>> | undefined {
-  const converter: { output?: unknown; input?: unknown } | undefined =
-    schema["~standard"].jsonSchema;
-  for (const convert of [converter?.output, converter?.input]) {
-    if (typeof convert !== "function") continue;
-    try {
-      const descriptor: unknown = convert({ target: "draft-2020-12" });
-      if (descriptor !== null && typeof descriptor === "object" && !Array.isArray(descriptor))
-        // SAFETY: the object guard and owned plain-data copy validate the descriptor's representation.
-        return ownState(descriptor as Record<string, unknown>);
-    } catch {
-      return undefined;
-    }
+  const converter: { output?: unknown } | undefined = schema["~standard"].jsonSchema;
+  if (typeof converter?.output !== "function") return undefined;
+  try {
+    const descriptor: unknown = converter.output({ target: "draft-2020-12" });
+    if (descriptor !== null && typeof descriptor === "object" && !Array.isArray(descriptor))
+      // SAFETY: the object guard and owned plain-data copy validate the descriptor's representation.
+      return ownState(descriptor as Record<string, unknown>);
+  } catch {
+    // Declarations fall back to unknown for an unavailable descriptor.
   }
   return undefined;
 }

@@ -74,13 +74,33 @@ function render(schema: unknown, root: Json, indent: string, depth: number): str
       return "null";
     case "array":
       return Array.isArray(schema.prefixItems)
-        ? `[${schema.prefixItems.map((item) => render(item, root, indent, depth + 1)).join(", ")}]`
+        ? tuple(schema, schema.prefixItems, root, indent, depth)
         : `${wrap(render(schema.items ?? true, root, indent, depth + 1))}[]`;
     case "object":
       return object(schema, root, indent, depth);
     default:
       return isRecord(schema.properties) ? object(schema, root, indent, depth) : "unknown";
   }
+}
+
+/**
+ * Prefix items are positional, not a fixed length: entries past `minItems` are optional, and
+ * later entries follow `items` unless it is false.
+ */
+function tuple(
+  schema: Json,
+  prefix: readonly unknown[],
+  root: Json,
+  indent: string,
+  depth: number
+): string {
+  const required = typeof schema.minItems === "number" ? schema.minItems : 0;
+  const entries = prefix.map(
+    (item, index) => `${render(item, root, indent, depth + 1)}${index < required ? "" : "?"}`
+  );
+  if (schema.items !== false)
+    entries.push(`...${wrap(render(schema.items ?? true, root, indent, depth + 1))}[]`);
+  return `[${entries.join(", ")}]`;
 }
 
 function object(schema: Json, root: Json, indent: string, depth: number): string {
@@ -93,6 +113,7 @@ function object(schema: Json, root: Json, indent: string, depth: number): string
       : `Record<string, ${isRecord(extra) ? render(extra, root, indent, depth + 1) : "unknown"}>`;
   const inner = `${indent}  `;
   const lines = ["{"];
+  const named: string[] = [];
   for (const [name, property] of properties) {
     if (
       isRecord(property) &&
@@ -101,10 +122,15 @@ function object(schema: Json, root: Json, indent: string, depth: number): string
     )
       lines.push(...comment(property.description, inner));
     const optional = required.has(name) ? "" : "?";
-    lines.push(`${inner}${key(name)}${optional}: ${render(property, root, inner, depth + 1)};`);
+    const type = render(property, root, inner, depth + 1);
+    named.push(type);
+    lines.push(`${inner}${key(name)}${optional}: ${type};`);
   }
+  // A TypeScript index signature also constrains named properties, so it must admit them.
   if (isRecord(extra))
-    lines.push(`${inner}[key: string]: ${render(extra, root, inner, depth + 1)};`);
+    lines.push(
+      `${inner}[key: string]: ${union([render(extra, root, inner, depth + 1), ...named].map(wrap))};`
+    );
   lines.push(`${indent}}`);
   return lines.join("\n");
 }

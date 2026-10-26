@@ -21,7 +21,11 @@ export function toolObject<const Shape extends Readonly<Record<string, WireSchem
       version: 1,
       vendor: "tubeless",
       // Models supply nullable options explicitly; application calls may omit them.
-      jsonSchema: { input: () => ({ ...schema.jsonSchema, required: fields }) },
+      // Decoding does not transform values, so output descriptors match inputs.
+      jsonSchema: {
+        input: () => ({ ...schema.jsonSchema, required: fields }),
+        output: () => ({ ...schema.jsonSchema, required: fields }),
+      },
       validate(value) {
         try {
           if (

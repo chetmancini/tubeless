@@ -84,26 +84,39 @@ export async function runCodemodeScript(script: CodemodeScript): Promise<Codemod
     execArgv: execArgv(),
     resourceLimits: { maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 32, stackSizeMb: 4 },
   });
+  // Cancel running script calls at most once; their resulting failures are not new faults.
+  let cancelled = false;
+  let deadlineExceeded = false;
+  const cancelNested = () => {
+    if (cancelled) return;
+    cancelled = true;
+    nested.abort(signal?.aborted ? signal.reason : undefined);
+  };
   const dispatch = (id: number, name: string, input: string) => {
+    // The task settles normally on every path, so its bookkeeping promise never rejects.
     const task = (async () => {
-      let reply: CodemodeReply;
       try {
-        reply = await script.call(name, JSON.parse(input), nested.signal);
+        const reply = await script.call(name, JSON.parse(input), nested.signal);
+        let text: string;
+        try {
+          text = JSON.stringify(reply);
+        } catch {
+          text = JSON.stringify({
+            ok: false,
+            code: "CODEMODE_INVALID_RESULT",
+            message: `Tool ${name} returned a value that cannot be passed to the script as JSON`,
+          } satisfies CodemodeReply);
+        }
+        if (!stopped)
+          worker.postMessage({ type: "reply", id, reply: text } satisfies CodemodeHostMessage);
       } catch (error) {
-        // Failures caused by an earlier stop are cancellations of that stop, not new faults.
-        if (!stopped || stopped.kind === "done") fatal ??= { error };
+        if (!cancelled) fatal ??= { error };
         stop({ kind: "fatal" });
-        return;
+        cancelNested();
       }
-      if (!stopped)
-        worker.postMessage({
-          type: "reply",
-          id,
-          reply: JSON.stringify(reply),
-        } satisfies CodemodeHostMessage);
     })();
     active.add(task);
-    void task.finally(() => active.delete(task));
+    void task.then(() => active.delete(task));
   };
   worker.on("message", (message: CodemodeWorkerMessage) => {
     if (stopped) return;
@@ -114,26 +127,40 @@ export async function runCodemodeScript(script: CodemodeScript): Promise<Codemod
   worker.on("exit", (code) =>
     stop({ kind: "crash", error: new Error(`Sandbox exited with code ${code}`) })
   );
-  const timer = setTimeout(() => stop({ kind: "timeout" }), script.timeoutMs);
-  const onAbort = () => stop({ kind: "abort" });
+  // The deadline and cancellation stay active until every script call settles, including
+  // calls the script started without awaiting.
+  const timer = setTimeout(() => {
+    deadlineExceeded = true;
+    stop({ kind: "timeout" });
+    cancelNested();
+  }, script.timeoutMs);
+  const onAbort = () => {
+    stop({ kind: "abort" });
+    cancelNested();
+  };
   signal?.addEventListener("abort", onAbort, { once: true });
-  const outcome = await settled;
-  clearTimeout(timer);
-  signal?.removeEventListener("abort", onAbort);
-  if (outcome.kind !== "done") nested.abort(signal?.aborted ? signal.reason : undefined);
-  await worker.terminate();
-  while (active.size > 0) await Promise.allSettled([...active]);
+  let outcome: Stop;
+  try {
+    outcome = await settled;
+    if (outcome.kind !== "done") cancelNested();
+    await worker.terminate();
+    while (active.size > 0) await Promise.allSettled([...active]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
   if (signal?.aborted) throw createAbortError(signal, "Codemode script");
   if (fatal) throw fatal.error;
+  if (deadlineExceeded)
+    return {
+      ok: false,
+      code: "CODEMODE_TIMEOUT",
+      message: `Script and its tool calls exceeded ${script.timeoutMs} ms`,
+      logs: [],
+      logsTruncated: false,
+    };
   const empty = { logs: [], logsTruncated: false };
   switch (outcome.kind) {
-    case "timeout":
-      return {
-        ok: false,
-        code: "CODEMODE_TIMEOUT",
-        message: `Script exceeded ${script.timeoutMs} ms`,
-        ...empty,
-      };
     case "crash":
       return {
         ok: false,

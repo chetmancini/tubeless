@@ -106,4 +106,25 @@ describe("agent sessions", () => {
       ["c", ["a, b"]],
     ]);
   });
+
+  it("does not revive a conversation cleared while its run was active", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const session = createAgentSession(
+      agent(async (request) => {
+        await gate;
+        return {
+          decision: { kind: "finish", result: { answer: request.task } },
+          conversation: [request.task],
+        };
+      })
+    );
+    const running = session.run({ task: "pending" });
+    session.clear();
+    release();
+    expect((await running).status).toBe("completed");
+    expect(session.conversation).toBeNull();
+  });
 });

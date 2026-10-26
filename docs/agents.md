@@ -631,24 +631,29 @@ The following become recoverable observations:
 
 - `CODEMODE_SCRIPT_ERROR`: syntax errors (including TypeScript syntax) and uncaught
   exceptions, with the script line and logs appended.
-- `CODEMODE_TIMEOUT`: the script exceeded 60 seconds.
+- `CODEMODE_TIMEOUT`: the script, including calls it started without awaiting, exceeded
+  60 seconds. Running calls are cancelled first.
 - `CODEMODE_RESULT_TOO_LARGE`: the return value exceeded 16 KiB. Its tool calls
   already ran.
 - `CODEMODE_SANDBOX_ERROR`: the worker stopped, for example on memory exhaustion.
 
 Inside a script, a tool call goes through the same preparation, admission and
 child execution as a direct call. A recoverable `ToolError` or invalid arguments
-(`CODEMODE_INVALID_CALL`) reject the call's promise with an `Error` carrying
+(`CODEMODE_INVALID_CALL`) and results that cannot cross into the script as JSON
+(`CODEMODE_INVALID_RESULT`) reject the call's promise with an `Error` carrying
 `code` and `message`, which the script may catch. Handler exceptions, limit
 exhaustion and cancellation stop the script and fail the run, just as for a direct
 call. Each script call is charged against `maxCalls` and admitted through the
 shared leaf queue, so `maxConcurrency` bounds `Promise.all` fan-out. Calls the
-script started but did not await settle before its result is published.
+script started but did not await settle before its result is published, and
+cancellation and the deadline still apply to them.
 
 The script is logged on its call (up to 16 KiB). Each script call is a child run
 of that call, with item key `<call id>.<n>` and the usual activity log, so `--trace`,
 `history` and Studio show what the script did. Durable agents checkpoint the script
 as one call: it is replay-safe only when every reachable tool is replay-safe.
+Reachable tool identities, including child implementation versions, are part of
+the agent's definition identity, so changing one rejects resumption of old checkpoints.
 Otherwise an interrupted script becomes `TUBELESS_AGENT_CALL_INTERRUPTED`. Nested
 calls are not journaled individually.
 

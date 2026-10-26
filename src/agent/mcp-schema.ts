@@ -257,29 +257,30 @@ export interface McpToolResult {
   readonly structuredContent?: Readonly<Record<string, unknown>>;
 }
 
+/** The generic result shape, used for code-mode declarations. */
+const mcpResultJsonSchema = {
+  type: "object",
+  properties: {
+    content: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { type: { type: "string" }, text: { type: "string" } },
+        required: ["type"],
+      },
+    },
+    structuredContent: { type: "object" },
+  },
+  required: ["content"],
+};
+
 /** Validate a raw `tools/call` result into the content the agent observes. */
 export const mcpResultSchema: StandardSchemaV1<unknown, McpToolResult> = {
   "~standard": {
     version: 1,
     vendor: "tubeless-mcp",
-    // Describes the generic result shape for code-mode declarations.
-    jsonSchema: {
-      input: () => ({
-        type: "object",
-        properties: {
-          content: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: { type: { type: "string" }, text: { type: "string" } },
-              required: ["type"],
-            },
-          },
-          structuredContent: { type: "object" },
-        },
-        required: ["content"],
-      }),
-    },
+    // Validation selects fields without transforming them, so both descriptors match.
+    jsonSchema: { input: () => mcpResultJsonSchema, output: () => mcpResultJsonSchema },
     validate(value) {
       if (
         !isRecord(value) ||

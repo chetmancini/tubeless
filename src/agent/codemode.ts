@@ -11,7 +11,8 @@ import {
   wireRefine,
   wireString,
 } from "../tracing/wire-schema.js";
-import { agentError } from "./agent-state.js";
+import { createHash } from "node:crypto";
+import { agentError, descriptorFingerprint } from "./agent-state.js";
 import { codemodeDeclarations } from "./codemode-declarations.js";
 import type { CodemodeReply } from "./codemode-protocol.js";
 import { callInvocation, prepareCalls, type PreparedCall } from "./decision.js";
@@ -37,6 +38,13 @@ const MAX_LOG_BYTES = 4096;
 const TIMEOUT_MS = 60_000;
 
 const utf8 = (text: string) => new TextEncoder().encode(text).length;
+
+/** Keep nested call IDs within the 256-character call ID limit, unique per outer call. */
+function idPrefix(callId: string): string {
+  return callId.length <= 200
+    ? callId
+    : `${callId.slice(0, 120)}~${createHash("sha256").update(callId).digest("hex").slice(0, 32)}`;
+}
 
 const usage = `Run a JavaScript async function body that calls tools and returns a JSON value.
 Call tools as \`await tools.name(input)\`; quote names that are not identifiers, as in \`tools["server__a-b"](input)\`. Chain dependent calls, loops and filtering in one script, and \`return\` only what you need (at most ${MAX_OUTPUT_BYTES} bytes of JSON). console.log output is returned as logs.
@@ -172,7 +180,7 @@ export function compileCodemodeTool(
       input: unknown,
       signal: AbortSignal
     ): Promise<CodemodeReply> => {
-      const id = `${call.id}.${++calls}`;
+      const id = `${idPrefix(call.id)}.${++calls}`;
       const nested: PipelineStepContext<object> = { ...context, signal };
       let prepared: PreparedCall;
       try {
@@ -283,6 +291,14 @@ export function compileCodemodeTool(
     inputJsonSchema,
     pipeline: definePipeline({
       id: `${agentId}/tool/${CODEMODE_TOOL}`,
+      // The script reaches every registered tool, so their identities, including child
+      // implementation versions, belong to this capability's durable definition identity.
+      implementationVersion: `codemode:${descriptorFingerprint({
+        tools: tools.map(({ name, pipeline }) => ({
+          name,
+          identity: pipeline.definition.identity,
+        })),
+      })}`,
       steps: [script, result],
       finalize: result,
     }),

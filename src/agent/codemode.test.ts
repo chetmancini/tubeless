@@ -7,6 +7,7 @@ import {
   defineAgentLoop,
   defineAgent,
   defineTool,
+  pipelineTool,
   ToolError,
   type AgentCall,
   type AgentDecision,
@@ -17,6 +18,7 @@ import {
   type CodemodeResult,
   type DefaultAgentTools,
 } from "./agent.js";
+import type { StandardSchemaV1 } from "../core/pipeline-types.js";
 import { emptyInput, schema, textSchema } from "./agent.test-support.js";
 import { runCodemodeScript } from "./codemode-sandbox.js";
 import { remote } from "./environment.test-support.js";
@@ -33,11 +35,20 @@ const word = schema<{ word: string }>(
     additionalProperties: false,
   }
 );
-const upperResult = schema<{ upper: string }>((value) => ({ value: value as { upper: string } }), {
+const upperDescriptor = {
   type: "object",
   properties: { upper: { type: "string" } },
   required: ["upper"],
-});
+};
+// Declarations type results only from an output converter.
+const upperResult: StandardSchemaV1<{ upper: string }> = {
+  "~standard": {
+    version: 1,
+    vendor: "test",
+    validate: (value) => ({ value: value as { upper: string } }),
+    jsonSchema: { input: () => upperDescriptor, output: () => upperDescriptor },
+  },
+};
 
 function upperTool(run: (word: string) => { upper: string } | Promise<{ upper: string }>) {
   return defineTool({
@@ -506,5 +517,111 @@ describe("code-mode sandbox", () => {
       logs: ['line 0 {"i":0}', 'line 1 {"i":1}'],
       logsTruncated: true,
     });
+  });
+
+  it("keeps cancellation and the deadline active while draining unawaited calls", async () => {
+    const pending = () => {
+      const aborted = vi.fn();
+      return {
+        aborted,
+        call: (_name: string, _input: unknown, signal: AbortSignal) =>
+          new Promise<never>((_resolve, reject) =>
+            signal.addEventListener("abort", () => {
+              aborted();
+              reject(new Error("aborted"));
+            })
+          ),
+      };
+    };
+    const controller = new AbortController();
+    const cancelled = pending();
+    const running = runCodemodeScript({
+      ...base,
+      code: `tools.echo({}); return "early";`,
+      timeoutMs: 10_000,
+      signal: controller.signal,
+      call: cancelled.call,
+    });
+    setTimeout(() => controller.abort(new Error("stop")), 100);
+    await expect(running).rejects.toThrow("stop");
+    expect(cancelled.aborted).toHaveBeenCalledOnce();
+
+    const late = pending();
+    expect(
+      await runCodemodeScript({
+        ...base,
+        code: `tools.echo({}); return "early";`,
+        timeoutMs: 200,
+        call: late.call,
+      })
+    ).toMatchObject({ ok: false, code: "CODEMODE_TIMEOUT" });
+    expect(late.aborted).toHaveBeenCalledOnce();
+  });
+
+  it("returns unserializable tool results to the script as recoverable errors", async () => {
+    const outcome = await runCodemodeScript({
+      ...base,
+      code: `try { await tools.echo({}); } catch (error) { return error.code; }`,
+      timeoutMs: 5000,
+      call: () => Promise.resolve({ ok: true, value: 1n }),
+    });
+    expect(outcome).toMatchObject({ ok: true, result: '"CODEMODE_INVALID_RESULT"' });
+  });
+});
+
+describe("code-mode identity and call IDs", () => {
+  it("binds reachable tool identities, including child versions, into the agent definition", () => {
+    const child = (version: string) =>
+      defineAgent({
+        id: "child",
+        implementationVersion: version,
+        projectContext: false,
+        model: () => ({ decision: { kind: "finish", result: { answer: "" } }, conversation: null }),
+      });
+    const parent = (version: string) =>
+      defineAgent({
+        id: "parent",
+        codemode: true,
+        projectContext: false,
+        tools: { child: pipelineTool(child(version), { description: "Delegate" }) },
+        model: () => ({ decision: { kind: "finish", result: { answer: "" } }, conversation: null }),
+      });
+    expect(parent("1").definition.identity.definitionId).toBe(
+      parent("1").definition.identity.definitionId
+    );
+    expect(parent("1").definition.identity.definitionId).not.toBe(
+      parent("2").definition.identity.definitionId
+    );
+  });
+
+  it("keeps nested call IDs valid for maximum-length outer IDs", async () => {
+    const id = "x".repeat(256);
+    const agent = defineAgent({
+      id: "long-ids",
+      projectContext: false,
+      codemode: true,
+      environment: remote(),
+      tools: { upper },
+      model: (request, context) =>
+        context.turn === 1
+          ? {
+              conversation: null,
+              decision: {
+                kind: "continue",
+                calls: [
+                  {
+                    id,
+                    tool: "codemode",
+                    input: { code: `return (await tools.upper({ word: "a" })).upper;` },
+                  },
+                ],
+              },
+            }
+          : {
+              conversation: null,
+              decision: { kind: "finish", result: { answer: JSON.stringify(request.outcomes) } },
+            },
+    });
+    expect(outcomes((await agent.runOrThrow({ task: "go" })).answer)[0]!.value!.result).toBe("A");
   });
 });

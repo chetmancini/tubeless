@@ -64,6 +64,8 @@ export function createAgentSession<Input extends object, Result>(
   let committed: unknown = ownState(options.conversation ?? null);
   let latest: unknown;
   let running = false;
+  // clear() during a run discards that run's conversation instead of reviving it later.
+  let generation = 0;
   // SAFETY: the builder recompiles the same definition, so its options and result types match.
   const compiled = build({
     seed: () => committed,
@@ -76,9 +78,15 @@ export function createAgentSession<Input extends object, Result>(
       throw agentError("TUBELESS_AGENT_SESSION_BUSY", "Agent session is already running");
     running = true;
     latest = undefined;
+    const started = generation;
     try {
       const result = await compiled.run(input, controls, context);
-      if (result.status === "completed" && result.finalized && latest !== undefined)
+      if (
+        result.status === "completed" &&
+        result.finalized &&
+        latest !== undefined &&
+        generation === started
+      )
         committed = latest;
       return result;
     } finally {
@@ -102,6 +110,7 @@ export function createAgentSession<Input extends object, Result>(
     },
     clear() {
       committed = null;
+      generation++;
     },
   });
 }
