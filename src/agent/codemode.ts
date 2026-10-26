@@ -162,9 +162,11 @@ export function compileCodemodeTool(
       description: tool.description,
       inputJsonSchema: tool.inputJsonSchema,
       outputJsonSchema: tool.kind === "handler" ? tool.outputJsonSchema : undefined,
-    }))
+    })),
+    // UTF-8 bytes are never fewer than characters, so this bounds rendering work early.
+    MAX_DECLARATION_BYTES
   );
-  if (utf8(declarations) > MAX_DECLARATION_BYTES)
+  if (declarations === undefined || utf8(declarations) > MAX_DECLARATION_BYTES)
     throw agentError(
       "TUBELESS_AGENT_INVALID_DEFINITION",
       `Code mode tool declarations exceed ${MAX_DECLARATION_BYTES} UTF-8 bytes; expose fewer tools, for example with MCP tool allowlists`

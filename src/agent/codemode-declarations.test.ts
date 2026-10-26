@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codemodeDeclarations } from "./codemode-declarations.js";
+import { codemodeDeclarations, renderSchemaType } from "./codemode-declarations.js";
 
 describe("code-mode declarations", () => {
   it("renders JSON Schema inputs and outputs as TypeScript declarations", () => {
@@ -90,5 +90,57 @@ describe("code-mode declarations", () => {
     ]);
     expect(text).toContain("tree(input: unknown[][][][][][]): Promise<unknown>;");
     expect(text).toContain("any(input: unknown): Promise<unknown>;");
+  });
+
+  it("decodes JSON Pointer and URI escapes in local references", () => {
+    expect(
+      renderSchemaType(
+        {
+          type: "object",
+          properties: {
+            slash: { $ref: "#/$defs/text~1value" },
+            tilde: { $ref: "#/$defs/a~0b" },
+            space: { $ref: "#/$defs/two%20words" },
+          },
+          required: ["slash", "tilde", "space"],
+          $defs: {
+            "text/value": { type: "string" },
+            "a~b": { type: "number" },
+            "two words": { type: "boolean" },
+          },
+        },
+        1000
+      )
+    ).toBe("{\n  slash: string;\n  tilde: number;\n  space: boolean;\n}");
+  });
+
+  it("stops rendering once a declaration exceeds its budget, including exponential expansion", () => {
+    // Each definition references the next ten times: unbounded rendering would never finish.
+    const $defs = Object.fromEntries(
+      Array.from({ length: 12 }, (_, level) => [
+        `d${level}`,
+        {
+          type: "object",
+          properties: Object.fromEntries(
+            Array.from({ length: 10 }, (_, index) => [
+              `p${index}`,
+              { $ref: `#/$defs/d${level + 1}` },
+            ])
+          ),
+        },
+      ])
+    );
+    const started = Date.now();
+    expect(renderSchemaType({ $ref: "#/$defs/d0", $defs }, 49_152)).toBeUndefined();
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(
+      codemodeDeclarations(
+        [{ name: "big", description: "Big", inputJsonSchema: { $ref: "#/$defs/d0", $defs } }],
+        49_152
+      )
+    ).toBeUndefined();
+    expect(
+      codemodeDeclarations([{ name: "ping", description: "Ping", inputJsonSchema: {} }], 10)
+    ).toBeUndefined();
   });
 });

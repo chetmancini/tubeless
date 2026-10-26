@@ -1,5 +1,6 @@
 import type { StandardSchemaV1 } from "../core/pipeline-types.js";
 import { canonicalJsonValue } from "../utilities/canonical-json.js";
+import { renderSchemaType } from "./codemode-declarations.js";
 import { isRecord } from "./mcp-session.js";
 
 type Json = Readonly<Record<string, unknown>>;
@@ -274,12 +275,14 @@ const mcpResultJsonSchema = {
   required: ["content"],
 };
 
-const MAX_OUTPUT_SCHEMA_CHARACTERS = 16_384;
+const MAX_OUTPUT_SCHEMA_BYTES = 16_384;
+const utf8 = (text: string) => new TextEncoder().encode(text).length;
 
 /**
  * Describe `structuredContent` with a tool's declared `outputSchema`, which servers must honor.
  * Its `$defs` and `definitions` move to the descriptor root so local references still resolve.
- * Missing, non-object, unserializable or oversized schemas keep the generic shape.
+ * Missing, non-object or unserializable schemas keep the generic shape, as do schemas over
+ * 16 KiB of UTF-8 either serialized or rendered as a declaration, where references expand.
  */
 function resultDescriptor(outputSchema: unknown): Json {
   if (!isRecord(outputSchema) || outputSchema.type !== "object") return mcpResultJsonSchema;
@@ -289,7 +292,7 @@ function resultDescriptor(outputSchema: unknown): Json {
   } catch {
     return mcpResultJsonSchema;
   }
-  if (text === undefined || text.length > MAX_OUTPUT_SCHEMA_CHARACTERS) return mcpResultJsonSchema;
+  if (text === undefined || utf8(text) > MAX_OUTPUT_SCHEMA_BYTES) return mcpResultJsonSchema;
   // SAFETY: the parsed copy of a stringified record is an owned plain JSON object.
   const {
     $defs,
@@ -298,13 +301,17 @@ function resultDescriptor(outputSchema: unknown): Json {
     $id: _id,
     ...structured
   } = JSON.parse(text) as Json;
-  return {
+  const descriptor = {
     ...mcpResultJsonSchema,
     ...(isRecord($defs) ? { $defs } : {}),
     ...(isRecord(definitions) ? { definitions } : {}),
     properties: { ...mcpResultJsonSchema.properties, structuredContent: structured },
     required: ["content", "structuredContent"],
   };
+  const declared = renderSchemaType(descriptor, MAX_OUTPUT_SCHEMA_BYTES);
+  return declared === undefined || utf8(declared) > MAX_OUTPUT_SCHEMA_BYTES
+    ? mcpResultJsonSchema
+    : descriptor;
 }
 
 /**

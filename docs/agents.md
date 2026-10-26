@@ -564,8 +564,10 @@ interpretations fail validation before a tool call is dispatched.
 Results are `{ content, structuredContent? }` from the server. When a tool lists an
 object `outputSchema`, [code-mode declarations](#code-mode) type `structuredContent`
 with it, required as the MCP specification requires. Local `$defs` and `definitions`
-references still resolve. Schemas that are missing, not object schemas,
-unserializable or over 16 KiB keep the generic `Record<string, unknown>`. The schema
+references still resolve, including JSON Pointer escapes. Schemas that are missing,
+not object schemas, unserializable, or over 16 KiB of UTF-8 either serialized or as a
+rendered declaration (where references expand) keep the generic
+`Record<string, unknown>`. The schema
 describes results for the model; Tubeless does not validate `structuredContent`
 against it. A result with
 `isError` becomes a recoverable `MCP_TOOL_ERROR` observation, and JSON-RPC errors
