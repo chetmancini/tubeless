@@ -54,6 +54,7 @@ if (process.env.EVAL_CODEMODE === "1")
 const aggregate = sequences["aggregate-files"];
 // Read-only answers may come from a command rather than read calls.
 if (process.env.EVAL_RECOVERY === "aggregate-bash") aggregate[0] = [["bash", {command: "cat data/*.json"}]];
+if (process.env.EVAL_RECOVERY === "aggregate-guess") aggregate.splice(0, 1);
 if (process.env.EVAL_RECOVERY === "aggregate-wrong") aggregate[1][0][1].answer = "Total: 13620";
 if (process.env.EVAL_RECOVERY === "aggregate-create")
   aggregate.splice(1, 0, [["bash", {command: "node -e \"require('fs').writeFileSync('data/extra.txt', 'scratch')\""}]]);
@@ -148,6 +149,7 @@ it.each([
   ["ordered", undefined, undefined],
   ["aggregate-wrong", undefined, undefined],
   ["aggregate-bash", undefined, undefined],
+  ["aggregate-guess", undefined, undefined],
   ["triage-wrong", undefined, undefined],
   ["aggregate-create", undefined, undefined],
   ["aggregate-restore", undefined, undefined],
@@ -228,6 +230,7 @@ it.each([
         "aggregate-wrong": "Answer must be exactly Total: 1362",
         "aggregate-create": "Read-only task must not change workspace files",
         "aggregate-restore": "Read-only task must not call write or edit",
+        "aggregate-guess": "Agent must observe the data files it aggregates",
       }[mode as string];
       const aggregateFailure = aggregateError !== undefined;
       const triageFailure = mode === "triage-wrong";

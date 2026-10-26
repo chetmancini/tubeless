@@ -75,6 +75,8 @@ const cases = [
     task: "Sum the amount field across every JSON file in data/ and report the result exactly as Total: <number>. Do not edit any files.",
     readOnly: true,
     exactAnswer: "Total: 1362",
+    // A memorized total must not pass: the run has to observe the data files.
+    observesData: true,
     files: {
       "data/item-01.json": JSON.stringify({ id: 1, amount: 20 }) + "\n",
       "data/item-02.json": JSON.stringify({ id: 2, amount: 37 }) + "\n",
@@ -125,6 +127,21 @@ async function snapshot(root) {
   };
   await walk(root);
   return JSON.stringify(files.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
+/**
+ * Whether a run observed the `data/` inputs: a successful read of one of its JSON files or a
+ * successful command (or code-mode script) that refers to `data`.
+ */
+function observedData(calls, outcomes) {
+  const succeeded = new Set(outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.id));
+  return calls.some(
+    (call) =>
+      succeeded.has(call.id) &&
+      ((call.tool === "read" && /(^|\/)data\/[^/]+\.json$/.test(call.input.path)) ||
+        (call.tool === "bash" && /\bdata\b/.test(call.input.command)) ||
+        (call.tool === "codemode" && /\bdata\b/.test(call.input.code)))
+  );
 }
 
 /** Fixtures require either an exact answer or a phrase within a longer one. */
@@ -424,6 +441,8 @@ for (const fixture of cases.filter(selected)) {
           "Startup guidance must be included in the first model request"
         );
       assertAnswer(fixture, answer);
+      if (fixture.observesData)
+        assert(observedData(calls, outcomes), "Agent must observe the data files it aggregates");
       if (fixture.compactAfterBytes)
         assert(compactions > 0, "Conversation must compact and still complete");
     } else {
@@ -457,6 +476,8 @@ for (const fixture of cases.filter(selected)) {
         );
       }
       assertAnswer(fixture, answer);
+      if (fixture.observesData)
+        assert(observedData(calls, outcomes), "Agent must observe the data files it aggregates");
       if (fixture.id === "nested-guidance") {
         assert(
           calls.every((call) => ["read", "list", "search"].includes(call.tool)),
