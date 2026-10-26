@@ -1,4 +1,4 @@
-import type { AgentModel } from "./model-types.js";
+import type { AgentModel, AgentModelDescriptors } from "./model-types.js";
 import {
   anthropicDecision,
   anthropicMessage,
@@ -91,7 +91,7 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
   )
     throw new Error("Invalid Anthropic model configuration");
   if (baseUrl !== undefined) providerBaseUrl("Anthropic", baseUrl);
-  return async (request, context) => {
+  const decide: AgentModel = async (request, context) => {
     const selectedModel = (model ?? process.env.ANTHROPIC_MODEL)?.trim() || "claude-opus-5-5";
     const timeout = AbortSignal.timeout(timeoutMs);
     const signal = context.signal ? AbortSignal.any([context.signal, timeout]) : timeout;
@@ -101,18 +101,7 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
     );
     throwIfAborted(signal, "Anthropic decision");
     // Validate descriptors before either compaction or a decision can perform I/O.
-    const tools = [
-      ...context.capabilities.map((tool) =>
-        anthropicTool(tool.name, tool.description, "input", tool.inputJsonSchema, strict)
-      ),
-      anthropicTool(
-        "_finish",
-        "Finish with the final answer.",
-        "result",
-        context.resultJsonSchema,
-        strict
-      ),
-    ];
+    const tools = anthropicTools(context, strict);
     if (
       request.conversation !== null &&
       (!Array.isArray(request.conversation) || !request.conversation.every(record))
@@ -245,6 +234,30 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
       messages = [...messages, { role: "user", content: TOOL_RULE }];
     }
   };
+  return Object.assign(decide, {
+    checkDescriptors: (descriptors: AgentModelDescriptors) =>
+      void anthropicTools(descriptors, strict),
+  });
+}
+
+// Strict mode accepts at most this many strict tools per request, including _finish.
+const MAX_STRICT_TOOLS = 20;
+
+/** Messages API tools for these descriptors, plus the adapter-only `_finish` tool. */
+function anthropicTools(
+  { capabilities, resultJsonSchema }: AgentModelDescriptors,
+  strict: boolean
+) {
+  if (strict && capabilities.length + 1 > MAX_STRICT_TOOLS)
+    throw new Error(
+      `Anthropic strict mode allows at most ${MAX_STRICT_TOOLS} tools per request, including _finish; this agent has ${capabilities.length + 1}. Set strict: false, or advertise fewer tools with defaultTools, allowlists or codemode`
+    );
+  return [
+    ...capabilities.map((tool) =>
+      anthropicTool(tool.name, tool.description, "input", tool.inputJsonSchema, strict)
+    ),
+    anthropicTool("_finish", "Finish with the final answer.", "result", resultJsonSchema, strict),
+  ];
 }
 
 /** Pair each pending `_finish` call with a tool_result so the next user prompt is valid. */

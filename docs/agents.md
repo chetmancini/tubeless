@@ -142,7 +142,9 @@ const classify = fromPipeline("classify", {
 });
 ```
 
-`task` is required exactly when `inputSchema` is set. Without both, the input stays
+With `openaiModel()` or `anthropicModel()`, a `resultSchema` outside the provider's
+strict-mode subset fails at definition; see
+[descriptor checks](#choose-a-model-provider). `task` is required exactly when `inputSchema` is set. Without both, the input stays
 `{ task: string }`; without `resultSchema`, the result stays `{ answer: string }`.
 
 Typed agents default to `projectContext: false`: a short task-neutral prompt that
@@ -191,6 +193,14 @@ and owns a frozen copy of that state; model definitions do not hold mutable sess
 Conversation state is accepted before dispatch and reduced after the whole tool batch settles successfully.
 Expected tool failures are outcomes; fatal failure or cancellation stops the run.
 
+A model may also provide `checkDescriptors({ capabilities, resultJsonSchema })`, which
+throws when its provider cannot accept the agent's tool or result schemas. `defineAgent`
+calls it once those descriptors are compiled, so an incompatible `resultSchema` or tool
+fails at definition with `TUBELESS_AGENT_INVALID_DEFINITION` rather than at the first
+request in a pipeline. `openaiModel()` and `anthropicModel()` provide it, running the same
+checks their requests run. Wrapping an adapter in another function drops the hook; the
+request still checks before any HTTP call.
+
 The optional OpenAI subpath uses native fetch and adds no SDK dependency. It defaults
 to `OPENAI_MODEL` or `gpt-5.4-mini`; `openaiModel({ model, apiKey })` supplies explicit
 values. The adapter omits reasoning settings by default so models that do not accept
@@ -214,8 +224,8 @@ See [OpenAI's error guide](https://developers.openai.com/api/docs/guides/error-c
 
 Custom tool descriptors must be inline and support OpenAI's strict JSON Schema
 subset. The adapter wraps each argument in `{ input }`; reference keywords
-(`$ref`, `$dynamicRef`, `$recursiveRef`) are rejected locally before any HTTP
-request because wrapping changes their reference root. Supply an inline
+(`$ref`, `$dynamicRef`, `$recursiveRef`) are rejected locally, at definition and
+before any HTTP request, because wrapping changes their reference root. Supply an inline
 `inputJsonSchema` override when the tool's schema generates references.
 Every object, including nested and nullable objects, must set
 `additionalProperties: false` and list every property in `required`. These
@@ -308,8 +318,9 @@ constraints, is recorded in that schema's `description` instead. Tubeless still
 validates every argument against the full schema. Tool names longer than 64 characters
 are rejected locally; the harness itself allows 128.
 Strict mode allows at most 20 strict tools per request, including `_finish`, plus
-limits on optional and union-typed parameters. Set `strict: false` for larger tool sets
-or servers without strict support.
+limits on optional and union-typed parameters. The adapter rejects more than 20 locally,
+at definition. Set `strict: false` for larger tool sets or servers without strict
+support, or advertise fewer tools with `defaultTools`, allowlists or code mode.
 
 Once completed history exceeds `compactAfterBytes`, or a complete decision would exceed
 the request limit, the adapter requests

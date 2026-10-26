@@ -51,7 +51,12 @@ export type {
 
 export { defineAgent } from "./model-agent.js";
 export { createAgentSession, type AgentSession } from "./agent-session.js";
-export type { AgentModel, AgentModelRequest, AgentModelResponse } from "./model-types.js";
+export type {
+  AgentModel,
+  AgentModelDescriptors,
+  AgentModelRequest,
+  AgentModelResponse,
+} from "./model-types.js";
 
 /** Build a bounded in-process agent as an ordinary pipeline with one target, agent. */
 export function defineAgentLoop<
