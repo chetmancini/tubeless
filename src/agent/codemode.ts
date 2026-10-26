@@ -47,9 +47,13 @@ function idPrefix(callId: string): string {
 }
 
 const usage = `Run a JavaScript async function body that calls tools and returns a JSON value.
-Call tools as \`await tools.name(input)\`; quote names that are not identifiers, as in \`tools["server__a-b"](input)\`. Chain dependent calls, loops and filtering in one script, and \`return\` only what you need (at most ${MAX_OUTPUT_BYTES} bytes of JSON). console.log output is returned as logs.
-A failed call throws an Error with code and message; catch it to recover inside the script.
-Write plain JavaScript: no TypeScript syntax, import, require, timers, fetch or process. Scripts time out after ${TIMEOUT_MS / 1000} seconds.
+Call tools as \`await tools.name(input)\`; quote names that are not identifiers, as in \`tools["server__a-b"](input)\`.
+Each script is one call, and waiting to read its result costs a model round trip, so do related work in one script: read related files together with Promise.all, loop over listings, and chain calls whose inputs the script can compute, such as an edit followed by its check. Keep unrelated work in separate scripts, which may run in the same batch, and start a later script only when you must see a result before deciding what to do next.
+\`return\` only the facts you need, such as relevant lines, fields or exit codes, rather than whole tool results (at most ${MAX_OUTPUT_BYTES} bytes of JSON). console.log output is returned as logs.
+A failed call throws an Error with code and message. Wrap calls that may fail, such as reading an optional file, in try/catch and return what happened, so one missing file does not fail the whole script.
+To pass text containing backticks or \`\${\`, such as source code for a file, build it from quoted strings or an array of lines joined with "\\n"; a template literal would interpolate it.
+The code is the script body only: plain JavaScript with no JSON wrapper, TypeScript syntax, import, require, timers, fetch or process. Scripts time out after ${TIMEOUT_MS / 1000} seconds.
+When the task is complete, finish with the final result instead of running another script.
 
 Available tools:`;
 

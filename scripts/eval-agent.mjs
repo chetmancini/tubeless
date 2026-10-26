@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { defineAgent } from "tubeless/agent";
 import { openaiModel } from "tubeless/agent/openai";
 
@@ -51,11 +51,36 @@ const cases = [
     id: "nested-guidance",
     task: "Read src/code.txt first, then report its content according to project conventions. Do not edit any files.",
     readOnly: true,
+    expectAnswer: "Scoped code: cobalt",
     files: {
       "src/AGENTS.md": 'Report codes from this directory with the prefix "Scoped code: ".\n',
       "src/code.txt": "cobalt\n",
       "check.mjs":
         'import assert from "node:assert/strict";\nimport { readFileSync } from "node:fs";\nassert.equal(readFileSync("src/code.txt", "utf8"), "cobalt\\n");\nconsole.log("guidance checks passed");\n',
+    },
+  },
+  {
+    // Rewards chaining: each file must be read, but none needs a decision of its own.
+    id: "aggregate-files",
+    task: "Sum the amount field across every JSON file in data/ and report the result exactly as Total: <number>. Do not edit any files.",
+    readOnly: true,
+    exactAnswer: "Total: 1362",
+    files: {
+      "data/item-01.json": JSON.stringify({ id: 1, amount: 20 }) + "\n",
+      "data/item-02.json": JSON.stringify({ id: 2, amount: 37 }) + "\n",
+      "data/item-03.json": JSON.stringify({ id: 3, amount: 54 }) + "\n",
+      "data/item-04.json": JSON.stringify({ id: 4, amount: 71 }) + "\n",
+      "data/item-05.json": JSON.stringify({ id: 5, amount: 88 }) + "\n",
+      "data/item-06.json": JSON.stringify({ id: 6, amount: 105 }) + "\n",
+      "data/item-07.json": JSON.stringify({ id: 7, amount: 122 }) + "\n",
+      "data/item-08.json": JSON.stringify({ id: 8, amount: 139 }) + "\n",
+      "data/item-09.json": JSON.stringify({ id: 9, amount: 156 }) + "\n",
+      "data/item-10.json": JSON.stringify({ id: 10, amount: 173 }) + "\n",
+      "data/item-11.json": JSON.stringify({ id: 11, amount: 190 }) + "\n",
+      "data/item-12.json": JSON.stringify({ id: 12, amount: 207 }) + "\n",
+      "data/README.txt": "Notes only; this file has no amount.\n",
+      "check.mjs":
+        'import assert from "node:assert/strict";\nimport { readdirSync } from "node:fs";\nassert.equal(readdirSync("data").filter((name) => name.endsWith(".json")).length, 12);\nconsole.log("aggregate checks passed");\n',
     },
   },
   {
@@ -70,6 +95,35 @@ const cases = [
     },
   },
 ];
+
+/** Hash every workspace file except .git, to detect created, changed or removed files. */
+async function snapshot(root) {
+  const files = [];
+  const walk = async (directory) => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (directory === root && entry.name === ".git") continue;
+      if (entry.isDirectory()) await walk(path);
+      else
+        files.push([
+          relative(root, path),
+          createHash("sha256")
+            .update(await readFile(path))
+            .digest("hex"),
+        ]);
+    }
+  };
+  await walk(root);
+  return JSON.stringify(files.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
+/** Fixtures require either an exact answer or a phrase within a longer one. */
+function assertAnswer(fixture, answer) {
+  if (fixture.exactAnswer !== undefined)
+    assert(answer.trim() === fixture.exactAnswer, `Answer must be exactly ${fixture.exactAnswer}`);
+  if (fixture.expectAnswer !== undefined)
+    assert(answer.includes(fixture.expectAnswer), `Answer must include ${fixture.expectAnswer}`);
+}
 
 function locatesConfiguration(outcome, root) {
   if (!outcome.ok) return false;
@@ -113,6 +167,7 @@ for (const fixture of cases) {
       await mkdir(dirname(join(root, name)), { recursive: true });
       await writeFile(join(root, name), content);
     }
+    const workspaceBefore = fixture.readOnly ? await snapshot(root) : undefined;
     const transport = openaiModel({
       reasoningEffort: "high",
       compactAfterBytes: fixture.compactAfterBytes,
@@ -181,8 +236,7 @@ for (const fixture of cases) {
           startupGuidanceLoaded,
           "Startup guidance must be included in the first model request"
         );
-      if (fixture.readOnly)
-        assert(answer.includes("Scoped code: cobalt"), "Answer must follow the nested guidance");
+      assertAnswer(fixture, answer);
       if (fixture.compactAfterBytes)
         assert(compactions > 0, "Conversation must compact and still complete");
     } else {
@@ -212,7 +266,8 @@ for (const fixture of cases) {
           "Startup-guidance task must pass verification without learning from failed checks"
         );
       }
-      if (fixture.readOnly) {
+      assertAnswer(fixture, answer);
+      if (fixture.id === "nested-guidance") {
         assert(
           calls.every((call) => ["read", "list", "search"].includes(call.tool)),
           "Read-only task must use only read, list, and search tools"
@@ -252,8 +307,7 @@ for (const fixture of cases) {
             `Read of ${path} must successfully return the expected contents`
           );
         }
-        assert(answer.includes("Scoped code: cobalt"), "Answer must follow the nested guidance");
-      } else {
+      } else if (!fixture.readOnly) {
         assert(
           calls.some((call) => call.tool === "edit" || call.tool === "write"),
           "Agent must edit files"
@@ -311,6 +365,19 @@ for (const fixture of cases) {
         assert(compactions > 0, "Conversation must compact and still complete");
       }
     }
+    // Read-only tasks may run read-only commands, but must leave no trace in the workspace.
+    // Direct mode also rejects writes and edits, even if a later call restores the file.
+    if (fixture.readOnly) {
+      if (!codemode)
+        assert(
+          !outcomes.some((outcome) => outcome.ok && ["write", "edit"].includes(outcome.tool)),
+          "Read-only task must not call write or edit"
+        );
+      assert(
+        (await snapshot(root)) === workspaceBefore,
+        "Read-only task must not change workspace files"
+      );
+    }
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
   } finally {
@@ -327,6 +394,7 @@ for (const fixture of cases) {
     outcomes,
     turns,
     compactions,
+    turnCount: turns.length,
     durationMs: Date.now() - started,
   };
   results.push(result);

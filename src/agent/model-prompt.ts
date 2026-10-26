@@ -32,8 +32,9 @@ Never claim something was verified unless a tool result establishes it.
 Finish only when the task is complete or blocked, with a result that satisfies the required schema.`;
 
 const codemodePrompt = `Code mode: your only tool is codemode. Each call runs a JavaScript script that calls the declared tools as \`await tools.<name>(input)\`; the rules above about tools apply to those calls.
-Prefer one script that chains dependent calls, loops and filters results, and return only the facts you need. Inspect the returned result and logs before deciding the next step.`;
-const codemodeWorkspacePrompt = `Guidance reads still come first: read applicable AGENTS.md files in a script that returns their contents, and only act in that directory in a later script.`;
+Put related calls in one script, using Promise.all for independent reads, and chain dependent calls when their inputs can be computed from earlier results. Unrelated work may go in separate scripts in the same batch. Wait for a script's result only when the next step depends on reading it.
+Return only the facts you need. Do not rerun a script to recheck a result you already have, and finish with the answer instead of running an empty script.`;
+const codemodeWorkspacePrompt = `Guidance reads still come first: read applicable AGENTS.md files in one script that catches missing files and returns their contents, and only act in that directory in a later script.`;
 
 export async function modelInstructions(
   cwd: string,
