@@ -117,6 +117,10 @@ conversation carries over. A persisted conversation must come from the same prov
 adapter. Sessions work with typed agents too. `defineAgentLoop` agents own their state
 and have no provider conversation, so they are rejected.
 
+Sessions use the configuration captured by `defineAgent`, including its model,
+tool grants and limits. Changing the original configuration object or its collections
+later does not change the agent or sessions created from it.
+
 ### Typed inputs and results
 
 Supply `inputSchema` with a `task` mapper, and optionally `resultSchema`, to run the

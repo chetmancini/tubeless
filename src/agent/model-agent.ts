@@ -17,7 +17,8 @@ import type {
 import type { AgentModel } from "./model-types.js";
 import { compileAgent } from "./compile-agent.js";
 import { registerSessionAgent, type SessionHooks } from "./agent-session.js";
-import { agentError } from "./agent-state.js";
+import { agentError, jsonDescriptor } from "./agent-state.js";
+import { resolvedLimits } from "./execution-scope.js";
 import { modelInstructions } from "./model-prompt.js";
 import { toolObject } from "./default-tool-schema.js";
 import { wireString } from "../tracing/wire-schema.js";
@@ -106,8 +107,28 @@ export function defineAgent<
 export function defineAgent<Options extends StandardSchemaV1<object, object>>(
   config: ModelAgentDefinition<Options>
 ): unknown {
-  const agent = compileModelAgent(config);
-  registerSessionAgent(agent, (hooks) => compileModelAgent(config, hooks));
+  // Sessions compile from this owned definition, never from caller-owned collections.
+  // Tools are opaque immutable handles; schemas, providers and executors retain their services.
+  const owned = Object.freeze({
+    ...config,
+    tools: config.tools && Object.freeze({ ...config.tools }),
+    defaultTools: Array.isArray(config.defaultTools)
+      ? Object.freeze([...config.defaultTools])
+      : config.defaultTools,
+    limits: resolvedLimits(config.limits),
+    codemode:
+      config.codemode && typeof config.codemode === "object" && !Array.isArray(config.codemode)
+        ? Object.freeze({ ...config.codemode })
+        : config.codemode,
+    durability: config.durability && Object.freeze({ ...config.durability }),
+    resultJsonSchema: jsonDescriptor(
+      config.resultSchema ?? answer,
+      config.resultJsonSchema,
+      "Agent result"
+    ),
+  });
+  const agent = compileModelAgent(owned);
+  registerSessionAgent(agent, (hooks) => compileModelAgent(owned, hooks));
   return agent;
 }
 

@@ -125,6 +125,8 @@ iterations, agent turns, and agent tool calls appear inside the expansion, and t
 calls are labeled by tool. Nested runs can expand again to show their own steps, up
 to six levels deep and sixteen items per step. The nested run list opens the rest
 sixteen per step at a time.
+Selected and expanded runs keep their last loaded details while refreshing and retry
+temporary loading failures, even after a run finishes.
 Select a step, arrow, or nested run to open it in the inspector beside the graph,
 or open a nested run from there. Recordings made before
 dependencies were recorded show steps without arrows. Animations respect the

@@ -48,9 +48,9 @@ their source files.
   Custom names override defaults with matching type inference.
   `compile-agent.ts` compiles both custom-decision and model-backed agents through
   the same turn pipeline. `model-agent.ts` owns `defineAgent`: default or typed schemas,
-  task mapping, prompting and per-run conversation state; `model-prompt.ts` builds the
+  task mapping, prompting, an owned definition snapshot and per-run conversation state; `model-prompt.ts` builds the
   workspace or task-neutral prompt from environment guidance. `agent-session.ts` owns
-  `createAgentSession`: a session recompiles its agent with hooks that seed each run's
+  `createAgentSession`: a session compiles from that same snapshot with hooks that seed each run's
   initial conversation and observe each decision's, committing the finish conversation
   only after the run completes and finalizes.
   `invocation.ts` owns environment resolution, checkpoint leases, terminal recovery
@@ -274,8 +274,10 @@ and interactive reporter orchestration.
   with history clearing; reset only after the maintenance adapter succeeds.
   Selected-run reads supply ancestry and direct-child summaries; definition metadata
   and its run pages load independently.
-  `studio/browser/data-controller.ts` owns history queries, selection state
-  and detail freshness. Views consume one selection union, and resource refreshes
+  `studio/browser/data-controller.ts` owns history queries and selection state.
+  `studio/browser/run-detail-loader.ts` owns per-run reads for both the selection and
+  expanded graph: coalesced revisions, retained successes, missing/error retries and
+  request retirement. Views consume one selection union, and resource refreshes
   retain matching definition metadata without remounting its explorer.
   `run-store/run-history.ts` also attributes each nested run to the parent step that
   started it (`origin`), using iteration and agent-call links before pipeline matches.
@@ -291,7 +293,7 @@ and interactive reporter orchestration.
   collections. It returns automatic expansion state without mutating its input.
   `graph/dependencies.ts` owns dependency kinds, edge states and per-step child totals
   shared by the scene, inspector and run views. `graph/graph.tsx` renders the scene,
-  owns selection and loads expanded runs through the Studio API. Scene construction
+  owns selection and reconciles the detail loaders for expanded runs. Scene construction
   loads neither UI components nor transport or server code; the emitted runtime graph
   test enforces this boundary. Shared history limits live in `studio/shared/limits.ts`
   so geometry and pagination do not need to load protocol validators.

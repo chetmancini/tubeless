@@ -417,7 +417,9 @@ read when a pipeline needs them.
   conversation. Failed/cancelled prompts retain the previous completed context.
   Ordinary `defineAgent` pipeline invocations remain isolated per run; wrap one in
   `createAgentSession(agent)` to continue a conversation across prompts in your own app
-  (`session.conversation` persists, `clear()` resets). See [chat sessions](./agents.md#chat-sessions).
+  (`session.conversation` persists, `clear()` resets). Sessions use the model, tool grants
+  and limits captured by `defineAgent`; later configuration mutations do not change them.
+  See [chat sessions](./agents.md#chat-sessions).
   See [agent CLI usage](./cli.md#prompt-a-workspace-agent) and the
   [provider plugin example](../examples/agent-repl-model.ts).
 

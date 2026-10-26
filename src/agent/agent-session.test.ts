@@ -3,6 +3,8 @@ import {
   createAgentSession,
   defineAgent,
   defineAgentLoop,
+  defineTool,
+  type DefaultAgentToolName,
   type AgentModel,
   type AgentModelRequest,
 } from "./agent.js";
@@ -59,6 +61,77 @@ describe("agent sessions", () => {
     expect(await session.runOrThrow({ task: "next" })).toEqual({ answer: "stored > next" });
     expect(await chat.runOrThrow({ task: "solo" })).toEqual({ answer: "solo" });
     expect(Object.isFrozen(session.conversation)).toBe(true);
+  });
+
+  it("keeps the defined model, tool grants, limits and descriptors after caller mutations", async () => {
+    const defaults: DefaultAgentToolName[] = [];
+    const probe = defineTool({
+      description: "Probe",
+      inputSchema: emptyInput,
+      outputSchema: textSchema,
+      run: () => "probe",
+    });
+    const tools: Record<string, typeof probe> = { probe };
+    const limits = { maxTurns: 1 };
+    const descriptor = {
+      type: "object",
+      properties: { answer: { type: "string" } },
+      required: ["answer"],
+      additionalProperties: false,
+    };
+    const requests: AgentModelRequest[] = [];
+    let prefix = "current";
+    const config = {
+      id: "owned-definition",
+      model: ((request, context) => {
+        requests.push(request);
+        expect(context.resultJsonSchema).toEqual(descriptorAtDefinition);
+        return {
+          decision: {
+            kind: "finish",
+            result: {
+              answer: `${prefix}:${context.capabilities.map((tool) => tool.name).join(",")}`,
+            },
+          },
+          conversation: [request.task],
+        };
+      }) satisfies AgentModel,
+      instructions: "Original instructions",
+      projectContext: false,
+      environment: remote(),
+      defaultTools: defaults,
+      tools,
+      limits,
+      resultJsonSchema: descriptor,
+    };
+    const descriptorAtDefinition = structuredClone(descriptor);
+    const chat = defineAgent(config);
+    config.model = () => ({
+      decision: { kind: "finish", result: { answer: "replacement" } },
+      conversation: [],
+    });
+    config.instructions = "Changed instructions";
+    defaults.push("bash");
+    delete tools.probe;
+    tools.other = probe;
+    limits.maxTurns = 0;
+    descriptor.properties.answer.type = "number";
+    prefix = "live"; // Captured service behavior remains live; configuration ownership does not freeze closures.
+    const session = createAgentSession(chat);
+    const original = await chat.run({ task: "solo" });
+    const continued = await session.run({ task: "hello" });
+    expect(original.value).toEqual({ answer: "live:probe" });
+    expect(continued.value).toEqual(original.value);
+    expect(continued.definitionIdentity).toEqual(original.definitionIdentity);
+    expect(
+      requests.every(
+        (request) =>
+          request.instructions.includes("Original instructions") &&
+          !request.instructions.includes("Changed instructions")
+      )
+    ).toBe(true);
+    expect(session.conversation).toEqual(["hello"]);
+    expect(createAgentSession(chat).conversation).toBeNull();
   });
 
   it("rejects overlapping runs and agents without a model", async () => {

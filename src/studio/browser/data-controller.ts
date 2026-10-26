@@ -1,4 +1,5 @@
 import type { StoredRunSummary } from "../../run-store/run-history.js";
+import { RunDetailLoader, DEFAULT_DETAIL_RETRY_MS } from "./run-detail-loader.js";
 import type {
   StudioApi,
   StudioAccessDenied,
@@ -30,18 +31,6 @@ export interface StudioDataInvalidation {
 }
 
 type StudioDataListener = (state: StudioDataState) => void;
-export const DEFAULT_DETAIL_RETRY_MS = 1_200;
-
-function fingerprint(summary: StoredRunSummary): string {
-  return [
-    summary.runId,
-    summary.eventCount,
-    summary.subtreeEventCount,
-    summary.rootRunId,
-    summary.status,
-  ].join(":");
-}
-
 function clearedSnapshot(snapshot: StudioSnapshot): StudioSnapshot {
   return {
     ...snapshot,
@@ -68,10 +57,7 @@ export class StudioDataController {
   readonly #unsubscribeAccess: (() => void) | undefined;
   readonly #detailRetryMs: number;
   readonly #listeners = new Set<StudioDataListener>();
-  #detailRequest: object | null = null;
-  #detailRetryTimeout: ReturnType<typeof setTimeout> | undefined;
-  #detailFingerprint: string | null = null;
-  #detailSelectionVersion = 0;
+  #detail: RunDetailLoader | undefined;
   #disposed = false;
   #invalidationTimeout: ReturnType<typeof setTimeout> | undefined;
   #manualRefreshPending = false;
@@ -152,10 +138,7 @@ export class StudioDataController {
       historyQuery: visible ? this.#state.historyQuery : { pipelineId, query: "", offset: 0 },
       selection: runId ? { status: "loading", runId, summary } : { status: "none" },
     });
-    if (summary) {
-      this.#detailFingerprint = fingerprint(summary);
-      this.#loadDetail(this.#detailSelectionVersion);
-    }
+    if (summary) this.#loadDetail(summary);
     this.refresh(true);
   }
 
@@ -184,7 +167,7 @@ export class StudioDataController {
         snapshot: this.#state.snapshot ? clearedSnapshot(this.#state.snapshot) : null,
       });
     } else {
-      this.#invalidateDetail(delayMs);
+      this.#detail?.invalidate(delayMs);
     }
     if (this.#invalidationTimeout) clearTimeout(this.#invalidationTimeout);
     this.#invalidationTimeout = undefined;
@@ -231,15 +214,12 @@ export class StudioDataController {
     if (runId) {
       const summary = snapshot.selectedRun ?? snapshot.runs.find((run) => run.runId === runId);
       if (summary?.runId === runId) {
-        const nextFingerprint = fingerprint(summary);
         selection =
           selection.status === "ready"
             ? { ...selection, summary }
             : { status: "loading", runId, summary };
-        const changed = nextFingerprint !== this.#detailFingerprint;
-        this.#detailFingerprint = nextFingerprint;
         this.#update({ connected: true, snapshot, snapshotPipelineId, selection });
-        if (changed) this.#loadDetail(this.#detailSelectionVersion);
+        this.#loadDetail(summary);
         return;
       }
       this.#retireDetail();
@@ -276,89 +256,35 @@ export class StudioDataController {
       });
   }
 
-  #loadDetail(selectionVersion: number): void {
-    const runId = this.#selectedRunId();
-    const startedFingerprint = this.#detailFingerprint;
-    if (
-      this.#disposed ||
-      this.#state.accessDenied ||
-      this.#detailRequest !== null ||
-      this.#detailRetryTimeout !== undefined ||
-      !runId ||
-      !startedFingerprint ||
-      selectionVersion !== this.#detailSelectionVersion
-    )
-      return;
-    const request = {};
-    this.#detailRequest = request;
-    void this.#api
-      .loadRunDetail(runId)
-      .then((detail) => {
-        if (!this.#detailRequestIsCurrent(request, selectionVersion)) return;
-        this.#detailRequest = null;
+  #loadDetail(summary: StoredRunSummary): void {
+    this.#detail ??= new RunDetailLoader(
+      this.#api,
+      summary.runId,
+      (detail) => {
         const selection = this.#state.selection;
         if (
-          detail?.run.runId === runId &&
+          detail &&
           (selection.status === "loading" || selection.status === "ready") &&
           selection.summary
         ) {
           this.#update({
-            selection: { status: "ready", runId, summary: selection.summary, detail },
+            selection: {
+              status: "ready",
+              runId: summary.runId,
+              summary: selection.summary,
+              detail,
+            },
           });
-          // Coalesce revisions received during this read into one follow-up.
-          if (startedFingerprint !== this.#detailFingerprint) this.#loadDetail(selectionVersion);
-        } else this.#scheduleDetailRetry(selectionVersion);
-      })
-      .catch(() => {
-        if (!this.#detailRequestIsCurrent(request, selectionVersion)) return;
-        this.#detailRequest = null;
-        this.#scheduleDetailRetry(selectionVersion);
-      });
-  }
-
-  #detailRequestIsCurrent(request: object, selectionVersion: number): boolean {
-    return (
-      !this.#disposed &&
-      !this.#state.accessDenied &&
-      this.#detailRequest === request &&
-      this.#detailSelectionVersion === selectionVersion
+        }
+      },
+      this.#detailRetryMs
     );
-  }
-
-  #scheduleDetailRetry(selectionVersion: number): void {
-    if (
-      this.#disposed ||
-      this.#state.accessDenied ||
-      selectionVersion !== this.#detailSelectionVersion
-    )
-      return;
-    if (this.#detailRetryTimeout) clearTimeout(this.#detailRetryTimeout);
-    this.#detailRetryTimeout = setTimeout(() => {
-      this.#detailRetryTimeout = undefined;
-      this.#loadDetail(selectionVersion);
-    }, this.#detailRetryMs);
-  }
-
-  #invalidateDetail(delayMs: number): void {
-    const currentFingerprint = this.#detailFingerprint;
-    this.#retireDetail();
-    this.#detailFingerprint = currentFingerprint;
-    if (!currentFingerprint) return;
-    const version = this.#detailSelectionVersion;
-    if (delayMs > 0) {
-      this.#detailRetryTimeout = setTimeout(() => {
-        this.#detailRetryTimeout = undefined;
-        this.#loadDetail(version);
-      }, delayMs);
-    } else this.#loadDetail(version);
+    this.#detail.update(summary);
   }
 
   #retireDetail(): void {
-    this.#detailSelectionVersion += 1;
-    this.#detailRequest = null;
-    this.#detailFingerprint = null;
-    if (this.#detailRetryTimeout) clearTimeout(this.#detailRetryTimeout);
-    this.#detailRetryTimeout = undefined;
+    this.#detail?.dispose();
+    this.#detail = undefined;
   }
 
   #update(update: Partial<StudioDataState>): void {

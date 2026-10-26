@@ -1,11 +1,10 @@
 import type { ComponentChildren } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
-import type { StoredRunSummary } from "../../../run-store/run-history.js";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { StoredPipelineRun, StoredPipelineStep } from "../../../run-store/run-store.js";
 import { StepArtifacts } from "../components/artifacts.js";
 import { preferredScrollBehavior } from "../components/common.js";
 import type { StudioApi } from "../transport.js";
-import { DEFAULT_DETAIL_RETRY_MS } from "../data-controller.js";
+import { RunDetailLoader } from "../run-detail-loader.js";
 import type { StudioRunDetail } from "../../shared/schema.js";
 import { duration, shortId, Status } from "../components/steps.js";
 import { Drawer, EDGE_KIND_LABEL, Facts, runOffset, StepInspector } from "./inspector.js";
@@ -548,34 +547,6 @@ function usePulse(): (key: string, status: string) => boolean {
   };
 }
 
-/** Fingerprint of one expanded child. Detail reloads only when this value changes. */
-export function expandedRunWatchKey(
-  summary: Pick<StoredRunSummary, "runId" | "eventCount" | "subtreeEventCount" | "status">
-): string {
-  return JSON.stringify([
-    summary.runId,
-    summary.eventCount,
-    summary.subtreeEventCount,
-    summary.status,
-  ]);
-}
-
-/**
- * Expanded children whose last successful load does not match `keys`.
- * A missing entry is loaded again, so a failed request is retried without a fingerprint change.
- */
-export function expandedRunsToLoad(
-  keys: readonly string[],
-  loaded: ReadonlyMap<string, string>
-): { key: string; runId: string }[] {
-  const pending: { key: string; runId: string }[] = [];
-  for (const key of keys) {
-    const runId: unknown = JSON.parse(key)[0];
-    if (typeof runId === "string" && loaded.get(runId) !== key) pending.push({ key, runId });
-  }
-  return pending;
-}
-
 export interface RunGraphProps {
   detail: StudioRunDetail;
   /** Loads nested run steps for in-place expansion; nested runs stay collapsed without it. */
@@ -601,12 +572,21 @@ export function RunGraph({
   const runId = detail.run.runId;
   const [toggles, setToggles] = useState<ReadonlyMap<string, boolean>>(new Map());
   const opened = useRef<ReadonlySet<string>>(new Set());
-  const [loads, setLoads] = useState<ReadonlyMap<string, RunLoad>>(new Map());
+  const loaders = useMemo(() => new Map<string, RunDetailLoader>(), [api, runId]);
+  const [loaded, setLoaded] = useState<{
+    owner: typeof loaders;
+    runs: ReadonlyMap<string, RunLoad>;
+  }>({ owner: loaders, runs: new Map() });
+  const loads = loaded.owner === loaders ? loaded.runs : new Map<string, RunLoad>();
+  useEffect(
+    () => () => {
+      for (const loader of loaders.values()) loader.dispose();
+    },
+    [loaders]
+  );
   const [selection, setSelection] = useState<GraphSelection | null>(() =>
     selectedStepId ? { kind: "step", runId, stepId: selectedStepId } : null
   );
-  const loadedKeys = useRef(new Map<string, string>());
-  const [retry, setRetry] = useState(0);
   const pulse = usePulse();
   const drawer = useRef<HTMLDivElement>(null);
   const select = (next: GraphSelection | null) => {
@@ -635,41 +615,33 @@ export function RunGraph({
   });
   opened.current = ctx.opened;
   const { scene } = ctx;
-  const watch = [...ctx.wanted]
-    .sort()
-    .map((runId) => expandedRunWatchKey(ctx.summaries.get(runId)!))
-    .join("\n");
-
-  // Reload an expanded child when its own event count, subtree size, or status changes.
-  // A failed request is not recorded, so the retry loads that child again even when a
-  // finished run will not change its fingerprint. The last loaded detail stays in place.
+  // Reconcile subscriptions after each scene. Revision changes update a loader without
+  // retiring its in-flight read; only collapsed/removed runs and owner changes retire reads.
   useEffect(() => {
-    if (!api || !watch) return;
-    const pending = expandedRunsToLoad(watch.split("\n"), loadedKeys.current);
-    if (pending.length === 0) return;
-    let current = true;
-    let retryQueued = false;
-    for (const { key, runId } of pending) {
-      api.loadRunDetail(runId).then(
-        (loaded) => {
-          if (!current) return;
-          loadedKeys.current.set(runId, key);
-          setLoads((previous) => new Map(previous).set(runId, loaded ?? "missing"));
-        },
-        () => {
-          if (current && !retryQueued) {
-            retryQueued = true;
-            setTimeout(() => {
-              if (current) setRetry((count) => count + 1);
-            }, DEFAULT_DETAIL_RETRY_MS);
-          }
-        }
-      );
+    for (const [id, loader] of loaders) {
+      if (!ctx.wanted.has(id)) {
+        loader.dispose();
+        loaders.delete(id);
+      }
     }
-    return () => {
-      current = false;
-    };
-  }, [api, watch, retry]);
+    if (!api) return;
+    for (const id of ctx.wanted) {
+      let loader = loaders.get(id);
+      if (!loader) {
+        loader = new RunDetailLoader(api, id, (detail) => {
+          setLoaded((previous) => {
+            const runs = previous.owner === loaders ? previous.runs : new Map<string, RunLoad>();
+            return {
+              owner: loaders,
+              runs: new Map(runs).set(id, detail ?? runs.get(id) ?? "missing"),
+            };
+          });
+        });
+        loaders.set(id, loader);
+      }
+      loader.update(ctx.summaries.get(id)!);
+    }
+  });
 
   const ui: GraphUi = {
     selection,
