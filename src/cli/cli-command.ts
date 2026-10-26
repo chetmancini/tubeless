@@ -231,32 +231,20 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
           `--resume was passed, but no checkpoint was found at ${resolvedPath}; starting fresh.`
         );
       }
-      // A dry run must never write to the checkpoint file, even while resuming — an
-      // in-memory view seeded with the real entries previews it accurately without risk.
-      return {
-        ...context,
-        checkpoint: values.dryRun ? inMemoryCheckpointView(store.entries()) : store,
-      };
+    } else if (hadExisting) {
+      if (values.dryRun) {
+        context.log.log("Dry run: leaving existing checkpoint untouched (would start fresh).");
+      } else {
+        store.clear();
+        context.log.log("Starting fresh — cleared existing checkpoint.");
+      }
     }
 
-    if (!hadExisting) {
-      return {
-        ...context,
-        checkpoint: values.dryRun ? inMemoryCheckpointView(store.entries()) : store,
-      };
-    }
-
-    if (values.dryRun) {
-      // Dry run must not touch the file — neither clearing it nor writing new progress —
-      // but the preview should still reflect what a real fresh run would see: an empty
-      // "done" set, not the stale entries a --resume invocation would use.
-      context.log.log("Dry run: leaving existing checkpoint untouched (would start fresh).");
-      return { ...context, checkpoint: inMemoryCheckpointView(new Map()) };
-    }
-
-    store.clear();
-    context.log.log("Starting fresh — cleared existing checkpoint.");
-    return { ...context, checkpoint: store };
+    // Isolate every dry run from disk; a fresh preview starts with no recorded items.
+    const checkpoint = values.dryRun
+      ? inMemoryCheckpointView(!values.resume && hadExisting ? new Map() : store.entries())
+      : store;
+    return { ...context, checkpoint };
   }
 
   /**

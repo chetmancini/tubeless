@@ -29,7 +29,6 @@ type LoadFailure = { exitCode: number };
 export interface WorkbenchRegistration {
   readonly identity: string;
   readonly source: string;
-  readonly cwd: string;
   /** Pipeline id when available before loading the source. */
   readonly id?: string;
   loadPlan(io: WorkbenchCliIo): Promise<{ view: WorkbenchPipeline } | LoadFailure>;
@@ -56,7 +55,6 @@ export function createModuleRegistration(
   return {
     identity: `${filePath}\0${exportName ?? ""}`,
     source: filePath,
-    cwd,
     async loadPlan(io) {
       const loaded = await loadPlanSource(filePath, exportName, { ...io, cwd });
       if ("exitCode" in loaded) return loaded;
@@ -100,7 +98,6 @@ function createPipelineRegistration(
   return {
     identity: `project-pipeline\0${filePath}\0${pipeline.id}`,
     source: pipeline.id,
-    cwd,
     id: pipeline.id,
     // A registered command owns presentation overrides; it plans its pipeline unchanged.
     async loadPlan() {

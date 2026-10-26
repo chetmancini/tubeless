@@ -196,13 +196,7 @@ function normalizePipelineCliValues<TSchema extends CliParamsSchema>(
   // `stepIds`/`targets`/`continueOnError`/`maxConcurrency` keys, which `CliParams<PipelineCliBuiltins & TSchema>`
   // already provides, so the runtime shape matches the target type.
   const pipelineValues = values as PipelineCliValues<TSchema>;
-  const { continueOnError, stepIds, targets } = pipelineValues;
-  return {
-    ...pipelineValues,
-    continueOnError,
-    stepIds,
-    targets: targets ?? [],
-  };
+  return { ...pipelineValues, targets: pipelineValues.targets ?? [] };
 }
 
 function pipelineRunControlsFromCliValues(
