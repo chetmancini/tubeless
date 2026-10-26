@@ -1,3 +1,9 @@
+import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
+import {
+  renderWorkbenchUsage,
+  parseSubcommandArgs,
+  runWorkbenchSubcommand,
+} from "./workbench-subcommand.js";
 import { stat } from "node:fs/promises";
 import * as path from "node:path";
 import { upgradeSqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
@@ -9,35 +15,18 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-import { parseSubcommandArgs, runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
-const UPGRADE_USAGE = `Usage: tubeless upgrade [options]
-
-Rewrite an older SQLite run store to the current schema.
-
-The upgrade rewrites the history file in place and cannot be undone. Versions 1
-and 2 rebuild the event table, keep event ids, and rename retired PIPES_ error
-codes to TUBELESS_. Version 3 adds a column. Run this before an unattended
-\`tubeless run --store\` or \`tubeless ui\` so that job does not stop on an older store.
-
-Options:
-      --store <path>    SQLite database (default: .tubeless/runs.sqlite)
-      --yes             Confirm the rewrite; there is no interactive prompt
-  -h, --help            Show this help
-`;
+const UPGRADE_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.upgrade);
 
 function parseUpgradeArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, {
-    store: { type: "string" },
-    yes: { type: "boolean" },
-  });
+  return parseSubcommandArgs(argv, WORKBENCH_SPECS.upgrade.options);
 }
 
 /** Confirm and apply a SQLite run-store schema upgrade. */
 export async function runUpgrade(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: UPGRADE_USAGE,
+      spec: WORKBENCH_SPECS.upgrade,
       parse: parseUpgradeArgs,
       async run(parsed, commandIo) {
         if (parsed.positionals.length > 0) {

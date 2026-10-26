@@ -1,8 +1,13 @@
+import { WORKBENCH_SPECS } from "../workbench-command-specs.js";
+import {
+  renderWorkbenchUsage,
+  parseSubcommandArgs,
+  runWorkbenchSubcommand,
+} from "../workbench-subcommand.js";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import * as path from "node:path";
-import { parseArgs } from "node:util";
 import { awaitWithAbort } from "../../utilities/abort.js";
 import { createCloudClient, CloudClientError, isCloudTransportError } from "./client.js";
 import { resolveCloudHost } from "./config.js";
@@ -13,7 +18,7 @@ import {
   type CliRun,
   type CloudJsonValue,
 } from "./protocol.js";
-import { runWorkbenchSubcommand } from "../workbench-subcommand.js";
+
 import {
   type WorkbenchCliIo,
   writeUsageError,
@@ -27,25 +32,7 @@ import {
   type CloudCommandDependencies,
 } from "./shared.js";
 
-const CLOUD_USAGE = `Usage: tubeless cloud <list|run|logs> [options]
-
-  list [--json]
-  run <pipeline-name-or-slug> [--input-file <path|->] [--detach] [--json]
-  run --id <cloud-pipeline-id> [--input-file <path|->] [--detach] [--json]
-  logs <run-id> [--follow] [--json]
-
-All commands accept --workspace <id>, --host <origin>, and --help.
-Use a listed slug or an exact name. Quote names containing spaces.
-Run watches logs by default; --detach returns after printing the run ID.
-Remote runs use deployed code. Local edits and modules are never loaded.
-Set up and load pipelines in the Cloud dashboard.
-`;
-const COMMON_OPTIONS = ["host", "workspace", "help"];
-const COMMAND_OPTIONS: Record<string, string[]> = {
-  list: ["json"],
-  run: ["id", "input-file", "detach", "json"],
-  logs: ["follow", "json"],
-};
+const CLOUD_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.cloud);
 const INPUT_LIMIT = 64 * 1024;
 
 async function boundedInput(
@@ -192,35 +179,12 @@ export async function runCloud(
 ): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: CLOUD_USAGE,
-      parse: (args) =>
-        parseArgs({
-          args: [...args],
-          allowPositionals: true,
-          strict: true,
-          options: {
-            help: { type: "boolean", short: "h" },
-            host: { type: "string" },
-            workspace: { type: "string" },
-            id: { type: "string" },
-            "input-file": { type: "string" },
-            detach: { type: "boolean" },
-            json: { type: "boolean" },
-            follow: { type: "boolean" },
-          },
-        }),
+      spec: WORKBENCH_SPECS.cloud,
+      parse: (args) => parseSubcommandArgs(args, WORKBENCH_SPECS.cloud.options),
       run: async ({ values, positionals }) => {
         const [command, selector] = positionals;
-        if (!command || !COMMAND_OPTIONS[command])
+        if (!command || !WORKBENCH_SPECS.cloud.subcommands.some((name) => name === command))
           return writeUsageError(io, "Pass list, run, or logs.", CLOUD_USAGE);
-        for (const option of Object.keys(values)) {
-          if (![...COMMON_OPTIONS, ...COMMAND_OPTIONS[command]!].includes(option))
-            return writeUsageError(
-              io,
-              `--${option} is not supported by cloud ${command}.`,
-              CLOUD_USAGE
-            );
-        }
         const wanted = command === "logs" || (command === "run" && !values.id) ? 2 : 1;
         if (positionals.length !== wanted)
           return writeUsageError(io, "Pass exactly the required command arguments.", CLOUD_USAGE);

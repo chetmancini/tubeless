@@ -1,4 +1,11 @@
-import { PIPELINE_MERMAID_DIRECTIONS } from "../core/pipeline-types.js";
+import { COMPLETION_SHELLS, WORKBENCH_SPECS } from "./workbench-command-specs.js";
+import {
+  workbenchOptions,
+  type WorkbenchCommandSpec,
+  renderWorkbenchUsage,
+  parseSubcommandArgs,
+  runWorkbenchSubcommand,
+} from "./workbench-subcommand.js";
 import { didYouMean } from "../utilities/suggest.js";
 import {
   DEFAULT_PIPELINE_PROJECT_FILE,
@@ -11,7 +18,6 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-import { parseSubcommandArgs, runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 /**
  * Hidden shell protocol: NUL-delimited triples of kind, value, and description.
@@ -20,14 +26,13 @@ import { parseSubcommandArgs, runWorkbenchSubcommand } from "./workbench-subcomm
  */
 const FILES_DIRECTIVE = "f";
 
-const COMPLETION_SHELLS = ["bash", "zsh", "fish"] as const;
 type CompletionShell = (typeof COMPLETION_SHELLS)[number];
 
 /** A top-level command offered at the command position. */
 interface WorkbenchCommandSummary {
   readonly name: string;
   readonly description: string;
-  run(argv: readonly string[], io: WorkbenchCliIo): Promise<number>;
+  readonly spec: WorkbenchCommandSpec;
 }
 
 interface Candidate {
@@ -57,57 +62,17 @@ interface SubcommandCompletion {
   readonly positional?: "pipeline" | "file" | readonly string[];
 }
 
-const POSITIONAL_COMPLETIONS: Readonly<Record<string, SubcommandCompletion["positional"]>> = {
-  inspect: "pipeline",
-  plan: "pipeline",
-  graph: "pipeline",
-  run: "pipeline",
-  validate: "file",
-  ui: "file",
-  init: ["cloudflare"],
-  auth: ["login", "status", "logout"],
-  cloud: ["list", "run", "logs"],
-  completion: COMPLETION_SHELLS,
-};
-
-/** Built-in commands have no descriptor. Read their own help instead of duplicating flag catalogs. */
-async function subcommandSpec(
-  command: WorkbenchCommandSummary,
-  io: WorkbenchCliIo
-): Promise<SubcommandCompletion> {
-  let help = "";
-  await command.run(["--help"], {
-    ...io,
-    stdout: {
-      write: (chunk) => {
-        help += chunk;
-      },
-    },
-  });
-  const flags = new Map<string, CompletionFlag>();
-  for (const [, short, name, placeholder] of help.matchAll(
-    /(?:-(\w), +)?--([\w-]+)(?: <([^>]+)>)?/g
-  )) {
-    const previous = flags.get(name!);
-    const value: FlagValue | undefined =
-      placeholder === undefined
-        ? undefined
-        : name === "direction"
-          ? PIPELINE_MERMAID_DIRECTIONS
-          : name === "target"
-            ? "target"
-            : name === "step"
-              ? "step"
-              : /^(path|file)/.test(placeholder)
-                ? "file"
-                : "text";
-    flags.set(name!, {
-      name: name!,
-      short: short ?? previous?.short,
-      value: value ?? previous?.value,
-    });
-  }
-  return { flags: [...flags.values()], positional: POSITIONAL_COMPLETIONS[command.name] };
+/** Read the same option definitions used by parsing and help. */
+function subcommandSpec(command: WorkbenchCommandSummary, nested?: string): SubcommandCompletion {
+  return {
+    flags: Object.entries(workbenchOptions(command.spec, nested)).map(([name, option]) => ({
+      name,
+      short: option.short,
+      value: option.type === "boolean" ? undefined : (option.completion ?? "text"),
+      multiple: option.multiple,
+    })),
+    positional: command.spec.subcommands ?? command.spec.positional,
+  };
 }
 
 const NO_COMPLETION: Completion = { candidates: [], files: false };
@@ -273,15 +238,17 @@ async function subcommandCompletion(
   current: string,
   io: WorkbenchCliIo
 ): Promise<Completion> {
-  const spec = await subcommandSpec(command, io);
+  let spec = subcommandSpec(command);
+  const nested = scanWords(words, spec).positionals[0];
+  if (nested !== undefined) spec = subcommandSpec(command, nested);
   // zsh and fish keep `--flag=partial` as one word: complete the value, then restore the prefix.
-  const mode = command.name === "run" ? "run" : "workbench";
+  const mode = command.spec.passthrough ? "run" : "workbench";
   let scanned = scanWords(words, spec, mode);
   const inline = !scanned.optionsEnded && /^(--[^=]+)=(.*)$/s.exec(current);
   if (inline) scanned = scanWords([...words, inline[1]!], spec, mode);
   let completion: Completion;
   if (scanned.passthrough !== undefined) {
-    if (command.name !== "run") return NO_COMPLETION;
+    if (!command.spec.passthrough) return NO_COMPLETION;
     completion = await commandArgumentCompletion(
       { ...scanned, passthrough: scanned.passthrough },
       inline ? inline[2]! : current,
@@ -464,23 +431,7 @@ const COMPLETION_SCRIPTS: Readonly<Record<CompletionShell, string>> = {
   fish: FISH_COMPLETION_SCRIPT,
 };
 
-const COMPLETION_USAGE = `Usage: tubeless completion <bash|zsh|fish>
-
-Print a shell completion script. It completes commands, flags, project
-pipeline IDs, plan targets and steps, and pipeline command flags after
-"tubeless run <id> --".
-
-Enable it in the current shell:
-  bash  eval "$(tubeless completion bash)"
-  zsh   source <(tubeless completion zsh)
-  fish  tubeless completion fish | source
-
-Add the same line to ~/.bashrc, ~/.zshrc (after compinit), or
-~/.config/fish/config.fish to keep it.
-
-Options:
-  -h, --help   Show this help
-`;
+const COMPLETION_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.completion);
 
 function isCompletionShell(value: string): value is CompletionShell {
   return (COMPLETION_SHELLS as readonly string[]).includes(value);
@@ -490,8 +441,8 @@ function isCompletionShell(value: string): value is CompletionShell {
 export async function runCompletion(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: COMPLETION_USAGE,
-      parse: (args) => parseSubcommandArgs(args, {}),
+      spec: WORKBENCH_SPECS.completion,
+      parse: (args) => parseSubcommandArgs(args, WORKBENCH_SPECS.completion.options),
       positionalCountError: {
         count: 1,
         message: `Pass one shell: ${COMPLETION_SHELLS.join(", ")}.`,

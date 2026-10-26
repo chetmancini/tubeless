@@ -1,3 +1,4 @@
+import { CLOUDFLARE_TARGET } from "./workbench-command-specs.js";
 import { basename, isAbsolute, join, relative, sep } from "node:path";
 import type { DeployTargetScaffold } from "./workbench-init.js";
 
@@ -60,8 +61,7 @@ export default defineConfig({ plugins: [cloudflare()] });
 `;
 
 export const cloudflareScaffold: DeployTargetScaffold = {
-  id: "cloudflare",
-  description: "Worker, Durable Objects and R2 with Studio behind Cloudflare Access",
+  ...CLOUDFLARE_TARGET,
   files({ cwd, projectFile, projectExport }) {
     const name = workerName(cwd);
     const workerDirectory = join(cwd, "cloudflare");

@@ -1,3 +1,9 @@
+import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
+import {
+  renderWorkbenchUsage,
+  parseSubcommandArgs,
+  runWorkbenchSubcommand,
+} from "./workbench-subcommand.js";
 import { querySteps } from "../core/pipeline.js";
 import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
@@ -21,12 +27,6 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-import {
-  parseSubcommandArgs,
-  REGISTRATION_OPTIONS,
-  runWorkbenchSubcommand,
-  STEP_METADATA_FILTER_OPTIONS,
-} from "./workbench-subcommand.js";
 
 const PIPELINE_FILE_POSITIONAL = {
   count: 1,
@@ -91,28 +91,14 @@ function alignedRows(
   );
 }
 
-const LIST_USAGE = `Usage: tubeless list [options]
-
-List the pipelines and commands registered in a Tubeless project file, one per line
-with its display name and description.
-
-Options:
-  -p, --project <path>  Project file (default: ./tubeless.project.ts)
-      --json            Emit the project inventory as JSON
-  -h, --help            Show this help
-`;
-
 function parseListArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, {
-    json: { type: "boolean" },
-    project: { type: "string", short: "p" },
-  });
+  return parseSubcommandArgs(argv, WORKBENCH_SPECS.list.options);
 }
 
 export async function runList(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: LIST_USAGE,
+      spec: WORKBENCH_SPECS.list,
       parse: parseListArgs,
       positionalCountError: { count: 0, message: "List does not accept a positional argument." },
       async run(parsed, commandIo) {
@@ -146,28 +132,14 @@ export async function runList(argv: readonly string[], io: WorkbenchCliIo): Prom
   );
 }
 
-const VALIDATE_USAGE = `Usage: tubeless validate [--json] <document.yaml|document.yml|document.json>
-
-Check pipeline document structure and metadata without importing handlers.
-Does not check graph semantics, registered names, or domain values. Use inspect
-or plan on the compiled command module for engine validation.
-YAML uses Bun's parser; duplicate mapping keys may be overwritten during parsing.
-
-Options:
-      --json   Emit a structured validation result
-  -h, --help   Show this help
-`;
-
 function parseValidateArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, {
-    json: { type: "boolean" },
-  });
+  return parseSubcommandArgs(argv, WORKBENCH_SPECS.validate.options);
 }
 
 export async function runValidate(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: VALIDATE_USAGE,
+      spec: WORKBENCH_SPECS.validate,
       parse: parseValidateArgs,
       positionalCountError: { count: 1, message: "Pass exactly one YAML or JSON document." },
       async run(parsed, commandIo) {
@@ -221,19 +193,7 @@ export async function runValidate(argv: readonly string[], io: WorkbenchCliIo): 
   );
 }
 
-const INSPECT_USAGE = `Usage: tubeless inspect [options] <pipeline-or-command-file>
-
-Show a registered id or exported pipeline's identity plus the default structural plan.
-
-Options:
-  -e, --export <name>   Select a pipeline or command export when the file has more than one
-  -p, --project <path>  Resolve a pipeline or command id from this project file
-      --tag <tag>       Require a step tag (repeatable; all must match)
-      --owner <owner>   Match step owner exactly
-      --domain <domain> Match step domain exactly
-      --json            Emit identity and the default plan as JSON
-  -h, --help            Show this help
-`;
+const INSPECT_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.inspect);
 
 function formatIdList(values: readonly string[]): string {
   return values.length > 0 ? values.join(", ") : "none";
@@ -247,17 +207,13 @@ interface WorkbenchInspection {
 }
 
 function parseInspectArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, {
-    ...REGISTRATION_OPTIONS,
-    ...STEP_METADATA_FILTER_OPTIONS,
-    json: { type: "boolean" },
-  });
+  return parseSubcommandArgs(argv, WORKBENCH_SPECS.inspect.options);
 }
 
 export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: INSPECT_USAGE,
+      spec: WORKBENCH_SPECS.inspect,
       parse: parseInspectArgs,
       positionalCountError: PIPELINE_FILE_POSITIONAL,
       async run(parsed, commandIo) {
@@ -317,36 +273,16 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
   );
 }
 
-const PLAN_USAGE = `Usage: tubeless plan [options] <pipeline-or-command-file>
-
-Preview a registered or exported pipeline without running steps or requiring domain options.
-
-Options:
-  -e, --export <name>   Select a pipeline or command export when the file has more than one
-  -p, --project <path>  Resolve a pipeline or command id from this project file
-  -t, --target <id>     Select a declared target and its prerequisites (repeatable)
-  -s, --step <id>       Select exact internal steps (repeatable)
-      --dry-run         Show each step's dry-run disposition
-      --explain         Include target/dependency selection provenance
-      --json            Emit the complete structured plan as JSON
-  -h, --help            Show this help
-`;
+const PLAN_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.plan);
 
 function parsePlanArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, {
-    "dry-run": { type: "boolean" },
-    explain: { type: "boolean" },
-    ...REGISTRATION_OPTIONS,
-    json: { type: "boolean" },
-    step: { type: "string", short: "s", multiple: true },
-    target: { type: "string", short: "t", multiple: true },
-  });
+  return parseSubcommandArgs(argv, WORKBENCH_SPECS.plan.options);
 }
 
 export async function runPlan(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: PLAN_USAGE,
+      spec: WORKBENCH_SPECS.plan,
       parse: parsePlanArgs,
       positionalCountError: PIPELINE_FILE_POSITIONAL,
       async run(parsed, commandIo) {
@@ -379,38 +315,16 @@ function isMermaidDirection(value: string): value is PipelineMermaidDirection {
   return (PIPELINE_MERMAID_DIRECTIONS as readonly string[]).includes(value);
 }
 
-const GRAPH_USAGE = `Usage: tubeless graph [options] <pipeline-or-command-file>
-
-Generate Mermaid flowchart source from a registered or exported pipeline or command.
-
-Options:
-  -e, --export <name>       Select a pipeline or command export when the file has more than one
-  -p, --project <path>      Resolve a pipeline or command id from this project file
-  -d, --direction <value>   Flowchart direction: BT, LR, RL, TB, or TD (default: TD)
-      --tag <tag>           Require a step tag (repeatable; all must match)
-      --owner <owner>       Match step owner exactly
-      --domain <domain>     Match step domain exactly
-      --metadata            Include step metadata in labels
-      --descriptions        Include step descriptions in node labels
-      --markdown            Wrap the result in a fenced Mermaid Markdown block
-  -h, --help                Show this help
-`;
+const GRAPH_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.graph);
 
 function parseGraphArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, {
-    descriptions: { type: "boolean" },
-    direction: { type: "string", short: "d" },
-    ...REGISTRATION_OPTIONS,
-    ...STEP_METADATA_FILTER_OPTIONS,
-    markdown: { type: "boolean" },
-    metadata: { type: "boolean" },
-  });
+  return parseSubcommandArgs(argv, WORKBENCH_SPECS.graph.options);
 }
 
 export async function runGraph(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: GRAPH_USAGE,
+      spec: WORKBENCH_SPECS.graph,
       parse: parseGraphArgs,
       positionalCountError: PIPELINE_FILE_POSITIONAL,
       async run(parsed, commandIo) {

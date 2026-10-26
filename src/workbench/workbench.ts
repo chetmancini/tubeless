@@ -1,3 +1,4 @@
+import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
 import { didYouMean } from "../utilities/suggest.js";
 import { runGraph, runInspect, runList, runPlan, runValidate } from "./workbench-commands.js";
 import { runComplete, runCompletion } from "./workbench-completion.js";
@@ -102,7 +103,12 @@ export async function runWorkbenchCli(
     return writeUsageError(io, "Pass a command.", WORKBENCH_USAGE);
   }
   // Hidden protocol command behind the generated shell completion scripts.
-  if (command === "__complete") return runComplete(commandArgs, io, WORKBENCH_COMMANDS);
+  if (command === "__complete")
+    return runComplete(
+      commandArgs,
+      io,
+      WORKBENCH_COMMANDS.map((entry) => ({ ...entry, spec: WORKBENCH_SPECS[entry.name] }))
+    );
   const entry = WORKBENCH_COMMANDS.find(({ name }) => name === command);
   if (entry) return entry.run(commandArgs, io);
   const suggestion = didYouMean(command, [...WORKBENCH_COMMANDS.map(({ name }) => name), "help"]);

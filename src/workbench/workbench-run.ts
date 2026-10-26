@@ -1,3 +1,9 @@
+import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
+import {
+  renderWorkbenchUsage,
+  parseSubcommandArgs,
+  runWorkbenchSubcommand,
+} from "./workbench-subcommand.js";
 import { createWriteStream, type WriteStream } from "node:fs";
 import { mkdir, readlink, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
@@ -18,35 +24,15 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-import {
-  parseSubcommandArgs,
-  REGISTRATION_OPTIONS,
-  RUN_HISTORY_OPTIONS,
-  runWorkbenchSubcommand,
-} from "./workbench-subcommand.js";
 
-const RUN_USAGE = `Usage: tubeless run [options] <pipeline-id-or-file> [-- <command-args...>]
-
-Execute a project pipeline or a directly exported pipeline or command using its validated CLI contract.
-
-Options:
-  -e, --export <name>   Select a pipeline or command export when the file has more than one
-  -p, --project <path>  Resolve a pipeline or command id from this project file
-      --store <path>    Append run events to a local SQLite database
-      --trace <path>    Write NDJSON traces to a file, or - for stdout
-                        (command output then goes to stderr)
-  -h, --help            Show this workbench help
-
-Pass application flags after --. For command help, use: tubeless run <file> -- --help
-Schema-backed pipelines infer arguments; use definePipelineCommand for custom inputs.
-`;
+const RUN_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.run);
 
 function parseRunArgs(argv: readonly string[]) {
   const separatorIndex = argv.indexOf("--");
   const workbenchArgs = separatorIndex === -1 ? argv : argv.slice(0, separatorIndex);
   const commandArgs = separatorIndex === -1 ? [] : argv.slice(separatorIndex + 1);
   return {
-    ...parseSubcommandArgs(workbenchArgs, { ...REGISTRATION_OPTIONS, ...RUN_HISTORY_OPTIONS }),
+    ...parseSubcommandArgs(workbenchArgs, WORKBENCH_SPECS.run.options),
     commandArgs,
   };
 }
@@ -54,7 +40,7 @@ function parseRunArgs(argv: readonly string[]) {
 export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: RUN_USAGE,
+      spec: WORKBENCH_SPECS.run,
       parse: parseRunArgs,
       positionalCountError: { count: 1, message: "Pass exactly one pipeline ID or file." },
       run: executeRun,

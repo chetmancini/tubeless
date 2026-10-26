@@ -1,3 +1,9 @@
+import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
+import {
+  renderWorkbenchUsage,
+  parseSubcommandArgs,
+  runWorkbenchSubcommand,
+} from "./workbench-subcommand.js";
 import { studioDescriptor } from "../hosting/hosting-commands.js";
 import { parseStudioHosting } from "../studio/server/hosting.js";
 import * as path from "node:path";
@@ -16,45 +22,17 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-import {
-  EXPORT_OPTION,
-  parseSubcommandArgs,
-  RUN_HISTORY_OPTIONS,
-  runWorkbenchSubcommand,
-} from "./workbench-subcommand.js";
 
-const UI_USAGE = `Usage: tubeless ui [options] [project-file]
-
-Serve the local pipeline studio from an append-only SQLite run store or a
-finished NDJSON trace. Load pipelines from a project, or register
-pipeline or definePipelineCommand modules directly, and only with a writable SQLite store.
-
-Options:
-      --command <path> Register a launchable pipeline or command (repeatable)
-  -e, --export <name>  Select the export when registering exactly one command
-      --store <path>    SQLite database (default: .tubeless/runs.sqlite)
-      --trace <path>    Read a finished NDJSON trace artifact (history-only)
-      --host <value>    Bind address (default: 127.0.0.1)
-      --port <number>   HTTP port (default: 4317)
-      --public-url <url> Host behind an authenticated gateway (requires TUBELESS_STUDIO_GATEWAY_TOKEN)
-  -h, --help            Show this help
-`;
+const UI_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.ui);
 
 function parseUiArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, {
-    command: { type: "string", multiple: true },
-    ...EXPORT_OPTION,
-    host: { type: "string" },
-    port: { type: "string" },
-    "public-url": { type: "string" },
-    ...RUN_HISTORY_OPTIONS,
-  });
+  return parseSubcommandArgs(argv, WORKBENCH_SPECS.ui.options);
 }
 
 export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: UI_USAGE,
+      spec: WORKBENCH_SPECS.ui,
       parse: parseUiArgs,
       async run(parsed, commandIo) {
         if (parsed.positionals.length > 1) {

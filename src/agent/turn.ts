@@ -1,20 +1,15 @@
 import { STEP_ORCHESTRATION } from "../core/pipeline-step-metadata.js";
 import { agentScope } from "./execution-scope.js";
-import { expectedToolFailure } from "./tool-failure.js";
 import { createSteps, definePipeline, type IterationDecision } from "../core/pipeline.js";
-import { invokeChildPipeline } from "../core/child-execution.js";
 import { createMappedChildProgress } from "../core/child-progress.js";
 import { formatMappedChildProgressMessage } from "../core/mapped-child-progress.js";
-import {
-  PipelineExecutionError,
-  isPipelineCancellation,
-} from "../core/pipeline-execution-error.js";
+import { isPipelineCancellation } from "../core/pipeline-execution-error.js";
 import type { StandardSchemaV1 } from "../core/pipeline-types.js";
 import { validateStandardSchema } from "../core/pipeline-validation.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { runConcurrentPartial } from "../utilities/batch.js";
 import { ownState, limit } from "./agent-state.js";
-import { callInvocation, decisionEnvelope, prepareCalls, type PreparedCall } from "./decision.js";
+import { decisionEnvelope, prepareCalls, type PreparedCall } from "./decision.js";
 import { restoreCalls, saveCalls } from "./checkpoint-calls.js";
 import type {
   AgentDecisionContext,
@@ -29,7 +24,7 @@ import type {
 import type { CallOutcome } from "./checkpoint-format.js";
 import type { RuntimeAgentDefinition } from "./compile-agent.js";
 import type { CompiledTool } from "./tools.js";
-import type { ToolActivity } from "./tool-progress.js";
+import { executePreparedToolCall } from "./tool-execution.js";
 
 export interface TurnState<State> {
   state: AgentState<State>;
@@ -167,7 +162,6 @@ export function createAgentTurn<
         { concurrency: limits.maxConcurrency, signal: context.signal },
         async (call) => {
           progress.start(call.id);
-          let activity: ToolActivity | undefined;
           try {
             const attributes = {
               "agent.runId": agentRunId,
@@ -192,59 +186,27 @@ export function createAgentTurn<
               else progress.fail(call.id, new Error(outcome.error.message), false);
               return outcome;
             }
-            const invocation = callInvocation(call, context, {
-              turn: execution.turn,
-              attributes,
-              execution: scope.identity(execution.turn, call.id),
-              onActivity: (started) => {
-                activity = started;
-              },
-            });
-            const result = await invokeChildPipeline(
-              call.tool.pipeline,
-              invocation.options,
-              invocation.context,
+            const result = await executePreparedToolCall(
+              call,
+              context,
               {
-                stepId: calls.id,
-                plan: call.plan,
-                hooks: progress.plan(call.id, call.plan),
-                itemKey: call.id,
-                preparedOptions: invocation.preparedOptions,
-              }
+                turn: execution.turn,
+                attributes,
+                execution: scope.identity(execution.turn, call.id),
+              },
+              { stepId: calls.id, hooks: progress.plan(call.id, call.plan) }
             );
-            if (result.status === "completed" && result.finalized) {
-              const label = activity?.complete(result.value);
-              if (label !== undefined) context.log.log(label);
-              activity = undefined;
+            if (result.ok) {
               progress.childCompleted(call.id);
               return complete(
-                {
-                  id: call.id,
-                  tool: call.tool.name,
-                  ok: true,
-                  value: result.value,
-                },
-                label
+                { id: call.id, tool: call.tool.name, ok: true, value: result.value },
+                result.label
               );
             }
-            const failure = new PipelineExecutionError(result);
-            const expected = !context.signal?.aborted && expectedToolFailure(result);
-            if (expected) {
-              if (activity) context.log.warn(`${activity.action}: failed`);
-              activity = undefined;
-              progress.fail(call.id, failure, false);
-              return complete({
-                id: call.id,
-                tool: call.tool.name,
-                ok: false,
-                error: expected,
-              });
-            }
-            throw failure;
+            progress.fail(call.id, result.failure, false);
+            return complete({ id: call.id, tool: call.tool.name, ok: false, error: result.error });
           } catch (error) {
             const cancelled = isPipelineCancellation(error, context);
-            if (activity)
-              context.log.warn(`${activity.action}: ${cancelled ? "cancelled" : "failed"}`);
             progress.fail(
               call.id,
               error instanceof Error ? error : new Error(String(error)),

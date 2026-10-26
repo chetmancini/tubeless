@@ -1,10 +1,15 @@
+import { WORKBENCH_SPECS } from "../workbench-command-specs.js";
+import {
+  renderWorkbenchUsage,
+  parseSubcommandArgs,
+  runWorkbenchSubcommand,
+} from "../workbench-subcommand.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { parseArgs } from "node:util";
 import { createCloudClient, cloudVerificationUrl } from "./client.js";
 import { resolveCloudHost } from "./config.js";
 import { createNativeCredentialStore, resolveCloudCredential } from "./credentials.js";
-import { runWorkbenchSubcommand } from "../workbench-subcommand.js";
+
 import { type WorkbenchCliIo, writeUsageError, terminalSafeText } from "../workbench-shared.js";
 import {
   cloudErrorExit,
@@ -13,18 +18,7 @@ import {
   type CloudCommandDependencies,
 } from "./shared.js";
 
-const AUTH_USAGE = `Usage: tubeless auth <login|status|logout> [options]
-
-Sign in to Tubeless Cloud with an expiring first-party session.
-
-Options:
-  --host <origin>  Cloud origin (default https://cloud.tubeless.io)
-  --no-browser     Print the login URL without opening a browser
-  --json           Machine-readable status
-  -h, --help       Show this help
-
-Credentials use the OS credential store. TUBELESS_TOKEN overrides stored sessions.
-`;
+const AUTH_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.auth);
 
 async function openBrowser(url: string): Promise<void> {
   const command =
@@ -40,28 +34,16 @@ export async function runAuth(
 ): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: AUTH_USAGE,
-      parse: (args) =>
-        parseArgs({
-          args: [...args],
-          allowPositionals: true,
-          strict: true,
-          options: {
-            host: { type: "string" },
-            "no-browser": { type: "boolean" },
-            json: { type: "boolean" },
-            help: { type: "boolean", short: "h" },
-          },
-        }),
+      spec: WORKBENCH_SPECS.auth,
+      parse: (args) => parseSubcommandArgs(args, WORKBENCH_SPECS.auth.options),
       run: async ({ values, positionals }) => {
         const [command] = positionals;
-        if (positionals.length !== 1 || !["login", "status", "logout"].includes(command ?? "")) {
+        if (
+          positionals.length !== 1 ||
+          !WORKBENCH_SPECS.auth.subcommands.some((name) => name === command)
+        ) {
           return writeUsageError(io, "Pass login, status, or logout.", AUTH_USAGE);
         }
-        if (values.json && command !== "status")
-          return writeUsageError(io, "--json is supported by auth status.", AUTH_USAGE);
-        if (values["no-browser"] && command !== "login")
-          return writeUsageError(io, "--no-browser is supported by auth login.", AUTH_USAGE);
         const managed = cloudSignal(io);
         try {
           const host = resolveCloudHost(values.host);

@@ -39,9 +39,10 @@ their source files.
   boundary returns full reports for handler-origin error classification.
   `agent/default-tools.ts` supplies the standard registry against the typed
   environment and supplies typed activity formatters to the private tool compiler.
-  `tool-progress.ts` starts action previews inside handlers; `turn.ts` publishes
-  result summaries only after child output validation, using ordinary progress
-  and scoped logging. Completion labels belong to the mapped call group.
+  `tool-progress.ts` starts action previews inside handlers. `tool-execution.ts` owns
+  prepared-call invocation, validated results, failure classification and terminal
+  activity logs for direct and code-mode calls. `turn.ts` owns batch progress and
+  checkpoint transitions; completion labels belong to the mapped call group.
   `node-environment.ts` loads local filesystem, commands and
   guidance; explicit environments supply remote authority without local fallback.
   Custom names override defaults with matching type inference.
@@ -172,6 +173,11 @@ Run `make check` after changes; it builds before checking these boundaries.
   instances, composition cycle detection and immutable collection metadata.
 
 ## Workbench execution ownership
+
+- `workbench/workbench-command-specs.ts` owns static option and completion metadata.
+  `workbench/workbench-subcommand.ts` uses it for parsing, help, typo suggestions and
+  nested-command option validation. `workbench/workbench-completion.ts` reads the same
+  metadata without executing command help or loading optional command implementations.
 
 - `workbench/agent/command.ts` owns agent command validation and model-module loading.
   `workbench/agent/environment.ts` parses explicitly selected dotenv files and

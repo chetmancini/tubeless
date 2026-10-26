@@ -1,7 +1,11 @@
-import { parseArgs } from "node:util";
 import { describe, expect, it } from "vitest";
 import { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "./workbench-shared.js";
-import { runWorkbenchSubcommand, type WorkbenchSubcommand } from "./workbench-subcommand.js";
+import {
+  parseSubcommandArgs,
+  renderWorkbenchUsage,
+  runWorkbenchSubcommand,
+  type WorkbenchSubcommand,
+} from "./workbench-subcommand.js";
 
 function captureIo(): WorkbenchCliIo & { errors: string[]; output: string[] } {
   const errors: string[] = [];
@@ -28,13 +32,14 @@ interface ToyParsed {
   positionals: string[];
 }
 
-const TOY_USAGE = "Usage: toy <file>\n";
+const TOY_SPEC = { name: "toy", usage: "Usage: toy <file>", options: {} } as const;
+const TOY_USAGE = renderWorkbenchUsage(TOY_SPEC);
 
 function toyCommand(
   run: WorkbenchSubcommand<ToyParsed>["run"] = async () => TUBELESS_WORKBENCH_EXIT_CODE.success
 ): WorkbenchSubcommand<ToyParsed> {
   return {
-    usage: TOY_USAGE,
+    spec: TOY_SPEC,
     parse(argv) {
       if (argv.includes("--bad")) throw new Error("Unknown option --bad");
       return {
@@ -60,21 +65,19 @@ describe("runWorkbenchSubcommand", () => {
   });
 
   describe("unknown long flags", () => {
-    const usage = "Usage: toy [--json] [--project <path>] <file>\n";
+    const spec = {
+      name: "toy",
+      usage: "Usage: toy <file>",
+      options: {
+        json: { type: "boolean", description: "JSON output" },
+        project: { type: "string", description: "Project", valueName: "path" },
+      },
+    } as const;
     function strictCommand(): WorkbenchSubcommand<ToyParsed> {
       return {
-        usage,
+        spec,
         parse(argv) {
-          const { values, positionals } = parseArgs({
-            args: [...argv],
-            allowPositionals: true,
-            options: {
-              help: { type: "boolean", short: "h" },
-              json: { type: "boolean" },
-              project: { type: "string" },
-            },
-            strict: true,
-          });
+          const { values, positionals } = parseSubcommandArgs(argv, spec.options);
           return { values: { help: values.help === true }, positionals };
         },
         run: async () => TUBELESS_WORKBENCH_EXIT_CODE.success,

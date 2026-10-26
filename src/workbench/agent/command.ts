@@ -1,8 +1,13 @@
+import { WORKBENCH_SPECS } from "../workbench-command-specs.js";
+import {
+  renderWorkbenchUsage,
+  parseSubcommandArgs,
+  runWorkbenchSubcommand,
+} from "../workbench-subcommand.js";
 import { pathToFileURL } from "node:url";
 import type { AgentLimits, DefaultAgentToolName } from "../../agent/agent.js";
 import { openaiModel } from "../../agent/openai.js";
 import { loadAgentEnvironment } from "./environment.js";
-import { AGENT_REPL_HELP } from "./commands.js";
 import type { AgentModelFactory } from "./prompt.js";
 import { runAgentSession } from "./session.js";
 import {
@@ -11,31 +16,8 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "../workbench-shared.js";
-import { parseSubcommandArgs, runWorkbenchSubcommand } from "../workbench-subcommand.js";
 
-const AGENT_USAGE = `Usage: tubeless agent [options]
-
-Prompt a workspace agent, watch its pipeline execution, then prompt again.
-Prompts share conversation context; each execution has fresh limits and the default tools.
-
-Options:
-  --model <name>         Model name (defaults to OPENAI_MODEL or gpt-5.4-mini)
-  --model-module <file>  Default-export a factory ({ model, signal, env }) => AgentModel
-  --env-file <file>      Read dotenv values; existing environment values take precedence
-  --prompt <text>        Run one prompt and exit instead of opening the REPL
-  --instructions <text> Append instructions to the workspace agent prompt
-  --max-turns <n>        Decision limit per prompt (default 20)
-  --max-calls <n>        Tool call limit per prompt (default 100)
-  --max-concurrency <n>  Concurrent decisions/tools (default 1)
-  --tools <names>        Comma-separated default tools to allow (default read,write,edit,bash,list,search)
-  --codemode            Offer one JavaScript codemode tool that calls the workspace tools
-  --no-graph            Hide pipeline reporting (keep model/tool logs and answers)
-  -h, --help            Show this help
-
-REPL commands:
-${AGENT_REPL_HELP}
-OpenAI needs an exported OPENAI_API_KEY or --env-file. Workspace tools run with your host permissions.
-`;
+const AGENT_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.agent);
 async function loadModelFactory(
   file: string | undefined,
   env: Readonly<NodeJS.ProcessEnv>,
@@ -89,21 +71,8 @@ const isDefaultTool = (name: string): name is DefaultAgentToolName =>
 export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: AGENT_USAGE,
-      parse: (args) =>
-        parseSubcommandArgs(args, {
-          model: { type: "string" },
-          "model-module": { type: "string" },
-          "env-file": { type: "string" },
-          prompt: { type: "string" },
-          instructions: { type: "string" },
-          "max-turns": { type: "string" },
-          "max-calls": { type: "string" },
-          "max-concurrency": { type: "string" },
-          tools: { type: "string" },
-          codemode: { type: "boolean" },
-          "no-graph": { type: "boolean" },
-        }),
+      spec: WORKBENCH_SPECS.agent,
+      parse: (args) => parseSubcommandArgs(args, WORKBENCH_SPECS.agent.options),
       positionalCountError: {
         count: 0,
         message: "Use --prompt for a task or start the REPL without positional arguments.",

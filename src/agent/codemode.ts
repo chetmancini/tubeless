@@ -1,7 +1,5 @@
-import { invokeChildPipeline } from "../core/child-execution.js";
 import { createSingleChildProgress } from "../core/child-progress.js";
 import { createSteps, definePipeline } from "../core/pipeline.js";
-import { PipelineExecutionError } from "../core/pipeline-execution-error.js";
 import { STEP_ORCHESTRATION } from "../core/pipeline-step-metadata.js";
 import type { PipelineStepContext } from "../core/pipeline-types.js";
 import {
@@ -19,12 +17,12 @@ import {
   type CodemodeExecutor,
   type CodemodeReply,
 } from "./codemode-executor.js";
-import { callInvocation, prepareCalls, type PreparedCall } from "./decision.js";
+import { prepareCalls, type PreparedCall } from "./decision.js";
 import { MAX_OUTPUT_BYTES } from "./default-tool-limits.js";
 import { toolObject } from "./default-tool-schema.js";
 import { agentScope } from "./execution-scope.js";
-import { expectedToolFailure } from "./tool-failure.js";
-import { startToolActivity, type ToolActivity } from "./tool-progress.js";
+import { executePreparedToolCall } from "./tool-execution.js";
+import { startToolActivity } from "./tool-progress.js";
 import {
   ToolError,
   type CompiledHandlerTool,
@@ -221,41 +219,25 @@ export function compileCodemodeTool(
         return { ok: false, code: "CODEMODE_INVALID_CALL", message: message.slice(0, 4096) };
       }
       await scope.admitNestedCall(signal);
-      let started: ToolActivity | undefined;
-      const invocation = callInvocation(prepared, nested, {
-        turn: call.turn,
-        attributes: {
-          ...attributes,
-          "agent.callId": id,
-          "agent.tool": name,
-          "agent.parentAttemptId": context.attemptId,
+      const result = await executePreparedToolCall(
+        prepared,
+        nested,
+        {
+          turn: call.turn,
+          attributes: {
+            ...attributes,
+            "agent.callId": id,
+            "agent.tool": name,
+            "agent.parentAttemptId": context.attemptId,
+          },
+          execution: scope.identity(call.turn, id),
         },
-        execution: scope.identity(call.turn, id),
-        onActivity: (activity) => {
-          started = activity;
-        },
-      });
-      const run = await invokeChildPipeline(
-        prepared.tool.pipeline,
-        invocation.options,
-        invocation.context,
         {
           stepId: "script",
-          plan: prepared.plan,
           hooks: createSingleChildProgress(prepared.plan, context.reportProgress),
-          itemKey: id,
-          preparedOptions: invocation.preparedOptions,
         }
       );
-      if (run.status === "completed" && run.finalized) {
-        const label = started?.complete(run.value);
-        if (label !== undefined) context.log.log(label);
-        return { ok: true, value: run.value };
-      }
-      const expected = !signal.aborted && expectedToolFailure(run);
-      if (!expected) throw new PipelineExecutionError(run);
-      if (started) context.log.warn(`${started.action}: failed`);
-      return { ok: false, ...expected };
+      return result.ok ? { ok: true, value: result.value } : { ok: false, ...result.error };
     };
     const outcome = await runCodemodeScript(executor ?? (await nodeExecutor()), {
       code,

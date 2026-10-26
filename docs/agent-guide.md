@@ -396,7 +396,8 @@ read when a pipeline needs them.
 - Use `tubeless agent --model <name>` for a workspace prompt loop using the same
   pipeline reporter as `tubeless run`, including nested turn/tool progress,
   shimmer, colors, timing, and logs. Tool activity includes paths, command previews,
-  and completion summaries in both the DAG and scoped logs. Custom handlers use
+  and completion summaries in both the DAG and scoped logs. Direct and code-mode
+  calls use the same activity settlement, including failures and cancellations. Custom handlers use
   `context.reportProgress` and `context.log` for their own activity detail.
   Completed prompts share conversation state;
   each prompt has fresh budgets. `/model` changes the next run's model while

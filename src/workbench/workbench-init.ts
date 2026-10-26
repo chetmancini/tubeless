@@ -1,3 +1,9 @@
+import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
+import {
+  renderWorkbenchUsage,
+  parseSubcommandArgs,
+  runWorkbenchSubcommand,
+} from "./workbench-subcommand.js";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { cloudflareScaffold } from "./workbench-init-cloudflare.js";
@@ -11,7 +17,6 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-import { parseSubcommandArgs, runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 export interface DeployTargetFile {
   readonly path: string;
@@ -39,17 +44,7 @@ const TARGETS: ReadonlyMap<string, DeployTargetScaffold> = new Map([
   [cloudflareScaffold.id, cloudflareScaffold],
 ]);
 
-const INIT_USAGE = `Usage: tubeless init <target> [options]
-
-Scaffold deployment files for a Tubeless project. Existing files are never overwritten.
-
-Targets:
-${[...TARGETS.values()].map((target) => `  ${target.id.padEnd(12)} ${target.description}`).join("\n")}
-
-Options:
-  -p, --project <path>  Project file (default: ./tubeless.project.ts)
-  -h, --help            Show this help
-`;
+const INIT_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.init);
 
 /** True when `current` (for example "22.11.0") is at least `minimum` ("22.12.0"); prerelease tags are ignored. */
 export function nodeVersionAtLeast(current: string, minimum: string): boolean {
@@ -77,8 +72,8 @@ async function occupied(path: string): Promise<boolean> {
 export async function runInit(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: INIT_USAGE,
-      parse: (args) => parseSubcommandArgs(args, { project: { type: "string", short: "p" } }),
+      spec: WORKBENCH_SPECS.init,
+      parse: (args) => parseSubcommandArgs(args, WORKBENCH_SPECS.init.options),
       positionalCountError: { count: 1, message: "Pass exactly one deploy target." },
       async run(parsed, commandIo) {
         const targetId = parsed.positionals[0]!;

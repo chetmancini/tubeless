@@ -9,27 +9,63 @@ import {
 
 type SubcommandOptions = NonNullable<ParseArgsConfig["options"]>;
 
-/** Select a pipeline or command export from a module. */
-export const EXPORT_OPTION = { export: { type: "string", short: "e" } } as const;
+export type WorkbenchCompletionValue = "file" | "text" | "target" | "step" | readonly string[];
 
-/** Resolve a pipeline or command export from a project file or module. */
-export const REGISTRATION_OPTIONS = {
-  ...EXPORT_OPTION,
-  project: { type: "string", short: "p" },
-} as const;
+export type WorkbenchOption = {
+  readonly description: string;
+  readonly short?: string;
+  /** Nested commands accepting this option; omitted means all commands. */
+  readonly commands?: readonly string[];
+} & (
+  | {
+      readonly type: "boolean";
+      readonly multiple?: never;
+      readonly valueName?: never;
+      readonly completion?: never;
+    }
+  | {
+      readonly type: "string";
+      readonly multiple?: boolean;
+      readonly valueName: string;
+      readonly completion?: WorkbenchCompletionValue;
+    }
+);
 
-/** Choose the SQLite store or NDJSON trace a command records to or reads from. */
-export const RUN_HISTORY_OPTIONS = {
-  store: { type: "string" },
-  trace: { type: "string" },
-} as const;
+export interface WorkbenchCommandSpec {
+  readonly name: string;
+  readonly usage: string;
+  readonly footer?: string;
+  readonly options: Readonly<Record<string, WorkbenchOption>>;
+  readonly positional?: "pipeline" | "file" | readonly string[];
+  readonly subcommands?: readonly string[];
+  readonly passthrough?: boolean;
+}
 
-/** Filter inspected or graphed steps by graph metadata. */
-export const STEP_METADATA_FILTER_OPTIONS = {
-  domain: { type: "string" },
-  owner: { type: "string" },
-  tag: { type: "string", multiple: true },
-} as const;
+const HELP_OPTION = { type: "boolean", short: "h", description: "Show this help" } as const;
+
+/** Options visible at the root, or accepted by one selected nested command. */
+export function workbenchOptions(
+  spec: WorkbenchCommandSpec,
+  command?: string
+): Readonly<Record<string, WorkbenchOption>> {
+  const selected = spec.subcommands?.some((name) => name === command) === true;
+  return Object.fromEntries([
+    ...Object.entries(spec.options).filter(
+      ([, option]) =>
+        !selected || !option.commands || option.commands.some((name) => name === command)
+    ),
+    ["help", HELP_OPTION],
+  ]);
+}
+
+export function renderWorkbenchUsage(spec: WorkbenchCommandSpec, command?: string): string {
+  const rows = Object.entries(workbenchOptions(spec, command)).map(([name, option]) => ({
+    flag: `${option.short ? `-${option.short}, ` : "    "}--${name}${option.valueName ? ` <${option.valueName}>` : ""}`,
+    description: option.description,
+  }));
+  const width = Math.max(...rows.map(({ flag }) => flag.length));
+  return `${spec.usage.trimEnd()}\n\nOptions:\n${rows.map(({ flag, description }) => `  ${flag.padEnd(width)}  ${description}`).join("\n")}\n${spec.footer ? `\n${spec.footer.trimEnd()}\n` : ""}`;
+}
 
 /** Strict subcommand parsing with positionals; every subcommand accepts `-h, --help`. */
 export function parseSubcommandArgs<const T extends SubcommandOptions>(
@@ -39,7 +75,7 @@ export function parseSubcommandArgs<const T extends SubcommandOptions>(
   return parseArgs({
     args: [...argv],
     allowPositionals: true,
-    options: { ...options, help: { type: "boolean", short: "h" } } as const,
+    options: { ...options, help: HELP_OPTION } as const,
     strict: true,
   });
 }
@@ -55,7 +91,7 @@ interface ParsedSubcommand {
  * in one place. Extra validation after that prologue belongs in `run`.
  */
 export interface WorkbenchSubcommand<TParsed extends ParsedSubcommand> {
-  readonly usage: string;
+  readonly spec: WorkbenchCommandSpec;
   parse(argv: readonly string[]): TParsed;
   readonly positionalCountError?: { count: number; message: string };
   run(parsed: TParsed, io: WorkbenchCliIo): Promise<number>;
@@ -70,15 +106,30 @@ export async function runWorkbenchSubcommand<TParsed extends ParsedSubcommand>(
   try {
     parsed = command.parse(argv);
   } catch (error) {
-    return writeUsageError(io, parseErrorMessage(error, command.usage), command.usage);
+    return writeUsageError(
+      io,
+      parseErrorMessage(error, command.spec),
+      renderWorkbenchUsage(command.spec)
+    );
   }
+  const usage = renderWorkbenchUsage(command.spec, parsed.positionals[0]);
   if (parsed.values.help === true) {
-    io.stdout.write(command.usage);
+    io.stdout.write(usage);
     return TUBELESS_WORKBENCH_EXIT_CODE.success;
   }
   const positionalError = command.positionalCountError;
   if (positionalError && parsed.positionals.length !== positionalError.count) {
-    return writeUsageError(io, positionalError.message, command.usage);
+    return writeUsageError(io, positionalError.message, usage);
+  }
+  const options = workbenchOptions(command.spec, parsed.positionals[0]);
+  for (const key of Object.keys(parsed.values)) {
+    if (!Object.hasOwn(options, key)) {
+      return writeUsageError(
+        io,
+        `--${key} is not supported by ${command.spec.name} ${parsed.positionals[0]}.`,
+        usage
+      );
+    }
   }
   return command.run(parsed, io);
 }
@@ -86,10 +137,9 @@ export async function runWorkbenchSubcommand<TParsed extends ParsedSubcommand>(
 /**
  * `node:util` `parseArgs` rejects unknown flags with a verbose message naming the
  * offending token. Report it in the same shape as pipeline commands. The usage
- * text documents every long flag a subcommand accepts, so near-misses are
- * suggested from it without a second option list.
+ * metadata supplies the accepted long flags for near-miss suggestions.
  */
-function parseErrorMessage(error: unknown, usage: string): string {
+function parseErrorMessage(error: unknown, spec: WorkbenchCommandSpec): string {
   const message = errorMessage(error);
   if ((error as { code?: unknown } | null)?.code !== "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
     return message;
@@ -98,7 +148,7 @@ function parseErrorMessage(error: unknown, usage: string): string {
   if (token === undefined) return message;
   const unknown = `Unknown option: ${token}.`;
   if (!token.startsWith("--")) return unknown;
-  const flags = usage.match(/--[a-z][a-z0-9-]*/g) ?? [];
+  const flags = Object.keys(workbenchOptions(spec)).map((name) => `--${name}`);
   const suggestion = didYouMean(token.split("=", 1)[0], flags, (candidate) => candidate);
   return suggestion === undefined ? unknown : `${unknown} ${suggestion}`;
 }

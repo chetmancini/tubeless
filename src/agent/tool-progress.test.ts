@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PipelineLogger, PipelineStepProgress } from "../core/pipeline.js";
+import { defineAgent } from "./agent.js";
 import { ToolError } from "./tools.js";
 import { remote, workspaceAgent } from "./environment.test-support.js";
 
@@ -25,6 +26,93 @@ function capture() {
 }
 
 describe("workspace tool activity", () => {
+  describe.each([false, true])("tool execution with codemode=%s", (codemode) => {
+    function agentFor(environment: ReturnType<typeof remote>) {
+      return defineAgent({
+        id: "activity-parity",
+        environment,
+        defaultTools: ["read"],
+        codemode,
+        model: (_request, context) => ({
+          conversation: null,
+          decision:
+            context.turn === 1
+              ? {
+                  kind: "continue",
+                  calls: [
+                    {
+                      id: "call-1",
+                      tool: codemode ? "codemode" : "read",
+                      input: codemode
+                        ? { code: 'return await tools.read({ path: "a" })' }
+                        : { path: "a" },
+                    },
+                  ],
+                }
+              : { kind: "finish", result: { answer: "done" } },
+        }),
+      });
+    }
+
+    it.each(["success", "recoverable", "fatal", "invalid-output"] as const)(
+      "settles activity after %s",
+      async (kind) => {
+        const environment = remote();
+        if (kind === "recoverable")
+          vi.mocked(environment.read).mockImplementation(() => {
+            throw new ToolError("READ_FAILED", "fixture failure");
+          });
+        if (kind === "fatal")
+          vi.mocked(environment.read).mockImplementation(() => {
+            throw new Error("fixture bug");
+          });
+        if (kind === "invalid-output")
+          vi.mocked(environment.read).mockReturnValue({ path: "a", truncated: "invalid" } as never);
+        const captured = capture();
+        const result = await agentFor(environment).run(
+          { task: "Read a" },
+          undefined,
+          captured.context
+        );
+        expect(result.status).toBe(
+          kind === "success" || kind === "recoverable" ? "completed" : "failed"
+        );
+        expect(environment.read).toHaveBeenCalledOnce();
+        expect(captured.messages.filter((line) => line.startsWith('Read "a"'))).toEqual([
+          'Read "a"',
+          kind === "success" ? 'Read "a": completed (lines 1-1 of 1)' : 'Read "a": failed',
+        ]);
+      }
+    );
+
+    it("settles cancellation while draining a late adapter result", async () => {
+      const environment = remote();
+      const controller = new AbortController();
+      const output = {
+        path: "a",
+        content: "",
+        startLine: 1,
+        endLine: 0,
+        totalLines: 0,
+        truncated: false,
+      };
+      vi.mocked(environment.read).mockImplementation(() => {
+        controller.abort();
+        return Promise.resolve(output);
+      });
+      const captured = capture();
+      const result = await agentFor(environment).run({ task: "Read a" }, undefined, {
+        ...captured.context,
+        signal: controller.signal,
+      });
+      expect(result.status).toBe("cancelled");
+      expect(captured.messages.filter((line) => line.startsWith('Read "a"'))).toEqual([
+        'Read "a"',
+        'Read "a": cancelled',
+      ]);
+    });
+  });
+
   it("reports each action and its result through logs and nested DAG details", async () => {
     const captured = capture();
     const { agent } = workspaceAgent(remote(), [

@@ -350,6 +350,51 @@ describe("tubeless __complete", () => {
     );
   });
 
+  it.each([
+    ["cloud", "list", ["--host", "--workspace", "--json", "--help"]],
+    [
+      "cloud",
+      "run",
+      ["--host", "--workspace", "--json", "--id", "--input-file", "--detach", "--help"],
+    ],
+    ["cloud", "logs", ["--host", "--workspace", "--json", "--follow", "--help"]],
+    ["auth", "login", ["--host", "--no-browser", "--help"]],
+    ["auth", "status", ["--host", "--json", "--help"]],
+    ["auth", "logout", ["--host", "--help"]],
+  ] as const)(
+    "scopes %s %s flags to the options its parser accepts",
+    async (command, nested, flags) => {
+      const completed = await complete(tmpdir(), command, nested, "--");
+      expect(completed.values.sort()).toEqual([...flags].sort());
+      const commandHelp = await help(command, nested, "--help");
+      const documented = [...commandHelp.matchAll(/^ +(?:-(\w), +)?--([\w-]+)( <)?/gm)].map(
+        (row) => `--${row[2]}`
+      );
+      expect(documented.sort()).toEqual([...flags].sort());
+    }
+  );
+
+  it.each([
+    ["cloud", "list", "--detach"],
+    ["cloud", "logs", "--detach"],
+    ["cloud", "run", "--follow"],
+    ["auth", "status", "--no-browser"],
+    ["auth", "login", "--json"],
+  ])("rejects %s %s %s before running command effects", async (...args) => {
+    const io = captureIo(tmpdir());
+    expect(await runWorkbenchCli(args, io)).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(io.errors.join("")).toContain(`${args[2]} is not supported by ${args[0]} ${args[1]}`);
+    expect(io.output).toEqual([]);
+  });
+
+  it("identifies nested commands after common option values and completes scoped file flags", async () => {
+    expect(
+      (await complete(tmpdir(), "cloud", "--host", "https://example.test", "list", "--d")).values
+    ).toEqual([]);
+    expect((await complete(tmpdir(), "cloud", "run", "--input-file=pa")).files).toBe(true);
+    expect((await complete(tmpdir(), "cloud", "list", "--input-file=pa")).files).toBe(false);
+  });
+
   it("stays silent when the project cannot load", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-completion-broken-"));
     directories.push(directory);

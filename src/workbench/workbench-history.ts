@@ -1,3 +1,9 @@
+import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
+import {
+  renderWorkbenchUsage,
+  parseSubcommandArgs,
+  runWorkbenchSubcommand,
+} from "./workbench-subcommand.js";
 import { didYouMean } from "../utilities/suggest.js";
 import { cacheArtifactMetadata } from "../run-store/cache-artifact.js";
 import { stat } from "node:fs/promises";
@@ -21,37 +27,11 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-import {
-  parseSubcommandArgs,
-  RUN_HISTORY_OPTIONS,
-  runWorkbenchSubcommand,
-} from "./workbench-subcommand.js";
 
-const HISTORY_USAGE = `Usage: tubeless history [options] [run-id]
-
-Show recorded pipeline runs from SQLite or an NDJSON trace.
-Run details include recorded agent turns, tool calls, and child agents.
-
-Options:
-      --store <path>    SQLite database (default: .tubeless/runs.sqlite)
-      --trace <path>    Read a finished NDJSON trace artifact
-      --pipeline <id>   Filter by recorded pipeline ID
-      --json            Emit the projected run list or run as JSON
-      --events          Emit raw store events as NDJSON
-      --clear           Delete all recorded history from a SQLite store (requires --yes)
-      --yes             Confirm --clear; there is no interactive prompt
-  -h, --help            Show this help
-`;
+const HISTORY_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.history);
 
 function parseHistoryArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, {
-    clear: { type: "boolean" },
-    events: { type: "boolean" },
-    json: { type: "boolean" },
-    pipeline: { type: "string" },
-    ...RUN_HISTORY_OPTIONS,
-    yes: { type: "boolean" },
-  });
+  return parseSubcommandArgs(argv, WORKBENCH_SPECS.history.options);
 }
 
 interface HistoryRunSummary {
@@ -197,7 +177,7 @@ function formatRunDetail(run: StoredPipelineRun): string {
 export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      usage: HISTORY_USAGE,
+      spec: WORKBENCH_SPECS.history,
       parse: parseHistoryArgs,
       async run(parsed, commandIo) {
         if (parsed.values.json && parsed.values.events) {
