@@ -154,6 +154,7 @@ Read the corresponding package recipe before using these features:
   `defineAgentLoop` and `decide` remain the lower-level path. For typed work inside a
   pipeline, give `defineAgent` an `inputSchema`, a `task(options)` mapper and a
   `resultSchema`, then compose it with `fromPipeline`; see `examples/agent-extract.ts`.
+  `openaiModel()`/`anthropicModel()` reject incompatible result or tool schemas at definition.
   For chat in an application, `createAgentSession(agent)` continues one conversation across
   sequential runs; persist `session.conversation`. Typed agents default to a task-neutral prompt without AGENTS.md; put task guidance in
   `instructions`. Restrict standard tools with `defaultTools` (e.g. `["read", "list", "search"]`) for

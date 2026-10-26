@@ -422,7 +422,9 @@ read when a pipeline needs them.
 
 - For a typed agent inside a pipeline, use `defineAgent({ id, model, inputSchema, task,
   resultSchema })`: `task` maps validated options (for example an extract step's output)
-  to the model's task text, and the model finishes against `resultSchema`. Compose it with
+  to the model's task text, and the model finishes against `resultSchema`. With the bundled
+  adapters, a schema outside the provider's strict subset fails at definition through the
+  model's optional `checkDescriptors` hook. Compose it with
   `fromPipeline` like any child pipeline; adapt the [extract recipe](../examples/agent-extract.ts).
   Typed agents default to a task-neutral prompt without AGENTS.md (`projectContext: false`),
   so `instructions` is their main guidance; opt in with `projectContext: true`.

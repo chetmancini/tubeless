@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineAgent } from "./agent.js";
+import { defineAgent, type AgentModel } from "./agent.js";
 import { anthropicModel } from "./anthropic.js";
 import { anthropicTool } from "./anthropic-protocol.js";
 
@@ -387,7 +387,7 @@ describe("Anthropic model", () => {
     );
   });
 
-  it("rejects relocated references before any request", async () => {
+  it("rejects relocated references at definition, and before any request without the hook", async () => {
     const fetcher = vi.fn<typeof fetch>();
     vi.stubGlobal("fetch", fetcher);
     const schema = {
@@ -401,19 +401,31 @@ describe("Anthropic model", () => {
       },
     };
     const { defineTool } = await import("./agent.js");
-    const result = await defineAgent({
-      id: "references",
-      projectContext: false,
-      tools: {
-        custom: defineTool({
-          description: "Custom",
-          inputSchema: schema,
-          outputSchema: schema,
-          run: (input) => input,
-        }),
-      },
-      model: anthropicModel({ apiKey: "fixture" }),
-    }).run({ task: "Finish" });
+    const define = (model: AgentModel) =>
+      defineAgent({
+        id: "references",
+        projectContext: false,
+        tools: {
+          custom: defineTool({
+            description: "Custom",
+            inputSchema: schema,
+            outputSchema: schema,
+            run: (input) => input,
+          }),
+        },
+        model,
+      });
+    const adapter = anthropicModel({ apiKey: "fixture" });
+    expect(() => define(adapter)).toThrow(
+      expect.objectContaining({
+        code: "TUBELESS_AGENT_INVALID_DEFINITION",
+        message: expect.stringContaining("$ref is unsupported"),
+      })
+    );
+    // A wrapping model function has no checkDescriptors hook; the request path still checks.
+    const result = await define((request, context) => adapter(request, context)).run({
+      task: "Finish",
+    });
     expect(result.status).toBe("failed");
     expect(result.errors[0]!.message).toContain("$ref is unsupported");
     expect(fetcher).not.toHaveBeenCalled();

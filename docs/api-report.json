@@ -27,6 +27,7 @@
         "AgentExecutionIdentity",
         "AgentLimits",
         "AgentModel",
+        "AgentModelDescriptors",
         "AgentModelRequest",
         "AgentModelResponse",
         "AgentOutcome",
@@ -53,7 +54,7 @@
         "plainAgentCheckpointCodec",
         "ToolError"
       ],
-      "sha256": "1c344e15bd71503d9a3abbd86798bc9b3f807731a1f670fa94bc3cc20e61aaa5",
+      "sha256": "e54c7791114e7c8d1231b1e3cf4a7d25f3db23df5deaf13c92785699b03a2b56",
       "specifier": "tubeless/agent"
     },
     {
@@ -274,7 +275,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "f4d28b8a71e092eab617b511afac844e8c46649d0376d1116c2b14f5abaf5ae7",
+      "sha256": "d380eacd0d996e0fb1f3ceb29755063dc63df4224e154cf6751f2755a4c89fb1",
       "specifier": "tubeless/agent/openai"
     },
     {
@@ -294,7 +295,7 @@
     {
       "declaration": "./dist/agent/anthropic.d.ts",
       "exports": ["anthropicModel", "AnthropicModelOptions"],
-      "sha256": "cfc24598f09d18a26c782bf1401015b1cdf8abd455b82c88971701ed1a92c9e3",
+      "sha256": "64f5c346c084bdbb31a0d9c645720df7d044ed52d2622027aa0f49ad3e0bc579",
       "specifier": "tubeless/agent/anthropic"
     },
     {

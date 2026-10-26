@@ -15,8 +15,21 @@ export interface AgentModelResponse {
   readonly conversation: unknown;
 }
 
+/** The model-facing descriptors one agent sends with every decision request. */
+export interface AgentModelDescriptors {
+  readonly capabilities: AgentDecisionContext<object>["capabilities"];
+  readonly resultJsonSchema: Readonly<Record<string, unknown>>;
+}
+
 /** Pluggable model transport; the harness owns and isolates its returned conversation per run. */
-export type AgentModel = (
-  request: AgentModelRequest,
-  context: AgentDecisionContext<object>
-) => Awaitable<AgentModelResponse>;
+export interface AgentModel {
+  (
+    request: AgentModelRequest,
+    context: AgentDecisionContext<object>
+  ): Awaitable<AgentModelResponse>;
+  /**
+   * Throw if this provider cannot accept these descriptors, such as a result schema outside
+   * its strict-mode subset. `defineAgent` calls it at definition, before any request.
+   */
+  readonly checkDescriptors?: (descriptors: AgentModelDescriptors) => void;
+}

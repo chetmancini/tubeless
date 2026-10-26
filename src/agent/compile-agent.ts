@@ -8,6 +8,7 @@ import type {
 import type { AnyStep } from "../core/pipeline-steps.js";
 import { agentError, checkSchema, descriptorFingerprint, jsonDescriptor } from "./agent-state.js";
 import { compileTool, type CompiledTool } from "./tools.js";
+import type { AgentModel } from "./model-types.js";
 import { CODEMODE_TOOL, compileCodemodeTool } from "./codemode.js";
 import { defaultTools } from "./default-tools.js";
 import { resolvedLimits, agentScope } from "./execution-scope.js";
@@ -39,6 +40,8 @@ export type RuntimeAgentDefinition<
   AgentDefinition<Id, Options, Result, State, Registry, Codemode, Defaults>,
   "decide" | "dryRun"
 > & {
+  /** A model's provider check, run once the model-facing descriptors are compiled. */
+  readonly checkDescriptors?: AgentModel["checkDescriptors"];
   decide(
     state: AgentState<State>,
     context: AgentDecisionContext<Output<Options>>
@@ -150,6 +153,17 @@ export function compileAgent<
       Object.freeze({ name, description, inputJsonSchema })
     )
   );
+  if (config.checkDescriptors) {
+    try {
+      config.checkDescriptors({ capabilities, resultJsonSchema });
+    } catch (cause) {
+      throw agentError(
+        "TUBELESS_AGENT_INVALID_DEFINITION",
+        `Agent ${config.id} cannot use its model: ${cause instanceof Error ? cause.message : String(cause)}`,
+        cause
+      );
+    }
+  }
   const turn = createAgentTurn(config, registry, limits, { capabilities, resultJsonSchema });
   const { iteratePipeline } = createSteps(config.inputSchema);
   const agent = iteratePipeline("agent", {

@@ -163,6 +163,8 @@ function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
       // SAFETY: the key callback only receives options validated by this agent's input schema.
       durability: config.durability as AgentDurability<object> | undefined,
       codemode,
+      // Reject descriptors the provider cannot accept now, not at the first request.
+      checkDescriptors: model.checkDescriptors,
       inputSchema: config.inputSchema ?? taskInput,
       resultSchema: config.resultSchema ?? answer,
       initialState: (options): ModelState => {

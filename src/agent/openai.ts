@@ -1,4 +1,4 @@
-import type { AgentModel } from "./model-types.js";
+import type { AgentModel, AgentModelDescriptors } from "./model-types.js";
 import { openaiRequest } from "./openai-http.js";
 import { MAX_REQUEST_BYTES, providerBaseUrl } from "./provider-http.js";
 import { record } from "./provider-schema.js";
@@ -62,28 +62,13 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
   )
     throw new Error("Invalid OpenAI model configuration");
   if (baseUrl !== undefined) providerBaseUrl("OpenAI", baseUrl);
-  return async (request, context) => {
+  const decide: AgentModel = async (request, context) => {
     const selectedModel = (model ?? process.env.OPENAI_MODEL)?.trim() || "gpt-5.4-mini";
     const timeout = AbortSignal.timeout(timeoutMs);
     const signal = context.signal ? AbortSignal.any([context.signal, timeout]) : timeout;
     throwIfAborted(signal, "OpenAI decision");
     // Validate descriptors before either compaction or a decision can perform I/O.
-    const tools = [
-      ...context.capabilities.map((tool) => ({
-        type: "function",
-        name: tool.name,
-        description: tool.description,
-        parameters: parameter("input", tool.inputJsonSchema, `tool ${tool.name}`),
-        strict: true,
-      })),
-      {
-        type: "function",
-        name: "_finish",
-        description: "Finish with the final answer.",
-        parameters: parameter("result", context.resultJsonSchema, "tool _finish"),
-        strict: true,
-      },
-    ];
+    const tools = openaiTools(context);
     if (
       request.conversation !== null &&
       (!Array.isArray(request.conversation) || !request.conversation.every(record))
@@ -167,4 +152,27 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
       });
     return { decision, conversation };
   };
+  return Object.assign(decide, {
+    checkDescriptors: (descriptors: AgentModelDescriptors) => void openaiTools(descriptors),
+  });
+}
+
+/** Strict function tools for these descriptors, plus the adapter-only `_finish` function. */
+function openaiTools({ capabilities, resultJsonSchema }: AgentModelDescriptors) {
+  return [
+    ...capabilities.map((tool) => ({
+      type: "function",
+      name: tool.name,
+      description: tool.description,
+      parameters: parameter("input", tool.inputJsonSchema, `tool ${tool.name}`),
+      strict: true,
+    })),
+    {
+      type: "function",
+      name: "_finish",
+      description: "Finish with the final answer.",
+      parameters: parameter("result", resultJsonSchema, "tool _finish"),
+      strict: true,
+    },
+  ];
 }
