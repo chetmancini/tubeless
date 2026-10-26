@@ -96,6 +96,8 @@ export async function runCodemodeScript(
   let reason: "timeout" | "abort" | "fatal" | undefined;
   let fatal: { error: unknown } | undefined;
   let cancelled = false;
+  // Set once the executor settles: later calls, such as from a retained bridge, are refused.
+  let closed = false;
   let notifyStop!: () => void;
   const stopped = new Promise<void>((resolve) => {
     notifyStop = resolve;
@@ -113,7 +115,7 @@ export async function runCodemodeScript(
     notifyStop();
   };
   const call = (name: string, input: string): Promise<string> => {
-    if (reason) return Promise.resolve(stoppedReply);
+    if (reason || closed) return Promise.resolve(stoppedReply);
     // The task settles normally on every path, so its bookkeeping promise never rejects.
     const task = (async () => {
       let parsed: unknown;
@@ -170,10 +172,14 @@ export async function runCodemodeScript(
       )
     ).then(
       (value) => {
+        closed = true;
         result = value;
       },
       (error: unknown) => {
+        closed = true;
         crash = { error };
+        // A crashed sandbox will not consume its calls' results; cancel them before draining.
+        cancelNested();
       }
     );
     // Stop waiting for an executor that a deadline, cancellation or fatal call ended.
@@ -182,6 +188,7 @@ export async function runCodemodeScript(
     if (reason) result = undefined;
     while (active.size > 0) await Promise.allSettled([...active]);
   } finally {
+    closed = true;
     clearTimeout(timer);
     signal?.removeEventListener("abort", onAbort);
     sandbox.abort();

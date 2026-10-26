@@ -704,6 +704,53 @@ describe("code-mode executor contract", () => {
     expect(JSON.parse(await late)).toMatchObject({ ok: false, code: "CODEMODE_STOPPED" });
   });
 
+  it("cancels running calls when the executor crashes", async () => {
+    const aborted = vi.fn();
+    const executor: CodemodeExecutor = {
+      execute: async (execution) => {
+        void execution.call("echo", "{}");
+        throw new Error("isolate crashed");
+      },
+    };
+    const started = Date.now();
+    expect(
+      await runWith(executor, {
+        ...script,
+        timeoutMs: 10_000,
+        call: (_name, _input, signal) =>
+          new Promise((_resolve, reject) =>
+            signal.addEventListener("abort", () => {
+              aborted();
+              reject(new Error("aborted"));
+            })
+          ),
+      })
+    ).toMatchObject({
+      ok: false,
+      code: "CODEMODE_SANDBOX_ERROR",
+      message: "Sandbox stopped: isolate crashed",
+    });
+    expect(aborted).toHaveBeenCalledOnce();
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
+
+  it("refuses calls a retained bridge makes after the script finishes", async () => {
+    let retained!: (name: string, input: string) => Promise<string>;
+    const call = vi.fn(async () => ({ ok: true as const, value: null }));
+    const executor: CodemodeExecutor = {
+      execute: async (execution) => {
+        retained = execution.call;
+        return { ok: true, result: "1", logs: [], logsTruncated: false };
+      },
+    };
+    expect(await runWith(executor, { ...script, call })).toMatchObject({ ok: true, result: "1" });
+    expect(JSON.parse(await retained("echo", "{}"))).toMatchObject({
+      ok: false,
+      code: "CODEMODE_STOPPED",
+    });
+    expect(call).not.toHaveBeenCalled();
+  });
+
   it("aborts the executor signal when a call fails fatally", async () => {
     let aborted = false;
     const executor: CodemodeExecutor = {
