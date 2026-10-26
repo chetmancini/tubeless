@@ -4,15 +4,25 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { defineAgent } from "tubeless/agent";
+import { defineAgent, defineTool, ToolError } from "tubeless/agent";
 import { openaiModel } from "tubeless/agent/openai";
 
 // Opt-in, paid live evaluations. Each task gets a disposable workspace and objective checks.
 if (!process.env.OPENAI_API_KEY)
   throw new Error("Set OPENAI_API_KEY to run live agent evaluations");
 // `--codemode` runs every case through one codemode tool instead of direct tool calls.
+// `--only=<id>,<id>` runs only the named cases.
 const args = process.argv.slice(2);
 const codemode = args.includes("--codemode");
+const onlyArg = args.find((arg) => arg.startsWith("--only="));
+const only = onlyArg && new Set(onlyArg.slice("--only=".length).split(",").filter(Boolean));
+const selected = (fixture) => !only || only.has(fixture.id);
+
+/** The count and UTF-8 bytes of tool descriptors the model sees, for declaration budgets. */
+const measureDescriptors = (context) => ({
+  toolCount: context.capabilities.length,
+  toolDescriptorBytes: Buffer.byteLength(JSON.stringify(context.capabilities)),
+});
 const sourceHashes = Object.fromEntries(
   await Promise.all(
     ["src/agent/model-prompt.ts", "src/agent/openai.ts", "scripts/eval-agent.mjs"].map(
@@ -65,6 +75,8 @@ const cases = [
     task: "Sum the amount field across every JSON file in data/ and report the result exactly as Total: <number>. Do not edit any files.",
     readOnly: true,
     exactAnswer: "Total: 1362",
+    // A memorized total must not pass: the run has to observe the data files.
+    observesData: true,
     files: {
       "data/item-01.json": JSON.stringify({ id: 1, amount: 20 }) + "\n",
       "data/item-02.json": JSON.stringify({ id: 2, amount: 37 }) + "\n",
@@ -117,6 +129,21 @@ async function snapshot(root) {
   return JSON.stringify(files.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 
+/**
+ * Whether a run observed the `data/` inputs: a successful read of one of its JSON files or a
+ * successful command (or code-mode script) that refers to `data`.
+ */
+function observedData(calls, outcomes) {
+  const succeeded = new Set(outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.id));
+  return calls.some(
+    (call) =>
+      succeeded.has(call.id) &&
+      ((call.tool === "read" && /(^|\/)data\/[^/]+\.json$/.test(call.input.path)) ||
+        (call.tool === "bash" && /\bdata\b/.test(call.input.command)) ||
+        (call.tool === "codemode" && /\bdata\b/.test(call.input.code)))
+  );
+}
+
 /** Fixtures require either an exact answer or a phrase within a longer one. */
 function assertAnswer(fixture, answer) {
   if (fixture.exactAnswer !== undefined)
@@ -143,13 +170,225 @@ function locatesConfiguration(outcome, root) {
   }
 }
 
+// Typed agents and large tool inventories: evidence for structured task input (#218) and
+// for code-mode declaration budgets (#220). These cases need no workspace files.
+const plainSchema = (descriptor) => ({
+  "~standard": {
+    version: 1,
+    vendor: "eval",
+    validate: (value) => ({ value }),
+    jsonSchema: { input: () => descriptor, output: () => descriptor },
+  },
+});
+const strictObject = (properties) => ({
+  type: "object",
+  properties,
+  required: Object.keys(properties),
+  additionalProperties: false,
+});
+const tickets = [
+  { id: "T1", title: "Update profile photo", body: "The avatar upload button is greyed out." },
+  {
+    id: "T2",
+    title: "Checkout returns 500",
+    body: "Every customer gets a server error at checkout.",
+  },
+  { id: "T3", title: "Typo on pricing page", body: "'Anual' should be 'Annual'." },
+  {
+    id: "T4",
+    title: "Unknown admin login",
+    body: "An admin session started from an unrecognized country.",
+  },
+  { id: "T5", title: "Dark mode", body: "Please add a dark theme." },
+  {
+    id: "T6",
+    title: "Card payments failing",
+    body: "All card charges have been declined since 09:00.",
+  },
+  { id: "T7", title: "Slow CSV export", body: "Exports take about two minutes." },
+  { id: "T8", title: "Invoice date question", body: "Why is my invoice dated the 1st?" },
+];
+const triage = (id, task) => ({
+  id,
+  // No tools for a script to call, so these cases run directly in both modes.
+  usesCodemode: false,
+  define: (model) =>
+    defineAgent({
+      id,
+      model,
+      instructions: "Mark a ticket urgent only for outages, security incidents or failed payments.",
+      inputSchema: plainSchema(
+        strictObject({
+          tickets: {
+            type: "array",
+            items: strictObject({
+              id: { type: "string" },
+              title: { type: "string" },
+              body: { type: "string" },
+            }),
+          },
+        })
+      ),
+      task,
+      resultSchema: plainSchema(
+        strictObject({ urgent: { type: "array", items: { type: "string" } } })
+      ),
+      // No tools for a script to call: code mode adds nothing, so both modes run directly.
+      defaultTools: [],
+      limits: { maxTurns: 4, maxCalls: 8, maxDecisions: 4 },
+    }),
+  input: { tickets },
+  check: (result) => {
+    const urgent = [...(result?.urgent ?? [])].sort();
+    assert(
+      JSON.stringify(urgent) === JSON.stringify(["T2", "T4", "T6"]),
+      `Urgent tickets must be exactly T2, T4 and T6; got ${urgent.join(", ") || "none"}`
+    );
+  },
+});
+const domains = [
+  ["crm", "contact"],
+  ["billing", "account"],
+  ["support", "ticket"],
+  ["inventory", "item"],
+  ["hr", "employee"],
+  ["analytics", "report"],
+];
+const operations = [
+  ["get", "Get one {noun} by id.", { id: { type: "string" } }],
+  ["list", "List {noun}s, newest first.", { limit: { type: "integer" } }],
+  ["search", "Search {noun}s by free text.", { query: { type: "string" } }],
+  ["create", "Create a {noun} from JSON fields.", { fields: { type: "string" } }],
+  [
+    "update",
+    "Update a {noun}'s JSON fields.",
+    { id: { type: "string" }, fields: { type: "string" } },
+  ],
+  ["delete", "Delete a {noun} by id.", { id: { type: "string" } }],
+  ["count", "Count {noun}s matching a filter.", { filter: { type: "string" } }],
+  ["export", "Export {noun}s as CSV text.", { filter: { type: "string" } }],
+];
+/**
+ * Wrap a handler to record each call in order. Handlers run for direct calls and for
+ * code-mode script calls alike, so the log shows what the agent actually looked up.
+ */
+function logged(log, tool, run) {
+  return async (input, context) => {
+    try {
+      const value = await run(input, context);
+      log.push({ tool, input, ok: true, value });
+      return value;
+    } catch (error) {
+      log.push({ tool, input, ok: false, code: error?.code });
+      throw error;
+    }
+  };
+}
+
+function inventoryTools(log) {
+  const tools = {};
+  for (const [domain, noun] of domains)
+    for (const [operation, description, properties] of operations)
+      tools[`${domain}__${operation}_${noun}`] = defineTool({
+        description: `${description.replaceAll("{noun}", noun)} Part of the ${domain} service.`,
+        inputSchema: plainSchema(strictObject(properties)),
+        outputSchema: plainSchema({ type: "object" }),
+        run: logged(log, `${domain}__${operation}_${noun}`, (input) => {
+          if (["create", "update", "delete"].includes(operation))
+            throw new ToolError("READ_ONLY", "This evaluation's services are read-only");
+          if (domain === "support" && operation === "get" && input.id === "S-1042")
+            return {
+              id: "S-1042",
+              subject: "Invoice question",
+              status: "open",
+              customerId: "C-77",
+            };
+          if (operation === "get") throw new ToolError("NOT_FOUND", `No ${noun} ${input.id}`);
+          return { results: [] };
+        }),
+      });
+  tools.billing__get_balance = defineTool({
+    description: "Get a billing customer's outstanding balance by customer id.",
+    inputSchema: plainSchema(strictObject({ customerId: { type: "string" } })),
+    outputSchema: plainSchema(
+      strictObject({
+        customerId: { type: "string" },
+        balance: { type: "number" },
+        currency: { type: "string" },
+      })
+    ),
+    run: logged(log, "billing__get_balance", ({ customerId }) => {
+      if (customerId !== "C-77") throw new ToolError("NOT_FOUND", `No customer ${customerId}`);
+      return { customerId, balance: 1234.56, currency: "USD" };
+    }),
+  });
+  return tools;
+}
+const structuredCases = [
+  triage(
+    "typed-triage-text",
+    ({ tickets }) =>
+      `Triage these support tickets and list the urgent ones by id:\n${tickets
+        .map((ticket) => `- ${ticket.id}: ${ticket.title}. ${ticket.body}`)
+        .join("\n")}`
+  ),
+  triage(
+    "typed-triage-json",
+    (options) =>
+      `Triage these support tickets and list the urgent ones by id. Tickets as JSON:\n${JSON.stringify(options)}`
+  ),
+  {
+    id: "large-inventory",
+    usesCodemode: codemode,
+    define: (model, toolLog) =>
+      defineAgent({
+        id: "large-inventory",
+        model,
+        projectContext: false,
+        defaultTools: [],
+        tools: inventoryTools(toolLog),
+        codemode,
+        limits: { maxTurns: 6, maxCalls: 12, maxDecisions: 6 },
+      }),
+    input: {
+      task: "Support ticket S-1042 was opened by a customer. What is that customer's outstanding billing balance? Reply exactly as Balance: <amount> USD.",
+    },
+    check: (result, toolLog) => {
+      // The answer must come from the lookups, not a memorized or guessed balance.
+      const ticket = toolLog.findIndex(
+        (entry) => entry.tool === "support__get_ticket" && entry.ok && entry.input.id === "S-1042"
+      );
+      const balance = toolLog.findIndex(
+        (entry, index) =>
+          index > ticket &&
+          entry.tool === "billing__get_balance" &&
+          entry.ok &&
+          entry.input.customerId === toolLog[ticket].value.customerId
+      );
+      assert(
+        ticket >= 0 && balance > ticket,
+        "Agent must look up ticket S-1042, then the balance of its customer"
+      );
+      assert(
+        result?.answer?.trim() === "Balance: 1234.56 USD",
+        "Answer must be exactly Balance: 1234.56 USD"
+      );
+    },
+  },
+];
+// Reject unknown --only names before any paid request.
+const unknownCases = [...(only ?? [])].filter(
+  (id) => ![...cases, ...structuredCases].some((fixture) => fixture.id === id)
+);
+if (unknownCases.length > 0) throw new Error(`Unknown --only case: ${unknownCases.join(", ")}`);
 const results = [];
-for (const fixture of cases) {
+for (const fixture of cases.filter(selected)) {
   const root = await realpath(await mkdtemp(join(tmpdir(), `tubeless-eval-${fixture.id}-`)));
   const started = Date.now();
   const calls = [];
   const outcomes = [];
   const turns = [];
+  let descriptors;
   let compactions = 0;
   let startupGuidanceLoaded = false;
   let answer;
@@ -177,6 +416,7 @@ for (const fixture of cases) {
       limits: { maxTurns: 12, maxCalls: 24, maxDecisions: 12 },
       codemode,
       model: async (request, context) => {
+        descriptors ??= measureDescriptors(context);
         if (fixture.id === "project-context" && turns.length === 0) {
           startupGuidanceLoaded = ["AGENTS.md", "src/AGENTS.md"].every((path) =>
             request.instructions.includes(files[path])
@@ -237,13 +477,18 @@ for (const fixture of cases) {
           "Startup guidance must be included in the first model request"
         );
       assertAnswer(fixture, answer);
+      if (fixture.observesData)
+        assert(observedData(calls, outcomes), "Agent must observe the data files it aggregates");
       if (fixture.compactAfterBytes)
         assert(compactions > 0, "Conversation must compact and still complete");
     } else {
-      assert(
-        calls.some((call) => call.tool === "read"),
-        "Agent must inspect files"
-      );
+      // Edits must follow inspection; read-only answers may come from any read-only command,
+      // and the workspace snapshot plus the exact answer already check them.
+      if (!fixture.readOnly)
+        assert(
+          calls.some((call) => call.tool === "read"),
+          "Agent must inspect files"
+        );
       if (fixture.id === "project-context") {
         assert(
           startupGuidanceLoaded,
@@ -267,6 +512,8 @@ for (const fixture of cases) {
         );
       }
       assertAnswer(fixture, answer);
+      if (fixture.observesData)
+        assert(observedData(calls, outcomes), "Agent must observe the data files it aggregates");
       if (fixture.id === "nested-guidance") {
         assert(
           calls.every((call) => ["read", "list", "search"].includes(call.tool)),
@@ -394,11 +641,73 @@ for (const fixture of cases) {
     outcomes,
     turns,
     compactions,
+    codemode,
+    ...descriptors,
     turnCount: turns.length,
     durationMs: Date.now() - started,
   };
   results.push(result);
   // Keep console output short; the report retains the complete captured evidence.
+  console.log(
+    JSON.stringify({
+      ...result,
+      calls: calls.map(({ tool }) => tool),
+      scripts: codemode ? calls.map(({ input }) => input.code) : undefined,
+      outcomes: undefined,
+      turns: undefined,
+    })
+  );
+}
+for (const fixture of structuredCases.filter(selected)) {
+  const root = await realpath(await mkdtemp(join(tmpdir(), `tubeless-eval-${fixture.id}-`)));
+  const started = Date.now();
+  const calls = [];
+  const outcomes = [];
+  const turns = [];
+  const toolLog = [];
+  let descriptors;
+  let output;
+  let failure;
+  try {
+    const transport = openaiModel({ reasoningEffort: "high" });
+    const model = Object.assign(
+      async (request, context) => {
+        descriptors ??= measureDescriptors(context);
+        const turn = { outcomes: request.outcomes };
+        turns.push(turn);
+        outcomes.push(...request.outcomes);
+        const result = await transport(request, context);
+        turn.decision = result.decision;
+        if (result.decision.kind === "continue") calls.push(...result.decision.calls);
+        return result;
+      },
+      { checkDescriptors: transport.checkDescriptors }
+    );
+    output = await fixture.define(model, toolLog).runOrThrow(fixture.input, undefined, {
+      cwd: root,
+      signal: AbortSignal.timeout(180_000),
+    });
+    fixture.check(output, toolLog);
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+  const result = {
+    id: fixture.id,
+    passed: failure === undefined,
+    error: failure,
+    codemode: fixture.usesCodemode,
+    output,
+    toolLog,
+    ...descriptors,
+    calls,
+    outcomes,
+    turns,
+    turnCount: turns.length,
+    durationMs: Date.now() - started,
+  };
+  results.push(result);
   console.log(
     JSON.stringify({
       ...result,

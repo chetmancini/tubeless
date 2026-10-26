@@ -27,6 +27,13 @@ const sequences = {
     [["edit", {path: "config/current.json", oldText: '"retries":0', newText: '"retries":3'}]],
     [["bash", {command: "node check.mjs"}]],
   ],
+  "typed-triage-text": [[["_finish", {urgent: ["T6", "T2", "T4"]}]]],
+  "typed-triage-json": [[["_finish", {urgent: ["T2", "T4", "T6"]}]]],
+  "large-inventory": [
+    [["support__get_ticket", {id: "S-1042"}]],
+    [["billing__get_balance", {customerId: "C-77"}]],
+    [["_finish", {answer: "Balance: 1234.56 USD"}]],
+  ],
   "aggregate-files": [
     Array.from({length: 12}, (_, index) => ["read", {path: "data/item-" + String(index + 1).padStart(2, "0") + ".json"}]),
     [["_finish", {answer: "Total: 1362"}]],
@@ -37,7 +44,19 @@ const sequences = {
     [["_finish", {answer: "Scoped code: cobalt"}]],
   ],
 };
+if (process.env.EVAL_RECOVERY === "triage-wrong") sequences["typed-triage-json"][0][0][1].urgent = ["T2", "T4"];
+// Offline code mode: one script chains both inventory tools through the Node executor.
+if (process.env.EVAL_CODEMODE === "1")
+  sequences["large-inventory"] = [
+    [["codemode", {code: "const ticket = await tools.support__get_ticket({ id: 'S-1042' });\nreturn await tools.billing__get_balance({ customerId: ticket.customerId });"}]],
+    [["_finish", {answer: "Balance: 1234.56 USD"}]],
+  ];
+if (process.env.EVAL_RECOVERY === "inventory-guess")
+  sequences["large-inventory"] = [[["_finish", {answer: "Balance: 1234.56 USD"}]]];
 const aggregate = sequences["aggregate-files"];
+// Read-only answers may come from a command rather than read calls.
+if (process.env.EVAL_RECOVERY === "aggregate-bash") aggregate[0] = [["bash", {command: "cat data/*.json"}]];
+if (process.env.EVAL_RECOVERY === "aggregate-guess") aggregate.splice(0, 1);
 if (process.env.EVAL_RECOVERY === "aggregate-wrong") aggregate[1][0][1].answer = "Total: 13620";
 if (process.env.EVAL_RECOVERY === "aggregate-create")
   aggregate.splice(1, 0, [["bash", {command: "node -e \"require('fs').writeFileSync('data/extra.txt', 'scratch')\""}]]);
@@ -131,6 +150,10 @@ const startupError = "Startup-guidance task must access only greet.mjs and run n
 it.each([
   ["ordered", undefined, undefined],
   ["aggregate-wrong", undefined, undefined],
+  ["aggregate-bash", undefined, undefined],
+  ["aggregate-guess", undefined, undefined],
+  ["triage-wrong", undefined, undefined],
+  ["inventory-guess", undefined, undefined],
   ["aggregate-create", undefined, undefined],
   ["aggregate-restore", undefined, undefined],
   ["list-root", recoveryError, undefined],
@@ -210,9 +233,19 @@ it.each([
         "aggregate-wrong": "Answer must be exactly Total: 1362",
         "aggregate-create": "Read-only task must not change workspace files",
         "aggregate-restore": "Read-only task must not call write or edit",
+        "aggregate-guess": "Agent must observe the data files it aggregates",
       }[mode as string];
       const aggregateFailure = aggregateError !== undefined;
-      if (expectedError || guidanceFailure || expectedStartupError || aggregateFailure)
+      const triageFailure = mode === "triage-wrong";
+      const inventoryFailure = mode === "inventory-guess";
+      if (
+        expectedError ||
+        guidanceFailure ||
+        expectedStartupError ||
+        aggregateFailure ||
+        triageFailure ||
+        inventoryFailure
+      )
         expect(run).toThrow();
       else run();
       const report = JSON.parse(await readFile(reportPath, "utf8"));
@@ -229,6 +262,45 @@ it.each([
         verification: "aggregate checks passed",
       });
       expect(results["aggregate-files"].error).toBe(aggregateError);
+      for (const result of report.results)
+        expect(result).toEqual(
+          expect.objectContaining({
+            toolCount: expect.any(Number),
+            toolDescriptorBytes: expect.any(Number),
+          })
+        );
+      expect(results["typed-triage-text"]).toMatchObject({
+        passed: true,
+        output: { urgent: ["T6", "T2", "T4"] },
+        toolCount: 0,
+      });
+      expect(results["typed-triage-json"]).toMatchObject({
+        passed: !triageFailure,
+        ...(triageFailure
+          ? { error: "Urgent tickets must be exactly T2, T4 and T6; got T2, T4" }
+          : {}),
+      });
+      expect(results["large-inventory"]).toMatchObject(
+        inventoryFailure
+          ? {
+              passed: false,
+              error: "Agent must look up ticket S-1042, then the balance of its customer",
+            }
+          : {
+              passed: true,
+              codemode: false,
+              output: { answer: "Balance: 1234.56 USD" },
+              toolCount: 49,
+              turnCount: 3,
+              toolLog: [
+                { tool: "support__get_ticket", ok: true },
+                { tool: "billing__get_balance", ok: true, input: { customerId: "C-77" } },
+              ],
+            }
+      );
+      expect(results["typed-triage-text"].codemode).toBe(false);
+      expect(results["investigate-edit-verify"].codemode).toBe(false);
+      expect(results["large-inventory"].toolDescriptorBytes).toBeGreaterThan(5000);
       expect(price.passed).toBe(true);
       expect(project).toMatchObject({
         passed: expectedStartupError === undefined,
@@ -324,3 +396,57 @@ it.each([
     }
   }
 );
+
+it("runs selected cases offline in code mode through generated declarations", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-report-"));
+  try {
+    const mockPath = join(directory, "provider.mjs");
+    const reportPath = join(directory, "report.json");
+    await writeFile(mockPath, preload);
+    execFileSync(
+      process.execPath,
+      [
+        "--import",
+        mockPath,
+        "scripts/eval-agent.mjs",
+        "--codemode",
+        "--only=large-inventory,typed-triage-json",
+        reportPath,
+      ],
+      {
+        encoding: "utf8",
+        timeout: 30_000,
+        env: {
+          ...process.env,
+          OPENAI_API_KEY: "offline-fixture",
+          OPENAI_MODEL: "offline-fixture",
+          EVAL_CODEMODE: "1",
+        },
+      }
+    );
+    const report = JSON.parse(await readFile(reportPath, "utf8"));
+    expect(report.codemode).toBe(true);
+    expect(report.results.map(({ id }: { id: string }) => id)).toEqual([
+      "typed-triage-json",
+      "large-inventory",
+    ]);
+    const [triage, inventory] = report.results;
+    expect(triage).toMatchObject({ passed: true, toolCount: 0, codemode: false });
+    expect(inventory).toMatchObject({
+      passed: true,
+      codemode: true,
+      toolCount: 1,
+      toolLog: [{ tool: "support__get_ticket" }, { tool: "billing__get_balance" }],
+      output: { answer: "Balance: 1234.56 USD" },
+      calls: [{ tool: "codemode" }],
+    });
+    expect(inventory.toolDescriptorBytes).toBeGreaterThan(5000);
+    expect(inventory.outcomes[0]).toMatchObject({
+      tool: "codemode",
+      ok: true,
+      value: { result: { customerId: "C-77", balance: 1234.56, currency: "USD" } },
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
