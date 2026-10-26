@@ -282,7 +282,11 @@ with no domain inputs work with the one-argument call. Validation-only schemas,
 nested objects, nullable/union inputs, tuples, array defaults, and numeric or boolean
 `enum`/`const` constraints require explicit
 parameters; unsupported schema shapes fail at command creation with guidance.
-Local JSON Schema references are resolved automatically.
+Local JSON Schema references are resolved automatically. Reference siblings may supply
+annotations such as `description` and `default`. References with validation siblings
+such as `properties`, `required`, or `minimum` require explicit parameters and are
+rejected during command creation; those constraints compose rather than override
+the referenced schema.
 
 ### Advanced: override a flag's presentation
 
@@ -336,6 +340,11 @@ wrappers rely on inference and do not need to import them. `DefinePipelineComman
 describes the advanced explicit-parameter form. `descriptor`, `parseValues`, and
 `execute` support UI adapters; neither CLI declarations nor projects load storage
 or Studio. Optional Node helpers live in `tubeless/node`.
+
+`parseValues` accepts finite numeric scalars and arrays, including small and large
+numbers that JavaScript displays in exponent notation. Integer and min/max constraints
+still apply. Numeric strings are rejected; argv and environment inputs retain their
+decimal-only text syntax.
 
 ### Executable commands
 

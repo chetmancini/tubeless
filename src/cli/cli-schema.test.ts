@@ -210,6 +210,110 @@ describe("inferred pipeline CLI", () => {
     expect(command.parse(["--amounts", "0"]).kind).toBe("error");
   });
 
+  it("keeps annotations on root and chained property references", () => {
+    const command = definePipelineCommand(
+      pipeline<{ amount: number }>(
+        {
+          $ref: "#/$defs/options",
+          title: "Options",
+          $defs: {
+            options: {
+              type: "object",
+              properties: {
+                amount: { $ref: "#/$defs/amount", description: "Amount per run", default: 3 },
+              },
+            },
+            amount: { $ref: "#/$defs/integer", description: "Base amount", default: 2 },
+            integer: { type: "integer", minimum: 1, maximum: 10 },
+          },
+        },
+        (value) => ({ value: value as { amount: number } })
+      )
+    );
+    expect(command.descriptor.parameters).toContainEqual(
+      expect.objectContaining({
+        key: "amount",
+        default: 3,
+        description: "Amount per run",
+        integer: true,
+        min: 1,
+        max: 10,
+      })
+    );
+    expect(command.parse([])).toMatchObject({ kind: "values", values: { amount: 3 } });
+    expect(command.parse(["--amount", "0"]).kind).toBe("error");
+  });
+
+  it.each([
+    {
+      $ref: "#/$defs/base",
+      $defs: {
+        base: { type: "object", properties: { source: { type: "string" } }, required: ["source"] },
+      },
+      properties: { destination: { type: "string" } },
+      required: ["destination"],
+    },
+    {
+      type: "object",
+      properties: { amount: { $ref: "#/$defs/amount", minimum: 0 } },
+      $defs: { amount: { type: "number", minimum: 10 } },
+    },
+    {
+      type: "object",
+      properties: { amount: { $ref: "#/$defs/amount", type: "string" } },
+      $defs: { amount: { type: "number" } },
+    },
+    {
+      type: "object",
+      properties: { amounts: { type: "array", items: { $ref: "#/$defs/amount", maximum: 5 } } },
+      $defs: { amount: { type: "number", maximum: 10 } },
+    },
+  ])(
+    "rejects validation siblings instead of overwriting referenced constraints: %j",
+    (metadata) => {
+      const validate = vi.fn(() => ({ value: {} }));
+      const source = pipeline(metadata, validate);
+      expect(() => definePipelineCommand(source)).toThrow(
+        /references with validation siblings.*Supply explicit params/
+      );
+      expect(validate).not.toHaveBeenCalled();
+      expect(() =>
+        definePipelineCommand(source, { params: {}, mapOptions: () => ({}) })
+      ).not.toThrow();
+    }
+  );
+
+  it("executes composed reference inputs through an explicit adapter", async () => {
+    const source = pipeline<{ source: string; destination: string }>(
+      {
+        $ref: "#/$defs/base",
+        $defs: {
+          base: {
+            type: "object",
+            properties: { source: { type: "string" } },
+            required: ["source"],
+          },
+        },
+        properties: { destination: { type: "string" } },
+        required: ["destination"],
+      },
+      (value) => {
+        const input = value as { source?: unknown; destination?: unknown };
+        return typeof input.source === "string" && typeof input.destination === "string"
+          ? { value: { source: input.source, destination: input.destination } }
+          : { issues: [{ message: "Both source and destination are required" }] };
+      }
+    );
+    const command = definePipelineCommand(source, {
+      params: { source: { type: "string" }, destination: { type: "string" } },
+      reporter: false,
+    });
+    expect(await command.run(["--source", "a", "--destination", "b"])).toEqual({
+      source: "a",
+      destination: "b",
+    });
+  });
+
   it.each([
     { type: "number", enum: [1, 2] },
     { type: "integer", enum: [1, 2] },

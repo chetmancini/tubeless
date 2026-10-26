@@ -112,6 +112,51 @@ describe("defineCommand: string params", () => {
     });
   });
 
+  it.each([1e-7, 1e21, -0])(
+    "preserves structured numeric values without a text round trip: %s",
+    async (amount) => {
+      const command = defineCommand({
+        params: { amount: { type: "number" }, series: { type: "number", multiple: true } },
+        run: (values) => values,
+      });
+      const series = [amount];
+      const parsed = command.parseValues({ amount, series });
+      expect(parsed).toMatchObject({ kind: "values", values: { amount, series: [amount] } });
+      if (parsed.kind !== "values") throw new Error("Expected numeric values");
+      expect(Object.is(parsed.values.amount, amount)).toBe(true);
+      expect(Object.is(parsed.values.series[0], amount)).toBe(true);
+      expect(parsed.values.series).not.toBe(series);
+      expect(await command.execute(parsed.values)).toMatchObject({ amount, series: [amount] });
+    }
+  );
+
+  it.each([NaN, Infinity, -Infinity])("rejects nonfinite structured numbers: %s", (amount) => {
+    const command = defineCommand({
+      params: { amount: { type: "number" }, series: { type: "number", multiple: true } },
+      run: (values) => values,
+    });
+    expect(command.parseValues({ amount, series: [amount] })).toMatchObject({
+      kind: "error",
+      errors: ["--amount must be a finite number.", "--series must contain only finite numbers."],
+    });
+  });
+
+  it.each([0, 1.5, 11])(
+    "keeps numeric constraints on structured scalar and repeated values: %s",
+    (amount) => {
+      const command = defineCommand({
+        params: {
+          amount: { type: "number", integer: true, min: 1, max: 10 },
+          series: { type: "number", multiple: true, integer: true, min: 1, max: 10 },
+        },
+        run: (values) => values,
+      });
+      const parsed = command.parseValues({ amount, series: [amount] });
+      expect(parsed.kind).toBe("error");
+      if (parsed.kind === "error") expect(parsed.errors).toHaveLength(2);
+    }
+  );
+
   it("does not fall back to env or validate domain values after malformed structured input", () => {
     const validate = vi.fn();
     const command = defineCommand({

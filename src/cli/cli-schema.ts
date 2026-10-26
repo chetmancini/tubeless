@@ -36,6 +36,21 @@ function record(value: unknown, location: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+// Reference siblings may override presentation, but assertions compose rather than overwrite.
+const REFERENCE_ANNOTATIONS = new Set([
+  "title",
+  "description",
+  "default",
+  "examples",
+  "deprecated",
+  "readOnly",
+  "writeOnly",
+  "$comment",
+  "$schema",
+  "$defs",
+  "definitions",
+]);
+
 function resolveSchema(
   value: unknown,
   root: Record<string, unknown>,
@@ -55,8 +70,11 @@ function resolveSchema(
     const parent = record(target, location);
     target = Object.hasOwn(parent, key) ? parent[key] : undefined;
   }
-  const { $ref: _ref, ...siblings } = schema;
-  return { ...resolveSchema(target, root, location, seen), ...siblings };
+  const { $ref: _ref, ...annotations } = schema;
+  if (Object.keys(annotations).some((key) => !REFERENCE_ANNOTATIONS.has(key))) {
+    return unsupported(location, "references with validation siblings need an explicit mapping");
+  }
+  return { ...resolveSchema(target, root, location, seen), ...annotations };
 }
 
 function scalarParam(schema: Record<string, unknown>, location: string): CliParam {

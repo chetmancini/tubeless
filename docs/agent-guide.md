@@ -292,7 +292,8 @@ read when a pipeline needs them.
   the schema passed to `createSteps(schema)`; see [automatic CLI](../examples/automatic-cli.ts).
   Use `overrides` only for aliases, flag names, descriptions or environment fallbacks.
   Type-only or validation-only schemas need explicit `params`; this replaces inference.
-  Nested/union inputs, array defaults, and non-string `enum`/`const` constraints
+  Nested/union inputs, array defaults, non-string `enum`/`const` constraints,
+  and `$ref` siblings with validation constraints
   need explicit parameters and, when shapes
   differ, `mapOptions`. Keep these advanced escape hatches out of ordinary wrappers. Do not parse `process.argv` manually or redeclare built-in dry-run,
   `--step`, or `--target` flags. `mapOptions`, validation, and hooks receive `stepIds` and `targets`,
@@ -304,6 +305,8 @@ read when a pipeline needs them.
   the CLI rejects the flag and the descriptor omits the Studio control.
   The returned command exposes an immutable `descriptor`; UI adapters should
   render those parameter definitions instead of parsing help text.
+  Pass finite numbers and number arrays directly to `parseValues`; numeric strings
+  are rejected, while integer and min/max constraints apply to typed values too.
   Command `name` and `description` default to their pipeline values; the name falls
   back to the pipeline ID. Supply command-level values only for CLI-specific wording.
   Use `command.plan()` or `tubeless plan` for a selection-only preview. Do not

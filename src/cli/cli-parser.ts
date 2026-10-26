@@ -458,17 +458,19 @@ export function tokenize(
 
 /** A single resolved parameter value after CLI/environment/default decoding. */
 export type ResolvedParamValue = string | number | boolean | (string | number)[] | undefined;
+/** Text from argv/environment or checked primitive values from a structured input. */
+export type RawParamValue = string | number | boolean | string[] | number[] | undefined;
 
 /** Mutable build-time views of the public descriptors, frozen before return. */
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 type MutableCliParameterDescriptor = Mutable<CliParameterDescriptor>;
 type MutableCliCommandDescriptor = Mutable<CliCommandDescriptor>;
 
-function isBooleanValue(value: string | boolean | string[] | undefined): value is boolean {
+function isBooleanValue(value: RawParamValue): value is boolean {
   return typeof value === "boolean";
 }
 
-function isStringValue(value: string | boolean | string[] | undefined): value is string {
+function isStringValue(value: RawParamValue): value is string {
   return typeof value === "string";
 }
 
@@ -479,7 +481,7 @@ function isNumberValue(value: string | number): value is number {
 export function resolveParam(
   key: string,
   param: CliParam,
-  raw: string | boolean | string[] | undefined,
+  raw: RawParamValue,
   cwd: string,
   errors: string[],
   source: "argv" | "env" | "default" = "argv"
@@ -507,6 +509,10 @@ export function resolveParam(
     const resolved: (string | number)[] = [];
     for (const item of rawValues) {
       if (param.type === "string") {
+        if (!isStringValue(item)) {
+          errors.push(`${sourceLabel} must contain only strings.`);
+          continue;
+        }
         if (param.choices && !param.choices.includes(item)) {
           errors.push(choiceError(sourceLabel, param.choices, item, showRawValue));
           continue;
@@ -534,7 +540,7 @@ export function resolveParam(
   }
 
   if (param.type === "number") {
-    const rawValue = isStringValue(raw) ? raw : param.default;
+    const rawValue = isStringValue(raw) || typeof raw === "number" ? raw : param.default;
     if (rawValue === undefined) {
       if (param.optional) return undefined;
       errors.push(`Missing required option --${flag}`);

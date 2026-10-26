@@ -10,6 +10,7 @@ import {
   renderHelp,
   resolveParam,
   tokenize,
+  type RawParamValue,
   type ResolvedParamValue,
 } from "./cli-parser.js";
 import {
@@ -111,10 +112,7 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
   const descriptor = commandDescriptor(config, effectiveParams, positionals);
 
   function resolveValues(
-    readValue: (
-      key: string,
-      param: CliParamsSchema[string]
-    ) => string | boolean | string[] | undefined,
+    readValue: (key: string, param: CliParamsSchema[string]) => RawParamValue,
     context: CliContext,
     errors: string[],
     helpText: string
@@ -353,7 +351,7 @@ function normalizeStructuredValue(
   param: CliParamsSchema[string],
   value: unknown,
   errors: string[]
-): string | boolean | string[] | undefined {
+): RawParamValue {
   if (value === undefined) return undefined;
   const label = `--${param.flag ?? key}`;
   if (param.type === "boolean") {
@@ -371,7 +369,7 @@ function normalizeStructuredValue(
         errors.push(`${label} must contain only finite numbers.`);
         return undefined;
       }
-      return value.map(String);
+      return [...value];
     }
     if (!value.every((item) => typeof item === "string")) {
       errors.push(`${label} must contain only strings.`);
@@ -384,7 +382,7 @@ function normalizeStructuredValue(
       errors.push(`${label} must be a finite number.`);
       return undefined;
     }
-    return String(value);
+    return value;
   }
   if (typeof value !== "string") {
     errors.push(`${label} must be a string value.`);

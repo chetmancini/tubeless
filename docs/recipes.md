@@ -213,7 +213,8 @@ pipeline does not require credentials.
    `--export` to resolve multiple commands or pipelines.
    Use `overrides` for presentation only; explicit `params` and `mapOptions` are
    advanced options for type-only pipelines or custom input shapes.
-   Non-string `enum`/`const` constraints also require explicit parameters.
+   Non-string `enum`/`const` constraints and `$ref` siblings with validation constraints
+   also require explicit parameters; see [CLI inference](./cli.md#turn-a-pipeline-into-a-cli).
    Use `defineCommand` from the same entrypoint for standalone scripts. Projects
    share their explicit adapters between terminal commands and Studio.
    Preview selection with

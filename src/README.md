@@ -95,6 +95,9 @@ their source files.
   execution or a concrete storage adapter itself.
 - CLI adapts pipelines with Node helpers and terminal reporters. It must not load
   workbench, storage or Studio, including through lazy imports.
+  `cli-schema.ts` owns the supported inference subset, rejecting reference validation
+  siblings instead of merging assertions. `cli-parser.ts` shares value validation
+  across text and structured inputs; structured numbers retain their numeric type.
 - The project compiler consumes
   core to build pipelines from parsed documents; it performs no parsing or I/O.
   Project entries accept explicit command adapters through type-only references;
