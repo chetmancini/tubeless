@@ -1,5 +1,10 @@
 import type { StandardSchemaV1 } from "../core/pipeline-types.js";
-import type { AgentDefinition, DefaultAgentToolName, Tools } from "./agent-types.js";
+import type {
+  AgentDefinition,
+  CodemodeSetting,
+  DefaultAgentToolName,
+  Tools,
+} from "./agent-types.js";
 import { agentError } from "./agent-state.js";
 import { compileAgent } from "./compile-agent.js";
 
@@ -15,9 +20,17 @@ export type {
   AgentState,
   AgentTool,
   AgentToolContext,
+  CodemodeOptions,
   CodemodeResult,
+  CodemodeSetting,
   DefaultAgentToolName,
 } from "./agent-types.js";
+export type {
+  CodemodeExecution,
+  CodemodeExecutionResult,
+  CodemodeExecutor,
+  CodemodeReply,
+} from "./codemode-executor.js";
 
 export type {
   AgentEnvironment,
@@ -47,7 +60,7 @@ export function defineAgentLoop<
   const Result extends StandardSchemaV1,
   State,
   const Registry extends Tools = {},
-  const Codemode extends boolean = false,
+  const Codemode extends CodemodeSetting = false,
   const Defaults extends DefaultAgentToolName = DefaultAgentToolName,
 >(definition: AgentDefinition<Id, Options, Result, State, Registry, Codemode, Defaults>) {
   const { decide, dryRun } = definition;

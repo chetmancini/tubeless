@@ -153,6 +153,37 @@ adapter. R2 artifacts use `env.TUBELESS_BUCKET`; add your own prefix next to
 Handlers cannot use the filesystem for anything durable: `node:fs` writes only
 under `/tmp`.
 
+## Code-mode agents on Workers
+
+[Code mode](./agents.md#code-mode) runs agent scripts in an executor. Workers have no
+worker threads, so give agents a Worker Loader executor. Each script then runs in a
+fresh [Dynamic Worker](https://developers.cloudflare.com/dynamic-workers/) with no
+`env`, no outbound network (`globalOutbound: null`) and a CPU budget. Tool calls come
+back to your Worker over RPC, so credentials and bindings stay with the host. Add a
+`worker_loaders` binding, for example `LOADER: bindings.workerLoader()` in
+`cloudflare.config.ts` or `[[worker_loaders]] binding = "LOADER"` with Wrangler:
+
+```ts
+import { env } from "cloudflare:workers";
+import { defineAgent } from "tubeless/agent";
+import { openaiModel } from "tubeless/agent/openai";
+import { createWorkerLoaderCodemodeExecutor } from "tubeless/cloudflare";
+
+const agent = defineAgent({
+  id: "triage",
+  model: openaiModel(),
+  environment: workspace, // an explicit environment: Workers have no local workspace
+  tools: { lookup },
+  codemode: { executor: createWorkerLoaderCodemodeExecutor(env.LOADER, { cpuMs: 30_000 }) },
+});
+```
+
+`cpuMs` defaults to 30,000 per script. A Dynamic Worker cannot be terminated from the
+host: at the 60-second script deadline or on cancellation, Tubeless stops waiting and
+rejects the script's later tool calls, and the CPU budget bounds work that keeps
+running. Syntax errors are reported with their line, as on Node. Miniflare does not
+enforce Dynamic Worker CPU limits, so a runaway script also blocks local development.
+
 ## Caching on Workers
 
 The default cache store writes files and the default codec uses `v8.serialize`.

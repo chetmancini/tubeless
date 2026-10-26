@@ -72,9 +72,12 @@ their source files.
   an orchestration step that holds no leaf permit runs the script and dispatches each
   script call through `decision.ts` preparation and ordinary child execution, then a leaf
   step publishes the result or a recoverable `ToolError`. `codemode-declarations.ts`
-  renders descriptors as TypeScript. The lazily loaded `codemode-sandbox.ts` owns the
-  worker, deadline and call draining; `codemode-worker.ts` owns the `node:vm` realm, which
-  exchanges only JSON text with the host.
+  renders descriptors as TypeScript. `codemode-executor.ts` owns the public executor
+  contract and the platform-neutral harness: deadline, cancellation, call dispatch,
+  draining and failure classification. Executors only run one script and stop on abort.
+  `codemode-realm.ts` holds the dependency-free in-sandbox setup shared by executors. The
+  lazily loaded `codemode-node.ts` is the default worker-thread executor;
+  `codemode-worker.ts` owns its `node:vm` realm, which exchanges only JSON text with the host.
   `testing/agent.example.test.ts` covers public recipes, including ordinary pipeline
   composition. Workbench history tests and the packed-artifact check exercise those
   recipes through the CLI; live model evaluations remain an opt-in script outside CI.
@@ -108,6 +111,8 @@ their source files.
   `cloudflare/` imports it, and its public declarations stay structural. The
   `tubeless/cloudflare/cache` entry (`cloudflare/cloudflare-cache.ts`) must stay free of
   `cloudflare:` imports so project modules that use it still load in Node.
+  `cloudflare/cloudflare-codemode.ts` is the Worker Loader code-mode executor; it imports
+  only agent's executor types and realm setup, which it embeds in each Dynamic Worker.
 - Type-only imports can share contracts without loading their implementation.
   Avoid creating new cross-module contracts unless the consumer needs them.
 

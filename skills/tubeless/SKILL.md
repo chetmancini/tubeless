@@ -174,7 +174,8 @@ Read the corresponding package recipe before using these features:
   `await tools.<name>(input)` and returning JSON. Prefer it for large MCP inventories or
   many chained calls. Type decisions as `AgentDecision<Registry, Result, true>`; outcomes carry
   `CodemodeResult`. Script calls are budgeted child runs; read `docs/agents.md#code-mode`
-  and `examples/agent-codemode.ts`. Isolation is best-effort and Node/Bun only.
+  and `examples/agent-codemode.ts`. Isolation is best-effort. The default executor needs Node or Bun; on Cloudflare pass
+  `codemode: { executor: createWorkerLoaderCodemodeExecutor(env.LOADER) }` from `tubeless/cloudflare`.
 
 - `defineAgentLoop`, `defineTool`, and `pipelineTool` from `tubeless/agent` for bounded in-process
   decisions over registered handlers, pipelines, and subagents. Read `docs/agents.md` and

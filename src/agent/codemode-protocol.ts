@@ -31,7 +31,3 @@ export interface CodemodeHostMessage {
   readonly id: number;
   readonly reply: string;
 }
-
-export type CodemodeReply =
-  | { readonly ok: true; readonly value: unknown }
-  | { readonly ok: false; readonly code: string; readonly message: string };

@@ -20,7 +20,11 @@ import {
 } from "./agent.js";
 import type { StandardSchemaV1 } from "../core/pipeline-types.js";
 import { emptyInput, schema, textSchema } from "./agent.test-support.js";
-import { runCodemodeScript } from "./codemode-sandbox.js";
+import { runCodemodeScript as runWith, type CodemodeExecutor } from "./codemode-executor.js";
+import { createNodeCodemodeExecutor } from "./codemode-node.js";
+
+const node = createNodeCodemodeExecutor();
+const runCodemodeScript = (script: Parameters<typeof runWith>[1]) => runWith(node, script);
 import { remote } from "./environment.test-support.js";
 
 const word = schema<{ word: string }>(
@@ -430,22 +434,22 @@ describe("code mode on defineAgentLoop", () => {
     expect(run.errors[0]!.message).toContain("Required pipeline outputs missing");
   });
 
-  it("rejects a non-boolean codemode flag", () => {
+  it("rejects an invalid codemode setting", () => {
     expect(() =>
       defineAgentLoop({
         id: "bad-codemode",
-        // @ts-expect-error codemode accepts only booleans
+        // @ts-expect-error codemode accepts a boolean or { executor }
         codemode: "yes",
         inputSchema: emptyInput,
         resultSchema: textSchema,
         initialState: () => null,
         decide: () => ({ kind: "finish", result: "" }),
       })
-    ).toThrow("boolean codemode");
+    ).toThrow("codemode as a boolean or { executor }");
   });
 });
 
-describe("code-mode sandbox", () => {
+describe("code-mode Node executor", () => {
   const base = { tools: ["echo"], maxLogLines: 200, maxLogCharacters: 4096 };
 
   it("terminates scripts that exceed their deadline and aborts their calls", async () => {
@@ -623,5 +627,134 @@ describe("code-mode identity and call IDs", () => {
             },
     });
     expect(outcomes((await agent.runOrThrow({ task: "go" })).answer)[0]!.value!.result).toBe("A");
+  });
+});
+
+describe("code-mode executor contract", () => {
+  const script = {
+    code: "ignored",
+    tools: ["echo"],
+    timeoutMs: 5000,
+    maxLogLines: 200,
+    maxLogCharacters: 4096,
+  };
+
+  it("passes JSON-text replies through and classifies an executor rejection as recoverable", async () => {
+    const replies: string[] = [];
+    const executor: CodemodeExecutor = {
+      execute: async (execution) => {
+        replies.push(await execution.call("echo", '{"x":1}'));
+        replies.push(await execution.call("echo", "not json"));
+        return { ok: true, result: "42", logs: ["done"], logsTruncated: false };
+      },
+    };
+    expect(
+      await runWith(executor, {
+        ...script,
+        call: async (_name, input) => ({ ok: true, value: input }),
+      })
+    ).toEqual({ ok: true, result: "42", logs: ["done"], logsTruncated: false });
+    expect(replies.map((reply) => JSON.parse(reply))).toEqual([
+      { ok: true, value: { x: 1 } },
+      { ok: false, code: "CODEMODE_INVALID_CALL", message: "Input to echo is not JSON" },
+    ]);
+    expect(
+      await runWith(
+        {
+          execute: () => {
+            throw new Error("not started");
+          },
+        },
+        { ...script, call: async () => ({ ok: true, value: null }) }
+      )
+    ).toMatchObject({
+      ok: false,
+      code: "CODEMODE_SANDBOX_ERROR",
+      message: "Sandbox stopped: not started",
+    });
+    expect(
+      await runWith(
+        { execute: () => Promise.reject(new Error("isolate crashed")) },
+        { ...script, call: async () => ({ ok: true, value: null }) }
+      )
+    ).toMatchObject({
+      ok: false,
+      code: "CODEMODE_SANDBOX_ERROR",
+      message: "Sandbox stopped: isolate crashed",
+    });
+  });
+
+  it("stops waiting for an executor that ignores its signal, and rejects later calls", async () => {
+    let late: Promise<string> | undefined;
+    let call!: (name: string, input: string) => Promise<string>;
+    const executor: CodemodeExecutor = {
+      execute: (execution) => {
+        call = execution.call;
+        return new Promise(() => {});
+      },
+    };
+    expect(
+      await runWith(executor, {
+        ...script,
+        timeoutMs: 50,
+        call: async () => ({ ok: true, value: null }),
+      })
+    ).toMatchObject({ ok: false, code: "CODEMODE_TIMEOUT" });
+    late = call("echo", "{}");
+    expect(JSON.parse(await late)).toMatchObject({ ok: false, code: "CODEMODE_STOPPED" });
+  });
+
+  it("aborts the executor signal when a call fails fatally", async () => {
+    let aborted = false;
+    const executor: CodemodeExecutor = {
+      execute: (execution, signal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => {
+            aborted = true;
+            reject(new Error("stopped"));
+          });
+          void execution.call("echo", "{}");
+        }),
+    };
+    await expect(
+      runWith(executor, { ...script, call: () => Promise.reject(new Error("transport lost")) })
+    ).rejects.toThrow("transport lost");
+    expect(aborted).toBe(true);
+  });
+});
+
+describe("code-mode executor option", () => {
+  it("runs scripts through a supplied executor and validates the setting", async () => {
+    const executions: string[] = [];
+    const executor: CodemodeExecutor = {
+      execute: async (execution) => {
+        executions.push(execution.code);
+        const reply = JSON.parse(await execution.call("upper", '{"word":"edge"}'));
+        return { ok: true, result: JSON.stringify(reply.value), logs: [], logsTruncated: false };
+      },
+    };
+    const agent = defineAgent({
+      id: "custom-executor",
+      projectContext: false,
+      environment: remote(),
+      codemode: { executor },
+      tools: { upper },
+      model: scripted("remote script").model,
+    });
+    expect(outcomes((await agent.runOrThrow({ task: "go" })).answer)[0]!.value!.result).toEqual({
+      upper: "EDGE",
+    });
+    expect(executions).toEqual(["remote script"]);
+    expect(() =>
+      defineAgentLoop({
+        id: "bad-executor",
+        inputSchema: emptyInput,
+        resultSchema: textSchema,
+        // @ts-expect-error an executor needs an execute method
+        codemode: { executor: {} },
+        initialState: () => null,
+        decide: () => ({ kind: "finish", result: "" }),
+      })
+    ).toThrow("codemode as a boolean or { executor }");
   });
 });

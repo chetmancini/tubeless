@@ -14,7 +14,11 @@ import {
 import { createHash } from "node:crypto";
 import { agentError, descriptorFingerprint } from "./agent-state.js";
 import { codemodeDeclarations } from "./codemode-declarations.js";
-import type { CodemodeReply } from "./codemode-protocol.js";
+import {
+  runCodemodeScript,
+  type CodemodeExecutor,
+  type CodemodeReply,
+} from "./codemode-executor.js";
 import { callInvocation, prepareCalls, type PreparedCall } from "./decision.js";
 import { MAX_OUTPUT_BYTES } from "./default-tool-limits.js";
 import { toolObject } from "./default-tool-schema.js";
@@ -123,6 +127,19 @@ function publish(outcome: ScriptOutcome): ScriptResult {
   return outcome.value;
 }
 
+/** Load the default executor only when a script runs without one, so other platforms can supply theirs. */
+async function nodeExecutor(): Promise<CodemodeExecutor> {
+  try {
+    return (await import("./codemode-node.js")).createNodeCodemodeExecutor();
+  } catch (cause) {
+    throw agentError(
+      "TUBELESS_AGENT_CODEMODE_UNAVAILABLE",
+      "Code mode's default executor needs node:worker_threads; pass codemode: { executor } on this platform",
+      cause
+    );
+  }
+}
+
 /**
  * Compile the code-mode capability over an agent's registry. The model sees only this tool;
  * its script reaches every registered tool through the same preparation, admission and child
@@ -130,7 +147,8 @@ function publish(outcome: ScriptOutcome): ScriptResult {
  */
 export function compileCodemodeTool(
   agentId: string,
-  registry: ReadonlyMap<string, CompiledTool>
+  registry: ReadonlyMap<string, CompiledTool>,
+  executor?: CodemodeExecutor
 ): CompiledHandlerTool {
   if (registry.has(CODEMODE_TOOL))
     throw agentError(
@@ -237,8 +255,7 @@ export function compileCodemodeTool(
       if (started) context.log.warn(`${started.action}: failed`);
       return { ok: false, ...expected };
     };
-    const { runCodemodeScript } = await import("./codemode-sandbox.js");
-    const outcome = await runCodemodeScript({
+    const outcome = await runCodemodeScript(executor ?? (await nodeExecutor()), {
       code,
       tools: names,
       timeoutMs: TIMEOUT_MS,

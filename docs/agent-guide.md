@@ -475,8 +475,9 @@ read when a pipeline needs them.
   `tools.<name>(input): Promise<output>`; its JavaScript script calls them and returns
   a JSON result with console logs. Script calls are ordinary budgeted child runs of
   that call. Recoverable tool errors throw inside the script; fatal handler errors
-  fail the run. Dry runs execute scripts with each tool's dry-run policy. Sandboxing is best-effort (worker thread plus `node:vm`) and needs Node
-  or Bun. Read [code mode](./agents.md#code-mode) and adapt the
+  fail the run. Dry runs execute scripts with each tool's dry-run policy. Sandboxing is best-effort; the default executor (worker thread plus `node:vm`) needs Node
+  or Bun; on Cloudflare pass `codemode: { executor: createWorkerLoaderCodemodeExecutor(env.LOADER) }`
+  from `tubeless/cloudflare`, or supply your own `CodemodeExecutor`. Read [code mode](./agents.md#code-mode) and adapt the
   [code-mode recipe](../examples/agent-codemode.ts).
 
 - Use `defineAgentLoop`, `defineTool`, and `pipelineTool` from `tubeless/agent` for an in-process

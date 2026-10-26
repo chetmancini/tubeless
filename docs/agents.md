@@ -664,13 +664,27 @@ such as `write`, `edit`, `bash` and MCP tools, are skipped. A script that awaits
 skipped result fails the preview, as a direct call would. A `dryRun` decision
 source can therefore preview read-only scripts.
 
-Scripts run in a fresh Node worker thread per call, with heap limits, inside a
-`node:vm` context. That context disables string code generation (`eval`, `Function`)
-and WebAssembly, and has no `process`, `require`, `fetch` or timers. Values cross
-into the script only as JSON text, so it holds no host-realm objects. This is
-best-effort isolation, not a security boundary. Like `bash`, treat scripts as code
-running with the host's authority. Code mode requires `node:worker_threads` and
-`node:vm` (Node or Bun); platforms such as Cloudflare Workers cannot run it yet.
+An executor decides where scripts run; pass one as `codemode: { executor }`. With
+`codemode: true`, the default `createNodeCodemodeExecutor()` (also exported from
+`tubeless/agent/node`) runs each script in a fresh Node or Bun worker thread with heap
+limits, inside a `node:vm` context. That context disables string code generation
+(`eval`, `Function`) and WebAssembly, and has no `process`, `require`, `fetch` or timers.
+Values cross into the script only as JSON text, so it holds no host-realm objects.
+This is best-effort isolation, not a security boundary. Like `bash`, treat scripts as
+code running with the host's authority. On a runtime without file-based worker
+threads, such as Cloudflare Workers, a script run without an executor fails the run
+with `TUBELESS_AGENT_CODEMODE_UNAVAILABLE`. There, use
+[`createWorkerLoaderCodemodeExecutor`](./deploy-cloudflare.md#code-mode-agents-on-workers).
+
+A custom `CodemodeExecutor` implements `execute(execution, signal)`. It runs
+`execution.code` as an async function body with `tools` and `console`, forwards each
+tool call to `execution.call(name, inputJson)`, and turns the resolved `CodemodeReply`
+JSON into the call's value or a thrown `Error` with `code`. It resolves with the
+script's JSON result text and console lines, or `{ ok: false, message }` for a script
+error, and stops promptly when `signal` aborts. Tubeless keeps the deadline,
+cancellation, budgets, draining and failure classification for every executor. A
+rejection without an aborted signal becomes `CODEMODE_SANDBOX_ERROR`, and calls made
+after a stop receive `CODEMODE_STOPPED`.
 The [code-mode recipe](../examples/agent-codemode.ts) runs a scripted survey
 without credentials.
 

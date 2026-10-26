@@ -19,6 +19,7 @@ import type {
   AgentDecisionContext,
   AgentState,
   Awaitable,
+  CodemodeSetting,
   DefaultAgentToolName,
   Input,
   Output,
@@ -32,7 +33,7 @@ export type RuntimeAgentDefinition<
   Result extends StandardSchemaV1,
   State,
   Registry extends Tools,
-  Codemode extends boolean = boolean,
+  Codemode extends CodemodeSetting = CodemodeSetting,
   Defaults extends DefaultAgentToolName = DefaultAgentToolName,
 > = Omit<
   AgentDefinition<Id, Options, Result, State, Registry, Codemode, Defaults>,
@@ -54,13 +55,24 @@ export type RuntimeAgentDefinition<
   }>;
 };
 
+function validCodemode(setting: unknown): boolean {
+  if (setting === undefined || typeof setting === "boolean") return true;
+  if (setting === null || typeof setting !== "object" || Array.isArray(setting)) return false;
+  const { executor, ...rest } = setting as { executor?: { execute?: unknown } };
+  return (
+    Object.keys(rest).length === 0 &&
+    (executor === undefined ||
+      (executor !== null && typeof executor === "object" && typeof executor.execute === "function"))
+  );
+}
+
 export function compileAgent<
   const Id extends string,
   const Options extends StandardSchemaV1<object, object>,
   const Result extends StandardSchemaV1,
   State,
   const Registry extends Tools = {},
-  const Codemode extends boolean = false,
+  const Codemode extends CodemodeSetting = false,
   const Defaults extends DefaultAgentToolName = DefaultAgentToolName,
 >(
   definition: RuntimeAgentDefinition<Id, Options, Result, State, Registry, Codemode, Defaults>,
@@ -83,12 +95,12 @@ export function compileAgent<
     typeof config.initialState !== "function" ||
     typeof config.decide !== "function" ||
     (config.reduce !== undefined && typeof config.reduce !== "function") ||
-    (config.codemode !== undefined && typeof config.codemode !== "boolean") ||
+    !validCodemode(config.codemode) ||
     (config.dryRun !== undefined && typeof config.dryRun !== "function")
   )
     throw agentError(
       "TUBELESS_AGENT_INVALID_DEFINITION",
-      "Agent requires initialState and decide callbacks, callable reduce/dryRun and a boolean codemode when supplied"
+      "Agent requires initialState and decide callbacks, callable reduce/dryRun, and codemode as a boolean or { executor } when supplied"
     );
   const limits = resolvedLimits(config.limits);
   const resultJsonSchema = jsonDescriptor(
@@ -122,7 +134,16 @@ export function compileAgent<
     })
   );
   const registry: ReadonlyMap<string, CompiledTool> = config.codemode
-    ? new Map([[CODEMODE_TOOL, compileCodemodeTool(config.id, tools)]])
+    ? new Map([
+        [
+          CODEMODE_TOOL,
+          compileCodemodeTool(
+            config.id,
+            tools,
+            typeof config.codemode === "object" ? config.codemode.executor : undefined
+          ),
+        ],
+      ])
     : tools;
   const capabilities = Object.freeze(
     [...registry.values()].map(({ name, description, inputJsonSchema }) =>

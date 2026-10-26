@@ -15,6 +15,12 @@ import type { DurableStorageLike } from "./cloudflare-storage.js";
 import { PIPELINE_RUN_STUDIO_CLIENT } from "./cloudflare-studio-client.js";
 
 export {
+  createWorkerLoaderCodemodeExecutor,
+  type WorkerLoaderCodemodeOptions,
+  type WorkerLoaderLike,
+} from "./cloudflare-codemode.js";
+
+export {
   createR2CacheStore,
   jsonCacheCodec,
   type R2BucketLike,
