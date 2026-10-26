@@ -51,11 +51,36 @@ const cases = [
     id: "nested-guidance",
     task: "Read src/code.txt first, then report its content according to project conventions. Do not edit any files.",
     readOnly: true,
+    expectAnswer: "Scoped code: cobalt",
     files: {
       "src/AGENTS.md": 'Report codes from this directory with the prefix "Scoped code: ".\n',
       "src/code.txt": "cobalt\n",
       "check.mjs":
         'import assert from "node:assert/strict";\nimport { readFileSync } from "node:fs";\nassert.equal(readFileSync("src/code.txt", "utf8"), "cobalt\\n");\nconsole.log("guidance checks passed");\n',
+    },
+  },
+  {
+    // Rewards chaining: each file must be read, but none needs a decision of its own.
+    id: "aggregate-files",
+    task: "Sum the amount field across every JSON file in data/ and report the result exactly as Total: <number>. Do not edit any files.",
+    readOnly: true,
+    expectAnswer: "Total: 1362",
+    files: {
+      "data/item-01.json": JSON.stringify({ id: 1, amount: 20 }) + "\n",
+      "data/item-02.json": JSON.stringify({ id: 2, amount: 37 }) + "\n",
+      "data/item-03.json": JSON.stringify({ id: 3, amount: 54 }) + "\n",
+      "data/item-04.json": JSON.stringify({ id: 4, amount: 71 }) + "\n",
+      "data/item-05.json": JSON.stringify({ id: 5, amount: 88 }) + "\n",
+      "data/item-06.json": JSON.stringify({ id: 6, amount: 105 }) + "\n",
+      "data/item-07.json": JSON.stringify({ id: 7, amount: 122 }) + "\n",
+      "data/item-08.json": JSON.stringify({ id: 8, amount: 139 }) + "\n",
+      "data/item-09.json": JSON.stringify({ id: 9, amount: 156 }) + "\n",
+      "data/item-10.json": JSON.stringify({ id: 10, amount: 173 }) + "\n",
+      "data/item-11.json": JSON.stringify({ id: 11, amount: 190 }) + "\n",
+      "data/item-12.json": JSON.stringify({ id: 12, amount: 207 }) + "\n",
+      "data/README.txt": "Notes only; this file has no amount.\n",
+      "check.mjs":
+        'import assert from "node:assert/strict";\nimport { readdirSync } from "node:fs";\nassert.equal(readdirSync("data").filter((name) => name.endsWith(".json")).length, 12);\nconsole.log("aggregate checks passed");\n',
     },
   },
   {
@@ -181,8 +206,11 @@ for (const fixture of cases) {
           startupGuidanceLoaded,
           "Startup guidance must be included in the first model request"
         );
-      if (fixture.readOnly)
-        assert(answer.includes("Scoped code: cobalt"), "Answer must follow the nested guidance");
+      if (fixture.expectAnswer)
+        assert(
+          answer.includes(fixture.expectAnswer),
+          `Answer must include ${fixture.expectAnswer}`
+        );
       if (fixture.compactAfterBytes)
         assert(compactions > 0, "Conversation must compact and still complete");
     } else {
@@ -212,7 +240,12 @@ for (const fixture of cases) {
           "Startup-guidance task must pass verification without learning from failed checks"
         );
       }
-      if (fixture.readOnly) {
+      if (fixture.expectAnswer)
+        assert(
+          answer.includes(fixture.expectAnswer),
+          `Answer must include ${fixture.expectAnswer}`
+        );
+      if (fixture.id === "nested-guidance") {
         assert(
           calls.every((call) => ["read", "list", "search"].includes(call.tool)),
           "Read-only task must use only read, list, and search tools"
@@ -252,8 +285,7 @@ for (const fixture of cases) {
             `Read of ${path} must successfully return the expected contents`
           );
         }
-        assert(answer.includes("Scoped code: cobalt"), "Answer must follow the nested guidance");
-      } else {
+      } else if (!fixture.readOnly) {
         assert(
           calls.some((call) => call.tool === "edit" || call.tool === "write"),
           "Agent must edit files"
@@ -327,6 +359,7 @@ for (const fixture of cases) {
     outcomes,
     turns,
     compactions,
+    turnCount: turns.length,
     durationMs: Date.now() - started,
   };
   results.push(result);

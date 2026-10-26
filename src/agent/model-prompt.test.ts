@@ -244,5 +244,5 @@ it("selects the workspace prompt with project context and a task-neutral prompt 
   expect(codemode).not.toContain("AGENTS.md");
   expect(
     await modelInstructions("/remote/project", undefined, true, undefined, environment, true)
-  ).toContain("read applicable AGENTS.md files in a script");
+  ).toContain("read applicable AGENTS.md files in one script");
 });

@@ -27,12 +27,17 @@ const sequences = {
     [["edit", {path: "config/current.json", oldText: '"retries":0', newText: '"retries":3'}]],
     [["bash", {command: "node check.mjs"}]],
   ],
+  "aggregate-files": [
+    Array.from({length: 12}, (_, index) => ["read", {path: "data/item-" + String(index + 1).padStart(2, "0") + ".json"}]),
+    [["_finish", {answer: "Total: 1362"}]],
+  ],
   "nested-guidance": [
     [["read", {path: "src/AGENTS.md"}]],
     [["read", {path: "src/code.txt"}]],
     [["_finish", {answer: "Scoped code: cobalt"}]],
   ],
 };
+if (process.env.EVAL_RECOVERY === "aggregate-wrong") sequences["aggregate-files"][1][0][1].answer = "Total: 1360";
 const guidance = sequences["nested-guidance"];
 if (process.env.EVAL_RECOVERY === "guidance-skipped") guidance.shift();
 if (process.env.EVAL_RECOVERY === "guidance-batched") guidance.splice(0, 2, [...guidance[0], ...guidance[1]]);
@@ -118,6 +123,7 @@ const readOnlyError = "Read-only task must use only read, list, and search tools
 const startupError = "Startup-guidance task must access only greet.mjs and run node ../check.mjs";
 it.each([
   ["ordered", undefined, undefined],
+  ["aggregate-wrong", undefined, undefined],
   ["list-root", recoveryError, undefined],
   ["list-config", undefined, undefined],
   ["search", undefined, undefined],
@@ -191,10 +197,26 @@ it.each([
           }
         );
       const guidanceFailure = expectedGuidanceError !== undefined;
-      if (expectedError || guidanceFailure || expectedStartupError) expect(run).toThrow();
+      const aggregateFailure = mode === "aggregate-wrong";
+      if (expectedError || guidanceFailure || expectedStartupError || aggregateFailure)
+        expect(run).toThrow();
       else run();
       const report = JSON.parse(await readFile(reportPath, "utf8"));
-      const [price, project, guidance, recovery] = report.results;
+      const results = Object.fromEntries(
+        report.results.map((result: { id: string }) => [result.id, result])
+      );
+      const price = results["investigate-edit-verify"];
+      const project = results["project-context"];
+      const guidance = results["nested-guidance"];
+      const recovery = results["recover-and-compact"];
+      expect(results["aggregate-files"]).toMatchObject({
+        passed: !aggregateFailure,
+        answer: aggregateFailure ? "Total: 1360" : "Total: 1362",
+        verification: "aggregate checks passed",
+      });
+      expect(results["aggregate-files"].error).toBe(
+        aggregateFailure ? "Answer must include Total: 1362" : undefined
+      );
       expect(price.passed).toBe(true);
       expect(project).toMatchObject({
         passed: expectedStartupError === undefined,
