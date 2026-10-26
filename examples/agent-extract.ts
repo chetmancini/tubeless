@@ -7,7 +7,7 @@ interface Extracted {
   files: string[];
 }
 interface Triage {
-  files: { path: string; kind: "empty" | "short" | "long" }[];
+  files: { path: string; kind: "empty" | "short" | "long" | "unreadable" }[];
 }
 
 const extracted: StandardSchemaV1<Extracted> = {
@@ -46,7 +46,7 @@ const triage: StandardSchemaV1<Triage> = {
               type: "object",
               properties: {
                 path: { type: "string" },
-                kind: { enum: ["empty", "short", "long"] },
+                kind: { enum: ["empty", "short", "long", "unreadable"] },
               },
               required: ["path", "kind"],
               additionalProperties: false,
@@ -73,7 +73,9 @@ const scriptedModel: AgentModel = (request) => {
         kind: "finish",
         result: {
           files: request.outcomes.map((outcome) => {
-            const content = outcome.ok ? (outcome.value as { content: string }).content : "";
+            // A failed read, such as a file over the read tool's 1 MiB limit, is reported as such.
+            if (!outcome.ok) return { path: outcome.id, kind: "unreadable" };
+            const { content } = outcome.value as { content: string };
             const kind = content.trim() === "" ? "empty" : content.length < 80 ? "short" : "long";
             return { path: outcome.id, kind };
           }),
@@ -83,6 +85,9 @@ const scriptedModel: AgentModel = (request) => {
   const paths = request.task
     .split("\n")
     .flatMap((line) => (line.startsWith("- ") ? [line.slice(2)] : []));
+  // An empty batch is not a valid decision: with nothing extracted, finish at once.
+  if (paths.length === 0)
+    return { conversation: null, decision: { kind: "finish", result: { files: [] } } };
   return {
     conversation: null,
     decision: {

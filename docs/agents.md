@@ -611,10 +611,10 @@ work the model doesn't need to see:
 
 - **Loops and aggregation.** Read every file in a listing, filter records or sum
   fields, and return only the total.
-- **Chains through typed outputs.** A script can feed one call's result into the
-  next only when the first tool declares its output schema, including MCP tools with
-  an `outputSchema`. With generic outputs, the model inspects each result in its own
-  turn.
+- **Chains through typed outputs.** An output schema helps the model write reliable
+  chains by showing what each tool returns. This includes MCP tools with an
+  `outputSchema`. Scripts can also chain generic outputs when the model knows their
+  shape; otherwise, it may need a separate turn to inspect the result.
 - **Large inventories.** One `codemode` tool replaces many function descriptors.
   Declarations take about 10 KB per 50 tools, so the 48 KiB budget fits roughly
   200 or more.
