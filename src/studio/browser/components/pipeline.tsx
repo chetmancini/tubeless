@@ -80,7 +80,7 @@ function PipelineGraph({
   const planCommandId = pipeline.command?.canPlan ? pipeline.command.id : undefined;
   const { pipelineId } = pipeline;
   const key = hasDefinition
-    ? `definition:${definitionId ?? "legacy"}`
+    ? JSON.stringify(["definition", pipelineId, definitionId ?? null])
     : planCommandId
       ? `plan:${planCommandId}`
       : "";

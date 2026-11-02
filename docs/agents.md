@@ -117,6 +117,15 @@ conversation carries over. A persisted conversation must come from the same prov
 adapter. Sessions work with typed agents too. `defineAgentLoop` agents own their state
 and have no provider conversation, so they are rejected.
 
+With a [durable agent](#durable-execution), replaying a completed task restores its
+final conversation without repeating model requests, tools, or result validation.
+Use a distinct execution key for each new task. Completed checkpoints written by
+older versions may lack the final conversation: ordinary agent replay still returns
+the saved answer, but session replay rejects with
+`TUBELESS_AGENT_SESSION_CHECKPOINT_INCOMPLETE`. Read that answer outside a session,
+then seed a session from separately persisted conversation for new work; seeding
+alone does not make that older task replayable in a session.
+
 Sessions use the configuration captured by `defineAgent`, including its model,
 tool grants and limits. Changing the original configuration object or its collections
 later does not change the agent or sessions created from it.
@@ -347,6 +356,10 @@ bun /path/to/tubeless/dist/workbench/workbench-bin.js run \
 ```
 
 ### Compatible APIs
+
+Provider requests do not follow redirects. Configure the final API base URL,
+including any gateway path prefix. This keeps credential headers at the
+configured endpoint.
 
 Both adapters work with any server that implements the same protocol: hosted routers,
 inference platforms, self-hosted servers, and gateways. Set `baseUrl` (or
@@ -597,7 +610,8 @@ failures and exited servers are fatal. Cancellation sends
 trusted to change either. The client declares no sampling, roots or elicitation
 capabilities and answers only `ping`. Stdio servers inherit the host environment
 plus `env`, and HTTP headers are sent as given: each server is a separate
-authority outside `AgentEnvironment`.
+authority outside `AgentEnvironment`. HTTP requests, including session termination,
+do not follow redirects; configure the server's final endpoint URL.
 
 ## Code mode
 
