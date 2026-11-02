@@ -69,6 +69,7 @@ export async function providerRequest(
   throwIfAborted(signal, `${provider} request`);
   const response = await fetch(url, {
     method: "POST",
+    redirect: "manual",
     headers: { ...headers, "Content-Type": "application/json" },
     signal,
     body,

@@ -95,6 +95,7 @@ export function httpTransport(
       if (lifetime.signal.aborted) throw new Error(`MCP server ${label} is closed`);
       const response = await fetch(url, {
         method: "POST",
+        redirect: "manual",
         headers: headers(),
         body: JSON.stringify(message),
         signal: AbortSignal.any([signal, lifetime.signal]),
@@ -124,6 +125,7 @@ export function httpTransport(
         // Servers may refuse explicit termination with 405; the session then expires on its own.
         await fetch(url, {
           method: "DELETE",
+          redirect: "manual",
           headers: headers(),
           signal: AbortSignal.timeout(5_000),
         })

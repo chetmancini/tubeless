@@ -348,6 +348,10 @@ bun /path/to/tubeless/dist/workbench/workbench-bin.js run \
 
 ### Compatible APIs
 
+Provider requests do not follow redirects. Configure the final API base URL,
+including any gateway path prefix. This keeps credential headers at the
+configured endpoint.
+
 Both adapters work with any server that implements the same protocol: hosted routers,
 inference platforms, self-hosted servers, and gateways. Set `baseUrl` (or
 `OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL`), the provider's credential, and the
@@ -597,7 +601,8 @@ failures and exited servers are fatal. Cancellation sends
 trusted to change either. The client declares no sampling, roots or elicitation
 capabilities and answers only `ping`. Stdio servers inherit the host environment
 plus `env`, and HTTP headers are sent as given: each server is a separate
-authority outside `AgentEnvironment`.
+authority outside `AgentEnvironment`. HTTP requests, including session termination,
+do not follow redirects; configure the server's final endpoint URL.
 
 ## Code mode
 
