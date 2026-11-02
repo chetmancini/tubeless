@@ -42,6 +42,8 @@ export type RuntimeAgentDefinition<
 > & {
   /** A model's provider check, run once the model-facing descriptors are compiled. */
   readonly checkDescriptors?: AgentModel["checkDescriptors"];
+  /** Restore a model session from an acknowledged finish snapshot without another decision. */
+  readonly onCompletedReplay?: (state: AgentState<State>) => void;
   decide(
     state: AgentState<State>,
     context: AgentDecisionContext<Output<Options>>

@@ -188,6 +188,7 @@ function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
       checkDescriptors: model.checkDescriptors,
       inputSchema: config.inputSchema ?? taskInput,
       resultSchema: config.resultSchema ?? answer,
+      onCompletedReplay: session && ((state) => session.observe(state.conversation)),
       initialState: (options): ModelState => {
         describe(options);
         return { conversation: session?.seed() ?? null, outcomes: [] };

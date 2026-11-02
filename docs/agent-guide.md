@@ -517,7 +517,10 @@ read when a pipeline needs them.
   decisions, outcomes, child state and budgets. Live children that inherit recovery
   also require an explicit `implementationVersion`; bump it when their semantics
   change. Reuse the key and inputs to resume;
-  use a new key for changed semantics. See [durable execution](./agents.md#durable-execution)
+  use a new key for changed semantics. Completed model-agent replay restores a session's
+  final conversation without another model request; use a distinct key for new chat
+  tasks. Older completed checkpoints without final context remain replayable outside
+  sessions; resume new work from separately persisted conversation instead. See [durable execution](./agents.md#durable-execution)
   and the [SQLite recipe](../examples/agent-durable.ts). Running unsafe calls become
   recoverable interruption outcomes; mark only repeatable or idempotent tools
   `replay: "safe"`.

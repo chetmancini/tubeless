@@ -31,6 +31,7 @@ export async function runAgentInvocation<Options extends object, State>(
     environment?: AgentEnvironmentProvider;
     durability?: AgentDurability<Options>;
     initialState(options: Options): State;
+    onCompletedReplay?(state: AgentState<State>): void;
     limits: Required<AgentLimits>;
     resolveCwd: boolean;
     definition: PipelineDefinitionSnapshot;
@@ -100,7 +101,18 @@ export async function runAgentInvocation<Options extends object, State>(
         { depth: scope.depth, limits: config.limits },
         () => initialAgentExecution(() => config.initialState(context.options))
       );
-      if (saved.phase === "completed") return saved.result;
+      if (saved.phase === "completed") {
+        if (config.onCompletedReplay) {
+          if (!saved.completedState)
+            throw agentError(
+              "TUBELESS_AGENT_SESSION_CHECKPOINT_INCOMPLETE",
+              "This completed checkpoint has no final conversation; replay its answer outside a session, then restore separately persisted conversation for a new task"
+            );
+          // SAFETY: recovery matched the owning definition before restoring its state.
+          config.onCompletedReplay(ownState(saved.completedState.state) as AgentState<State>);
+        }
+        return saved.result;
+      }
       if (saved.phase === "failed") throw agentError(saved.failure.code, saved.failure.message);
     }
     try {

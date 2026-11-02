@@ -1,6 +1,9 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   createAgentSession,
+  createMemoryAgentCheckpointStore,
+  plainAgentCheckpointCodec,
+  type AgentCheckpointStore,
   defineAgent,
   defineAgentLoop,
   defineTool,
@@ -8,9 +11,10 @@ import {
   type AgentModel,
   type AgentModelRequest,
 } from "./agent.js";
-import { emptyInput, textSchema } from "./agent.test-support.js";
+import { emptyInput, textSchema, schema } from "./agent.test-support.js";
 import { toolObject } from "./default-tool-schema.js";
 import { remote } from "./environment.test-support.js";
+import type { Checkpoint } from "./checkpoint-format.js";
 import { wireArray, wireString } from "../tracing/wire-schema.js";
 
 /** A provider that appends each task, and fails tasks named "fail", recording what it saw. */
@@ -32,6 +36,253 @@ const agent = (model: AgentModel) =>
   defineAgent({ id: "chat", projectContext: false, environment: remote(), model });
 
 describe("agent sessions", () => {
+  it("restores a completed durable conversation without replaying the model or finish transform", async () => {
+    const { model, requests } = chatModel();
+    let transforms = 0;
+    const chat = defineAgent({
+      id: "durable-chat",
+      model,
+      projectContext: false,
+      environment: remote(),
+      defaultTools: [],
+      implementationVersion: "v1",
+      durability: { store: createMemoryAgentCheckpointStore(), key: ({ task }) => task },
+      resultSchema: schema<{ answer: string }>((value) => {
+        transforms++;
+        return { value: value as { answer: string } };
+      }),
+    });
+    const original = createAgentSession(chat);
+    expect(await original.runOrThrow({ task: "first" })).toEqual({ answer: "first" });
+    const replay = createAgentSession(chat);
+    expect(await replay.runOrThrow({ task: "first" })).toEqual({ answer: "first" });
+    expect(requests).toHaveLength(1);
+    expect(transforms).toBe(1);
+    expect(replay.conversation).toEqual(["first"]);
+    expect(Object.isFrozen(replay.conversation)).toBe(true);
+    expect(await replay.runOrThrow({ task: "second" })).toEqual({ answer: "first > second" });
+    expect(requests[1]!.conversation).toEqual(["first"]);
+  });
+
+  it.each([undefined, null])(
+    "restores an empty durable finish conversation: %s",
+    async (conversation) => {
+      const requests: AgentModelRequest[] = [];
+      const chat = defineAgent({
+        id: "empty-finish",
+        projectContext: false,
+        environment: remote(),
+        defaultTools: [],
+        implementationVersion: "v1",
+        durability: { store: createMemoryAgentCheckpointStore(), key: ({ task }) => task },
+        model: (request) => {
+          requests.push(request);
+          return { decision: { kind: "finish", result: { answer: request.task } }, conversation };
+        },
+      });
+      await chat.runOrThrow({ task: "first" });
+      const session = createAgentSession(chat, { conversation: ["stale"] });
+      await session.runOrThrow({ task: "first" });
+      expect(session.conversation).toBeNull();
+      await session.runOrThrow({ task: "second" });
+      expect(requests).toHaveLength(2);
+      expect(requests[1]!.conversation).toBeNull();
+    }
+  );
+
+  it("restores the finish response after tool turns without repeating tools", async () => {
+    let calls = 0;
+    let decisions = 0;
+    const chat = defineAgent({
+      id: "tool-finish",
+      projectContext: false,
+      environment: remote(),
+      defaultTools: [],
+      implementationVersion: "v1",
+      durability: { store: createMemoryAgentCheckpointStore(), key: "task" },
+      tools: {
+        probe: defineTool({
+          description: "Probe",
+          inputSchema: emptyInput,
+          outputSchema: textSchema,
+          run: () => {
+            calls++;
+            return "observed";
+          },
+        }),
+      },
+      model: (_request, context) => {
+        decisions++;
+        return context.turn === 1
+          ? {
+              decision: { kind: "continue", calls: [{ id: "probe", tool: "probe", input: {} }] },
+              conversation: ["before-finish"],
+            }
+          : { decision: { kind: "finish", result: { answer: "done" } }, conversation: ["final"] };
+      },
+    });
+    await chat.runOrThrow({ task: "first" });
+    const session = createAgentSession(chat);
+    expect(await session.runOrThrow({ task: "first" })).toEqual({ answer: "done" });
+    expect(session.conversation).toEqual(["final"]);
+    expect(decisions).toBe(2);
+    expect(calls).toBe(1);
+  });
+
+  it("keeps legacy result replay but rejects session replay without the final conversation", async () => {
+    const base = createMemoryAgentCheckpointStore();
+    let legacy = false;
+    const store: AgentCheckpointStore = {
+      acquire: async (key) => {
+        const lease = await base.acquire(key);
+        return {
+          ...lease,
+          read: async () => {
+            const bytes = await lease.read();
+            if (!legacy || bytes === undefined) return bytes;
+            const checkpoint = plainAgentCheckpointCodec.decode(bytes) as Checkpoint;
+            for (const saved of Object.values(checkpoint.agents))
+              if (saved.phase === "completed") delete saved.completedState;
+            return plainAgentCheckpointCodec.encode(checkpoint);
+          },
+        };
+      },
+    };
+    const { model, requests } = chatModel();
+    const chat = defineAgent({
+      id: "legacy",
+      model,
+      projectContext: false,
+      environment: remote(),
+      defaultTools: [],
+      implementationVersion: "v1",
+      durability: { store, key: "task" },
+    });
+    await chat.runOrThrow({ task: "first" });
+    legacy = true;
+    expect(await chat.runOrThrow({ task: "first" })).toEqual({ answer: "first" });
+    const session = createAgentSession(chat, { conversation: ["preserved"] });
+    await expect(session.runOrThrow({ task: "first" })).rejects.toThrow("no final conversation");
+    expect(session.conversation).toEqual(["preserved"]);
+    expect(await chat.runOrThrow({ task: "first" })).toEqual({ answer: "first" });
+    expect(requests).toHaveLength(1);
+  });
+
+  it("does not revive a durable conversation cleared during checkpoint loading", async () => {
+    const base = createMemoryAgentCheckpointStore();
+    let paused = false;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const store: AgentCheckpointStore = {
+      acquire: async (key) => {
+        const lease = await base.acquire(key);
+        return {
+          ...lease,
+          read: async () => {
+            if (paused) await gate;
+            return lease.read();
+          },
+        };
+      },
+    };
+    const { model } = chatModel();
+    const chat = defineAgent({
+      id: "clear-replay",
+      model,
+      projectContext: false,
+      environment: remote(),
+      defaultTools: [],
+      implementationVersion: "v1",
+      durability: { store, key: "task" },
+    });
+    await chat.runOrThrow({ task: "first" });
+    const session = createAgentSession(chat);
+    paused = true;
+    const running = session.run({ task: "first" });
+    session.clear();
+    release();
+    expect((await running).status).toBe("completed");
+    expect(session.conversation).toBeNull();
+  });
+
+  it("does not commit an invalid durable finish result", async () => {
+    const session = createAgentSession(
+      defineAgent({
+        id: "invalid-finish",
+        projectContext: false,
+        environment: remote(),
+        defaultTools: [],
+        implementationVersion: "v1",
+        durability: { store: createMemoryAgentCheckpointStore(), key: "task" },
+        model: () => ({
+          decision: { kind: "finish", result: { answer: 123 } },
+          conversation: ["invalid"],
+        }),
+      }),
+      { conversation: ["preserved"] }
+    );
+    expect((await session.run({ task: "first" })).status).toBe("failed");
+    expect(session.conversation).toEqual(["preserved"]);
+  });
+
+  it("keeps context when durable completion cannot be acknowledged", async () => {
+    const base = createMemoryAgentCheckpointStore();
+    const store: AgentCheckpointStore = {
+      acquire: async (key) => {
+        const lease = await base.acquire(key);
+        return {
+          ...lease,
+          write: async (bytes) => {
+            const checkpoint = plainAgentCheckpointCodec.decode(bytes) as Checkpoint;
+            if (Object.values(checkpoint.agents).some((saved) => saved.phase === "completed"))
+              throw new Error("completion storage failed");
+            await lease.write(bytes);
+          },
+        };
+      },
+    };
+    const session = createAgentSession(
+      defineAgent({
+        id: "unacknowledged-finish",
+        model: chatModel().model,
+        projectContext: false,
+        environment: remote(),
+        defaultTools: [],
+        implementationVersion: "v1",
+        durability: { store, key: "task" },
+      }),
+      { conversation: ["preserved"] }
+    );
+    await expect(session.runOrThrow({ task: "first" })).rejects.toThrow(
+      "completion storage failed"
+    );
+    expect(session.conversation).toEqual(["preserved"]);
+  });
+
+  it("keeps prior context for dry and already cancelled durable runs", async () => {
+    const { model, requests } = chatModel();
+    const chat = defineAgent({
+      id: "preview-chat",
+      model,
+      projectContext: false,
+      environment: remote(),
+      defaultTools: [],
+      implementationVersion: "v1",
+      durability: { store: createMemoryAgentCheckpointStore(), key: ({ task }) => task },
+    });
+    const session = createAgentSession(chat, { conversation: ["preserved"] });
+    expect((await session.run({ task: "dry" }, { dryRun: true })).finalized).toBe(false);
+    const controller = new AbortController();
+    controller.abort();
+    expect(
+      (await session.run({ task: "cancelled" }, undefined, { signal: controller.signal })).status
+    ).toBe("cancelled");
+    expect(requests).toHaveLength(0);
+    expect(session.conversation).toEqual(["preserved"]);
+  });
+
   it("continues one conversation across prompts and keeps it after failures", async () => {
     const { model, requests } = chatModel();
     const session = createAgentSession(agent(model));

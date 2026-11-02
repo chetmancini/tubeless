@@ -211,7 +211,7 @@ export class AgentCheckpointSession {
       checkpoint.agents[key] = { metadata: saved.metadata, execution, phase: "decide" };
     });
   }
-  finish(key: string, result: unknown): Promise<void> {
+  finish(key: string, result: unknown, completedState: { state: unknown }): Promise<void> {
     return this.update((checkpoint) => {
       const saved = checkpoint.agents[key];
       if (!saved || saved.phase !== "decide")
@@ -221,6 +221,7 @@ export class AgentCheckpointSession {
         execution: saved.execution,
         phase: "completed",
         result,
+        completedState,
       };
     });
   }

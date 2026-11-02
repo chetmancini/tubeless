@@ -39,7 +39,13 @@ export type SavedAgent = AgentSnapshot &
   (
     | { phase: "decide"; decision?: never; result?: never; failure?: never }
     | { phase: "calls"; decision: SavedDecision; result?: never; failure?: never }
-    | { phase: "completed"; result: unknown; decision?: never; failure?: never }
+    | {
+        phase: "completed";
+        result: unknown;
+        completedState?: { state: unknown };
+        decision?: never;
+        failure?: never;
+      }
     | {
         phase: "failed";
         failure: { code: string; message: string };
@@ -128,6 +134,12 @@ function checkAgent(agent: unknown): void {
     throw new Error("Invalid saved agent execution");
   if (agent.phase === "completed" && !Object.hasOwn(agent, "result"))
     throw new Error("Missing saved agent result");
+  if (
+    agent.phase === "completed" &&
+    agent.completedState !== undefined &&
+    (!record(agent.completedState) || !Object.hasOwn(agent.completedState, "state"))
+  )
+    throw new Error("Invalid saved completed state");
   if (agent.phase === "failed" && !failure(agent.failure))
     throw new Error("Invalid saved agent failure");
   if (agent.phase === "calls") {

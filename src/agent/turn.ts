@@ -101,7 +101,7 @@ export function createAgentTurn<
           "Agent finish result"
         );
         throwIfAborted(context.signal, "Agent finish");
-        await scope.journal?.finish(scope.agentKey, result);
+        await scope.journal?.finish(scope.agentKey, result, { state: ownState(response.state) });
         return { kind: "finish", result };
       }
       if (turn === limits.maxTurns) limit("maxTurns", limits.maxTurns, turn, 1, agentRunId);
