@@ -28,6 +28,22 @@ function database() {
 }
 
 describe("shared run-store SQL", () => {
+  it.each(["", "ordinary", undefined])("round-trips optional item key %j", (itemKey) => {
+    const db = database();
+    try {
+      const event = { ...started, ...(itemKey === undefined ? {} : { itemKey }) };
+      db.prepare(RUN_EVENT_INSERT_SQL).run(...runEventRow(event));
+      const rows = db
+        .prepare("SELECT * FROM pipeline_run_events")
+        .all() as unknown as RunEventRecord[];
+      const decoded = storedRunEvent(rows[0]!);
+      expect(decoded.itemKey).toBe(itemKey);
+      expect(Object.hasOwn(decoded, "itemKey")).toBe(itemKey !== undefined);
+    } finally {
+      db.close();
+    }
+  });
+
   it("round-trips an event through each statement individually", () => {
     const db = database();
     db.prepare(RUN_EVENT_INSERT_SQL).run(...runEventRow(started));

@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import type { PipelineRunEventQuery, StoredPipelineEvent } from "./run-store.js";
-import { projectPipelineRun } from "./run-store.js";
+import { createRunHistoryIndex, summarizeRun } from "./run-history.js";
+import { projectPipelineRunStore, projectPipelineRun } from "./run-store.js";
 import { openNdjsonPipelineRunStore } from "./run-store-ndjson.js";
 import { openSqlitePipelineRunStore } from "./run-store-sqlite.js";
 import { readPipelineEventPages, readPipelineRunTree } from "./run-store-reader.js";
@@ -59,6 +60,41 @@ async function fixture(source: Source, events: PipelineTraceEvent[]) {
 }
 
 describe.each(sources)("%s subtree reads", (source) => {
+  it("preserves empty fan-out keys from recorded parent/child event fixtures", async () => {
+    const events: PipelineTraceEvent[] = [
+      started("root", undefined, "parent"),
+      {
+        version: 2,
+        pipelineId: "parent",
+        runId: "root",
+        timestampMs: 0,
+        name: "step.planned",
+        stepId: "items",
+        payload: {
+          dependencies: [],
+          optionalDependencies: [],
+          skipAfterFailureOf: [],
+          dryRun: "run",
+          runtimeSkipPossible: false,
+          selected: true,
+          selectionReasons: [],
+          nestedPipeline: { mode: "for-each", pipelineId: "item", stepCount: 0, stepIds: [] },
+        },
+      },
+      { ...started("child", "root", "item"), itemKey: "" },
+    ];
+    const { reader } = await fixture(source, events);
+    try {
+      const runs = projectPipelineRunStore(await reader.listEvents()).runs;
+      const nested = runs.find((run) => run.pipelineId === "item")!;
+      const index = createRunHistoryIndex(runs);
+      expect(nested.itemKey).toBe("");
+      expect(summarizeRun(nested, index).origin).toEqual({ stepId: "items", itemKey: "" });
+    } finally {
+      await reader.close();
+    }
+  });
+
   it("pages across interleaved runs and cycles without pruning links or changing the artifact", async () => {
     const events = [
       started("root", "grandchild"),

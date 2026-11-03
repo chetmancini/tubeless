@@ -128,7 +128,7 @@ export function storedRunEvent(row: RunEventRecord): StoredPipelineEvent {
   if (row.correlation_id != null) encoded.correlationId = row.correlation_id;
   if (row.duration_ms !== null) encoded.durationMs = Number(row.duration_ms);
   if (row.error_json) encoded.error = JSON.parse(row.error_json);
-  if (row.item_key) encoded.itemKey = row.item_key;
+  if (row.item_key != null) encoded.itemKey = row.item_key;
   if (row.iteration_json) encoded.iteration = JSON.parse(row.iteration_json);
   if (row.parent_run_id) encoded.parentRunId = row.parent_run_id;
   if (row.step_id) encoded.stepId = row.step_id;
