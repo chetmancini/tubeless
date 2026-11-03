@@ -1,4 +1,5 @@
 import { CliHelpRequested, CliValidationError } from "../cli/cli.js";
+import { throwIfAborted } from "../utilities/abort.js";
 import type { PipelineContext } from "../core/pipeline.js";
 import {
   executeHostedCommandOperation,
@@ -19,7 +20,14 @@ export async function executePipelineCommand(
       const parsed = command.parse(args, hostedCommandContext(io, signal));
       if (parsed.kind === "help") throw new CliHelpRequested(parsed.helpText);
       if (parsed.kind === "error") throw new CliValidationError(parsed.errors, parsed.helpText);
-      const pipelineContext = await prepareContext?.();
+      throwIfAborted(signal, "Run recording setup");
+      let pipelineContext: Omit<PipelineContext, "cwd" | "log" | "signal"> | undefined;
+      try {
+        pipelineContext = await prepareContext?.();
+      } catch (error) {
+        throwIfAborted(signal, "Run recording setup");
+        throw error;
+      }
       await command.execute(parsed.values, hostedCommandContext(io, signal, pipelineContext));
     },
     io,

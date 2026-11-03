@@ -124,6 +124,30 @@ describe("runCommand", () => {
     }
   );
 
+  it.each([new Error("custom cancellation"), "custom cancellation"])(
+    "classifies recording setup cancellation for reason %s",
+    async (reason) => {
+      const { directory } = await writeCommandFixture();
+      const controller = new AbortController();
+      controller.abort(reason);
+      const io = { ...captureIo(directory), signal: controller.signal };
+      expect(
+        await runCommand(
+          [
+            "--trace",
+            path.join(directory, "trace.ndjson"),
+            "pipeline.mjs",
+            "--",
+            "--message",
+            "hello",
+          ],
+          io
+        )
+      ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
+      expect(io.output.join("") + io.errors.join("")).not.toContain("worked:");
+    }
+  );
+
   it("keeps application help off trace stdout", async () => {
     const { directory } = await writeCommandFixture();
     const io = captureIo(directory);
