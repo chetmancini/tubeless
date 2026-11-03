@@ -1,4 +1,4 @@
-import { PartialPipelineTraceExporterError } from "./trace-exporter-error.js";
+import { formatExporterError, PartialPipelineTraceExporterError } from "./trace-exporter-error.js";
 import type { PipelineTraceExporter } from "./tracing-contracts.js";
 
 export type { PipelineTraceEvent, PipelineTraceExporter } from "./tracing-contracts.js";
@@ -39,7 +39,7 @@ export function composeTraceExporters(
       if (succeeded > 0) {
         throw new PartialPipelineTraceExporterError({
           error: roundError,
-          message: roundError instanceof Error ? roundError.message : String(roundError),
+          message: formatExporterError(roundError),
         });
       }
       throw roundError;

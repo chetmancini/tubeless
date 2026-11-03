@@ -28,7 +28,10 @@ import {
   PIPELINE_TRACE_STRING_LIMIT,
   PIPELINE_TRACE_VERSION,
 } from "./tracing-constants.js";
-import { PARTIAL_PIPELINE_TRACE_EXPORTER_ERROR } from "./trace-exporter-error.js";
+import {
+  formatExporterError,
+  PARTIAL_PIPELINE_TRACE_EXPORTER_ERROR,
+} from "./trace-exporter-error.js";
 
 // Oversized definitions keep their full identity; never fingerprint a truncated graph.
 function traceDefinition(plan: PipelinePlan) {
@@ -176,10 +179,17 @@ function elapsedMs(record: { finishedAtMs: number; startedAtMs?: number }): numb
   return record.startedAtMs === undefined ? undefined : record.finishedAtMs - record.startedAtMs;
 }
 
-function isPartialExporterError(error: unknown): error is { readonly exporterError: unknown } {
-  if (typeof error !== "object" || error === null || !("exporterError" in error)) return false;
-  const marker = Object.getOwnPropertyDescriptor(error, PARTIAL_PIPELINE_TRACE_EXPORTER_ERROR);
-  return marker !== undefined && "value" in marker && marker.value === true;
+function partialExporterFailure(error: unknown): { readonly exporterError: unknown } | undefined {
+  try {
+    if (typeof error !== "object" || error === null) return undefined;
+    const marker = Object.getOwnPropertyDescriptor(error, PARTIAL_PIPELINE_TRACE_EXPORTER_ERROR);
+    const failure = Object.getOwnPropertyDescriptor(error, "exporterError");
+    if (marker?.value === true && failure && "value" in failure)
+      return { exporterError: failure.value };
+  } catch {
+    // Exporters can throw proxies whose inspection traps fail too.
+  }
+  return undefined;
 }
 
 function formatLogValue(value: unknown): string {
@@ -213,9 +223,6 @@ export function createPipelineTraceEmitter(
   let queue = Promise.resolve();
   let sawExporterError = false;
   let stopExporting = false;
-
-  const formatExporterError = (error: unknown): string =>
-    error instanceof Error ? error.message : String(error);
 
   const warnCallbackError = (callbackError: unknown): void => {
     log.warn(`Pipeline trace onExporterError failed: ${formatExporterError(callbackError)}`);
@@ -256,8 +263,8 @@ export function createPipelineTraceEmitter(
         return options.exporter.export(event);
       })
       .catch((error) => {
-        const partial = isPartialExporterError(error);
-        const exporterError = partial ? error.exporterError : error;
+        const partial = partialExporterFailure(error);
+        const exporterError = partial ? partial.exporterError : error;
         captureExporterError(
           exporterError,
           partial
@@ -461,8 +468,8 @@ export function createPipelineTraceEmitter(
       try {
         await options.exporter.flush?.();
       } catch (error) {
-        const partial = isPartialExporterError(error);
-        const exporterError = partial ? error.exporterError : error;
+        const partial = partialExporterFailure(error);
+        const exporterError = partial ? partial.exporterError : error;
         captureExporterError(
           exporterError,
           partial

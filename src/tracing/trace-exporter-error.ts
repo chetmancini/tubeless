@@ -18,3 +18,13 @@ export class PartialPipelineTraceExporterError extends Error {
     Object.defineProperty(this, PARTIAL_PIPELINE_TRACE_EXPORTER_ERROR, { value: true });
   }
 }
+
+/** Format unknown exporter failures without allowing diagnostics to become failures. */
+export function formatExporterError(error: unknown): string {
+  try {
+    const message = error instanceof Error ? error.message : error;
+    return String(message);
+  } catch {
+    return "[unprintable error]";
+  }
+}

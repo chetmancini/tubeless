@@ -243,6 +243,170 @@ describe("pipeline tracing", () => {
     expect(flush).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ["null-prototype record", () => Object.create(null)],
+    [
+      "throwing coercion",
+      () => ({
+        [Symbol.toPrimitive]() {
+          throw new Error("coercion failed");
+        },
+      }),
+    ],
+    [
+      "throwing message getter",
+      () =>
+        Object.defineProperty(new Error(), "message", {
+          get() {
+            throw new Error("message failed");
+          },
+        }),
+    ],
+    [
+      "throwing proxy traps",
+      () =>
+        new Proxy(
+          {},
+          {
+            get() {
+              throw new Error("get failed");
+            },
+            has() {
+              throw new Error("has failed");
+            },
+            getOwnPropertyDescriptor() {
+              throw new Error("descriptor failed");
+            },
+          }
+        ),
+    ],
+  ])("isolates an unprintable final-event failure: %s", async (_label, createFailure) => {
+    const { step } = createSteps();
+    const pipeline = definePipeline({
+      id: "trace-unprintable",
+      steps: [step("work", { run: () => 42 })],
+    });
+    const failure = createFailure();
+    const log = createLogger();
+    const onExporterError = vi.fn();
+    const result = await pipeline.run({}, undefined, {
+      log,
+      tracing: {
+        exporter: {
+          export(event) {
+            if (event.name === "pipeline.completed") throw failure;
+          },
+        },
+        onExporterError,
+      },
+    });
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe(42);
+    expect(log.warnings).toEqual([expect.stringContaining("[unprintable error]")]);
+    expect(onExporterError).toHaveBeenCalledOnce();
+    expect(onExporterError.mock.calls[0]![0]).toBe(failure);
+  });
+
+  it("isolates an unprintable flush failure", async () => {
+    const { step } = createSteps();
+    const pipeline = definePipeline({
+      id: "trace-unprintable-flush",
+      steps: [step("work", { run: () => 42 })],
+    });
+    const failure = Object.create(null);
+    const log = createLogger();
+    const onExporterError = vi.fn();
+    const result = await pipeline.run({}, undefined, {
+      log,
+      tracing: {
+        exporter: {
+          export() {},
+          flush() {
+            throw failure;
+          },
+        },
+        onExporterError,
+      },
+    });
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe(42);
+    expect(log.warnings).toEqual([expect.stringContaining("flush failed: [unprintable error]")]);
+    expect(onExporterError).toHaveBeenCalledOnce();
+    expect(onExporterError.mock.calls[0]![0]).toBe(failure);
+  });
+
+  it.each([false, true])(
+    "isolates an unprintable callback failure (async: %s)",
+    async (asyncCallback) => {
+      const { step } = createSteps();
+      const pipeline = definePipeline({
+        id: "trace-unprintable-callback",
+        steps: [step("work", { run: () => 42 })],
+      });
+      const failure = Object.create(null);
+      const log = createLogger();
+      const onExporterError = vi.fn(() => {
+        if (asyncCallback) return Promise.reject(failure);
+        throw failure;
+      });
+      const result = await pipeline.run({}, undefined, {
+        log,
+        tracing: {
+          exporter: {
+            export() {
+              throw new Error("collector unavailable");
+            },
+          },
+          onExporterError,
+        },
+      });
+      expect(result.status).toBe("completed");
+      expect(result.value).toBe(42);
+      expect(onExporterError).toHaveBeenCalledOnce();
+      expect(log.warnings).toContain("Pipeline trace onExporterError failed: [unprintable error]");
+    }
+  );
+
+  it("keeps healthy exporters after an unprintable partial failure", async () => {
+    const { step } = createSteps();
+    const pipeline = definePipeline({
+      id: "trace-unprintable-partial",
+      steps: [step("work", { run: () => 42 })],
+    });
+    const failure = Object.create(null);
+    const events: PipelineTraceEvent[] = [];
+    const failed = {
+      export: vi.fn(() => {
+        throw failure;
+      }),
+    };
+    const onExporterError = vi.fn();
+    const log = createLogger();
+    const result = await pipeline.run({}, undefined, {
+      log,
+      tracing: {
+        exporter: composeTraceExporters([
+          failed,
+          {
+            export: (event) => {
+              events.push(event);
+            },
+          },
+        ]),
+        onExporterError,
+      },
+    });
+    expect(result.status).toBe("completed");
+    expect(result.value).toBe(42);
+    expect(failed.export).toHaveBeenCalledOnce();
+    expect(onExporterError).toHaveBeenCalledOnce();
+    expect(onExporterError.mock.calls[0]![0]).toBe(failure);
+    expect(events.at(-1)?.name).toBe("pipeline.completed");
+    expect(log.warnings).toEqual([
+      expect.stringContaining("healthy exporters continue: [unprintable error]"),
+    ]);
+  });
+
   it("isolates exporter failures and still completes the pipeline", async () => {
     const { step } = createSteps();
     const pipeline = definePipeline({
