@@ -714,7 +714,7 @@ export function assertValidPositionals(
   let sawOptional = false;
   for (let index = 0; index < positionals.length; index++) {
     const key = positionals[index]!;
-    const param = schema[key];
+    const param = Object.hasOwn(schema, key) ? schema[key] : undefined;
     if (!param) {
       throw new Error(`Unknown positional parameter "${key}"; it must be declared in params.`);
     }

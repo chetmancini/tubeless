@@ -4,6 +4,15 @@ import { renderPipelinePlan } from "../render/render.js";
 import { defineCommand, definePipelineCommand } from "./cli.js";
 
 describe("defineCommand: aliases, positionals, and environment fallbacks", () => {
+  it.each(["constructor", "toString", "__proto__"])(
+    "rejects inherited positional schema key %s",
+    (key) => {
+      expect(() =>
+        defineCommand({ params: {}, positionals: [key as never], run: () => undefined })
+      ).toThrow(`Unknown positional parameter "${key}"`);
+    }
+  );
+
   it("supports short aliases and includes them in generated help", () => {
     const command = defineCommand({
       params: {

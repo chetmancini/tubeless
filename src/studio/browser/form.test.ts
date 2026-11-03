@@ -27,6 +27,23 @@ function command(parameters: readonly CliParameterDescriptor[]): PipelineRunStud
 }
 
 describe("Studio form serialization", () => {
+  it.each([
+    ["scalar", parameter("__proto__"), ["provided"], "provided"],
+    ["boolean", parameter("__proto__", { type: "boolean", default: false }), [true], true],
+    ["repeatable", parameter("__proto__", { multiple: true }), ["one", "two"], ["one", "two"]],
+  ] as const)(
+    "preserves an own __proto__ %s value in launch JSON",
+    (_name, descriptor, input, expected) => {
+      const values = serializeLaunchValues(command([descriptor]), () => input);
+      expect(Object.hasOwn(values, "__proto__")).toBe(true);
+      expect(values["__proto__"]).toEqual(expected);
+      expect(Object.getPrototypeOf(values)).toBe(Object.prototype);
+      const decoded: Record<string, unknown> = JSON.parse(JSON.stringify(values));
+      expect(Object.hasOwn(decoded, "__proto__")).toBe(true);
+      expect(decoded["__proto__"]).toEqual(expected);
+    }
+  );
+
   it("starts multiple-choice controls with no selected values", () => {
     const parameters = [
       parameter("stepIds", { choices: ["load", "publish"], multiple: true }),

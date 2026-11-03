@@ -36,20 +36,27 @@ export function serializeLaunchValues(
   const values: PipelineRunStudioLaunchRequest["values"] = {};
   command.parameters.forEach((parameter, index) => {
     const parameterValue = readValues(parameter, index);
+    let value: PipelineRunStudioLaunchRequest["values"][string];
     if (parameter.type === "boolean") {
       const checked = parameterValue[0];
-      if (checked !== Boolean(parameter.default)) values[parameter.key] = checked;
-      return;
-    }
-    if (parameter.multiple) {
-      values[parameter.key] =
+      if (checked === Boolean(parameter.default)) return;
+      value = checked;
+    } else if (parameter.multiple) {
+      value =
         parameter.type === "number"
           ? parameterValue.filter((value): value is number => typeof value === "number")
           : parameterValue.filter((value): value is string => typeof value === "string");
-      return;
+    } else {
+      const single = parameterValue[0];
+      if (single === "" || single === undefined) return;
+      value = single;
     }
-    const single = parameterValue[0];
-    if (single !== "" && single !== undefined) values[parameter.key] = single;
+    Object.defineProperty(values, parameter.key, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   });
   return values;
 }

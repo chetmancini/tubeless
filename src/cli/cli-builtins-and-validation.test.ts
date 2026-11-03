@@ -39,6 +39,36 @@ describe("defineCommand: built-in --dry-run", () => {
     });
   });
 
+  it.each(["constructor", "toString", "__proto__"])(
+    "matches argv omission and supplied values for own structured key %s",
+    (key) => {
+      for (const fallback of ["optional", "default", "environment"] as const) {
+        const param = {
+          type: "string" as const,
+          optional: true,
+          ...(fallback === "default" ? { default: "fallback" } : {}),
+          ...(fallback === "environment" ? { env: "FIXTURE_VALUE" } : {}),
+        };
+        const command = defineCommand({
+          params: Object.fromEntries([[key, param]]),
+          run: (values) => values,
+        });
+        const context = { env: { FIXTURE_VALUE: "environment" } };
+        expect(command.parseValues({}, context)).toEqual(command.parse([], context));
+        const supplied = Object.fromEntries([[key, "provided"]]);
+        expect(command.parseValues(supplied, context)).toEqual(
+          command.parse(
+            [
+              `--${command.descriptor.parameters.find((parameter) => parameter.key === key)!.flag}`,
+              "provided",
+            ],
+            context
+          )
+        );
+      }
+    }
+  );
+
   it("preserves an own __proto__ parameter", () => {
     const params = Object.fromEntries([["__proto__", { type: "string" as const }]]);
     const command = defineCommand({ params, run: (values) => values });

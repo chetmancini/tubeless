@@ -187,7 +187,13 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       }
     }
     return resolveValues(
-      (key, param) => normalizeStructuredValue(key, param, structuredValues[key], errors),
+      (key, param) =>
+        normalizeStructuredValue(
+          key,
+          param,
+          Object.hasOwn(structuredValues, key) ? structuredValues[key] : undefined,
+          errors
+        ),
       context,
       errors,
       helpText
