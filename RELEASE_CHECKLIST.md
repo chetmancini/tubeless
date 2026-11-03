@@ -7,6 +7,12 @@ publishes the matching `v*` tag to npm via trusted publishing
 an `NPM_TOKEN`. Keep `"private": true` in git; the publish job deletes that
 field immediately before `npm publish`.
 
+Release jobs build and announce the exact commit selected by the version tag.
+To retry a failed publication, rerun its original workflow. A fresh manual
+dispatch from `main` can reuse an existing tag only when that tag still points
+to the selected commit; advancing `main` without changing the version is refused.
+Never move an existing release tag to retry publication.
+
 ## Public names
 
 These names are the pre-1.0 contract. Treat a change as breaking.
