@@ -45,6 +45,20 @@ export interface StudioObjectDependencies {
   readonly startTimeoutMs?: number;
 }
 
+async function scheduleReconcile(
+  deps: StudioObjectDependencies,
+  registry: LaunchRegistry,
+  now: () => number
+): Promise<void> {
+  const pending = await deps.storage.getAlarm();
+  const target = registry.nextReconcileAt(deps.maxRunDurationMs + RECONCILE_GRACE_MS);
+  if (target === undefined) {
+    if (pending !== null) await deps.storage.deleteAlarm();
+  } else if (pending === null || pending <= now() || pending > target) {
+    await deps.storage.setAlarm(target);
+  }
+}
+
 class DurableStudioLauncher implements PipelineRunStudioLauncher {
   readonly commands;
   readonly #waiters = new Map<string, (result: PipelineRunStudioLaunchResult) => void>();
@@ -121,9 +135,7 @@ class DurableStudioLauncher implements PipelineRunStudioLauncher {
 
   /** Keep the earliest pending reconcile so steady launches cannot postpone it. */
   async #scheduleReconcile(): Promise<void> {
-    const target = this.now() + this.deps.maxRunDurationMs + RECONCILE_GRACE_MS;
-    const pending = await this.deps.storage.getAlarm();
-    if (pending === null || pending > target) await this.deps.storage.setAlarm(target);
+    await scheduleReconcile(this.deps, this.registry, this.now);
   }
 
   /** Runs inside a voided promise chain, so it must never throw. */
@@ -199,7 +211,11 @@ export class StudioObjectCore implements StudioIngest {
   }
 
   async reportFailure(launchId: string, message: string): Promise<void> {
-    this.#registry.fail(launchId, message, this.#now());
+    this.#failLaunch(launchId, message, this.#now());
+  }
+
+  #failLaunch(launchId: string, message: string, now: number): void {
+    this.#registry.fail(launchId, message, now);
     this.#launcher.settle(launchId, { accepted: false, errors: [message] });
   }
 
@@ -208,10 +224,8 @@ export class StudioObjectCore implements StudioIngest {
     for (const launchId of this.#registry.stale(
       now - this.deps.maxRunDurationMs - RECONCILE_GRACE_MS
     )) {
-      await this.reportFailure(launchId, HOST_TERMINATED);
+      this.#failLaunch(launchId, HOST_TERMINATED, now);
     }
-    if (this.#registry.hasActive()) {
-      await this.deps.storage.setAlarm(now + this.deps.maxRunDurationMs + RECONCILE_GRACE_MS);
-    }
+    await scheduleReconcile(this.deps, this.#registry, this.#now);
   }
 }

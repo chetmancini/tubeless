@@ -107,6 +107,11 @@ before Cloudflare stops the invocation. Pass a shorter limit with
 `createCloudflareApp(project, { limits: { maxRunDurationMs } })`; the value cannot
 exceed 840,000 ms.
 
+Waiting for a launch to start does not consume its execution limit. Studio
+reconciles an unfinished run from its recorded root start plus the execution
+limit and a two-minute reporting grace period. Launches without a recorded start
+use their creation time instead.
+
 CPU time is limited too: 30 seconds by default, and up to 5 minutes on Workers Paid
 through `limits: { cpuMs: 300_000 }` in `cloudflare.config.ts` (the scaffold has
 this line commented out). Time spent waiting on I/O does not count as CPU. Use

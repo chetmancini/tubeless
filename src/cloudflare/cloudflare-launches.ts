@@ -8,6 +8,22 @@ import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import type { DurableRunStore } from "./cloudflare-run-store.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 
+// A launch may wait for admission before its execution budget begins. Reuse the
+// persisted root start through the run-id index, with creation time for old or
+// unstarted launches that have no root start event.
+const ACTIVE_LAUNCHES = `WITH active_launches AS (
+  SELECT launch_id, created_at_ms,
+    CASE WHEN state = 'running' THEN COALESCE((
+      SELECT timestamp_ms FROM pipeline_run_events AS event
+      WHERE event.run_id = launch.run_id
+        AND event.event_name = 'pipeline.started'
+        AND event.parent_run_id IS NULL
+      ORDER BY event.id LIMIT 1
+    ), created_at_ms) ELSE created_at_ms END AS started_at_ms
+  FROM tubeless_launches AS launch
+  WHERE state IN ('starting', 'running')
+)`;
+
 export type LaunchState = "starting" | "running" | "finished" | "failed";
 
 export interface LaunchRecord {
@@ -247,11 +263,18 @@ export class LaunchRegistry {
   stale(cutoffMs: number): string[] {
     return this.storage.sql
       .exec(
-        "SELECT launch_id FROM tubeless_launches WHERE state IN ('starting', 'running') AND created_at_ms <= ? ORDER BY created_at_ms",
+        `${ACTIVE_LAUNCHES} SELECT launch_id FROM active_launches WHERE started_at_ms <= ? ORDER BY created_at_ms`,
         cutoffMs
       )
       .toArray()
       .map((row) => String(row.launch_id));
+  }
+
+  nextReconcileAt(delayMs: number): number | undefined {
+    const row = this.storage.sql
+      .exec(`${ACTIVE_LAUNCHES} SELECT MIN(started_at_ms) AS started_at_ms FROM active_launches`)
+      .toArray()[0];
+    return row?.started_at_ms == null ? undefined : Number(row.started_at_ms) + delayMs;
   }
 
   hasActive(): boolean {

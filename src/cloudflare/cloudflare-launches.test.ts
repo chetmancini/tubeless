@@ -223,6 +223,34 @@ describe("launch registry", () => {
     expect(createRunHistoryIndex(runs).subtreeIsRunning("r1")).toBe(false);
   });
 
+  it("ages running launches from their persisted root start instead of launch creation", () => {
+    const { registry, storage, store } = setup();
+    registry.create("late", "demo", 0);
+    registry.create("waiting", "demo", 0);
+    registry.acceptBatch("late", 0, [{ ...started("root"), timestampMs: 150_000 }]);
+    registry.acceptBatch("late", 1, [{ ...started("child", "root"), timestampMs: 160_000 }]);
+    expect(registry.stale(1)).toEqual(["waiting"]);
+    expect(registry.nextReconcileAt(180_000)).toBe(180_000);
+    registry.fail("waiting", "Host stopped", 180_001);
+    const recreated = new LaunchRegistry(storage, store);
+    expect(recreated.nextReconcileAt(180_000)).toBe(330_000);
+    expect(recreated.stale(149_999)).toEqual([]);
+    expect(recreated.stale(150_000)).toEqual(["late"]);
+  });
+
+  it("falls back to creation time for old running records without a root start", () => {
+    const { registry, storage } = setup();
+    registry.create("legacy", "demo", 10);
+    storage.sql.exec(
+      "UPDATE tubeless_launches SET state = 'running', run_id = 'missing' WHERE launch_id = ?",
+      "legacy"
+    );
+    expect(registry.stale(10)).toEqual(["legacy"]);
+    expect(registry.nextReconcileAt(180_000)).toBe(180_010);
+    registry.fail("legacy", "Host stopped", 180_010);
+    expect(registry.nextReconcileAt(180_000)).toBeUndefined();
+  });
+
   it("fails unbound launches without inventing history and lists stale launches", async () => {
     const { registry, store } = setup();
     registry.create("old", "demo", 100);

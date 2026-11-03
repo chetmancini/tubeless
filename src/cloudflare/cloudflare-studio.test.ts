@@ -187,7 +187,7 @@ describe("Studio object", () => {
     await studio.alarm();
     // A second reconcile is a no-op once the launch is failed.
     await studio.alarm();
-    expect(storage.alarmAtMs()).toBe(181_000);
+    expect(storage.alarmAtMs()).toBeUndefined();
     expect(
       ((await (await api("/api/snapshot")).json()) as { liveRunIds: string[] }).liveRunIds
     ).toEqual([]);
@@ -391,6 +391,47 @@ describe("Studio object", () => {
     await launch("greeting", { name: "ada" });
     now += 81_001;
     await studio.alarm();
-    expect(storage.alarmAtMs()).toBe(now + 60_000 + 120_000);
+    expect(storage.alarmAtMs()).toBe(281_000);
+  });
+
+  it("retains a late-started run after recreation and reconciles its actual deadline", async () => {
+    let now = 0;
+    const original = setup({ startRuns: false, now: () => now, startTimeoutMs: 1 });
+    await original.launch("greeting", { name: "ada" });
+    await original.launch("greeting", { name: "ada" });
+    const launchId = original.starts[0]!.launchId;
+    now = 150_000;
+    expect(await original.studio.admit(launchId)).toEqual({ admitted: true });
+    await original.studio.appendEvents(launchId, 0, [
+      {
+        version: 3,
+        name: "pipeline.started",
+        pipelineId: "greeting",
+        runId: "late-root",
+        timestampMs: now,
+        payload: { dryRun: false, planOk: true, stepCount: 1, targetIds: [] },
+      },
+    ]);
+    const { studio, api, storage } = setup({ storage: original.storage, now: () => now });
+    now = 180_001;
+    await studio.alarm();
+    expect(
+      ((await (await api("/api/snapshot")).json()) as { liveRunIds: string[] }).liveRunIds
+    ).toEqual(["late-root"]);
+    expect(await openDurableRunStore(storage).listEvents()).toHaveLength(1);
+    expect(await studio.admit(original.starts[1]!.launchId)).toEqual({ admitted: false });
+    expect(storage.alarmAtMs()).toBe(330_000);
+    now = 330_000;
+    await studio.alarm();
+    expect(
+      ((await (await api("/api/snapshot")).json()) as { liveRunIds: string[] }).liveRunIds
+    ).toEqual([]);
+    expect((await openDurableRunStore(storage).listEvents())[1]).toMatchObject({
+      name: "pipeline.completed",
+      runId: "late-root",
+      timestampMs: now,
+      payload: { status: "failed" },
+    });
+    expect(storage.alarmAtMs()).toBeUndefined();
   });
 });
