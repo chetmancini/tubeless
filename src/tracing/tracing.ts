@@ -19,19 +19,37 @@ export function composeTraceExporters(
   const invokeHealthy = async (
     invoke: (exporter: PipelineTraceExporter) => void | Promise<void>
   ): Promise<void> => {
+    // Independent destinations can overlap, but repeated references to one
+    // exporter must still wait for its preceding invocation and retirement.
+    const pending = new Map<PipelineTraceExporter, Promise<unknown>>();
+    const results = await Promise.allSettled(
+      exporters.map((exporter) => {
+        const previous = pending.get(exporter);
+        const task = (async () => {
+          if (previous) await previous.catch(() => undefined);
+          if (failed.has(exporter)) return false;
+          try {
+            await invoke(exporter);
+            return true;
+          } catch (error) {
+            failed.add(exporter);
+            throw error;
+          }
+        })();
+        pending.set(exporter, task);
+        return task;
+      })
+    );
     let succeeded = 0;
     let roundError: unknown;
     let hadRoundError = false;
-    for (const exporter of exporters) {
-      if (failed.has(exporter)) continue;
-      try {
-        await invoke(exporter);
-        succeeded += 1;
-      } catch (error) {
-        failed.add(exporter);
-        lastError = error;
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        if (result.value) succeeded += 1;
+      } else {
+        lastError = result.reason;
         hasLastError = true;
-        if (!hadRoundError) roundError = error;
+        if (!hadRoundError) roundError = result.reason;
         hadRoundError = true;
       }
     }

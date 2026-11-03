@@ -1,6 +1,7 @@
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { throwIfAborted } from "../utilities/abort.js";
+import { runConcurrent } from "../utilities/batch.js";
 import { bashTool } from "./default-tool-bash.js";
 import { readTool, writeTool, editTool, listTool, searchTool } from "./default-tool-files.js";
 import type {
@@ -35,17 +36,21 @@ async function projectInstructions(
     }
     directory = parent;
   }
-  const instructions: AgentProjectInstruction[] = [];
-  for (const path of ancestors.reverse().map((ancestor) => join(ancestor, "AGENTS.md"))) {
-    try {
-      const file = await readTool({ path, maxLines: 2000 }, { cwd: workspace, signal });
-      if (file.truncated) throw new Error(`Project instructions exceed read limits: ${path}`);
-      instructions.push({ path, content: file.content });
-    } catch (error) {
-      if (!missing(error)) throw error;
+  const instructions = await runConcurrent(
+    ancestors.reverse().map((ancestor) => join(ancestor, "AGENTS.md")),
+    { concurrency: 4, signal },
+    async (path): Promise<AgentProjectInstruction | undefined> => {
+      try {
+        const file = await readTool({ path, maxLines: 2000 }, { cwd: workspace, signal });
+        if (file.truncated) throw new Error(`Project instructions exceed read limits: ${path}`);
+        return { path, content: file.content };
+      } catch (error) {
+        if (!missing(error)) throw error;
+        return undefined;
+      }
     }
-  }
-  return instructions;
+  );
+  return instructions.filter((instruction) => instruction !== undefined);
 }
 
 /**

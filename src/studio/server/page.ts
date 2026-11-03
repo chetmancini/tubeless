@@ -550,8 +550,10 @@ function studioDocument(script: string): string {
 
 /** Build the page from the compiled client. Only a validated, nonsecret mount enters the HTML. */
 export async function createStudioPage(script: string): Promise<StudioPage> {
-  const styleHash = await sha256Base64(PIPELINE_RUN_STUDIO_STYLE);
-  const scriptHash = await sha256Base64(script);
+  const [styleHash, scriptHash] = await Promise.all([
+    sha256Base64(PIPELINE_RUN_STUDIO_STYLE),
+    sha256Base64(script),
+  ]);
   const csp = `default-src 'none'; style-src 'sha256-${styleHash}'; script-src 'sha256-${scriptHash}'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
   const document = studioDocument(script);
   return {
