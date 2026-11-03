@@ -84,24 +84,8 @@ async function executeRun(
   let bindTraceSignal: ((signal: AbortSignal) => void) | undefined;
   let exitCode: number = TUBELESS_WORKBENCH_EXIT_CODE.execution;
   try {
-    const exporters: PipelineTraceExporter[] = [];
-    if (parsed.values.store) {
-      const { openSqlitePipelineRunStore } = await import("../run-store/run-store-sqlite.js");
-      store = await openSqlitePipelineRunStore(path.resolve(io.cwd, parsed.values.store));
-      exporters.push(store);
-    }
-    if (parsed.values.trace) {
-      const writer = await createRunTraceWriter(parsed.values.trace, io, io.signal);
-      bindTraceSignal = writer.bindSignal;
-      closeTrace = writer.close;
-      exporters.push(writer.exporter);
-    }
     managedSignal = manageWorkbenchSignal(io);
-    bindTraceSignal?.(managedSignal.signal);
-    const pipelineContext =
-      exporters.length > 0
-        ? { tracing: { exporter: composeTraceExporters(exporters) } }
-        : undefined;
+    const signal = managedSignal.signal;
     const commandIo =
       parsed.values.trace === "-"
         ? { ...loaded.commandIo, stdout: loaded.commandIo.stderr }
@@ -110,8 +94,25 @@ async function executeRun(
       loaded.command,
       parsed.commandArgs,
       commandIo,
-      managedSignal.signal,
-      pipelineContext
+      signal,
+      async () => {
+        const exporters: PipelineTraceExporter[] = [];
+        if (parsed.values.store) {
+          const { openSqlitePipelineRunStore } = await import("../run-store/run-store-sqlite.js");
+          store = await openSqlitePipelineRunStore(path.resolve(io.cwd, parsed.values.store));
+          exporters.push(store);
+        }
+        if (parsed.values.trace) {
+          const writer = await createRunTraceWriter(parsed.values.trace, io, signal);
+          bindTraceSignal = writer.bindSignal;
+          closeTrace = writer.close;
+          exporters.push(writer.exporter);
+        }
+        bindTraceSignal?.(signal);
+        return exporters.length > 0
+          ? { tracing: { exporter: composeTraceExporters(exporters) } }
+          : undefined;
+      }
     );
     if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success && managedSignal.wasInterrupted()) {
       exitCode = TUBELESS_WORKBENCH_EXIT_CODE.cancellation;

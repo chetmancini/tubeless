@@ -1,3 +1,4 @@
+import { CliHelpRequested, CliValidationError } from "../cli/cli.js";
 import type { PipelineContext } from "../core/pipeline.js";
 import {
   executeHostedCommandOperation,
@@ -7,15 +8,19 @@ import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import type { WorkbenchCliIo } from "./workbench-shared.js";
 
 export async function executePipelineCommand(
-  command: Pick<WorkbenchPipelineCommand, "run">,
+  command: Pick<WorkbenchPipelineCommand, "parse" | "execute">,
   args: readonly string[],
   io: WorkbenchCliIo,
   signal: AbortSignal,
-  pipelineContext?: Omit<PipelineContext, "cwd" | "log" | "signal">
+  prepareContext?: () => Promise<Omit<PipelineContext, "cwd" | "log" | "signal"> | undefined>
 ): Promise<number> {
   return executeHostedCommandOperation(
     async () => {
-      await command.run(args, hostedCommandContext(io, signal, pipelineContext));
+      const parsed = command.parse(args, hostedCommandContext(io, signal));
+      if (parsed.kind === "help") throw new CliHelpRequested(parsed.helpText);
+      if (parsed.kind === "error") throw new CliValidationError(parsed.errors, parsed.helpText);
+      const pipelineContext = await prepareContext?.();
+      await command.execute(parsed.values, hostedCommandContext(io, signal, pipelineContext));
     },
     io,
     signal

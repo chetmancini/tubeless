@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { getEventListeners } from "node:events";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -36,7 +37,8 @@ function captureIo(cwd: string): WorkbenchCliIo & { errors: string[]; output: st
 }
 
 async function writeCommandFixture(
-  reporterSource = "false"
+  reporterSource = "false",
+  validateSource = "undefined"
 ): Promise<{ directory: string; filePath: string }> {
   const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-"));
   directories.push(directory);
@@ -69,6 +71,7 @@ async function writeCommandFixture(
             fail: { type: "boolean", default: false },
           },
           reporter: ${reporterSource},
+          validate: ${validateSource},
           summarize: (result) => [\`completed:\${result}\`],
         }
       );
@@ -86,6 +89,64 @@ function parseNdjson(text: string): { name?: string }[] {
 }
 
 describe("runCommand", () => {
+  it.each([
+    ["help", ["--help"], TUBELESS_WORKBENCH_EXIT_CODE.success],
+    ["missing input", [], TUBELESS_WORKBENCH_EXIT_CODE.validation],
+    [
+      "invalid input",
+      ["--message", "hello", "--max-concurrency", "0"],
+      TUBELESS_WORKBENCH_EXIT_CODE.validation,
+    ],
+  ] as const)(
+    "preserves recording destinations for application %s",
+    async (_name, args, expected) => {
+      const { directory } = await writeCommandFixture();
+      const trace = path.join(directory, "existing.ndjson");
+      const store = path.join(directory, "unopened", "runs.sqlite");
+      const sentinel = "previous trace\n";
+      await writeFile(trace, sentinel);
+      const io = captureIo(directory);
+      expect(
+        await runCommand(["--trace", trace, "--store", store, "pipeline.mjs", "--", ...args], io)
+      ).toBe(expected);
+      expect(await readFile(trace, "utf8")).toBe(sentinel);
+      expect(existsSync(path.dirname(store))).toBe(false);
+      expect(io.output.join("") + io.errors.join("")).not.toContain("worked:");
+
+      const absentTrace = path.join(directory, "unopened-trace", "run.ndjson");
+      expect(
+        await runCommand(
+          ["--trace", absentTrace, "pipeline.mjs", "--", ...args],
+          captureIo(directory)
+        )
+      ).toBe(expected);
+      expect(existsSync(path.dirname(absentTrace))).toBe(false);
+    }
+  );
+
+  it("keeps application help off trace stdout", async () => {
+    const { directory } = await writeCommandFixture();
+    const io = captureIo(directory);
+    expect(await runCommand(["--trace", "-", "pipeline.mjs", "--", "--help"], io)).toBe(0);
+    expect(io.output).toEqual([]);
+    expect(io.errors.join("")).toContain("Usage:");
+  });
+
+  it("validates once before recording and executes a valid command once", async () => {
+    const { directory } = await writeCommandFixture(
+      "false",
+      "(_values, context) => { context.log.log('validated'); return []; }"
+    );
+    const io = captureIo(directory);
+    const trace = path.join(directory, "recorded.ndjson");
+    expect(
+      await runCommand(["--trace", trace, "pipeline.mjs", "--", "--message", "hello"], io)
+    ).toBe(0);
+    expect(io.output.join("").match(/validated/g)).toHaveLength(1);
+    expect(io.output.join("").match(/worked:hello/g)).toHaveLength(1);
+    expect(parseNdjson(await readFile(trace, "utf8")).at(-1)?.name).toBe("pipeline.completed");
+  });
+
   it("suggests workbench flag typos while preserving the application-argument guidance", async () => {
     for (const token of ["--projet", "--projet=project.mjs"]) {
       const io = captureIo(tmpdir());
