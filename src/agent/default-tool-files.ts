@@ -253,10 +253,11 @@ export async function searchTool(input: { query: string; path?: string | null },
     let bytes = 0;
     let truncated = false;
     let skippedFiles = 0;
-    async function searchFile(path: string) {
+    function collectFileMatches(path: string, read: PromiseSettledResult<string>) {
       let text: string;
       try {
-        text = await readText(path, context.signal);
+        if (read.status === "rejected") throw read.reason;
+        text = read.value;
       } catch (error) {
         throwIfAborted(context.signal, "Search files");
         if (
@@ -290,7 +291,9 @@ export async function searchTool(input: { query: string; path?: string | null },
         truncated = true;
         return;
       }
-      for (const entry of await sortedEntries(path, context.signal)) {
+      const children = await sortedEntries(path, context.signal);
+      for (let index = 0; index < children.length; index++) {
+        const entry = children[index]!;
         throwIfAborted(context.signal, "Search files");
         if (++entries > 2000 || matches.length >= 50 || bytes > MAX_OUTPUT_BYTES) {
           truncated = true;
@@ -299,8 +302,37 @@ export async function searchTool(input: { query: string; path?: string | null },
         try {
           if (entry.isDirectory() && entry.name !== ".git" && entry.name !== "node_modules")
             await walk(join(path, entry.name), depth + 1);
-          else if (entry.isFile()) await searchFile(join(path, entry.name));
-          else if (!entry.isDirectory() && !entry.isSymbolicLink()) skippedFiles++;
+          else if (entry.isFile()) {
+            // Read a bounded window of sibling files together, then apply results
+            // in traversal order so completion timing cannot change the limits.
+            const files = [entry];
+            while (
+              files.length < 4 &&
+              entries + files.length <= 2000 &&
+              children[index + files.length]?.isFile()
+            )
+              files.push(children[index + files.length]!);
+            const reads = await Promise.allSettled(
+              files.map((file) => readText(join(path, file.name), context.signal))
+            );
+            for (let offset = 0; offset < files.length; offset++) {
+              throwIfAborted(context.signal, "Search files");
+              if (offset > 0) {
+                if (++entries > 2000 || matches.length >= 50 || bytes > MAX_OUTPUT_BYTES) {
+                  truncated = true;
+                  return;
+                }
+              }
+              try {
+                collectFileMatches(join(path, files[offset]!.name), reads[offset]!);
+              } catch (error) {
+                throwIfAborted(context.signal, "Search files");
+                if (!unavailableEntry(error)) throw error;
+                skippedFiles++;
+              }
+            }
+            index += files.length - 1;
+          } else if (!entry.isDirectory() && !entry.isSymbolicLink()) skippedFiles++;
         } catch (error) {
           throwIfAborted(context.signal, "Search files");
           if (!unavailableEntry(error)) throw error;
@@ -308,8 +340,10 @@ export async function searchTool(input: { query: string; path?: string | null },
         }
       }
     }
-    if ((await stat(root)).isFile()) await searchFile(root);
-    else await walk(root, 0);
+    if ((await stat(root)).isFile()) {
+      const [read] = await Promise.allSettled([readText(root, context.signal)]);
+      collectFileMatches(root, read!);
+    } else await walk(root, 0);
     return { matches, truncated, skippedFiles };
   });
 }

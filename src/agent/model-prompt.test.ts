@@ -2,6 +2,9 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
+import { defer } from "../core/child-pipeline.test-support.js";
+import * as fileTools from "./default-tool-files.js";
+import { createNodeAgentEnvironment } from "./node-environment.js";
 import { remote } from "./environment.test-support.js";
 import { modelInstructions } from "./model-prompt.js";
 
@@ -12,9 +15,48 @@ async function workspace() {
   return root;
 }
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     directories.splice(0).map((path) => rm(path, { recursive: true, force: true }))
   );
+});
+
+it("bounds independent guidance reads and preserves root-to-cwd order across missing files", async () => {
+  const root = await realpath(await workspace());
+  const cwd = join(root, "one", "two", "three", "four", "five", "six");
+  await mkdir(cwd, { recursive: true });
+  await writeFile(join(root, ".git"), "gitdir: elsewhere");
+  await writeFile(join(root, "AGENTS.md"), "ROOT");
+  await writeFile(join(cwd, "AGENTS.md"), "NESTED");
+  const gate = defer();
+  const started = defer();
+  const read = fileTools.readTool;
+  let active = 0;
+  let peak = 0;
+  vi.spyOn(fileTools, "readTool").mockImplementation(async (...args) => {
+    active++;
+    peak = Math.max(peak, active);
+    if (active === 4) started.resolve();
+    try {
+      await gate.promise;
+      return await read(...args);
+    } finally {
+      active--;
+    }
+  });
+  const loading = createNodeAgentEnvironment().projectInstructions({ cwd });
+  try {
+    await started.promise;
+    expect(peak).toBe(4);
+  } finally {
+    gate.resolve();
+  }
+  expect(await loading).toEqual([
+    { path: join(root, "AGENTS.md"), content: "ROOT" },
+    { path: join(cwd, "AGENTS.md"), content: "NESTED" },
+  ]);
+  expect(peak).toBe(4);
+  expect(active).toBe(0);
 });
 
 it("loads root-to-cwd guidance, stops at worktree git files and excludes unrelated directories", async () => {

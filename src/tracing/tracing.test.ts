@@ -1,3 +1,4 @@
+import { defer } from "../core/child-pipeline.test-support.js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { createSteps, definePipeline, type PipelineLogger } from "../core/pipeline.js";
 import { defaultPipelineContext } from "../core/pipeline-execute.js";
@@ -55,6 +56,102 @@ describe("pipeline tracing", () => {
     expect(failed.export).toHaveBeenCalledOnce();
     expect(failed.flush).not.toHaveBeenCalled();
   });
+
+  it.each(["export", "flush"] as const)(
+    "overlaps independent %s destinations and drains them before reporting failure",
+    async (operation) => {
+      const gate = defer();
+      const failure = new Error("destination failed");
+      const slow = vi.fn(() => gate.promise);
+      const fast = vi.fn(() => {
+        throw failure;
+      });
+      const composite = composeTraceExporters([
+        { export: slow, flush: slow },
+        { export: fast, flush: fast },
+      ]);
+      const event = {
+        name: "pipeline.started",
+        payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+        pipelineId: "composed",
+        runId: "run-1",
+        timestampMs: 1,
+        version: 2,
+      } satisfies PipelineTraceEvent;
+      let settled = false;
+      const result = (
+        operation === "export" ? composite.export(event) : composite.flush?.()
+      ) as Promise<void>;
+      const assertion = expect(result).rejects.toThrow("destination failed");
+      void result.then(
+        () => (settled = true),
+        () => (settled = true)
+      );
+      expect(slow).toHaveBeenCalledOnce();
+      expect(fast).toHaveBeenCalledOnce();
+      expect(settled).toBe(false);
+      gate.resolve();
+      await assertion;
+      expect(settled).toBe(true);
+    }
+  );
+
+  it("selects composition failures by destination order rather than completion order", async () => {
+    const gate = defer();
+    const firstFailure = new Error("first destination");
+    const lastFailure = new Error("last destination");
+    const composite = composeTraceExporters([
+      {
+        export: async () => {
+          await gate.promise;
+          throw firstFailure;
+        },
+      },
+      { export: () => Promise.reject(lastFailure) },
+    ]);
+    const event = {
+      name: "pipeline.started",
+      payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+      pipelineId: "composed",
+      runId: "run-1",
+      timestampMs: 1,
+      version: 2,
+    } satisfies PipelineTraceEvent;
+    const assertion = expect(composite.export(event)).rejects.toBe(firstFailure);
+    gate.resolve();
+    await assertion;
+    await expect(composite.export(event)).rejects.toBe(lastFailure);
+  });
+
+  it.each([false, true])(
+    "serializes duplicate destinations and honors retirement (failure: %s)",
+    async (fail) => {
+      const gate = defer();
+      const destination = {
+        export: vi.fn(async () => {
+          await gate.promise;
+          if (fail) throw new Error("retired");
+        }),
+      };
+      const composite = composeTraceExporters([destination, destination]);
+      const event = {
+        name: "pipeline.started",
+        payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+        pipelineId: "composed",
+        runId: "run-1",
+        timestampMs: 1,
+        version: 2,
+      } satisfies PipelineTraceEvent;
+      const result = composite.export(event);
+      const assertion = fail
+        ? expect(result).rejects.toThrow("retired")
+        : expect(result).resolves.toBeUndefined();
+      expect(destination.export).toHaveBeenCalledOnce();
+      gate.resolve();
+      await assertion;
+      expect(destination.export).toHaveBeenCalledTimes(fail ? 1 : 2);
+    }
+  );
 
   it("reports a partial composition failure while continuing healthy destinations", async () => {
     const { step } = createSteps();

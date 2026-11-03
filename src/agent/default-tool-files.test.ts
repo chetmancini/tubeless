@@ -1,3 +1,4 @@
+import { defer } from "../core/child-pipeline.test-support.js";
 import * as fs from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { join } from "node:path";
@@ -182,6 +183,110 @@ describe("workspace search and listing", () => {
     ]);
     expect(reversed.truncated).toBe(true);
   });
+
+  it("bounds concurrent file reads and retains traversal order after out-of-order completion", async () => {
+    const context = await workspace();
+    const names = Array.from({ length: 9 }, (_, index) => `file-${index}`);
+    await Promise.all(names.map((name) => fs.writeFile(join(context.cwd, name), "needle")));
+    const gate = defer();
+    const started = defer();
+    let active = 0;
+    let peak = 0;
+    const completed: string[] = [];
+    vi.mocked(fs.open).mockImplementation(async (...args) => {
+      const file = await actualFs.open(...args);
+      active++;
+      peak = Math.max(peak, active);
+      const close = file.close.bind(file);
+      vi.spyOn(file, "close").mockImplementation(async () => {
+        await close();
+        active--;
+        completed.push(String(args[0]));
+        if (completed.length === 3) started.resolve();
+      });
+      if (args[0] === join(context.cwd, names[0]!)) await gate.promise;
+      return file;
+    });
+    const searching = searchTool({ query: "needle" }, context);
+    try {
+      await started.promise;
+      expect(peak).toBe(4);
+      expect(completed).not.toContain(join(context.cwd, names[0]!));
+    } finally {
+      gate.resolve();
+    }
+    const result = await searching;
+    expect(result.matches.map(({ path }) => path)).toEqual(
+      names.map((name) => join(context.cwd, name))
+    );
+    expect(peak).toBe(4);
+    expect(active).toBe(0);
+  });
+
+  it("stops at the match limit without counting speculative read failures", async () => {
+    const context = await workspace();
+    await fs.writeFile(join(context.cwd, "a-hits"), "needle\n".repeat(51));
+    await fs.writeFile(join(context.cwd, "b-unavailable"), "needle");
+    vi.mocked(fs.open).mockImplementation(async (...args) => {
+      if (args[0] === join(context.cwd, "b-unavailable"))
+        throw Object.assign(new Error("I/O failed"), { code: "EIO" });
+      return actualFs.open(...args);
+    });
+    expect(await searchTool({ query: "needle" }, context)).toMatchObject({
+      matches: Array.from({ length: 50 }, (_, index) => ({
+        path: join(context.cwd, "a-hits"),
+        line: index + 1,
+        text: "needle",
+      })),
+      skippedFiles: 0,
+      truncated: true,
+    });
+  });
+
+  it.each(["failure", "cancellation"] as const)(
+    "drains active reads before returning a search %s",
+    async (mode) => {
+      const context = await workspace();
+      await fs.writeFile(join(context.cwd, "a-fail"), "needle");
+      await fs.writeFile(join(context.cwd, "b-slow"), "needle");
+      const controller = new AbortController();
+      const gate = defer();
+      const started = defer();
+      const reason = new Error("search cancelled");
+      let closed = false;
+      vi.mocked(fs.open).mockImplementation(async (...args) => {
+        if (args[0] === join(context.cwd, "a-fail"))
+          throw Object.assign(new Error("I/O failed"), { code: "EIO" });
+        const file = await actualFs.open(...args);
+        if (args[0] === join(context.cwd, "b-slow")) {
+          const close = file.close.bind(file);
+          vi.spyOn(file, "close").mockImplementation(async () => {
+            await close();
+            closed = true;
+          });
+          started.resolve();
+          await gate.promise;
+        }
+        return file;
+      });
+      let settled = false;
+      const result = searchTool({ query: "needle" }, { ...context, signal: controller.signal });
+      const assertion =
+        mode === "cancellation"
+          ? expect(result).rejects.toBe(reason)
+          : expect(result).rejects.toMatchObject({ code: "EIO" });
+      void result.then(
+        () => (settled = true),
+        () => (settled = true)
+      );
+      await started.promise;
+      if (mode === "cancellation") controller.abort(reason);
+      expect(settled).toBe(false);
+      gate.resolve();
+      await assertion;
+      expect(closed).toBe(true);
+    }
+  );
 
   it.each(["EACCES", "EPERM", "ENOENT", "ENOTDIR"])(
     "retains matches and counts a discovered file that fails with %s",
