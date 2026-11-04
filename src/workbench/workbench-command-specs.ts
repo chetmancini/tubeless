@@ -359,7 +359,12 @@ Sign in to Tubeless Cloud with an expiring first-party session.
 All commands accept --workspace <id>, --host <origin>, and --help.
 Use a listed slug or an exact name. Quote names containing spaces.
 Run watches logs by default; --detach returns after printing the run ID.
-Remote runs use deployed code. Local edits and modules are never loaded.
+Automation uses TUBELESS_TOKEN and an explicit --workspace. Known --id with
+--detach needs run scope only; names, listing, logs and waiting need read scope.
+Use --ref for a GitHub branch, tag or commit; omission uses the configured branch HEAD.
+Use --source for an advanced source selector and --idempotency-key to
+retry the same pipeline/input/source after an uncertain admission.
+Remote runs use Cloud-admitted source. Local edits and modules are never loaded.
 Set up and load pipelines in the Cloud dashboard.
 `,
     subcommands: ["list", "run", "logs"],
@@ -389,6 +394,28 @@ Set up and load pipelines in the Cloud dashboard.
       detach: {
         type: "boolean",
         description: "Return after printing the admitted run ID",
+        commands: ["run"],
+      },
+      source: {
+        type: "string",
+        description:
+          "Advanced source selector as inline JSON, @file, or - for stdin; excludes --ref",
+        valueName: "json|@path|-",
+        completion: "text",
+        commands: ["run"],
+      },
+      ref: {
+        type: "string",
+        description: "GitHub branch, tag, full or short SHA; excludes --source",
+        valueName: "branch|tag|sha",
+        completion: "text",
+        commands: ["run"],
+      },
+      "idempotency-key": {
+        type: "string",
+        description: "Reuse an admission key with identical pipeline, input and source",
+        valueName: "key",
+        completion: "text",
         commands: ["run"],
       },
       follow: {

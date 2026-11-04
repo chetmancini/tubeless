@@ -146,7 +146,7 @@ export async function resolveCloudCredential(
   if (environmentToken !== undefined) {
     if (!isCloudToken(environmentToken)) {
       throw new Error(
-        "TUBELESS_TOKEN is empty or invalid. Remove it or supply an active Cloud session token."
+        "TUBELESS_TOKEN is empty or invalid. Remove it or supply an active Cloud session or automation token."
       );
     }
     return { token: environmentToken, source: "environment" };

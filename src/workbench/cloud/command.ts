@@ -4,20 +4,11 @@ import {
   parseSubcommandArgs,
   runWorkbenchSubcommand,
 } from "../workbench-subcommand.js";
-import { randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { open } from "node:fs/promises";
-import * as path from "node:path";
-import { awaitWithAbort } from "../../utilities/abort.js";
 import { createCloudClient, CloudClientError, isCloudTransportError } from "./client.js";
 import { resolveCloudHost } from "./config.js";
 import { resolveCloudCredential } from "./credentials.js";
-import {
-  CLOUD_INPUT_MAX_DEPTH,
-  isCloudJsonValue,
-  type CliRun,
-  type CloudJsonValue,
-} from "./protocol.js";
+import { prepareRunInput, CloudRunUsageError } from "./run-input.js";
+import { isCloudAutomationToken, type CliRun } from "./protocol.js";
 
 import {
   type WorkbenchCliIo,
@@ -33,95 +24,6 @@ import {
 } from "./shared.js";
 
 const CLOUD_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.cloud);
-const INPUT_LIMIT = 64 * 1024;
-
-async function boundedInput(
-  file: string,
-  cwd: string,
-  dependencies: CloudCommandDependencies,
-  signal: AbortSignal
-): Promise<Record<string, CloudJsonValue>> {
-  let text: string;
-  if (file === "-") {
-    if (dependencies.readStdin)
-      text = await awaitWithAbort(dependencies.readStdin(), signal, "Input read");
-    else {
-      text = await new Promise<string>((resolve, reject) => {
-        const chunks: Buffer[] = [];
-        let size = 0;
-        const cleanup = () => {
-          process.stdin.off("data", onData);
-          process.stdin.off("end", onEnd);
-          process.stdin.off("error", onError);
-          signal.removeEventListener("abort", onAbort);
-          process.stdin.pause();
-        };
-        const onError = (error: Error) => {
-          cleanup();
-          reject(error);
-        };
-        const onAbort = () => onError(new Error("Input read interrupted."));
-        const onData = (chunk: Buffer | string) => {
-          const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          size += bytes.length;
-          if (size > INPUT_LIMIT) {
-            onError(new CloudClientError("Input JSON must be at most 64 KB.", "invalid_request"));
-            return;
-          }
-          chunks.push(bytes);
-        };
-        const onEnd = () => {
-          cleanup();
-          resolve(Buffer.concat(chunks).toString("utf8"));
-        };
-        process.stdin.on("data", onData);
-        process.stdin.once("end", onEnd);
-        process.stdin.once("error", onError);
-        signal.addEventListener("abort", onAbort, { once: true });
-        if (signal.aborted) onAbort();
-        else process.stdin.resume();
-      });
-    }
-  } else {
-    const fileHandle = await open(
-      path.resolve(cwd, file),
-      constants.O_RDONLY | constants.O_NONBLOCK
-    );
-    try {
-      if (!(await fileHandle.stat()).isFile())
-        throw new CloudClientError("Input file must be a regular file.", "invalid_request");
-      const buffer = Buffer.alloc(INPUT_LIMIT + 1);
-      let size = 0;
-      while (size < buffer.length) {
-        if (signal.aborted) throw new Error("Input read interrupted.");
-        const read = await fileHandle.read(buffer, size, buffer.length - size, null);
-        if (read.bytesRead === 0) break;
-        size += read.bytesRead;
-      }
-      text = buffer.subarray(0, size).toString("utf8");
-    } finally {
-      await fileHandle.close();
-    }
-  }
-  if (Buffer.byteLength(text) > INPUT_LIMIT)
-    throw new CloudClientError("Input JSON must be at most 64 KB.", "invalid_request");
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    throw new CloudClientError("Input must be valid JSON.", "invalid_request");
-  }
-  if (value === null || typeof value !== "object" || Array.isArray(value))
-    throw new CloudClientError("Input must be a JSON object.", "invalid_request");
-  if (!isCloudJsonValue(value))
-    throw new CloudClientError(
-      `Input must contain JSON data with finite numbers and at most ${CLOUD_INPUT_MAX_DEPTH} levels of objects and arrays.`,
-      "invalid_request"
-    );
-  // SAFETY: The object shape and every JSON value were checked above.
-  return value as Record<string, CloudJsonValue>;
-}
-
 function runUrl(host: string, workspace: string, id: string): string {
   const url = new URL(`/app/runs/${encodeURIComponent(id)}`, host);
   url.searchParams.set("workspace", workspace);
@@ -194,15 +96,22 @@ export async function runCloud(
           return writeUsageError(io, "Pass a nonempty workspace ID.", CLOUD_USAGE);
         if (values.id !== undefined && !values.id.trim())
           return writeUsageError(io, "Pass a nonempty pipeline ID.", CLOUD_USAGE);
-        if (values["input-file"] === "")
-          return writeUsageError(
-            io,
-            "Pass a nonempty --input-file path, or - for stdin.",
-            CLOUD_USAGE
-          );
         const managed = cloudSignal(io);
         let admitted: { id: string; url: string } | undefined;
         try {
+          const operation =
+            command === "run"
+              ? {
+                  kind: "run" as const,
+                  ...(await prepareRunInput(values, {
+                    cwd: io.cwd,
+                    signal: managed.signal,
+                    readStdin: dependencies.readStdin,
+                  })),
+                }
+              : command === "list"
+                ? { kind: "list" as const }
+                : { kind: "logs" as const };
           const host = resolveCloudHost(values.host);
           const credential = await resolveCloudCredential(host, {
             store: dependencies.store,
@@ -221,6 +130,10 @@ export async function runCloud(
           });
           let workspace = values.workspace;
           if (!workspace) {
+            if (isCloudAutomationToken(credential.token))
+              throw new Error(
+                "Automation credentials require --workspace <id>; session workspace discovery is unavailable."
+              );
             const session = await client.session();
             if (session.workspaces.length === 0)
               throw new Error(
@@ -232,7 +145,7 @@ export async function runCloud(
               );
             workspace = session.workspaces[0]!.id;
           }
-          if (command === "list") {
+          if (operation.kind === "list") {
             const pipelines = await client.pipelines(workspace);
             if (values.json) io.stdout.write(`${JSON.stringify(pipelines)}\n`);
             else
@@ -242,7 +155,7 @@ export async function runCloud(
                 );
             return 0;
           }
-          if (command === "logs") {
+          if (operation.kind === "logs") {
             let run = await client.getRun(workspace, selector!);
             admitted = { id: run.id, url: runUrl(host, workspace, run.id) };
             if (values.follow)
@@ -271,39 +184,39 @@ export async function runCloud(
               );
             return values.follow ? runExit(run) : 0;
           }
-          const pipelines = await client.pipelines(workspace);
-          const matches = pipelines.filter((item) =>
-            values.id ? item.id === values.id : item.name === selector || item.slug === selector
-          );
-          if (matches.length === 0)
-            throw new Error(
-              "Cloud pipeline not found in this workspace. Use tubeless cloud list or the Cloud dashboard to select a loaded pipeline."
+          let pipelineId = values.id;
+          if (pipelineId === undefined) {
+            const pipelines = await client.pipelines(workspace);
+            const matches = pipelines.filter(
+              (item) => item.name === selector || item.slug === selector
             );
-          if (matches.length !== 1)
-            throw new Error(
-              `Multiple pipelines match ${JSON.stringify(selector)}. Choose --id <id>:\n${matches.map((item) => `${item.slug}: ${item.name} (${item.id})`).join("\n")}`
-            );
-          const pipeline = matches[0]!;
-          const input =
-            values["input-file"] !== undefined
-              ? await boundedInput(values["input-file"], io.cwd, dependencies, managed.signal)
-              : {};
+            if (matches.length === 0)
+              throw new Error(
+                "Cloud pipeline not found in this workspace. Use tubeless cloud list or the Cloud dashboard to select a loaded pipeline."
+              );
+            if (matches.length !== 1)
+              throw new Error(
+                `Multiple pipelines match ${JSON.stringify(selector)}. Choose --id <id>:\n${matches.map((item) => `${item.slug}: ${item.name} (${item.id})`).join("\n")}`
+              );
+            pipelineId = matches[0]!.id;
+          }
+          const { input, source, idempotencyKey: key } = operation;
           if (managed.signal.aborted) throw new Error("Run admission interrupted.");
-          const key = randomUUID();
+          const request = { pipelineId, input, ...(source ? { source } : {}) };
           let run: CliRun;
           try {
             try {
-              run = await client.run(workspace, { pipelineId: pipeline.id, input }, key);
+              run = await client.run(workspace, request, key);
             } catch (error) {
               if (!isCloudTransportError(error) || managed.signal.aborted) throw error;
-              run = await client.run(workspace, { pipelineId: pipeline.id, input }, key);
+              run = await client.run(workspace, request, key);
             }
           } catch (error) {
             // Local validation and explicit 4xx responses establish rejection.
             // A 5xx, unusable response or interrupted POST can follow admission.
             if (admissionUncertain(error)) {
               io.stderr.write(
-                `Admission could not be confirmed. Workspace: ${terminalSafeText(workspace)}; idempotency key: ${key}. Retry only with this same key through the API.\n`
+                `Admission could not be confirmed. Workspace: ${terminalSafeText(workspace)}; idempotency key: ${key}. Host: ${host}; pipeline ID: ${terminalSafeText(pipelineId)}. Retry with --idempotency-key ${key}, the same --id, --host and --workspace, and identical input and source selection (--ref or --source) under the same principal. Do not start a fresh run.\n`
               );
             }
             throw error;
@@ -311,7 +224,7 @@ export async function runCloud(
           admitted = { id: run.id, url: runUrl(host, workspace, run.id) };
           const progress = values.json ? io.stderr : io.stdout;
           progress.write(
-            `Run ${terminalSafeText(run.id)}: ${terminalSafeText(run.pipelineName)}\nWorkspace: ${terminalSafeText(workspace)}\nDeployed commit: ${terminalSafeText(run.commit)}\n${terminalSafeText(admitted.url)}\nLocal changes are not used.\n`
+            `Run ${terminalSafeText(run.id)}: ${terminalSafeText(run.pipelineName)}\nWorkspace: ${terminalSafeText(workspace)}\nSource commit: ${terminalSafeText(run.commit)}\n${terminalSafeText(admitted.url)}\nLocal changes are not used.\n${source ? `Requested source: ${JSON.stringify(source)}\n` : ""}`
           );
           if (values.detach) {
             if (values.json) io.stdout.write(`${JSON.stringify(run)}\n`);
@@ -334,9 +247,20 @@ export async function runCloud(
           }
           return runExit(run);
         } catch (error) {
+          if (error instanceof CloudRunUsageError)
+            return writeUsageError(io, error.message, CLOUD_USAGE);
           if (admitted)
             io.stderr.write(
               `Run ${terminalSafeText(admitted.id)}\n${terminalSafeText(admitted.url)}\n`
+            );
+          if (
+            admitted &&
+            command === "run" &&
+            error instanceof CloudClientError &&
+            error.code === "forbidden"
+          )
+            io.stderr.write(
+              "The run was admitted. Following requires read scope; use --detach for run-only credentials.\n"
             );
           return cloudErrorExit(error, io, managed.signal);
         } finally {

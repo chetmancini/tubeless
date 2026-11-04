@@ -342,6 +342,9 @@ describe("tubeless __complete", () => {
         "--workspace",
         "--id",
         "--input-file",
+        "--source",
+        "--ref",
+        "--idempotency-key",
         "--detach",
         "--follow",
         "--json",
@@ -355,7 +358,18 @@ describe("tubeless __complete", () => {
     [
       "cloud",
       "run",
-      ["--host", "--workspace", "--json", "--id", "--input-file", "--detach", "--help"],
+      [
+        "--host",
+        "--workspace",
+        "--json",
+        "--id",
+        "--input-file",
+        "--source",
+        "--ref",
+        "--idempotency-key",
+        "--detach",
+        "--help",
+      ],
     ],
     ["cloud", "logs", ["--host", "--workspace", "--json", "--follow", "--help"]],
     ["auth", "login", ["--host", "--no-browser", "--help"]],
@@ -392,6 +406,8 @@ describe("tubeless __complete", () => {
       (await complete(tmpdir(), "cloud", "--host", "https://example.test", "list", "--d")).values
     ).toEqual([]);
     expect((await complete(tmpdir(), "cloud", "run", "--input-file=pa")).files).toBe(true);
+    expect((await complete(tmpdir(), "cloud", "run", "--source={")).files).toBe(false);
+    expect((await complete(tmpdir(), "cloud", "list", "--source=pa")).files).toBe(false);
     expect((await complete(tmpdir(), "cloud", "list", "--input-file=pa")).files).toBe(false);
   });
 

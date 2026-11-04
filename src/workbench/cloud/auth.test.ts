@@ -47,6 +47,19 @@ function loginFetch(polls: unknown[], calls: string[] = []): typeof fetch {
 }
 
 describe("Cloud authentication commands", () => {
+  it("explains session-only status for automation without sending it to a session endpoint", async () => {
+    const io = captureIo("/detached");
+    const fetcher = vi.fn();
+    expect(
+      await runAuth(["status"], io, {
+        env: { TUBELESS_TOKEN: "tlc_ci_v1.test-only" },
+        fetch: fetcher,
+      })
+    ).toBe(2);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(io.errors.join("")).toContain("read scope");
+    expect(io.errors.join("")).not.toContain("tlc_ci_v1.test-only");
+  });
   it("help touches neither HTTP nor credentials", async () => {
     const fetcher = vi.fn();
     const store = { get: vi.fn(), set: vi.fn(), delete: vi.fn() };

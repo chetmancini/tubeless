@@ -54,7 +54,7 @@ describe("Cloud credential resolution", () => {
   });
 
   it("rejects empty and header-injecting environment values without diagnostics containing them", async () => {
-    for (const token of ["", "token\nX-Leak: secret", "token with spaces"]) {
+    for (const token of ["", "token\nX-Leak: secret", "token with spaces", "token\n", "token\r"]) {
       await expect(
         resolveCloudCredential("https://cloud.tubeless.io", { env: { TUBELESS_TOKEN: token } })
       ).rejects.toThrow("TUBELESS_TOKEN is empty or invalid");

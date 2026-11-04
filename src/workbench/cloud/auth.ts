@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { createCloudClient, cloudVerificationUrl } from "./client.js";
 import { resolveCloudHost } from "./config.js";
 import { createNativeCredentialStore, resolveCloudCredential } from "./credentials.js";
+import { isCloudAutomationToken } from "./protocol.js";
 
 import { type WorkbenchCliIo, writeUsageError, terminalSafeText } from "../workbench-shared.js";
 import {
@@ -115,7 +116,7 @@ export async function runAuth(
           }
           if (command === "logout" && env.TUBELESS_TOKEN) {
             io.stderr.write(
-              "TUBELESS_TOKEN is active. Remove it from your environment; this command does not revoke environment-supplied sessions.\n"
+              "TUBELESS_TOKEN is active. Remove it from your environment; this command does not revoke environment-supplied credentials.\n"
             );
             return 2;
           }
@@ -123,6 +124,10 @@ export async function runAuth(
           if (!credential)
             throw new Error(
               "No active Cloud credential. Run tubeless auth login or supply TUBELESS_TOKEN."
+            );
+          if (isCloudAutomationToken(credential.token))
+            throw new Error(
+              "auth status requires an interactive session. Use cloud list or cloud logs with --workspace <id> and read scope to check automation access."
             );
           const client = createCloudClient({
             host,

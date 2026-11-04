@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CloudClientError, cloudVerificationUrl, createCloudClient } from "./client.js";
-import type { CliRun, CliSession, CloudJsonValue } from "./protocol.js";
+import type { CliRun, CliSession, CloudJsonValue, CliRunSource } from "./protocol.js";
 
 afterEach(() => vi.useRealTimers());
 
@@ -42,6 +42,147 @@ function json(value: unknown, status = 200): Response {
 }
 
 describe("Cloud HTTP client", () => {
+  it.each([
+    "HEAD",
+    "Feature/orders",
+    "heads/main",
+    "tags/v1.2.3",
+    "v1.2.3",
+    "a1b2c3d",
+    "A".repeat(40),
+    "feature/😀",
+  ])("preserves a GitHub ref for server-side resolution: %s", async (ref) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(run, 202));
+    await createCloudClient({ host, token: "credential", fetch: fetcher }).run(
+      "workspace",
+      { pipelineId: "pipeline", input: {}, source: { kind: "ref", ref } },
+      "ref-key"
+    );
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).source).toEqual({ kind: "ref", ref });
+  });
+
+  it.each([
+    "",
+    " main",
+    "main\n",
+    "feature branch",
+    "../main",
+    "main~1",
+    "main^",
+    "main:other",
+    "main?",
+    "main*",
+    "main[1]",
+    "main\\other",
+    "main..other",
+    "main@{1}",
+    "@",
+    "-main",
+    "a//b",
+    "/main",
+    "main/",
+    ".main",
+    "main.",
+    "main.lock",
+    "a/.private/b",
+    "a/branch.lock/b",
+    "a".repeat(1025),
+    "é".repeat(513),
+    "bad\ud800",
+    "bad\udfff",
+  ])("rejects invalid, oversized or malformed Unicode refs before HTTP: %j", async (ref) => {
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(
+      createCloudClient({ host, token: "credential", fetch: fetcher }).run(
+        "workspace",
+        { pipelineId: "pipeline", input: {}, source: { kind: "ref", ref } },
+        "key"
+      )
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("accepts the full input budget alongside a maximally escaped ref", async () => {
+    const ref = '"'.repeat(1024);
+    const input = { payload: "x".repeat(65536 - Buffer.byteLength('{"payload":""}')) };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(run, 202));
+    await createCloudClient({ host, token: "credential", fetch: fetcher }).run(
+      "workspace",
+      { pipelineId: "pipeline", input, source: { kind: "ref", ref } },
+      "key"
+    );
+    expect(Buffer.byteLength(String(fetcher.mock.calls[0][1]?.body))).toBeGreaterThan(66 * 1024);
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({
+      pipelineId: "pipeline",
+      input,
+      source: { kind: "ref", ref },
+    });
+  });
+  it.each([
+    { kind: "main", commit: "A".repeat(40) },
+    {
+      kind: "pull_request",
+      number: 2,
+      headSha: "B".repeat(40),
+      baseSha: "C".repeat(40),
+      mergeSha: "D".repeat(40),
+    },
+  ] as const)(
+    "normalizes a complete $kind selector without altering the admission key",
+    async (source) => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(run, 202));
+      await createCloudClient({ host, token: "credential", fetch: fetcher }).run(
+        "workspace",
+        { pipelineId: "pipeline", input: {}, source },
+        "stable-key"
+      );
+      expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).source).toEqual(
+        source.kind === "main"
+          ? { kind: "main", commit: "a".repeat(40) }
+          : {
+              kind: "pull_request",
+              number: 2,
+              headSha: "b".repeat(40),
+              baseSha: "c".repeat(40),
+              mergeSha: "d".repeat(40),
+            }
+      );
+      expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("Idempotency-Key")).toBe(
+        "stable-key"
+      );
+    }
+  );
+
+  it.each([
+    null,
+    [],
+    {},
+    { kind: "branch", commit: "a".repeat(40) },
+    { kind: "main", commit: "a".repeat(39) },
+    { kind: "main", commit: "g".repeat(40) },
+    { kind: "ref", ref: "main", commit: "a".repeat(40) },
+    { kind: "ref", ref: 123 },
+    { kind: "main", commit: `${"a".repeat(40)}\n` },
+    { kind: "main", commit: "a".repeat(40), secrets: [] },
+    ...[0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "1"].map((number) => ({
+      kind: "pull_request",
+      number,
+      headSha: "a".repeat(40),
+      baseSha: "b".repeat(40),
+      mergeSha: "c".repeat(40),
+    })),
+    { kind: "pull_request", number: 1, headSha: "a".repeat(40), baseSha: "b".repeat(40) },
+  ])("rejects invalid immutable sources rather than falling back to latest: %j", async (source) => {
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(
+      createCloudClient({ host, token: "credential", fetch: fetcher }).run(
+        "workspace",
+        { pipelineId: "pipeline", input: {}, source: source as CliRunSource },
+        "key"
+      )
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it("binds bearer authority to one origin, omits cookies and rejects redirects", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(session));
     const client = createCloudClient({ host, token: "credential", fetch: fetcher });

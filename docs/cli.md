@@ -828,10 +828,28 @@ credential service. It reports storage failure and does not use plaintext files.
 The executable requires Bun 1.3.14 or later; Windows credential support has not
 been validated on a Windows host. Older Bun releases use the native Windows
 persistence default; Bun 1.4.2+ requests local machine persistence. For headless clients, inject an existing
-expiring session as `TUBELESS_TOKEN`. It overrides stored credentials and is
-never saved or printed. Dedicated scoped or long-lived CI tokens are not part of
-this flow. `auth logout` revokes a stored session and removes the local entry;
+expiring session or a Cloud automation token as `TUBELESS_TOKEN`. It overrides
+stored credentials and is never saved or printed. Automation credentials require
+an explicit `--workspace <id>` and are issued, scoped, rotated and revoked in the
+Cloud dashboard. `auth status` is for interactive sessions; use `cloud list` or
+`cloud logs` with read scope to check automation access.
+`auth logout` revokes a stored session and removes the local entry;
 when the environment token is active, remove it from the environment yourself.
+
+For a run-only automation grant, supply a known pipeline ID and detach:
+
+```sh
+# Inject TUBELESS_TOKEN through your CI secret store.
+tubeless cloud run --id <cloud-pipeline-id> --workspace <workspace-id> --detach --json
+```
+
+This sends admission directly without listing pipelines or enumerating sessions.
+Listing, name/slug resolution, retained logs and foreground waiting require read
+scope. Submission requires run scope. The service enforces pipeline restrictions,
+workspace/host binding, expiry and revocation on every request. If admission succeeds
+but following is denied, the diagnostic retains the admitted run ID; do not submit
+another job to recover the result. Current automation read/run scopes do not grant
+remote cancellation or artifact downloads.
 
 `cloud list` shows each loaded pipeline's slug, name, Cloud ID, availability and
 deployed commit. Run accepts an exact name or a listed slug: both
@@ -843,11 +861,70 @@ slug. A name ending in `.ts` is still a name. Unknown selectors suggest listing
 or loading in the dashboard. Any collision between names or slugs requires
 `cloud run --id <cloud-pipeline-id>`; ID selection cannot be combined with a name
 or slug. Owners, admins and members can run; viewers can list and read logs.
+Explicit IDs are checked directly by the service rather than looked up in a list.
 
-A run executes its **deployed revision**. The accepted run's SHA is authoritative
-and printed with its ID and dashboard URL. Local files and changes are never
-loaded, uploaded or synchronized. Deployment and version management remain a
-separate workflow.
+A run executes the revision admitted by Cloud. Without a source selector, Cloud
+uses its configured source policy. The accepted run's SHA is authoritative and
+printed with its ID and dashboard URL. Local pipeline modules and changes are
+never loaded, uploaded or synchronized.
+
+For ordinary runs, select a GitHub branch, tag, full SHA or unambiguous short SHA
+with `--ref`. Omitting it runs the HEAD of the pipeline's configured remote
+branch; the CLI does not inspect your local checkout.
+
+```sh
+tubeless cloud run checks --ref feature/orders
+tubeless cloud run checks --ref v1.2.3
+tubeless cloud run checks --ref abc1234
+```
+
+Cloud resolves the ref once and pins all source/import reads to the resulting
+full commit. The printed source commit and JSON `commit` are the admitted SHA.
+Ref names are case-sensitive and limited to 1024 UTF-8 bytes. Use `heads/<branch>`
+or `tags/<tag>` to disambiguate a branch and tag with the same name. Missing or
+ambiguous refs fail explicitly; ambiguous short SHAs need more characters. A ref
+run requires an explicitly empty pipeline secret scope and does not establish
+main ancestry or create a promotable release candidate. Replaying the same
+admission key returns the original snapshot even if the ref moves.
+
+For advanced source assertions, use `--source <json|@path|->`. Pass the object
+as inline JSON, use `@path` to read it from a file, or `-` to read stdin. Bare
+filenames are not interpreted as paths. Each form accepts at most 64 KB of JSON.
+
+```sh
+tubeless cloud run --id <cloud-pipeline-id> --workspace <workspace-id> \
+  --source '{"kind":"main","commit":"0123456789abcdef0123456789abcdef01234567"}' --detach
+tubeless cloud run --id <cloud-pipeline-id> --workspace <workspace-id> \
+  --source @source-selector.json --detach
+```
+
+For a main-branch commit, the selector object is:
+
+```json
+{ "kind": "main", "commit": "0123456789abcdef0123456789abcdef01234567" }
+```
+
+For a PR's verified merge snapshot:
+
+```json
+{
+  "kind": "pull_request",
+  "number": 19,
+  "headSha": "1111111111111111111111111111111111111111",
+  "baseSha": "2222222222222222222222222222222222222222",
+  "mergeSha": "3333333333333333333333333333333333333333"
+}
+```
+
+SHAs must be full 40-character hex values and are normalized to lowercase. PR
+numbers must be positive safe integers. Unknown fields and incomplete selectors
+are rejected locally. Cloud verifies repository ownership, main reachability or
+current PR context, and requires an explicitly empty secret scope for immutable
+source. A rejected selector never falls back to the latest revision. The selector
+cannot choose commands, images, secrets or another repository. `--ref` and
+`--source` are mutually exclusive. Advanced callers may also supply
+`{"kind":"ref","ref":"feature/orders"}` through `--source`. Only one of
+`--input-file` and `--source` may read stdin.
 
 Inputs are JSON objects up to 64 KB, with no local schema inference. Omitted input
 is `{}`. Use `--input-file -` for stdin, or a regular JSON file. An explicitly
@@ -858,8 +935,25 @@ Input must fit the limit after
 JSON normalization as well as in the original file. A run invocation uses one
 idempotency key for its bounded transport retry; local validation errors are not
 retried. If admission remains uncertain,
-the diagnostic prints that key and workspace so the request can be investigated.
-Do not start a fresh run to retry an uncertain admission.
+the diagnostic prints that key, workspace and pipeline ID so the request can be
+investigated. Use `--idempotency-key <key>` to replay an uncertain admission in a
+new CLI invocation:
+
+```sh
+tubeless cloud run --id <cloud-pipeline-id> --workspace <workspace-id> \
+  --input-file input.json --source @source-selector.json \
+  --idempotency-key ci.check.123 --detach --json
+```
+
+Keys contain 1–200 letters, digits, periods, underscores, colons or hyphens.
+Retain the same host, workspace, principal, pipeline ID, JSON input and source
+selector across retries. Cloud canonicalizes input and source; changed intent
+under the same key conflicts. Rotation preserves the grant's principal, while a
+different grant creates a different namespace. A replay returns the original
+admission receipt, not later status; read the run for current results. Keep the
+input/source files fixed and never reuse an uncertain key for new work. Without
+an explicit key the CLI generates one for that invocation. Do not start a fresh
+run to retry an uncertain admission.
 
 Foreground runs follow status and retained logs every two seconds. `--detach`
 prints the run ID and returns after confirmed admission; use `--detach --json`

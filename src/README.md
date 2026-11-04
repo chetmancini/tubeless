@@ -202,7 +202,10 @@ Run `make check` after changes; it builds before checking these boundaries.
 
 - `workbench/cloud/auth.ts` and `workbench/cloud/command.ts` own lazy first-party Cloud
   command orchestration and name/slug selection. `workbench/cloud/client.ts` owns bounded
-  HTTP transport and run request validation; `workbench/cloud/protocol.ts` owns independent
+  HTTP transport and run request validation, including immutable source selectors;
+  `workbench/cloud/run-input.ts` owns run-argument combinations, bounded JSON
+  file/stdin loading and preparation of input, source and admission key.
+  `workbench/cloud/protocol.ts` owns independent
   wire types, strict response decoding, finite JSON validation and the canonical token validator.
   `workbench/cloud/config.ts` validates explicit/default service origins, and
   `workbench/cloud/credentials.ts` owns lazy native credentials. These modules never import
