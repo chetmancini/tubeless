@@ -3,9 +3,44 @@ import { describe, expect, it } from "vitest";
 import * as path from "node:path";
 import { runCloud } from "./command.js";
 import { captureIo } from "../workbench.test-support.js";
-import { pipeline, fixture, service } from "./command.test-support.js";
+import { baseRun, pipeline, fixture, service } from "./command.test-support.js";
 
 describe("Cloud source selection", () => {
+  it.each([
+    { file: false, json: false },
+    { file: true, json: false },
+    { file: false, json: true },
+    { file: true, json: true },
+  ])("sanitizes source progress only (file=$file, json=$json)", async ({ file, json }) => {
+    const ref = "feature/\u009b31m\u202eorders";
+    const source = { kind: "ref", ref };
+    const root = await fixture();
+    await writeFile(path.join(root, "source.json"), JSON.stringify(source));
+    const dependencies = service({ admission: { ...baseRun, branch: ref } });
+    const io = captureIo(root);
+    expect(
+      await runCloud(
+        [
+          "run",
+          "--id",
+          pipeline.id,
+          "--workspace",
+          "workspace",
+          ...(file ? ["--source", "@source.json"] : ["--ref", ref]),
+          "--detach",
+          ...(json ? ["--json"] : []),
+        ],
+        io,
+        dependencies
+      )
+    ).toBe(0);
+    const progress = (json ? io.errors : io.output).join("");
+    expect(progress).toContain('Requested source: {"kind":"ref","ref":"feature/ 31m orders"}');
+    expect(progress).not.toMatch(/[\u009b\u202e]/);
+    expect(dependencies.calls[0]!.body).toEqual({ pipelineId: pipeline.id, input: {}, source });
+    if (json) expect(JSON.parse(io.output.join("")).branch).toBe(ref);
+  });
+
   it("rejects malformed source before credential or HTTP access", async () => {
     const dependencies = service();
     const store = {

@@ -224,7 +224,7 @@ export async function runCloud(
           admitted = { id: run.id, url: runUrl(host, workspace, run.id) };
           const progress = values.json ? io.stderr : io.stdout;
           progress.write(
-            `Run ${terminalSafeText(run.id)}: ${terminalSafeText(run.pipelineName)}\nWorkspace: ${terminalSafeText(workspace)}\nSource commit: ${terminalSafeText(run.commit)}\n${terminalSafeText(admitted.url)}\nLocal changes are not used.\n${source ? `Requested source: ${JSON.stringify(source)}\n` : ""}`
+            `Run ${terminalSafeText(run.id)}: ${terminalSafeText(run.pipelineName)}\nWorkspace: ${terminalSafeText(workspace)}\nSource commit: ${terminalSafeText(run.commit)}\n${terminalSafeText(admitted.url)}\nLocal changes are not used.\n${source ? `Requested source: ${terminalSafeText(JSON.stringify(source))}\n` : ""}`
           );
           if (values.detach) {
             if (values.json) io.stdout.write(`${JSON.stringify(run)}\n`);
