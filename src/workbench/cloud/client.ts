@@ -22,7 +22,7 @@ import {
 import { terminalSafeText } from "../workbench-shared.js";
 
 const CLOUD_JSON_LIMIT = 64 * 1024;
-const RUN_ENVELOPE_LIMIT = 66 * 1024;
+const RUN_ENVELOPE_LIMIT = 68 * 1024;
 const RESPONSE_LIMIT = 4 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 15_000;
 

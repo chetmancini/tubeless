@@ -383,6 +383,11 @@ describe("Cloud HTTP client", () => {
     expect(typeof requestBody).toBe("string");
     expect(Buffer.byteLength(String(requestBody), "utf8")).toBeGreaterThan(65536);
     expect(JSON.parse(String(requestBody))).toEqual({ pipelineId: "pipeline", input });
+    const source = { kind: "ref" as const, ref: '"'.repeat(1024) };
+    expect(
+      await client.run("workspace", { pipelineId: "pipeline", input, source }, "ref-limit")
+    ).toEqual(run);
+    expect(Buffer.byteLength(String(fetcher.mock.calls[1][1]?.body))).toBeGreaterThan(66 * 1024);
     const oversized = { data: `${data}x` };
     expect(Buffer.byteLength(JSON.stringify(oversized), "utf8")).toBe(65537);
     await expect(
@@ -391,7 +396,7 @@ describe("Cloud HTTP client", () => {
       code: "invalid_request",
       message: "Cloud run input exceeds the 64 KB JSON limit.",
     });
-    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("bounds streamed response bytes even without a Content-Length", async () => {

@@ -341,6 +341,7 @@ describe("tubeless __complete", () => {
         "--host",
         "--workspace",
         "--id",
+        "--ref",
         "--input-file",
         "--detach",
         "--follow",
@@ -355,7 +356,7 @@ describe("tubeless __complete", () => {
     [
       "cloud",
       "run",
-      ["--host", "--workspace", "--json", "--id", "--input-file", "--detach", "--help"],
+      ["--host", "--workspace", "--json", "--id", "--ref", "--input-file", "--detach", "--help"],
     ],
     ["cloud", "logs", ["--host", "--workspace", "--json", "--follow", "--help"]],
     ["auth", "login", ["--host", "--no-browser", "--help"]],

@@ -16,6 +16,7 @@ import {
   CLOUD_INPUT_MAX_DEPTH,
   isCloudJsonValue,
   type CliRun,
+  type CliRunRequest,
   type CloudJsonValue,
 } from "./protocol.js";
 
@@ -194,6 +195,11 @@ export async function runCloud(
           return writeUsageError(io, "Pass a nonempty workspace ID.", CLOUD_USAGE);
         if (values.id !== undefined && !values.id.trim())
           return writeUsageError(io, "Pass a nonempty pipeline ID.", CLOUD_USAGE);
+        if (
+          values.ref !== undefined &&
+          (!values.ref.trim() || Buffer.byteLength(values.ref) > 1024)
+        )
+          return writeUsageError(io, "Pass a nonempty --ref of at most 1024 bytes.", CLOUD_USAGE);
         if (values["input-file"] === "")
           return writeUsageError(
             io,
@@ -290,13 +296,18 @@ export async function runCloud(
               : {};
           if (managed.signal.aborted) throw new Error("Run admission interrupted.");
           const key = randomUUID();
+          const request: CliRunRequest = {
+            pipelineId: pipeline.id,
+            input,
+            ...(values.ref === undefined ? {} : { source: { kind: "ref", ref: values.ref } }),
+          };
           let run: CliRun;
           try {
             try {
-              run = await client.run(workspace, { pipelineId: pipeline.id, input }, key);
+              run = await client.run(workspace, request, key);
             } catch (error) {
               if (!isCloudTransportError(error) || managed.signal.aborted) throw error;
-              run = await client.run(workspace, { pipelineId: pipeline.id, input }, key);
+              run = await client.run(workspace, request, key);
             }
           } catch (error) {
             // Local validation and explicit 4xx responses establish rejection.
@@ -311,7 +322,7 @@ export async function runCloud(
           admitted = { id: run.id, url: runUrl(host, workspace, run.id) };
           const progress = values.json ? io.stderr : io.stdout;
           progress.write(
-            `Run ${terminalSafeText(run.id)}: ${terminalSafeText(run.pipelineName)}\nWorkspace: ${terminalSafeText(workspace)}\nDeployed commit: ${terminalSafeText(run.commit)}\n${terminalSafeText(admitted.url)}\nLocal changes are not used.\n`
+            `Run ${terminalSafeText(run.id)}: ${terminalSafeText(run.pipelineName)}\nWorkspace: ${terminalSafeText(workspace)}\nCommit: ${terminalSafeText(run.commit)}\n${terminalSafeText(admitted.url)}\nLocal changes are not used.\n`
           );
           if (values.detach) {
             if (values.json) io.stdout.write(`${JSON.stringify(run)}\n`);
