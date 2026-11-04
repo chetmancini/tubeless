@@ -37,6 +37,7 @@ export interface CliPipeline {
 export interface CliRunRequest {
   pipelineId: string;
   input: Record<string, CloudJsonValue>;
+  source?: { kind: "ref"; ref: string };
 }
 
 export interface CliLogLine {

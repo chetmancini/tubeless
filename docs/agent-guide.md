@@ -711,8 +711,10 @@ Use `tubeless auth login`, then `cloud list` to select an already-loaded pipelin
 by exact name or listed slug. Use `cloud run --id <id>` when selectors collide.
 A single session workspace is automatic; multiple workspaces require
 `--workspace <id>`. Load and synchronize pipelines in the dashboard.
-`cloud run` executes only the existing deployment and never reads Git, project
-configuration or local modules. Pass JSON object input via `--input-file`, use
+`cloud run` uses the configured GitHub branch's latest commit; `--ref <branch|tag|sha>`
+selects another branch, tag or full or abbreviated SHA through Cloud. Ref runs
+require an explicitly empty pipeline secret scope. Commands never read local Git,
+project configuration or modules. Pass JSON object input via `--input-file`, use
 `--json` for automation and `--detach` for admission only. Preserve an uncertain
 admission key rather than launching a fresh run. Ctrl-C stops following;
 cancellation remains explicit in the dashboard.

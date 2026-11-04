@@ -805,6 +805,9 @@ tubeless auth status
 tubeless cloud list
 tubeless cloud run orders-sync --input-file input.json
 tubeless cloud run orders-sync --detach --json
+tubeless cloud run orders-sync --ref feature/orders
+tubeless cloud run orders-sync --ref abc1234
+tubeless cloud run orders-sync --ref v1.2.3
 tubeless cloud logs <run-id> --follow
 tubeless auth logout
 ```
@@ -844,10 +847,18 @@ or loading in the dashboard. Any collision between names or slugs requires
 `cloud run --id <cloud-pipeline-id>`; ID selection cannot be combined with a name
 or slug. Owners, admins and members can run; viewers can list and read logs.
 
-A run executes its **deployed revision**. The accepted run's SHA is authoritative
-and printed with its ID and dashboard URL. Local files and changes are never
-loaded, uploaded or synchronized. Deployment and version management remain a
-separate workflow.
+A run uses the configured GitHub branch's latest commit. Use `--ref <branch|tag|sha>`
+to select another branch, tag, full commit SHA or unambiguous abbreviated SHA in
+the connected repository. Cloud resolves the ref once and reads all source and
+imports at that exact commit. `heads/<branch>` and `tags/<tag>` distinguish names
+shared by a branch and tag; annotated tags resolve to their commit. Missing or
+ambiguous refs reject admission; use a longer SHA if needed. Refs are
+case-sensitive and limited to 1024 UTF-8 bytes. Ref runs require the pipeline's
+secret scope to be explicitly empty and do not create promotable release candidates.
+The accepted run's SHA is authoritative and printed with its ID and dashboard URL.
+An idempotency retry preserves that commit even if the ref moves. Ref selection
+leaves the loaded pipeline unchanged. Local files and changes are never loaded or
+uploaded.
 
 Inputs are JSON objects up to 64 KB, with no local schema inference. Omitted input
 is `{}`. Use `--input-file -` for stdin, or a regular JSON file. An explicitly

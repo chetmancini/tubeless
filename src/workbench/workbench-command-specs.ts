@@ -352,14 +352,15 @@ Sign in to Tubeless Cloud with an expiring first-party session.
     usage: `Usage: tubeless cloud <list|run|logs> [options]
 
   list [--json]
-  run <pipeline-name-or-slug> [--input-file <path|->] [--detach] [--json]
-  run --id <cloud-pipeline-id> [--input-file <path|->] [--detach] [--json]
+  run <pipeline-name-or-slug> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach] [--json]
+  run --id <cloud-pipeline-id> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach] [--json]
   logs <run-id> [--follow] [--json]
 
 All commands accept --workspace <id>, --host <origin>, and --help.
 Use a listed slug or an exact name. Quote names containing spaces.
 Run watches logs by default; --detach returns after printing the run ID.
-Remote runs use deployed code. Local edits and modules are never loaded.
+Run uses the configured branch's latest commit; --ref selects a GitHub branch, tag or SHA.
+Local edits and modules are never loaded.
 Set up and load pipelines in the Cloud dashboard.
 `,
     subcommands: ["list", "run", "logs"],
@@ -376,6 +377,13 @@ Set up and load pipelines in the Cloud dashboard.
         type: "string",
         description: "Select a pipeline by its exact ID",
         valueName: "cloud-pipeline-id",
+        completion: "text",
+        commands: ["run"],
+      },
+      ref: {
+        type: "string",
+        description: "Run a GitHub branch, tag, or full or abbreviated commit SHA",
+        valueName: "branch|tag|sha",
         completion: "text",
         commands: ["run"],
       },

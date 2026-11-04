@@ -114,6 +114,42 @@ describe("Cloud remote commands", () => {
     expect(dependencies.calls).toEqual([]);
   });
 
+  it.each(["feature/orders", "abc1234", "v1.2.3", "heads/release/v2", "tags/v2"])(
+    "sends --ref %s unchanged and reuses it on a transport retry",
+    async (ref) => {
+      const dependencies = service({ lostAcknowledgement: true });
+      const io = captureIo("/detached");
+      expect(
+        await runCloud(
+          ["run", "--id", pipeline.id, "--ref", ref, "--detach", "--json"],
+          io,
+          dependencies
+        )
+      ).toBe(0);
+      const posts = dependencies.calls.filter((call) => call.method === "POST");
+      expect(posts).toHaveLength(2);
+      expect(posts[0]!.body).toEqual({
+        pipelineId: pipeline.id,
+        input: {},
+        source: { kind: "ref", ref },
+      });
+      expect(posts[1]!.body).toEqual(posts[0]!.body);
+      expect(posts[1]!.key).toBe(posts[0]!.key);
+      expect(JSON.parse(io.output.join(""))).toMatchObject({ commit: baseRun.commit });
+    }
+  );
+
+  it.each(["", " ", "x".repeat(1025)])(
+    "rejects an empty or oversized ref before HTTP",
+    async (ref) => {
+      const dependencies = service();
+      expect(
+        await runCloud(["run", pipeline.slug, "--ref", ref], captureIo("/detached"), dependencies)
+      ).toBe(1);
+      expect(dependencies.calls).toHaveLength(0);
+    }
+  );
+
   it.each([["--input-file", ""], ["--input-file="]])(
     "rejects an explicitly empty input-file path before HTTP: %j",
     async (...flags) => {
@@ -293,7 +329,7 @@ describe("Cloud remote commands", () => {
       const human = json ? io.errors.join("") : io.output.join("") + io.errors.join("");
       expect(human).not.toMatch(/[\u001b\u009b\u202e]/);
       expect(human).toContain("Run remote [2J   spoof: remote [2J   spoof\n");
-      expect(human).toContain("Deployed commit: remote [2J   spoof\n");
+      expect(human).toContain("Commit: remote [2J   spoof\n");
       if (json) expect(JSON.parse(io.output.join(""))).toEqual(run);
       else expect(io.errors.join("")).toBe("remote [2J   spoof\n");
     }
