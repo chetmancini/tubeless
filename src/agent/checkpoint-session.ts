@@ -32,6 +32,7 @@ function callingAgent(checkpoint: Checkpoint, key: string): CallingAgent {
 /** One owner for acknowledged state transitions and budgets across a durable subtree. */
 export class AgentCheckpointSession {
   #checkpoint: Checkpoint;
+  #encodedCheckpoint: string | undefined;
   #tail = Promise.resolve();
   #failure: { error: unknown } | undefined;
   private constructor(
@@ -61,8 +62,7 @@ export class AgentCheckpointSession {
       throw error;
     }
   }
-  private roundTrip<T>(value: T): { encoded: string; decoded: T } {
-    const encoded = this.codec.encode(value);
+  private decode<T>(encoded: string): T {
     const decoded = this.codec.decode(encoded);
     if (this.codec.encode(decoded) !== encoded)
       throw agentError(
@@ -70,7 +70,11 @@ export class AgentCheckpointSession {
         "Agent checkpoint codec must round-trip deterministically"
       );
     // SAFETY: codecs promise lossless round trips; the default checks finite plain data.
-    return { encoded, decoded: decoded as T };
+    return decoded as T;
+  }
+  private roundTrip<T>(value: T): { encoded: string; decoded: T } {
+    const encoded = this.codec.encode(value);
+    return { encoded, decoded: this.decode<T>(encoded) };
   }
   agent(key: string): SavedAgent | undefined {
     const value = this.#checkpoint.agents[key];
@@ -163,10 +167,12 @@ export class AgentCheckpointSession {
     id: string,
     replay: "safe" | "unsafe"
   ): Promise<{ kind: "run" } | { kind: "outcome"; outcome: CallOutcome; reused: boolean }> {
-    const saved = this.decision(key)?.calls.find((call) => call.id === id);
+    const agent = this.#checkpoint.agents[key];
+    const saved =
+      agent?.phase === "calls" ? agent.decision.calls.find((call) => call.id === id) : undefined;
     if (!saved) throw new Error("Saved agent call disappeared");
     if (saved.status === "completed")
-      return { kind: "outcome", outcome: saved.outcome, reused: true };
+      return { kind: "outcome", outcome: this.roundTrip(saved.outcome).decoded, reused: true };
     if (saved.status === "running" && (saved.replay !== "safe" || replay !== "safe")) {
       const outcome: CallOutcome = {
         id,
@@ -247,13 +253,19 @@ export class AgentCheckpointSession {
   private update(change: (checkpoint: Checkpoint) => void): Promise<void> {
     const write = this.#tail.then(async () => {
       if (this.#failure) throw this.#failure.error;
-      const checkpoint = this.roundTrip(this.#checkpoint).decoded;
+      // Reuse acknowledged bytes to make the private working copy. New state still
+      // passes the codec's deterministic round-trip check before it is persisted.
+      const checkpoint =
+        this.#encodedCheckpoint === undefined
+          ? this.roundTrip(this.#checkpoint).decoded
+          : checkedCheckpoint(this.decode(this.#encodedCheckpoint));
       change(checkpoint);
       try {
         const { encoded, decoded } = this.roundTrip(checkedCheckpoint(checkpoint));
         const checked = checkedCheckpoint(decoded);
         await this.lease.write(encoded);
         this.#checkpoint = checked;
+        this.#encodedCheckpoint = encoded;
       } catch (error) {
         this.#failure ??= { error };
         throw error;
