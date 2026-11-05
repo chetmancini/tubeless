@@ -280,6 +280,83 @@ describe("createRunHistoryIndex", () => {
       "newer-idle",
     ]);
   });
+
+  it("refreshes event totals, activity and records like a fresh index without changing old snapshots", () => {
+    let runs = [
+      run({ runId: "root" }),
+      run({ runId: "child", parentRunId: "root", status: "running" }),
+      run({ runId: "grandchild", parentRunId: "child", status: "running" }),
+      run({ runId: "orphan", parentRunId: "missing" }),
+      run({ runId: "cycle-a", parentRunId: "cycle-b" }),
+      run({ runId: "cycle-b", parentRunId: "cycle-a" }),
+    ];
+    const originalRuns = runs;
+    const original = structuredClone(runs);
+    const index = createRunHistoryIndex(runs);
+    for (let change = 0; change < 24; change++) {
+      runs = runs.map((run, position) =>
+        position === change % runs.length
+          ? {
+              ...run,
+              eventCount: run.eventCount + 1,
+              status: run.status === "running" ? "completed" : "running",
+              correlationId: `job-${change}`,
+            }
+          : run
+      );
+      expect(index.update(runs)).toBeDefined();
+      const fresh = createRunHistoryIndex(runs);
+      expect(index.roots).toEqual(fresh.roots);
+      expect(index.childrenOf("missing")).toEqual(fresh.childrenOf("missing"));
+      expect(index.matchingRootIds(`job-${change}`)).toEqual(
+        fresh.matchingRootIds(`job-${change}`)
+      );
+      for (const run of runs) {
+        expect(index.runById(run.runId)).toBe(run);
+        expect(index.ancestorsOf(run.runId)).toEqual(fresh.ancestorsOf(run.runId));
+        expect(index.childrenOf(run.runId)).toEqual(fresh.childrenOf(run.runId));
+        expect(index.subtreeEventCount(run.runId)).toBe(fresh.subtreeEventCount(run.runId));
+        expect(index.subtreeIsRunning(run.runId)).toBe(fresh.subtreeIsRunning(run.runId));
+        expect(index.descendantCount(run.runId)).toBe(fresh.descendantCount(run.runId));
+      }
+    }
+    expect(originalRuns).toEqual(original);
+  });
+
+  it("rejects structural updates before replacing any records", () => {
+    const first = run({ runId: "first" });
+    const second = run({ runId: "second" });
+    const runs = [first, second];
+    const index = createRunHistoryIndex(runs);
+    for (const next of [
+      [...runs, run({ runId: "third" })],
+      [second, first],
+      [
+        { ...first, eventCount: 2 },
+        { ...second, parentRunId: "first" },
+      ],
+      [
+        { ...first, eventCount: 2 },
+        { ...second, startedAtMs: 2 },
+      ],
+    ]) {
+      expect(index.update(next)).toBeUndefined();
+      expect(index.runById("first")).toBe(first);
+      expect(index.subtreeEventCount("first")).toBe(1);
+    }
+  });
+
+  it("leaves a large overlapping update for one full rebuild", () => {
+    const runs = Array.from({ length: 2_000 }, (_, index) =>
+      run({ runId: `node-${index}`, parentRunId: index ? `node-${index - 1}` : undefined })
+    );
+    const history = createRunHistoryIndex(runs);
+    const next = runs.map((run) => ({ ...run, eventCount: 2 }));
+    expect(history.update(next)).toBeUndefined();
+    expect(history.subtreeEventCount("node-0")).toBe(2_000);
+    expect(history.runById("node-1999")).toBe(runs[1_999]);
+    expect(createRunHistoryIndex(next).subtreeEventCount("node-0")).toBe(4_000);
+  });
 });
 
 describe("summarizeRun origin", () => {

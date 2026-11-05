@@ -143,6 +143,8 @@ const EMPTY_RUNS: readonly never[] = [];
 
 export interface RunHistoryIndex<T extends RunHistoryItem> {
   readonly roots: readonly T[];
+  /** Refresh unchanged topology; return affected summary IDs, or undefined to rebuild. */
+  update(runs: readonly T[]): ReadonlySet<string> | undefined;
   ancestorsOf(runId: string | null | undefined): T[];
   /** The resolved immediate parent, without walking the ancestor chain. */
   parentOf(runId: string | null | undefined): T | undefined;
@@ -155,10 +157,11 @@ export interface RunHistoryIndex<T extends RunHistoryItem> {
   subtreeEventCount(runId: string): number;
 }
 
-/** Derived run hierarchy for one history revision. Rebuild when the snapshot is replaced. */
+/** Derived run hierarchy; updates reuse topology until membership, parents or ordering change. */
 export function createRunHistoryIndex<T extends RunHistoryItem>(
   runs: readonly T[]
 ): RunHistoryIndex<T> {
+  let currentRuns = runs;
   const runsById = new Map<string, T>();
   const childrenByParentId = new Map<string, T[]>();
   const parentIdByRunId = new Map<string, string | undefined>();
@@ -195,17 +198,19 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
     if (siblings) siblings.push(run);
     else childrenByParentId.set(parentRunId, [run]);
   }
+  const childIndexById = new Map<string, number>();
   for (const siblings of childrenByParentId.values()) {
     siblings.sort((left, right) => right.startedAtMs - left.startedAtMs);
+    siblings.forEach((child, index) => childIndexById.set(child.runId, index));
   }
 
   const roots: T[] = [];
-  const rootIds = new Set<string>();
+  const rootIds = new Map<string, number>();
   for (const run of runs) {
     const parentRunId = parentIdByRunId.get(run.runId);
     if (parentRunId && runsById.has(parentRunId)) continue;
+    rootIds.set(run.runId, roots.length);
     roots.push(run);
-    rootIds.add(run.runId);
   }
 
   const rootIdByRunId = new Map<string, string | undefined>();
@@ -236,7 +241,7 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
   }
 
   const descendantCountById = new Map<string, number>();
-  const subtreeRunningById = new Map<string, boolean>();
+  const subtreeRunningById = new Map<string, number>();
   const subtreeEventsById = new Map<string, number>();
   for (const run of runs) {
     if (descendantCountById.has(run.runId)) continue;
@@ -246,13 +251,13 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
       if (!frame) break;
       if (frame.exiting) {
         let count = 0;
-        let running = runsById.get(frame.id)?.status === "running";
+        let running = Number(runsById.get(frame.id)?.status === "running");
         let events = runsById.get(frame.id)?.eventCount ?? 0;
         for (const child of childrenByParentId.get(frame.id) ?? EMPTY_RUNS) {
           const childCount = descendantCountById.get(child.runId);
           if (childCount === undefined) continue;
           count += 1 + childCount;
-          running = running || subtreeRunningById.get(child.runId) === true;
+          running += subtreeRunningById.get(child.runId) ?? 0;
           events += subtreeEventsById.get(child.runId) ?? 0;
         }
         descendantCountById.set(frame.id, count);
@@ -298,7 +303,7 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
       for (const root of roots) matched.add(root.runId);
       return matched;
     }
-    for (const run of runs) {
+    for (const run of currentRuns) {
       if (
         !run.pipelineId.toLowerCase().includes(needle) &&
         !run.runId.toLowerCase().includes(needle) &&
@@ -314,6 +319,54 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
 
   return {
     roots,
+    update(nextRuns) {
+      if (nextRuns.length !== currentRuns.length || runsById.size !== currentRuns.length)
+        return undefined;
+      const changed: T[] = [];
+      let remainingWork = currentRuns.length;
+      for (let index = 0; index < nextRuns.length; index++) {
+        const next = nextRuns[index]!;
+        const previous = currentRuns[index]!;
+        if (next === previous) continue;
+        if (
+          next.runId !== previous.runId ||
+          next.parentRunId !== previous.parentRunId ||
+          next.startedAtMs !== previous.startedAtMs
+        )
+          return undefined;
+        // Prefer one full traversal to overlapping ancestor walks in a large batch.
+        remainingWork -= childrenOf(next.runId).length;
+        let id: string | undefined = next.runId;
+        while (id && runsById.has(id)) {
+          if (--remainingWork < 0) return undefined;
+          id = parentIdByRunId.get(id);
+        }
+        changed.push(next);
+      }
+      const affected = new Set<string>();
+      for (const next of changed) {
+        const previous = runsById.get(next.runId)!;
+        const eventDelta = next.eventCount - previous.eventCount;
+        const runningDelta =
+          Number(next.status === "running") - Number(previous.status === "running");
+        runsById.set(next.runId, next);
+        const rootIndex = rootIds.get(next.runId);
+        if (rootIndex !== undefined) roots[rootIndex] = next;
+        const parentId = parentIdByRunId.get(next.runId);
+        if (parentId) childrenByParentId.get(parentId)![childIndexById.get(next.runId)!] = next;
+        let id: string | undefined = next.runId;
+        while (id && runsById.has(id)) {
+          affected.add(id);
+          subtreeEventsById.set(id, subtreeEventsById.get(id)! + eventDelta);
+          subtreeRunningById.set(id, subtreeRunningById.get(id)! + runningDelta);
+          id = parentIdByRunId.get(id);
+        }
+        // A parent's steps and agent metadata determine its direct children's origins.
+        for (const child of childrenOf(next.runId)) affected.add(child.runId);
+      }
+      currentRuns = nextRuns;
+      return affected;
+    },
     ancestorsOf,
     childrenOf,
     parentOf,
@@ -326,7 +379,7 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
     },
     runById,
     subtreeIsRunning(runId: string) {
-      return subtreeRunningById.get(runId) === true;
+      return (subtreeRunningById.get(runId) ?? 0) > 0;
     },
     subtreeEventCount(runId: string) {
       return subtreeEventsById.get(runId) ?? 0;

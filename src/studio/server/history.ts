@@ -23,35 +23,54 @@ import type {
   StudioDefinitionRuns,
 } from "../shared/schema.js";
 
-/** Queries one projected history revision without reading or mutating storage. */
+/** Queries projected history, reusing summaries and topology across event-only updates. */
 export class StudioHistory {
   readonly #index;
   readonly #summaries;
-  readonly #roots;
-  readonly #definitions;
-  readonly #pipelines;
-  readonly #eventCount;
+  #roots;
+  #definitions;
+  #pipelines;
+  #eventCount;
   #search: { query: string; pipelineId: string; roots: StoredRunSummary[] } | undefined;
 
-  constructor(private readonly source: PipelineRunStoreSnapshot) {
+  constructor(private source: PipelineRunStoreSnapshot) {
     this.#index = createRunHistoryIndex(source.runs);
     this.#summaries = new Map(
       source.runs.map((run) => [run.runId, summarizeRun(run, this.#index)])
     );
-    this.#roots = this.#index.roots
-      .map((run) => this.#summaries.get(run.runId)!)
-      .sort(
-        (left, right) =>
-          Number(right.subtreeIsRunning) - Number(left.subtreeIsRunning) ||
-          right.startedAtMs - left.startedAtMs
-      );
+    this.#roots = this.#index.roots.map((run) => this.#summaries.get(run.runId)!).sort(activeFirst);
     this.#definitions = source.definitions.map(summarizeDefinition);
     this.#pipelines = summarizePipelines(this.#summaries.values());
     this.#eventCount = source.runs.reduce((sum, run) => sum + run.eventCount, 0);
   }
 
-  matches(source: PipelineRunStoreSnapshot): boolean {
-    return this.source === source;
+  /** Return false when this revision needs a fresh history index. */
+  update(source: PipelineRunStoreSnapshot): boolean {
+    if (this.source === source) return true;
+    const affected = this.#index.update(source.runs);
+    if (!affected) return false;
+    let rootsChanged = false;
+    let pipelinesChanged = false;
+    for (const id of affected) {
+      const run = this.#index.runById(id)!;
+      const previous = this.#summaries.get(id)!;
+      this.#eventCount += run.eventCount - previous.eventCount;
+      const summary = summarizeRun(run, this.#index);
+      this.#summaries.set(id, summary);
+      rootsChanged ||= summary.rootRunId === id;
+      pipelinesChanged ||=
+        previous.status !== summary.status || previous.pipelineId !== summary.pipelineId;
+    }
+    if (rootsChanged) {
+      this.#roots = this.#index.roots
+        .map((run) => this.#summaries.get(run.runId)!)
+        .sort(activeFirst);
+    }
+    if (pipelinesChanged) this.#pipelines = summarizePipelines(this.#summaries.values());
+    this.#definitions = source.definitions.map(summarizeDefinition);
+    this.#search = undefined;
+    this.source = source;
+    return true;
   }
 
   #directChildren(runId: string): StoredRunSummary[] {
@@ -172,6 +191,9 @@ const matchingRoots = (roots: readonly StoredRunSummary[], matches: ReadonlySet<
 const newestFirst = (left: StoredRunSummary, right: StoredRunSummary) =>
   right.startedAtMs - left.startedAtMs;
 
+const activeFirst = (left: StoredRunSummary, right: StoredRunSummary) =>
+  Number(right.subtreeIsRunning) - Number(left.subtreeIsRunning) || newestFirst(left, right);
+
 function pipelineRuns(
   summaries: Iterable<StoredRunSummary>,
   pipelineId: string,
@@ -186,10 +208,7 @@ function pipelineRuns(
           run.runId.toLowerCase().includes(needle) ||
           !!run.correlationId?.toLowerCase().includes(needle))
     )
-    .sort(
-      (left, right) =>
-        Number(right.subtreeIsRunning) - Number(left.subtreeIsRunning) || newestFirst(left, right)
-    );
+    .sort(activeFirst);
 }
 
 /** Per-pipeline activity for the navigation rail, most recently active first. */
