@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PipelineRunEventQuery } from "../../run-store/run-store.js";
-import { memoryStore, recordedRun } from "./events.test-support.js";
+import { memoryStore, recordedRun, storedEvent } from "./events.test-support.js";
 import { PipelineRunStudioEventState, PipelineRunStudioHistoryBusyError } from "./state.js";
 
 describe("Studio state coordination", () => {
@@ -92,5 +92,47 @@ describe("Studio state coordination", () => {
     await expect(failed).rejects.toBe(failure);
     expect((await next)?.run.logs).toHaveLength(1);
     expect(await state.workspace()).toMatchObject({ runCount: 1, eventCount: 2 });
+  });
+
+  it("refreshes nested activity and definition counts before rebuilding for newly discovered runs", async () => {
+    const events = recordedRun();
+    const append = (
+      name: "pipeline.started" | "pipeline.completed",
+      runId: string,
+      parentRunId?: string
+    ) =>
+      events.push(
+        storedEvent({
+          id: events.length + 1,
+          version: 2,
+          timestampMs: events.length + 1,
+          pipelineId: "fixture",
+          name,
+          runId,
+          parentRunId,
+        })
+      );
+    append("pipeline.started", "child", "run");
+    append("pipeline.completed", "run");
+    const state = new PipelineRunStudioEventState(memoryStore(events));
+    const before = await state.workspace("", 0, "child");
+    expect(before.runs[0]).toMatchObject({
+      status: "completed",
+      subtreeIsRunning: true,
+      subtreeEventCount: 4,
+    });
+    append("pipeline.completed", "child", "run");
+    const after = await state.workspace("", 0, "child");
+    expect(after.runs[0]).toMatchObject({ subtreeIsRunning: false, subtreeEventCount: 5 });
+    expect(after.selectedRun?.status).toBe("completed");
+    expect(after.pipelines[0]?.runningCount).toBe(0);
+    expect(after.definitions[0]).toMatchObject({ activeRuns: 0, runCount: 2 });
+    expect(before.runs[0]?.subtreeIsRunning).toBe(true);
+
+    append("pipeline.started", "new-root");
+    const expanded = await state.workspace();
+    expect(expanded.runs.map((run) => run.runId)).toEqual(["new-root", "run"]);
+    expect(expanded.definitions[0]).toMatchObject({ activeRuns: 1, runCount: 3 });
+    expect((await state.detail("child"))?.ancestors[0]?.runId).toBe("run");
   });
 });

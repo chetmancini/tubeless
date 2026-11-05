@@ -272,8 +272,11 @@ and interactive reporter orchestration.
   pipeline filters apply after discovering the subtree so they cannot sever links.
 - `studio/server/state.ts` serializes reads and history clearing; it consumes
   only the reader's `listEvents` capability. `run-store/run-history.ts` owns the
-  historical hierarchy, descendant activity and summary projection. Studio retains
-  that index per history revision in `studio/server/history.ts`, which owns search,
+  historical hierarchy, descendant activity and summary projection, refreshing
+  aggregates while membership, parent links and start-time ordering stay unchanged.
+  Studio reuses that index and unaffected summaries across revisions in
+  `studio/server/history.ts`, rebuilding for structural changes or overlapping
+  updates whose ancestor walks would exceed a full traversal. It owns search,
   summary pagination, child attribution and definition queries without a storage
   capability. `studio/server/run-details.ts` owns bounded detail retention, per-run
   cursors and eviction. The state queue serializes all detail reads and cache resets

@@ -60,7 +60,7 @@ export class PipelineRunStudioEventState {
 
   #indexedHistory(): StudioHistory {
     const source = this.#projector.snapshot();
-    if (!this.#history?.matches(source)) this.#history = new StudioHistory(source);
+    if (!this.#history?.update(source)) this.#history = new StudioHistory(source);
     return this.#history;
   }
 
