@@ -49,8 +49,8 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && bun scripts/generate-studio-client.mjs",
-    "build:watch": "tsc -p tsconfig.json --watch",
+    "build": "node scripts/clean-dist.mjs && tsrs -p tsconfig.json && bun scripts/generate-studio-client.mjs",
+    "build:watch": "tsrs -p tsconfig.json --watch",
     "api:check": "node scripts/generate-api-reference.mjs --check",
     "api:diff": "node scripts/summarize-api-report-diff.mjs",
     "api:generate": "bun run build && node scripts/generate-api-reference.mjs",
@@ -71,7 +71,7 @@
     "test:coverage": "vitest run --config vitest.config.ts --coverage",
     "test:watch": "vitest --watch --config vitest.config.ts",
     "typecheck": "bun run build && bun run typecheck:run",
-    "typecheck:run": "tsc -p tsconfig.json --noEmit && tsc -p examples/tsconfig.json --noEmit && tsc -p tsconfig.automation.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p design/tsconfig.json",
+    "typecheck:run": "tsrs -p tsconfig.json --noEmit && tsrs -p examples/tsconfig.json --noEmit && tsrs -p tsconfig.automation.json --noEmit && tsrs -p tsconfig.test.json --noEmit && tsrs -p design/tsconfig.json",
     "pack:verify": "node scripts/verify-packed-artifact.mjs",
     "eval:agent": "bun run build && node scripts/eval-agent.mjs"
   },
@@ -95,6 +95,7 @@
     "oxlint": "1.91.0",
     "preact": "11.1.1",
     "preact-render-to-string": "6.8.2",
+    "tsrs": "0.21.0-ts7.1.0-beta",
     "typescript": "7.0.2",
     "vite": "8.3.5",
     "vitest": "5.1.0"

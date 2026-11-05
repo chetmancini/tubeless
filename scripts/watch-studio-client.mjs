@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateStudioClient } from "./generate-studio-client.mjs";
 
-// `tsc --watch` never emits the Studio browser bundle. tsconfig excludes the
+// `tsrs --watch` never emits the Studio browser bundle. tsconfig excludes the
 // browser entry so a compile cannot overwrite the generator's output. Rebuild
 // on source changes. ponytail: accept extra rebuilds; use bundler dependency
 // metadata if filtering becomes necessary.

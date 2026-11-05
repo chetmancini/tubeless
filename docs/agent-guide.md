@@ -763,5 +763,8 @@ make check
 ```
 
 For a consumer-only change, run its focused tests and the repository typecheck.
+Package builds, watch mode, and type checks use the pinned `tsrs` compiler in
+default mode for lower memory use; keep fast mode disabled. Packed-consumer
+checks use the pinned TypeScript compiler to verify declaration compatibility.
 If public declarations change intentionally, regenerate the checked API artifacts
 with `bun run api:generate` from the package root.

@@ -24,6 +24,11 @@ make check
 remaining checks as a concurrent Tubeless pipeline and record `logs/check.ndjson`.
 `make help` lists the rest. `make install` runs `bun ci`.
 
+Package builds and type checks use the pinned `tsrs` compiler in its default
+mode to reduce memory use. Keep fast mode disabled. Packed-consumer checks use
+the pinned TypeScript compiler to verify the published declarations against
+the standard compiler.
+
 ### Fast loops
 
 `make lint` never rebuilds; linting is syntactic. Tests and type checks resolve
@@ -33,7 +38,7 @@ only the vitest suite and `make typecheck-run` only the type checks.
 
 `make watch` builds once, then recompiles `src/` on change, regenerates the
 Studio client when a bundled source changes, and re-runs the vitest suite; stop
-it with Ctrl-C. `tsc` still does not emit the browser bundle. The watch loop
+it with Ctrl-C. `tsrs` still does not emit the browser bundle. The watch loop
 runs `scripts/generate-studio-client.mjs`. `make studio-check` fails when the
 served bundle does not match the sources.
 

@@ -2,7 +2,12 @@ import { studioSnapshot as snapshot, studioRunDetail } from "../server/listener.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RUN_MODEL_VERSION } from "../../core/pipeline.js";
 import type { StoredPipelineRun } from "../../run-store/run-store.js";
-import type { StudioApi, StudioRunDetail, StudioSnapshot } from "./transport.js";
+import type {
+  StudioApi,
+  StudioHistoryQuery,
+  StudioRunDetail,
+  StudioSnapshot,
+} from "./transport.js";
 import { StudioDataController } from "./data-controller.js";
 
 function deferred<T>() {
@@ -44,7 +49,7 @@ function api(overrides: Partial<StudioApi>): StudioApi {
     }),
     loadRunDetail: vi.fn(async () => null),
     loadChildRuns: vi.fn(async () => ({ children: [], page: 0, childCount: 0 })),
-    loadSnapshot: vi.fn(async ({ selectedRunId } = {}) =>
+    loadSnapshot: vi.fn(async ({ selectedRunId }: StudioHistoryQuery = {}) =>
       snapshot(selectedRunId ? [run(selectedRunId)] : [], selectedRunId)
     ),
     launch: vi.fn(async () => "run"),
@@ -182,7 +187,7 @@ describe("StudioDataController", () => {
           ...studioRunDetail(id === root.runId ? root : child),
           children: id === root.runId ? [summaries.selectedRun!] : [],
         })),
-        loadSnapshot: vi.fn(async ({ selectedRunId } = {}) =>
+        loadSnapshot: vi.fn(async ({ selectedRunId }: StudioHistoryQuery = {}) =>
           snapshot([root, child], selectedRunId)
         ),
       }),
