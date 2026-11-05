@@ -4,6 +4,7 @@ import {
   isCloudJsonValue,
   isCloudObject,
   isCloudToken,
+  isCloudIdempotencyKey,
   parseCliError,
   parseCliPipelines,
   parseCliRun,
@@ -14,6 +15,7 @@ import {
   type CliPipeline,
   type CliRun,
   type CliRunRequest,
+  type CliRunSource,
   type CliSession,
   type CloudDeviceCode,
   type CloudDeviceError,
@@ -22,7 +24,7 @@ import {
 import { terminalSafeText } from "../workbench-shared.js";
 
 const CLOUD_JSON_LIMIT = 64 * 1024;
-const RUN_ENVELOPE_LIMIT = 66 * 1024;
+const RUN_ENVELOPE_LIMIT = 68 * 1024;
 const RESPONSE_LIMIT = 4 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -93,6 +95,65 @@ function validateRunInput(input: unknown): void {
   }
   if (encoded === undefined || Buffer.byteLength(encoded, "utf8") > CLOUD_JSON_LIMIT)
     throw new CloudClientError("Cloud run input exceeds the 64 KB JSON limit.", "invalid_request");
+}
+
+/** Validate and normalize only the immutable source selectors supported by Cloud. */
+export function parseCloudSource(value: unknown): CliRunSource {
+  const invalid = (): never => {
+    throw new CloudClientError(
+      "Source must select a GitHub ref or a complete immutable main commit or pull_request snapshot.",
+      "invalid_request"
+    );
+  };
+  if (!isCloudObject(value)) return invalid();
+  if (value.kind === "ref") {
+    const ref = value.ref;
+    if (
+      Object.keys(value).some((key) => !["kind", "ref"].includes(key)) ||
+      typeof ref !== "string" ||
+      !ref ||
+      /[\ud800-\udfff]/u.test(ref) ||
+      Buffer.byteLength(ref, "utf8") > 1024 ||
+      /[\s\x00-\x1f\x7f~^:?*[\\]/.test(ref) ||
+      ref.includes("..") ||
+      ref.includes("@{") ||
+      ref === "@" ||
+      ref.startsWith("-") ||
+      ref
+        .split("/")
+        .some(
+          (part) => !part || part.startsWith(".") || part.endsWith(".") || part.endsWith(".lock")
+        )
+    )
+      return invalid();
+    return { kind: "ref", ref };
+  }
+  const fields =
+    value.kind === "main"
+      ? ["kind", "commit"]
+      : ["kind", "number", "headSha", "baseSha", "mergeSha"];
+  if (Object.keys(value).some((key) => !fields.includes(key))) return invalid();
+  const sha = (key: string): string => {
+    const field = value[key];
+    return typeof field === "string" && field.length === 40 && !/[^a-fA-F0-9]/.test(field)
+      ? field.toLowerCase()
+      : invalid();
+  };
+  if (value.kind === "main") return { kind: "main", commit: sha("commit") };
+  if (
+    value.kind !== "pull_request" ||
+    typeof value.number !== "number" ||
+    !Number.isSafeInteger(value.number) ||
+    value.number < 1
+  )
+    return invalid();
+  return {
+    kind: "pull_request",
+    number: value.number,
+    headSha: sha("headSha"),
+    baseSha: sha("baseSha"),
+    mergeSha: sha("mergeSha"),
+  };
 }
 
 async function responseJson(response: Response, signal: AbortSignal): Promise<unknown> {
@@ -321,12 +382,13 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
       ),
     pipelines: (workspace) => request(`${workspacePath(workspace)}/pipelines`, parseCliPipelines),
     run: async (workspace, body, idempotencyKey) => {
-      if (!/^[A-Za-z0-9._:-]{1,200}$/.test(idempotencyKey)) {
+      if (!isCloudIdempotencyKey(idempotencyKey)) {
         throw new CloudClientError("Invalid Cloud run idempotency key.", "invalid_request");
       }
       validateRunInput(body.input);
+      const source = body.source === undefined ? undefined : parseCloudSource(body.source);
       return request(`${workspacePath(workspace)}/runs`, parseCliRun, {
-        body,
+        body: { pipelineId: body.pipelineId, input: body.input, ...(source ? { source } : {}) },
         idempotencyKey,
         bodyLimit: RUN_ENVELOPE_LIMIT,
       });

@@ -8,6 +8,9 @@ For an existing script or workflow, use `tubeless-make-pipeline` from the
 [agent skill pack](./agent-skills.md) to choose step boundaries before adapting
 one of these recipes.
 
+For headless Cloud submission, see [Cloud CLI](./cli.md#tubeless-cloud) for scoped
+credentials, Git refs, and admission retries.
+
 | Intent                                                  | Executable recipe                                                                                                                                       | Main primitives                                                                                                                                                                 |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Run all steps with a default result                     | [`minimal-pipeline.ts`](../examples/minimal-pipeline.ts)                                                                                                | `definePipeline({ id, steps })`                                                                                                                                                 |

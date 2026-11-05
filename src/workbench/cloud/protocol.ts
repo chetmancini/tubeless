@@ -34,9 +34,15 @@ export interface CliPipeline {
   available: boolean;
 }
 
+export type CliRunSource =
+  | { kind: "ref"; ref: string }
+  | { kind: "main"; commit: string }
+  | { kind: "pull_request"; number: number; headSha: string; baseSha: string; mergeSha: string };
+
 export interface CliRunRequest {
   pipelineId: string;
   input: Record<string, CloudJsonValue>;
+  source?: CliRunSource;
 }
 
 export interface CliLogLine {
@@ -183,7 +189,16 @@ function oneOf(value: unknown, allowed: readonly string[]): boolean {
 }
 
 export function isCloudToken(value: unknown): value is string {
-  return text(value) && value.length <= 4096 && /^[\x21-\x7e]+$/.test(value);
+  return text(value) && value.length <= 4096 && !/[^\x21-\x7e]/.test(value);
+}
+
+/** Recognize session-only UX limitations; the service still validates all authority. */
+export function isCloudAutomationToken(token: string): boolean {
+  return /^tlc_ci_/i.test(token);
+}
+
+export function isCloudIdempotencyKey(value: unknown): value is string {
+  return text(value) && value.length <= 200 && !/[^A-Za-z0-9._:-]/.test(value);
 }
 
 function parseResponse<T>(value: unknown, valid: boolean, name: string): T {

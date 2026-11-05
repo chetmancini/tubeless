@@ -1,113 +1,19 @@
-import { execFile } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { access, readFile, readdir, writeFile } from "node:fs/promises";
+import { describe, expect, it } from "vitest";
 import * as path from "node:path";
-import { promisify } from "node:util";
-import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCloud } from "./command.js";
 import { captureIo } from "../workbench.test-support.js";
-import type { CliRun, CliPipeline, CliWorkspace } from "./protocol.js";
+import {
+  host,
+  pipeline,
+  baseRun,
+  fixture,
+  service,
+  testDirectory,
+} from "./command.test-support.js";
+import type { CliWorkspace, CliRun } from "./protocol.js";
 
-const host = "http://localhost:8787";
-const roots: string[] = [];
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-});
-const pipeline: CliPipeline = {
-  id: "cloud-orders",
-  name: "Orders",
-  slug: "orders",
-  branch: "main",
-  commit: "stored-sha",
-  enabled: true,
-  available: true,
-};
-const baseRun: CliRun = {
-  id: "run-1",
-  pipelineId: pipeline.id,
-  pipelineName: pipeline.name,
-  status: "queued",
-  createdAt: 1000,
-  durationMs: 0,
-  commit: "accepted-sha",
-  branch: "main",
-  trigger: "manual",
-  actor: "user",
-  steps: [],
-  logs: [],
-  artifacts: [],
-  input: {},
-};
-async function fixture(): Promise<string> {
-  const root = await mkdtemp(path.join(tmpdir(), "tubeless-cloud-command-"));
-  roots.push(root);
-  await mkdir(path.join(root, ".tubeless"));
-  await writeFile(path.join(root, ".tubeless/cloud.json"), "stale malformed project configuration");
-  return root;
-}
-function service(
-  options: {
-    pipelines?: CliPipeline[];
-    workspaces?: CliWorkspace[];
-    runs?: CliRun[];
-    admission?: CliRun;
-    admissionStatus?: number;
-    admissionError?: string;
-    lostAcknowledgement?: boolean;
-  } = {}
-) {
-  const calls: { method: string; url: string; body?: unknown; key?: string }[] = [];
-  let admitted = false;
-  const runs = [...(options.runs ?? [{ ...baseRun, status: "completed", result: { ok: true } }])];
-  const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-    const url = new URL(String(input));
-    const method = init?.method ?? "GET";
-    const headers = new Headers(init?.headers);
-    calls.push({
-      method,
-      url: url.pathname,
-      body: init?.body ? JSON.parse(String(init.body)) : undefined,
-      key: headers.get("Idempotency-Key") ?? undefined,
-    });
-    if (url.pathname === "/api/v1/session")
-      return Response.json({
-        user: { id: "user", login: "user", name: "User", email: "user@example.com", avatar: "" },
-        expiresAt: Date.now() + 60000,
-        workspaces: options.workspaces ?? [
-          {
-            id: "workspace",
-            name: "Workspace",
-            slug: "workspace",
-            role: "owner",
-          },
-        ],
-      });
-    if (url.pathname.endsWith("/pipelines")) return Response.json(options.pipelines ?? [pipeline]);
-    if (url.pathname.endsWith("/runs")) {
-      if (options.admissionError)
-        return Response.json(
-          { error: { code: options.admissionError, message: "Rejected" } },
-          { status: options.admissionStatus ?? 429 }
-        );
-      if (options.lostAcknowledgement && !admitted) {
-        admitted = true;
-        throw new Error("lost response");
-      }
-      return Response.json(options.admission ?? baseRun, { status: 202 });
-    }
-    if (url.pathname.endsWith(`/runs/${encodeURIComponent(options.admission?.id ?? baseRun.id)}`))
-      return Response.json(runs.length > 1 ? runs.shift() : runs[0]);
-    throw new Error("Unexpected route");
-  }) as typeof fetch;
-  return {
-    calls,
-    fetch: fetcher,
-    env: { TUBELESS_TOKEN: "fixture-secret" },
-    sleep: async () => {},
-  };
-}
-
-describe("Cloud remote commands", () => {
+describe("Cloud command", () => {
   it("help makes no HTTP requests", async () => {
     const dependencies = service();
     expect(await runCloud(["run", "--help"], captureIo("/detached"), dependencies)).toBe(0);
@@ -151,8 +57,7 @@ describe("Cloud remote commands", () => {
     expect(io.output.join("")).not.toContain("fixture-secret");
   });
   it("explicit IDs work outside a Git repository", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "tubeless-detached-"));
-    roots.push(root);
+    const root = await testDirectory();
     const dependencies = service();
     expect(
       await runCloud(
@@ -172,64 +77,6 @@ describe("Cloud remote commands", () => {
       expect(io.errors.join("")).toMatch(/cloud list|Multiple pipelines/);
     }
   });
-  it("invalid/oversized JSON input fails before admission", async () => {
-    const root = await fixture();
-    for (const input of [
-      "null",
-      "[]",
-      "{",
-      '"scalar"',
-      JSON.stringify({ long: "x".repeat(65536) }),
-    ]) {
-      const dependencies = { ...service(), readStdin: async () => input };
-      expect(
-        await runCloud(["run", pipeline.name, "--input-file", "-"], captureIo(root), dependencies)
-      ).toBe(4);
-      expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
-    }
-  });
-  it("passes stdin JSON objects and reuses the key after a lost acknowledgement", async () => {
-    const root = await fixture();
-    const dependencies = {
-      ...service({ lostAcknowledgement: true }),
-      readStdin: async () => '{"hello":"world"}',
-    };
-    expect(
-      await runCloud(
-        ["run", pipeline.name, "--input-file", "-", "--detach"],
-        captureIo(root),
-        dependencies
-      )
-    ).toBe(0);
-    const admissions = dependencies.calls.filter((call) => call.method === "POST");
-    expect(admissions).toHaveLength(2);
-    expect(admissions[0]!.key).toBe(admissions[1]!.key);
-    expect(admissions[0]!.body).toEqual({ pipelineId: pipeline.id, input: { hello: "world" } });
-  });
-
-  it.each(["-", "input.json"])(
-    "rejects overflowing numbers and excessive nesting from %s without admission or retries",
-    async (file) => {
-      const root = await fixture();
-      for (const input of [
-        '{"threshold":1e400}',
-        '{"nested":[{"threshold":-1e400}]}',
-        '{"a":'.repeat(129) + "1" + "}".repeat(129),
-      ]) {
-        await writeFile(path.join(root, "input.json"), input);
-        const dependencies = { ...service(), readStdin: async () => input };
-        const io = captureIo(root);
-        expect(await runCloud(["run", pipeline.name, "--input-file", file], io, dependencies)).toBe(
-          4
-        );
-        expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
-        expect(io.errors.join("")).toContain("finite numbers");
-        expect(io.errors.join("")).not.toContain("Admission could not be confirmed");
-        expect(io.errors.join("")).not.toContain("idempotency key");
-      }
-    }
-  );
-
   it("sanitizes human pipeline fields while preserving JSON fields", async () => {
     const remote = `remote\u001b]52;c;clipboard\u0007\u009b31m\u061c\u200e\u200f\u202e\u2066\nspoof`;
     const unsafe = {
@@ -293,7 +140,7 @@ describe("Cloud remote commands", () => {
       const human = json ? io.errors.join("") : io.output.join("") + io.errors.join("");
       expect(human).not.toMatch(/[\u001b\u009b\u202e]/);
       expect(human).toContain("Run remote [2J   spoof: remote [2J   spoof\n");
-      expect(human).toContain("Deployed commit: remote [2J   spoof\n");
+      expect(human).toContain("Source commit: remote [2J   spoof\n");
       if (json) expect(JSON.parse(io.output.join(""))).toEqual(run);
       else expect(io.errors.join("")).toBe("remote [2J   spoof\n");
     }
@@ -327,97 +174,6 @@ describe("Cloud remote commands", () => {
     expect(failed.errors.join("")).not.toMatch(/[\u001b\u009b\u202e]/);
     expect(failed.errors.join("")).toContain("Run remote [2J   spoof\n");
   });
-  it("does not retry or report uncertain admission when normalized JSON exceeds the input budget", async () => {
-    const input = `{"values":[${Array(4000).fill("1e20").join(",")}]}`;
-    expect(Buffer.byteLength(input)).toBeLessThan(65536);
-    expect(Buffer.byteLength(JSON.stringify(JSON.parse(input)))).toBeGreaterThan(65536);
-    const dependencies = { ...service(), readStdin: async () => input };
-    const io = captureIo(await fixture());
-    expect(await runCloud(["run", pipeline.name, "--input-file", "-"], io, dependencies)).toBe(4);
-    expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
-    expect(io.errors.join("")).not.toContain("idempotency key");
-    expect(io.errors.join("")).not.toContain("Admission could not be confirmed");
-  });
-  it("reports a recoverable key after a server error following the POST", async () => {
-    const root = await fixture();
-    const dependencies = service({ admissionError: "internal_error", admissionStatus: 500 });
-    const io = captureIo(root);
-    expect(await runCloud(["run", pipeline.name, "--json"], io, dependencies)).toBe(2);
-    const admissions = dependencies.calls.filter((call) => call.method === "POST");
-    expect(admissions).toHaveLength(1);
-    expect(io.errors.join("")).toContain(
-      `Workspace: workspace; idempotency key: ${admissions[0]!.key}`
-    );
-    expect(io.output.join("")).toBe("");
-  });
-  it("reports a recoverable key for an unusable successful admission response", async () => {
-    const root = await fixture();
-    const dependencies = service();
-    const original = dependencies.fetch;
-    dependencies.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
-      const response = await original(url, init);
-      return init?.method === "POST"
-        ? Response.json({ admitted: true }, { status: 202 })
-        : response;
-    }) as typeof fetch;
-    const io = captureIo(root);
-    expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(2);
-    const admissions = dependencies.calls.filter((call) => call.method === "POST");
-    expect(admissions).toHaveLength(1);
-    expect(io.errors.join("")).toContain(`idempotency key: ${admissions[0]!.key}`);
-  });
-  it("reports the same key when interruption loses a pending POST acknowledgement", async () => {
-    const root = await fixture();
-    const controller = new AbortController();
-    const dependencies = service();
-    const original = dependencies.fetch;
-    let markPosted: () => void = () => {};
-    const posted = new Promise<void>((resolve) => {
-      markPosted = resolve;
-    });
-    dependencies.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
-      const response = await original(url, init);
-      if (init?.method !== "POST") return response;
-      markPosted();
-      return new Promise<Response>(() => {});
-    }) as typeof fetch;
-    const io = { ...captureIo(root), signal: controller.signal };
-    const result = runCloud(["run", pipeline.name, "--json"], io, dependencies);
-    await posted;
-    controller.abort();
-    expect(await result).toBe(7);
-    const admissions = dependencies.calls.filter((call) => call.method === "POST");
-    expect(admissions).toHaveLength(1);
-    expect(io.errors.join("")).toContain(
-      `Workspace: workspace; idempotency key: ${admissions[0]!.key}`
-    );
-    expect(io.output.join("")).toBe("");
-  });
-  it("keeps one recoverable key through the bounded failed transport retry", async () => {
-    const root = await fixture();
-    const dependencies = service();
-    const original = dependencies.fetch;
-    dependencies.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
-      const response = await original(url, init);
-      if (init?.method === "POST") throw new Error("lost response");
-      return response;
-    }) as typeof fetch;
-    const io = captureIo(root);
-    expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(2);
-    const admissions = dependencies.calls.filter((call) => call.method === "POST");
-    expect(admissions).toHaveLength(2);
-    expect(admissions[0]!.key).toBe(admissions[1]!.key);
-    expect(io.errors.join("").match(/Admission could not be confirmed/g)).toHaveLength(1);
-    expect(io.errors.join("")).toContain(`idempotency key: ${admissions[0]!.key}`);
-  });
-  it("definite 4xx rejection does not suggest an uncertain admission", async () => {
-    const root = await fixture();
-    const dependencies = service({ admissionError: "invalid_request", admissionStatus: 400 });
-    const io = captureIo(root);
-    expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(4);
-    expect(dependencies.calls.filter((call) => call.method === "POST")).toHaveLength(1);
-    expect(io.errors.join("")).not.toContain("idempotency key");
-  });
   it("retains duplicate logs and deduplicates by snapshot array index", async () => {
     const root = await fixture();
     const log = { time: 1000, level: "info" as const, message: "repeated" };
@@ -442,12 +198,6 @@ describe("Cloud remote commands", () => {
       exit
     );
   });
-  it("rate-limited admission exits execution failure without retry", async () => {
-    const root = await fixture();
-    const dependencies = service({ admissionError: "rate_limited" });
-    expect(await runCloud(["run", pipeline.name], captureIo(root), dependencies)).toBe(6);
-    expect(dependencies.calls.filter((call) => call.method === "POST")).toHaveLength(1);
-  });
   it("interrupting foreground follow prints the run ID without cancellation", async () => {
     const root = await fixture();
     const controller = new AbortController();
@@ -462,28 +212,6 @@ describe("Cloud remote commands", () => {
     expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(7);
     expect(io.errors.join("")).toContain("Run run-1");
     expect(dependencies.calls.filter((call) => call.method === "POST")).toHaveLength(1);
-  });
-  it("interrupting a pending stdin read admits no run", async () => {
-    const root = await fixture();
-    const controller = new AbortController();
-    let inputStarted: () => void = () => {};
-    const started = new Promise<void>((resolve) => {
-      inputStarted = resolve;
-    });
-    const dependencies = {
-      ...service(),
-      readStdin: () => {
-        inputStarted();
-        return new Promise<string>(() => {});
-      },
-    };
-    const io = { ...captureIo(root), signal: controller.signal };
-    const result = runCloud(["run", pipeline.name, "--input-file", "-"], io, dependencies);
-    await started;
-    controller.abort();
-    expect(await result).toBe(7);
-    expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
-    expect(io.errors.join("")).not.toContain("idempotency key");
   });
   it("stops foreground following after bounded transport failures and keeps the run URL", async () => {
     const root = await fixture();
@@ -520,22 +248,6 @@ describe("Cloud remote commands", () => {
     expect(io.output.join("")).toBe("");
     expect(io.errors.join("")).toContain("Run run-1");
   });
-  it.runIf(process.platform !== "win32")(
-    "rejects FIFO input without waiting for a writer or admitting a run",
-    async () => {
-      const root = await fixture();
-      await promisify(execFile)("mkfifo", [path.join(root, "input.json")]);
-      const dependencies = service();
-      expect(
-        await runCloud(
-          ["run", pipeline.name, "--input-file", "input.json"],
-          captureIo(root),
-          dependencies
-        )
-      ).toBe(4);
-      expect(dependencies.calls.every((call) => call.method === "GET")).toBe(true);
-    }
-  );
   it("lists slugs, names and IDs before deployment availability", async () => {
     const io = captureIo(await fixture());
     expect(await runCloud(["list"], io, service())).toBe(0);
@@ -672,6 +384,16 @@ describe("Cloud remote commands", () => {
     ["run", "Orders", "--workspace", ""],
     ["list", "--workspace", "   "],
     ["list", "--input-file", "input.json"],
+    ["list", "--source", "source.json"],
+    ["logs", "run-1", "--idempotency-key", "key"],
+    ["run", "--id", pipeline.id, "--source", ""],
+    ["run", "--id", pipeline.id, "--source", "@"],
+    ["run", "--id", pipeline.id, "--ref", "main", "--source", '{"kind":"ref","ref":"main"}'],
+    ["run", "--id", pipeline.id, "--ref", ""],
+    ["list", "--ref", "main"],
+    ["logs", "run-1", "--ref", "main"],
+    ["run", "--id", pipeline.id, "--source-file", "source.json"],
+    ["run", "--id", pipeline.id, "--source", "-", "--input-file", "-"],
   ])("rejects obsolete commands and invalid combinations before HTTP: %j", async (...args) => {
     const dependencies = service();
     expect(await runCloud(args, captureIo("/detached"), dependencies)).toBe(1);
