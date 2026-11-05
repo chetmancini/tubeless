@@ -3,7 +3,7 @@ import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // This script is the only writer of the browser bundle. `tsconfig.json` excludes
-// `src/studio/browser/entry.ts` so `tsc` never emits a competing
+// `src/studio/browser/entry.ts` so `tsrs` never emits a competing
 // module over that path — an unfiltered compile would overwrite the bundle with
 // an importing stub and break the served Studio client.
 

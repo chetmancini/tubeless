@@ -133,7 +133,12 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
         listeners.delete(listener);
       };
     },
-    async loadSnapshot({ query = "", offset = 0, pipelineId, selectedRunId } = {}) {
+    async loadSnapshot({
+      query = "",
+      offset = 0,
+      pipelineId,
+      selectedRunId,
+    }: StudioHistoryQuery = {}) {
       const params = new URLSearchParams();
       if (pipelineId) params.set("pipeline", pipelineId);
       if (query) params.set("query", query);
