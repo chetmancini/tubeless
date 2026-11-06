@@ -451,37 +451,73 @@ export function tokenize(
 
 /** A single resolved parameter value after CLI/environment/default decoding. */
 export type ResolvedParamValue = string | number | boolean | (string | number)[] | undefined;
-/** Text from argv/environment or checked primitive values from a structured input. */
-export type RawParamValue = string | number | boolean | string[] | number[] | undefined;
 
 /** Mutable build-time views of the public descriptors, frozen before return. */
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 type MutableCliParameterDescriptor = Mutable<CliParameterDescriptor>;
 type MutableCliCommandDescriptor = Mutable<CliCommandDescriptor>;
+type ParamValueSource = "argv" | "env" | "default" | "structured";
 
-function isBooleanValue(value: RawParamValue): value is boolean {
+function isBooleanValue(value: unknown): value is boolean {
   return typeof value === "boolean";
 }
 
-function isStringValue(value: RawParamValue): value is string {
+function isStringValue(value: unknown): value is string {
   return typeof value === "string";
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function isNumberValue(value: string | number): value is number {
   return typeof value === "number";
 }
 
+/**
+ * Shape diagnostics for structured values. The label is the parameter key, or
+ * `flag` when set, and text is not coerced. `undefined` means the value can
+ * continue through choice, range, and path checks.
+ */
+function structuredShapeError(key: string, param: CliParam, value: unknown): string | undefined {
+  const label = `--${param.flag ?? key}`;
+  if (param.type === "boolean") {
+    return isBooleanValue(value) ? undefined : `${label} must be a boolean value.`;
+  }
+  if (isMultipleParam(param)) {
+    if (!Array.isArray(value)) return `${label} must be an array.`;
+    if (param.type === "number") {
+      return value.every(isFiniteNumber) ? undefined : `${label} must contain only finite numbers.`;
+    }
+    return value.every(isStringValue) ? undefined : `${label} must contain only strings.`;
+  }
+  if (param.type === "number") {
+    return isFiniteNumber(value) ? undefined : `${label} must be a finite number.`;
+  }
+  return isStringValue(value) ? undefined : `${label} must be a string value.`;
+}
+
 export function resolveParam(
   key: string,
   param: CliParam,
-  raw: RawParamValue,
+  raw: unknown,
   cwd: string,
   errors: string[],
-  source: "argv" | "env" | "default" = "argv"
+  source: ParamValueSource = "argv"
 ): ResolvedParamValue {
+  if (source === "structured") {
+    const shapeError = structuredShapeError(key, param, raw);
+    if (shapeError !== undefined) {
+      errors.push(shapeError);
+      return undefined;
+    }
+  }
+
   const flag = flagName(key, param);
-  const sourceLabel = source === "env" ? `environment variable ${param.env}` : `--${flag}`;
-  const showRawValue = source !== "env";
+  // Accepted structured values use argv diagnostics for constraints and paths.
+  const reportedSource = source === "structured" ? "argv" : source;
+  const sourceLabel = reportedSource === "env" ? `environment variable ${param.env}` : `--${flag}`;
+  const showRawValue = reportedSource !== "env";
 
   if (param.type === "boolean") {
     if (isBooleanValue(raw)) return raw;
@@ -513,7 +549,17 @@ export function resolveParam(
         resolved.push(item);
         continue;
       }
-      const value = validateNumberValue(flag, param, item, errors, source, param.env);
+      // Argv supplies strings. Any other item still reaches the decimal diagnostic.
+      const numericItem =
+        typeof item === "string" || typeof item === "number" ? item : String(item);
+      const value = validateNumberValue(
+        flag,
+        param,
+        numericItem,
+        errors,
+        reportedSource,
+        param.env
+      );
       if (value !== undefined) resolved.push(value);
     }
     return resolved;
@@ -539,7 +585,7 @@ export function resolveParam(
       errors.push(`Missing required option --${flag}`);
       return undefined;
     }
-    return validateNumberValue(flag, param, rawValue, errors, source, param.env);
+    return validateNumberValue(flag, param, rawValue, errors, reportedSource, param.env);
   }
 
   const rawString = isStringValue(raw) ? raw : param.default;

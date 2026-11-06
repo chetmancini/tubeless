@@ -190,6 +190,44 @@ describe("defineCommand: string params", () => {
     });
   });
 
+  it("keeps structured shape diagnostics distinct from argv constraints", () => {
+    const command = defineCommand({
+      params: {
+        maxConcurrency: { type: "number", integer: true, min: 1 },
+        stepIds: { type: "string", multiple: true, flag: "step", choices: ["load"] },
+        labels: { type: "string", multiple: true },
+        continueOnError: { type: "boolean" },
+        input: { type: "path", optional: true },
+      },
+      run: (values) => values,
+    });
+
+    expect(
+      command.parseValues({
+        continueOnError: "true",
+        input: 1,
+        labels: [1],
+        maxConcurrency: "4",
+        stepIds: "load",
+      })
+    ).toMatchObject({
+      kind: "error",
+      errors: [
+        "--maxConcurrency must be a finite number.",
+        "--step must be an array.",
+        "--labels must contain only strings.",
+        "--continueOnError must be a boolean value.",
+        "--input must be a string value.",
+      ],
+    });
+    expect(
+      command.parseValues({ input: "rows.txt", maxConcurrency: 0, stepIds: ["nope"] })
+    ).toMatchObject({
+      kind: "error",
+      errors: ["--max-concurrency must be >= 1, got 0", '--step must be one of: load (got "nope")'],
+    });
+  });
+
   it("supports the --flag=value form", () => {
     const command = defineCommand({
       params: { version: { type: "string" } },
