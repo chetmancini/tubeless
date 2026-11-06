@@ -8,6 +8,7 @@ import { DefinitionHistory } from "./definitions.js";
 import { RunGraph } from "../graph/graph.js";
 import type { RailPipeline } from "./rail.js";
 import { useStudioResource } from "../resource.js";
+import { useDefinitionResource } from "../definition-resource.js";
 import type { StudioPipelineTab } from "../../shared/route.js";
 import { RunList } from "./runs.js";
 import type { StudioRunDetail } from "../../shared/schema.js";
@@ -75,20 +76,9 @@ function PipelineGraph({
   definitions: readonly StoredDefinitionSummary[];
 }) {
   const latest = [...definitions].sort((left, right) => right.lastSeenAtMs - left.lastSeenAtMs)[0];
-  const hasDefinition = latest !== undefined;
-  const definitionId = latest?.identity?.definitionId;
   const planCommandId = pipeline.command?.canPlan ? pipeline.command.id : undefined;
-  const { pipelineId } = pipeline;
-  const key = hasDefinition
-    ? JSON.stringify(["definition", pipelineId, definitionId ?? null])
-    : planCommandId
-      ? `plan:${planCommandId}`
-      : "";
-  // Legacy observations can replace their graph, and a later run can complete an identified
-  // definition's truncated snapshot; reload on that revision, not on every history refresh.
-  const revision = definitionId ? latest?.runCount : latest?.lastSeenAtMs;
+  const definition = useDefinitionResource(api, latest);
   const load = useCallback(async (): Promise<readonly PlannedStep[]> => {
-    if (hasDefinition) return (await api.loadDefinition(pipelineId, definitionId)).steps;
     if (planCommandId)
       return (await api.previewPlan(planCommandId, {})).steps.map(
         ({ nestedPipeline, ...step }) => ({
@@ -103,9 +93,14 @@ function PipelineGraph({
         })
       );
     return [];
-  }, [api, definitionId, hasDefinition, pipelineId, planCommandId, revision]);
-  const steps = useStudioResource(api, key, load);
-  if (!key) {
+  }, [api, planCommandId]);
+  const plan = useStudioResource(
+    api,
+    !latest && planCommandId ? `plan:${planCommandId}` : "",
+    load
+  );
+  const steps = latest ? { ...definition, value: definition.value?.steps ?? null } : plan;
+  if (!latest && !planCommandId) {
     return (
       <EmptyView
         title="No graph recorded"

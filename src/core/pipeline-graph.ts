@@ -112,7 +112,6 @@ export function compiledStepGraph<TOptions extends object>(
   return graph as CompiledStepGraph<TOptions>;
 }
 
-/** Returns every distinct edge into a step, regardless of dependency policy. */
 export function stepEdges<TOptions extends object>(
   step: AnyStep<TOptions>,
   graph: CompiledStepGraph<TOptions> = liveStepGraph(step)
@@ -138,7 +137,6 @@ export function targetClosure<TOptions extends object>(
   return selected;
 }
 
-/** Orders steps so every dependency runs before its dependents. */
 export function topologicalSort<TOptions extends object>(
   steps: readonly AnyStep<TOptions>[]
 ): readonly AnyStep<TOptions>[] | null {
@@ -179,11 +177,11 @@ export interface CompiledPipelineGraph<TOptions extends object> {
   readonly stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph>;
 }
 
-export function compilePipelineGraph<TOptions extends object>(
-  steps: readonly AnyStep<TOptions>[],
-  compiledCaches: ReadonlyMap<AnyStep, CompiledStepCache<TOptions>> = new Map()
-): CompiledPipelineGraph<TOptions> {
-  const orderedAuthorSteps = topologicalSort(steps)!;
+export function compilePipelineGraph<TOptions extends object>(input: {
+  orderedSteps: readonly AnyStep<TOptions>[];
+  compiledCaches?: ReadonlyMap<AnyStep, CompiledStepCache<TOptions>>;
+}): CompiledPipelineGraph<TOptions> {
+  const { orderedSteps: orderedAuthorSteps, compiledCaches = new Map() } = input;
   const compiledByAuthorStep = new Map<AnyStep<TOptions>, CompiledStep<TOptions>>(
     orderedAuthorSteps.map((step) => [step, compileStep(step, compiledCaches.get(step))])
   );

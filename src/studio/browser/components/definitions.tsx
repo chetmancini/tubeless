@@ -6,10 +6,7 @@ import { useCallback, useState } from "preact/hooks";
 import { compareDefinitions } from "../../../run-store/definition-diff.js";
 import type { StoredPipelineDefinition } from "../../../run-store/run-store.js";
 import { useStudioResource, type StudioResource } from "../resource.js";
-
-function key(definition: StoredDefinitionSummary): string {
-  return JSON.stringify([definition.pipelineId, definition.identity?.definitionId ?? null]);
-}
+import { definitionKey as key, useDefinitionResource } from "../definition-resource.js";
 
 function label(definition: StoredDefinitionSummary): string {
   const identity = definition.identity;
@@ -207,22 +204,6 @@ export function DefinitionHistoryView({
   );
 }
 
-function useDefinition(
-  api: StudioApi | undefined,
-  definition: StoredDefinitionSummary | undefined
-): StudioResource<StoredPipelineDefinition> {
-  const pipelineId = definition?.pipelineId;
-  const definitionId = definition?.identity?.definitionId;
-  // Legacy observations can replace their graph; an incomplete snapshot can be
-  // supplied by a later run of the same identified definition.
-  const revision = definitionId ? definition?.runCount : definition?.lastSeenAtMs;
-  const load = useCallback(async () => {
-    if (!api || !pipelineId) throw new Error("No definition selected.");
-    return api.loadDefinition(pipelineId, definitionId);
-  }, [api, pipelineId, definitionId, revision]);
-  return useStudioResource(api, definition ? key(definition) : "", load);
-}
-
 function useDefinitionRuns(
   api: StudioApi | undefined,
   definition: StoredDefinitionSummary | undefined,
@@ -258,9 +239,9 @@ export function DefinitionHistory({
       entry.pipelineId === selected?.pipelineId && key(entry) !== (selected && key(selected))
   );
   const previous = candidates.find((entry) => key(entry) === compareKey) ?? candidates[0];
-  const definition = useDefinition(api, selected);
+  const definition = useDefinitionResource(api, selected);
   const runs = useDefinitionRuns(api, selected, offset);
-  const comparison = useDefinition(api, previous);
+  const comparison = useDefinitionResource(api, previous);
   return (
     <DefinitionHistoryView
       definitions={definitions}

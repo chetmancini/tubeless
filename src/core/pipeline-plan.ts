@@ -342,8 +342,6 @@ export function buildPipelinePlan<
     );
   }
   const planSteps: PipelinePlanStep[] = [];
-  // Accumulated planned skip/complete reports so later steps see the same
-  // unmet-dependency chain as today's skipReason walk (not one empty map).
   const plannedReportsByStepId = new Map<string, PipelineStepReport>();
   for (const step of steps) {
     const selectionReasons = selectionReasonsByStepId.get(step.id)!;
@@ -373,7 +371,6 @@ export function buildPipelinePlan<
       if (disposition.message) report.message = disposition.message;
       plannedReportsByStepId.set(step.id, report);
     } else {
-      // Synthetic complete so isRequiredDependencyMet treats will-run deps as met.
       plannedReportsByStepId.set(step.id, {
         attemptId: "",
         id: step.id,

@@ -5,27 +5,20 @@ import type { AgentCheckpointSession } from "./checkpoint-session.js";
 import type { AgentExecutionIdentity } from "./checkpoint-types.js";
 import type { AgentEnvironment } from "./environment.js";
 import type { AgentLimits } from "./agent-types.js";
+import { DEFAULT_AGENT_LIMITS, minimumAgentLimit, validAgentLimit } from "./agent-limits.js";
 
 export function resolvedLimits(limits: AgentLimits = {}): Required<AgentLimits> {
-  const defaults = {
-    maxTurns: 20,
-    maxCalls: 100,
-    maxDecisions: 100,
-    maxDepth: 4,
-    maxConcurrency: 1,
-  };
   for (const key of Object.keys(limits)) {
-    if (!Object.hasOwn(defaults, key))
+    if (!Object.hasOwn(DEFAULT_AGENT_LIMITS, key))
       throw agentError("TUBELESS_AGENT_INVALID_DEFINITION", `Unsupported agent limit: ${key}`);
   }
-  const result = { ...defaults };
-  for (const key of Object.keys(defaults) as (keyof AgentLimits)[]) {
-    const value = limits[key] === undefined ? defaults[key] : limits[key];
-    const minimum = key === "maxCalls" || key === "maxDepth" ? 0 : 1;
-    if (!Number.isSafeInteger(value) || value < minimum)
+  const result = { ...DEFAULT_AGENT_LIMITS };
+  for (const key of Object.keys(DEFAULT_AGENT_LIMITS) as (keyof AgentLimits)[]) {
+    const value = limits[key] === undefined ? DEFAULT_AGENT_LIMITS[key] : limits[key];
+    if (!validAgentLimit(key, value))
       throw agentError(
         "TUBELESS_AGENT_INVALID_DEFINITION",
-        `Agent ${key} must be a ${minimum === 0 ? "nonnegative" : "positive"} safe integer`
+        `Agent ${key} must be a ${minimumAgentLimit(key) === 0 ? "nonnegative" : "positive"} safe integer`
       );
     result[key] = value;
   }

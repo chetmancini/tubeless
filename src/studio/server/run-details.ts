@@ -22,7 +22,6 @@ export class StudioRunDetails {
     this.#runs.clear();
   }
 
-  /** Fold one run from its last event id. The first open reads the run; later polls read the tail. */
   async read(runId: string): Promise<StoredPipelineRun | undefined> {
     const cached = this.#runs.get(runId) ?? {
       lastEventId: undefined,
@@ -43,7 +42,6 @@ export class StudioRunDetails {
     return cached.projector.snapshot().runs.find((entry) => entry.runId === runId);
   }
 
-  /** Remember a run and drop the oldest projector once retention is full. */
   #retainRun(
     runId: string,
     cached: { lastEventId: number | undefined; projector: PipelineRunProjector }

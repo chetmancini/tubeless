@@ -170,7 +170,6 @@ export function createAgentTurn<
               "agent.tool": call.tool.name,
               "agent.parentAttemptId": context.attemptId,
             };
-            // Record the selected alias for pipeline tools as well as handlers.
             context.reportAttempt(1, attributes);
             const complete = async (outcome: CallOutcome, label?: string) => {
               await journal?.completeCall(scope.agentKey, call.id, outcome);

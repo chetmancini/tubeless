@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { checkBuiltLinks, runCheck } from "./check-built-links.mjs";
+import { checkBuiltLinks } from "./check-built-links.mjs";
 
 const script = fileURLToPath(new URL("./check-built-links.mjs", import.meta.url));
 const temps = [];
@@ -35,11 +35,21 @@ function page(links) {
 describe("checkBuiltLinks", () => {
   it("accepts local pages, directory indexes, and file assets", () => {
     const dir = fixture({
-      "index.html": page(["/docs", "/llms.txt", "/api-report.json"]),
+      "index.html": page(["/docs", "/docs/", "/llms.txt", "/api-report.json"]),
       "docs/index.html": page(["/docs/concepts"]),
       "docs/concepts/index.html": page(["/"]),
       "llms.txt": "map",
       "api-report.json": "{}",
+    });
+
+    assert.deepEqual(checkBuiltLinks(dir), { ok: true, errors: [] });
+  });
+
+  it("decodes anchor references once before resolving their destination", () => {
+    const dir = fixture({
+      "index.html": page(["/agent&#39;s.html", "/file&amp;lt;.html"]),
+      "agent's.html": "agent",
+      "file&lt;.html": "literal entity",
     });
 
     assert.deepEqual(checkBuiltLinks(dir), { ok: true, errors: [] });
@@ -109,20 +119,6 @@ describe("checkBuiltLinks", () => {
     assert.equal(result.errors[0].target, "/docs/missing-route");
     assert.match(result.errors[0].message, /\/docs\/concepts/);
     assert.match(result.errors[0].message, /\/docs\/missing-route/);
-  });
-
-  it("fails a remote-step-shaped missing route clearly", () => {
-    const dir = fixture({
-      "docs/concepts/index.html":
-        '<p>See <a href="/docs/remote-step-composition">remote-step composition</a>.</p>',
-    });
-
-    const lines = [];
-    const code = runCheck(dir, (line) => lines.push(line));
-    assert.equal(code, 1);
-    assert.equal(lines.length, 1);
-    assert.match(lines[0], /\/docs\/concepts/);
-    assert.match(lines[0], /\/docs\/remote-step-composition/);
   });
 
   it("does not interpret destinations outside the output root", () => {

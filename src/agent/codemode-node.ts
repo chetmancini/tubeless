@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
 import { createAbortError } from "../utilities/abort.js";
+import { fileWorkerExecArgv } from "../utilities/worker-argv.js";
 import type { CodemodeExecutor } from "./codemode-executor.js";
 import type {
   CodemodeHostMessage,
@@ -12,15 +13,6 @@ function workerUrl(): URL {
     ? new URL("../../dist/agent/codemode-worker.js", import.meta.url)
     : new URL("./codemode-worker.js", import.meta.url);
 }
-
-// --input-type is valid for the caller's eval/stdin but not this file-based worker.
-const execArgv = () =>
-  process.execArgv.filter(
-    (arg, index, args) =>
-      arg !== "--input-type" &&
-      !arg.startsWith("--input-type=") &&
-      args[index - 1] !== "--input-type"
-  );
 
 /**
  * Run each code-mode script in a fresh Node or Bun worker thread with heap limits, inside a
@@ -45,7 +37,7 @@ export function createNodeCodemodeExecutor(): CodemodeExecutor {
             maxLogLines: execution.maxLogLines,
             maxLogCharacters: execution.maxLogCharacters,
           } satisfies CodemodeWorkerData,
-          execArgv: execArgv(),
+          execArgv: fileWorkerExecArgv(process.execArgv),
           resourceLimits: {
             maxOldGenerationSizeMb: 128,
             maxYoungGenerationSizeMb: 32,

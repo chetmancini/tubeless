@@ -1,4 +1,5 @@
 import { Worker } from "node:worker_threads";
+import { fileWorkerExecArgv } from "../utilities/worker-argv.js";
 import type { PipelineStepContext, RemoteStepAdapter } from "../core/pipeline.js";
 import {
   decodeWorkerError,
@@ -99,13 +100,7 @@ export function createWorkerThreadAdapter<TPayload = unknown>(
   function createSlot(): Slot {
     const worker = new Worker(new URL("./worker-thread-runtime.js", import.meta.url), {
       workerData: { module, exportName } satisfies WorkerThreadData,
-      // --input-type is valid for the caller's eval/stdin but not this file-based worker.
-      execArgv: process.execArgv.filter(
-        (arg, index, args) =>
-          arg !== "--input-type" &&
-          !arg.startsWith("--input-type=") &&
-          args[index - 1] !== "--input-type"
-      ),
+      execArgv: fileWorkerExecArgv(process.execArgv),
     });
     const slot: Slot = { worker };
     slots.add(slot);

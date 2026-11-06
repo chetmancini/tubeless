@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import type { PipelineStepContext } from "../core/pipeline-types.js";
 import { createAbortError, throwIfAborted } from "../utilities/abort.js";
-import { clippedText } from "./default-tool-files.js";
-import { MAX_OUTPUT_BYTES } from "./default-tool-limits.js";
+import { clippedText } from "./default-tool-text.js";
+import { DEFAULT_BASH_TIMEOUT_MS, MAX_OUTPUT_BYTES } from "./default-tool-limits.js";
 import { ToolError } from "./tools.js";
 
 export function bashTool(
@@ -78,7 +78,7 @@ export function bashTool(
     const timeout = setTimeout(() => {
       timedOut = true;
       stop();
-    }, input.timeoutMs ?? 30_000);
+    }, input.timeoutMs ?? DEFAULT_BASH_TIMEOUT_MS);
     child.stdout.on("data", (chunk: Buffer) => capture(stdout, chunk));
     child.stderr.on("data", (chunk: Buffer) => capture(stderr, chunk));
     child.once("error", (error) => {

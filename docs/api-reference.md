@@ -13,18 +13,18 @@ Package: `tubeless`
 | `tubeless/agent/node`       | `./dist/agent/node.d.ts`                  | `e0558b4bf12753bf66e687621f7c6573605046c77e99f41ec26cd711a7bcf2d7` |                4 |
 | `tubeless/agent`            | `./dist/agent/agent.d.ts`                 | `5fa21302535eefeea4d86fb8325ce267e793391b3c595ef29402314e4b17d5c6` |               39 |
 | `tubeless`                  | `./dist/core/pipeline.d.ts`               | `e19783e82012183aef5c87abd1d91cb1cfde70e105204c87abc73670577aace2` |               78 |
-| `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `5a027c5810d08524a21e7ab66d43f11553e03e86547d118af85965b7a57deb84` |               31 |
+| `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `e8e9eb129dbb19648f552da85c2e2648e3da3328d123f18debf8e5068814c2f1` |               31 |
 | `tubeless/batch`            | `./dist/utilities/batch.d.ts`             | `a09125c6849bb91b4bbba2f76c4248452d5288cf0c70671461de5846b1d17037` |                7 |
-| `tubeless/node`             | `./dist/node/node.d.ts`                   | `9c928ce580452f11c6acdc228c2923ef98fa853ffa2e70cd1dacae8164c1dc0f` |               14 |
+| `tubeless/node`             | `./dist/node/node.d.ts`                   | `e0ec16243c8534fe01125d7f155e075d7b264e4a932d844f25316c4be56bb7f0` |               14 |
 | `tubeless/rate-limit`       | `./dist/utilities/rate-limit.d.ts`        | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
 | `tubeless/retry`            | `./dist/utilities/retry.d.ts`             | `52ede846e87e3601426639a7bdc2de0a440c119470dc55324deb26cb312757fd` |                6 |
-| `tubeless/project`          | `./dist/project/project.d.ts`             | `77b0836e88c61d98d8dd795c92795bbb17a7ddbac9001522c92f2a33feca206b` |                8 |
+| `tubeless/project`          | `./dist/project/project.d.ts`             | `54e026c26790be29f37beec3dafaec27d4d885ad2e0e6ee288174fbbef51964a` |                8 |
 | `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `f1c9d6699246a6f91329d1d23c53d310e4a18d5b136375c109d128126165d038` |               10 |
 | `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `9b7b2835a4ffa8bdce42233c0ff22ca28fe2a51de95208d895f6fc1904d2bad0` |                3 |
 | `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `8e08fe480b86de80ede5e03d7f30fff3a46f9da7ce9d5261441e961bea6678ac` |                2 |
 | `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `dc3bfb16ef93c725830400845b7389277e3dc16f7906b6b6095f670d54884f36` |                7 |
 | `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `51fc37d127b384327979df8f47e29125977cb2ae0f87fe8676d916d7bf30011f` |                2 |
-| `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `8424e7173bc9a7e0b5ef203057eb5d4ae61988507ee960a2a0fafdb643ace61d` |               12 |
+| `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `044fb4cc0ef6b0b1afb241c3001446640aedf6efb10f58b2f73d96e879478002` |               12 |
 | `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `a9a03a7a9a1b62cd3fe611ef83b864c876f61b8d74ece137761ed2a3ef98bc38` |                4 |
 
 ## Symbols
@@ -33,8 +33,8 @@ Package: `tubeless`
 
 | Symbol                                                                                                                         | Description                                                                                                                                                                                       |
 | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`createNodeAgentEnvironment`](https://github.com/chetmancini/tubeless/blob/main/src/agent/node-environment.ts#L63)            | Local workspace capabilities with bounded reads, atomic writes and cancellable bash.                                                                                                              |
-| [`createNodeCodemodeExecutor`](https://github.com/chetmancini/tubeless/blob/main/src/agent/codemode-node.ts#L30)               | Run each code-mode script in a fresh Node or Bun worker thread with heap limits, inside a `node:vm` context without string code generation, WebAssembly, `process`, `require`, `fetch` or timers. |
+| [`createNodeAgentEnvironment`](https://github.com/chetmancini/tubeless/blob/main/src/agent/node-environment.ts#L64)            | Local workspace capabilities with bounded reads, atomic writes and cancellable bash.                                                                                                              |
+| [`createNodeCodemodeExecutor`](https://github.com/chetmancini/tubeless/blob/main/src/agent/codemode-node.ts#L22)               | Run each code-mode script in a fresh Node or Bun worker thread with heap limits, inside a `node:vm` context without string code generation, WebAssembly, `process`, `require`, `fetch` or timers. |
 | [`openSqliteAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/sqlite-checkpoint-store.ts#L37) | Open durable SQLite checkpoints; process exit automatically releases execution ownership.                                                                                                         |
 | [`SqliteAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/sqlite-checkpoint-store.ts#L9)      | File-backed checkpoint storage using Node's built-in SQLite and per-key file locks.                                                                                                               |
 
@@ -74,7 +74,7 @@ Package: `tubeless`
 | [`createAgentSession`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-session.ts#L54)                        | Continue one conversation across sequential runs of a `defineAgent` agent, such as chat prompts. |
 | [`createMemoryAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/memory-checkpoint-store.ts#L6) | In-memory checkpoint store with exclusive leases, useful for tests and embedded hosts.           |
 | [`DefaultAgentToolName`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L21)                        | A standard workspace tool an agent's setup may select.                                           |
-| [`DefaultAgentTools`](https://github.com/chetmancini/tubeless/blob/main/src/agent/default-tools.ts#L207)                        | The read, write, edit, bash, list and search tools included in every agent.                      |
+| [`DefaultAgentTools`](https://github.com/chetmancini/tubeless/blob/main/src/agent/default-tools.ts#L210)                        | The read, write, edit, bash, list and search tools included in every agent.                      |
 | [`defineAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-agent.ts#L80)                                 | Prompt a model with `{ task }` and finish with the result schema, `{ answer }` by default.       |
 | [`defineAgentLoop`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent.ts#L62)                                   | Build a bounded in-process agent as an ordinary pipeline with one target, agent.                 |
 | [`defineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L57)                                        | Declare a validated handler capability; tools skip live work in dry runs by default.             |
@@ -186,14 +186,14 @@ Package: `tubeless`
 | [`CliPathParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L64)                            | Declarative configuration for a filesystem path command parameter.                  |
 | [`CliStringParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L35)                          | Declarative configuration for a string command parameter.                           |
 | [`CliValidationError`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L192)                     | Error thrown when command-line arguments fail schema validation.                    |
-| [`defineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-command.ts#L401)                        | Create a typed command from a declarative parameter schema and run handler.         |
-| [`definePipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L261)       | Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. |
-| [`DefinePipelineCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L146) | Configuration for a typed pipeline command.                                         |
-| [`PipelineCliParseResult`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L53)       | Parse result returned by commands created with `definePipelineCommand`.             |
-| [`PipelineCliValues`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L44)            | Validated domain parameters plus the built-in pipeline execution controls.          |
-| [`PipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L59)              | Typed CLI facade over a pipeline with planning and graph helpers.                   |
-| [`PipelineCommandHookConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L99)    | Static or lazily constructed lifecycle hooks for a pipeline command.                |
-| [`PipelineCommandHookContext`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L90)   | Parsed values and CLI services passed to a pipeline hook factory.                   |
+| [`defineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-command.ts#L378)                        | Create a typed command from a declarative parameter schema and run handler.         |
+| [`definePipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L296)       | Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. |
+| [`DefinePipelineCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L149) | Configuration for a typed pipeline command.                                         |
+| [`PipelineCliParseResult`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L56)       | Parse result returned by commands created with `definePipelineCommand`.             |
+| [`PipelineCliValues`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L47)            | Validated domain parameters plus the built-in pipeline execution controls.          |
+| [`PipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L62)              | Typed CLI facade over a pipeline with planning and graph helpers.                   |
+| [`PipelineCommandHookConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L102)   | Static or lazily constructed lifecycle hooks for a pipeline command.                |
+| [`PipelineCommandHookContext`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L93)   | Parsed values and CLI services passed to a pipeline hook factory.                   |
 | [`PipelineReporterConfig`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L51)  | Rendering and output settings for automatic, plain, or interactive reporting.       |
 | [`PipelineReporterMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L33)    | Rendering mode selected for pipeline lifecycle reporting.                           |
 | [`ReporterColorMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L6)                    | Policy for ANSI color in terminal reporter output.                                  |
@@ -219,7 +219,7 @@ Package: `tubeless`
 | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | [`CheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/node/checkpoint.ts#L5)                        | Mutable set of completed item keys backed by an explicit JSON flush.                                                          |
 | [`createFileStepCache`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/cache-storage.ts#L22)           | Persist timestamped cache entries with atomic replacement in a dedicated directory.                                           |
-| [`createWorkerThreadAdapter`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-adapter.ts#L64)  | Run an explicit module export in a lazily created, reusable Node worker pool.                                                 |
+| [`createWorkerThreadAdapter`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-adapter.ts#L65)  | Run an explicit module export in a lazily created, reusable Node worker pool.                                                 |
 | [`definePaths`](https://github.com/chetmancini/tubeless/blob/main/src/node/paths.ts#L11)                                | Create a factory that resolves a named set of workspace-relative paths.                                                       |
 | [`openCheckpoint`](https://github.com/chetmancini/tubeless/blob/main/src/node/checkpoint.ts#L66)                        | Open a JSON checkpoint file, falling back to an empty store when it is absent.                                                |
 | [`readJson`](https://github.com/chetmancini/tubeless/blob/main/src/node/file-utils.ts#L14)                              | Read and parse trusted JSON without runtime schema validation.                                                                |
@@ -227,9 +227,9 @@ Package: `tubeless`
 | [`resetDir`](https://github.com/chetmancini/tubeless/blob/main/src/node/file-utils.ts#L23)                              | Remove and recreate a directory for generated output.                                                                         |
 | [`v8StepCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/cache-storage.ts#L10)              | Node's structured serialization, including undefined, Maps, Dates, and BigInts.                                               |
 | [`withCheckpointedBatch`](https://github.com/chetmancini/tubeless/blob/main/src/node/checkpoint.ts#L113)                | Runs `persist()`, and only once it resolves without throwing, records every item in `batch` into `checkpoint` and flushes it. |
-| [`WorkerThreadAdapter`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-adapter.ts#L24)        | Invoke cloneable payloads through a reusable pool of Node worker threads.                                                     |
-| [`WorkerThreadAdapterOptions`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-adapter.ts#L12) | Configure the module export and worker-pool limits for a thread adapter.                                                      |
-| [`WorkerThreadContext`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-protocol.ts#L14)       | Provide cancellation, logging, progress, and run metadata to a worker export.                                                 |
+| [`WorkerThreadAdapter`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-adapter.ts#L25)        | Invoke cloneable payloads through a reusable pool of Node worker threads.                                                     |
+| [`WorkerThreadAdapterOptions`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-adapter.ts#L13) | Configure the module export and worker-pool limits for a thread adapter.                                                      |
+| [`WorkerThreadContext`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-protocol.ts#L13)       | Explicit context supplied to the exported worker function; domain input is its first argument.                                |
 | [`writeJson`](https://github.com/chetmancini/tubeless/blob/main/src/node/file-utils.ts#L5)                              | Serialize JSON and atomically replace the destination file.                                                                   |
 
 ### `tubeless/rate-limit`
@@ -315,11 +315,11 @@ Package: `tubeless`
 
 | Symbol                                                                                                                               | Description                                                                                     |
 | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| [`CloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L47)                                | Worker handler and Durable Object classes that a Worker entry exports.                          |
-| [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L31)                         | Options for createCloudflareApp.                                                                |
-| [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L44)                 | Durable Object class to export from the Worker entry under its binding's export name.           |
-| [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L39)                             | Worker module handler to use as the Worker entry's default export.                              |
-| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L102)                         | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects.       |
+| [`CloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L43)                                | Worker handler and Durable Object classes that a Worker entry exports.                          |
+| [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L27)                         | Options for createCloudflareApp.                                                                |
+| [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L40)                 | Durable Object class to export from the Worker entry under its binding's export name.           |
+| [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L35)                             | Worker module handler to use as the Worker entry's default export.                              |
+| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L98)                          | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects.       |
 | [`createR2CacheStore`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L24)                     | Step cache entries in R2.                                                                       |
 | [`createWorkerLoaderCodemodeExecutor`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-codemode.ts#L107) | Run each code-mode script in a fresh Cloudflare Dynamic Worker from a `worker_loaders` binding. |
 | [`jsonCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L132)                        | Lossless JSON codec for Workers, where the default V8 codec is unavailable.                     |

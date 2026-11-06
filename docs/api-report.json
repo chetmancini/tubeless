@@ -177,7 +177,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "5a027c5810d08524a21e7ab66d43f11553e03e86547d118af85965b7a57deb84",
+      "sha256": "e8e9eb129dbb19648f552da85c2e2648e3da3328d123f18debf8e5068814c2f1",
       "specifier": "tubeless/cli"
     },
     {
@@ -212,7 +212,7 @@
         "WorkerThreadContext",
         "writeJson"
       ],
-      "sha256": "9c928ce580452f11c6acdc228c2923ef98fa853ffa2e70cd1dacae8164c1dc0f",
+      "sha256": "e0ec16243c8534fe01125d7f155e075d7b264e4a932d844f25316c4be56bb7f0",
       "specifier": "tubeless/node"
     },
     {
@@ -246,7 +246,7 @@
         "ProjectOptions",
         "ProjectRegistry"
       ],
-      "sha256": "77b0836e88c61d98d8dd795c92795bbb17a7ddbac9001522c92f2a33feca206b",
+      "sha256": "54e026c26790be29f37beec3dafaec27d4d885ad2e0e6ee288174fbbef51964a",
       "specifier": "tubeless/project"
     },
     {
@@ -314,7 +314,7 @@
         "WorkerLoaderCodemodeOptions",
         "WorkerLoaderLike"
       ],
-      "sha256": "8424e7173bc9a7e0b5ef203057eb5d4ae61988507ee960a2a0fafdb643ace61d",
+      "sha256": "044fb4cc0ef6b0b1afb241c3001446640aedf6efb10f58b2f73d96e879478002",
       "specifier": "tubeless/cloudflare"
     },
     {

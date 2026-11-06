@@ -27,7 +27,7 @@ const allowedDependencies: Record<string, readonly string[]> = {
   core: ["tracing", "utilities"],
   tracing: [],
   utilities: [],
-  node: [],
+  node: ["utilities"],
   reporter: ["core", "utilities"],
   render: ["core"],
   "run-store": ["core", "tracing", "utilities"],
@@ -73,6 +73,7 @@ describe("module runtime boundaries", () => {
       "studio/browser/graph/scene.js",
       "studio/browser/graph/dependencies.js",
       "studio/browser/graph/layout.js",
+      "studio/shared/children.js",
       "studio/shared/limits.js",
     ]);
     const pending = [resolve(dist, "studio/browser/graph/scene.js")];
@@ -173,6 +174,7 @@ describe("module runtime boundaries", () => {
       "run-store/run-store-schema.js",
       "studio/server/api.js",
       "studio/server/children.js",
+      "studio/shared/children.js",
       "studio/shared/limits.js",
       "studio/server/http.js",
       "studio/shared/protocol.js",

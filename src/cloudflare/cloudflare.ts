@@ -4,12 +4,8 @@ import { hostedProjectCommands } from "../hosting/hosting-commands.js";
 import { errorResponse } from "../studio/server/http.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { createAccessAuthenticator, parseAccessConfig } from "./cloudflare-access.js";
-import {
-  MAX_RUN_DURATION_MS,
-  RunObjectCore,
-  type RunJob,
-  type StudioIngest,
-} from "./cloudflare-run.js";
+import { MAX_RUN_DURATION_MS, type RunJob, type StudioIngest } from "./cloudflare-run-contract.js";
+import { RunObjectCore } from "./cloudflare-run.js";
 import { StudioObjectCore, type RunStubLike } from "./cloudflare-studio.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 import { PIPELINE_RUN_STUDIO_CLIENT } from "./cloudflare-studio-client.js";

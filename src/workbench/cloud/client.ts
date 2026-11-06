@@ -1,6 +1,9 @@
 import { normalizeCloudHost } from "./config.js";
 import {
+  CloudClientError,
+  parseCloudSource,
   CLOUD_INPUT_MAX_DEPTH,
+  CLOUD_INPUT_MAX_BYTES,
   isCloudJsonValue,
   isCloudObject,
   isCloudToken,
@@ -15,7 +18,6 @@ import {
   type CliPipeline,
   type CliRun,
   type CliRunRequest,
-  type CliRunSource,
   type CliSession,
   type CloudDeviceCode,
   type CloudDeviceError,
@@ -23,22 +25,9 @@ import {
 } from "./protocol.js";
 import { terminalSafeText } from "../workbench-shared.js";
 
-const CLOUD_JSON_LIMIT = 64 * 1024;
 const RUN_ENVELOPE_LIMIT = 68 * 1024;
 const RESPONSE_LIMIT = 4 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 15_000;
-
-export class CloudClientError extends Error {
-  readonly code: string;
-  readonly status?: number;
-
-  constructor(message: string, code: string, status?: number) {
-    super(message);
-    this.name = "CloudClientError";
-    this.code = code;
-    this.status = status;
-  }
-}
 
 export function isCloudTransportError(error: unknown): error is CloudClientError {
   return (
@@ -93,67 +82,8 @@ function validateRunInput(input: unknown): void {
   } catch {
     throw new CloudClientError("Cloud run input must contain JSON data.", "invalid_request");
   }
-  if (encoded === undefined || Buffer.byteLength(encoded, "utf8") > CLOUD_JSON_LIMIT)
+  if (encoded === undefined || Buffer.byteLength(encoded, "utf8") > CLOUD_INPUT_MAX_BYTES)
     throw new CloudClientError("Cloud run input exceeds the 64 KB JSON limit.", "invalid_request");
-}
-
-/** Validate and normalize only the immutable source selectors supported by Cloud. */
-export function parseCloudSource(value: unknown): CliRunSource {
-  const invalid = (): never => {
-    throw new CloudClientError(
-      "Source must select a GitHub ref or a complete immutable main commit or pull_request snapshot.",
-      "invalid_request"
-    );
-  };
-  if (!isCloudObject(value)) return invalid();
-  if (value.kind === "ref") {
-    const ref = value.ref;
-    if (
-      Object.keys(value).some((key) => !["kind", "ref"].includes(key)) ||
-      typeof ref !== "string" ||
-      !ref ||
-      /[\ud800-\udfff]/u.test(ref) ||
-      Buffer.byteLength(ref, "utf8") > 1024 ||
-      /[\s\x00-\x1f\x7f~^:?*[\\]/.test(ref) ||
-      ref.includes("..") ||
-      ref.includes("@{") ||
-      ref === "@" ||
-      ref.startsWith("-") ||
-      ref
-        .split("/")
-        .some(
-          (part) => !part || part.startsWith(".") || part.endsWith(".") || part.endsWith(".lock")
-        )
-    )
-      return invalid();
-    return { kind: "ref", ref };
-  }
-  const fields =
-    value.kind === "main"
-      ? ["kind", "commit"]
-      : ["kind", "number", "headSha", "baseSha", "mergeSha"];
-  if (Object.keys(value).some((key) => !fields.includes(key))) return invalid();
-  const sha = (key: string): string => {
-    const field = value[key];
-    return typeof field === "string" && field.length === 40 && !/[^a-fA-F0-9]/.test(field)
-      ? field.toLowerCase()
-      : invalid();
-  };
-  if (value.kind === "main") return { kind: "main", commit: sha("commit") };
-  if (
-    value.kind !== "pull_request" ||
-    typeof value.number !== "number" ||
-    !Number.isSafeInteger(value.number) ||
-    value.number < 1
-  )
-    return invalid();
-  return {
-    kind: "pull_request",
-    number: value.number,
-    headSha: sha("headSha"),
-    baseSha: sha("baseSha"),
-    mergeSha: sha("mergeSha"),
-  };
 }
 
 async function responseJson(response: Response, signal: AbortSignal): Promise<unknown> {
@@ -265,7 +195,7 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
       } catch {
         throw new CloudClientError("Cloud request must contain JSON data.", "invalid_request");
       }
-      const bodyLimit = requestOptions.bodyLimit ?? CLOUD_JSON_LIMIT;
+      const bodyLimit = requestOptions.bodyLimit ?? CLOUD_INPUT_MAX_BYTES;
       if (body === undefined || Buffer.byteLength(body, "utf8") > bodyLimit) {
         throw new CloudClientError(
           `Cloud request exceeds the ${bodyLimit / 1024} KB JSON limit.`,

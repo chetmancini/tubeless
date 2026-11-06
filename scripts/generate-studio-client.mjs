@@ -10,13 +10,13 @@ import { fileURLToPath } from "node:url";
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const check = process.argv.includes("--check");
 
-const clientEntryPath = resolve(packageRoot, "src/studio/browser/entry.ts");
-const browserBundlePath = resolve(packageRoot, "dist/studio/browser/entry.js");
-const cloudflareClientPath = resolve(packageRoot, "dist/cloudflare/cloudflare-studio-client.js");
-const cloudflareClientTypesPath = resolve(
-  packageRoot,
-  "dist/cloudflare/cloudflare-studio-client.d.ts"
-);
+export function studioClientPaths(root = packageRoot) {
+  return {
+    browser: resolve(root, "dist/studio/browser/entry.js"),
+    cloudflare: resolve(root, "dist/cloudflare/cloudflare-studio-client.js"),
+    declarations: resolve(root, "dist/cloudflare/cloudflare-studio-client.d.ts"),
+  };
+}
 
 /** The Workers entry cannot read files, so ship the same bundle as a string module. */
 export function cloudflareClientModule(source) {
@@ -34,9 +34,11 @@ export function compiledClientSource(js) {
 
 export async function generateStudioClient({ check = false } = {}) {
   const source = await bundledClientSource();
+  const paths = studioClientPaths();
   const outputs = [
-    [browserBundlePath, source],
-    [cloudflareClientPath, cloudflareClientModule(source)],
+    [paths.browser, source],
+    [paths.cloudflare, cloudflareClientModule(source)],
+    [paths.declarations, "export declare const PIPELINE_RUN_STUDIO_CLIENT: string;\n"],
   ];
 
   if (check) {
@@ -53,12 +55,8 @@ export async function generateStudioClient({ check = false } = {}) {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, contents);
   }
-  writeFileSync(
-    cloudflareClientTypesPath,
-    "export declare const PIPELINE_RUN_STUDIO_CLIENT: string;\n"
-  );
-  rmSync(`${browserBundlePath}.map`, { force: true });
-  process.stdout.write(`Generated ${relative(packageRoot, browserBundlePath)}\n`);
+  rmSync(`${paths.browser}.map`, { force: true });
+  process.stdout.write(`Generated ${relative(packageRoot, paths.browser)}\n`);
 }
 
 async function bundledClientSource() {
@@ -66,7 +64,7 @@ async function bundledClientSource() {
     throw new Error("Generate the Studio client with Bun: bun scripts/generate-studio-client.mjs");
   }
   const result = await Bun.build({
-    entrypoints: [clientEntryPath],
+    entrypoints: [resolve(packageRoot, "src/studio/browser/entry.ts")],
     format: "esm",
     minify: true,
     target: "browser",

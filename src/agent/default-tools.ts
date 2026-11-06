@@ -16,8 +16,16 @@ import { environmentOperation, type AgentEnvironment } from "./environment.js";
 import { toolPreview } from "./tool-progress.js";
 import type { AgentToolContext } from "./agent-types.js";
 import {
+  DEFAULT_BASH_TIMEOUT_MS,
+  DEFAULT_READ_LINES,
+  MAX_BASH_TIMEOUT_MS,
   MAX_FILE_BYTES,
+  MAX_LIST_ENTRIES,
   MAX_OUTPUT_BYTES,
+  MAX_READ_LINES,
+  MAX_SEARCH_DEPTH,
+  MAX_SEARCH_ENTRIES,
+  MAX_SEARCH_MATCHES,
   MAX_SEARCH_SNIPPET_BYTES,
 } from "./default-tool-limits.js";
 
@@ -63,7 +71,7 @@ const listEntries: WireSchema<Readonly<Awaited<ReturnType<AgentEnvironment["list
         name: path,
         kind: wireEnum(["file", "directory", "symlink", "other"] as const),
       }),
-      { maxItems: 200 }
+      { maxItems: MAX_LIST_ENTRIES }
     ),
     (entries) => checkOutputBytes(entries.map(({ name }) => name))
   );
@@ -71,12 +79,11 @@ const searchMatches: WireSchema<
   Readonly<Awaited<ReturnType<AgentEnvironment["search"]>>["matches"]>
 > = wireRefine(
   wireArray(wireObject({ path, line: count, text: utf8Text(MAX_SEARCH_SNIPPET_BYTES) }), {
-    maxItems: 50,
+    maxItems: MAX_SEARCH_MATCHES,
   }),
   (matches) => checkOutputBytes(matches.flatMap(({ path, text }) => [path, text]))
 );
 
-// Read-only handlers run identically in live executions and previews.
 function read(input: Parameters<AgentEnvironment["read"]>[0], context: AgentToolContext) {
   return environmentOperation(context, () => context.environment.read(input, context));
 }
@@ -92,12 +99,11 @@ function search(input: Parameters<AgentEnvironment["search"]>[0], context: Agent
 export const defaultTools = Object.freeze({
   read: defineToolWithActivity({
     replay: "safe",
-    description:
-      "Read a UTF-8 file up to 1 MiB. Paths resolve from the run cwd. startLine is 1-based (default 1); maxLines defaults to 200. Output is capped at 16 KiB. Use null for defaults.",
+    description: `Read a UTF-8 file up to 1 MiB. Paths resolve from the run cwd. startLine is 1-based (default 1); maxLines defaults to ${DEFAULT_READ_LINES}. Output is capped at 16 KiB. Use null for defaults.`,
     inputSchema: toolObject({
       path,
       startLine: optionalToolField(positive(Number.MAX_SAFE_INTEGER)),
-      maxLines: optionalToolField(positive(2000)),
+      maxLines: optionalToolField(positive(MAX_READ_LINES)),
     }),
     outputSchema: toolObject({
       path,
@@ -140,12 +146,11 @@ export const defaultTools = Object.freeze({
     summarize: (result) => `${result.bytes} bytes`,
   }),
   bash: defineToolWithActivity({
-    description:
-      "Run bash in the run cwd or a supplied cwd. Return stdout, stderr, exitCode, signal, timedOut and truncated. timeoutMs defaults to 30000 (maximum 300000); combined output is capped at 16 KiB. Use null for defaults. Skipped in dry runs.",
+    description: `Run bash in the run cwd or a supplied cwd. Return stdout, stderr, exitCode, signal, timedOut and truncated. timeoutMs defaults to ${DEFAULT_BASH_TIMEOUT_MS} (maximum ${MAX_BASH_TIMEOUT_MS}); combined output is capped at 16 KiB. Use null for defaults. Skipped in dry runs.`,
     inputSchema: toolObject({
       command: wireString({ maxLength: 32_768 }),
       cwd: optionalToolField(path),
-      timeoutMs: optionalToolField(positive(300_000)),
+      timeoutMs: optionalToolField(positive(MAX_BASH_TIMEOUT_MS)),
     }),
     outputSchema: toolObject(
       {
@@ -168,8 +173,7 @@ export const defaultTools = Object.freeze({
   }),
   list: defineToolWithActivity({
     replay: "safe",
-    description:
-      "List up to 200 entries in filename order, defaulting to the run cwd. Retained names are capped at 16 KiB. Return names and file/directory/symlink kinds. Use null for the default path.",
+    description: `List up to ${MAX_LIST_ENTRIES} entries in filename order, defaulting to the run cwd. Retained names are capped at 16 KiB. Return names and file/directory/symlink kinds. Use null for the default path.`,
     inputSchema: toolObject({ path: optionalToolField(path) }),
     outputSchema: toolObject({
       path,
@@ -184,8 +188,7 @@ export const defaultTools = Object.freeze({
   }),
   search: defineToolWithActivity({
     replay: "safe",
-    description:
-      "Search for literal, case-sensitive text in a file or directory (default run cwd), traversing entries in filename order. Skip .git, node_modules and nested symlinks. Count binary/oversized files (over 1 MiB) and unavailable descendants in skippedFiles. Examine at most 2000 entries and 32 directory levels; return up to 50 matching lines and 16 KiB. Long-line snippets shift to the match and cap at 1024 bytes. Use null for the default path.",
+    description: `Search for literal, case-sensitive text in a file or directory (default run cwd), traversing entries in filename order. Skip .git, node_modules and nested symlinks. Count binary/oversized files (over 1 MiB) and unavailable descendants in skippedFiles. Examine at most ${MAX_SEARCH_ENTRIES} entries and ${MAX_SEARCH_DEPTH} directory levels; return up to ${MAX_SEARCH_MATCHES} matching lines and 16 KiB. Long-line snippets shift to the match and cap at ${MAX_SEARCH_SNIPPET_BYTES} bytes. Use null for the default path.`,
     inputSchema: toolObject({
       query: wireString({ maxLength: 4096 }),
       path: optionalToolField(path),

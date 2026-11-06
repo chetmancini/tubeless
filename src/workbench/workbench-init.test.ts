@@ -55,8 +55,13 @@ describe("tubeless init", () => {
     expect(vite).toContain('import { cloudflare } from "@cloudflare/vite-plugin";');
     expect(vite).toContain("plugins: [cloudflare()]");
     const steps = out.join("");
-    for (const [name, version] of Object.entries(CLOUDFLARE_DEV_DEPENDENCIES))
-      expect(steps).toContain(` ${name}@${version}`);
+    const installCommand = `bun add tubeless && bun add -d --exact ${Object.entries(
+      CLOUDFLARE_DEV_DEPENDENCIES
+    )
+      .map(([name, version]) => `${name}@${version}`)
+      .join(" ")}`;
+    expect(steps).toContain(installCommand);
+    expect(readFileSync("docs/deploy-cloudflare.md", "utf8")).toContain(installCommand);
     // Package managers save ^ranges by default; the verified beta toolchain must stay exact.
     expect(steps).toContain("bun add -d --exact ");
     // cf dev and cf build write generated types and Build Output there.

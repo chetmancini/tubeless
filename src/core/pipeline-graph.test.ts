@@ -57,7 +57,7 @@ describe("pipeline graph", () => {
     dependencies.push(source);
     const consume = step("consume", { dependsOn: dependencies });
 
-    const compiled = compilePipelineGraph([consume, source]);
+    const compiled = compilePipelineGraph({ orderedSteps: [source, consume] });
     dependencies.length = 0;
     Object.assign(source, { id: "mutated" });
 

@@ -29,7 +29,10 @@ import {
   type PipelineRunControls,
   type StandardSchemaV1,
 } from "../core/pipeline.js";
-import { createPipelineReporter, type PipelineReporterConfig } from "../reporter/reporter-entry.js";
+import {
+  createPipelineReporter,
+  type PipelineReporterConfig,
+} from "../reporter/interactive-reporter.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE } from "./cli-exit.js";
 
 export type PipelineCliBuiltins = {
@@ -107,7 +110,7 @@ type PipelineCommandMapOptions<TOptions extends object, TSchema extends CliParam
 
 type DefaultPipelineCommandOptions<TSchema extends CliParamsSchema> = Omit<
   PipelineCliValues<TSchema>,
-  "cache" | "continueOnError" | "maxConcurrency" | "dryRun" | "resume" | "stepIds" | "targets"
+  keyof PipelineCliBuiltins | "dryRun" | "resume"
 >;
 
 type CanDefaultPipelineCommandOptions<TOptions extends object, TSchema extends CliParamsSchema> =
@@ -158,30 +161,65 @@ export type DefinePipelineCommandConfig<
         mapOptions: PipelineCommandMapOptions<TOptions, TSchema>;
       });
 
-const PIPELINE_COMMAND_KEYS = new Set([
-  "cache",
-  "continueOnError",
-  "maxConcurrency",
-  "stepIds",
-  "targets",
-]);
-const PIPELINE_COMMAND_FLAGS = new Set([
-  "cache",
-  "continue-on-error",
-  "max-concurrency",
-  "step",
-  "target",
-]);
+function pipelineCommandBuiltins(pipeline: {
+  readonly stepIds: readonly string[];
+  readonly targetIds: readonly string[];
+}): PipelineCliBuiltins {
+  return {
+    cache: {
+      type: "string",
+      choices: ["use", "recompute", "bypass"],
+      optional: true,
+      group: "execution",
+      description: "Override the cache policy for opted-in steps, including child pipelines.",
+    },
+    stepIds: {
+      type: "string",
+      multiple: true,
+      flag: "step",
+      group: "execution",
+      exclusive: true,
+      choices: pipeline.stepIds,
+      description: "Run exactly this step.",
+    },
+    continueOnError: {
+      type: "boolean",
+      group: "execution",
+      description: "Continue independent work after a step fails.",
+    },
+    maxConcurrency: {
+      type: "number",
+      group: "execution",
+      default: 1,
+      integer: true,
+      min: 1,
+      description: "Maximum simultaneous steps in this run.",
+    },
+    targets: {
+      type: "string",
+      multiple: true,
+      flag: "target",
+      group: "execution",
+      exclusive: true,
+      choices: pipeline.targetIds,
+      description: "Run this declared target and its prerequisites.",
+    },
+  };
+}
 
-function assertNoPipelineCommandConflicts(params: CliParamsSchema): void {
+function assertNoPipelineCommandConflicts(
+  params: CliParamsSchema,
+  builtins: PipelineCliBuiltins
+): void {
+  const flags = new Set(Object.entries(builtins).map(([key, param]) => flagName(key, param)));
   for (const [key, param] of Object.entries(params)) {
-    if (PIPELINE_COMMAND_KEYS.has(key)) {
+    if (Object.hasOwn(builtins, key)) {
       throw new Error(
         `"${key}" is a reserved parameter provided automatically by pipeline commands; remove it from params.`
       );
     }
     const flag = flagName(key, param);
-    if (PIPELINE_COMMAND_FLAGS.has(flag)) {
+    if (flags.has(flag)) {
       throw new Error(
         `--${flag} is a reserved flag provided automatically by pipeline commands; remove "${key}" from params or give it a different flag name.`
       );
@@ -238,19 +276,16 @@ function isHookConfigFunction<TResult, TSchema extends CliParamsSchema>(
 }
 
 function defaultPipelineCommandOptions<TSchema extends CliParamsSchema>(
-  values: PipelineCliValues<TSchema>
+  values: PipelineCliValues<TSchema>,
+  builtins: PipelineCliBuiltins
 ): DefaultPipelineCommandOptions<TSchema> {
-  const {
-    cache: _cache,
-    continueOnError: _continueOnError,
-    maxConcurrency: _maxConcurrency,
-    dryRun: _dryRun,
-    resume: _resume,
-    stepIds: _stepIds,
-    targets: _targets,
-    ...domainValues
-  } = values;
-  return domainValues;
+  // SAFETY: remove the pipeline schema's keys and the two base-command values,
+  // exactly matching DefaultPipelineCommandOptions's omitted execution controls.
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([key]) => !Object.hasOwn(builtins, key) && key !== "dryRun" && key !== "resume"
+    )
+  ) as DefaultPipelineCommandOptions<TSchema>;
 }
 
 function nonBlankPipelineText(value: unknown): string | undefined {
@@ -315,51 +350,11 @@ export function definePipelineCommand<
       "Flag overrides require inferred pipeline flags; use params for an explicit CLI."
     );
   }
-  assertNoPipelineCommandConflicts(userParams);
-
+  const builtins = pipelineCommandBuiltins(pipeline);
+  assertNoPipelineCommandConflicts(userParams, builtins);
   const targetFlagEnabled = pipeline.targetIds.length > 0;
-  const bridgeParams: CliParamsSchema = {
-    cache: {
-      type: "string",
-      choices: ["use", "recompute", "bypass"],
-      optional: true,
-      group: "execution",
-      description: "Override the cache policy for opted-in steps, including child pipelines.",
-    },
-    stepIds: {
-      type: "string",
-      multiple: true,
-      flag: "step",
-      group: "execution",
-      exclusive: true,
-      choices: pipeline.stepIds,
-      description: "Run exactly this step.",
-    },
-    continueOnError: {
-      type: "boolean",
-      group: "execution",
-      description: "Continue independent work after a step fails.",
-    },
-    maxConcurrency: {
-      type: "number",
-      group: "execution",
-      default: 1,
-      integer: true,
-      min: 1,
-      description: "Maximum simultaneous steps in this run.",
-    },
-  };
-  if (targetFlagEnabled) {
-    bridgeParams.targets = {
-      type: "string",
-      multiple: true,
-      flag: "target",
-      group: "execution",
-      exclusive: true,
-      choices: pipeline.targetIds,
-      description: "Run this declared target and its prerequisites.",
-    };
-  }
+  const bridgeParams: CliParamsSchema = { ...builtins };
+  if (!targetFlagEnabled) delete bridgeParams.targets;
 
   // SAFETY: `bridgeParams` supplies the `PipelineCliBuiltins` keys and `userParams` is
   // `TSchema`, so the merged object satisfies `PipelineCliBuiltins & TSchema`.
@@ -394,7 +389,7 @@ export function definePipelineCommand<
       } else {
         // SAFETY: `defaultPipelineCommandOptions` returns exactly the domain options the
         // `CanDefaultPipelineCommandOptions` constraint guarantees map to `TOptions`.
-        mapped = defaultPipelineCommandOptions(pipelineValues) as TOptions;
+        mapped = defaultPipelineCommandOptions(pipelineValues, builtins) as TOptions;
       }
       const controls = pipelineRunControlsFromCliValues(pipelineValues, targetFlagEnabled);
 

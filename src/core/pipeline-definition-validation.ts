@@ -272,7 +272,8 @@ export function validatePipelineDefinition<
     );
   }
 
-  const requiredFinalizerSteps = requiredFinalizerMetadata<TOptions>(definition.finalize)?.steps;
+  const finalizerMetadata = requiredFinalizerMetadata<TOptions>(definition.finalize);
+  const requiredFinalizerSteps = finalizerMetadata?.steps;
   const missingFinalizerSteps = (requiredFinalizerSteps ?? []).filter(
     (step) => !knownSteps.has(step)
   );
@@ -320,5 +321,11 @@ export function validatePipelineDefinition<
       )
     );
   }
-  return { errors, compiledCaches };
+  if (errors.length > 0 || orderedSteps === null) return { ok: false, errors } as const;
+  return {
+    ok: true,
+    graph: { orderedSteps, compiledCaches },
+    declaredTargets,
+    finalizerMetadata,
+  } as const;
 }

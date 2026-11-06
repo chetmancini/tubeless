@@ -10,7 +10,6 @@ export interface WorkerThreadMetadata {
 }
 
 /** Explicit context supplied to the exported worker function; domain input is its first argument. */
-/** Provide cancellation, logging, progress, and run metadata to a worker export. */
 export interface WorkerThreadContext extends WorkerThreadMetadata {
   log: PipelineLogger;
   reportProgress(progress: PipelineStepProgress): void;

@@ -14,11 +14,10 @@ import type {
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { LaunchRegistry } from "./cloudflare-launches.js";
 import { openDurableRunStore, type DurableRunStore } from "./cloudflare-run-store.js";
-import type { RunJob, StudioIngest } from "./cloudflare-run.js";
+import { HOST_TERMINATED, type RunJob, type StudioIngest } from "./cloudflare-run-contract.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 
 const RECONCILE_GRACE_MS = 120_000;
-const HOST_TERMINATED = "The Cloudflare run host stopped before the run finished.";
 const START_FAILED = "The run host could not start the run.";
 const START_UNCONFIRMED =
   "The run host could not confirm the run started. It may have started; check history before launching again.";
@@ -113,7 +112,7 @@ class DurableStudioLauncher implements PipelineRunStudioLauncher {
     );
     try {
       // Schedule the reconciler before the run can exist so a started run is never unreconciled.
-      await this.#scheduleReconcile();
+      await scheduleReconcile(this.deps, this.registry, this.now);
     } catch (error) {
       clearTimeout(timeout);
       this.#failStart(launchId, error, START_FAILED);
@@ -131,11 +130,6 @@ class DurableStudioLauncher implements PipelineRunStudioLauncher {
     } finally {
       clearTimeout(timeout);
     }
-  }
-
-  /** Keep the earliest pending reconcile so steady launches cannot postpone it. */
-  async #scheduleReconcile(): Promise<void> {
-    await scheduleReconcile(this.deps, this.registry, this.now);
   }
 
   /** Runs inside a voided promise chain, so it must never throw. */

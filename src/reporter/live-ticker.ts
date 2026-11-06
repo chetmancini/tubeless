@@ -1,6 +1,7 @@
 import { writeSync } from "node:fs";
 import { isatty } from "node:tty";
 import { MessageChannel, receiveMessageOnPort, Worker } from "node:worker_threads";
+import { fileWorkerExecArgv } from "../utilities/worker-argv.js";
 import {
   currentSpinner,
   hasLiveAnimation,
@@ -99,26 +100,13 @@ function resolveLiveTickerWorkerUrl(): URL {
     : new URL("./live-ticker-worker.js", import.meta.url);
 }
 
-function fileWorkerExecArgv(argv: readonly string[] = process.execArgv): string[] {
-  const next: string[] = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "--input-type") {
-      index += 1;
-    } else if (!arg.startsWith("--input-type=")) {
-      next.push(arg);
-    }
-  }
-  return next;
-}
-
 function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTicker {
   const state = new TickerWorkerState();
   const { port1: framePort, port2: workerFramePort } = new MessageChannel();
   let worker: Worker;
   try {
     worker = new Worker(options.workerUrl ?? resolveLiveTickerWorkerUrl(), {
-      execArgv: fileWorkerExecArgv(),
+      execArgv: fileWorkerExecArgv(process.execArgv),
       transferList: [workerFramePort],
       workerData: {
         color: options.color === true,

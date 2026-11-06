@@ -2,6 +2,7 @@ import type { PipelineStepProgressDetail } from "../../../core/pipeline.js";
 import type { StoredRunSummary } from "../../../run-store/run-history.js";
 import type { StoredPipelineRun, StoredPipelineStep } from "../../../run-store/run-store.js";
 import { STUDIO_CHILD_PAGE_SIZE } from "../../shared/limits.js";
+import { compareChildRuns } from "../../shared/children.js";
 import type { StudioChildStep, StudioRunDetail } from "../../shared/schema.js";
 import {
   childStepTotal,
@@ -184,11 +185,7 @@ function buildExpansion(
   depth: number
 ): ExpansionScene {
   const tools = new Map(run.agentTurn?.calls.map((call) => [call.callId, call.tool]) ?? []);
-  const ordered = [...childRuns].sort(
-    (left, right) =>
-      (left.origin?.iteration ?? 0) - (right.origin?.iteration ?? 0) ||
-      left.startedAtMs - right.startedAtMs
-  );
+  const ordered = [...childRuns].sort(compareChildRuns);
   const runningRuns = ordered.filter((child) => child.subtreeIsRunning).length;
   const sized: ItemScene[] = [];
   for (const summary of ordered.slice(0, ITEM_LIMIT)) {

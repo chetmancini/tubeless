@@ -52,7 +52,6 @@ async function loadParsedPlanSource(
   return registration.loadPlan(io);
 }
 
-/** One terminal-safe line: control characters removed and whitespace collapsed. */
 function inlineText(value: string): string {
   return terminalSafeText(value).replace(/\s+/g, " ").trim();
 }
@@ -63,7 +62,6 @@ function optionalInlineText(value: unknown): string | undefined {
   return text === "" ? undefined : text;
 }
 
-/** Display name (only when it differs from the id) and description of a pipeline or command. */
 function pipelineIdentityText(view: WorkbenchPipeline): { name?: string; description?: string } {
   const source = isWorkbenchPipelineCommand(view) ? view.descriptor : view;
   const name = "name" in source ? optionalInlineText(source.name) : undefined;
@@ -74,13 +72,11 @@ function pipelineIdentityText(view: WorkbenchPipeline): { name?: string; descrip
   };
 }
 
-/** `Name - description`, either part alone, or undefined when neither is present. */
 function joinNameAndDescription(name?: string, description?: string): string | undefined {
   if (name !== undefined && description !== undefined) return `${name} - ${description}`;
   return name ?? description;
 }
 
-/** Rows of `<key>  <summary>` with summaries aligned and no trailing spaces. */
 function alignedRows(
   rows: readonly { key: string; summary: string | undefined }[],
   indent = ""

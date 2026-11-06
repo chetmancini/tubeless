@@ -1,4 +1,5 @@
 import { Worker } from "node:worker_threads";
+import { fileWorkerExecArgv } from "../utilities/worker-argv.js";
 import { describe, expect, it, vi } from "vitest";
 import { TickerWorkerState } from "./live-ticker-protocol.js";
 
@@ -55,7 +56,7 @@ describe("ticker output ownership", () => {
       parentPort.postMessage("released");
     `;
     const worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(source)}`), {
-      execArgv: process.execArgv.filter((arg) => !arg.startsWith("--input-type")),
+      execArgv: fileWorkerExecArgv(process.execArgv),
       workerData: { buffer: parent.buffer, holdMs },
     });
 
