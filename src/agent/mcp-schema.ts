@@ -1,7 +1,7 @@
 import type { StandardSchemaV1 } from "../core/pipeline-types.js";
 import { canonicalJsonValue } from "../utilities/canonical-json.js";
 import { renderSchemaType } from "./codemode-declarations.js";
-import { isRecord } from "./mcp-session.js";
+import { isRecord } from "./mcp-protocol.js";
 
 type Json = Readonly<Record<string, unknown>>;
 

@@ -10,6 +10,7 @@ import { LaunchModal } from "./components/launch.js";
 import { PipelinePage } from "./components/pipeline.js";
 import { latestStatus, Rail, railPipelines, type RailPipeline } from "./components/rail.js";
 import { parseStudioRoute, studioPage, studioRouteUrl, type StudioRoute } from "../shared/route.js";
+import { useEscapeDismiss } from "./escape-dismiss.js";
 
 interface ClearHistoryModalProps {
   api: StudioApi;
@@ -23,13 +24,7 @@ function ClearHistoryModal({ api, onCleared, onClose, snapshot }: ClearHistoryMo
   const [error, setError] = useState("");
   const confirmButton = useRef<HTMLButtonElement>(null);
   useEffect(() => confirmButton.current?.focus(), []);
-  useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !clearing) onClose();
-    };
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [clearing, onClose]);
+  useEscapeDismiss(onClose, { blocked: clearing, modal: true });
   const runCount = snapshot.runCount;
   const eventCount = snapshot.eventCount;
   const close = () => {

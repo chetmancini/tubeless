@@ -3,13 +3,8 @@ import { throwIfAborted } from "../utilities/abort.js";
 import { defineTool, ToolError } from "./tools.js";
 import { httpTransport, type McpHttpOptions } from "./mcp-http.js";
 import { mcpInputSchema, mcpResultSchema, type McpToolResult } from "./mcp-schema.js";
-import {
-  isRecord,
-  McpRpcError,
-  openMcpSession,
-  type McpSession,
-  type OpenMcpTransport,
-} from "./mcp-session.js";
+import { isRecord, type OpenMcpTransport } from "./mcp-protocol.js";
+import { McpRpcError, openMcpSession, type McpSession } from "./mcp-session.js";
 import { stdioTransport, type McpStdioOptions } from "./mcp-stdio.js";
 
 export type { McpToolResult } from "./mcp-schema.js";

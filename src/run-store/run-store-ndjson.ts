@@ -1,3 +1,4 @@
+import { runEventPageLimit } from "./run-store-query.js";
 import { open } from "node:fs/promises";
 import * as path from "node:path";
 import type {
@@ -135,7 +136,7 @@ export async function openNdjsonPipelineRunStore(
     },
     async listEvents(query: PipelineRunEventQuery = {}) {
       if (closed) throw new Error("Cannot query a closed NDJSON pipeline run store.");
-      const limit = Math.max(1, Math.min(100_000, Math.floor(query.limit ?? 20_000)));
+      const limit = runEventPageLimit(query.limit);
       let selected = query.runId !== undefined ? (eventsByRun.get(query.runId) ?? []) : events;
       if (query.rootRunId !== undefined) {
         const tree = new Set([query.rootRunId]);

@@ -4,7 +4,7 @@ import {
   parseMessage,
   type McpTransport,
   type McpTransportEvents,
-} from "./mcp-session.js";
+} from "./mcp-protocol.js";
 
 /** A remote server reached over Streamable HTTP. */
 export interface McpHttpOptions {

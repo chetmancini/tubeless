@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { defer } from "./child-pipeline.test-support.js";
 import { createSteps, definePipeline } from "./pipeline.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { makePipeline, thrownDefinitionErrors } from "./pipeline.test-support.js";
@@ -89,15 +90,14 @@ describe("definePipeline lifecycle and scheduling", () => {
   });
 
   it("does not emit empty running progress while a step awaits", async () => {
-    let releaseWork!: () => void;
-    const workGate = new Promise<void>((resolve) => {
-      releaseWork = resolve;
-    });
-    let started = false;
+    vi.useFakeTimers();
+    const workGate = defer();
+    const started = defer();
     const { step } = createSteps();
     const slow = step("slow", {
       run: async () => {
-        await workGate;
+        started.resolve();
+        await workGate.promise;
         return "done";
       },
     });
@@ -111,9 +111,6 @@ describe("definePipeline lifecycle and scheduling", () => {
     const runPromise = pipeline.run({}, undefined, {
       cwd: "/tmp",
       hooks: {
-        onStepStart: ({ step: startedStep }) => {
-          if (startedStep.id === "slow") started = true;
-        },
         onStepProgress: ({ progress, step: progressStep }) => {
           if (progressStep.id === "slow") {
             progressEvents.push(progress);
@@ -122,15 +119,20 @@ describe("definePipeline lifecycle and scheduling", () => {
       },
       log: console,
     });
-    await vi.waitFor(() => {
-      expect(started).toBe(true);
-    });
-    // Hold the pending step across the old 250ms observation window so a late
-    // empty-progress tick would still be recorded before we release the gate.
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    expect(progressEvents).toEqual([]);
-    releaseWork();
-    await runPromise;
+    try {
+      await started.promise;
+      // Hold the pending step across the old 250ms observation window so a late
+      // empty-progress tick would still be recorded before we release the gate.
+      await vi.advanceTimersByTimeAsync(250);
+      expect(progressEvents).toEqual([]);
+    } finally {
+      workGate.resolve();
+      try {
+        await runPromise;
+      } finally {
+        vi.useRealTimers();
+      }
+    }
 
     expect(progressEvents).toEqual([]);
   });

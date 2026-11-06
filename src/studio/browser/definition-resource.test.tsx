@@ -14,6 +14,7 @@ afterEach(async () => {
 });
 
 async function mountDefinition(api: StudioApi, initial: StoredDefinitionSummary) {
+  let currentApi = api;
   // SAFETY: the probe renders no DOM nodes, so Preact only needs root metadata.
   const root = {
     nodeType: 1,
@@ -22,13 +23,14 @@ async function mountDefinition(api: StudioApi, initial: StoredDefinitionSummary)
   } as unknown as Element;
   roots.push(root);
   let current: ReturnType<typeof useDefinitionResource> | undefined;
-  function Probe({ definition }: { definition: StoredDefinitionSummary }) {
+  function Probe({ api, definition }: { api: StudioApi; definition: StoredDefinitionSummary }) {
     current = useDefinitionResource(api, definition);
     return null;
   }
   const mounted = {
-    async update(definition: StoredDefinitionSummary) {
-      await act(() => render(<Probe definition={definition} />, root));
+    async update(definition: StoredDefinitionSummary, nextApi = currentApi) {
+      currentApi = nextApi;
+      await act(() => render(<Probe api={currentApi} definition={definition} />, root));
       await act(async () => {});
     },
     get resource() {
@@ -54,10 +56,12 @@ function definition(): StoredPipelineDefinition {
 
 function pendingDefinition() {
   let resolve!: (value: StoredPipelineDefinition) => void;
-  const promise = new Promise<StoredPipelineDefinition>((settle) => {
+  let reject!: (error: Error) => void;
+  const promise = new Promise<StoredPipelineDefinition>((settle, fail) => {
     resolve = settle;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 describe("definition resource refresh", () => {
@@ -119,5 +123,75 @@ describe("definition resource refresh", () => {
     expect(mounted.resource.loading).toBe(false);
     await mounted.update({ ...updated });
     expect(loadDefinition).toHaveBeenCalledTimes(2);
+  });
+
+  it("retires a pending refresh when the selected definition identity changes", async () => {
+    const { step } = createSteps();
+    const identify = (id: string) =>
+      definePipeline({ id: "example", steps: [step(id, { run: () => 1 })] }).definition.identity;
+    const initial = { ...definition(), identity: identify("original") };
+    const replacement = { ...definition(), identity: identify("replacement") };
+    const stale = pendingDefinition();
+    const next = pendingDefinition();
+    const loadDefinition = vi
+      .fn()
+      .mockResolvedValueOnce(initial)
+      .mockReturnValueOnce(stale.promise)
+      .mockReturnValueOnce(next.promise);
+    const mounted = await mountDefinition({ loadDefinition } as unknown as StudioApi, initial);
+    expect(mounted.resource.value).toBe(initial);
+
+    await mounted.update({ ...initial, runCount: 2 });
+    expect(mounted.resource.value).toBe(initial);
+    await mounted.update(replacement);
+    expect(loadDefinition).toHaveBeenLastCalledWith("example", replacement.identity.definitionId);
+    expect(mounted.resource.value).toBeNull();
+    expect(mounted.resource.loading).toBe(true);
+
+    await act(async () => {
+      stale.resolve({ ...initial, targetIds: ["stale"] });
+      await stale.promise;
+    });
+    expect(mounted.resource.value).toBeNull();
+    expect(mounted.resource.loading).toBe(true);
+
+    await act(async () => {
+      next.resolve(replacement);
+      await next.promise;
+    });
+    expect(mounted.resource.value).toBe(replacement);
+    expect(mounted.resource.loading).toBe(false);
+  });
+
+  it("clears the previous API's snapshot and ignores its late failures", async () => {
+    const initial = definition();
+    const stale = pendingDefinition();
+    const loadDefinition = vi
+      .fn()
+      .mockResolvedValueOnce(initial)
+      .mockReturnValueOnce(stale.promise);
+    const mounted = await mountDefinition({ loadDefinition } as unknown as StudioApi, initial);
+    await mounted.update({ ...initial, lastSeenAtMs: 3 });
+    expect(mounted.resource.value).toBe(initial);
+
+    const next = pendingDefinition();
+    const replacementApi = { loadDefinition: vi.fn(() => next.promise) } as unknown as StudioApi;
+    await mounted.update(initial, replacementApi);
+    expect(replacementApi.loadDefinition).toHaveBeenCalledWith("example", undefined);
+    expect(mounted.resource.value).toBeNull();
+    expect(mounted.resource.loading).toBe(true);
+
+    const replacement = { ...initial, targetIds: ["new-api"] };
+    await act(async () => {
+      next.resolve(replacement);
+      await next.promise;
+    });
+    await act(async () => {
+      stale.reject(new Error("old API unavailable"));
+      await stale.promise.catch(() => {});
+    });
+    expect(mounted.resource.value).toBe(replacement);
+    expect(mounted.resource.loading).toBe(false);
+    expect(mounted.resource.error).toBeUndefined();
   });
 });

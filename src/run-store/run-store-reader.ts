@@ -1,3 +1,4 @@
+import { DEFAULT_RUN_EVENT_PAGE_SIZE } from "./run-store-query.js";
 import type {
   PipelineRunEventQuery,
   PipelineRunEventReader,
@@ -15,7 +16,7 @@ export async function* readPipelineEventPages(
   reader: Pick<PipelineRunEventReader, "listEvents">,
   query: PipelineRunEventQuery = {}
 ): AsyncGenerator<readonly StoredPipelineEvent[]> {
-  const selection = { ...query, limit: query.limit ?? 20_000 };
+  const selection = { ...query, limit: query.limit ?? DEFAULT_RUN_EVENT_PAGE_SIZE };
   let afterId = query.afterId;
   for (;;) {
     const page = await reader.listEvents({ ...selection, afterId });

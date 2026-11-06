@@ -22,7 +22,7 @@ Package: `tubeless`
 | `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `f1c9d6699246a6f91329d1d23c53d310e4a18d5b136375c109d128126165d038` |               10 |
 | `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `9b7b2835a4ffa8bdce42233c0ff22ca28fe2a51de95208d895f6fc1904d2bad0` |                3 |
 | `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `8e08fe480b86de80ede5e03d7f30fff3a46f9da7ce9d5261441e961bea6678ac` |                2 |
-| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `dc3bfb16ef93c725830400845b7389277e3dc16f7906b6b6095f670d54884f36` |                7 |
+| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `1fdae9dd284b5c9fe01ae9f4e8aade2035fcc8a6948d311fd67201d7a8b31d0e` |                7 |
 | `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `51fc37d127b384327979df8f47e29125977cb2ae0f87fe8676d916d7bf30011f` |                2 |
 | `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `044fb4cc0ef6b0b1afb241c3001446640aedf6efb10f58b2f73d96e879478002` |               12 |
 | `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `a9a03a7a9a1b62cd3fe611ef83b864c876f61b8d74ece137761ed2a3ef98bc38` |                4 |
@@ -89,7 +89,7 @@ Package: `tubeless`
 | [`ArtifactJsonValue`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/artifact-metadata.ts#L12)           | JSON values accepted in persisted artifact metadata.                                                 |
 | [`ArtifactLoader`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-artifacts.ts#L11)                | Application-owned read boundary.                                                                     |
 | [`ArtifactMetadata`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/artifact-metadata.ts#L21)            | Identifies an artifact without recording its contents.                                               |
-| [`ArtifactRecord`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/artifact-metadata.ts#L140)             | A completed artifact operation recorded by a step; reuse does not claim a new write.                 |
+| [`ArtifactRecord`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/artifact-metadata.ts#L132)             | A completed artifact operation recorded by a step; reuse does not claim a new write.                 |
 | [`ArtifactResult`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-artifacts.ts#L5)                 | Adapter result: the value flows to dependents; only artifact metadata is recorded.                   |
 | [`ArtifactSaver`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-artifacts.ts#L17)                 | Application-owned write boundary returning a typed receipt and separate trace metadata.              |
 | [`createSteps`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L67)                       | Create typed step constructors for one pipeline definition.                                          |
@@ -296,12 +296,12 @@ Package: `tubeless`
 
 | Symbol                                                                                            | Description                                                                                    |
 | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [`connectMcpServers`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L188)    | Connect MCP servers and expose their tools to an agent, named `<server>__<tool>`.              |
+| [`connectMcpServers`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L183)    | Connect MCP servers and expose their tools to an agent, named `<server>__<tool>`.              |
 | [`McpHttpOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp-http.ts#L10)   | A remote server reached over Streamable HTTP.                                                  |
-| [`McpServer`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L27)             | A Streamable HTTP endpoint (`url`) or a local stdio command (`command`).                       |
-| [`McpServers`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L34)            | Connected servers whose tools are named `<server>__<tool>`; close them after the agent's runs. |
+| [`McpServer`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L22)             | A Streamable HTTP endpoint (`url`) or a local stdio command (`command`).                       |
+| [`McpServers`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L29)            | Connected servers whose tools are named `<server>__<tool>`; close them after the agent's runs. |
 | [`McpStdioOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp-stdio.ts#L10) | A local server process speaking JSON-RPC over stdin and stdout.                                |
-| [`McpTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L31)               | A tool discovered on an MCP server, called with its validated JSON arguments.                  |
+| [`McpTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp.ts#L26)               | A tool discovered on an MCP server, called with its validated JSON arguments.                  |
 | [`McpToolResult`](https://github.com/chetmancini/tubeless/blob/main/src/agent/mcp-schema.ts#L256) | Content and optional structured data returned by an MCP tool call.                             |
 
 ### `tubeless/agent/anthropic`

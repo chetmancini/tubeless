@@ -1,9 +1,9 @@
 import { Fragment, type ComponentChildren } from "preact";
-import { useEffect } from "preact/hooks";
 import type { StoredRunSummary } from "../../../run-store/run-history.js";
 import type { StoredPipelineRun, StoredPipelineStep } from "../../../run-store/run-store.js";
 import { ErrorDiagnostics, LogLines } from "../components/debugging.js";
 import { duration, Status, StepRow } from "../components/steps.js";
+import { useEscapeDismiss } from "../escape-dismiss.js";
 
 import { incomingEdges, type EdgeKind } from "./dependencies.js";
 
@@ -91,13 +91,7 @@ function ChildRunList({
 
 /** Side panel for one selection; Escape or × closes it. */
 export function Drawer({ children, onClose }: { children: ComponentChildren; onClose(): void }) {
-  useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !document.querySelector(".modal-backdrop")) onClose();
-    };
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [onClose]);
+  useEscapeDismiss(onClose);
   return (
     <aside class="step-drawer" aria-label="Inspector">
       <button class="close-button drawer-close" type="button" aria-label="Close" onClick={onClose}>

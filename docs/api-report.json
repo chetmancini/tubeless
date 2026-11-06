@@ -289,7 +289,7 @@
         "McpTool",
         "McpToolResult"
       ],
-      "sha256": "dc3bfb16ef93c725830400845b7389277e3dc16f7906b6b6095f670d54884f36",
+      "sha256": "1fdae9dd284b5c9fe01ae9f4e8aade2035fcc8a6948d311fd67201d7a8b31d0e",
       "specifier": "tubeless/agent/mcp"
     },
     {

@@ -9,6 +9,7 @@ import type {
 } from "../../shared/protocol.js";
 import { commandDescription, errorMessage } from "./common.js";
 import { PlanView } from "./pipelines.js";
+import { useEscapeDismiss } from "../escape-dismiss.js";
 
 export type StudioParameterValue = boolean | number | string;
 
@@ -322,14 +323,11 @@ export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: L
     );
   }, [command]);
 
-  useEffect(() => {
-    if (commandId === null) return;
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !launching && !planning) onClose();
-    };
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [commandId, launching, onClose, planning]);
+  useEscapeDismiss(onClose, {
+    active: commandId !== null,
+    blocked: launching || planning,
+    modal: true,
+  });
 
   if (commandId === null) return null;
 

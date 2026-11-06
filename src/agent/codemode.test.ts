@@ -298,20 +298,38 @@ describe("code mode", () => {
   });
 
   it("admits concurrent script calls through the shared leaf queue without holding a permit", async () => {
-    let active = 0;
-    let peak = 0;
-    const slow = upperTool(async (value) => {
-      peak = Math.max(peak, ++active);
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      active--;
-      return { upper: value.toUpperCase() };
-    });
     for (const maxConcurrency of [1, 2]) {
-      peak = 0;
+      let active = 0;
+      let peak = 0;
+      const admitted = signal();
+      const submitted = signal();
+      const release = signal();
+      let callCount = 0;
+      const executor: CodemodeExecutor = {
+        execute: (execution, executorSignal) =>
+          node.execute(
+            {
+              ...execution,
+              call: (name, input) => {
+                const reply = execution.call(name, input);
+                if (++callCount === 3) submitted.resolve();
+                return reply;
+              },
+            },
+            executorSignal
+          ),
+      };
+      const slow = upperTool(async (value) => {
+        peak = Math.max(peak, ++active);
+        if (active === maxConcurrency) admitted.resolve();
+        await release.promise;
+        active--;
+        return { upper: value.toUpperCase() };
+      });
       const agent = defineAgent({
         id: "codemode-concurrency",
         projectContext: false,
-        codemode: true,
+        codemode: { executor },
         environment: remote(),
         tools: { upper: slow },
         limits: { maxConcurrency },
@@ -319,7 +337,15 @@ describe("code mode", () => {
           `return (await Promise.all(["a", "b", "c"].map((word) => tools.upper({ word })))).map((r) => r.upper);`
         ).model,
       });
-      const [result] = outcomes((await agent.runOrThrow({ task: "go" })).answer);
+      const running = agent.runOrThrow({ task: "go" });
+      try {
+        await Promise.all([admitted.promise, submitted.promise]);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(active).toBe(maxConcurrency);
+      } finally {
+        release.resolve();
+      }
+      const [result] = outcomes((await running).answer);
       expect(result!.value!.result).toEqual(["A", "B", "C"]);
       expect(peak).toBe(maxConcurrency);
     }
@@ -511,17 +537,38 @@ describe("code-mode Node executor", () => {
 
   it("drains calls a script did not await, and fails fatally when one rejects", async () => {
     const settled = vi.fn();
-    const outcome = await runCodemodeScript({
+    const release = signal();
+    const finished = signal();
+    const executor: CodemodeExecutor = {
+      execute: async (execution, executorSignal) => {
+        const result = await node.execute(execution, executorSignal);
+        finished.resolve();
+        return result;
+      },
+    };
+    let completed = false;
+    const running = runWith(executor, {
       ...base,
       code: `tools.echo({ late: true }); return "early";`,
       timeoutMs: 5000,
       call: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await release.promise;
         settled();
         return { ok: true, value: null };
       },
+    }).then((outcome) => {
+      completed = true;
+      return outcome;
     });
-    expect(outcome).toMatchObject({ ok: true, result: '"early"' });
+    try {
+      await finished.promise;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(completed).toBe(false);
+      expect(settled).not.toHaveBeenCalled();
+    } finally {
+      release.resolve();
+    }
+    expect(await running).toMatchObject({ ok: true, result: '"early"' });
     expect(settled).toHaveBeenCalledOnce();
     await expect(
       runCodemodeScript({

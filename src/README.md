@@ -71,7 +71,9 @@ their source files.
   error-body reads, exposing known rejection codes and safe advice without raw
   provider messages. The provider-independent agent entrypoint never imports it.
   The optional `tubeless/agent/mcp` entrypoint owns MCP sessions (`mcp-session.ts`),
-  HTTP and lazily loaded stdio transports, and schema adaptation; it produces
+  HTTP and lazily loaded stdio transports, and schema adaptation. Transports and
+  schemas consume pure wire contracts and parsing from `mcp-protocol.ts`, independently
+  of session negotiation, deadlines and lifecycle. The entrypoint produces
   ordinary `defineTool` capabilities, so the agent runtime has no MCP concepts.
   `codemode.ts` compiles the optional code-mode capability over a compiled registry:
   an orchestration step that holds no leaf permit runs the script and dispatches each
@@ -190,7 +192,9 @@ Run `make check` after changes; it builds before checking these boundaries.
 
 ## Workbench execution ownership
 
-- `workbench/workbench-command-specs.ts` owns static option and completion metadata.
+- `workbench/workbench-command-specs.ts` owns the ordered command inventory, summaries,
+  static options and completion metadata. `workbench/workbench.ts` binds a handler
+  for every command and derives dispatch, root help and completion from that inventory.
   `workbench/workbench-subcommand.ts` uses it for parsing, help, typo suggestions and
   nested-command option validation. `workbench/workbench-completion.ts` reads the same
   metadata without executing command help or loading optional command implementations.
@@ -268,7 +272,8 @@ and interactive reporter orchestration.
   incremental projection and caching. It groups runs by definition without reaching
   into a projection's mutable state.
 - `run-store/run-store-sql.ts` owns the shared schema, statements, row mapping and list query
-  for SQLite drivers; it imports no driver.
+  for SQLite drivers; it imports no driver. `run-store/run-store-query.ts` owns event
+  page defaults and adapter limit normalization shared by SQLite and NDJSON.
 - `run-store/run-projection.ts` owns one run's metadata, attempts, progress and logs.
   It retains only required fields and copies retained identities and errors at the
   boundary. `run-store/definition-projection.ts` owns definition replacement and
@@ -312,6 +317,8 @@ and interactive reporter orchestration.
   `studio/browser/components/runs.tsx` (run list and detail), `studio/browser/components/pipelines.tsx`
   (command catalog and plan preview), and `studio/browser/components/launch.tsx` (launch form,
   value serialization and modal). `studio/browser/components/common.tsx` holds small shared pieces.
+  `studio/browser/escape-dismiss.ts` gives modals priority over inspectors for Escape,
+  including while a modal is busy, without depending on CSS selectors.
 - `studio/browser/components/steps.tsx` owns step presentation shared by the timeline and
   graph. `studio/browser/graph/layout.ts` is a pure layered DAG layout;
   `studio/browser/graph/scene.ts` builds nested geometry and inspection indexes

@@ -1,3 +1,4 @@
+import { runEventPageLimit } from "./run-store-query.js";
 import { decodeStoredTraceEvent } from "./run-store-event-decoder.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import type { PipelineRunEventQuery, StoredPipelineEvent } from "./run-store.js";
@@ -186,7 +187,7 @@ export function runEventListQuery(query: PipelineRunEventQuery): {
     predicates.push("run_id = ?");
     params.push(query.runId);
   }
-  params.push(Math.max(1, Math.min(100_000, Math.floor(query.limit ?? 20_000))));
+  params.push(runEventPageLimit(query.limit));
   const where = predicates.length > 0 ? `WHERE ${predicates.join(" AND ")}` : "";
   return {
     sql: `${subtree} SELECT * FROM pipeline_run_events ${where} ORDER BY id ASC LIMIT ?`,
