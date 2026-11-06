@@ -10,7 +10,6 @@ import {
   renderHelp,
   resolveParam,
   tokenize,
-  type RawParamValue,
   type ResolvedParamValue,
 } from "./cli-parser.js";
 import {
@@ -104,10 +103,11 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
   const descriptor = commandDescriptor(config, effectiveParams, positionals);
 
   function resolveValues(
-    readValue: (key: string, param: CliParamsSchema[string]) => RawParamValue,
+    readValue: (key: string, param: CliParamsSchema[string]) => unknown,
     context: CliContext,
     errors: string[],
-    helpText: string
+    helpText: string,
+    input: "argv" | "structured" = "argv"
   ): CliParseResult<TSchema> {
     const values: Record<string, ResolvedParamValue> = { resume: false };
     for (const [key, param] of Object.entries(effectiveParams)) {
@@ -115,15 +115,16 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       const raw = readValue(key, param);
       if (errors.length > errorCount) continue;
       const envValue = raw === undefined && param.env ? context.env?.[param.env] : undefined;
+      const resolutionSource =
+        raw !== undefined
+          ? input === "structured"
+            ? "structured"
+            : "argv"
+          : envValue !== undefined
+            ? "env"
+            : "default";
       Object.defineProperty(values, key, {
-        value: resolveParam(
-          key,
-          param,
-          raw ?? envValue,
-          context.cwd,
-          errors,
-          raw !== undefined ? "argv" : envValue !== undefined ? "env" : "default"
-        ),
+        value: resolveParam(key, param, raw ?? envValue, context.cwd, errors, resolutionSource),
         enumerable: true,
         configurable: true,
         writable: true,
@@ -179,16 +180,11 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       }
     }
     return resolveValues(
-      (key, param) =>
-        normalizeStructuredValue(
-          key,
-          param,
-          Object.hasOwn(structuredValues, key) ? structuredValues[key] : undefined,
-          errors
-        ),
+      (key) => (Object.hasOwn(structuredValues, key) ? structuredValues[key] : undefined),
       context,
       errors,
-      helpText
+      helpText,
+      "structured"
     );
   }
 
@@ -327,51 +323,6 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
   }
 
   return { descriptor, execute, parse, parseValues, run, main };
-}
-
-function normalizeStructuredValue(
-  key: string,
-  param: CliParamsSchema[string],
-  value: unknown,
-  errors: string[]
-): RawParamValue {
-  if (value === undefined) return undefined;
-  const label = `--${param.flag ?? key}`;
-  if (param.type === "boolean") {
-    if (typeof value === "boolean") return value;
-    errors.push(`${label} must be a boolean value.`);
-    return undefined;
-  }
-  if ((param.type === "number" || param.type === "string") && param.multiple === true) {
-    if (!Array.isArray(value)) {
-      errors.push(`${label} must be an array.`);
-      return undefined;
-    }
-    if (param.type === "number") {
-      if (!value.every((item) => typeof item === "number" && Number.isFinite(item))) {
-        errors.push(`${label} must contain only finite numbers.`);
-        return undefined;
-      }
-      return [...value];
-    }
-    if (!value.every((item) => typeof item === "string")) {
-      errors.push(`${label} must contain only strings.`);
-      return undefined;
-    }
-    return [...value];
-  }
-  if (param.type === "number") {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      errors.push(`${label} must be a finite number.`);
-      return undefined;
-    }
-    return value;
-  }
-  if (typeof value !== "string") {
-    errors.push(`${label} must be a string value.`);
-    return undefined;
-  }
-  return value;
 }
 
 /** Create a typed command from a declarative parameter schema and run handler. */
