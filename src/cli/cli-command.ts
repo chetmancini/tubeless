@@ -76,14 +76,6 @@ function manageMainSignal(context: CliContext): ManagedMainSignal {
   };
 }
 
-/**
- * An in-memory-only `CheckpointStore` seeded from `seed`: reads and `record()` behave
- * exactly like a real store for the rest of this run, but `flush()`/`clear()` never touch
- * disk. Every dry-run path hands `run` one of these instead of the real store — the
- * managed-checkpoint contract is that a dry run never writes to the checkpoint file, no
- * matter what `run` does with `context.checkpoint` (`record`/`flush`/`clear`, directly or
- * via `withCheckpointedBatch`).
- */
 function inMemoryCheckpointView(seed: ReadonlyMap<string, unknown>): CheckpointStore {
   const entries = new Map(seed);
   return {
@@ -200,12 +192,6 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     );
   }
 
-  /**
-   * No-op unless `config.checkpoint` is set. Respects a caller-provided `context.checkpoint`
-   * override (e.g. a stub in tests) instead of opening the real file. Otherwise opens (or
-   * clears, if not resuming) the checkpoint before `run` is called — never on the `--help`/
-   * error paths, since those return before this is reached.
-   */
   function attachCheckpoint(context: CliContext, values: CliParams<TSchema>): CliContext {
     const checkpointConfig = config.checkpoint;
     if (!checkpointConfig) {
@@ -214,10 +200,6 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     const resolvedPath = path.isAbsolute(checkpointConfig.path)
       ? checkpointConfig.path
       : path.join(context.cwd, checkpointConfig.path);
-    // A caller-provided context.checkpoint (e.g. a stub in tests) is used as the
-    // underlying store instead of opening the real file, but every rule below — fresh
-    // clearing, dry-run wrapping, resume detection/logging — still applies to it; only
-    // the "where does the store come from" step is skipped.
     const store = context.checkpoint ?? openCheckpoint(resolvedPath);
     const hadExisting = store.entries().size > 0;
 
@@ -227,10 +209,6 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
           `Resuming from checkpoint: ${store.entries().size} item(s) already recorded.`
         );
       } else {
-        // Without this, --resume against a missing/wrong-path/already-cleared checkpoint
-        // silently starts fresh — the exact failure mode that's dangerous for
-        // clearOnSuccess: false workflows, where "fresh" quietly means "reprocess
-        // everything already done".
         context.log.warn(
           `--resume was passed, but no checkpoint was found at ${resolvedPath}; starting fresh.`
         );
@@ -244,7 +222,6 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       }
     }
 
-    // Isolate every dry run from disk; a fresh preview starts with no recorded items.
     const checkpoint = values.dryRun
       ? inMemoryCheckpointView(!values.resume && hadExisting ? new Map() : store.entries())
       : store;

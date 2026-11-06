@@ -14,7 +14,6 @@ describe("compiledClientSource", () => {
     ].join("\n");
     const source = compiledClientSource(compiled);
     expect(source).not.toContain("sourceMappingURL");
-    expect(source).toContain("export { createStudioRunIndex };");
     const client = await import(
       `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
     );
@@ -38,10 +37,11 @@ describe("compiledClientSource", () => {
 });
 
 describe("cloudflareClientModule", () => {
-  it("embeds the client source as a lossless string literal", () => {
-    const module = cloudflareClientModule('a"b');
-    const literal = /^export const PIPELINE_RUN_STUDIO_CLIENT = (.*);\n$/s.exec(module)?.[1];
-    expect(literal).toBeDefined();
-    expect(JSON.parse(literal!)).toBe('a"b');
+  it("exports the client source without changing its contents", async () => {
+    const source = 'a"b\n</script>\u2028';
+    const module = await import(
+      `data:text/javascript;base64,${Buffer.from(cloudflareClientModule(source)).toString("base64")}`
+    );
+    expect(module.PIPELINE_RUN_STUDIO_CLIENT).toBe(source);
   });
 });

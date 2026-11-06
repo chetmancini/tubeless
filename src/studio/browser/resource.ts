@@ -45,7 +45,7 @@ export function useStudioResource<T>(
           setResult((previous) => ({
             ...previous,
             loading: false,
-            error: error instanceof Error ? error.message : "Could not load definition history.",
+            error: error instanceof Error ? error.message : "Could not load resource.",
           }));
       });
     return () => {

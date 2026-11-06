@@ -9,6 +9,7 @@ export type CloudJsonValue =
 
 export type CloudRole = "owner" | "admin" | "member" | "viewer";
 export const CLOUD_INPUT_MAX_DEPTH = 128;
+export const CLOUD_INPUT_MAX_BYTES = 64 * 1024;
 export type CloudRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
 export interface CliWorkspace {
@@ -112,6 +113,18 @@ export type CliErrorCode =
   | "unavailable"
   | "internal_error";
 
+export class CloudClientError extends Error {
+  readonly code: string;
+  readonly status?: number;
+
+  constructor(message: string, code: string, status?: number) {
+    super(message);
+    this.name = "CloudClientError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
 const RUN_STATUSES = ["queued", "running", "completed", "failed", "cancelled"];
 const ERROR_CODES = [
   "unauthenticated",
@@ -199,6 +212,65 @@ export function isCloudAutomationToken(token: string): boolean {
 
 export function isCloudIdempotencyKey(value: unknown): value is string {
   return text(value) && value.length <= 200 && !/[^A-Za-z0-9._:-]/.test(value);
+}
+
+/** Validate and normalize only the immutable source selectors supported by Cloud. */
+export function parseCloudSource(value: unknown): CliRunSource {
+  const invalid = (): never => {
+    throw new CloudClientError(
+      "Source must select a GitHub ref or a complete immutable main commit or pull_request snapshot.",
+      "invalid_request"
+    );
+  };
+  if (!isCloudObject(value)) return invalid();
+  if (value.kind === "ref") {
+    const ref = value.ref;
+    if (
+      Object.keys(value).some((key) => !["kind", "ref"].includes(key)) ||
+      typeof ref !== "string" ||
+      !ref ||
+      /[\ud800-\udfff]/u.test(ref) ||
+      new TextEncoder().encode(ref).length > 1024 ||
+      /[\s\x00-\x1f\x7f~^:?*[\\]/.test(ref) ||
+      ref.includes("..") ||
+      ref.includes("@{") ||
+      ref === "@" ||
+      ref.startsWith("-") ||
+      ref
+        .split("/")
+        .some(
+          (part) => !part || part.startsWith(".") || part.endsWith(".") || part.endsWith(".lock")
+        )
+    )
+      return invalid();
+    return { kind: "ref", ref };
+  }
+  const fields =
+    value.kind === "main"
+      ? ["kind", "commit"]
+      : ["kind", "number", "headSha", "baseSha", "mergeSha"];
+  if (Object.keys(value).some((key) => !fields.includes(key))) return invalid();
+  const sha = (key: string): string => {
+    const field = value[key];
+    return typeof field === "string" && field.length === 40 && !/[^a-fA-F0-9]/.test(field)
+      ? field.toLowerCase()
+      : invalid();
+  };
+  if (value.kind === "main") return { kind: "main", commit: sha("commit") };
+  if (
+    value.kind !== "pull_request" ||
+    typeof value.number !== "number" ||
+    !Number.isSafeInteger(value.number) ||
+    value.number < 1
+  )
+    return invalid();
+  return {
+    kind: "pull_request",
+    number: value.number,
+    headSha: sha("headSha"),
+    baseSha: sha("baseSha"),
+    mergeSha: sha("mergeSha"),
+  };
 }
 
 function parseResponse<T>(value: unknown, valid: boolean, name: string): T {

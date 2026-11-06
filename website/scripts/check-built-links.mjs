@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { decodeHtml } from "./html.mjs";
 
 const ORIGIN = "https://built.invalid";
 
@@ -59,15 +60,6 @@ function extractAnchorHrefs(html) {
   return hrefs;
 }
 
-function decodeHtml(value) {
-  return value
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
-
 function resolveLocalTarget(target, source, root) {
   const href = target.trim();
   if (!href || href.startsWith("#")) return { ignored: true };
@@ -83,10 +75,7 @@ function resolveLocalTarget(target, source, root) {
   }
   if (url.origin !== ORIGIN) return { ignored: true };
 
-  const pathname = normalizePathname(url.pathname);
-  if (pathname === undefined) return { exists: false };
-
-  const relativePath = pathname.replace(/^\/+/, "");
+  const relativePath = url.pathname.replace(/^\/+/, "");
 
   let decoded;
   try {
@@ -98,11 +87,6 @@ function resolveLocalTarget(target, source, root) {
   const candidate = decoded === "" ? root : resolve(root, decoded);
   if (!isInside(root, candidate)) return { exists: false };
   return { exists: outputExists(candidate) };
-}
-
-function normalizePathname(pathname) {
-  if (pathname.endsWith("/") && pathname.length > 1) return pathname.slice(0, -1);
-  return pathname;
 }
 
 function outputExists(candidate) {

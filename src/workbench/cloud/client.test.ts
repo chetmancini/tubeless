@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CloudClientError, cloudVerificationUrl, createCloudClient } from "./client.js";
+import { cloudVerificationUrl, createCloudClient } from "./client.js";
+import { CloudClientError } from "./protocol.js";
 import type { CliRun, CliSession, CloudJsonValue, CliRunSource } from "./protocol.js";
 
 afterEach(() => vi.useRealTimers());

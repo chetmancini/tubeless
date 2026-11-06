@@ -3,7 +3,6 @@ import { compileDefinitionSnapshot } from "./pipeline-definition-identity.js";
 import type { PipelineDefinition, StepsOptions } from "./pipeline-definition.js";
 import { validatePipelineDefinition } from "./pipeline-definition-validation.js";
 import { PipelineDefinitionError } from "./pipeline-errors.js";
-import { requiredFinalizerMetadata } from "./pipeline-finalizer.js";
 import { compilePipelineGraph, type CompiledStepGraph } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { STEP_OPTIONS_SCHEMA } from "./pipeline-step-metadata.js";
@@ -40,22 +39,16 @@ export function compilePipeline<
 >(
   definition: PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>
 ): CompiledPipeline<TSteps, TResult, TTargets, TResultSchema> {
-  const { errors, compiledCaches } = validatePipelineDefinition(definition);
-  if (errors.length > 0) {
-    throw new PipelineDefinitionError(definition.id, errors);
+  const validated = validatePipelineDefinition(definition);
+  if (!validated.ok) {
+    throw new PipelineDefinitionError(definition.id, validated.errors);
   }
-  type TOptions = StepsOptions<TSteps>;
-  // SAFETY: `steps` is `TSteps extends readonly AnyStep[]`; the cast restores
-  // the `TOptions` generic that the tuple erased, without changing the values.
-  const { compiledByAuthorStep, orderedSteps, stepGraph } = compilePipelineGraph(
-    definition.steps as readonly AnyStep<TOptions>[],
-    compiledCaches
-  );
-  const finalizerMetadata = requiredFinalizerMetadata<TOptions>(definition.finalize);
+  const { compiledByAuthorStep, orderedSteps, stepGraph } = compilePipelineGraph(validated.graph);
+  const { finalizerMetadata } = validated;
   const requiredFinalizerSteps = finalizerMetadata?.steps;
-  const compiledTargets = definition.targets
-    ? definition.targets.map((target) => compiledByAuthorStep.get(target)!)
-    : orderedSteps.slice(-1);
+  const compiledTargets = validated.declaredTargets.map((target) =>
+    compiledByAuthorStep.get(target)!
+  );
   const compiledRequiredFinalizerSteps = requiredFinalizerSteps?.map((step) =>
     compiledByAuthorStep.get(step)!
   );

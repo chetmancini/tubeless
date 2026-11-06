@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, statSync, watch } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generateStudioClient } from "./generate-studio-client.mjs";
+import { generateStudioClient, studioClientPaths } from "./generate-studio-client.mjs";
 
 // `tsrs --watch` never emits the Studio browser bundle. tsconfig excludes the
 // browser entry so a compile cannot overwrite the generator's output. Rebuild
@@ -10,10 +10,6 @@ import { generateStudioClient } from "./generate-studio-client.mjs";
 
 const defaultPackageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const defaultDebounceMs = 50;
-const browserBundle = "dist/studio/browser/entry.js";
-const cloudflareBundle = "dist/cloudflare/cloudflare-studio-client.js";
-
-/** Rebuild the Studio client when any file under src changes. */
 export function startStudioClientWatch({
   packageRoot = defaultPackageRoot,
   generate = generateStudioClient,
@@ -54,10 +50,7 @@ export function startStudioClientWatch({
   };
 
   const stop = openWatch(resolve(packageRoot, "src"), schedule);
-  if (
-    !existsSync(resolve(packageRoot, browserBundle)) ||
-    !existsSync(resolve(packageRoot, cloudflareBundle))
-  ) {
+  if (Object.values(studioClientPaths(packageRoot)).some((path) => !existsSync(path))) {
     schedule();
   }
 

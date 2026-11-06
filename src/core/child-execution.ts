@@ -191,6 +191,27 @@ function childTracingOptions(
   };
 }
 
+function childContext(
+  context: PipelineStepContext<object>,
+  identity: { pipelineId: string; stepId: string; itemKey?: string },
+  traceItemKey = context.trace?.itemKey
+): PipelineContext {
+  return childExecutionScope(
+    context,
+    {
+      correlationId: context.correlationId,
+      cwd: context.cwd,
+      log: context.log,
+      now: context.now,
+      parentRunId: context.runId,
+      signal: context.signal,
+      sleep: context.sleep,
+      tracing: childTracingOptions(context, identity.stepId, traceItemKey),
+    },
+    identity
+  );
+}
+
 /** Internal full-report boundary for dispatchers that classify failed child runs. */
 export function invokeChildPipeline(
   pipeline: ChildPipeline,
@@ -205,27 +226,18 @@ export function invokeChildPipeline(
   }
 ): Promise<PipelineRun<unknown>> {
   const controls = childRunControls(undefined, context.dryRun, context.cachePolicy);
-  const runtime: PipelineContext = {
-    correlationId: context.correlationId,
-    cwd: context.cwd,
-    log: context.log,
-    now: context.now,
-    parentRunId: context.runId,
-    signal: context.signal,
-    sleep: context.sleep,
-    tracing: childTracingOptions(context, invocation.stepId, invocation.itemKey),
-    hooks: invocation.hooks,
-  };
+  const runtime = childContext(
+    context,
+    { pipelineId: pipeline.id, stepId: invocation.stepId, itemKey: invocation.itemKey },
+    invocation.itemKey
+  );
+  runtime.hooks = invocation.hooks;
   return executeCompiledChild(
     pipeline,
     invocation.plan,
     options,
     controls,
-    childExecutionScope(context, runtime, {
-      pipelineId: pipeline.id,
-      stepId: invocation.stepId,
-      itemKey: invocation.itemKey,
-    }),
+    runtime,
     invocation.preparedOptions
   );
 }
@@ -325,17 +337,6 @@ export function createSingleChildRunner<TParentOptions extends object>(
     const configuredControls =
       typeof config.controls === "function" ? config.controls(inputs, context) : config.controls;
     const controls = childRunControls(configuredControls, context.dryRun, context.cachePolicy);
-    const baseChildContext: PipelineContext = {
-      correlationId: context.correlationId,
-      cwd: context.cwd,
-      log: context.log,
-      now: context.now,
-      parentRunId: context.runId,
-      signal: context.signal,
-      sleep: context.sleep,
-      tracing: childTracingOptions(context, config.stepId),
-    };
-    // Plan once for progress totals and execution. Invalid plans fail before child.run.
     const childPlan = config.pipeline.plan(controls);
     const childHooks = hasProgressObserver(context)
       ? createSingleChildProgress(childPlan, context.reportProgress)
@@ -344,7 +345,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
       config.pipeline,
       domainOptions,
       controls,
-      childExecutionScope(context, baseChildContext, {
+      childContext(context, {
         pipelineId: config.pipeline.id,
         stepId: config.stepId,
         itemKey: config.itemKey,
@@ -408,30 +409,20 @@ export function createMappedChildRunner<TParentOptions extends object>(
             context.dryRun,
             context.cachePolicy
           );
-          // Plan once per mapped-options bag for progress and execution.
           const childPlan = config.pipeline.plan(controls);
           const childHooks = progress?.plan(key, childPlan) ?? {};
           const childResult = await runChildPipeline(
             config.pipeline,
             domainOptions,
             controls,
-            childExecutionScope(
+            childContext(
               context,
-              {
-                correlationId: context.correlationId,
-                cwd: context.cwd,
-                log: context.log,
-                now: context.now,
-                parentRunId: context.runId,
-                signal: context.signal,
-                sleep: context.sleep,
-                tracing: childTracingOptions(context, config.stepId, key),
-              },
               {
                 pipelineId: config.pipeline.id,
                 stepId: config.stepId,
                 itemKey: key,
-              }
+              },
+              key
             ),
             childHooks,
             "",

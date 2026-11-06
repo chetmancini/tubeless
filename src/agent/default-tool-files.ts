@@ -17,22 +17,18 @@ import type { PipelineStepContext } from "../core/pipeline-types.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { ToolError } from "./tools.js";
 import {
+  DEFAULT_READ_LINES,
   MAX_FILE_BYTES,
+  MAX_LIST_ENTRIES,
   MAX_OUTPUT_BYTES,
+  MAX_SEARCH_DEPTH,
+  MAX_SEARCH_ENTRIES,
+  MAX_SEARCH_MATCHES,
   MAX_SEARCH_SNIPPET_BYTES,
 } from "./default-tool-limits.js";
+import { clippedText } from "./default-tool-text.js";
 
 type Context = Pick<PipelineStepContext<object>, "cwd" | "signal">;
-
-export function clippedText(text: string, maxBytes = MAX_OUTPUT_BYTES) {
-  const bytes = Buffer.from(text);
-  return {
-    text: new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes.subarray(0, maxBytes), {
-      stream: bytes.length > maxBytes,
-    }),
-    truncated: bytes.length > maxBytes,
-  };
-}
 
 async function sortedEntries(path: string, signal?: AbortSignal) {
   throwIfAborted(signal, "List files");
@@ -105,7 +101,7 @@ export async function readTool(
     const startLine = input.startLine ?? 1;
     const selected = parts.slice(
       (startLine - 1) * 2,
-      (startLine - 1 + (input.maxLines ?? 200)) * 2 - 1
+      (startLine - 1 + (input.maxLines ?? DEFAULT_READ_LINES)) * 2 - 1
     );
     const content = clippedText(selected.join(""));
     let endLine =
@@ -226,7 +222,7 @@ export async function listTool(input: { path?: string | null }, context: Context
     for (const entry of await sortedEntries(path, context.signal)) {
       throwIfAborted(context.signal, "List files");
       bytes += Buffer.byteLength(entry.name);
-      if (entries.length === 200 || bytes > MAX_OUTPUT_BYTES) {
+      if (entries.length === MAX_LIST_ENTRIES || bytes > MAX_OUTPUT_BYTES) {
         truncated = true;
         break;
       }
@@ -278,7 +274,7 @@ export async function searchTool(input: { query: string; path?: string | null },
         if (line.truncated && !line.text.includes(input.query))
           line.text = clippedText(source.slice(match), MAX_SEARCH_SNIPPET_BYTES).text;
         bytes += Buffer.byteLength(path) + Buffer.byteLength(line.text);
-        if (matches.length === 50 || bytes > MAX_OUTPUT_BYTES) {
+        if (matches.length === MAX_SEARCH_MATCHES || bytes > MAX_OUTPUT_BYTES) {
           truncated = true;
           return;
         }
@@ -287,7 +283,7 @@ export async function searchTool(input: { query: string; path?: string | null },
       }
     }
     async function walk(path: string, depth: number): Promise<void> {
-      if (depth > 32) {
+      if (depth > MAX_SEARCH_DEPTH) {
         truncated = true;
         return;
       }
@@ -295,7 +291,11 @@ export async function searchTool(input: { query: string; path?: string | null },
       for (let index = 0; index < children.length; index++) {
         const entry = children[index]!;
         throwIfAborted(context.signal, "Search files");
-        if (++entries > 2000 || matches.length >= 50 || bytes > MAX_OUTPUT_BYTES) {
+        if (
+          ++entries > MAX_SEARCH_ENTRIES ||
+          matches.length >= MAX_SEARCH_MATCHES ||
+          bytes > MAX_OUTPUT_BYTES
+        ) {
           truncated = true;
           return;
         }
@@ -308,7 +308,7 @@ export async function searchTool(input: { query: string; path?: string | null },
             const files = [entry];
             while (
               files.length < 4 &&
-              entries + files.length <= 2000 &&
+              entries + files.length <= MAX_SEARCH_ENTRIES &&
               children[index + files.length]?.isFile()
             )
               files.push(children[index + files.length]!);
@@ -318,7 +318,11 @@ export async function searchTool(input: { query: string; path?: string | null },
             for (let offset = 0; offset < files.length; offset++) {
               throwIfAborted(context.signal, "Search files");
               if (offset > 0) {
-                if (++entries > 2000 || matches.length >= 50 || bytes > MAX_OUTPUT_BYTES) {
+                if (
+                  ++entries > MAX_SEARCH_ENTRIES ||
+                  matches.length >= MAX_SEARCH_MATCHES ||
+                  bytes > MAX_OUTPUT_BYTES
+                ) {
                   truncated = true;
                   return;
                 }

@@ -2,6 +2,7 @@ import { COMPLETION_SHELLS, WORKBENCH_SPECS } from "./workbench-command-specs.js
 import {
   workbenchOptions,
   type WorkbenchCommandSpec,
+  type WorkbenchCompletionValue,
   renderWorkbenchUsage,
   parseSubcommandArgs,
   runWorkbenchSubcommand,
@@ -28,7 +29,6 @@ const FILES_DIRECTIVE = "f";
 
 type CompletionShell = (typeof COMPLETION_SHELLS)[number];
 
-/** A top-level command offered at the command position. */
 interface WorkbenchCommandSummary {
   readonly name: string;
   readonly description: string;
@@ -45,14 +45,11 @@ interface Completion {
   readonly files: boolean;
 }
 
-/** `text` values are free-form; `target`/`step` come from the plan. */
-type FlagValue = "file" | "text" | "target" | "step" | readonly string[];
-
 interface CompletionFlag {
   readonly name: string;
   readonly short?: string;
   readonly description?: string;
-  readonly value?: FlagValue;
+  readonly value?: WorkbenchCompletionValue;
   readonly positional?: boolean;
   readonly multiple?: boolean;
 }
@@ -62,7 +59,6 @@ interface SubcommandCompletion {
   readonly positional?: "pipeline" | "file" | readonly string[];
 }
 
-/** Read the same option definitions used by parsing and help. */
 function subcommandSpec(command: WorkbenchCommandSummary, nested?: string): SubcommandCompletion {
   return {
     flags: Object.entries(workbenchOptions(command.spec, nested)).map(([name, option]) => ({
@@ -102,7 +98,6 @@ interface ScannedWords {
   readonly optionsEnded?: boolean;
 }
 
-/** Walk the subcommand's words before the cursor the way its option parser would. */
 function scanWords(
   words: readonly string[],
   spec: SubcommandCompletion,

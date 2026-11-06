@@ -378,6 +378,15 @@ describe("definePipelineCommand", () => {
 
     expect(pipeline.targetIds).toEqual([]);
     expect(result.kind === "help" && result.helpText).not.toContain("--target");
+    const reservedParams: CliParamsSchema[] = [
+      { targets: { type: "string" as const } },
+      { customTarget: { type: "string" as const, flag: "target" } },
+    ];
+    for (const params of reservedParams) {
+      expect(() => definePipelineCommand(pipeline, { params, mapOptions: () => ({}) })).toThrow(
+        /reserved/
+      );
+    }
 
     const undeclared = command.plan({ targets: ["internal" as never] });
     expect(undeclared.ok).toBe(false);

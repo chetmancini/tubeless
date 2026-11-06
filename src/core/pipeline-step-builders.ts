@@ -73,6 +73,31 @@ type ArtifactStepFields<TOptions extends object> = Omit<
   skip?: AnySkip<TOptions>;
 };
 
+function buildArtifactStep<TOptions extends object>(
+  buildStep: BuildStep<TOptions>,
+  id: string,
+  operation: "read" | "write",
+  definition: ArtifactStepFields<TOptions> & {
+    dryRun?: "skip" | ArtifactLoader<Record<string, unknown>, unknown, TOptions>;
+    run: ArtifactLoader<Record<string, unknown>, unknown, TOptions>;
+  }
+): AnyStep<TOptions> {
+  const { cache, run, dryRun, ...fields } = definition;
+  if (cache !== undefined) throw new Error("Artifact helpers cannot configure caching");
+  const wrap =
+    (handler: typeof run) =>
+    async (inputs: Record<string, unknown>, context: PipelineStepContext<TOptions>) => {
+      const result = await handler(inputs, context);
+      context.recordArtifact({ operation, artifact: result.artifact });
+      return result.value;
+    };
+  return buildStep(id, {
+    ...fields,
+    run: wrap(run),
+    dryRun: typeof dryRun === "function" ? wrap(dryRun) : dryRun,
+  });
+}
+
 /** Read an artifact as an ordinary step, publishing only its typed value. */
 export function buildLoadArtifactStep<TOptions extends object>(
   buildStep: BuildStep<TOptions>,
@@ -82,20 +107,8 @@ export function buildLoadArtifactStep<TOptions extends object>(
     load: ArtifactLoader<Record<string, unknown>, unknown, TOptions>;
   }
 ): AnyStep<TOptions> {
-  const { cache, load, dryRun, ...fields } = definition;
-  if (cache !== undefined) throw new Error("Artifact helpers cannot configure caching");
-  const wrap =
-    (handler: typeof load) =>
-    async (inputs: Record<string, unknown>, context: PipelineStepContext<TOptions>) => {
-      const loaded = await handler(inputs, context);
-      context.recordArtifact({ operation: "read", artifact: loaded.artifact });
-      return loaded.value;
-    };
-  return buildStep(id, {
-    ...fields,
-    run: wrap(load),
-    dryRun: typeof dryRun === "function" ? wrap(dryRun) : dryRun,
-  });
+  const { load, ...fields } = definition;
+  return buildArtifactStep(buildStep, id, "read", { ...fields, run: load });
 }
 
 /** Write an artifact as an ordinary step. Dry runs skip unless a preview is supplied. */
@@ -107,19 +120,11 @@ export function buildSaveArtifactStep<TOptions extends object>(
     save: ArtifactSaver<Record<string, unknown>, unknown, TOptions>;
   }
 ): AnyStep<TOptions> {
-  const { cache, save, dryRun, ...fields } = definition;
-  if (cache !== undefined) throw new Error("Artifact helpers cannot configure caching");
-  const wrap =
-    (handler: typeof save) =>
-    async (inputs: Record<string, unknown>, context: PipelineStepContext<TOptions>) => {
-      const saved = await handler(inputs, context);
-      context.recordArtifact({ operation: "write", artifact: saved.artifact });
-      return saved.value;
-    };
-  return buildStep(id, {
+  const { save, dryRun, ...fields } = definition;
+  return buildArtifactStep(buildStep, id, "write", {
     ...fields,
-    run: wrap(save),
-    dryRun: typeof dryRun === "function" ? wrap(dryRun) : "skip",
+    run: save,
+    dryRun: typeof dryRun === "function" ? dryRun : "skip",
   });
 }
 

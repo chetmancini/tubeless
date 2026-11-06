@@ -2,6 +2,7 @@ import { lstat, realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { throwIfAborted } from "../utilities/abort.js";
 import { runConcurrent } from "../utilities/batch.js";
+import { MAX_READ_LINES } from "./default-tool-limits.js";
 import { bashTool } from "./default-tool-bash.js";
 import { readTool, writeTool, editTool, listTool, searchTool } from "./default-tool-files.js";
 import type {
@@ -41,7 +42,7 @@ async function projectInstructions(
     { concurrency: 4, signal },
     async (path): Promise<AgentProjectInstruction | undefined> => {
       try {
-        const file = await readTool({ path, maxLines: 2000 }, { cwd: workspace, signal });
+        const file = await readTool({ path, maxLines: MAX_READ_LINES }, { cwd: workspace, signal });
         if (file.truncated) throw new Error(`Project instructions exceed read limits: ${path}`);
         return { path, content: file.content };
       } catch (error) {

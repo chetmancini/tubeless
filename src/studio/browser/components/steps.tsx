@@ -171,7 +171,6 @@ export function StepRow({ step, steps = [], selected = false, onSelect }: StepRo
       onClick={
         onSelect &&
         ((event) => {
-          // Controls inside the row, such as artifact filters, keep their own clicks.
           if (
             !(event.target instanceof Element) ||
             !event.target.closest("button, select, summary, a")

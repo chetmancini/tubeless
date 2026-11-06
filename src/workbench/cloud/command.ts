@@ -4,11 +4,11 @@ import {
   parseSubcommandArgs,
   runWorkbenchSubcommand,
 } from "../workbench-subcommand.js";
-import { createCloudClient, CloudClientError, isCloudTransportError } from "./client.js";
+import { createCloudClient, isCloudTransportError } from "./client.js";
 import { resolveCloudHost } from "./config.js";
 import { resolveCloudCredential } from "./credentials.js";
 import { prepareRunInput, CloudRunUsageError } from "./run-input.js";
-import { isCloudAutomationToken, type CliRun } from "./protocol.js";
+import { CloudClientError, isCloudAutomationToken, type CliRun } from "./protocol.js";
 
 import {
   type WorkbenchCliIo,

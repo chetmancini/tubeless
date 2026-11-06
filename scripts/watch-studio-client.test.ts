@@ -30,6 +30,7 @@ describe("startStudioClientWatch", () => {
     writeFileSync(join(root, "src/cli/cli-parser.ts"), "export const n = 1;\n");
     writeFileSync(join(root, "dist/studio/browser/entry.js"), "ok\n");
     writeFileSync(join(root, "dist/cloudflare/cloudflare-studio-client.js"), "ok\n");
+    writeFileSync(join(root, "dist/cloudflare/cloudflare-studio-client.d.ts"), "ok\n");
 
     const pending: Array<() => void> = [];
     let warmup = true;
@@ -77,12 +78,23 @@ describe("startStudioClientWatch", () => {
     }
   });
 
-  it("generates at startup when a bundle is missing and keeps watching after a failure", async () => {
+  it.each([
+    "dist/studio/browser/entry.js",
+    "dist/cloudflare/cloudflare-studio-client.js",
+    "dist/cloudflare/cloudflare-studio-client.d.ts",
+  ])("generates when %s is missing and keeps watching after a failure", async (missing) => {
     const root = mkdtempSync(join(tmpdir(), "tubeless-studio-watch-"));
     mkdirSync(join(root, "src/studio/browser"), { recursive: true });
-    mkdirSync(join(root, "dist/cloudflare"), { recursive: true });
     writeFileSync(join(root, "src/studio/browser/entry.ts"), 'export const text = "Studio";\n');
-    writeFileSync(join(root, "dist/cloudflare/cloudflare-studio-client.js"), "ok\n");
+    for (const output of [
+      "dist/studio/browser/entry.js",
+      "dist/cloudflare/cloudflare-studio-client.js",
+      "dist/cloudflare/cloudflare-studio-client.d.ts",
+    ]) {
+      if (output === missing) continue;
+      mkdirSync(join(root, output, ".."), { recursive: true });
+      writeFileSync(join(root, output), "ok\n");
+    }
 
     const calls: string[] = [];
     const handle = startStudioClientWatch({

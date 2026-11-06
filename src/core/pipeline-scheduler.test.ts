@@ -189,7 +189,7 @@ describe("parallel DAG scheduling", () => {
         })
       );
     }
-    const graph = compilePipelineGraph(steps);
+    const graph = compilePipelineGraph({ orderedSteps: steps });
     let stepLookups = 0;
     // Count scheduler array accesses without timing-dependent performance assertions.
     const orderedSteps = new Proxy(graph.orderedSteps, {
@@ -641,10 +641,9 @@ describe("parallel DAG scheduling", () => {
     const started = defer();
     const failure = new Error("unexpected");
     const { step } = createSteps();
-    const graph = compilePipelineGraph([
-      step("first", { run: () => 1 }),
-      step("second", { run: () => 2 }),
-    ]);
+    const graph = compilePipelineGraph({
+      orderedSteps: [step("first", { run: () => 1 }), step("second", { run: () => 2 })],
+    });
     let returned = false;
     const outcome = schedulePipelineSteps({
       ...graph,

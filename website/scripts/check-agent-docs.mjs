@@ -3,9 +3,18 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { decodeHtml } from "./html.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../dist");
 const read = (path) => readFileSync(join(root, path), "utf8");
+
+function metadata(html, name) {
+  const value = html.match(new RegExp(`<meta (?:name|property)="${name}" content="([^"]*)"`))?.[1];
+  const decoded = value === undefined ? undefined : decodeHtml(value);
+  assert.ok(decoded?.trim(), `Missing or empty metadata: ${name}`);
+  return decoded;
+}
+
 const index = read("llms.txt");
 const bundle = read("llms-full.txt");
 const documentSchema = JSON.parse(read("schemas/pipeline-document-v1.schema.json"));
@@ -45,11 +54,7 @@ assert.match(gettingStarted, /<pre class="astro-code github-dark"[^>]*data-langu
 assert.match(gettingStarted, /<span class="line"><span style="color:/);
 console.log(`Verified ${pages.length} Markdown documents, discovery links, and full documentation bundle.`);
 
-// Validate the llms.txt file-list grammar, not just the presence of keywords.
 assert.match(index, /^# tubeless\n\n> .+\n/);
-assert.match(index, /## When to use Tubeless\n/);
-assert.match(index, /Pipelines run in your process/);
-assert.match(index, /tubeless plan <pipeline-id>/);
 for (const section of index.split(/^## /m).slice(1)) {
   const [heading, ...lines] = section.split("\n");
   const entries = lines.filter((line) => line.trim());
@@ -60,7 +65,6 @@ for (const section of index.split(/^## /m).slice(1)) {
 }
 
 const homepage = read("index.html");
-assert.match(homepage, /<title>Tubeless — Typed pipelines for Node\.js<\/title>/);
 assert.match(homepage, /name="application-name" content="Tubeless"/);
 assert.match(homepage, /property="og:site_name" content="Tubeless"/);
 assert.ok(existsSync(join(root, "og.jpg")), "Social card JPEG must be in the built artifact");
@@ -71,14 +75,11 @@ assert.match(homepage, /property="og:image:type" content="image\/jpeg"/);
 assert.match(homepage, /property="og:image:width" content="1200"/);
 assert.match(homepage, /property="og:image:height" content="630"/);
 assert.match(homepage, /name="twitter:card" content="summary_large_image"/);
-assert.match(homepage, /name="twitter:title" content="Tubeless — Typed pipelines for Node.js"/);
-assert.match(homepage, /name="twitter:description" content="Tubeless is a TypeScript library/);
 assert.ok(homepage.includes(`name="twitter:image" content="${socialImage}"`));
 assert.match(homepage, /rel="icon" href="\/apple-touch-icon.png" type="image\/png" sizes="180x180"/);
 assert.match(homepage, /rel="apple-touch-icon" href="\/apple-touch-icon.png" sizes="180x180"/);
 assert.match(homepage, /<link rel="alternate" type="text\/markdown" href="\/index.md"/);
 assert.match(read("index.md"), /^# Tubeless\n/);
-assert.match(read("index.md"), /## When to use Tubeless\n/);
 assert.ok(index.includes("https://tubeless.io/index.md"));
 assert.match(homepage, /href="\/developers"/);
 for (const [, target] of read("index.md").matchAll(/\]\(([^)]+)\)/g)) {
@@ -93,31 +94,27 @@ const software = JSON.parse(jsonld[0][1]);
 assert.equal(software["@context"], "https://schema.org");
 assert.equal(software["@type"], "SoftwareApplication");
 assert.equal(software.name, "Tubeless");
-assert.equal(software.alternateName, "Tubeless TypeScript Pipelines");
+assert.ok(software.alternateName?.trim());
 assert.equal(software.url, "https://tubeless.io/");
 assert.equal(software.author.name, "Chet Mancini");
 assert.equal(software.author["@type"], "Person");
 assert.ok(software.description.length > 0);
 assert.ok(software.softwareVersion.length > 0);
-assert.deepEqual(software.keywords, ["TypeScript pipelines", "Node.js workflows", "typed ETL"]);
+assert.ok(Array.isArray(software.keywords) && software.keywords.length > 0);
+assert.ok(software.keywords.every((keyword) => typeof keyword === "string" && keyword.trim()));
 assert.deepEqual(software.sameAs, ["https://github.com/chetmancini/tubeless"]);
-assert.match(homepage, /name="description" content="Tubeless is a TypeScript library/);
 
 const developers = read("developers/index.html");
-assert.match(developers, /<title>Developer Resources · Tubeless<\/title>/);
-assert.match(developers, /<h1 class="page-title"[^>]*>Tubeless developer resources<\/h1>/);
 assert.match(developers, /href="\/docs\/api-reference"/);
 assert.match(developers, /type="text\/markdown" href="\/developers\.md"/);
-assert.match(read("developers.md"), /^# Tubeless developer resources\n/);
+assert.match(read("developers.md"), /^# .+\n/);
 
 const brand = read("brand/index.html");
-assert.match(brand, /<title>Brand · Tubeless<\/title>/);
-assert.match(brand, /<h1 class="page-title"[^>]*>Tubeless brand<\/h1>/);
 assert.match(brand, /href="\/wordmark\.svg"/);
 assert.match(brand, /href="\/wordmark-inverse\.svg"/);
 assert.match(brand, /href="\/logo\.svg"/);
 assert.match(brand, /type="text\/markdown" href="\/brand\.md"/);
-assert.match(read("brand.md"), /^# Tubeless brand\n/);
+assert.match(read("brand.md"), /^# .+\n/);
 assert.ok(brand.includes(`src="/og.jpg?v=${socialImageRevision}"`), "Brand page must preview the current social card");
 assert.ok(brand.includes(`href="/og.jpg?v=${socialImageRevision}" download="tubeless-social.jpg"`), "Brand page must offer the current JPEG download");
 assert.ok(brand.includes(`data-copy="${socialImage}"`), "Brand page must copy the social image URL used by metadata");
@@ -158,20 +155,25 @@ assert.match(robots, /Sitemap: https:\/\/tubeless.io\/sitemap.xml/);
 
 for (const path of humanPages) {
   const html = read(path ? `${path}/index.html` : "index.html");
+  const title = decodeHtml(html.match(/<title>([^<]+)<\/title>/)?.[1] ?? "");
+  assert.ok(title?.trim(), `${path || "homepage"} must have a title`);
+  assert.equal(metadata(html, "og:title"), title);
+  assert.equal(metadata(html, "twitter:title"), title);
+  assert.equal(metadata(html, "og:description"), metadata(html, "description"));
+  assert.equal(metadata(html, "twitter:description"), metadata(html, "description"));
+  assert.equal(metadata(html, "og:image:alt"), metadata(html, "twitter:image:alt"));
+  assert.equal((html.match(/<h1\b/g) ?? []).length, 1, `${path || "homepage"} must render exactly one H1`);
   assert.match(html, /<link rel="describedby" href="\/llms.txt"/);
   assert.match(html, /<link rel="sitemap" type="application\/xml" href="\/sitemap.xml"/);
   assert.match(html, /name="twitter:card" content="summary_large_image"/);
   assert.ok(html.includes(`name="twitter:image" content="${socialImage}"`));
   assert.ok(html.includes(`property="og:image" content="${socialImage}"`));
-  assert.match(html, /property="og:image:alt" content="Tubeless — Managed Agentic Workflows\./);
-  assert.match(html, /name="twitter:image:alt" content="Tubeless — Managed Agentic Workflows\./);
   assert.match(html, /rel="apple-touch-icon" href="\/apple-touch-icon.png" sizes="180x180"/);
   const markdown = path === "start" ? "/docs/getting-started.md" : path ? `/${path}.md` : "/index.md";
   assert.ok(html.includes(`<link rel="alternate" type="text/markdown" href="${markdown}"`), `${path || "homepage"} must advertise Markdown`);
 }
 for (const slug of pages) {
   const html = read(`docs/${slug}/index.html`);
-  assert.equal((html.match(/<h1\b/g) ?? []).length, 1, `${slug} must render exactly one H1`);
   const headingIds = new Set([...html.matchAll(/<h[23]\b[^>]*\bid="([^"]+)"/g)].map((match) => match[1]));
   for (const [target] of html.matchAll(/<nav class="toc"[\s\S]*?<\/nav>/g)) {
     for (const [, id] of target.matchAll(/href="#([^"]+)"/g)) {

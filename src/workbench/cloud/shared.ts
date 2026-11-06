@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { CloudCredentialStore } from "./credentials.js";
-import { CloudClientError } from "./client.js";
+import { CloudClientError } from "./protocol.js";
 import {
   errorMessage,
   onFirstProcessSignal,

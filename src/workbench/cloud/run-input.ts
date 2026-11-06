@@ -3,9 +3,11 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import * as path from "node:path";
 import { awaitWithAbort } from "../../utilities/abort.js";
-import { CloudClientError, parseCloudSource } from "./client.js";
 import {
+  CloudClientError,
+  parseCloudSource,
   CLOUD_INPUT_MAX_DEPTH,
+  CLOUD_INPUT_MAX_BYTES,
   isCloudJsonValue,
   isCloudIdempotencyKey,
   type CliRunRequest,
@@ -78,8 +80,6 @@ export async function prepareRunInput(
   };
 }
 
-const INPUT_LIMIT = 64 * 1024;
-
 async function boundedInput(
   file: string,
   context: CloudRunInputContext,
@@ -108,7 +108,7 @@ async function boundedInput(
         const onData = (chunk: Buffer | string) => {
           const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
           size += bytes.length;
-          if (size > INPUT_LIMIT) {
+          if (size > CLOUD_INPUT_MAX_BYTES) {
             onError(
               new CloudClientError(`${label} JSON must be at most 64 KB.`, "invalid_request")
             );
@@ -136,7 +136,7 @@ async function boundedInput(
     try {
       if (!(await fileHandle.stat()).isFile())
         throw new CloudClientError(`${label} file must be a regular file.`, "invalid_request");
-      const buffer = Buffer.alloc(INPUT_LIMIT + 1);
+      const buffer = Buffer.alloc(CLOUD_INPUT_MAX_BYTES + 1);
       let size = 0;
       while (size < buffer.length) {
         if (context.signal.aborted) throw new Error("Input read interrupted.");
@@ -153,7 +153,7 @@ async function boundedInput(
 }
 
 function parseJsonObject(text: string, label: string): Record<string, CloudJsonValue> {
-  if (Buffer.byteLength(text) > INPUT_LIMIT)
+  if (Buffer.byteLength(text) > CLOUD_INPUT_MAX_BYTES)
     throw new CloudClientError(`${label} JSON must be at most 64 KB.`, "invalid_request");
   let value: unknown;
   try {

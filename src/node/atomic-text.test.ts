@@ -31,16 +31,27 @@ it("keeps overlapping writes in the same process on independent temporary files"
   }
 });
 
-it("writes the temporary file with exclusive create", () => {
+it("rejects a competing temporary file without overwriting it or the destination", async () => {
+  const actualFs = await vi.importActual<typeof import("fs")>("fs");
   const dir = fs.mkdtempSync(join(tmpdir(), "atomic-text-test-"));
   const file = join(dir, "artifact.json");
+  actualFs.writeFileSync(file, "original");
+  vi.mocked(fs.writeFileSync).mockImplementationOnce((temporary, contents, options) => {
+    actualFs.writeFileSync(temporary, "competing writer");
+    try {
+      actualFs.writeFileSync(temporary, contents, options);
+    } finally {
+      expect(actualFs.readFileSync(temporary, "utf8")).toBe("competing writer");
+    }
+  });
 
   try {
-    writeAtomicText(file, '{"writer":"only"}\n');
-    const [tmpPathArg, , optionsArg] = vi.mocked(fs.writeFileSync).mock.calls.at(-1)!;
-    expect(String(tmpPathArg)).toContain(`${file}.tmp-`);
-    expect(optionsArg).toMatchObject({ flag: "wx" });
+    expect(() => writeAtomicText(file, "replacement")).toThrowError(
+      expect.objectContaining({ code: "EEXIST" })
+    );
+    expect(actualFs.readFileSync(file, "utf8")).toBe("original");
   } finally {
+    vi.mocked(fs.writeFileSync).mockRestore();
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

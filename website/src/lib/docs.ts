@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { rewriteDocLinks } from "./doc-links";
-import { GITHUB_BLOB, absUrl, href } from "./paths";
+import { absUrl, href } from "./paths";
 
 const docsDir = join(__REPO_ROOT__, "docs");
 
@@ -53,7 +53,6 @@ export function loadDoc(slug: string): DocPage {
   return { slug, title, description };
 }
 
-// Keep agent downloads aligned with the exact sources rendered by this build.
 export function loadMarkdown(slug: string): string {
   if (!DOC_SLUGS.has(slug as (typeof DOC_NAV)[number]["slug"])) {
     throw new Error(`Unknown documentation page: ${slug}`);

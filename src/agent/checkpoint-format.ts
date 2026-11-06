@@ -1,4 +1,5 @@
 import type { AgentLimits, AgentOutcome, Tools } from "./agent-types.js";
+import { DEFAULT_AGENT_LIMITS, validAgentLimit } from "./agent-limits.js";
 
 export interface StoredBudget {
   depth: number;
@@ -166,16 +167,8 @@ function checkBudget(budget: unknown): void {
     !record(budget.limits)
   )
     throw new Error("Invalid saved agent budget");
-  for (const name of [
-    "maxTurns",
-    "maxCalls",
-    "maxDecisions",
-    "maxDepth",
-    "maxConcurrency",
-  ] as const) {
-    const bound = budget.limits[name];
-    if (!natural(bound) || (!["maxCalls", "maxDepth"].includes(name) && bound === 0))
-      throw new Error("Invalid saved agent limits");
+  for (const name of Object.keys(DEFAULT_AGENT_LIMITS) as (keyof AgentLimits)[]) {
+    if (!validAgentLimit(name, budget.limits[name])) throw new Error("Invalid saved agent limits");
   }
   if (
     budget.maxCalls > Number(budget.limits.maxCalls) ||

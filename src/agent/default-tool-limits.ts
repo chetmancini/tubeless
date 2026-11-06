@@ -1,4 +1,11 @@
-/** Shared byte limits for workspace validators and the local adapter. */
 export const MAX_FILE_BYTES = 1_048_576;
 export const MAX_OUTPUT_BYTES = 16_384;
+export const DEFAULT_READ_LINES = 200;
+export const MAX_READ_LINES = 2000;
+export const MAX_LIST_ENTRIES = 200;
+export const MAX_SEARCH_MATCHES = 50;
+export const MAX_SEARCH_ENTRIES = 2000;
+export const MAX_SEARCH_DEPTH = 32;
 export const MAX_SEARCH_SNIPPET_BYTES = 1024;
+export const DEFAULT_BASH_TIMEOUT_MS = 30_000;
+export const MAX_BASH_TIMEOUT_MS = 300_000;

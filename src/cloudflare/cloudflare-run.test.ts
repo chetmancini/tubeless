@@ -4,14 +4,8 @@ import { defineProject } from "../project/project.js";
 import { hostedProjectCommands } from "../hosting/hosting-commands.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { createFakeDurableStorage } from "./cloudflare-storage.test-support.js";
-import {
-  BatchingTraceExporter,
-  MAX_RUN_DURATION_MS,
-  RunObjectCore,
-  runHostedJob,
-  type RunJob,
-  type StudioIngest,
-} from "./cloudflare-run.js";
+import { BatchingTraceExporter, RunObjectCore, runHostedJob } from "./cloudflare-run.js";
+import { MAX_RUN_DURATION_MS, type RunJob, type StudioIngest } from "./cloudflare-run-contract.js";
 
 function schema<T>(validate: (value: unknown) => T | undefined): StandardSchemaV1<T, T> {
   return {

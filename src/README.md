@@ -62,6 +62,10 @@ their source files.
   Runtime call identity is typed invocation data, independent of tracing attributes.
   Storage and lossless codecs are separate contracts; `tubeless/agent/node` supplies local environment and SQLite
   adapters. Traces remain best-effort inspection, independent of recovery.
+  `agent-limits.ts` owns execution defaults and validation rules shared with
+  checkpoint restoration. `default-tool-limits.ts` owns workspace bounds shared
+  by tool schemas, adapters and guidance; `default-tool-text.ts` owns UTF-8
+  clipping independently of filesystem operations.
   The optional `tubeless/agent/openai` entrypoint owns HTTP, provider protocol and
   compaction. `openai-http.ts` bounds successful responses and authentication
   error-body reads, exposing known rejection codes and safe advice without raw
@@ -86,7 +90,9 @@ their source files.
 - Core uses utilities and internal trace emission. Its complete runtime import graph
   must stay independent of exporters, storage, UI, command parsing and presentation.
 - Utilities and tracing have no runtime imports from other modules. Node helpers
-  are self-contained except for the cache utility re-export from their public entrypoint.
+  depend only on pure utilities, with cache storage re-exported through their
+  public entrypoint. `utilities/worker-argv.ts` owns file-worker argument
+  compatibility for Node adapters, agent code mode and terminal reporting.
   Tracing shares type-only pipeline contracts with core.
 - Reporters and rendering consume core. Storage consumes core and trace contracts;
   storage never depends on the studio or workbench.
@@ -115,6 +121,8 @@ their source files.
   `cloudflare/` imports it, and its public declarations stay structural. The
   `tubeless/cloudflare/cache` entry (`cloudflare/cloudflare-cache.ts`) must stay free of
   `cloudflare:` imports so project modules that use it still load in Node.
+  `cloudflare/cloudflare-run-contract.ts` owns shared run jobs, ingestion,
+  deadline limits and host-failure vocabulary without loading execution.
   `cloudflare/cloudflare-codemode.ts` is the Worker Loader code-mode executor; it imports
   only agent's executor types and realm setup, which it embeds in each Dynamic Worker.
 - Type-only imports can share contracts without loading their implementation.
@@ -139,6 +147,11 @@ Run `make check` after changes; it builds before checking these boundaries.
   Definition types live in `core/pipeline-step-types.ts`; runtime construction for
   artifacts, child, mapped, remote and iteration steps lives in
   `core/pipeline-step-builders.ts`, which receives erased definitions.
+- `core/pipeline-definition-validation.ts` produces validated graph order, targets,
+  cache plans and required-finalizer metadata for compilation. Graph compilation
+  consumes that order rather than sorting again. `core/child-execution.ts` owns
+  inherited child runtime context; invocation-specific hooks and identities remain
+  with their callers.
 
 - `core/pipeline-execute.ts` coordinates a run: options validation, scheduling,
   step attempts, stop policy and finalization.
@@ -202,11 +215,13 @@ Run `make check` after changes; it builds before checking these boundaries.
 
 - `workbench/cloud/auth.ts` and `workbench/cloud/command.ts` own lazy first-party Cloud
   command orchestration and name/slug selection. `workbench/cloud/client.ts` owns bounded
-  HTTP transport and run request validation, including immutable source selectors;
+  HTTP transport and request submission;
   `workbench/cloud/run-input.ts` owns run-argument combinations, bounded JSON
   file/stdin loading and preparation of input, source and admission key.
   `workbench/cloud/protocol.ts` owns independent
-  wire types, strict response decoding, finite JSON validation and the canonical token validator.
+  wire types, strict response decoding, finite JSON validation, immutable source
+  selectors, input bounds, errors shared by transport/input/authentication, and
+  the canonical token validator.
   `workbench/cloud/config.ts` validates explicit/default service origins, and
   `workbench/cloud/credentials.ts` owns lazy native credentials. These modules never import
   selected pipeline files and remain outside public runtime entrypoints.
@@ -288,6 +303,8 @@ and interactive reporter orchestration.
   expanded graph: coalesced revisions, retained successes, missing/error retries and
   request retirement. Views consume one selection union, and resource refreshes
   retain matching definition metadata without remounting its explorer.
+  `studio/browser/definition-resource.ts` owns definition identity, loading and
+  legacy/identified revision refresh shared by graph and history views.
   `run-store/run-history.ts` also attributes each nested run to the parent step that
   started it (`origin`), using iteration and agent-call links before pipeline matches.
 - `studio/browser/app.tsx` composes the browser app: view selection, URL
@@ -306,6 +323,8 @@ and interactive reporter orchestration.
   loads neither UI components nor transport or server code; the emitted runtime graph
   test enforces this boundary. Shared history limits live in `studio/shared/limits.ts`
   so geometry and pagination do not need to load protocol validators.
+  `studio/shared/children.ts` owns iteration/start-time ordering shared by server
+  child pagination and browser graph geometry.
 - `run-store/run-store-schema.ts` validates projected storage records;
   `studio/shared/schema.ts` defines the browser protocol. Both reuse pure
   trace schemas. Decode at the transport boundary instead of promoting partially

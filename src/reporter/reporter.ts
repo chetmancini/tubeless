@@ -42,7 +42,6 @@ export interface ReporterSymbols {
 
 const SYMBOLS = {
   ascii: { complete: "ok", fail: "fail", pending: ".", skip: "-", start: "->" },
-  // Distinct from pending (○): skipped work uses a yellow dash, not a green check.
   unicode: { complete: "✓", fail: "✗", pending: "○", skip: "–", start: "→" },
   emoji: { complete: "✅", fail: "❌", pending: "▫️", skip: "⏭️", start: "⏳" },
 } satisfies Record<Exclude<ReporterSymbolMode, "auto">, ReporterSymbols>;
@@ -193,7 +192,6 @@ export function createRunReporter<TResult = unknown>(
       );
     },
     onStepProgress: ({ progress, step }) => {
-      // Ignore empty/non-visible progress snapshots (no message, total, or work count).
       if (!hasVisibleStepProgress(progress)) return;
 
       const total =

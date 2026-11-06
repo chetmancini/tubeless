@@ -1,6 +1,7 @@
 import type { StoredRunSummary } from "../../run-store/run-history.js";
 import { STUDIO_CHILD_PAGE_SIZE } from "../shared/limits.js";
 import type { StudioChildStep } from "../shared/schema.js";
+import { compareChildRuns } from "../shared/children.js";
 
 const UNATTRIBUTED = "";
 
@@ -34,11 +35,7 @@ export function pageDirectChildren(
   const childSteps: StudioChildStep[] = [];
   for (const key of keys) {
     const group = groups.get(key)!;
-    group.sort(
-      (left, right) =>
-        (left.origin?.iteration ?? 0) - (right.origin?.iteration ?? 0) ||
-        left.startedAtMs - right.startedAtMs
-    );
+    group.sort(compareChildRuns);
     childSteps.push(
       key === UNATTRIBUTED ? { count: group.length } : { stepId: key, count: group.length }
     );

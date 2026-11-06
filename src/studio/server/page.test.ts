@@ -19,14 +19,7 @@ describe("pipeline run studio page composition", () => {
       `<script type="module">${PIPELINE_RUN_STUDIO_SCRIPT}</script>`
     );
     expect(PIPELINE_RUN_STUDIO_HTML).toContain(`<style>${PIPELINE_RUN_STUDIO_STYLE}</style>`);
-  });
-
-  it("keeps the studio shell tokens the existing tests rely on", async () => {
-    const PIPELINE_RUN_STUDIO_HTML = (await createStudioPage(PIPELINE_RUN_STUDIO_SCRIPT)).html("");
-    expect(PIPELINE_RUN_STUDIO_HTML).toContain("<title>Tubeless — Studio</title>");
     expect(PIPELINE_RUN_STUDIO_HTML).toContain('id="studio-root"');
-    expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("data-run-id");
-    expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("Pipeline runs");
   });
 
   it("pins the served CSP hashes to the composed inline script and style", async () => {

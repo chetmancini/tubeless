@@ -83,7 +83,6 @@ export function flagName(key: string, param: CliParam): string {
   return param.flag ?? key.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
 }
 
-/** True for a string/number param declared `multiple: true` — the only types that support it. */
 function isMultipleParam(
   param: CliParam
 ): param is (CliStringParam | CliNumberParam) & { multiple: true } {
@@ -95,7 +94,6 @@ export function commandDescriptor(
   params: CliParamsSchema,
   positionals: readonly string[]
 ): CliCommandDescriptor {
-  // Preserve schema order for flags while ordering positional slots as declared.
   const positionalEntries = positionals.map((key) => [key, params[key]!] as const);
   let positionalIndex = 0;
   const entries = Object.entries(params).map((entry) =>
@@ -178,11 +176,6 @@ function positionalUsageToken(key: string, param: CliParam): string {
   return optional ? `[${name}]` : name;
 }
 
-/**
- * One help-row summary: the author's description followed by a bracketed list of
- * constraints. Implicit defaults (`false` booleans, `[]` repeatables) are omitted, and
- * `one of:` comes last so its comma-separated choices can't blur into other entries.
- */
 function describeParam(param: CliParam): string {
   const metadata: string[] = [];
   if (param.type === "number") {
