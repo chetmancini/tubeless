@@ -1,5 +1,12 @@
 import { expect, it } from "vitest";
-import { openaiToolOutputs } from "./openai-tool-outputs.js";
+import type { AgentModelRequest } from "./model-types.js";
+import { boundedToolOutputs } from "./provider-tool-outputs.js";
+
+const toolOutputs = (outcomes: AgentModelRequest["outcomes"], availableBytes: number) =>
+  boundedToolOutputs("Test", outcomes, availableBytes, (outcome, output) => ({
+    id: outcome.id,
+    output,
+  }));
 
 it("keeps a complete batch unchanged when it fits, including recoverable errors", () => {
   const outcomes = [
@@ -11,8 +18,8 @@ it("keeps a complete batch unchanged when it fits, including recoverable errors"
       error: { code: "ENOENT", message: "Missing" },
     },
   ];
-  const outputs = openaiToolOutputs(outcomes, 1_000_000);
-  expect(outputs.map((item) => [item.call_id, JSON.parse(item.output)])).toEqual([
+  const outputs = toolOutputs(outcomes, 1_000_000);
+  expect(outputs.map((item) => [item.id, JSON.parse(item.output)])).toEqual([
     ["read", { ok: true, value: { content: "exact text" } }],
     ["missing", { ok: false, error: { code: "ENOENT", message: "Missing" } }],
   ]);
@@ -32,13 +39,13 @@ it.each([1200, 1_000_000])(
       },
       { id: "small", tool: "write", ok: true as const, value: "done" },
     ];
-    const outputs = openaiToolOutputs(outcomes, budget);
+    const outputs = toolOutputs(outcomes, budget);
     const history = [{ role: "user", content: "Task" }];
     const addedBytes =
       Buffer.byteLength(JSON.stringify([...history, ...outputs])) -
       Buffer.byteLength(JSON.stringify(history));
     expect(addedBytes).toBeLessThanOrEqual(Math.min(budget, 262_144));
-    expect(outputs.map((item) => item.call_id)).toEqual(["large", "error", "small"]);
+    expect(outputs.map((item) => item.id)).toEqual(["large", "error", "small"]);
     for (const index of [0, 1]) {
       const output = JSON.parse(outputs[index]!.output);
       const outcome = outcomes[index]!;
@@ -60,9 +67,9 @@ it.each([1200, 1_000_000])(
 );
 
 it("fails explicitly when even one result marker cannot fit", () => {
-  expect(() =>
-    openaiToolOutputs([{ id: "read", tool: "read", ok: true, value: "text" }], 1)
-  ).toThrow("no room for tool output metadata");
+  expect(() => toolOutputs([{ id: "read", tool: "read", ok: true, value: "text" }], 1)).toThrow(
+    "no room for tool output metadata"
+  );
 });
 
 it.each([false, true])(
@@ -77,7 +84,7 @@ it.each([false, true])(
         value: smallResult ? "done" : "y".repeat(300_000),
       },
     ];
-    const minimum = openaiToolOutputs(outcomes, 1_000_000).map((item) => {
+    const minimum = toolOutputs(outcomes, 1_000_000).map((item) => {
       const output = JSON.parse(item.output);
       return output.truncated
         ? { ...item, output: JSON.stringify({ ...output, preview: "" }) }
@@ -87,9 +94,7 @@ it.each([false, true])(
     const budget =
       Buffer.byteLength(JSON.stringify([...history, ...minimum])) -
       Buffer.byteLength(JSON.stringify(history));
-    expect(openaiToolOutputs(outcomes, budget)).toEqual(minimum);
-    expect(() => openaiToolOutputs(outcomes, budget - 1)).toThrow(
-      "no room for tool output metadata"
-    );
+    expect(toolOutputs(outcomes, budget)).toEqual(minimum);
+    expect(() => toolOutputs(outcomes, budget - 1)).toThrow("no room for tool output metadata");
   }
 );

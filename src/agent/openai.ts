@@ -3,7 +3,7 @@ import { openaiRequest } from "./openai-http.js";
 import { MAX_REQUEST_BYTES, providerBaseUrl } from "./provider-http.js";
 import { record } from "./provider-schema.js";
 import { openaiDecision, outputItems, parameter } from "./openai-protocol.js";
-import { openaiToolOutputs } from "./openai-tool-outputs.js";
+import { boundedToolOutputs } from "./provider-tool-outputs.js";
 import { throwIfAborted } from "../utilities/abort.js";
 
 /** Responses transport settings; credentials are resolved only when a decision executes. */
@@ -91,7 +91,14 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
       tool_choice: "required",
       parallel_tool_calls: true,
     };
-    const completedInput = [...input, ...openaiToolOutputs(request.outcomes, MAX_REQUEST_BYTES)];
+    const completedInput = [
+      ...input,
+      ...boundedToolOutputs("OpenAI", request.outcomes, MAX_REQUEST_BYTES, (outcome, output) => ({
+        type: "function_call_output" as const,
+        call_id: outcome.id,
+        output,
+      })),
+    ];
     const shouldCompact =
       compactAfterBytes !== null &&
       (request.outcomes.length > 0 || (newPrompt && request.conversation !== null)) &&
@@ -107,9 +114,15 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
         ? completedInput
         : [
             ...input,
-            ...openaiToolOutputs(
+            ...boundedToolOutputs(
+              "OpenAI",
               request.outcomes,
-              MAX_REQUEST_BYTES - Buffer.byteLength(JSON.stringify(nextRequest))
+              MAX_REQUEST_BYTES - Buffer.byteLength(JSON.stringify(nextRequest)),
+              (outcome, output) => ({
+                type: "function_call_output" as const,
+                call_id: outcome.id,
+                output,
+              })
             ),
           ];
     if (shouldCompact) {
