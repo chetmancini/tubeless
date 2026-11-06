@@ -74,6 +74,7 @@ const CLOUD_HOST_OPTION = {
 export const WORKBENCH_SPECS = {
   list: {
     name: "list",
+    description: "List pipelines or commands in the project file",
     usage: `Usage: tubeless list [options]
 
 List the pipelines and commands registered in a Tubeless project file, one per line
@@ -86,6 +87,7 @@ with its display name and description.
   },
   validate: {
     name: "validate",
+    description: "Check a YAML or JSON pipeline document without loading handlers",
     usage: `Usage: tubeless validate [--json] <document.yaml|document.yml|document.json>
 
 Check pipeline document structure and metadata without importing handlers.
@@ -100,6 +102,7 @@ YAML uses Bun's parser; duplicate mapping keys may be overwritten during parsing
   },
   inspect: {
     name: "inspect",
+    description: "Show pipeline identity and the default structural plan",
     usage: `Usage: tubeless inspect [options] <pipeline-or-command-file>
 
 Show a registered id or exported pipeline's identity plus the default structural plan.
@@ -113,6 +116,7 @@ Show a registered id or exported pipeline's identity plus the default structural
   },
   plan: {
     name: "plan",
+    description: "Preview step selection without executing the pipeline",
     usage: `Usage: tubeless plan [options] <pipeline-or-command-file>
 
 Preview a registered or exported pipeline without running steps or requiring domain options.
@@ -143,6 +147,7 @@ Preview a registered or exported pipeline without running steps or requiring dom
   },
   graph: {
     name: "graph",
+    description: "Generate Mermaid flowchart source",
     usage: `Usage: tubeless graph [options] <pipeline-or-command-file>
 
 Generate Mermaid flowchart source from a registered or exported pipeline or command.
@@ -168,6 +173,7 @@ Generate Mermaid flowchart source from a registered or exported pipeline or comm
   },
   run: {
     name: "run",
+    description: "Execute a project pipeline or a pipeline or command file",
     usage: `Usage: tubeless run [options] <pipeline-id-or-file> [-- <command-args...>]
 
 Execute a project pipeline or a directly exported pipeline or command using its validated CLI contract.
@@ -195,6 +201,7 @@ Schema-backed pipelines infer arguments; use definePipelineCommand for custom in
   },
   history: {
     name: "history",
+    description: "Show recorded runs from the local SQLite store",
     usage: `Usage: tubeless history [options] [run-id]
 
 Show recorded pipeline runs from SQLite or an NDJSON trace.
@@ -225,6 +232,7 @@ Run details include recorded agent turns, tool calls, and child agents.
   },
   upgrade: {
     name: "upgrade",
+    description: "Rewrite an older SQLite run store before writing to it",
     usage: `Usage: tubeless upgrade [options]
 
 Rewrite an older SQLite run store to the current schema.
@@ -241,6 +249,7 @@ codes to TUBELESS_. Version 3 adds a column. Run this before an unattended
   },
   agent: {
     name: "agent",
+    description: "Prompt a workspace agent with a live execution DAG",
     usage: `Usage: tubeless agent [options]
 
 Prompt a workspace agent, watch its pipeline execution, then prompt again.
@@ -317,6 +326,7 @@ OpenAI needs an exported OPENAI_API_KEY or --env-file. Workspace tools run with 
   },
   init: {
     name: "init",
+    description: "Scaffold a deployment (cloudflare)",
     usage: `Usage: tubeless init <target> [options]
 
 Scaffold deployment files for a Tubeless project. Existing files are never overwritten.
@@ -331,6 +341,7 @@ Targets:
   },
   auth: {
     name: "auth",
+    description: "Sign in to Tubeless Cloud",
     usage: `Usage: tubeless auth <login|status|logout> [options]
 
 Sign in to Tubeless Cloud with an expiring first-party session.
@@ -349,6 +360,7 @@ Sign in to Tubeless Cloud with an expiring first-party session.
   },
   cloud: {
     name: "cloud",
+    description: "List and run deployed Cloud pipelines",
     usage: `Usage: tubeless cloud <list|run|logs> [options]
 
   list [--json]
@@ -427,6 +439,7 @@ Set up and load pipelines in the Cloud dashboard.
   },
   ui: {
     name: "ui",
+    description: "Open the optional local run studio",
     usage: `Usage: tubeless ui [options] [project-file]
 
 Serve the local pipeline studio from an append-only SQLite run store or a
@@ -479,6 +492,7 @@ pipeline or definePipelineCommand modules directly, and only with a writable SQL
   },
   completion: {
     name: "completion",
+    description: "Print a shell completion script (bash, zsh, fish)",
     usage: `Usage: tubeless completion <bash|zsh|fish>
 
 Print a shell completion script. It completes commands, flags, project
@@ -496,4 +510,6 @@ Add the same line to ~/.bashrc, ~/.zshrc (after compinit), or
     positional: COMPLETION_SHELLS,
     options: {},
   },
-} as const satisfies Readonly<Record<string, WorkbenchCommandSpec>>;
+} as const satisfies Readonly<
+  Record<string, WorkbenchCommandSpec & { readonly description: string }>
+>;

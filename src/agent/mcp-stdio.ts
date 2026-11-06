@@ -4,7 +4,7 @@ import {
   parseMessage,
   type McpTransport,
   type McpTransportEvents,
-} from "./mcp-session.js";
+} from "./mcp-protocol.js";
 
 /** A local server process speaking JSON-RPC over stdin and stdout. */
 export interface McpStdioOptions {

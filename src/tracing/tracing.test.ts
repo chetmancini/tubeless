@@ -695,16 +695,17 @@ describe("pipeline tracing", () => {
   });
 
   it("does not wait for a slow onExporterError before completing the run", async () => {
+    vi.useFakeTimers();
     const { step } = createSteps();
     const pipeline = definePipeline({
       id: "trace-callback-slow",
       steps: [step("work", { run: () => "ok" })],
       finalize: () => "ok",
     });
-    let release!: () => void;
-    const hung = new Promise<void>((resolve) => {
-      release = resolve;
-    });
+    const callbackStarted = defer();
+    const callbackGate = defer();
+    let callbackCompleted = false;
+    let runStatus: string | undefined;
 
     const runPromise = pipeline.run({}, undefined, {
       ...defaultPipelineContext(),
@@ -712,19 +713,29 @@ describe("pipeline tracing", () => {
       correlationId: "callback-slow",
       tracing: {
         exporter: { export: () => Promise.reject(new Error("collector unavailable")) },
-        onExporterError: () => hung,
+        onExporterError: async () => {
+          callbackStarted.resolve();
+          await callbackGate.promise;
+          callbackCompleted = true;
+        },
       },
     });
-    const timeout = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error("run waited on onExporterError")), 100);
+    void runPromise.then((result) => {
+      runStatus = result.status;
     });
 
     try {
-      const result = await Promise.race([runPromise, timeout]);
-      expect(result.status).toBe("completed");
+      await callbackStarted.promise;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(callbackCompleted).toBe(false);
+      expect(runStatus).toBe("completed");
     } finally {
-      release();
-      await runPromise;
+      callbackGate.resolve();
+      try {
+        await runPromise;
+      } finally {
+        vi.useRealTimers();
+      }
     }
   });
 

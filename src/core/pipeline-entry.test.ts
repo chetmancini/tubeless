@@ -170,6 +170,7 @@ describe("module runtime boundaries", () => {
       "run-store/agent-history.js",
       "run-store/definition-projection.js",
       "run-store/run-store-reader.js",
+      "run-store/run-store-query.js",
       "run-store/run-history.js",
       "run-store/run-store-schema.js",
       "studio/server/api.js",

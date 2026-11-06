@@ -85,7 +85,7 @@ export function snapshotJsonMetadata(value: unknown, path: string): ArtifactJson
 }
 
 const text = wireString({ maxLength: 4096 });
-const shape = wireObject({
+const fields = {
   id: wireOptional(text),
   uri: wireOptional(text),
   mediaType: wireOptional(text),
@@ -105,7 +105,9 @@ const shape = wireObject({
       }
     )
   ),
-});
+};
+const shape = wireObject(fields);
+const allowedFields = new Set(Object.keys(fields));
 
 export const artifactMetadataSchema = wireCustom<ArtifactMetadata>(
   { ...shape.jsonSchema, anyOf: [{ required: ["id"] }, { required: ["uri"] }] },
@@ -113,17 +115,7 @@ export const artifactMetadataSchema = wireCustom<ArtifactMetadata>(
     const snapshot = snapshotJsonMetadata(value, path);
     const decoded = shape.decode(snapshot, path);
     if (!decoded.id && !decoded.uri) throw new Error(`${path} requires id or uri`);
-    const allowed = [
-      "id",
-      "uri",
-      "mediaType",
-      "checksum",
-      "version",
-      "byteSize",
-      "schemaVersion",
-      "metadata",
-    ];
-    if (Object.keys(snapshot!).some((key) => !allowed.includes(key))) {
+    if (Object.keys(snapshot!).some((key) => !allowedFields.has(key))) {
       throw new Error(`${path} has unknown fields; use metadata for application fields`);
     }
     return decoded.id ? { ...decoded, id: decoded.id } : { ...decoded, uri: decoded.uri! };
