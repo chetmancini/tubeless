@@ -231,10 +231,11 @@ Run `make check` after changes; it builds before checking these boundaries.
   selected pipeline files and remain outside public runtime entrypoints.
 - `workbench/workbench-shared.ts` owns terminal-safe text formatting shared by
   local history and Cloud human output. Machine JSON retains original fields.
-- `workbench/workbench-run.ts` owns the `run` command's arguments and trace destinations.
-- `workbench/workbench-command-execution.ts` executes command arguments or validated
-  values and translates failures into terminal output and exit codes. Both `run`
-  and Studio use it; it does not open stores or trace files.
+- `workbench/workbench-run.ts` owns the `run` command's arguments, trace destinations,
+  and command execution. It translates failures into terminal output and exit codes
+  through the shared hosted-command operation; it does not open stores or trace files
+  until after command parsing succeeds. Studio executes validated values through
+  `hosting/hosting-commands.ts` directly.
 - `workbench/workbench-ui.ts` loads and validates registrations, opens the chosen
   store, starts the HTTP server and closes these resources.
 - `workbench/workbench-studio-launcher.ts` owns the collection of admitted launches,

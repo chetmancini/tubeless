@@ -279,7 +279,6 @@ describe("module runtime boundaries", () => {
     const workbenchInternals = new Set([
       "workbench/workbench-studio-launcher.js",
       "workbench/workbench-launch-session.js",
-      "workbench/workbench-command-execution.js",
       "workbench/workbench-shared.js",
       "workbench/pipeline-module.js",
     ]);

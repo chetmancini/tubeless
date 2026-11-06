@@ -8,7 +8,7 @@ import type {
 } from "../studio/shared/protocol.js";
 import type { PipelineTraceExporter } from "../tracing/tracing.js";
 import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
-import { executePipelineCommandValues } from "./workbench-command-execution.js";
+import { executeHostedCommand } from "../hosting/hosting-commands.js";
 import { WorkbenchLaunchSession } from "./workbench-launch-session.js";
 import { commandContext, errorMessage, type WorkbenchCliIo } from "./workbench-shared.js";
 
@@ -76,7 +76,7 @@ export class WorkbenchStudioLauncher implements PipelineRunStudioLauncher {
     if (parsed.kind === "help") {
       return { accepted: false, errors: ["Help is not a launchable value set."] };
     }
-    const execution = executePipelineCommandValues(
+    const execution = executeHostedCommand(
       registration.command,
       parsed.values,
       registration.commandIo,
