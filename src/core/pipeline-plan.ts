@@ -347,11 +347,10 @@ export function buildPipelinePlan<
     const selectionReasons = selectionReasonsByStepId.get(step.id)!;
     const selected = selectionReasons.some(selectsStep);
     const graph = compiledStepGraph(compiled, step);
-    const planned = stepToPlanStep(step, selected, undefined, selectionReasons, graph);
     const disposition = decideStepDisposition({
       dryRun,
       graph,
-      planned,
+      selected,
       reportsByStepId: plannedReportsByStepId,
       step,
     });

@@ -1,10 +1,6 @@
 import type { CompiledStepGraph } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
-import type {
-  PipelinePlanStep,
-  PipelineStepReport,
-  PipelineStepSkipReason,
-} from "./pipeline-types.js";
+import type { PipelineStepReport, PipelineStepSkipReason } from "./pipeline-types.js";
 
 /** Required dependencies are met when completed, or intentionally policy-skipped. */
 function isRequiredDependencyMet(report: PipelineStepReport | undefined): boolean {
@@ -16,7 +12,7 @@ function isRequiredDependencyMet(report: PipelineStepReport | undefined): boolea
 type StepDispositionInput<TOptions extends object> = {
   dryRun: boolean;
   graph: CompiledStepGraph<TOptions>;
-  planned: PipelinePlanStep;
+  selected: boolean;
   reportsByStepId: ReadonlyMap<string, PipelineStepReport>;
   step: AnyStep<TOptions>;
 };
@@ -39,9 +35,9 @@ type StepDisposition =
 export function decideStepDisposition<TOptions extends object>(
   input: StepDispositionInput<TOptions>
 ): StepDisposition {
-  const { dryRun, graph, planned, reportsByStepId, step } = input;
+  const { dryRun, graph, selected, reportsByStepId, step } = input;
 
-  if (!planned.selected) {
+  if (!selected) {
     return { kind: "skip", reason: "filtered" };
   }
 

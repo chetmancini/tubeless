@@ -251,7 +251,7 @@ export async function executePlannedRun<
     const disposition = decideStepDisposition({
       dryRun,
       graph,
-      planned: plannedStep,
+      selected: plannedStep.selected,
       reportsByStepId: state.reportsByStepId,
       step,
     });

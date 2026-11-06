@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decideStepDisposition } from "./pipeline-disposition.js";
 import { liveStepGraph } from "./pipeline-graph.js";
-import { stepToPlanStep } from "./pipeline-plan.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import type { PipelineStepReport } from "./pipeline-types.js";
 
@@ -54,7 +53,7 @@ function disposition(
   return decideStepDisposition({
     dryRun: options.dryRun ?? false,
     graph,
-    planned: stepToPlanStep(step, selected, undefined, undefined, graph),
+    selected,
     reportsByStepId: new Map(options.reports),
     step,
   });
