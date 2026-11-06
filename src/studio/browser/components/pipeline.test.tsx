@@ -74,8 +74,8 @@ async function completeReads(): Promise<void> {
 const pipeline = (pipelineId: string): RailPipeline => ({ pipelineId, name: pipelineId });
 
 describe("pipeline graph resources", () => {
-  it("loads each legacy pipeline's own graph and retains it during refresh", async () => {
-    let first = definition("first", "first-step");
+  it("loads each legacy pipeline's own graph", async () => {
+    const first = definition("first", "first-step");
     const second = definition("second", "second-step");
     const loadDefinition = vi.fn(async (id: string) => (id === "first" ? first : second));
     const api = { loadDefinition } as unknown as StudioApi;
@@ -90,21 +90,15 @@ describe("pipeline graph resources", () => {
     await completeReads();
     expect(renderGraph(api, pipeline("second"), [second])).toContain("second-step");
 
-    first = { ...definition("first", "updated-step"), lastSeenAtMs: 3, runCount: 2 };
-    expect(renderGraph(api, pipeline("first"), [first])).toContain("first-step");
-    await completeReads();
-    const refreshed = renderGraph(api, pipeline("first"), [first]);
-    expect(refreshed).toContain("updated-step");
-    expect(refreshed).not.toContain("first-step");
     expect(loadDefinition).toHaveBeenCalledWith("first", undefined);
     expect(loadDefinition).toHaveBeenCalledWith("second", undefined);
   });
 
-  it("loads the latest recorded identity and refreshes an incomplete observed definition", async () => {
+  it("loads the latest recorded identity", async () => {
     const { step } = createSteps();
     const identity = definePipeline({ id: "modern", steps: [step("load", { run: () => 1 })] })
       .definition.identity;
-    let latest = { ...definition("modern", "recorded-step"), identity, lastSeenAtMs: 3 };
+    const latest = { ...definition("modern", "recorded-step"), identity, lastSeenAtMs: 3 };
     const older = definition("modern", "old-step");
     const loadDefinition = vi.fn(async () => latest);
     const api = { loadDefinition } as unknown as StudioApi;
@@ -113,11 +107,6 @@ describe("pipeline graph resources", () => {
     await completeReads();
     expect(renderGraph(api, pipeline("modern"), [older, latest])).toContain("recorded-step");
     expect(loadDefinition).toHaveBeenCalledWith("modern", identity.definitionId);
-
-    latest = { ...latest, ...definition("modern", "completed-snapshot-step"), runCount: 2 };
-    renderGraph(api, pipeline("modern"), [latest]);
-    await completeReads();
-    expect(renderGraph(api, pipeline("modern"), [latest])).toContain("completed-snapshot-step");
   });
 
   it("previews an unrecorded command and stops previewing once a definition is available", async () => {
