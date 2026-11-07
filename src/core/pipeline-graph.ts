@@ -10,30 +10,22 @@ import {
   STEP_ORCHESTRATION,
 } from "./pipeline-step-metadata.js";
 
-export interface CompiledStepGraph<TOptions extends object = object> {
-  readonly dependsOn: readonly AnyStep<TOptions>[];
-  readonly optionalDependsOn: readonly AnyStep<TOptions>[];
-  readonly skipAfterFailureOf: readonly AnyStep<TOptions>[];
+/** Frozen step snapshot whose normalized dependency arrays reference compiled steps. */
+export interface CompiledStep<TOptions extends object = object> extends AnyStep<TOptions> {
+  readonly dependsOn: readonly CompiledStep<TOptions>[];
+  readonly optionalDependsOn: readonly CompiledStep<TOptions>[];
+  readonly skipAfterFailureOf: readonly CompiledStep<TOptions>[];
 }
 
-export type CompiledStep<TOptions extends object = object> = Omit<
-  AnyStep<TOptions>,
+type CompiledStepEdges<TOptions extends object> = Pick<
+  CompiledStep<TOptions>,
   "dependsOn" | "optionalDependsOn" | "skipAfterFailureOf"
 >;
 
-export function liveStepGraph<TOptions extends object>(
-  step: AnyStep<TOptions>
-): CompiledStepGraph<TOptions> {
-  return {
-    dependsOn: step.dependsOn ?? [],
-    optionalDependsOn: step.optionalDependsOn ?? [],
-    skipAfterFailureOf: step.skipAfterFailureOf ?? [],
-  };
-}
-
 function compileStep<TOptions extends object>(
   step: AnyStep<TOptions>,
-  cache: CompiledStepCache<TOptions> | undefined
+  cache: CompiledStepCache<TOptions> | undefined,
+  edges: CompiledStepEdges<TOptions>
 ): CompiledStep<TOptions> {
   const nestedPipeline = step[STEP_NESTED_PIPELINE];
   const remote = step[STEP_REMOTE];
@@ -48,6 +40,7 @@ function compileStep<TOptions extends object>(
   const compiled = {
     id: step.id,
     run: step.run.bind(step),
+    ...edges,
   };
   if (nestedPipeline !== undefined) {
     Object.assign(compiled, {
@@ -77,47 +70,16 @@ function compileStep<TOptions extends object>(
   return Object.freeze(compiled);
 }
 
-function snapshotCompiledStepGraph<TOptions extends object>(
-  step: AnyStep<TOptions>,
-  compiledByAuthorStep: ReadonlyMap<AnyStep<TOptions>, CompiledStep<TOptions>>
-): CompiledStepGraph<TOptions> {
-  const compileDependencies = (
-    dependencies: readonly AnyStep<TOptions>[] | undefined
-  ): readonly CompiledStep<TOptions>[] =>
-    Object.freeze(
-      (dependencies ?? []).map((dependency) => {
-        const compiled = compiledByAuthorStep.get(dependency);
-        if (compiled === undefined) {
-          throw new Error(`Compiled pipeline graph is missing dependency ${dependency.id}`);
-        }
-        return compiled;
-      })
-    );
-  return Object.freeze({
-    dependsOn: compileDependencies(step.dependsOn),
-    optionalDependsOn: compileDependencies(step.optionalDependsOn),
-    skipAfterFailureOf: compileDependencies(step.skipAfterFailureOf),
-  });
-}
-
-export function compiledStepGraph<TOptions extends object>(
-  compiled: Pick<{ stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph> }, "stepGraph">,
-  step: AnyStep<TOptions>
-): CompiledStepGraph<TOptions> {
-  const graph = compiled.stepGraph.get(step);
-  if (graph === undefined) {
-    throw new Error(`Compiled pipeline graph is missing step ${step.id}`);
-  }
-  // SAFETY: compile stores each descriptor as the map key.
-  return graph as CompiledStepGraph<TOptions>;
-}
-
+/** Normalized edges of an author or compiled step, deduplicated across policies. */
 export function stepEdges<TOptions extends object>(
-  step: AnyStep<TOptions>,
-  graph: CompiledStepGraph<TOptions> = liveStepGraph(step)
+  step: AnyStep<TOptions>
 ): readonly AnyStep<TOptions>[] {
   return [
-    ...new Set([...graph.dependsOn, ...graph.optionalDependsOn, ...graph.skipAfterFailureOf]),
+    ...new Set([
+      ...(step.dependsOn ?? []),
+      ...(step.optionalDependsOn ?? []),
+      ...(step.skipAfterFailureOf ?? []),
+    ]),
   ];
 }
 
@@ -174,23 +136,41 @@ export function topologicalSort<TOptions extends object>(
 export interface CompiledPipelineGraph<TOptions extends object> {
   readonly compiledByAuthorStep: ReadonlyMap<AnyStep<TOptions>, CompiledStep<TOptions>>;
   readonly orderedSteps: readonly CompiledStep<TOptions>[];
-  readonly stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph>;
 }
 
+/**
+ * Snapshot topologically ordered author steps. Each step compiles after its
+ * dependencies, so its frozen edge arrays reference their compiled snapshots.
+ */
 export function compilePipelineGraph<TOptions extends object>(input: {
   orderedSteps: readonly AnyStep<TOptions>[];
   compiledCaches?: ReadonlyMap<AnyStep, CompiledStepCache<TOptions>>;
 }): CompiledPipelineGraph<TOptions> {
   const { orderedSteps: orderedAuthorSteps, compiledCaches = new Map() } = input;
-  const compiledByAuthorStep = new Map<AnyStep<TOptions>, CompiledStep<TOptions>>(
-    orderedAuthorSteps.map((step) => [step, compileStep(step, compiledCaches.get(step))])
-  );
-  const orderedSteps = orderedAuthorSteps.map((step) => compiledByAuthorStep.get(step)!);
-  const stepGraph = new Map<AnyStep, CompiledStepGraph>(
-    orderedAuthorSteps.map((step) => {
-      const compiled = compiledByAuthorStep.get(step)!;
-      return [compiled, snapshotCompiledStepGraph(step, compiledByAuthorStep)];
-    })
-  );
-  return { compiledByAuthorStep, orderedSteps, stepGraph };
+  const compiledByAuthorStep = new Map<AnyStep<TOptions>, CompiledStep<TOptions>>();
+  const compileDependencies = (
+    step: AnyStep<TOptions>,
+    dependencies: readonly AnyStep<TOptions>[] | undefined
+  ): readonly CompiledStep<TOptions>[] =>
+    Object.freeze(
+      (dependencies ?? []).map((dependency) => {
+        const compiled = compiledByAuthorStep.get(dependency);
+        if (compiled === undefined) {
+          throw new Error(
+            `Compiled pipeline graph requires dependency ${dependency.id} before step ${step.id}`
+          );
+        }
+        return compiled;
+      })
+    );
+  const orderedSteps = orderedAuthorSteps.map((step) => {
+    const compiled = compileStep(step, compiledCaches.get(step), {
+      dependsOn: compileDependencies(step, step.dependsOn),
+      optionalDependsOn: compileDependencies(step, step.optionalDependsOn),
+      skipAfterFailureOf: compileDependencies(step, step.skipAfterFailureOf),
+    });
+    compiledByAuthorStep.set(step, compiled);
+    return compiled;
+  });
+  return { compiledByAuthorStep, orderedSteps };
 }

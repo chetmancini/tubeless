@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decideStepDisposition } from "./pipeline-disposition.js";
-import { liveStepGraph } from "./pipeline-graph.js";
+import { compilePipelineGraph, stepEdges } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import type { PipelineStepReport } from "./pipeline-types.js";
 
@@ -48,14 +48,13 @@ function disposition(
     selected?: boolean;
   } = {}
 ) {
-  const graph = liveStepGraph(step);
-  const selected = options.selected ?? true;
+  // Test dependencies are leaves, so they precede the step in topological order.
+  const graph = compilePipelineGraph({ orderedSteps: [...stepEdges(step), step] });
   return decideStepDisposition({
     dryRun: options.dryRun ?? false,
-    graph,
-    selected,
+    selected: options.selected ?? true,
     reportsByStepId: new Map(options.reports),
-    step,
+    step: graph.compiledByAuthorStep.get(step)!,
   });
 }
 

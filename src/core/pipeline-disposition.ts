@@ -1,5 +1,4 @@
-import type { CompiledStepGraph } from "./pipeline-graph.js";
-import type { AnyStep } from "./pipeline-steps.js";
+import type { CompiledStep } from "./pipeline-graph.js";
 import type { PipelineStepReport, PipelineStepSkipReason } from "./pipeline-types.js";
 
 /** Required dependencies are met when completed, or intentionally policy-skipped. */
@@ -11,10 +10,9 @@ function isRequiredDependencyMet(report: PipelineStepReport | undefined): boolea
 
 type StepDispositionInput<TOptions extends object> = {
   dryRun: boolean;
-  graph: CompiledStepGraph<TOptions>;
   selected: boolean;
   reportsByStepId: ReadonlyMap<string, PipelineStepReport>;
-  step: AnyStep<TOptions>;
+  step: CompiledStep<TOptions>;
 };
 
 type StepDisposition =
@@ -35,13 +33,13 @@ type StepDisposition =
 export function decideStepDisposition<TOptions extends object>(
   input: StepDispositionInput<TOptions>
 ): StepDisposition {
-  const { dryRun, graph, selected, reportsByStepId, step } = input;
+  const { dryRun, selected, reportsByStepId, step } = input;
 
   if (!selected) {
     return { kind: "skip", reason: "filtered" };
   }
 
-  const unsuccessfulAncestor = graph.skipAfterFailureOf.find((dep) => {
+  const unsuccessfulAncestor = step.skipAfterFailureOf.find((dep) => {
     const status = reportsByStepId.get(dep.id)?.status;
     return status === "failed" || status === "cancelled";
   });
@@ -53,7 +51,7 @@ export function decideStepDisposition<TOptions extends object>(
     };
   }
 
-  const unmetDependency = graph.dependsOn.find(
+  const unmetDependency = step.dependsOn.find(
     (dep) => !isRequiredDependencyMet(reportsByStepId.get(dep.id))
   );
   if (unmetDependency) {

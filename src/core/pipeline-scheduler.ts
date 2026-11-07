@@ -1,25 +1,25 @@
-import { compiledStepGraph, stepEdges, type CompiledStepGraph } from "./pipeline-graph.js";
+import { stepEdges } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 
-/** Schedule the compiled DAG; execution owns step outcomes and the stop policy. */
-export async function schedulePipelineSteps<TOptions extends object>(input: {
-  orderedSteps: readonly AnyStep<TOptions>[];
-  stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph>;
+/**
+ * Schedule the compiled DAG; execution owns step outcomes and the stop policy.
+ * Edges must reference the same step objects as `orderedSteps`.
+ */
+export async function schedulePipelineSteps<TStep extends AnyStep>(input: {
+  orderedSteps: readonly TStep[];
   maxConcurrency: number;
-  executeOneStep(step: AnyStep<TOptions>): Promise<void>;
+  executeOneStep(step: TStep): Promise<void>;
   shouldStop(): boolean;
-}): Promise<readonly AnyStep<TOptions>[]> {
+}): Promise<readonly TStep[]> {
   const { orderedSteps, executeOneStep, maxConcurrency, shouldStop } = input;
-  const indexByStep = new Map(orderedSteps.map((step, index) => [step, index]));
+  const indexByStep = new Map<AnyStep, number>(orderedSteps.map((step, index) => [step, index]));
   let nextReadyIndex = 0;
   const pending = new Set(orderedSteps);
-  const ready = new Set<AnyStep<TOptions>>();
-  const running = new Map<AnyStep<TOptions>, Promise<void>>();
-  const terminal = new Set<AnyStep<TOptions>>();
-  const prerequisites = new Map(
-    orderedSteps.map((step) => [step, stepEdges(step, compiledStepGraph(input, step))])
-  );
-  const dependents = new Map<AnyStep<TOptions>, AnyStep<TOptions>[]>();
+  const ready = new Set<TStep>();
+  const running = new Map<TStep, Promise<void>>();
+  const terminal = new Set<AnyStep>();
+  const prerequisites = new Map(orderedSteps.map((step) => [step, stepEdges(step)]));
+  const dependents = new Map<AnyStep, TStep[]>();
   for (const [step, edges] of prerequisites) {
     if (edges.length === 0) ready.add(step);
     for (const prerequisite of edges) {

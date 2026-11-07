@@ -6,7 +6,7 @@ import type { CompiledPipeline } from "./pipeline-compiler.js";
 import type { StepsOptions } from "./pipeline-definition.js";
 import { decideStepDisposition } from "./pipeline-disposition.js";
 import { schedulePipelineSteps } from "./pipeline-scheduler.js";
-import { compiledStepGraph } from "./pipeline-graph.js";
+import type { CompiledStep } from "./pipeline-graph.js";
 import { planStepById, stepToPlanStep } from "./pipeline-plan.js";
 import { PipelineRunState, type PipelineStepAttempt } from "./pipeline-run-state.js";
 import type { AnyStep } from "./pipeline-steps.js";
@@ -135,16 +135,17 @@ export async function executePlannedRun<
   // `input.plan.steps` is already topologically ordered. Rehydrate from the original step
   // objects so callers still get the typed handlers rather than plan metadata.
   // SAFETY: every planned step id originates from `compiled.orderedSteps`, so the
-  // map lookup always finds the matching `AnyStep<TOptions>`.
-  const orderedSteps = input.plan.steps.map((step) => stepsById.get(step.id) as AnyStep<TOptions>);
-  const plannedStepFor = (step: AnyStep<TOptions>): PipelinePlanStep =>
-    plannedSteps.get(step.id) ??
-    stepToPlanStep(step, true, undefined, undefined, compiledStepGraph(compiled, step));
+  // map lookup always finds the matching `CompiledStep<TOptions>`.
+  const orderedSteps = input.plan.steps.map(
+    (step) => stepsById.get(step.id) as CompiledStep<TOptions>
+  );
+  const plannedStepFor = (step: CompiledStep<TOptions>): PipelinePlanStep =>
+    plannedSteps.get(step.id) ?? stepToPlanStep(step, true);
 
   let stopError: PipelineError | undefined;
   let externalCancellationError: PipelineError | undefined;
 
-  const recordUnstartedStep = (step: AnyStep<TOptions>, error: PipelineError): void => {
+  const recordUnstartedStep = (step: CompiledStep<TOptions>, error: PipelineError): void => {
     const plannedStep = plannedStepFor(step);
     // Only the external signal can override a selected step's planned skip.
     if (plannedStep.skipReason && (!plannedStep.selected || error !== externalCancellationError)) {
@@ -181,7 +182,7 @@ export async function executePlannedRun<
     }
   };
 
-  const cancelBeforeStepStart = (step: AnyStep<TOptions>): boolean => {
+  const cancelBeforeStepStart = (step: CompiledStep<TOptions>): boolean => {
     const pipelineError = recordExternalCancellation(step.id);
     if (!pipelineError) return false;
     stopError ??= pipelineError;
@@ -227,7 +228,7 @@ export async function executePlannedRun<
     });
   };
 
-  const executeOneStep = async (step: AnyStep<TOptions>): Promise<void> => {
+  const executeOneStep = async (step: CompiledStep<TOptions>): Promise<void> => {
     const plannedStep = plannedStepFor(step);
     if (cancelBeforeStepStart(step)) return;
 
@@ -247,10 +248,8 @@ export async function executePlannedRun<
       return;
     }
 
-    const graph = compiledStepGraph(compiled, step);
     const disposition = decideStepDisposition({
       dryRun,
-      graph,
       selected: plannedStep.selected,
       reportsByStepId: state.reportsByStepId,
       step,
@@ -261,8 +260,8 @@ export async function executePlannedRun<
     }
 
     const inputEntries: Array<[string, unknown]> = [];
-    for (const dep of graph.dependsOn) inputEntries.push([dep.id, state.outputs.get(dep.id)]);
-    for (const dep of graph.optionalDependsOn) {
+    for (const dep of step.dependsOn) inputEntries.push([dep.id, state.outputs.get(dep.id)]);
+    for (const dep of step.optionalDependsOn) {
       if (state.outputs.has(dep.id)) inputEntries.push([dep.id, state.outputs.get(dep.id)]);
     }
     const stepInputs = Object.fromEntries(inputEntries);
@@ -314,7 +313,6 @@ export async function executePlannedRun<
 
   const unstarted = await schedulePipelineSteps({
     orderedSteps,
-    stepGraph: compiled.stepGraph,
     maxConcurrency,
     executeOneStep,
     shouldStop: () => stopError !== undefined || runtime.signal?.aborted === true,

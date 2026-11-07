@@ -4,7 +4,7 @@ import type { CompiledPipeline } from "./pipeline-compiler.js";
 import type { StepIds, TargetIds } from "./pipeline-definition.js";
 import { decideStepDisposition } from "./pipeline-disposition.js";
 import { pipelineDiagnostic } from "./pipeline-errors.js";
-import { compiledStepGraph, liveStepGraph, type CompiledStepGraph } from "./pipeline-graph.js";
+import type { CompiledStep } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { STEP_NESTED_PIPELINE, STEP_REMOTE, STEP_AGENT } from "./pipeline-step-metadata.js";
 import type {
@@ -20,25 +20,24 @@ import type {
 } from "./pipeline-types.js";
 
 export function stepToPlanStep<TOptions extends object>(
-  step: AnyStep<TOptions>,
+  step: CompiledStep<TOptions>,
   selected: boolean,
   skipReason?: PipelineStepSkipReason,
-  selectionReasons?: readonly PipelineStepSelectionReason[],
-  graph: CompiledStepGraph<TOptions> = liveStepGraph(step)
+  selectionReasons?: readonly PipelineStepSelectionReason[]
 ): PipelinePlanStep {
   const reasons = selectionReasons ?? [{ kind: "all" }];
   const planStep: PipelinePlanStep = {
-    dependencies: graph.dependsOn.map((dep) => dep.id),
+    dependencies: step.dependsOn.map((dep) => dep.id),
     description: step.description,
     ...(step.metadata === undefined ? {} : { metadata: step.metadata }),
     dryRun: step.dryRun === "skip" ? "skip" : step.dryRun !== undefined ? "custom" : "run",
     id: step.id,
     name: step.name,
-    optionalDependencies: graph.optionalDependsOn.map((dep) => dep.id),
+    optionalDependencies: step.optionalDependsOn.map((dep) => dep.id),
     runtimeSkipPossible: step.skip !== undefined,
     selected,
     selectionReasons: reasons,
-    skipAfterFailureOf: graph.skipAfterFailureOf.map((dep) => dep.id),
+    skipAfterFailureOf: step.skipAfterFailureOf.map((dep) => dep.id),
     skipReason,
   };
   if (step[STEP_NESTED_PIPELINE]) {
@@ -68,20 +67,18 @@ function addSelectionReason(
 }
 
 function targetSelectionReasons<TOptions extends object>(
-  targets: readonly AnyStep<TOptions>[],
-  stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph>
+  targets: readonly CompiledStep<TOptions>[]
 ): Map<string, PipelineStepSelectionReason[]> {
   const reasonsByStepId = new Map<string, PipelineStepSelectionReason[]>();
 
   for (const target of targets) {
     addSelectionReason(reasonsByStepId, target.id, { kind: "target", targetId: target.id });
-    const expanded = new Set<AnyStep<TOptions>>();
-    const includePrerequisites = (step: AnyStep<TOptions>): void => {
+    const expanded = new Set<CompiledStep<TOptions>>();
+    const includePrerequisites = (step: CompiledStep<TOptions>): void => {
       if (expanded.has(step)) return;
       expanded.add(step);
 
-      const graph = compiledStepGraph({ stepGraph }, step);
-      for (const dependency of graph.dependsOn) {
+      for (const dependency of step.dependsOn) {
         addSelectionReason(reasonsByStepId, dependency.id, {
           dependentId: step.id,
           kind: "required-dependency",
@@ -89,7 +86,7 @@ function targetSelectionReasons<TOptions extends object>(
         });
         includePrerequisites(dependency);
       }
-      for (const dependency of graph.skipAfterFailureOf) {
+      for (const dependency of step.skipAfterFailureOf) {
         addSelectionReason(reasonsByStepId, dependency.id, {
           dependentId: step.id,
           kind: "failure-gate",
@@ -97,7 +94,7 @@ function targetSelectionReasons<TOptions extends object>(
         });
         includePrerequisites(dependency);
       }
-      for (const dependency of graph.optionalDependsOn) {
+      for (const dependency of step.optionalDependsOn) {
         addSelectionReason(reasonsByStepId, dependency.id, {
           dependentId: step.id,
           kind: "optional-only",
@@ -323,7 +320,7 @@ export function buildPipelinePlan<
   } else if (controls.targets !== undefined) {
     const stepsById = new Map(steps.map((step) => [step.id, step]));
     const selectedTargets = controls.targets.map((target) => stepsById.get(target)!);
-    selectionReasonsByStepId = targetSelectionReasons(selectedTargets, compiled.stepGraph);
+    selectionReasonsByStepId = targetSelectionReasons(selectedTargets);
     for (const step of steps) {
       const reasons = selectionReasonsByStepId.get(step.id) ?? [];
       const selected = reasons.some(selectsStep);
@@ -346,16 +343,14 @@ export function buildPipelinePlan<
   for (const step of steps) {
     const selectionReasons = selectionReasonsByStepId.get(step.id)!;
     const selected = selectionReasons.some(selectsStep);
-    const graph = compiledStepGraph(compiled, step);
     const disposition = decideStepDisposition({
       dryRun,
-      graph,
       selected,
       reportsByStepId: plannedReportsByStepId,
       step,
     });
     const skipReason = disposition.kind === "skip" ? disposition.reason : undefined;
-    const planStep = stepToPlanStep(step, selected, skipReason, selectionReasons, graph);
+    const planStep = stepToPlanStep(step, selected, skipReason, selectionReasons);
     planSteps.push(planStep);
     if (disposition.kind === "skip") {
       const report: PipelineStepSkippedReport = {

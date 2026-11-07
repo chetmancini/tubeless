@@ -200,7 +200,6 @@ describe("parallel DAG scheduling", () => {
     });
     const executed: string[] = [];
     const unstarted = await schedulePipelineSteps({
-      ...graph,
       orderedSteps,
       maxConcurrency: 1,
       shouldStop: () => false,
@@ -646,7 +645,7 @@ describe("parallel DAG scheduling", () => {
     });
     let returned = false;
     const outcome = schedulePipelineSteps({
-      ...graph,
+      orderedSteps: graph.orderedSteps,
       maxConcurrency: 2,
       shouldStop: () => false,
       executeOneStep: async (step) => {
