@@ -1,20 +1,21 @@
-import {
-  createPipelineRunProjector,
-  type PipelineRunEventReader,
-  type PipelineRunProjector,
-  type StoredPipelineRun,
-} from "../../run-store/run-store.js";
+import { RunProjection } from "../../run-store/run-projection.js";
+import type { PipelineRunEventReader, StoredPipelineRun } from "../../run-store/run-store.js";
 import { readPipelineEventPages } from "../../run-store/run-store-reader.js";
 
 /**
- * Detail projectors retain log and artifact bodies. This keeps the selected run
+ * Detail projections retain log and artifact bodies. This keeps the selected run
  * and the expanded children touched most recently; an older open is rebuilt on demand.
  */
 export const STUDIO_OPEN_RUN_LIMIT = 32;
 
+interface RetainedRun {
+  lastEventId: number;
+  readonly projection: RunProjection;
+}
+
 /** Run detail retention; the server state serializes reads and clearing. */
 export class StudioRunDetails {
-  #runs = new Map<string, { lastEventId: number | undefined; projector: PipelineRunProjector }>();
+  #runs = new Map<string, RetainedRun>();
 
   constructor(private readonly store: Pick<PipelineRunEventReader, "listEvents">) {}
 
@@ -23,31 +24,28 @@ export class StudioRunDetails {
   }
 
   async read(runId: string): Promise<StoredPipelineRun | undefined> {
-    const cached = this.#runs.get(runId) ?? {
-      lastEventId: undefined,
-      projector: createPipelineRunProjector(),
-    };
-    let seen = cached.lastEventId !== undefined;
+    // A new run stays local until every page folds, so a failed read rebuilds it.
+    let retained = this.#runs.get(runId);
+    // Pages hold only this run's events, ordered after the cursor.
     for await (const page of readPipelineEventPages(this.store, {
-      afterId: cached.lastEventId,
+      afterId: retained?.lastEventId,
       limit: 100_000,
       runId,
     })) {
-      cached.projector.append(page);
-      cached.lastEventId = page.at(-1)!.id;
-      seen = true;
+      for (const event of page) {
+        if (retained) retained.projection.append(event);
+        else retained = { lastEventId: event.id, projection: new RunProjection(event) };
+        retained.lastEventId = event.id;
+      }
     }
-    if (!seen) return undefined;
-    this.#retainRun(runId, cached);
-    return cached.projector.snapshot().runs.find((entry) => entry.runId === runId);
+    if (!retained) return undefined;
+    this.#retainRun(runId, retained);
+    return retained.projection.snapshot();
   }
 
-  #retainRun(
-    runId: string,
-    cached: { lastEventId: number | undefined; projector: PipelineRunProjector }
-  ): void {
+  #retainRun(runId: string, retained: RetainedRun): void {
     this.#runs.delete(runId);
-    this.#runs.set(runId, cached);
+    this.#runs.set(runId, retained);
     while (this.#runs.size > STUDIO_OPEN_RUN_LIMIT) {
       const oldest = this.#runs.keys().next().value;
       if (oldest === undefined) return;
