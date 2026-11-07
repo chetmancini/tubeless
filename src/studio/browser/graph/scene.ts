@@ -1,12 +1,13 @@
 import type { PipelineStepProgressDetail } from "../../../core/pipeline.js";
 import type { StoredRunSummary } from "../../../run-store/run-history.js";
-import type { StoredPipelineRun, StoredPipelineStep } from "../../../run-store/run-store.js";
+import type { GraphDetail, GraphRun, GraphStep } from "./input.js";
 import { STUDIO_CHILD_PAGE_SIZE } from "../../shared/limits.js";
 import { compareChildRuns } from "../../shared/children.js";
-import type { StudioChildStep, StudioRunDetail } from "../../shared/schema.js";
+import type { StudioChildStep } from "../../shared/schema.js";
 import {
   childStepTotal,
   edgeState,
+  graphRunId,
   incomingEdges,
   type EdgeKind,
   type EdgeState,
@@ -27,7 +28,7 @@ const ITEM_COLUMNS = 4;
 const ITEM_LIMIT = STUDIO_CHILD_PAGE_SIZE;
 const MAX_DEPTH = 6;
 /** Expanded child pipeline detail; `missing` when the store has no record of the run. */
-export type RunLoad = StudioRunDetail | "missing";
+export type RunLoad = GraphDetail | "missing";
 
 interface EdgeScene {
   readonly from: string;
@@ -40,7 +41,7 @@ interface EdgeScene {
 
 interface StepScene {
   readonly key: string;
-  readonly step: StoredPipelineStep;
+  readonly step: GraphStep;
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -51,7 +52,7 @@ interface StepScene {
 }
 
 export interface RunScene {
-  readonly run: StoredPipelineRun;
+  readonly run: GraphRun;
   readonly width: number;
   readonly height: number;
   readonly steps: readonly StepScene[];
@@ -101,7 +102,7 @@ interface SceneContext {
   readonly expandable: Set<string>;
   /** Expanded child runs whose detail must be loaded and refreshed. */
   readonly wanted: Set<string>;
-  readonly runs: Map<string, StoredPipelineRun>;
+  readonly runs: Map<string, GraphRun>;
   readonly children: Map<string, readonly StoredRunSummary[]>;
   /** Direct-child totals per parent step. The children map holds only the drawn page. */
   readonly childSteps: Map<string, readonly StudioChildStep[]>;
@@ -114,7 +115,7 @@ export interface GraphScene {
   readonly opened: ReadonlySet<string>;
   readonly expandable: ReadonlySet<string>;
   readonly wanted: ReadonlySet<string>;
-  readonly runs: ReadonlyMap<string, StoredPipelineRun>;
+  readonly runs: ReadonlyMap<string, GraphRun>;
   readonly children: ReadonlyMap<string, readonly StoredRunSummary[]>;
   readonly childSteps: ReadonlyMap<string, readonly StudioChildStep[]>;
   readonly summaries: ReadonlyMap<string, StoredRunSummary>;
@@ -122,7 +123,7 @@ export interface GraphScene {
 
 /** Build a scene and its inspection index without mutating the previous expansion state. */
 export function buildGraphScene(
-  detail: StudioRunDetail,
+  detail: GraphDetail,
   options: {
     readonly loads: ReadonlyMap<string, RunLoad>;
     readonly toggles: ReadonlyMap<string, boolean>;
@@ -140,7 +141,7 @@ export function buildGraphScene(
     childSteps: new Map(),
     summaries: new Map(),
   };
-  const scene = buildRunScene(detail.run, detail.children, ctx, 0, detail.childSteps);
+  const scene = buildRunScene(detail.run, detail.children ?? [], ctx, 0, detail.childSteps);
   return {
     scene,
     canLoad: ctx.canLoad,
@@ -174,8 +175,8 @@ function itemTop(item: PlacedItem & { kind: string; graph?: RunScene }): number 
 }
 
 function buildExpansion(
-  run: StoredPipelineRun,
-  step: StoredPipelineStep,
+  run: GraphRun,
+  step: GraphStep,
   childRuns: readonly StoredRunSummary[],
   details: readonly PipelineStepProgressDetail[],
   /** Progress rows the trace dropped; their depth is unknown, so they are not items. */
@@ -200,7 +201,7 @@ function buildExpansion(
     if (expanded) ctx.wanted.add(summary.runId);
     const graph =
       load && load !== "missing"
-        ? buildRunScene(load.run, load.children, ctx, depth + 1, load.childSteps)
+        ? buildRunScene(load.run, load.children ?? [], ctx, depth + 1, load.childSteps)
         : undefined;
     sized.push({
       kind: "run",
@@ -279,19 +280,20 @@ function buildExpansion(
 }
 
 function buildRunScene(
-  run: StoredPipelineRun,
+  run: GraphRun,
   children: readonly StoredRunSummary[],
   ctx: SceneContext,
   depth: number,
   childSteps: readonly StudioChildStep[] = []
 ): RunScene {
-  ctx.runs.set(run.runId, run);
-  ctx.children.set(run.runId, children);
-  ctx.childSteps.set(run.runId, childSteps);
+  const runId = graphRunId(run);
+  ctx.runs.set(runId, run);
+  ctx.children.set(runId, children);
+  ctx.childSteps.set(runId, childSteps);
   for (const child of children) ctx.summaries.set(child.runId, child);
   const stepById = new Map(run.steps.map((step) => [step.id, step]));
   const unplaced: StepScene[] = run.steps.map((step) => {
-    const key = `${run.runId}/${step.id}`;
+    const key = `${runId}/${step.id}`;
     const childRuns = children.filter((child) => child.origin?.stepId === step.id);
     const runItems = new Set(childRuns.map((child) => child.origin?.itemKey));
     // Single and iterate steps report their child runs' progress as details; the runs show it.
@@ -337,8 +339,8 @@ function buildRunScene(
     unplaced.map(({ key, width, height }) => ({ id: key, width, height })),
     run.steps.flatMap((step) =>
       [...incoming.get(step.id)!.keys()].map((from) => ({
-        from: `${run.runId}/${from}`,
-        to: `${run.runId}/${step.id}`,
+        from: `${runId}/${from}`,
+        to: `${runId}/${step.id}`,
       }))
     ),
     { columnGap: COLUMN_GAP, rowGap: ROW_GAP }

@@ -1,6 +1,6 @@
 import { Fragment, type ComponentChildren } from "preact";
 import type { StoredRunSummary } from "../../../run-store/run-history.js";
-import type { StoredPipelineRun, StoredPipelineStep } from "../../../run-store/run-store.js";
+import type { GraphRun, GraphStep } from "./input.js";
 import { ErrorDiagnostics, LogLines } from "../components/debugging.js";
 import { duration, Status, StepRow } from "../components/steps.js";
 import { useEscapeDismiss } from "../escape-dismiss.js";
@@ -14,8 +14,8 @@ export const EDGE_KIND_LABEL: Record<EdgeKind, string> = {
 };
 
 /** Elapsed time from the run's start, for step timing facts. */
-export const runOffset = (run: StoredPipelineRun, ms: number | undefined) =>
-  ms === undefined ? "—" : "+" + duration(ms - run.startedAtMs);
+export const runOffset = (run: GraphRun, ms: number | undefined) =>
+  ms === undefined || run.startedAtMs === undefined ? "—" : "+" + duration(ms - run.startedAtMs);
 
 export function Facts({ rows }: { rows: readonly (readonly [string, ComponentChildren])[] }) {
   return (
@@ -103,8 +103,8 @@ export function Drawer({ children, onClose }: { children: ComponentChildren; onC
 }
 
 interface StepInspectorProps {
-  run: StoredPipelineRun;
-  step: StoredPipelineStep;
+  run: GraphRun;
+  step: GraphStep;
   /** Child runs this step started, as far as they are loaded. */
   childRuns: readonly StoredRunSummary[];
   childTotal: number;
@@ -137,13 +137,13 @@ export function StepInspector({
           {
             id: candidate.id,
             kinds,
-            status: candidate.status,
+            status: candidate.status ?? "planned",
             onSelect: () => onSelectConsumer(candidate.id),
           },
         ]
       : [];
   });
-  const logs = run.logs.filter((log) => log.stepId === step.id);
+  const logs = (run.logs ?? []).filter((log) => log.stepId === step.id);
   return (
     <div class="graph-inspector">
       <div class="graph-kicker">Step · {run.pipelineId}</div>

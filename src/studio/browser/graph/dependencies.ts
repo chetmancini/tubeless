@@ -1,4 +1,4 @@
-import type { StoredPipelineStep } from "../../../run-store/run-store.js";
+import type { GraphRun, GraphStep } from "./input.js";
 import type { StudioChildStep } from "../../shared/schema.js";
 
 export type EdgeState =
@@ -12,8 +12,11 @@ export type EdgeState =
 
 export type EdgeKind = "input" | "optional" | "gate";
 
+/** Internal selection identity; definition-only graphs have no recorded run ID. */
+export const graphRunId = (run: GraphRun): string => run.runId ?? `definition:${run.pipelineId}`;
+
 /** Group a step's planned dependencies by source, in required, optional, gate order. */
-export function incomingEdges(step: StoredPipelineStep): Map<string, EdgeKind[]> {
+export function incomingEdges(step: GraphStep): Map<string, EdgeKind[]> {
   const edges = new Map<string, EdgeKind[]>();
   const add = (ids: readonly string[] | undefined, kind: EdgeKind) => {
     for (const id of ids ?? []) edges.set(id, [...(edges.get(id) ?? []), kind]);
@@ -35,7 +38,7 @@ export function childStepTotal(
 }
 
 /** Completed steps and policy skips publish an output that consumers receive. */
-function producedOutput(step: StoredPipelineStep): boolean {
+function producedOutput(step: GraphStep): boolean {
   return step.status === "completed" || step.skipReason === "policy";
 }
 
@@ -47,13 +50,13 @@ function producedOutput(step: StoredPipelineStep): boolean {
  */
 export function edgeState(
   kinds: readonly EdgeKind[],
-  source: StoredPipelineStep,
-  target: StoredPipelineStep
+  source: GraphStep,
+  target: GraphStep
 ): EdgeState {
   const gate = kinds.includes("gate");
   const failed = source.status === "failed" || source.status === "cancelled";
   if (gate && failed) return "tripped";
-  if (target.status === "planned") return "candidate";
+  if (target.status === undefined || target.status === "planned") return "candidate";
   if (kinds.length === 1 && gate) return "settled";
   if (!producedOutput(source)) return failed ? "blocked" : "unused";
   if (target.status === "running") return "active";

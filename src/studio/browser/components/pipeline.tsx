@@ -1,5 +1,4 @@
 import { useCallback } from "preact/hooks";
-import type { RUN_MODEL_VERSION } from "../../../core/pipeline-ids.js";
 import type { StoredDefinitionSummary, StoredRunSummary } from "../../../run-store/run-history.js";
 import type { StoredPipelineStep } from "../../../run-store/run-store.js";
 import type { StudioApi } from "../transport.js";
@@ -11,7 +10,7 @@ import { useStudioResource } from "../resource.js";
 import { useDefinitionResource } from "../definition-resource.js";
 import type { StudioPipelineTab } from "../../shared/route.js";
 import { RunList } from "./runs.js";
-import type { StudioRunDetail } from "../../shared/schema.js";
+import type { GraphDetail } from "../graph/input.js";
 
 /** Planned structure shared by recorded definitions and plan previews. */
 type PlannedStep = Pick<
@@ -26,24 +25,11 @@ type PlannedStep = Pick<
   | "skipAfterFailureOf"
 >;
 
-// Studio imports only core types; a version change fails type checking here.
-const PLANNED_RUN_VERSION: typeof RUN_MODEL_VERSION = 2;
-
-/** A run-shaped view of a pipeline's declared steps, all planned, for the graph. */
-export function plannedGraphDetail(
-  pipelineId: string,
-  steps: readonly PlannedStep[]
-): StudioRunDetail {
+/** Declared steps without fabricated run or execution state. */
+export function plannedGraphDetail(pipelineId: string, steps: readonly PlannedStep[]): GraphDetail {
   return {
     run: {
-      dryRun: false,
-      eventCount: 0,
-      logCount: 0,
-      logs: [],
       pipelineId,
-      runId: `definition:${pipelineId}`,
-      startedAtMs: 0,
-      status: "completed",
       steps: steps.map((step) => ({
         id: step.id,
         name: step.name,
@@ -53,15 +39,8 @@ export function plannedGraphDetail(
         skipAfterFailureOf: [...(step.skipAfterFailureOf ?? [])],
         nestedPipeline: step.nestedPipeline,
         remote: step.remote,
-        status: "planned",
       })),
-      version: PLANNED_RUN_VERSION,
     },
-    ancestors: [],
-    children: [],
-    childCount: 0,
-    childSteps: [],
-    descendantCount: 0,
   };
 }
 

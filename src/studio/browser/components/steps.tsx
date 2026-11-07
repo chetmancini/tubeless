@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import type { StoredPipelineStep } from "../../../run-store/run-store.js";
+import type { GraphStep } from "../graph/input.js";
 import { StepArtifacts } from "./artifacts.js";
 
 export const shortId = (id: string) => (id.length > 24 ? id.slice(0, 12) + "…" + id.slice(-7) : id);
@@ -102,10 +102,7 @@ const settled = (status: string | undefined) => status === "failed" || status ==
  * its planned inputs. Traces keep the reason, not the triggering dependency, so the
  * named step is the first planned gate or input whose outcome matches that reason.
  */
-export function skipExplanation(
-  step: StoredPipelineStep,
-  steps: readonly StoredPipelineStep[]
-): string | undefined {
+export function skipExplanation(step: GraphStep, steps: readonly GraphStep[]): string | undefined {
   if (step.status !== "skipped" || !step.skipReason) return undefined;
   const statusOf = (id: string) => steps.find((candidate) => candidate.id === id)?.status;
   switch (step.skipReason) {
@@ -140,19 +137,20 @@ export function skipExplanation(
 }
 
 interface StepRowProps {
-  step: StoredPipelineStep;
+  step: GraphStep;
   /** Sibling steps from the same run, used to name the input behind a skip. */
-  steps?: readonly StoredPipelineStep[];
+  steps?: readonly GraphStep[];
   selected?: boolean;
   /** Makes the row selectable; the step name is the keyboard target. */
   onSelect?(): void;
 }
 
 export function StepRow({ step, steps = [], selected = false, onSelect }: StepRowProps) {
+  const status = step.status ?? "planned";
   const progressTotal = step.progress?.total;
   const progressWidth = progressTotal
     ? Math.max(0, Math.min(100, ((step.progress?.completed ?? 0) / progressTotal) * 100))
-    : step.status === "completed"
+    : status === "completed"
       ? 100
       : 18;
   const nested = step.nestedPipeline;
@@ -166,7 +164,7 @@ export function StepRow({ step, steps = [], selected = false, onSelect }: StepRo
   const skipped = skipExplanation(step, steps);
   return (
     <article
-      class={`step ${step.status}${onSelect ? " selectable" : ""}${selected ? " selected" : ""}`}
+      class={`step ${status}${onSelect ? " selectable" : ""}${selected ? " selected" : ""}`}
       data-step-id={step.id}
       onClick={
         onSelect &&
@@ -179,7 +177,7 @@ export function StepRow({ step, steps = [], selected = false, onSelect }: StepRo
         })
       }
     >
-      <StepStatusIcon value={step.status} />
+      <StepStatusIcon value={status} />
       <div class="step-head">
         {onSelect ? (
           <button class="step-title" type="button" aria-pressed={selected} onClick={onSelect}>
@@ -188,7 +186,7 @@ export function StepRow({ step, steps = [], selected = false, onSelect }: StepRo
         ) : (
           <strong>{step.name || step.id}</strong>
         )}
-        {step.outputSource && <Status value={step.status} outputSource={step.outputSource} />}
+        {step.outputSource && <Status value={status} outputSource={step.outputSource} />}
         {step.name && <code>{step.id}</code>}
         {retries > 0 && (
           <span class="step-retries">

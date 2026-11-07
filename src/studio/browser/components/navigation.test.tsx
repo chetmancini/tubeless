@@ -5,6 +5,7 @@ import { createRunHistoryIndex, summarizeRun } from "../../../run-store/run-hist
 import type { StoredPipelineRun } from "../../../run-store/run-store.js";
 import type { StudioApi } from "../transport.js";
 import { StepInspector } from "../graph/inspector.js";
+import { RunGraph } from "../graph/graph.js";
 import { PipelinePage, plannedGraphDetail } from "./pipeline.js";
 import type { PipelineRunStudioCommand } from "../../shared/protocol.js";
 import { latestStatus, Rail, railPipelines } from "./rail.js";
@@ -118,10 +119,10 @@ describe("pipeline page", () => {
         skipAfterFailureOf: ["load"],
       },
     ]);
-    expect(detail.run.steps.map((step) => [step.id, step.status, step.dependencies])).toEqual([
-      ["load", "planned", []],
-      ["save", "planned", ["load"]],
-    ]);
+    const markup = renderToString(<RunGraph detail={detail} onOpenRun={() => {}} />);
+    expect(markup).toContain('aria-label="load: planned"');
+    expect(markup).toContain('aria-label="save: planned"');
+    expect(markup).toContain('aria-label="Connection load to save"');
   });
 
   it("offers Versions only when a definition was recorded", () => {

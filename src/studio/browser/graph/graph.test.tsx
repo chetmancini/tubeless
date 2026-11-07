@@ -22,14 +22,7 @@ function graph(root: StoredPipelineRun, children: readonly StoredPipelineRun[] =
   );
   const markup = renderToString(
     <RunGraph
-      detail={{
-        run: root,
-        ancestors: [],
-        children: window.children,
-        childCount: window.childCount,
-        childSteps: window.childSteps,
-        descendantCount: index.descendantCount(root.runId),
-      }}
+      detail={{ run: root, children: window.children, childSteps: window.childSteps }}
       onOpenRun={() => {}}
     />
   );

@@ -1,17 +1,17 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { StoredPipelineRun, StoredPipelineStep } from "../../../run-store/run-store.js";
+import type { GraphDetail, GraphRun, GraphStep } from "./input.js";
 import { StepArtifacts } from "../components/artifacts.js";
 import { preferredScrollBehavior } from "../components/common.js";
 import type { StudioApi } from "../transport.js";
 import { RunDetailLoader } from "../run-detail-loader.js";
-import type { StudioRunDetail } from "../../shared/schema.js";
 import { duration, shortId, Status } from "../components/steps.js";
 import { Drawer, EDGE_KIND_LABEL, Facts, runOffset, StepInspector } from "./inspector.js";
 
 import {
   childStepTotal,
   edgeState,
+  graphRunId,
   incomingEdges,
   type EdgeKind,
   type EdgeState,
@@ -182,8 +182,8 @@ function ExpansionView({
   ui,
 }: {
   expansion: ExpansionScene;
-  run: StoredPipelineRun;
-  step: StoredPipelineStep;
+  run: GraphRun;
+  step: GraphStep;
   ui: GraphUi;
 }) {
   return (
@@ -196,7 +196,7 @@ function ExpansionView({
         if (item.kind === "item") {
           const selection: GraphSelection = {
             kind: "item",
-            runId: run.runId,
+            runId: graphRunId(run),
             stepId: step.id,
             itemId: item.detail.id,
           };
@@ -210,7 +210,7 @@ function ExpansionView({
                 title={item.label}
                 status={status}
                 selected={sameSelection(ui.selection, selection)}
-                pulse={ui.pulse(`${run.runId}/${step.id}/${item.detail.id}`, status)}
+                pulse={ui.pulse(`${graphRunId(run)}/${step.id}/${item.detail.id}`, status)}
                 onSelect={() => ui.select(selection)}
               />
             </g>
@@ -288,7 +288,7 @@ function ExpansionView({
 }
 
 function RunSceneView({ scene, ui }: { scene: RunScene; ui: GraphUi }) {
-  const runId = scene.run.runId;
+  const runId = graphRunId(scene.run);
   return (
     <g class="graph-run">
       {scene.edges.map((edge) => {
@@ -315,6 +315,7 @@ function RunSceneView({ scene, ui }: { scene: RunScene; ui: GraphUi }) {
       {scene.steps.map((node) => {
         const { step } = node;
         const selection: GraphSelection = { kind: "step", runId, stepId: step.id };
+        const status = nodeStatus(step.status);
         return (
           <g key={step.id} transform={`translate(${node.x} ${node.y})`}>
             {node.expansion && (
@@ -325,9 +326,9 @@ function RunSceneView({ scene, ui }: { scene: RunScene; ui: GraphUi }) {
               kind="step"
               label={step.name || step.id}
               title={step.name ? `${step.name} (${step.id})` : step.id}
-              status={step.status}
+              status={status}
               selected={sameSelection(ui.selection, selection)}
-              pulse={ui.pulse(node.key, step.status)}
+              pulse={ui.pulse(node.key, status)}
               onSelect={() => ui.select(selection)}
               badge={
                 node.itemCount > 0 && (
@@ -446,7 +447,7 @@ function inspectorContent({
             <button
               class="secondary-button"
               type="button"
-              onClick={() => ui.select({ kind: "step", runId: run.runId, stepId: step.id })}
+              onClick={() => ui.select({ kind: "step", runId: graphRunId(run), stepId: step.id })}
             >
               Inspect {step.id}
             </button>
@@ -475,8 +476,14 @@ function inspectorContent({
           <p class={`graph-edge-state ${state}`}>{EDGE_STATE_COPY[state](source.id, target.id)}</p>
           <Facts
             rows={[
-              ["Source", <Status value={source.status} outputSource={source.outputSource} />],
-              ["Target", <Status value={target.status} outputSource={target.outputSource} />],
+              [
+                "Source",
+                <Status value={nodeStatus(source.status)} outputSource={source.outputSource} />,
+              ],
+              [
+                "Target",
+                <Status value={nodeStatus(target.status)} outputSource={target.outputSource} />,
+              ],
               ["Output ready", runOffset(run, source.finishedAtMs)],
               ["Consumed", runOffset(run, target.startedAtMs)],
             ]}
@@ -493,7 +500,7 @@ function inspectorContent({
                 class="secondary-button"
                 type="button"
                 key={step.id}
-                onClick={() => ui.select({ kind: "step", runId: run.runId, stepId: step.id })}
+                onClick={() => ui.select({ kind: "step", runId: graphRunId(run), stepId: step.id })}
               >
                 Inspect {step.id}
               </button>
@@ -506,7 +513,7 @@ function inspectorContent({
   if (run && selection?.kind === "step") {
     const step = run.steps.find((candidate) => candidate.id === selection.stepId);
     if (step) {
-      const childRuns = (ctx.children.get(run.runId) ?? []).filter(
+      const childRuns = (ctx.children.get(graphRunId(run)) ?? []).filter(
         (child) => child.origin?.stepId === step.id
       );
       return (
@@ -515,16 +522,16 @@ function inspectorContent({
           step={step}
           childRuns={childRuns}
           childTotal={childStepTotal(
-            ctx.childSteps.get(run.runId) ?? [],
+            ctx.childSteps.get(graphRunId(run)) ?? [],
             step.id,
             childRuns.length
           )}
           onOpenRun={onOpenRun}
           onSelectInput={(id) =>
-            ui.select({ kind: "edge", runId: run.runId, from: id, to: step.id })
+            ui.select({ kind: "edge", runId: graphRunId(run), from: id, to: step.id })
           }
           onSelectConsumer={(id) =>
-            ui.select({ kind: "edge", runId: run.runId, from: step.id, to: id })
+            ui.select({ kind: "edge", runId: graphRunId(run), from: step.id, to: id })
           }
         />
       );
@@ -548,7 +555,7 @@ function usePulse(): (key: string, status: string) => boolean {
 }
 
 export interface RunGraphProps {
-  detail: StudioRunDetail;
+  detail: GraphDetail;
   /** Loads nested run steps for in-place expansion; nested runs stay collapsed without it. */
   api?: Pick<StudioApi, "loadRunDetail">;
   onOpenRun(runId: string, pipelineId?: string): void;
@@ -569,7 +576,7 @@ export function RunGraph({
   focusRequest,
   onSelectStep,
 }: RunGraphProps) {
-  const runId = detail.run.runId;
+  const runId = graphRunId(detail.run);
   const [toggles, setToggles] = useState<ReadonlyMap<string, boolean>>(new Map());
   const opened = useRef<ReadonlySet<string>>(new Set());
   const loaders = useMemo(() => new Map<string, RunDetailLoader>(), [api, runId]);
