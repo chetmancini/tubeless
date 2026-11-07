@@ -197,7 +197,7 @@ export function definePipeline<
   }
 
   function toMermaid(options: PipelineMermaidOptions = {}): string {
-    return renderPipelineMermaid(compiled.orderedSteps, options, compiled.stepGraph);
+    return renderPipelineMermaid(compiled.orderedSteps, options);
   }
 
   async function executeCompiled(

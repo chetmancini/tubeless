@@ -62,9 +62,41 @@ describe("pipeline graph", () => {
     Object.assign(source, { id: "mutated" });
 
     expect(compiled.orderedSteps.map(({ id }) => id)).toEqual(["source", "consume"]);
-    const compiledConsume = compiled.orderedSteps[1]!;
-    expect(compiled.stepGraph.get(compiledConsume)?.dependsOn.map(({ id }) => id)).toEqual([
-      "source",
-    ]);
+    const [compiledSource, compiledConsume] = compiled.orderedSteps;
+    expect(compiledConsume!.dependsOn).toEqual([compiledSource]);
+    expect(compiledConsume!.dependsOn.map(({ id }) => id)).toEqual(["source"]);
+    expect(Object.isFrozen(compiledConsume)).toBe(true);
+    expect(Object.isFrozen(compiledConsume!.dependsOn)).toBe(true);
+  });
+
+  it("normalizes every edge policy onto compiled steps without touching author steps", () => {
+    const required = step("required");
+    const optional = step("optional");
+    const gate = step("gate");
+    const target = step("target", {
+      dependsOn: [required],
+      optionalDependsOn: [optional],
+      skipAfterFailureOf: [gate],
+    });
+
+    const compiled = compilePipelineGraph({ orderedSteps: [required, optional, gate, target] });
+    const compiledOf = (author: AnyStep) => compiled.compiledByAuthorStep.get(author)!;
+
+    expect(compiledOf(target).dependsOn).toEqual([compiledOf(required)]);
+    expect(compiledOf(target).optionalDependsOn).toEqual([compiledOf(optional)]);
+    expect(compiledOf(target).skipAfterFailureOf).toEqual([compiledOf(gate)]);
+    expect(compiledOf(required).dependsOn).toEqual([]);
+    expect(stepEdges(compiledOf(target))).toEqual([required, optional, gate].map(compiledOf));
+    expect(target.dependsOn).toEqual([required]);
+    expect(Object.isFrozen(target)).toBe(false);
+  });
+
+  it("rejects dependencies that are not compiled before their dependents", () => {
+    const source = step("source");
+    const consume = step("consume", { dependsOn: [source] });
+
+    expect(() => compilePipelineGraph({ orderedSteps: [consume, source] })).toThrow(
+      "Compiled pipeline graph requires dependency source before step consume"
+    );
   });
 });

@@ -1,5 +1,5 @@
 import { matchesStepQuery } from "./pipeline-query.js";
-import { liveStepGraph, stepEdges, type CompiledStepGraph } from "./pipeline-graph.js";
+import { stepEdges, type CompiledStep } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { STEP_NESTED_PIPELINE } from "./pipeline-step-metadata.js";
 import { PIPELINE_MERMAID_DIRECTIONS, type PipelineMermaidOptions } from "./pipeline-types.js";
@@ -16,16 +16,17 @@ function escapeMermaidLabel(value: string): string {
 }
 
 export function renderPipelineMermaid<TOptions extends object>(
-  steps: readonly AnyStep<TOptions>[],
-  options: PipelineMermaidOptions,
-  stepGraph?: ReadonlyMap<AnyStep, CompiledStepGraph>
+  steps: readonly CompiledStep<TOptions>[],
+  options: PipelineMermaidOptions
 ): string {
   steps = steps.filter((step) => matchesStepQuery(step.metadata, options.query ?? {}));
   const direction = options.direction ?? "TD";
   if (!PIPELINE_MERMAID_DIRECTIONS.includes(direction)) {
     throw new Error(`Invalid Mermaid flowchart direction: ${direction}`);
   }
-  const nodeIdByStep = new Map(steps.map((step, index) => [step, `step${index}`]));
+  const nodeIdByStep = new Map<AnyStep<TOptions>, string>(
+    steps.map((step, index) => [step, `step${index}`])
+  );
   const lines = [`flowchart ${direction}`];
 
   for (const step of steps) {
@@ -44,13 +45,12 @@ export function renderPipelineMermaid<TOptions extends object>(
 
   const edgeLines: string[] = [];
   for (const step of steps) {
-    const graph = stepGraph?.get(step) ?? liveStepGraph(step);
     const targetId = nodeIdByStep.get(step)!;
-    const required = new Set(graph.dependsOn);
-    const optional = new Set(graph.optionalDependsOn);
-    const failureGates = new Set(graph.skipAfterFailureOf);
+    const required = new Set<AnyStep<TOptions>>(step.dependsOn);
+    const optional = new Set<AnyStep<TOptions>>(step.optionalDependsOn);
+    const failureGates = new Set<AnyStep<TOptions>>(step.skipAfterFailureOf);
 
-    for (const dependency of stepEdges(step, graph)) {
+    for (const dependency of stepEdges(step)) {
       const sourceId = nodeIdByStep.get(dependency);
       if (sourceId === undefined) continue;
       if (required.has(dependency)) {

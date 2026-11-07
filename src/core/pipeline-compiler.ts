@@ -3,7 +3,7 @@ import { compileDefinitionSnapshot } from "./pipeline-definition-identity.js";
 import type { PipelineDefinition, StepsOptions } from "./pipeline-definition.js";
 import { validatePipelineDefinition } from "./pipeline-definition-validation.js";
 import { PipelineDefinitionError } from "./pipeline-errors.js";
-import { compilePipelineGraph, type CompiledStepGraph } from "./pipeline-graph.js";
+import { compilePipelineGraph, type CompiledStep } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { STEP_OPTIONS_SCHEMA } from "./pipeline-step-metadata.js";
 import type { PipelineDefinitionSnapshot, StandardSchemaV1 } from "./pipeline-types.js";
@@ -15,17 +15,16 @@ export interface CompiledPipeline<
   TResultSchema extends StandardSchemaV1 | undefined = undefined,
 > {
   readonly definition: PipelineDefinitionSnapshot;
-  readonly declaredTargets: readonly AnyStep<StepsOptions<TSteps>>[];
+  readonly declaredTargets: readonly CompiledStep<StepsOptions<TSteps>>[];
   readonly finalize: Extract<
     NonNullable<PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>["finalize"]>,
     (...args: never[]) => unknown
   >;
   readonly id: string;
   readonly optionsSchema: StandardSchemaV1 | undefined;
-  readonly orderedSteps: readonly AnyStep<StepsOptions<TSteps>>[];
-  readonly compiledByAuthorStep: ReadonlyMap<AnyStep, AnyStep>;
-  readonly requiredFinalizerSteps: readonly AnyStep<StepsOptions<TSteps>>[] | undefined;
-  readonly stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph>;
+  readonly orderedSteps: readonly CompiledStep<StepsOptions<TSteps>>[];
+  readonly compiledByAuthorStep: ReadonlyMap<AnyStep, CompiledStep>;
+  readonly requiredFinalizerSteps: readonly CompiledStep<StepsOptions<TSteps>>[] | undefined;
   readonly resultSchema: TResultSchema | undefined;
   readonly stepIds: readonly string[];
   readonly targetIds: readonly string[];
@@ -43,7 +42,7 @@ export function compilePipeline<
   if (!validated.ok) {
     throw new PipelineDefinitionError(definition.id, validated.errors);
   }
-  const { compiledByAuthorStep, orderedSteps, stepGraph } = compilePipelineGraph(validated.graph);
+  const { compiledByAuthorStep, orderedSteps } = compilePipelineGraph(validated.graph);
   const { finalizerMetadata } = validated;
   const requiredFinalizerSteps = finalizerMetadata?.steps;
   const compiledTargets = validated.declaredTargets.map((target) =>
@@ -66,7 +65,6 @@ export function compilePipeline<
             : undefined;
   const snapshot = compileDefinitionSnapshot({
     orderedSteps,
-    stepGraph,
     metadata: snapshotPipelineMetadata(definition.metadata),
     targetIds: compiledTargets.map((step) => step.id),
     requiredFinalizerSteps: compiledRequiredFinalizerSteps,
@@ -89,7 +87,6 @@ export function compilePipeline<
         : compiledByAuthorStep.get(definition.steps[0]!)?.[STEP_OPTIONS_SCHEMA],
     orderedSteps: Object.freeze([...orderedSteps]),
     compiledByAuthorStep,
-    stepGraph,
     requiredFinalizerSteps: compiledRequiredFinalizerSteps
       ? Object.freeze(compiledRequiredFinalizerSteps)
       : undefined,

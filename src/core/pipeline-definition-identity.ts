@@ -1,7 +1,7 @@
 import { canonicalJsonValue } from "../utilities/canonical-json.js";
 import type { PipelineMetadata } from "../tracing/graph-metadata.js";
 import { createHash } from "node:crypto";
-import type { CompiledStepGraph } from "./pipeline-graph.js";
+import type { CompiledStep } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import {
   STEP_CACHE,
@@ -76,24 +76,22 @@ function agentFields(agent: NonNullable<PipelineDefinitionSnapshot["steps"][numb
 /** Canonical snapshot. Execution order matters; dependency and target sets do not. */
 export function compileDefinitionSnapshot(input: {
   metadata?: PipelineMetadata;
-  orderedSteps: readonly AnyStep[];
-  stepGraph: ReadonlyMap<AnyStep, CompiledStepGraph>;
+  orderedSteps: readonly CompiledStep[];
   targetIds: readonly string[];
   requiredFinalizerSteps: readonly AnyStep[] | undefined;
   resultValidated: boolean;
   implementationVersion: string | undefined;
 }): PipelineDefinitionSnapshot {
   const steps = input.orderedSteps.map((step) => {
-    const graph = input.stepGraph.get(step)!;
     const nested = step[STEP_NESTED_PIPELINE];
     const remote = step[STEP_REMOTE];
     const cache = step[STEP_CACHE];
     return {
       id: step.id,
       ...(step.metadata === undefined ? {} : { metadata: step.metadata }),
-      dependencies: graph.dependsOn.map(({ id }) => id).sort(),
-      optionalDependencies: graph.optionalDependsOn.map(({ id }) => id).sort(),
-      skipAfterFailureOf: graph.skipAfterFailureOf.map(({ id }) => id).sort(),
+      dependencies: step.dependsOn.map(({ id }) => id).sort(),
+      optionalDependencies: step.optionalDependsOn.map(({ id }) => id).sort(),
+      skipAfterFailureOf: step.skipAfterFailureOf.map(({ id }) => id).sort(),
       dryRun:
         step.dryRun === "skip"
           ? ("skip" as const)
