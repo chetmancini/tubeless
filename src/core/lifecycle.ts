@@ -44,13 +44,25 @@ function basePipelineLogger(log: PipelineLogger): PipelineLogger {
   return (log as TracedPipelineLogger)[PIPELINE_LOGGER_BASE] ?? log;
 }
 
+/** Describe an arbitrary thrown value without letting the description throw. */
+function hookFailureMessage(error: unknown): string {
+  try {
+    return String(error instanceof Error ? error.message : error);
+  } catch {
+    return "[unprintable error]";
+  }
+}
+
 function emitHook(runtime: PipelineRuntime, emit: (hooks: PipelineHooks) => unknown): void {
   if (!runtime.hooks) return;
   const hookSets = Array.isArray(runtime.hooks) ? runtime.hooks : [runtime.hooks];
-  const warn = (error: unknown) =>
-    runtime.log.warn(
-      `Pipeline hook failed: ${error instanceof Error ? error.message : String(error)}`
-    );
+  const warn = (error: unknown): void => {
+    try {
+      runtime.log.warn(`Pipeline hook failed: ${hookFailureMessage(error)}`);
+    } catch {
+      // Hook diagnostics are best effort; a failing logger must not fail the run.
+    }
+  };
   for (const hooks of hookSets) {
     try {
       const result = emit(hooks);

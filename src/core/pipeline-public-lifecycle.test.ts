@@ -211,6 +211,64 @@ describe("definePipeline lifecycle and scheduling", () => {
     }
   });
 
+  it("completes when a sync hook throws an unprintable value", async () => {
+    const warn = vi.fn();
+    const result = await makePipeline("unprintable-sync-hook").run({}, undefined, {
+      cwd: "/tmp",
+      hooks: {
+        onStepComplete: () => {
+          throw Object.create(null);
+        },
+      },
+      log: { error: vi.fn(), log: vi.fn(), warn },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^Pipeline hook failed: /));
+  });
+
+  it("completes when the logger's warn throws for a failing hook", async () => {
+    const warn = vi.fn(() => {
+      throw new Error("logger down");
+    });
+    const result = await makePipeline("throwing-logger").run({}, undefined, {
+      cwd: "/tmp",
+      hooks: {
+        onStepComplete: () => {
+          throw new Error("boom");
+        },
+      },
+      log: { error: vi.fn(), log: vi.fn(), warn },
+    });
+
+    expect(result.status).toBe("completed");
+  });
+
+  it("does not leak an unhandled rejection when an async hook rejects with an unprintable value", async () => {
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const warn = vi.fn();
+      const result = await makePipeline("unprintable-async-hook").run({}, undefined, {
+        cwd: "/tmp",
+        hooks: {
+          onStepComplete: async () => {
+            await Promise.resolve();
+            throw Object.create(null);
+          },
+        },
+        log: { error: vi.fn(), log: vi.fn(), warn },
+      });
+
+      expect(result.status).toBe("completed");
+      await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
   it("uses injected runtime timing for reports and results", async () => {
     let currentTime = 0;
     const { step } = createSteps();
