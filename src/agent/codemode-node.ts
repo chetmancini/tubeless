@@ -38,6 +38,7 @@ export function createNodeCodemodeExecutor(): CodemodeExecutor {
             maxLogCharacters: execution.maxLogCharacters,
           } satisfies CodemodeWorkerData,
           execArgv: fileWorkerExecArgv(process.execArgv),
+          env: {},
           resourceLimits: {
             maxOldGenerationSizeMb: 128,
             maxYoungGenerationSizeMb: 32,
