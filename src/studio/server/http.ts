@@ -95,20 +95,24 @@ export async function readJsonBody(request: Request): Promise<unknown> {
   let byteLength = 0;
   const reader = request.body?.getReader();
   if (reader) {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      byteLength += value.byteLength;
-      if (byteLength > MAX_REQUEST_BODY_BYTES) {
-        await reader.cancel();
-        throw new StudioRequestError(
-          "request_body_too_large",
-          "Request body exceeds 64 KiB.",
-          413,
-          "Send a JSON body no larger than 64 KiB."
-        );
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        byteLength += value.byteLength;
+        if (byteLength > MAX_REQUEST_BODY_BYTES) {
+          throw new StudioRequestError(
+            "request_body_too_large",
+            "Request body exceeds 64 KiB.",
+            413,
+            "Send a JSON body no larger than 64 KiB."
+          );
+        }
+        chunks.push(value);
       }
-      chunks.push(value);
+    } finally {
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
     }
   }
   const bytes = new Uint8Array(byteLength);
@@ -118,7 +122,7 @@ export async function readJsonBody(request: Request): Promise<unknown> {
     offset += chunk.byteLength;
   }
   try {
-    return JSON.parse(new TextDecoder().decode(bytes));
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch {
     throw new StudioRequestError(
       "invalid_json",
