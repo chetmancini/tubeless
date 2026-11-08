@@ -125,8 +125,8 @@ function studioUrl(output: string): string {
   return url!;
 }
 
-// Studio startup waits allow 10 s on loaded machines; leave room for setup and shutdown.
-describe("runUi", { timeout: 30_000 }, () => {
+// Each startup or snapshot wait allows 10 s, and some tests run three in a row; keep headroom.
+describe("runUi", { timeout: 60_000 }, () => {
   it("prints help and exits 0", async () => {
     const io = captureIo(await tempDir());
 

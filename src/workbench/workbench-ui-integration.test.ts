@@ -15,8 +15,8 @@ import {
   writeStudioConfig,
 } from "./workbench.test-support.js";
 
-// Studio startup waits allow 10 s on loaded machines; leave room for setup and shutdown.
-describe("workbench UI integration", { timeout: 30_000 }, () => {
+// Each startup or snapshot wait allows 10 s, and some tests run three in a row; keep headroom.
+describe("workbench UI integration", { timeout: 60_000 }, () => {
   it("serves and cleanly stops the optional local studio command", async () => {
     const { directory } = await writeModule("export {};");
     const controller = new AbortController();
@@ -633,7 +633,7 @@ it("runs remote-bind commands in gateway mode and retains history without revivi
     if (previous === undefined) delete process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
     else process.env.TUBELESS_STUDIO_GATEWAY_TOKEN = previous;
   }
-}, 30_000);
+}, 60_000);
 
 it("keeps hosted NDJSON history read-only for every mutation", async () => {
   // Observe the real listener so the OS can assign its port without a reservation gap.
@@ -693,4 +693,4 @@ it("keeps hosted NDJSON history read-only for every mutation", async () => {
     if (previous === undefined) delete process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
     else process.env.TUBELESS_STUDIO_GATEWAY_TOKEN = previous;
   }
-}, 30_000);
+}, 60_000);
