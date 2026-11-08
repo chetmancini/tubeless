@@ -255,6 +255,12 @@ describe("SQLite pipeline run store", () => {
       await store.close();
     } finally {
       await worker.terminate();
+      // Release the connection when an assertion above failed; close() is a no-op once closed.
+      try {
+        await store.close();
+      } catch {
+        // The failure above is the one to report.
+      }
     }
   });
 
