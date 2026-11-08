@@ -308,8 +308,8 @@ Package: `tubeless`
 
 | Symbol                                                                                                  | Description                                                                                     |
 | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [`anthropicModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L60)        | Create a dependency-free Anthropic Messages model with native history and on-demand compaction. |
-| [`AnthropicModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L15) | Messages API transport settings; credentials are resolved only when a decision executes.        |
+| [`anthropicModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L65)        | Create a dependency-free Anthropic Messages model with native history and on-demand compaction. |
+| [`AnthropicModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L20) | Messages API transport settings; credentials are resolved only when a decision executes.        |
 
 ### `tubeless/cloudflare`
 

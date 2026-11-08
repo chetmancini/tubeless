@@ -6,7 +6,12 @@ import {
   carriesCompaction,
   COMPACTION_BETA,
 } from "./anthropic-protocol.js";
-import { MAX_REQUEST_BYTES, providerBaseUrl, providerRequest } from "./provider-http.js";
+import {
+  MAX_REQUEST_BYTES,
+  providerBaseUrl,
+  providerRequest,
+  withProviderDeadline,
+} from "./provider-http.js";
 import { record } from "./provider-schema.js";
 import { boundedToolOutputs } from "./provider-tool-outputs.js";
 import { throwIfAborted } from "../utilities/abort.js";
@@ -93,146 +98,147 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
   if (baseUrl !== undefined) providerBaseUrl("Anthropic", baseUrl);
   const decide: AgentModel = async (request, context) => {
     const selectedModel = (model ?? process.env.ANTHROPIC_MODEL)?.trim() || "claude-opus-5-5";
-    const timeout = AbortSignal.timeout(timeoutMs);
-    const signal = context.signal ? AbortSignal.any([context.signal, timeout]) : timeout;
     const base = providerBaseUrl(
       "Anthropic",
       baseUrl ?? (process.env.ANTHROPIC_BASE_URL?.trim() || DEFAULT_BASE_URL)
     );
-    throwIfAborted(signal, "Anthropic decision");
-    // Validate descriptors before either compaction or a decision can perform I/O.
-    const tools = anthropicTools(context, strict);
-    if (
-      request.conversation !== null &&
-      (!Array.isArray(request.conversation) || !request.conversation.every(record))
-    )
-      throw new Error("Invalid Anthropic conversation state");
-    // A restored session starts a new prompt with no tool outcomes. Close _finish
-    // before appending that prompt; the Messages API rejects a second user message.
-    const newPrompt = context.turn === 1 && request.outcomes.length === 0;
-    let messages: unknown[] =
-      request.conversation === null
-        ? []
-        : newPrompt
-          ? closeFinishedTools(request.conversation)
-          : [...request.conversation];
-    const withPrompt = (history: readonly unknown[]) =>
-      newPrompt ? appendUserText(history, request.task) : [...history];
-    const send = (endpointLabel: string, payload: { messages: unknown[] }, beta: boolean) =>
-      providerRequest(
-        "Anthropic",
-        endpointLabel,
-        `${base}/v1/messages`,
-        {
-          ...credentials(apiKey, authToken),
-          "anthropic-version": "2023-06-01",
-          ...(beta || carriesCompaction(payload.messages)
-            ? { "anthropic-beta": COMPACTION_BETA }
-            : {}),
-        },
-        payload,
-        signal
-      );
-    const system = `${request.instructions}\n\n${TOOL_RULE}`;
-    // Summaries read the same system prompt and tools as the conversation.
-    const compactRequest = {
-      model: selectedModel,
-      max_tokens: maxTokens,
-      system,
-      tools,
-      compaction: { type: "summarize", instructions: SUMMARY_INSTRUCTIONS },
-      messages,
-    };
-    const decisionRequest = {
-      model: selectedModel,
-      max_tokens: maxTokens,
-      ...(reasoningEffort === null ? {} : { output_config: { effort: reasoningEffort } }),
-      ...(promptCaching ? { cache_control: { type: "ephemeral" } } : {}),
-      system,
-      tools,
-      // Current models reject forced tool choice; the system rule and retry below steer instead.
-      tool_choice: { type: "auto" },
-      messages,
-    };
-    const results = (availableBytes: number) =>
-      request.outcomes.length === 0
-        ? []
-        : [
-            {
-              role: "user",
-              content: boundedToolOutputs(
-                "Anthropic",
-                request.outcomes,
-                availableBytes - RESULT_MESSAGE_BYTES,
-                (outcome, output) => ({
-                  type: "tool_result",
-                  tool_use_id: outcome.id,
-                  content: output,
-                  ...(outcome.ok ? {} : { is_error: true }),
-                })
-              ),
-            },
-          ];
-    const history = [...messages, ...results(MAX_REQUEST_BYTES)];
-    const completed = withPrompt(history);
-    const shouldCompact =
-      compactAfterBytes !== null &&
-      (request.outcomes.length > 0 || (newPrompt && request.conversation !== null)) &&
-      (Buffer.byteLength(JSON.stringify(completed)) > compactAfterBytes ||
-        Buffer.byteLength(JSON.stringify({ ...decisionRequest, messages: completed })) >
-          MAX_REQUEST_BYTES);
-    // Compaction covers completed history only. The new prompt stays verbatim.
-    const nextRequest = shouldCompact ? compactRequest : decisionRequest;
-    const payload = shouldCompact ? history : completed;
-    const fits =
-      Buffer.byteLength(JSON.stringify({ ...nextRequest, messages: payload })) <= MAX_REQUEST_BYTES;
-    messages = fits
-      ? payload
-      : [
-          ...messages,
-          ...results(MAX_REQUEST_BYTES - Buffer.byteLength(JSON.stringify(nextRequest))),
-        ];
-    if (shouldCompact) {
-      const summary = anthropicMessage(
-        await send("compaction", { ...compactRequest, messages }, true)
-      );
-      const [block] = summary.content;
+    return withProviderDeadline("Anthropic decision", timeoutMs, context.signal, async (signal) => {
+      throwIfAborted(signal, "Anthropic decision");
+      // Validate descriptors before either compaction or a decision can perform I/O.
+      const tools = anthropicTools(context, strict);
       if (
-        summary.stopReason === "compaction" &&
-        summary.content.length === 1 &&
-        block?.type === "compaction" &&
-        typeof block.content === "string" &&
-        typeof block.signature === "string"
-      ) {
-        // The returned assistant message replaces every message it covered, unchanged.
-        // The summarized history ended with tool results, so a user turn must follow it.
-        messages = [
-          { role: "assistant", content: [block] },
-          { role: "user", content: "Continue the task from this summary." },
-        ];
-        context.log.log("Compacted agent conversation");
-      } else {
-        context.log.log(`Anthropic compaction returned no summary (${summary.stopReason})`);
+        request.conversation !== null &&
+        (!Array.isArray(request.conversation) || !request.conversation.every(record))
+      )
+        throw new Error("Invalid Anthropic conversation state");
+      // A restored session starts a new prompt with no tool outcomes. Close _finish
+      // before appending that prompt; the Messages API rejects a second user message.
+      const newPrompt = context.turn === 1 && request.outcomes.length === 0;
+      let messages: unknown[] =
+        request.conversation === null
+          ? []
+          : newPrompt
+            ? closeFinishedTools(request.conversation)
+            : [...request.conversation];
+      const withPrompt = (history: readonly unknown[]) =>
+        newPrompt ? appendUserText(history, request.task) : [...history];
+      const send = (endpointLabel: string, payload: { messages: unknown[] }, beta: boolean) =>
+        providerRequest(
+          "Anthropic",
+          endpointLabel,
+          `${base}/v1/messages`,
+          {
+            ...credentials(apiKey, authToken),
+            "anthropic-version": "2023-06-01",
+            ...(beta || carriesCompaction(payload.messages)
+              ? { "anthropic-beta": COMPACTION_BETA }
+              : {}),
+          },
+          payload,
+          signal
+        );
+      const system = `${request.instructions}\n\n${TOOL_RULE}`;
+      // Summaries read the same system prompt and tools as the conversation.
+      const compactRequest = {
+        model: selectedModel,
+        max_tokens: maxTokens,
+        system,
+        tools,
+        compaction: { type: "summarize", instructions: SUMMARY_INSTRUCTIONS },
+        messages,
+      };
+      const decisionRequest = {
+        model: selectedModel,
+        max_tokens: maxTokens,
+        ...(reasoningEffort === null ? {} : { output_config: { effort: reasoningEffort } }),
+        ...(promptCaching ? { cache_control: { type: "ephemeral" } } : {}),
+        system,
+        tools,
+        // Current models reject forced tool choice; the system rule and retry below steer instead.
+        tool_choice: { type: "auto" },
+        messages,
+      };
+      const results = (availableBytes: number) =>
+        request.outcomes.length === 0
+          ? []
+          : [
+              {
+                role: "user",
+                content: boundedToolOutputs(
+                  "Anthropic",
+                  request.outcomes,
+                  availableBytes - RESULT_MESSAGE_BYTES,
+                  (outcome, output) => ({
+                    type: "tool_result",
+                    tool_use_id: outcome.id,
+                    content: output,
+                    ...(outcome.ok ? {} : { is_error: true }),
+                  })
+                ),
+              },
+            ];
+      const history = [...messages, ...results(MAX_REQUEST_BYTES)];
+      const completed = withPrompt(history);
+      const shouldCompact =
+        compactAfterBytes !== null &&
+        (request.outcomes.length > 0 || (newPrompt && request.conversation !== null)) &&
+        (Buffer.byteLength(JSON.stringify(completed)) > compactAfterBytes ||
+          Buffer.byteLength(JSON.stringify({ ...decisionRequest, messages: completed })) >
+            MAX_REQUEST_BYTES);
+      // Compaction covers completed history only. The new prompt stays verbatim.
+      const nextRequest = shouldCompact ? compactRequest : decisionRequest;
+      const payload = shouldCompact ? history : completed;
+      const fits =
+        Buffer.byteLength(JSON.stringify({ ...nextRequest, messages: payload })) <=
+        MAX_REQUEST_BYTES;
+      messages = fits
+        ? payload
+        : [
+            ...messages,
+            ...results(MAX_REQUEST_BYTES - Buffer.byteLength(JSON.stringify(nextRequest))),
+          ];
+      if (shouldCompact) {
+        const summary = anthropicMessage(
+          await send("compaction", { ...compactRequest, messages }, true)
+        );
+        const [block] = summary.content;
+        if (
+          summary.stopReason === "compaction" &&
+          summary.content.length === 1 &&
+          block?.type === "compaction" &&
+          typeof block.content === "string" &&
+          typeof block.signature === "string"
+        ) {
+          // The returned assistant message replaces every message it covered, unchanged.
+          // The summarized history ended with tool results, so a user turn must follow it.
+          messages = [
+            { role: "assistant", content: [block] },
+            { role: "user", content: "Continue the task from this summary." },
+          ];
+          context.log.log("Compacted agent conversation");
+        } else {
+          context.log.log(`Anthropic compaction returned no summary (${summary.stopReason})`);
+        }
       }
-    }
-    if (newPrompt && (shouldCompact || !fits)) messages = withPrompt(messages);
-    for (let attempt = 0; ; attempt++) {
-      const response = anthropicMessage(
-        await send("messages", { ...decisionRequest, messages }, false)
-      );
-      if (response.stopReason === "max_tokens")
-        throw new Error("Anthropic response reached max_tokens; raise maxTokens");
-      if (response.stopReason === "refusal") throw new Error("Anthropic refused the request");
-      if (response.stopReason !== "tool_use" && response.stopReason !== "end_turn")
-        throw new Error(`Anthropic stopped unexpectedly (${response.stopReason})`);
-      if (response.content.length === 0) throw new Error("Anthropic returned empty content");
-      // Keep every block, including thinking and signatures, exactly as returned.
-      messages = [...messages, { role: "assistant", content: response.content }];
-      const decision = anthropicDecision(response.content);
-      if (decision) return { decision, conversation: messages };
-      if (attempt > 0) throw new Error("Anthropic returned no tool calls");
-      messages = [...messages, { role: "user", content: TOOL_RULE }];
-    }
+      if (newPrompt && (shouldCompact || !fits)) messages = withPrompt(messages);
+      for (let attempt = 0; ; attempt++) {
+        const response = anthropicMessage(
+          await send("messages", { ...decisionRequest, messages }, false)
+        );
+        if (response.stopReason === "max_tokens")
+          throw new Error("Anthropic response reached max_tokens; raise maxTokens");
+        if (response.stopReason === "refusal") throw new Error("Anthropic refused the request");
+        if (response.stopReason !== "tool_use" && response.stopReason !== "end_turn")
+          throw new Error(`Anthropic stopped unexpectedly (${response.stopReason})`);
+        if (response.content.length === 0) throw new Error("Anthropic returned empty content");
+        // Keep every block, including thinking and signatures, exactly as returned.
+        messages = [...messages, { role: "assistant", content: response.content }];
+        const decision = anthropicDecision(response.content);
+        if (decision) return { decision, conversation: messages };
+        if (attempt > 0) throw new Error("Anthropic returned no tool calls");
+        messages = [...messages, { role: "user", content: TOOL_RULE }];
+      }
+    });
   };
   return Object.assign(decide, {
     checkDescriptors: (descriptors: AgentModelDescriptors) =>
