@@ -328,7 +328,7 @@ describe("OpenAI model", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it("reports a deadline that fires while the response body is read as a failure", async () => {
+  it("reports a deadline that fires after the response arrives, before its body is read, as a failure", async () => {
     const fetcher = vi.fn<typeof fetch>().mockImplementation(
       (_url, options) =>
         new Promise((resolve) => {
@@ -342,6 +342,28 @@ describe("OpenAI model", () => {
     vi.stubGlobal("fetch", fetcher);
     const result = await defineAgent({
       id: "deadline-classification",
+      projectContext: false,
+      model: openaiModel({ apiKey: "fixture", timeoutMs: 25 }),
+    }).run({ task: "Work" });
+    expect(result.status).toBe("failed");
+    expect(JSON.stringify(result.errors)).toContain("timed out after 25 ms");
+    expect(JSON.stringify(result.errors)).not.toContain("TUBELESS_RUN_CANCELLED");
+  });
+
+  it("reports a deadline that interrupts a pending response body read as a failure", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((_url, options) => {
+      const signal = options!.signal!;
+      // Like fetch, error the pending body stream with the signal's reason on abort.
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          signal.addEventListener("abort", () => controller.error(signal.reason), { once: true });
+        },
+      });
+      return Promise.resolve(new Response(body));
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const result = await defineAgent({
+      id: "deadline-pending-body",
       projectContext: false,
       model: openaiModel({ apiKey: "fixture", timeoutMs: 25 }),
     }).run({ task: "Work" });
