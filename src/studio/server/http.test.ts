@@ -95,4 +95,47 @@ describe("fetch-native Studio responses", () => {
       )
     ).rejects.toMatchObject({ code: "request_body_too_large", status: 413 });
   });
+
+  it("rejects invalid UTF-8 request bodies", async () => {
+    const request = new Request("http://studio.local/", {
+      method: "POST",
+      body: new Uint8Array([0x22, 0xff, 0x22]),
+    });
+    await expect(readJsonBody(request)).rejects.toMatchObject({
+      code: "invalid_json",
+      status: 400,
+    });
+  });
+
+  it("releases the stream when reading fails", async () => {
+    let pulls = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulls++ === 0) controller.enqueue(new TextEncoder().encode("{"));
+        else controller.error(new Error("client aborted"));
+      },
+    });
+    // `duplex` is required for stream bodies but missing from the DOM RequestInit type.
+    const init: RequestInit & { duplex: "half" } = { method: "POST", body: stream, duplex: "half" };
+    await expect(readJsonBody(new Request("http://studio.local/", init))).rejects.toThrow(
+      "client aborted"
+    );
+    expect(stream.locked).toBe(false);
+  });
+
+  it("releases the stream when the body is too large", async () => {
+    let pulls = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulls++ < 3) controller.enqueue(new Uint8Array(30_000).fill(0x20));
+        else controller.close();
+      },
+    });
+    // `duplex` is required for stream bodies but missing from the DOM RequestInit type.
+    const init: RequestInit & { duplex: "half" } = { method: "POST", body: stream, duplex: "half" };
+    await expect(readJsonBody(new Request("http://studio.local/", init))).rejects.toMatchObject({
+      code: "request_body_too_large",
+    });
+    expect(stream.locked).toBe(false);
+  });
 });
