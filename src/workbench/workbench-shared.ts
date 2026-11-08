@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import * as path from "node:path";
 import type { Readable } from "node:stream";
 import { TUBELESS_WORKBENCH_EXIT_CODE } from "../cli/cli-exit.js";
+import { onFirstProcessSignal } from "../cli/cli-signal.js";
 import { loadPlanSourceModule, type WorkbenchPlanSource } from "./pipeline-module.js";
 import { tubelessErrorKind } from "../utilities/tubeless-error.js";
 
@@ -171,30 +172,6 @@ export interface ManagedWorkbenchSignal {
   wasInterrupted(): boolean;
 }
 
-/** Watch for the first terminal signal, then restore default signal handling. */
-export function onFirstProcessSignal(
-  signals: readonly NodeJS.Signals[],
-  onFirst: (signal: NodeJS.Signals) => void
-): () => void {
-  let handled = false;
-  const removeAll = (): void => {
-    for (const { signal, listener } of listeners) {
-      process.removeListener(signal, listener);
-    }
-  };
-  const listeners = signals.map((signal) => {
-    const listener = (): void => {
-      if (handled) return;
-      handled = true;
-      removeAll();
-      onFirst(signal);
-    };
-    process.on(signal, listener);
-    return { signal, listener };
-  });
-  return removeAll;
-}
-
 export function manageWorkbenchSignal(io: WorkbenchCliIo): ManagedWorkbenchSignal {
   if (io.signal) {
     return {
@@ -206,9 +183,9 @@ export function manageWorkbenchSignal(io: WorkbenchCliIo): ManagedWorkbenchSigna
 
   const controller = new AbortController();
   let interrupted = false;
-  const dispose = onFirstProcessSignal(["SIGINT"], () => {
+  const dispose = onFirstProcessSignal(["SIGINT", "SIGTERM"], (signal) => {
     interrupted = true;
-    io.stderr.write("SIGINT received; cancelling pipeline work.\n");
+    io.stderr.write(`${signal} received; cancelling pipeline work.\n`);
     controller.abort();
   });
   return {

@@ -637,7 +637,7 @@ it:
 tubeless run --export PublishCommand ./scripts/publish.ts -- --source input.json --target publish
 ```
 
-The CLI forwards SIGINT to the run's abort signal and uses distinct exit codes
+The CLI forwards SIGINT and SIGTERM to the run's abort signal and uses distinct exit codes
 for validation, planning, execution, and cancellation errors. Pass `--store`
 to record SQLite history or `--trace` to write an NDJSON file.
 

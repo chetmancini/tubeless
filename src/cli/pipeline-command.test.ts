@@ -487,7 +487,7 @@ describe("definePipelineCommand", () => {
     expect(seenSignal).toBe(controller.signal);
   });
 
-  it("creates and cleans up a SIGINT signal for main entrypoints", async () => {
+  it("creates and cleans up SIGINT and SIGTERM signals for main entrypoints", async () => {
     let seenSignal: AbortSignal | undefined;
     const { step } = createSteps();
     const work = step("work", {
@@ -503,21 +503,24 @@ describe("definePipelineCommand", () => {
     });
     const command = definePipelineCommand(pipeline, { mapOptions: () => ({}), reporter: false });
     const log = testLog();
-    const onceSpy = vi.spyOn(process, "once");
+    const onSpy = vi.spyOn(process, "on");
     const removeListenerSpy = vi.spyOn(process, "removeListener");
 
     try {
       await command.main([], { log });
     } finally {
-      const onceCalls = onceSpy.mock.calls.slice();
+      const onCalls = onSpy.mock.calls.slice();
       const removeListenerCalls = removeListenerSpy.mock.calls.slice();
-      onceSpy.mockRestore();
+      onSpy.mockRestore();
       removeListenerSpy.mockRestore();
 
-      const sigintRegistration = onceCalls.find(([event]) => event === "SIGINT");
+      const sigintRegistration = onCalls.find(([event]) => event === "SIGINT");
+      const sigtermRegistration = onCalls.find(([event]) => event === "SIGTERM");
       expect(sigintRegistration).toBeDefined();
+      expect(sigtermRegistration).toBeDefined();
       expect(seenSignal).toBeInstanceOf(AbortSignal);
       expect(removeListenerCalls).toContainEqual(["SIGINT", sigintRegistration?.[1]]);
+      expect(removeListenerCalls).toContainEqual(["SIGTERM", sigtermRegistration?.[1]]);
     }
   });
 
@@ -555,19 +558,19 @@ describe("definePipelineCommand", () => {
     const command = definePipelineCommand(pipeline, { mapOptions: () => ({}), reporter: false });
     const log = testLog();
     const previousExitCode = process.exitCode;
-    const onceSpy = vi.spyOn(process, "once");
+    const onSpy = vi.spyOn(process, "on");
 
     try {
       const runPromise = command.main([], { log });
       await started;
-      const registration = onceSpy.mock.calls.find(([event]) => event === "SIGINT");
+      const registration = onSpy.mock.calls.find(([event]) => event === "SIGINT");
       expect(registration).toBeDefined();
       (registration![1] as () => void)();
       await runPromise;
     } finally {
       const observedExitCode = process.exitCode;
       process.exitCode = previousExitCode;
-      onceSpy.mockRestore();
+      onSpy.mockRestore();
 
       expect(observedExitCode).toBe(130);
     }
@@ -575,6 +578,62 @@ describe("definePipelineCommand", () => {
     expect(seenSignal?.aborted).toBe(true);
     expect(ranAfterCancellation).toBe(false);
     expect(log.lines.some(({ message }) => message.includes("SIGINT received"))).toBe(true);
+  });
+
+  it("aborts a main pipeline when its SIGTERM handler fires", async () => {
+    let resolveStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    let seenSignal: AbortSignal | undefined;
+    let ranAfterCancellation = false;
+    const { step } = createSteps();
+    const wait = step("wait", {
+      run: async (_inputs, context) => {
+        if (!context.signal) throw new Error("expected a managed CLI signal");
+        seenSignal = context.signal;
+        resolveStarted?.();
+        await new Promise<void>((resolve) => {
+          context.signal?.addEventListener("abort", () => resolve(), { once: true });
+        });
+        return "done";
+      },
+    });
+    const after = step("after", {
+      dependsOn: [wait],
+      run: () => {
+        ranAfterCancellation = true;
+        return "after";
+      },
+    });
+    const pipeline = definePipeline({
+      id: "main-sigterm-abort",
+      steps: [wait, after],
+      finalize: (outputs) => outputs.after ?? outputs.wait,
+    });
+    const command = definePipelineCommand(pipeline, { mapOptions: () => ({}), reporter: false });
+    const log = testLog();
+    const previousExitCode = process.exitCode;
+    const onSpy = vi.spyOn(process, "on");
+
+    try {
+      const runPromise = command.main([], { log });
+      await started;
+      const registration = onSpy.mock.calls.find(([event]) => event === "SIGTERM");
+      expect(registration).toBeDefined();
+      (registration![1] as () => void)();
+      await runPromise;
+    } finally {
+      const observedExitCode = process.exitCode;
+      process.exitCode = previousExitCode;
+      onSpy.mockRestore();
+
+      expect(observedExitCode).toBe(143);
+    }
+
+    expect(seenSignal?.aborted).toBe(true);
+    expect(ranAfterCancellation).toBe(false);
+    expect(log.lines.some(({ message }) => message.includes("SIGTERM received"))).toBe(true);
   });
 
   it("keeps the SIGINT exit code when pipeline cleanup returns normally", async () => {
@@ -601,19 +660,19 @@ describe("definePipelineCommand", () => {
     const command = definePipelineCommand(pipeline, { mapOptions: () => ({}), reporter: false });
     const log = testLog();
     const previousExitCode = process.exitCode;
-    const onceSpy = vi.spyOn(process, "once");
+    const onSpy = vi.spyOn(process, "on");
 
     try {
       const runPromise = command.main([], { log });
       await started;
-      const registration = onceSpy.mock.calls.find(([event]) => event === "SIGINT");
+      const registration = onSpy.mock.calls.find(([event]) => event === "SIGINT");
       expect(registration).toBeDefined();
       (registration![1] as () => void)();
       await runPromise;
       expect(process.exitCode).toBe(130);
     } finally {
       process.exitCode = previousExitCode;
-      onceSpy.mockRestore();
+      onSpy.mockRestore();
     }
   });
 

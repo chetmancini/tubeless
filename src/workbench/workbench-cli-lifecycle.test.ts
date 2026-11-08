@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
-import { onFirstProcessSignal } from "./workbench-shared.js";
+import { onFirstProcessSignal } from "../cli/cli-signal.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli } from "./workbench.js";
 import {
   captureIo,
@@ -101,6 +101,35 @@ describe("workbench CLI lifecycle", () => {
       expect(await runPromise).toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
       expect(io.errors.join("")).toContain("SIGINT received; cancelling pipeline work.");
       expect(removeListenerSpy.mock.calls).toContainEqual(["SIGINT", registration?.[1]]);
+    } finally {
+      onSpy.mockRestore();
+      removeListenerSpy.mockRestore();
+    }
+  });
+
+  it("turns SIGTERM into cancellation and removes its temporary listeners", async () => {
+    const { directory, filePath } = await writeActualPipelineCommandModule();
+    const io = captureIo(directory);
+    const onSpy = vi.spyOn(process, "on");
+    const removeListenerSpy = vi.spyOn(process, "removeListener");
+
+    try {
+      const runPromise = runWorkbenchCli(
+        ["run", "pipeline.mjs", "--", "--message", "hello", "--mode", "wait"],
+        io
+      );
+      const fixture = (await import(pathToFileURL(filePath).href)) as { started: Promise<void> };
+      await fixture.started;
+      const sigint = onSpy.mock.calls.find(([event]) => event === "SIGINT");
+      const sigterm = onSpy.mock.calls.find(([event]) => event === "SIGTERM");
+      expect(sigint).toBeDefined();
+      expect(sigterm).toBeDefined();
+      (sigterm![1] as () => void)();
+
+      expect(await runPromise).toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
+      expect(io.errors.join("")).toContain("SIGTERM received; cancelling pipeline work.");
+      expect(removeListenerSpy.mock.calls).toContainEqual(["SIGINT", sigint?.[1]]);
+      expect(removeListenerSpy.mock.calls).toContainEqual(["SIGTERM", sigterm?.[1]]);
     } finally {
       onSpy.mockRestore();
       removeListenerSpy.mockRestore();

@@ -775,7 +775,7 @@ missing target argument is a usage error.
 | `6`  | Execution    |
 | `7`  | Cancellation |
 
-SIGINT is forwarded through the command context. Help (`--help` or a command's
+SIGINT and SIGTERM are forwarded through the command context. Help (`--help` or a command's
 own help) exits `0`.
 
 Use `inspect --tag <tag> --owner <owner> --domain <domain>` for metadata discovery.
