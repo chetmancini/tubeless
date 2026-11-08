@@ -193,6 +193,14 @@ describe("tubeless init", () => {
     expect(err.join("")).toContain("Could not write cloudflare.config.ts");
     expect(err.join("")).toContain("Already created: cloudflare/worker.ts");
   });
+
+  it("pins the Cloudflare scaffold to the toolchain this repository tests", () => {
+    const { devDependencies } = JSON.parse(readFileSync("package.json", "utf8")) as {
+      devDependencies: Record<string, string>;
+    };
+    for (const [name, version] of Object.entries(CLOUDFLARE_DEV_DEPENDENCIES))
+      expect({ name, version }).toEqual({ name, version: devDependencies[name] });
+  });
 });
 
 describe("cloudflare scaffold naming and imports", () => {
