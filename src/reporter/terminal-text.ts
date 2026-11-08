@@ -2,7 +2,9 @@ const TERMINAL_OSC = /(?:\u001B\]|\u009D)[\s\S]*?(?:\u0007|\u001B\\|\u009C)/g;
 const TERMINAL_STRING = /(?:\u001B[P_X^]|\u0090|\u0098|\u009E|\u009F)[\s\S]*?(?:\u001B\\|\u009C)/g;
 const TERMINAL_CSI = /(?:\u001B\[|\u009B)[0-?]*[ -/]*[@-~]/g;
 const TERMINAL_ESCAPE = /\u001B[@-_]/g;
-const TERMINAL_CONTROL = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/g;
+// C0/C1 controls plus bidirectional formatting controls that can reorder displayed text.
+const TERMINAL_CONTROL =
+  /[\u0000-\u0009\u000B-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
 
 function stripTerminalControls(value: string): string {
   return value
