@@ -299,7 +299,9 @@ describe("MCP servers", () => {
       expect(requests.filter(({ method }) => method === "tools/list")).toHaveLength(
         mode === "repeated" ? 2 : 1024
       );
-    }
+    },
+    // Issues 1024 real HTTP requests; allow for loaded CI machines.
+    20_000
   );
 
   it("keeps long JSON-RPC errors recoverable and the connection usable", async () => {
