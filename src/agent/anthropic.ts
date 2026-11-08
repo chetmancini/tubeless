@@ -48,7 +48,10 @@ export interface AnthropicModelOptions {
    * exceeds the request limit. null never requests on-demand compaction.
    */
   readonly compactAfterBytes?: number | null;
-  /** Combined deadline for compaction and decision requests; defaults to 600000 ms. */
+  /**
+   * Combined deadline for compaction and decision requests; defaults to 600000 ms.
+   * Reaching it fails the decision rather than cancelling the run.
+   */
   readonly timeoutMs?: number;
 }
 

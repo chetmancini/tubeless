@@ -82,6 +82,10 @@ const gpt = defineAgent({ id: "coding", model: openaiModel() });
 
 Every environment value is read when a decision executes, so imports, plans and dry
 runs need no credentials. Options always take precedence over the environment.
+
+`timeoutMs` bounds one decision, including any compaction request. When it elapses,
+the decision fails with `OpenAI decision timed out after N ms` (or `Anthropic …`) and
+the run reports `failed`, not `cancelled`. Only the run's own abort signal cancels it.
 The executable [Claude recipe](../examples/agent-model-anthropic.ts) is registered as
 `claude-coding-agent` beside the OpenAI-backed `coding-agent`. To use another
 server that implements either API, see [compatible APIs](#compatible-apis).

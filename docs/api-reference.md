@@ -21,9 +21,9 @@ Package: `tubeless`
 | `tubeless/project`          | `./dist/project/project.d.ts`             | `54e026c26790be29f37beec3dafaec27d4d885ad2e0e6ee288174fbbef51964a` |                8 |
 | `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `f1c9d6699246a6f91329d1d23c53d310e4a18d5b136375c109d128126165d038` |               10 |
 | `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `9b7b2835a4ffa8bdce42233c0ff22ca28fe2a51de95208d895f6fc1904d2bad0` |                3 |
-| `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `8e08fe480b86de80ede5e03d7f30fff3a46f9da7ce9d5261441e961bea6678ac` |                2 |
+| `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `2605f953e1fc83a3f8b4bcdf070b8aa5e4385835bbb0701c858b00473a81e424` |                2 |
 | `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `1fdae9dd284b5c9fe01ae9f4e8aade2035fcc8a6948d311fd67201d7a8b31d0e` |                7 |
-| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `51fc37d127b384327979df8f47e29125977cb2ae0f87fe8676d916d7bf30011f` |                2 |
+| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `967a0b9f15a5fffa242b69a158dd6f5269aa754d2a86e10e432199136b5e57f2` |                2 |
 | `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `044fb4cc0ef6b0b1afb241c3001446640aedf6efb10f58b2f73d96e879478002` |               12 |
 | `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `a9a03a7a9a1b62cd3fe611ef83b864c876f61b8d74ece137761ed2a3ef98bc38` |                4 |
 
@@ -289,7 +289,7 @@ Package: `tubeless`
 
 | Symbol                                                                                            | Description                                                                                   |
 | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L40)        | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
+| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L43)        | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
 | [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L10) | Responses transport settings; credentials are resolved only when a decision executes.         |
 
 ### `tubeless/agent/mcp`
@@ -308,7 +308,7 @@ Package: `tubeless`
 
 | Symbol                                                                                                  | Description                                                                                     |
 | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [`anthropicModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L65)        | Create a dependency-free Anthropic Messages model with native history and on-demand compaction. |
+| [`anthropicModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L68)        | Create a dependency-free Anthropic Messages model with native history and on-demand compaction. |
 | [`AnthropicModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L20) | Messages API transport settings; credentials are resolved only when a decision executes.        |
 
 ### `tubeless/cloudflare`

@@ -32,7 +32,10 @@ export interface OpenAIModelOptions {
    * exceeds the request limit. null never calls /responses/compact, for servers without it.
    */
   readonly compactAfterBytes?: number | null;
-  /** Combined deadline for compaction and decision requests; defaults to 60000 ms. */
+  /**
+   * Combined deadline for compaction and decision requests; defaults to 60000 ms.
+   * Reaching it fails the decision rather than cancelling the run.
+   */
   readonly timeoutMs?: number;
 }
 
