@@ -28,6 +28,7 @@ export class PipelineRunStudioHistoryBusyError extends Error {
 /** Serializes incremental store reads and history clearing for one studio server. */
 export class PipelineRunStudioEventState {
   #lastEventId: number | undefined;
+  #oldestEventId: number | undefined;
   #operation: Promise<void> = Promise.resolve();
   #projector = createPipelineRunProjector({ retainLogs: false, retainArtifacts: false });
   readonly #details: StudioRunDetails;
@@ -47,11 +48,26 @@ export class PipelineRunStudioEventState {
     return result;
   }
 
+  #reset(): void {
+    this.#lastEventId = undefined;
+    this.#oldestEventId = undefined;
+    this.#projector.clear();
+    this.#details.clear();
+    this.#history = undefined;
+    this.#revision += 1;
+  }
+
   async #appendNewEvents(): Promise<void> {
+    if (this.#oldestEventId !== undefined) {
+      const [oldest] = await this.store.listEvents({ limit: 1 });
+      // Stores delete only by clearing everything; a different oldest event means another process cleared history.
+      if (oldest?.id !== this.#oldestEventId) this.#reset();
+    }
     for await (const page of readPipelineEventPages(this.store, {
       afterId: this.#lastEventId,
       limit: 100_000,
     })) {
+      this.#oldestEventId ??= page[0]!.id;
       this.#projector.append(page);
       this.#lastEventId = page.at(-1)!.id;
       this.#revision += 1;
@@ -127,11 +143,7 @@ export class PipelineRunStudioEventState {
       await this.#appendNewEvents();
       const snapshot = this.#projector.snapshot();
       await history.clear();
-      this.#lastEventId = undefined;
-      this.#projector.clear();
-      this.#details.clear();
-      this.#history = undefined;
-      this.#revision += 1;
+      this.#reset();
       return {
         eventCount: snapshot.runs.reduce((n, run) => n + run.eventCount, 0),
         runCount: snapshot.runs.length,

@@ -69,7 +69,38 @@ describe("Studio state coordination", () => {
 
     reader.listEvents.mockClear();
     expect((await state.detail("run"))?.run.logs).toHaveLength(1);
-    expect(reader.listEvents.mock.calls.every(([query]) => query?.afterId === 2)).toBe(true);
+    const reads = reader.listEvents.mock.calls.filter(
+      ([query]) => !(query?.limit === 1 && Object.keys(query).length === 1)
+    );
+    expect(reads.every(([query]) => query?.afterId === 2)).toBe(true);
+  });
+
+  it("resets when another process clears the store", async () => {
+    const events = recordedRun();
+    const state = new PipelineRunStudioEventState(memoryStore(events));
+    expect(await state.workspace()).toMatchObject({ runCount: 1 });
+
+    // SQLite ids keep growing after a clear.
+    events.length = 0;
+    events.push(
+      ...recordedRun("replacement").map((event, index) => ({
+        ...event,
+        id: index + 3,
+        runId: "other",
+      }))
+    );
+    const after = await state.workspace();
+    expect(after.runCount).toBe(1);
+    expect(after.runs.map((run) => run.runId)).toEqual(["other"]);
+    expect(await state.detail("run")).toBeUndefined();
+  });
+
+  it("resets to empty when another process clears the store and nothing new arrives", async () => {
+    const events = recordedRun();
+    const state = new PipelineRunStudioEventState(memoryStore(events));
+    expect(await state.workspace()).toMatchObject({ runCount: 1 });
+    events.length = 0;
+    expect(await state.workspace()).toMatchObject({ runCount: 0 });
   });
 
   it("rejects a busy clear and continues serving reads through the same queue", async () => {
