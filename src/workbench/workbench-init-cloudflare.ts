@@ -41,13 +41,14 @@ function projectImport(projectExport: string, specifier: string): string {
 }
 
 /**
- * Exact tooling versions the scaffold is verified against: `cf deploy` builds through
+ * Exact tooling versions the scaffold is verified against; a test keeps them
+ * equal to this repository's devDependencies. `cf deploy` builds through
  * `@cloudflare/vite-plugin`, so all three are required and pinned together.
  */
 export const CLOUDFLARE_DEV_DEPENDENCIES = {
-  cf: "1.0.0-beta.18",
-  vite: "8.3.4",
-  "@cloudflare/vite-plugin": "2.0.0-beta.sha-805ec1ff3",
+  cf: "1.0.0-beta.28",
+  vite: "8.3.6",
+  "@cloudflare/vite-plugin": "2.0.0-beta.v.11",
 } as const;
 
 const devDependencyInstall = Object.entries(CLOUDFLARE_DEV_DEPENDENCIES)
