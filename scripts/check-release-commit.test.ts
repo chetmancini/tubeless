@@ -100,7 +100,8 @@ afterEach(async () => {
   );
 });
 
-describe("release commit guard", () => {
+// Creates real git repositories; allow for loaded machines.
+describe("release commit guard", { timeout: 30_000 }, () => {
   it.each(["annotated", "lightweight"] as const)(
     "resolves a matching %s tag without mutation",
     async (kind) => {
@@ -123,7 +124,8 @@ describe("release commit guard", () => {
   });
 });
 
-describe("publish workflow release identity", () => {
+// Creates real git repositories; allow for loaded machines.
+describe("publish workflow release identity", { timeout: 30_000 }, () => {
   it("rejects a fresh manual dispatch when main advanced beyond an unpublished tag", async () => {
     const { repo, remote, output, tag, commit } = await fixture();
     await writeFile(join(repo, "later.txt"), "Different source, unchanged package version\n");
