@@ -15,7 +15,8 @@ import {
   writeStudioConfig,
 } from "./workbench.test-support.js";
 
-describe("workbench UI integration", () => {
+// Studio startup waits allow 10 s on loaded machines; leave room for setup and shutdown.
+describe("workbench UI integration", { timeout: 30_000 }, () => {
   it("serves and cleanly stops the optional local studio command", async () => {
     const { directory } = await writeModule("export {};");
     const controller = new AbortController();
@@ -151,7 +152,7 @@ describe("workbench UI integration", () => {
 
     controller.abort();
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
-  }, 10_000);
+  });
 
   it("holds the launch POST until mapOptions records a store row", async () => {
     const gateDirectory = await mkdtemp(path.join(os.tmpdir(), "tubeless-gate-"));
@@ -632,7 +633,7 @@ it("runs remote-bind commands in gateway mode and retains history without revivi
     if (previous === undefined) delete process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
     else process.env.TUBELESS_STUDIO_GATEWAY_TOKEN = previous;
   }
-});
+}, 30_000);
 
 it("keeps hosted NDJSON history read-only for every mutation", async () => {
   // Observe the real listener so the OS can assign its port without a reservation gap.
@@ -692,4 +693,4 @@ it("keeps hosted NDJSON history read-only for every mutation", async () => {
     if (previous === undefined) delete process.env.TUBELESS_STUDIO_GATEWAY_TOKEN;
     else process.env.TUBELESS_STUDIO_GATEWAY_TOKEN = previous;
   }
-});
+}, 30_000);
