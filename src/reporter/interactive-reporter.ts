@@ -326,12 +326,16 @@ function createInteractiveReporter<TResult>(
   const frameLines = (): string[] => {
     if (!plan) return [];
     const lines: string[] = [];
-    if (options.logPlan !== false) {
-      const header = result
-        ? options.logSummary === false
+    const header = result
+      ? options.logSummary !== false
+        ? summaryHeader(result)
+        : options.logPlan !== false
           ? `Pipeline ${safeTerminalText(result.pipelineId)}`
-          : summaryHeader(result)
-        : liveHeader(plan);
+          : undefined
+      : options.logPlan !== false
+        ? liveHeader(plan)
+        : undefined;
+    if (header !== undefined) {
       lines.push(
         result?.status === "completed"
           ? theme.styled.complete(header)

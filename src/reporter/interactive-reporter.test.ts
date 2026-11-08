@@ -105,6 +105,62 @@ describe("createPipelineReporter", () => {
     }
   });
 
+  it("shows the final summary when logPlan is false and logSummary is not", async () => {
+    const output = { ...captureOutput(true, 140), rows: 12 };
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      logPlan: false,
+      mode: "interactive",
+      output,
+      symbols: "ascii",
+    });
+    try {
+      const result = await progressivePipeline().run(
+        {},
+        {},
+        {
+          cwd: "/tmp",
+          hooks: reporter.hooks,
+          log: reporter.log,
+        }
+      );
+      expect(result.status).toBe("completed");
+      expect(renderTerminal(output.chunks.join("")).join("\n")).toContain("completed in");
+    } finally {
+      reporter.dispose();
+    }
+  });
+
+  it("shows no header row when logPlan and logSummary are both false", async () => {
+    const output = { ...captureOutput(true, 140), rows: 12 };
+    const reporter = createPipelineReporter({
+      color: "never",
+      log: captureLog(),
+      logPlan: false,
+      logSummary: false,
+      mode: "interactive",
+      output,
+      symbols: "ascii",
+    });
+    try {
+      const result = await progressivePipeline().run(
+        {},
+        {},
+        {
+          cwd: "/tmp",
+          hooks: reporter.hooks,
+          log: reporter.log,
+        }
+      );
+      expect(result.status).toBe("completed");
+      const lines = renderTerminal(output.chunks.join(""));
+      expect(lines.some((line) => line.trimStart().startsWith("Pipeline "))).toBe(false);
+    } finally {
+      reporter.dispose();
+    }
+  });
+
   it("shows recent sanitized logs only in the pane while it is visible", async () => {
     const output = { ...captureOutput(true, 120), rows: 12 };
     const reporter = createPipelineReporter({
