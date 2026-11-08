@@ -14,9 +14,9 @@ import { spawnSync } from "node:child_process";
 import { packedTarballFilename, resolveNpm } from "./resolve-npm.mjs";
 
 const [nodeMajor, nodeMinor] = process.versions.node.split(".").map(Number);
-if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 6)) {
+if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 18)) {
   throw new Error(
-    `Packed-artifact verification requires Node.js 22.6 or later; found ${process.versions.node}.`
+    `Packed-artifact verification requires Node.js 22.18 or later; found ${process.versions.node}.`
   );
 }
 

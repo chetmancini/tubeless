@@ -20,11 +20,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - node: 22
-            shard: 1/2
+          - node: "22.18.0"
+            shard: 1/1
           - node: 24
           - node: 26
-            shard: 2/2
+            shard: 1/1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -49,9 +49,9 @@ jobs:
           path: .vitest-cache
           key: ${{ runner.os }}-vitest-${{ hashFiles('bun.lock', 'vitest.config.ts') }}
       # Lint, formatting, typecheck, docs, and API checks do not depend on Node;
-      # run the complete gate once on node 24. Runtime lanes verify the package
-      # against the other supported Node versions, each running half the test
-      # suite via TEST_SHARD so the pair covers the full set once.
+      # run the complete gate once on node 24. Runtime lanes run the whole test
+      # suite and the pack smoke test on the minimum supported Node (22.18.0)
+      # and on Node 26.
       - name: Check
         if: matrix.node == 24
         run: make check

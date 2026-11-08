@@ -33,7 +33,7 @@ The Python example is tested with Dagster 1.13.24.
 
 ## Run locally
 
-Use Node.js 22.6 or later, Bun, Python 3.12, and
+Use Node.js 22.18 or later, Bun, Python 3.12, and
 [uv](https://docs.astral.sh/uv/getting-started/installation/). From the repository root:
 
 ```sh

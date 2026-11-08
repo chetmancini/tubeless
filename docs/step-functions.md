@@ -32,7 +32,7 @@ would be a successful Lambda response, so this handler throws on failure.
 
 ## Build and deploy
 
-Install Bun, Node.js 22.6 or later, the
+Install Bun, Node.js 22.18 or later, the
 [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html),
 and AWS CLI v2. From the repository root:
 

@@ -34,7 +34,7 @@ separate trigger argument; see the
 
 ## Run locally
 
-Use Node.js 22.6 or later and Bun 1.3.14 or later. From the repository root:
+Use Node.js 22.18 or later and Bun 1.3.14 or later. From the repository root:
 
 ```sh
 bun ci
