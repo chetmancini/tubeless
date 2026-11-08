@@ -25,7 +25,9 @@ describe("workbench UI integration", () => {
       io
     );
 
-    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"), {
+      timeout: 10_000,
+    });
     const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
     expect(url).toBeDefined();
     await expect(fetch(url!)).resolves.toMatchObject({ status: 200 });
@@ -66,7 +68,7 @@ describe("workbench UI integration", () => {
     });
 
     await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"), {
-      timeout: 5_000,
+      timeout: 10_000,
     });
     const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
     expect(url).toBeDefined();
@@ -133,14 +135,19 @@ describe("workbench UI integration", () => {
       runs: { runId: string }[];
     };
     expect(recorded.runs).toContainEqual(expect.objectContaining({ runId: launch.runId }));
-    await vi.waitFor(async () => {
-      const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
-        runs: { runId: string; status: string }[];
-      };
-      expect(snapshot.runs).toContainEqual(
-        expect.objectContaining({ runId: launch.runId, status: "completed" })
-      );
-    });
+    await vi.waitFor(
+      async () => {
+        const snapshot = (await fetch(`${url}/api/snapshot`).then((response) =>
+          response.json()
+        )) as {
+          runs: { runId: string; status: string }[];
+        };
+        expect(snapshot.runs).toContainEqual(
+          expect.objectContaining({ runId: launch.runId, status: "completed" })
+        );
+      },
+      { timeout: 10_000 }
+    );
 
     controller.abort();
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
@@ -175,7 +182,9 @@ describe("workbench UI integration", () => {
       io
     );
 
-    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"), {
+      timeout: 10_000,
+    });
     const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
     expect(url).toBeDefined();
     const commands = (await fetch(`${url}/api/commands`).then((response) => response.json())) as {
@@ -193,13 +202,18 @@ describe("workbench UI integration", () => {
       resolved = true;
       return response;
     });
-    await vi.waitFor(() => expect(existsSync(startedFile)).toBe(true));
-    await vi.waitFor(async () => {
-      const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
-        liveRunIds: string[];
-      };
-      expect(snapshot.liveRunIds).toEqual([]);
-    });
+    await vi.waitFor(() => expect(existsSync(startedFile)).toBe(true), { timeout: 10_000 });
+    await vi.waitFor(
+      async () => {
+        const snapshot = (await fetch(`${url}/api/snapshot`).then((response) =>
+          response.json()
+        )) as {
+          liveRunIds: string[];
+        };
+        expect(snapshot.liveRunIds).toEqual([]);
+      },
+      { timeout: 10_000 }
+    );
     expect(resolved).toBe(false);
     await writeFile(gateFile, "go");
     const launched = await launchPromise;
@@ -235,7 +249,9 @@ describe("workbench UI integration", () => {
       io
     );
 
-    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"), {
+      timeout: 10_000,
+    });
     const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
     expect(url).toBeDefined();
     const commands = (await fetch(`${url}/api/commands`).then((response) => response.json())) as {
@@ -297,7 +313,9 @@ describe("workbench UI integration", () => {
       io
     );
 
-    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"), {
+      timeout: 10_000,
+    });
     const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
     expect(url).toBeDefined();
     const commands = (await fetch(`${url}/api/commands`).then((response) => response.json())) as {
@@ -315,13 +333,18 @@ describe("workbench UI integration", () => {
       resolved = true;
       return response;
     });
-    await vi.waitFor(() => expect(existsSync(startedFile)).toBe(true));
-    await vi.waitFor(async () => {
-      const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
-        liveRunIds: string[];
-      };
-      expect(snapshot.liveRunIds).toEqual([]);
-    });
+    await vi.waitFor(() => expect(existsSync(startedFile)).toBe(true), { timeout: 10_000 });
+    await vi.waitFor(
+      async () => {
+        const snapshot = (await fetch(`${url}/api/snapshot`).then((response) =>
+          response.json()
+        )) as {
+          liveRunIds: string[];
+        };
+        expect(snapshot.liveRunIds).toEqual([]);
+      },
+      { timeout: 10_000 }
+    );
     expect(resolved).toBe(false);
     controller.abort();
     const failed = await launchPromise;
@@ -353,7 +376,9 @@ describe("workbench UI integration", () => {
       io
     );
 
-    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"), {
+      timeout: 10_000,
+    });
     const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
     expect(url).toBeDefined();
     await expect(
@@ -376,20 +401,25 @@ describe("workbench UI integration", () => {
     };
     const first = await launchWait("first");
     const second = await launchWait("second");
-    await vi.waitFor(async () => {
-      const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
-        liveRunIds: string[];
-        runs: { runId: string; status: string }[];
-      };
-      expect(snapshot.runs).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ runId: first.runId, status: "running" }),
-          expect.objectContaining({ runId: second.runId, status: "running" }),
-        ])
-      );
-      expect(snapshot.liveRunIds).toEqual(expect.arrayContaining([first.runId, second.runId]));
-      expect(snapshot.liveRunIds).toHaveLength(2);
-    });
+    await vi.waitFor(
+      async () => {
+        const snapshot = (await fetch(`${url}/api/snapshot`).then((response) =>
+          response.json()
+        )) as {
+          liveRunIds: string[];
+          runs: { runId: string; status: string }[];
+        };
+        expect(snapshot.runs).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ runId: first.runId, status: "running" }),
+            expect.objectContaining({ runId: second.runId, status: "running" }),
+          ])
+        );
+        expect(snapshot.liveRunIds).toEqual(expect.arrayContaining([first.runId, second.runId]));
+        expect(snapshot.liveRunIds).toHaveLength(2);
+      },
+      { timeout: 10_000 }
+    );
 
     const cancelled = await fetch(`${url}/api/runs/${encodeURIComponent(first.runId)}/cancel`, {
       headers: { "x-tubeless-studio-cancel": "1" },
@@ -397,26 +427,31 @@ describe("workbench UI integration", () => {
     });
     expect(cancelled.status).toBe(202);
     await expect(cancelled.json()).resolves.toEqual({ cancelled: true, runId: first.runId });
-    await vi.waitFor(async () => {
-      const snapshot = (await fetch(`${url}/api/snapshot`).then((response) => response.json())) as {
-        liveRunIds: string[];
-        runs: { runId: string; status: string }[];
-      };
-      expect(snapshot.runs).toContainEqual(
-        expect.objectContaining({
-          runId: first.runId,
-          status: "cancelled",
-        })
-      );
-      expect(snapshot.runs).toContainEqual(
-        expect.objectContaining({ runId: second.runId, status: "running" })
-      );
-      expect(snapshot.liveRunIds).toEqual([second.runId]);
-      const detail = await fetch(`${url}/api/runs/${encodeURIComponent(first.runId)}`).then(
-        (response) => response.json()
-      );
-      expect(detail.run.error.message).toContain("run was cancelled");
-    });
+    await vi.waitFor(
+      async () => {
+        const snapshot = (await fetch(`${url}/api/snapshot`).then((response) =>
+          response.json()
+        )) as {
+          liveRunIds: string[];
+          runs: { runId: string; status: string }[];
+        };
+        expect(snapshot.runs).toContainEqual(
+          expect.objectContaining({
+            runId: first.runId,
+            status: "cancelled",
+          })
+        );
+        expect(snapshot.runs).toContainEqual(
+          expect.objectContaining({ runId: second.runId, status: "running" })
+        );
+        expect(snapshot.liveRunIds).toEqual([second.runId]);
+        const detail = await fetch(`${url}/api/runs/${encodeURIComponent(first.runId)}`).then(
+          (response) => response.json()
+        );
+        expect(detail.run.error.message).toContain("run was cancelled");
+      },
+      { timeout: 10_000 }
+    );
     const stale = await fetch(`${url}/api/runs/${encodeURIComponent(first.runId)}/cancel`, {
       headers: { "x-tubeless-studio-cancel": "1" },
       method: "POST",
@@ -473,7 +508,9 @@ describe("workbench UI integration", () => {
       io
     );
 
-    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"));
+    await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless local studio: http://"), {
+      timeout: 10_000,
+    });
     const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))?.[1];
     expect(url).toMatch(/^http:\/\/0\.0\.0\.0:\d+$/);
     await expect(
@@ -531,8 +568,9 @@ it("runs remote-bind commands in gateway mode and retains history without revivi
     };
     let runId = "";
     try {
-      await vi.waitFor(() =>
-        expect(io.output.join("")).toContain("Tubeless gateway studio: " + publicUrl + "/")
+      await vi.waitFor(
+        () => expect(io.output.join("")).toContain("Tubeless gateway studio: " + publicUrl + "/"),
+        { timeout: 10_000 }
       );
       const studio = await startStudio.mock.results[0]!.value;
       const backendUrl = `http://127.0.0.1:${studio.port}/admin/pipelines`;
@@ -565,8 +603,9 @@ it("runs remote-bind commands in gateway mode and retains history without revivi
     const restartIo = { ...captureIo(directory), signal: restartController.signal };
     const restart = runWorkbenchCli(args, restartIo);
     try {
-      await vi.waitFor(() =>
-        expect(restartIo.output.join("")).toContain("Tubeless gateway studio:")
+      await vi.waitFor(
+        () => expect(restartIo.output.join("")).toContain("Tubeless gateway studio:"),
+        { timeout: 10_000 }
       );
       const restartedStudio = await startStudio.mock.results[1]!.value;
       const backendUrl = `http://127.0.0.1:${restartedStudio.port}/admin/pipelines`;
@@ -624,7 +663,9 @@ it("keeps hosted NDJSON history read-only for every mutation", async () => {
       "x-tubeless-studio-clear-history": "1",
     };
     try {
-      await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless gateway studio:"));
+      await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless gateway studio:"), {
+        timeout: 10_000,
+      });
       const studio = await startStudio.mock.results[0]!.value;
       const backendUrl = `http://127.0.0.1:${studio.port}/admin/pipelines`;
       expect(

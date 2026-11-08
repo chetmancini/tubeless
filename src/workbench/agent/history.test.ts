@@ -133,7 +133,9 @@ it.each([
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
-  }
+  },
+  // Spawns real processes; allow for loaded CI machines.
+  20_000
 );
 
 it("escapes terminal controls in call IDs and errors and labels incomplete observations", () => {

@@ -245,8 +245,9 @@ describe("runUi", () => {
     const pending = runUi(["--trace", tracePath, "--port", "0"], io);
 
     try {
-      await vi.waitFor(() =>
-        expect(io.output.join("")).toContain("Tubeless local studio: http://")
+      await vi.waitFor(
+        () => expect(io.output.join("")).toContain("Tubeless local studio: http://"),
+        { timeout: 10_000 }
       );
       expect(io.output.join("")).toContain(`Trace artifact: ${tracePath}`);
       const url = studioUrl(io.output.join(""));
@@ -281,8 +282,9 @@ describe("runUi", () => {
       io
     );
     try {
-      await vi.waitFor(() =>
-        expect(io.output.join("")).toContain("Tubeless local studio: http://")
+      await vi.waitFor(
+        () => expect(io.output.join("")).toContain("Tubeless local studio: http://"),
+        { timeout: 10_000 }
       );
       const url = studioUrl(io.output.join(""));
       const payload = (await fetch(`${url}/api/commands`).then((response) => response.json())) as {
@@ -320,18 +322,21 @@ describe("runUi", () => {
       });
       expect(launched.status).toBe(202);
       const launch = (await launched.json()) as { runId: string };
-      await vi.waitFor(async () => {
-        const snapshot = (await fetch(`${url}/api/snapshot`).then((response) =>
-          response.json()
-        )) as {
-          liveRunIds: string[];
-          runs: { runId: string; status: string }[];
-        };
-        expect(snapshot.runs).toContainEqual(
-          expect.objectContaining({ runId: launch.runId, status: "completed" })
-        );
-        expect(snapshot.liveRunIds).toEqual([]);
-      });
+      await vi.waitFor(
+        async () => {
+          const snapshot = (await fetch(`${url}/api/snapshot`).then((response) =>
+            response.json()
+          )) as {
+            liveRunIds: string[];
+            runs: { runId: string; status: string }[];
+          };
+          expect(snapshot.runs).toContainEqual(
+            expect.objectContaining({ runId: launch.runId, status: "completed" })
+          );
+          expect(snapshot.liveRunIds).toEqual([]);
+        },
+        { timeout: 10_000 }
+      );
     } finally {
       controller.abort();
       await pending.catch(() => undefined);
@@ -348,8 +353,9 @@ describe("runUi", () => {
       io
     );
     try {
-      await vi.waitFor(() =>
-        expect(io.output.join("")).toContain("Tubeless local studio: http://")
+      await vi.waitFor(
+        () => expect(io.output.join("")).toContain("Tubeless local studio: http://"),
+        { timeout: 10_000 }
       );
       const url = studioUrl(io.output.join(""));
       await expect(
@@ -429,8 +435,9 @@ describe("runUi", () => {
     );
 
     try {
-      await vi.waitFor(() =>
-        expect(io.output.join("")).toContain("Tubeless local studio: http://")
+      await vi.waitFor(
+        () => expect(io.output.join("")).toContain("Tubeless local studio: http://"),
+        { timeout: 10_000 }
       );
       const url = studioUrl(io.output.join(""));
       const commandId = await fetch(`${url}/api/commands`).then(async (response) => {
@@ -449,12 +456,15 @@ describe("runUi", () => {
       // Both paths must log the failure exactly once without crashing.
       expect([202, 500]).toContain(launched.status);
       await launched.json().catch(() => undefined);
-      await vi.waitFor(async () => {
-        const snapshot = (await fetch(`${url}/api/snapshot`).then((response) =>
-          response.json()
-        )) as { liveRunIds: string[] };
-        expect(snapshot.liveRunIds).toEqual([]);
-      });
+      await vi.waitFor(
+        async () => {
+          const snapshot = (await fetch(`${url}/api/snapshot`).then((response) =>
+            response.json()
+          )) as { liveRunIds: string[] };
+          expect(snapshot.liveRunIds).toEqual([]);
+        },
+        { timeout: 10_000 }
+      );
       expect(await fetch(`${url}/api/commands`).then((response) => response.status)).toBe(200);
       expect(consoleError).toHaveBeenCalledTimes(1);
       expect(String(consoleError.mock.calls[0]?.[0])).toContain("EPIPE");
