@@ -71,7 +71,7 @@
     "test:coverage": "vitest run --config vitest.config.ts --coverage",
     "test:watch": "vitest --watch --config vitest.config.ts",
     "typecheck": "bun run build && bun run typecheck:run",
-    "typecheck:run": "tsrs -p tsconfig.json --noEmit && tsrs -p examples/tsconfig.json --noEmit && tsrs -p tsconfig.automation.json --noEmit && tsrs -p tsconfig.test.json --noEmit && tsrs -p design/tsconfig.json",
+    "typecheck:run": "tsrs -p examples/tsconfig.json --noEmit && tsrs -p tsconfig.automation.json --noEmit && tsrs -p tsconfig.test.json --noEmit && tsrs -p design/tsconfig.json",
     "pack:verify": "node scripts/verify-packed-artifact.mjs",
     "eval:agent": "bun run build && node scripts/eval-agent.mjs"
   },
