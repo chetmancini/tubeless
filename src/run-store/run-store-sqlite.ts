@@ -57,6 +57,9 @@ interface SqliteModule {
 /** Larger batches mean fewer commits but more tail loss on crash. */
 const EXPORT_BATCH_SIZE = 64;
 
+/** Wait for other writers (CLI runs, Studio launches) rather than failing on contention. */
+const BUSY_TIMEOUT_MS = 5_000;
+
 const RUN_EVENT_STORE_SCHEMA = `PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 PRAGMA foreign_keys = ON;
@@ -110,15 +113,23 @@ async function openDatabase(
       throw error;
     }
   }
-  if (!create) {
-    if (bunSqlite) {
-      return openReadableDatabase(Database, filename, { create: false, readwrite: true });
-    }
+  let database: SqliteDatabase;
+  if (create) {
+    database = new Database(filename);
+  } else if (bunSqlite) {
+    database = openReadableDatabase(Database, filename, { create: false, readwrite: true });
+  } else {
     // Node's DatabaseSync ignores `{ create: false }` and creates an empty
     // file. `mode=rw` fails closed when the path is missing.
-    return openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=rw`);
+    database = openReadableDatabase(Database, `${pathToFileURL(filename).href}?mode=rw`);
   }
-  return new Database(filename);
+  try {
+    database.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
+  } catch (error) {
+    database.close();
+    throw error;
+  }
+  return database;
 }
 
 function isMissingDirectoryEntry(error: NodeJS.ErrnoException): boolean {
