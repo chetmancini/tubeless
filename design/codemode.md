@@ -71,7 +71,8 @@ and log bounds behave the same everywhere.
 - **Node or Bun (default):** `createNodeCodemodeExecutor()` starts one worker thread per script,
   with resource limits. Inside the worker, the script runs in a `node:vm` context. String code
   generation and WebAssembly are disabled, and there are no timers, `fetch`, `process` or
-  `require`. Only JSON text crosses the realm boundary, so host-realm objects stay out of reach.
+  `require`. Only JSON text crosses the realm boundary. The context is built from a null-prototype object
+  and the worker gets an empty `env`.
   The host terminates the worker on stop. Runtimes without file-based worker threads, such as
   Workers with `nodejs_compat`, fail when the executor is created, so the run fails with
   `TUBELESS_AGENT_CODEMODE_UNAVAILABLE` instead of every script failing recoverably.

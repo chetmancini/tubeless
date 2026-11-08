@@ -41,10 +41,11 @@ function bridge(name: string, input: string): Promise<string> {
 }
 
 async function main(): Promise<CodemodeWorkerMessage> {
-  const context = createContext(
-    {},
-    { name: "codemode", codeGeneration: { strings: false, wasm: false } }
-  );
+  // Null prototype: a host-realm `{}` would expose the host `Function` via its constructor chain.
+  const context = createContext(Object.create(null), {
+    name: "codemode",
+    codeGeneration: { strings: false, wasm: false },
+  });
   const realm: Realm = new Script(REALM_SETUP, { filename: "codemode-setup.js" }).runInContext(
     context
   )(bridge, JSON.stringify(data.tools), data.maxLogLines, data.maxLogCharacters);

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { createPipelineTestRuntime } from "../testing/testing.js";
 import { decodeStoredTraceEvent } from "../run-store/run-store-event-decoder.js";
@@ -239,6 +240,9 @@ describe("code mode", () => {
         eval: () => eval("1"),
         constructor: () => tools.read.constructor("return process")(),
         consoleConstructor: () => console.log.constructor("return 1")(),
+        globalConstructor: () => this.constructor.constructor("return process")(),
+        globalThisConstructor: () => globalThis.constructor.constructor("return process")(),
+        env: () => this.constructor.constructor("return process.env")(),
       };
       const blocked = {};
       for (const [name, probe] of Object.entries(probes)) {
@@ -261,7 +265,16 @@ describe("code mode", () => {
       eval: "EvalError",
       constructor: "EvalError",
       consoleConstructor: "EvalError",
+      globalConstructor: "EvalError",
+      globalThisConstructor: "EvalError",
+      env: "EvalError",
     });
+  });
+
+  it("starts code-mode workers with an empty environment", () => {
+    // `vi.spyOn` cannot redefine the ESM `Worker` export, so assert the option from source.
+    const source = readFileSync(new URL("./codemode-node.ts", import.meta.url), "utf8");
+    expect(source).toContain("env: {}");
   });
 
   it("charges nested calls against maxCalls and fails fatally on handler exceptions", async () => {

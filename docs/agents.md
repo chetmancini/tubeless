@@ -731,7 +731,8 @@ An executor decides where scripts run; pass one as `codemode: { executor }`. Wit
 `tubeless/agent/node`) runs each script in a fresh Node or Bun worker thread with heap
 limits, inside a `node:vm` context. That context disables string code generation
 (`eval`, `Function`) and WebAssembly, and has no `process`, `require`, `fetch` or timers.
-Values cross into the script only as JSON text, so it holds no host-realm objects.
+Values cross into the script only as JSON text. The context is created without host-realm
+objects, and the worker starts with an empty environment.
 This is best-effort isolation, not a security boundary. Like `bash`, treat scripts as
 code running with the host's authority. On a runtime without file-based worker
 threads, such as Cloudflare Workers, a script run without an executor fails the run
