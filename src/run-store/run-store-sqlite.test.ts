@@ -15,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
+import { Worker } from "node:worker_threads";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PipelineRunStudioEventState } from "../studio/server/state.js";
 import { assertRunStoreMigrationConfigured } from "./run-store-migrate.js";
@@ -220,6 +221,46 @@ describe("SQLite pipeline run store", () => {
       expect(projectPipelineRunStore(persisted, 0)).toEqual(projectPipelineRunStore(captured, 0));
     } finally {
       await reopened.close();
+    }
+  });
+
+  it("waits for another connection's write lock instead of failing", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
+    directories.push(directory);
+    const file = path.join(directory, "runs.sqlite");
+    const store = await openSqlitePipelineRunStore(file);
+    // The lock must be held on another thread: SQLite's busy wait blocks the caller.
+    const worker = new Worker(
+      `const { parentPort, workerData } = require("node:worker_threads");
+       const { DatabaseSync } = require("node:sqlite");
+       const database = new DatabaseSync(workerData.file);
+       database.exec("BEGIN IMMEDIATE");
+       parentPort.postMessage("locked");
+       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+       database.exec("COMMIT");
+       database.close();
+       parentPort.postMessage("released");`,
+      { eval: true, workerData: { file } }
+    );
+    try {
+      await new Promise<void>((resolve, reject) => {
+        worker.once("error", reject);
+        worker.once("message", () => resolve());
+      });
+      await store.export(startedEvent("run-1", 10));
+      await expect(Promise.resolve(store.flush?.())).resolves.toBeUndefined();
+      expect(await store.listEvents({ runId: "run-1" })).toEqual([
+        expect.objectContaining({ name: "pipeline.started", runId: "run-1" }),
+      ]);
+      await store.close();
+    } finally {
+      await worker.terminate();
+      // Release the connection when an assertion above failed; close() is a no-op once closed.
+      try {
+        await store.close();
+      } catch {
+        // The failure above is the one to report.
+      }
     }
   });
 
@@ -1128,7 +1169,8 @@ describe("SQLite pipeline run store", () => {
       locker.exec("ROLLBACK");
       locker.close();
     }
-  });
+    // close() now waits out the full busy timeout before surfacing the failure.
+  }, 15_000);
 
   it("persists unflushed exports when close drains the buffer", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-run-store-"));
