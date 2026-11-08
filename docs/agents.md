@@ -1103,7 +1103,7 @@ try {
 }
 ```
 
-The SQLite adapter uses Node 22.6+ built-ins, WAL and full synchronous commits;
+The SQLite adapter uses Node 22.18+ built-ins (`node:sqlite`), WAL and full synchronous commits;
 it adds no runtime dependency. It creates database files with mode `0600` and
 rejects existing files with group or other access on POSIX. Database files must
 be regular files with one hard link; SQLite sidecars are checked as well. On

@@ -33,7 +33,7 @@ own project; Tubeless itself has no runtime dependency on Temporal.
 
 ## Run locally
 
-Use Node.js 22.6 or later to run the Temporal Worker and Client. Bun installs
+Use Node.js 22.18 or later to run the Temporal Worker and Client. Bun installs
 the repository dependencies and builds the package, but the Worker runs under
 Node.js.
 
