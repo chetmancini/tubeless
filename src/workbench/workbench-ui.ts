@@ -9,6 +9,7 @@ import { parseStudioHosting } from "../studio/server/hosting.js";
 import * as path from "node:path";
 import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import { loadPipelineProjectFile, createModuleRegistration } from "./workbench-project-loader.js";
+import { onFirstProcessSignal } from "../cli/cli-signal.js";
 import type { PipelineRunEventReader } from "../run-store/run-store.js";
 import {
   WorkbenchStudioLauncher,
@@ -17,7 +18,6 @@ import {
 import {
   DEFAULT_PIPELINE_RUN_STORE,
   errorMessage,
-  onFirstProcessSignal,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
   type WorkbenchCliIo,

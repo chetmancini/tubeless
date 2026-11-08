@@ -385,7 +385,7 @@ describe("defineCommand: checkpoint", () => {
     const started = new Promise<void>((resolve) => {
       resolveStarted = resolve;
     });
-    const onceSpy = vi.spyOn(process, "once");
+    const onceSpy = vi.spyOn(process, "on");
     const previousExitCode = process.exitCode;
     const command = defineCommand({
       checkpoint: { path: checkpointPath },

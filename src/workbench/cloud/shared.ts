@@ -1,12 +1,8 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { onFirstProcessSignal } from "../../cli/cli-signal.js";
 import type { CloudCredentialStore } from "./credentials.js";
 import { CloudClientError } from "./protocol.js";
-import {
-  errorMessage,
-  onFirstProcessSignal,
-  terminalSafeText,
-  type WorkbenchCliIo,
-} from "../workbench-shared.js";
+import { errorMessage, terminalSafeText, type WorkbenchCliIo } from "../workbench-shared.js";
 
 /** Small I/O seams keep CLI tests away from production and the machine keychain. */
 export interface CloudCommandDependencies {
@@ -26,7 +22,7 @@ export async function cloudSleep(milliseconds: number, signal?: AbortSignal): Pr
 export function cloudSignal(io: WorkbenchCliIo): { signal: AbortSignal; cleanup(): void } {
   if (io.signal) return { signal: io.signal, cleanup() {} };
   const controller = new AbortController();
-  const cleanup = onFirstProcessSignal(["SIGINT"], () => controller.abort());
+  const cleanup = onFirstProcessSignal(["SIGINT", "SIGTERM"], () => controller.abort());
   return { signal: controller.signal, cleanup };
 }
 

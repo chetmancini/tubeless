@@ -28,6 +28,7 @@ import {
   isPipelineExecutionError,
   toExitCode,
 } from "./cli-exit.js";
+import { onFirstProcessSignal } from "./cli-signal.js";
 
 function resolveContext(overrides?: Partial<CliContext>): CliContext {
   return {
@@ -43,11 +44,14 @@ function resolveContext(overrides?: Partial<CliContext>): CliContext {
 
 interface ManagedMainSignal {
   context: CliContext;
+  /** Conventional exit code for the signal that interrupted the run, if any. */
+  exitCode(): number | undefined;
   wasInterrupted(): boolean;
   cleanup(): void;
 }
 
-const SIGINT_EXIT_CODE = 130;
+/** Conventional 128 + signal number exit codes. */
+const SIGNAL_EXIT_CODES = { SIGINT: 130, SIGTERM: 143 } as const;
 
 /**
  * Give real CLI entrypoints graceful cancellation without making `run()` or
@@ -56,22 +60,22 @@ const SIGINT_EXIT_CODE = 130;
  */
 function manageMainSignal(context: CliContext): ManagedMainSignal {
   if (context.signal) {
-    return { context, wasInterrupted: () => false, cleanup: () => {} };
+    return { context, exitCode: () => undefined, wasInterrupted: () => false, cleanup: () => {} };
   }
 
   const controller = new AbortController();
-  let interrupted = false;
-  const onSigint = (): void => {
-    interrupted = true;
-    context.log.warn("SIGINT received; cancelling pipeline work.");
+  let interruptedBy: keyof typeof SIGNAL_EXIT_CODES | undefined;
+  const cleanup = onFirstProcessSignal(["SIGINT", "SIGTERM"], (signal) => {
+    interruptedBy = signal as keyof typeof SIGNAL_EXIT_CODES;
+    context.log.warn(`${signal} received; cancelling pipeline work.`);
     controller.abort();
-  };
-  process.once("SIGINT", onSigint);
+  });
 
   return {
     context: { ...context, signal: controller.signal },
-    wasInterrupted: () => interrupted,
-    cleanup: () => process.removeListener("SIGINT", onSigint),
+    exitCode: () => (interruptedBy ? SIGNAL_EXIT_CODES[interruptedBy] : undefined),
+    wasInterrupted: () => interruptedBy !== undefined,
+    cleanup,
   };
 }
 
@@ -310,13 +314,13 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     } catch (error) {
       context.log.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
       process.exitCode = managedSignal.wasInterrupted()
-        ? SIGINT_EXIT_CODE
+        ? managedSignal.exitCode()
         : mainExits || isCliValidationError(error) || isPipelineExecutionError(error)
           ? toExitCode(error)
           : 1;
     } finally {
       if (managedSignal.wasInterrupted()) {
-        process.exitCode = SIGINT_EXIT_CODE;
+        process.exitCode = managedSignal.exitCode();
       }
       managedSignal.cleanup();
     }
