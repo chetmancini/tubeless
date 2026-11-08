@@ -66,10 +66,13 @@ their source files.
   checkpoint restoration. `default-tool-limits.ts` owns workspace bounds shared
   by tool schemas, adapters and guidance; `default-tool-text.ts` owns UTF-8
   clipping independently of filesystem operations.
-  The optional `tubeless/agent/openai` entrypoint owns HTTP, provider protocol and
-  compaction. `openai-http.ts` bounds successful responses and authentication
-  error-body reads, exposing known rejection codes and safe advice without raw
-  provider messages. The provider-independent agent entrypoint never imports it.
+  The optional `tubeless/agent/openai` and `tubeless/agent/anthropic` entrypoints own
+  their provider protocols and compaction. They share `provider-http.ts` (bounded
+  requests and responses, base URLs, deadlines that fail rather than cancel),
+  `provider-schema.ts` (strict tool-parameter schemas) and `provider-tool-outputs.ts`
+  (bounded tool results). `openai-http.ts` keeps OpenAI
+  authentication-error handling: known codes, no raw provider messages. The
+  provider-independent agent entrypoint imports none of them.
   The optional `tubeless/agent/mcp` entrypoint owns MCP sessions (`mcp-session.ts`),
   HTTP and lazily loaded stdio transports, and schema adaptation. Transports and
   schemas consume pure wire contracts and parsing from `mcp-protocol.ts`, independently
