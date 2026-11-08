@@ -130,6 +130,88 @@ describe("Anthropic model", () => {
     expect(body(fetcher, 0)).not.toHaveProperty("output_config");
   });
 
+  it("reports a deadline that fires after the response arrives, before its body is read, as a failure", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(
+      (_url, options) =>
+        new Promise((resolve) => {
+          options!.signal!.addEventListener("abort", () => resolve(message([finish()])), {
+            once: true,
+          });
+        })
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const result = await defineAgent({
+      id: "deadline-classification",
+      projectContext: false,
+      model: anthropicModel({ apiKey: "fixture", timeoutMs: 25 }),
+    }).run({ task: "Work" });
+    expect(result.status).toBe("failed");
+    expect(JSON.stringify(result.errors)).toContain("timed out after 25 ms");
+    expect(JSON.stringify(result.errors)).not.toContain("TUBELESS_RUN_CANCELLED");
+  });
+
+  it("reports a deadline that interrupts a pending response body read as a failure", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((_url, options) => {
+      const signal = options!.signal!;
+      // Like fetch, error the pending body stream with the signal's reason on abort.
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          signal.addEventListener("abort", () => controller.error(signal.reason), { once: true });
+        },
+      });
+      return Promise.resolve(new Response(body));
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const result = await defineAgent({
+      id: "deadline-pending-body",
+      projectContext: false,
+      model: anthropicModel({ apiKey: "fixture", timeoutMs: 25 }),
+    }).run({ task: "Work" });
+    expect(result.status).toBe("failed");
+    expect(JSON.stringify(result.errors)).toContain("timed out after 25 ms");
+    expect(JSON.stringify(result.errors)).not.toContain("TUBELESS_RUN_CANCELLED");
+  });
+
+  it("reports a deadline during the HTTP request as a failure", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(
+      (_url, options) =>
+        new Promise((_resolve, reject) => {
+          options!.signal!.addEventListener("abort", () => reject(options!.signal!.reason), {
+            once: true,
+          });
+        })
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const result = await defineAgent({
+      id: "deadline",
+      projectContext: false,
+      model: anthropicModel({ apiKey: "fixture", timeoutMs: 25 }),
+    }).run({ task: "Work" });
+    expect(result.status).toBe("failed");
+    expect(JSON.stringify(result.errors)).toContain("timed out after 25 ms");
+    expect(JSON.stringify(result.errors)).not.toContain("TUBELESS_RUN_CANCELLED");
+  });
+
+  it("keeps caller cancellation as a cancellation", async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(
+      (_url, options) =>
+        new Promise((_resolve, reject) => {
+          options!.signal!.addEventListener("abort", () => reject(options!.signal!.reason), {
+            once: true,
+          });
+          controller.abort(new Error("stop"));
+        })
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const result = await defineAgent({
+      id: "cancel",
+      projectContext: false,
+      model: anthropicModel({ apiKey: "fixture" }),
+    }).run({ task: "Work" }, undefined, { signal: controller.signal });
+    expect(result.status).toBe("cancelled");
+  });
+
   it("asks once for tool calls after a text-only reply, then fails", async () => {
     const text = { type: "text", text: "All done." };
     const fetcher = vi

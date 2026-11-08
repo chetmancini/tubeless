@@ -81,3 +81,24 @@ export async function providerRequest(
   }
   return readProviderJson(response, signal, MAX_RESPONSE_BYTES, provider);
 }
+
+/**
+ * Run provider work under the caller's signal plus a deadline. Caller aborts stay
+ * cancellations; a deadline alone becomes an ordinary failure, as in MCP sessions.
+ */
+export async function withProviderDeadline<T>(
+  label: string,
+  timeoutMs: number,
+  caller: AbortSignal | undefined,
+  work: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
+  const deadline = AbortSignal.timeout(timeoutMs);
+  const signal = caller ? AbortSignal.any([caller, deadline]) : deadline;
+  try {
+    return await work(signal);
+  } catch (error) {
+    if (!caller?.aborted && deadline.aborted)
+      throw new Error(`${label} timed out after ${timeoutMs} ms`);
+    throw error;
+  }
+}

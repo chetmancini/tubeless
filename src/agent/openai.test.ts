@@ -306,7 +306,7 @@ describe("OpenAI model", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
-  it("aborts the active HTTP request at the configured decision deadline", async () => {
+  it("reports the configured decision deadline as a failure and aborts the active HTTP request", async () => {
     const fetcher = vi.fn<typeof fetch>().mockImplementation(
       (_url, options) =>
         new Promise((_resolve, reject) => {
@@ -316,15 +316,60 @@ describe("OpenAI model", () => {
         })
     );
     vi.stubGlobal("fetch", fetcher);
-    await expect(
-      defineAgent({
-        id: "deadline",
-        projectContext: false,
-        model: openaiModel({ apiKey: "fixture", timeoutMs: 25 }),
-      }).runOrThrow({ task: "Work" })
-    ).rejects.toThrow();
+    const result = await defineAgent({
+      id: "deadline",
+      projectContext: false,
+      model: openaiModel({ apiKey: "fixture", timeoutMs: 25 }),
+    }).run({ task: "Work" });
+    expect(result.status).toBe("failed");
+    expect(JSON.stringify(result.errors)).toContain("timed out after 25 ms");
+    expect(JSON.stringify(result.errors)).not.toContain("TUBELESS_RUN_CANCELLED");
     expect(fetcher.mock.calls[0]![1]!.signal!.aborted).toBe(true);
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a deadline that fires after the response arrives, before its body is read, as a failure", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(
+      (_url, options) =>
+        new Promise((resolve) => {
+          options!.signal!.addEventListener(
+            "abort",
+            () => resolve(new Response(JSON.stringify({ status: "completed", output: [] }))),
+            { once: true }
+          );
+        })
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const result = await defineAgent({
+      id: "deadline-classification",
+      projectContext: false,
+      model: openaiModel({ apiKey: "fixture", timeoutMs: 25 }),
+    }).run({ task: "Work" });
+    expect(result.status).toBe("failed");
+    expect(JSON.stringify(result.errors)).toContain("timed out after 25 ms");
+    expect(JSON.stringify(result.errors)).not.toContain("TUBELESS_RUN_CANCELLED");
+  });
+
+  it("reports a deadline that interrupts a pending response body read as a failure", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((_url, options) => {
+      const signal = options!.signal!;
+      // Like fetch, error the pending body stream with the signal's reason on abort.
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          signal.addEventListener("abort", () => controller.error(signal.reason), { once: true });
+        },
+      });
+      return Promise.resolve(new Response(body));
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const result = await defineAgent({
+      id: "deadline-pending-body",
+      projectContext: false,
+      model: openaiModel({ apiKey: "fixture", timeoutMs: 25 }),
+    }).run({ task: "Work" });
+    expect(result.status).toBe("failed");
+    expect(JSON.stringify(result.errors)).toContain("timed out after 25 ms");
+    expect(JSON.stringify(result.errors)).not.toContain("TUBELESS_RUN_CANCELLED");
   });
 
   it("replays every provider item and the exact ordered tool outputs with project instructions", async () => {

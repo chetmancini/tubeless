@@ -443,7 +443,8 @@ read when a pipeline needs them.
   `anthropicModel()` from `tubeless/agent/anthropic`. Both adapters share option
   names; set `baseUrl` (or `OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL`) for compatible
   servers such as OpenRouter or a gateway, and `compactAfterBytes: null` when the
-  server lacks compaction. See [providers](./agents.md#choose-a-model-provider) and
+  server lacks compaction. A provider `timeoutMs` deadline fails the run
+  (`failed`); only the caller's abort signal cancels it. See [providers](./agents.md#choose-a-model-provider) and
   [compatible APIs](./agents.md#compatible-apis). It supplies
   task/answer schemas, a customizable coding prompt, startup AGENTS.md discovery
   from the physical workspace directory, shared by the model and all tool calls,
