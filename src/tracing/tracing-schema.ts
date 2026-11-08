@@ -558,7 +558,7 @@ const traceAttemptShape = {
 const traceStepShape = { stepId: requiredString } as const;
 const emptyPayloadSchema = wireObject({});
 
-export const pipelineTraceEventSchemas = {
+const pipelineTraceEventSchemas = {
   "step.artifact": wireObject({
     ...traceBaseShape,
     ...traceStepShape,
@@ -809,30 +809,3 @@ export type PipelineTraceEventContract =
       ? PublicPipelineTraceEvent<ReadonlyArrays<TEvent & PipelineTraceEventOptionalFields>>
       : never
     : never;
-/** @public Shared with the separately built documentation website. */
-export const pipelineTraceOpenApiSchemas = {
-  PipelineError: pipelineTraceErrorSchema.jsonSchema,
-  PipelineErrorCause: pipelineErrorCauseJsonSchema,
-  PipelineFanOutDiagnostics: fanOutSchema.jsonSchema,
-  PipelineFanOutFailure: fanOutFailureSchema.jsonSchema,
-  PipelineProgressDetail: progressDetailSchema.jsonSchema,
-  PipelineValidationIssue: validationIssueSchema.jsonSchema,
-  StoredPipelineEvent: {
-    oneOf: Object.values(pipelineTraceEventSchemas).map((eventSchema) => {
-      // SAFETY: Every entry is created by `wireObject`, whose JSON Schema has these two fields.
-      const eventJson = eventSchema.jsonSchema as {
-        properties: Record<string, unknown>;
-        required: readonly string[];
-      };
-      return {
-        ...eventJson,
-        ...traceVersionConstraint,
-        properties: {
-          ...eventJson.properties,
-          id: { minimum: 0, type: "integer" },
-        },
-        required: [...eventJson.required, "id"],
-      };
-    }),
-  },
-} as const satisfies Readonly<Record<string, WireJsonSchema>>;
