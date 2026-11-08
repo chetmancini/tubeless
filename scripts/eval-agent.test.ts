@@ -394,7 +394,9 @@ it.each([
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
-  }
+  },
+  // One child spawn with a 20_000 ms inner timeout: 20_000 + 10_000.
+  30_000
 );
 
 it("runs selected cases offline in code mode through generated declarations", async () => {
@@ -449,4 +451,5 @@ it("runs selected cases offline in code mode through generated declarations", as
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
+  // One child spawn with a 30_000 ms inner timeout: 30_000 + 10_000.
+}, 40_000);
