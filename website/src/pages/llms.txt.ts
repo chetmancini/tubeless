@@ -55,6 +55,7 @@ ${DOC_NAV.map(({ slug, label, blurb }) => `- [${label}](${absUrl(`docs/${slug}.m
 - [Complete documentation](${absUrl("llms-full.txt")}): All docs from this build, agent guide first.
 - [Human documentation index](${absUrl("docs")}): Browse the same documentation as HTML.
 - [Sitemap](${absUrl("sitemap.xml")}): All indexable human pages.
+- [Tubeless Cloud](https://cloud.tubeless.io/llms.txt): Hosted service that runs your Tubeless pipelines from GitHub with schedules, team run history, an HTTP API and an MCP server for AI agents.
 - [Source and executable examples](${GITHUB_BLOB}/examples): Examples that import the public package and compile in CI.
 `;
 
