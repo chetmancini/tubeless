@@ -19,6 +19,9 @@ interface WorkflowStep {
   run?: string;
 }
 interface WorkflowJob {
+  needs?: string[];
+  if?: string;
+  permissions?: Record<string, string>;
   outputs?: Record<string, string>;
   steps: WorkflowStep[];
 }
@@ -126,6 +129,36 @@ describe("release commit guard", { timeout: 30_000 }, () => {
 
 // Creates real git repositories; allow for loaded machines.
 describe("publish workflow release identity", { timeout: 30_000 }, () => {
+  it("publishes only commits that are on main", async () => {
+    const { repo, output } = await fixture();
+    const validate = step("verify", "Require release commit on main").run!;
+    const onMain = runStep(validate, repo, output);
+    expect(onMain.status, onMain.stderr).toBe(0);
+
+    git(repo, ["checkout", "-b", "side"]);
+    await writeFile(join(repo, "side.txt"), "Unreleased source\n");
+    git(repo, ["add", "side.txt"]);
+    git(repo, ["commit", "-m", "Advance side branch"]);
+
+    const offMain = runStep(validate, repo, output);
+    expect(offMain.status).not.toBe(0);
+    expect(offMain.stderr).toContain("is not on main");
+  });
+
+  it("treats a stable release as newer than its release candidates", async () => {
+    const { repo, output } = await fixture("1.0.1-rc.1", "none");
+    for (const tag of ["v1.0.1-rc.0", "v1.0.1"]) {
+      git(repo, ["tag", "-a", tag, "-m", tag]);
+      git(repo, ["push", "origin", tag]);
+    }
+
+    const result = runStep(step("cut", "Cut version tag").run!, repo, output);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("refusing version 1.0.1-rc.1");
+    expect(await readFile(output, "utf8")).toBe("");
+  });
+
   it("rejects a fresh manual dispatch when main advanced beyond an unpublished tag", async () => {
     const { repo, remote, output, tag, commit } = await fixture();
     await writeFile(join(repo, "later.txt"), "Different source, unchanged package version\n");
@@ -185,12 +218,33 @@ describe("publish workflow release identity", { timeout: 30_000 }, () => {
     }
   });
 
+  it("keeps the registry credential away from dependency code", () => {
+    expect(workflow.jobs.verify!.permissions).toEqual({ contents: "read" });
+    expect(workflow.jobs.publish!.permissions).toEqual({
+      contents: "read",
+      "id-token": "write",
+    });
+    expect(workflow.jobs.publish!.needs).toContain("verify");
+    expect(workflow.jobs.publish!.if).toContain("needs.verify.result == 'success'");
+    for (const candidate of workflow.jobs.publish!.steps) {
+      expect(candidate.run ?? "").not.toMatch(/bun |make /);
+      expect(candidate.uses ?? "").not.toMatch(/^oven-sh\/setup-bun@/);
+    }
+    for (const [name, job] of Object.entries(workflow.jobs)) {
+      if (name !== "publish") expect(job.permissions).not.toHaveProperty("id-token");
+      for (const candidate of job.steps) {
+        if (candidate.uses) expect(candidate.uses).toMatch(/@[0-9a-f]{40}$/);
+      }
+    }
+  });
+
   it("propagates immutable identity through publication and GitHub release jobs", () => {
     expect(workflow.jobs.cut!.outputs).toEqual({
       tag: "${{ steps.release.outputs.tag }}",
       commit: "${{ steps.release.outputs.commit }}",
     });
     expect(checkout("cut").with?.ref).toBe("${{ github.sha }}");
+    expect(checkout("verify").with?.ref).toBe("${{ needs.cut.outputs.commit || github.sha }}");
     expect(checkout("publish").with?.ref).toBe("${{ needs.cut.outputs.commit || github.sha }}");
     expect(workflow.jobs.publish!.outputs).toEqual({
       tag: "${{ steps.release.outputs.tag }}",

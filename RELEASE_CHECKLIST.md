@@ -4,8 +4,9 @@ Merging to `main` does not publish. Cut a release with `make release`. CI
 publishes the matching `v*` tag to npm via trusted publishing
 (`.github/workflows/publish.yml`, GitHub Environment `npm`). Do not
 `npm publish` from a laptop. Do not store
-an `NPM_TOKEN`. Keep `"private": true` in git; the publish job deletes that
-field immediately before `npm publish`.
+an `NPM_TOKEN`. Keep `"private": true` in git; the verify job deletes that
+field before packing, and the publish job publishes the packed tarball without
+running project code.
 
 Release jobs build and announce the exact commit selected by the version tag.
 To retry a failed publication, rerun its original workflow. A fresh manual

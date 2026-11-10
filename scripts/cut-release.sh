@@ -24,7 +24,7 @@ if [[ -n "${BUMP:-}" && -n "${VERSION:-}" ]]; then
 fi
 
 current="$(node -p 'require("./package.json").version')"
-latest_tag="$(git tag -l 'v*' --sort=-version:refname | awk 'NR == 1 { print; exit }')"
+latest_tag="$(git -c versionsort.suffix=- tag -l 'v*' --sort=-version:refname | awk 'NR == 1 { print; exit }')"
 if [[ -n "${latest_tag}" ]]; then
 	latest="${latest_tag#v}"
 	if [[ -n "${VERSION:-}" ]]; then

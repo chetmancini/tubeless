@@ -113,6 +113,18 @@ describe("cut release", { timeout: 30_000 }, () => {
     expect(git(directory, ["status", "--porcelain"])).toBe("");
   });
 
+  it("treats a stable release as newer than its release candidates", async () => {
+    const { directory } = await setupRepo("1.0.1");
+    git(directory, ["tag", "-a", "v1.0.1-rc.0", "-m", "rc"]);
+    git(directory, ["push", "origin", "v1.0.1-rc.0"]);
+
+    const result = release(directory, { VERSION: "1.0.1-rc.1" });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("refusing version 1.0.1-rc.1");
+    expect(await packageVersion(directory)).toBe("1.0.1");
+  });
+
   it("does not commit, tag, or push when checks fail", async () => {
     const { directory, remote } = await setupRepo();
     const before = git(directory, ["rev-parse", "HEAD"]);
