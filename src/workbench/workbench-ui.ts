@@ -57,7 +57,8 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
             UI_USAGE
           );
         }
-        const port = Number(parsed.values.port ?? "4317");
+        const portText = parsed.values.port ?? "4317";
+        const port = /^\d+$/.test(portText) ? Number(portText) : Number.NaN;
         if (!Number.isInteger(port) || port < 0 || port > 65_535) {
           return writeUsageError(io, "--port must be an integer from 0 to 65535.", UI_USAGE);
         }

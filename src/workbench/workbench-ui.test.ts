@@ -141,7 +141,15 @@ describe("runUi", { timeout: 60_000 }, () => {
 
   it("rejects a non-integer or out-of-range --port", async () => {
     const directory = await tempDir();
-    for (const argv of [["--port", "abc"], ["--port=-1"], ["--port", "65536"]]) {
+    for (const argv of [
+      ["--port", "abc"],
+      ["--port=-1"],
+      ["--port", "65536"],
+      ["--port="],
+      ["--port", " "],
+      ["--port", "0x10"],
+      ["--port", "1e3"],
+    ]) {
       const io = captureIo(directory);
       const exitCode = await runUi(argv, io);
       expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
