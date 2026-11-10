@@ -47,7 +47,7 @@ function projectImport(projectExport: string, specifier: string): string {
  */
 export const CLOUDFLARE_DEV_DEPENDENCIES = {
   cf: "1.0.0-beta.28",
-  vite: "8.3.6",
+  vite: "8.3.7",
   "@cloudflare/vite-plugin": "2.0.0-beta.v.11",
 } as const;
 
