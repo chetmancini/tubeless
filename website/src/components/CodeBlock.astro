@@ -1,9 +1,10 @@
 ---
 import { Code } from "astro:components";
+import type { ComponentProps } from "astro/types";
 
 type Props = {
   code: string;
-  lang: string;
+  lang: NonNullable<ComponentProps<typeof Code>["lang"]>;
 };
 
 const { code, lang } = Astro.props;
