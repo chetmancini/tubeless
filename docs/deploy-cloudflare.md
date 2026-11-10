@@ -112,6 +112,10 @@ reconciles an unfinished run from its recorded root start plus the execution
 limit and a two-minute reporting grace period. Launches without a recorded start
 use their creation time instead.
 
+On this target, log lines, progress messages, skip messages, and error messages or
+stacks longer than 65,536 characters are truncated in recorded history because
+Durable Object storage limits row size. Local history keeps the full text.
+
 CPU time is limited too: 30 seconds by default, and up to 5 minutes on Workers Paid
 through `limits: { cpuMs: 300_000 }` in `cloudflare.config.ts` (the scaffold has
 this line commented out). Time spent waiting on I/O does not count as CPU. Use

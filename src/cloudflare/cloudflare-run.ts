@@ -14,6 +14,62 @@ import {
   type StudioIngest,
 } from "./cloudflare-run-contract.js";
 
+/**
+ * Durable Object SQLite rejects a string or row over 2 MB. These trace strings have no
+ * schema limit, so bound each one here; one oversized event would otherwise fail its batch.
+ */
+export const HOSTED_TRACE_TEXT_LIMIT = 65_536;
+
+function boundHostedText(text: string): string {
+  if (text.length <= HOSTED_TRACE_TEXT_LIMIT) return text;
+  return `${text.slice(0, HOSTED_TRACE_TEXT_LIMIT)}… [truncated ${text.length - HOSTED_TRACE_TEXT_LIMIT} characters]`;
+}
+
+/** Bound hosted history text without changing the original event or local history. */
+export function boundHostedEvent(event: PipelineTraceEvent): PipelineTraceEvent {
+  let bounded = event;
+  switch (event.name) {
+    case "pipeline.log": {
+      const message = boundHostedText(event.payload.message);
+      if (message !== event.payload.message) {
+        bounded = { ...event, payload: { ...event.payload, message } };
+      }
+      break;
+    }
+    case "step.running": {
+      const progress = event.payload.progress;
+      if (progress?.message !== undefined) {
+        const message = boundHostedText(progress.message);
+        if (message !== progress.message) {
+          bounded = { ...event, payload: { ...event.payload, progress: { ...progress, message } } };
+        }
+      }
+      break;
+    }
+    case "step.skipped": {
+      if (event.payload.message !== undefined) {
+        const message = boundHostedText(event.payload.message);
+        if (message !== event.payload.message) {
+          bounded = { ...event, payload: { ...event.payload, message } };
+        }
+      }
+      break;
+    }
+  }
+  if ("error" in bounded && bounded.error) {
+    const error = bounded.error;
+    const message = boundHostedText(error.message);
+    const stack = error.stack === undefined ? undefined : boundHostedText(error.stack);
+    if (message !== error.message || stack !== error.stack) {
+      return {
+        ...bounded,
+        error: { ...error, message, ...(stack === undefined ? {} : { stack }) },
+      };
+    }
+  }
+  return bounded;
+}
+
 export interface BatchingOptions {
   readonly maxEvents: number;
   readonly maxDelayMs: number;
@@ -115,13 +171,13 @@ async function admitted(ingest: StudioIngest, launchId: string): Promise<boolean
 export async function runHostedJob(options: {
   readonly job: RunJob;
   readonly commands: ReadonlyMap<string, HostedCommand>;
-  readonly ingest: StudioIngest;
+  readonly ingest: () => StudioIngest;
   readonly controller: AbortController;
 }): Promise<void> {
   const { job, ingest, controller } = options;
   const entry = options.commands.get(job.commandId);
   if (!entry) {
-    await ingest.reportFailure(job.launchId, "Pipeline command not found.");
+    await ingest().reportFailure(job.launchId, "Pipeline command not found.");
     return;
   }
   const output = capturingOutput();
@@ -130,7 +186,7 @@ export async function runHostedJob(options: {
     hostedCommandContext(output, controller.signal)
   );
   if (parsed.kind !== "values") {
-    await ingest.reportFailure(
+    await ingest().reportFailure(
       job.launchId,
       parsed.kind === "error" ? parsed.errors.join("\n") : "Help is not a launchable value set."
     );
@@ -138,12 +194,12 @@ export async function runHostedJob(options: {
   }
   // Core does not await exporters, so a refused batch could arrive after a step's side effects.
   // Admission happens before any user code runs; a refused launch was already closed by Studio.
-  if (!(await admitted(ingest, job.launchId))) return;
+  if (!(await admitted(ingest(), job.launchId))) return;
   let recorded = false;
   let deliveryFailure: { readonly error: unknown } | undefined;
   const batches = new BatchingTraceExporter(
     async (sequence, events) => {
-      const { accepted } = await ingest.appendEvents(job.launchId, sequence, events);
+      const { accepted } = await ingest().appendEvents(job.launchId, sequence, events);
       // Studio already failed this launch (for example, after an unconfirmed start), so
       // nothing more would be recorded and the run could not be cancelled.
       if (!accepted) controller.abort(new Error("Studio closed this launch; stopping the run."));
@@ -162,7 +218,7 @@ export async function runHostedJob(options: {
   const exporter: PipelineTraceExporter = {
     export(event) {
       if (isTopLevelStart(event)) recorded = true;
-      return batches.export(event);
+      return batches.export(boundHostedEvent(event));
     },
     flush: () => batches.flush(),
   };
@@ -185,14 +241,14 @@ export async function runHostedJob(options: {
     // The run may be fully recorded locally yet unknown to Studio; tell it, best effort.
     const { error } = deliveryFailure;
     const message = error instanceof Error ? error.message : String(error);
-    await ingest
+    await ingest()
       .reportFailure(job.launchId, `Run events could not be delivered to Studio: ${message}`)
       .catch((reportError: unknown) => {
         console.error(reportError);
       });
   } else if (!recorded) {
     const detail = output.tail();
-    await ingest.reportFailure(
+    await ingest().reportFailure(
       job.launchId,
       `Pipeline command exited (${exitCode}) before recording a run.${detail ? `\n${detail}` : ""}`
     );
@@ -243,12 +299,14 @@ export class RunObjectCore {
     const { storage } = this.deps;
     const job = await storage.get<RunJob>("job");
     if (!job) return;
-    const ingest = this.deps.ingest();
     if ((await storage.get("state")) === "running") {
       // Alarms never overlap, so a running state here means an earlier attempt died.
-      await ingest.reportFailure(job.launchId, HOST_TERMINATED).catch((error: unknown) => {
-        console.error(error);
-      });
+      await this.deps
+        .ingest()
+        .reportFailure(job.launchId, HOST_TERMINATED)
+        .catch((error: unknown) => {
+          console.error(error);
+        });
       await storage.deleteAlarm();
       await storage.deleteAll();
       return;
@@ -259,10 +317,18 @@ export class RunObjectCore {
     const controller = new AbortController();
     this.#controller = controller;
     try {
-      await runHostedJob({ job, commands: this.deps.commands, ingest, controller });
+      await runHostedJob({
+        job,
+        commands: this.deps.commands,
+        ingest: this.deps.ingest,
+        controller,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await ingest.reportFailure(job.launchId, `Run host error: ${message}`).catch(() => {});
+      await this.deps
+        .ingest()
+        .reportFailure(job.launchId, `Run host error: ${message}`)
+        .catch(() => {});
     } finally {
       this.#controller = undefined;
       await storage.deleteAlarm();
