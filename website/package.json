@@ -5,12 +5,16 @@
   "packageManager": "bun@1.3.14",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build && node --test scripts/*.test.mjs && node scripts/check-built-links.mjs && node scripts/check-agent-docs.mjs",
+    "check": "astro sync && tsrs --noEmit --runExternalCode",
+    "build": "bun run check && astro build && node --test scripts/*.test.mjs && node scripts/check-built-links.mjs && node scripts/check-agent-docs.mjs",
     "preview": "astro preview"
   },
   "devDependencies": {
     "@astrojs/markdown-satteri": "0.4.7",
+    "@astrojs/ts-content-mapper": "0.2.0",
+    "@types/node": "22.20.5",
     "astro": "7.4.7",
-    "satteri": "0.11.7"
+    "satteri": "0.11.7",
+    "tsrs": "0.23.0-ts7.1.0-beta"
   }
 }
