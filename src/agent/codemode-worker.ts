@@ -15,6 +15,7 @@ import {
 interface Realm {
   readonly tools: unknown;
   readonly console: unknown;
+  run(script: unknown, done: (ok: boolean, value: unknown) => void): void;
   finish(value: unknown): { result?: unknown; logs: unknown; truncated: unknown };
 }
 
@@ -68,8 +69,16 @@ async function main(): Promise<CodemodeWorkerMessage> {
   } catch (error) {
     return failed(describeScriptError(error));
   }
+  // Host code must never await a sandbox value, resolve a promise with one, or return one
+  // from an async function: each makes the engine call the value's script-controlled
+  // `then` with host-realm functions. The realm reports through a callback instead, and
+  // the outcome crosses inside a host-realm wrapper object.
+  const outcome = await new Promise<{ readonly ok: boolean; readonly value: unknown }>((resolve) =>
+    realm.run(script, (ok, value) => resolve({ ok, value }))
+  );
+  if (!outcome.ok) return failed(describeScriptError(outcome.value));
   try {
-    const { result, logs, truncated } = realm.finish(await script(realm.tools, realm.console));
+    const { result, logs, truncated } = realm.finish(outcome.value);
     if (typeof result !== "string") return failed("Script result must be JSON-serializable");
     return {
       type: "done",

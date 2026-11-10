@@ -3,15 +3,18 @@
 // helpers' source text, in a Dynamic Worker module. Keep the helpers self-contained.
 
 /**
- * In-sandbox setup: `(bridge, names, maxLines, maxCharacters) => { tools, console, finish }`.
+ * In-sandbox setup: `(bridge, names, maxLines, maxCharacters) => { tools, console, run, finish }`.
  * It runs before model code and creates `tools` and `console` inside the sandbox, so scripts
  * reach only sandbox-local objects. The host bridge stays in this closure and exchanges JSON
- * text only. Scripts receive `tools` and `console` as parameters.
+ * text only. Scripts receive `tools` and `console` as parameters. `run` reports the outcome
+ * through a callback because the host must not await a sandbox promise.
  */
 export const REALM_SETUP = `(function (bridge, names, maxLines, maxCharacters) {
   "use strict";
   const { parse, stringify } = JSON;
   const freeze = Object.freeze;
+  const { apply } = Reflect;
+  const then = Promise.prototype.then;
   const logs = [];
   let characters = 0;
   let truncated = false;
@@ -49,9 +52,27 @@ export const REALM_SETUP = `(function (bridge, names, maxLines, maxCharacters) {
       throw error;
     };
   }
+  const frozenTools = freeze(tools);
+  const frozenConsole = freeze({ log: write, info: write, warn: write, error: write, debug: write });
   return {
-    tools: freeze(tools),
-    console: freeze({ log: write, info: write, warn: write, error: write, debug: write }),
+    tools: frozenTools,
+    console: frozenConsole,
+    run(script, done) {
+      let settled = false;
+      const settle = (ok, value) => {
+        if (settled) return;
+        settled = true;
+        done(ok, value);
+      };
+      try {
+        apply(then, script(frozenTools, frozenConsole), [
+          (value) => settle(true, value),
+          (error) => settle(false, error),
+        ]);
+      } catch (error) {
+        settle(false, error);
+      }
+    },
     finish(value) {
       let result;
       try {

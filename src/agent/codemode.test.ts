@@ -1,4 +1,7 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { createPipelineTestRuntime } from "../testing/testing.js";
 import { decodeStoredTraceEvent } from "../run-store/run-store-event-decoder.js";
@@ -505,6 +508,48 @@ describe("code mode on defineAgentLoop", () => {
 
 describe("code-mode Node executor", () => {
   const base = { tools: ["echo"], maxLogLines: 200, maxLogCharacters: 4096 };
+  const HIJACK = `
+    const original = Promise.prototype.then;
+    Promise.prototype.then = function (resolve, reject) {
+      let seen;
+      try { seen = "reached:" + resolve.constructor("return typeof process")(); }
+      catch (error) { seen = "blocked:" + error.name; }
+      return original.call(this, () => resolve(seen), reject);
+    };
+    return "expected";
+  `;
+
+  it("collects the result without consulting the script's Promise.prototype.then", async () => {
+    const outcome = await runCodemodeScript({
+      ...base,
+      code: HIJACK,
+      timeoutMs: 5000,
+      call: () => Promise.resolve({ ok: true, value: null }),
+    });
+    expect(outcome).toMatchObject({ ok: true, result: '"expected"' });
+  });
+
+  it("keeps host-realm functions from scripts on Bun", () => {
+    const executorUrl = pathToFileURL(path.resolve("dist/agent/codemode-executor.js")).href;
+    const nodeUrl = pathToFileURL(path.resolve("dist/agent/codemode-node.js")).href;
+    const program = `
+      import { runCodemodeScript } from ${JSON.stringify(executorUrl)};
+      import { createNodeCodemodeExecutor } from ${JSON.stringify(nodeUrl)};
+      const outcome = await runCodemodeScript(createNodeCodemodeExecutor(), {
+        code: ${JSON.stringify(HIJACK)},
+        tools: [],
+        timeoutMs: 10000,
+        maxLogLines: 10,
+        maxLogCharacters: 1000,
+        call: () => Promise.resolve({ ok: true, value: null }),
+      });
+      console.log(JSON.stringify(outcome));
+    `;
+    const result = spawnSync("bun", ["-e", program], { encoding: "utf8", timeout: 30_000 });
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, result: '"expected"' });
+    expect(result.stdout).not.toContain("reached:");
+  }, 30_000);
 
   it("terminates scripts that exceed their deadline and aborts their calls", async () => {
     // Fake only the harness deadline, and fire it once the call has started.
