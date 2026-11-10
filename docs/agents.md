@@ -573,7 +573,9 @@ capability fingerprints and durable checkpoints see a fixed set. A server that
 changes its tools changes the agent's definition identity. Connect inside the
 function that runs the agent rather than at module scope, so importing a project
 starts no processes, and close the connection after the last run, as in the
-[MCP recipe](../examples/agent-mcp.ts). Calls after `close()` fail. Closing aborts
+[MCP recipe](../examples/agent-mcp.ts). Calls after `close()` fail. When an HTTP server
+answers 404 for the session, the client starts a new session and retries that
+request once; the tool inventory is not rediscovered. Closing aborts
 active HTTP requests and bounds stdio shutdown, terminating the owned process
 group on POSIX. Descendants that escape that group may outlive the connection.
 

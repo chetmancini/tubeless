@@ -119,12 +119,17 @@ export function createFakeMcpServer() {
 /** Serve the fake over Streamable HTTP, answering tool calls as event streams. */
 export async function serveFakeMcpHttp(): Promise<{
   url: string;
+  expireSession(): void;
+  refuseSessions(): void;
   close(): Promise<void>;
   fake: ReturnType<typeof createFakeMcpServer>;
   requests: { method: string; session?: string; version?: string; auth?: string }[];
 }> {
   const fake = createFakeMcpServer();
   const requests: { method: string; session?: string; version?: string; auth?: string }[] = [];
+  let session: string | undefined;
+  let sessions = 0;
+  let refusing = false;
   const server = createServer(async (request, response) => {
     let body = "";
     for await (const chunk of request) body += chunk;
@@ -136,8 +141,14 @@ export async function serveFakeMcpHttp(): Promise<{
       auth: request.headers.authorization,
     });
     if (!message) return response.writeHead(204).end();
+    const sent = request.headers["mcp-session-id"];
+    if (message.method === "initialize") {
+      session = `session-${++sessions}`;
+      response.setHeader("Mcp-Session-Id", session);
+    } else if (sent !== undefined && (refusing || sent !== session)) {
+      return response.writeHead(404).end();
+    }
     const reply = fake.handle(message);
-    if (message.method === "initialize") response.setHeader("Mcp-Session-Id", "session-1");
     if (!reply) {
       if (message.id === undefined) return response.writeHead(202).end();
       response.writeHead(200, { "Content-Type": "text/event-stream" });
@@ -161,6 +172,12 @@ export async function serveFakeMcpHttp(): Promise<{
     url: `http://127.0.0.1:${port}/mcp`,
     fake,
     requests,
+    expireSession() {
+      session = undefined;
+    },
+    refuseSessions() {
+      refusing = true;
+    },
     async close() {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));

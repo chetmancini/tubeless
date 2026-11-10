@@ -1,6 +1,7 @@
 import {
   isRecord,
   MAX_MESSAGE_BYTES,
+  McpSessionExpiredError,
   parseMessage,
   type McpTransport,
   type McpTransportEvents,
@@ -93,6 +94,7 @@ export function httpTransport(
   return {
     async send(message, signal) {
       if (lifetime.signal.aborted) throw new Error(`MCP server ${label} is closed`);
+      const sent = session;
       const response = await fetch(url, {
         method: "POST",
         redirect: "manual",
@@ -102,6 +104,13 @@ export function httpTransport(
       });
       if (!response.ok) {
         await response.body?.cancel().catch(() => {});
+        if (response.status === 404 && sent !== undefined) {
+          if (session === sent) {
+            session = undefined;
+            version = undefined;
+          }
+          throw new McpSessionExpiredError(label);
+        }
         throw new Error(`MCP server ${label} failed (HTTP ${response.status})`);
       }
       session = response.headers.get("mcp-session-id") ?? session;

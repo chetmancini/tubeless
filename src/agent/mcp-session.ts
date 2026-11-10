@@ -1,6 +1,11 @@
 import { createAbortError, throwIfAborted } from "../utilities/abort.js";
 
-import { isRecord, type McpMessage, type OpenMcpTransport } from "./mcp-protocol.js";
+import {
+  isRecord,
+  McpSessionExpiredError,
+  type McpMessage,
+  type OpenMcpTransport,
+} from "./mcp-protocol.js";
 
 /** A JSON-RPC error returned by the server; the connection remains usable. */
 export class McpRpcError extends Error {
@@ -60,7 +65,7 @@ export async function openMcpSession(
   const notify = (method: string, params?: object) =>
     transport.send({ jsonrpc: "2.0", method, params }, AbortSignal.timeout(timeoutMs));
 
-  const request = async (method: string, params: object, caller?: AbortSignal) => {
+  const attempt = async (method: string, params: object, caller?: AbortSignal) => {
     if (failure) throw failure;
     throwIfAborted(caller, `MCP ${method}`);
     const id = nextId++;
@@ -102,15 +107,15 @@ export async function openMcpSession(
     await transport.close();
   };
 
-  try {
-    const result = await request(
+  const handshake = async (caller?: AbortSignal) => {
+    const result = await attempt(
       "initialize",
       {
         protocolVersion: PROTOCOL_VERSIONS[0],
         capabilities: {},
         clientInfo: { name: "tubeless", version: "unversioned" },
       },
-      signal
+      caller
     );
     if (
       !isRecord(result) ||
@@ -119,6 +124,33 @@ export async function openMcpSession(
     )
       throw new Error(`MCP server ${label} requires an unsupported protocol version`);
     await notify("notifications/initialized");
+  };
+  let stale = false;
+  let renewal: Promise<void> | undefined;
+  // One handshake serves every request that found the session expired.
+  const renew = () =>
+    (renewal ??= handshake()
+      .then(() => {
+        stale = false;
+      })
+      .finally(() => {
+        renewal = undefined;
+      }));
+  const request = async (method: string, params: object, caller?: AbortSignal) => {
+    if (stale) await renew();
+    try {
+      return await attempt(method, params, caller);
+    } catch (error) {
+      if (!(error instanceof McpSessionExpiredError)) throw error;
+      // A 404 means the server never ran this request, so sending it again is safe.
+      stale = true;
+      await renew();
+      return attempt(method, params, caller);
+    }
+  };
+
+  try {
+    await handshake(signal);
   } catch (error) {
     await close().catch(() => {});
     throw error;

@@ -238,6 +238,74 @@ describe("MCP servers", () => {
     expect(requests.at(-1)!.method).toBe("DELETE");
   });
 
+  it("starts a new HTTP session when the server drops the old one", async () => {
+    const server = await serveFakeMcpHttp();
+    open.push(server);
+    const mcp = await connectMcpServers({ remote: { url: server.url } });
+    open.push(mcp);
+    const agent = callingAgent(mcp.tools, [
+      { tool: "remote__echo", input: { text: "x", times: 3 } },
+    ]);
+    const expected = [{ ok: true, value: { content: [{ text: "xxx" }] } }];
+    expect(await createPipelineTestRuntime().runOrThrow(agent, {})).toMatchObject(expected);
+    await vi.waitFor(() => expect(server.fake.responses).toHaveLength(1));
+    const start = server.requests.length;
+    server.expireSession();
+    expect(await createPipelineTestRuntime().runOrThrow(agent, {})).toMatchObject(expected);
+    const requests = server.requests.slice(start);
+    // Ignore replies to server pings; they have no method and are recorded as POST.
+    expect(requests.filter(({ method }) => method !== "POST")).toEqual([
+      expect.objectContaining({ method: "tools/call", session: "session-1" }),
+      expect.objectContaining({ method: "initialize", session: undefined, version: undefined }),
+      expect.objectContaining({ method: "notifications/initialized", session: "session-2" }),
+      expect.objectContaining({ method: "tools/call", session: "session-2" }),
+    ]);
+    expect(requests.some(({ method }) => method === "tools/list")).toBe(false);
+  });
+
+  it("fails the call when the server keeps refusing the session", async () => {
+    const server = await serveFakeMcpHttp();
+    open.push(server);
+    const mcp = await connectMcpServers({ remote: { url: server.url } });
+    open.push(mcp);
+    const start = server.requests.length;
+    server.refuseSessions();
+    const result = await createPipelineTestRuntime().run(
+      callingAgent(mcp.tools, [{ tool: "remote__echo", input: { text: "x", times: 3 } }]),
+      {}
+    );
+    expect(result.status).toBe("failed");
+    expect(JSON.stringify(result.errors)).toContain("HTTP 404");
+    expect(
+      server.requests.slice(start).filter(({ method }) => method === "initialize")
+    ).toHaveLength(1);
+  });
+
+  it("renews once for concurrent calls", async () => {
+    const server = await serveFakeMcpHttp();
+    open.push(server);
+    const mcp = await connectMcpServers({ remote: { url: server.url } });
+    open.push(mcp);
+    const start = server.requests.length;
+    server.expireSession();
+    const outcomes = await createPipelineTestRuntime().runOrThrow(
+      callingAgent(mcp.tools, [
+        { tool: "remote__echo", input: { text: "a", times: 2 } },
+        { tool: "remote__echo", input: { text: "b", times: 3 } },
+      ]),
+      {}
+    );
+    expect(outcomes).toMatchObject([
+      { ok: true, value: { content: [{ text: "aa" }] } },
+      { ok: true, value: { content: [{ text: "bbb" }] } },
+    ]);
+    const initializations = server.requests
+      .slice(start)
+      .filter(({ method }) => method === "initialize");
+    expect(initializations.length).toBeGreaterThanOrEqual(1);
+    expect(initializations.length).toBeLessThanOrEqual(2);
+  });
+
   it("validates configuration and reports servers that fail to start", async () => {
     await expect(connectMcpServers({ bad_name: stdioServer })).rejects.toThrow(
       "Invalid MCP server name"

@@ -1,3 +1,11 @@
+/** The server no longer recognizes the HTTP session a request was sent with. */
+export class McpSessionExpiredError extends Error {
+  constructor(label: string) {
+    super(`MCP server ${label} ended the session (HTTP 404)`);
+    this.name = "McpSessionExpiredError";
+  }
+}
+
 export interface McpMessage {
   readonly jsonrpc: "2.0";
   readonly id?: number | string;
