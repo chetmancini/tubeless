@@ -201,6 +201,19 @@ describe("tubeless init", () => {
     for (const [name, version] of Object.entries(CLOUDFLARE_DEV_DEPENDENCIES))
       expect({ name, version }).toEqual({ name, version: devDependencies[name] });
   });
+
+  it("tests the Cloudflare target on the Miniflare the pinned cf uses", () => {
+    const { devDependencies } = JSON.parse(readFileSync("package.json", "utf8")) as {
+      devDependencies: Record<string, string>;
+    };
+    const { dependencies } = JSON.parse(readFileSync("node_modules/cf/package.json", "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(dependencies.miniflare, "cf must pin an exact Miniflare version, not a range").toMatch(
+      /^\d/
+    );
+    expect(devDependencies.miniflare).toBe(dependencies.miniflare);
+  });
 });
 
 describe("cloudflare scaffold naming and imports", () => {
