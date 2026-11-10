@@ -103,6 +103,30 @@ describe("agent credentials and dotenv files", () => {
     }
   );
 
+  it.each([
+    { baseUrl: undefined, expectedBaseUrl: "https://gateway.example/v1" },
+    { baseUrl: "https://process.example/v1", expectedBaseUrl: "https://process.example/v1" },
+  ])(
+    "sends requests to OPENAI_BASE_URL from the dotenv file with process precedence: %j",
+    async ({ baseUrl, expectedBaseUrl }) => {
+      vi.stubEnv("OPENAI_API_KEY", undefined);
+      vi.stubEnv("OPENAI_BASE_URL", baseUrl);
+      const { directory } = await writeModule("export default {};");
+      await writeFile(
+        join(directory, ".env.agent"),
+        "OPENAI_API_KEY=file-key\nOPENAI_BASE_URL=https://gateway.example/v1\n"
+      );
+      const fetcher = mockModelResponse();
+      const io = captureIo(directory);
+      expect(
+        await runWorkbenchCli(["agent", "--env-file", ".env.agent", "--prompt", "hi"], io)
+      ).toBe(0);
+      expect(fetcher).toHaveBeenCalledOnce();
+      expect(String(fetcher.mock.calls[0]![0])).toBe(`${expectedBaseUrl}/responses`);
+      expect(process.env.OPENAI_BASE_URL).toBe(baseUrl);
+    }
+  );
+
   it("keeps an explicitly blank inherited key authoritative over the dotenv value", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     const { directory } = await writeModule("export default {};");

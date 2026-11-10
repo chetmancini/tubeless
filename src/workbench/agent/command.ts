@@ -39,7 +39,8 @@ async function loadModelFactory(
       );
       return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.usage };
     }
-    return ({ model }) => openaiModel({ model, apiKey });
+    const baseUrl = env.OPENAI_BASE_URL?.trim() || undefined;
+    return ({ model }) => openaiModel({ model, apiKey, ...(baseUrl ? { baseUrl } : {}) });
   }
   return loadWorkbenchModule(file, io, async (filePath) => {
     const module: unknown = await import(pathToFileURL(filePath).href);

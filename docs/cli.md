@@ -49,7 +49,8 @@ built-in dotenv parser, supporting quotes, comments, whitespace, and an optional
 variable expansion. Existing process environment values take precedence over the
 file, including empty values; `--model` overrides `OPENAI_MODEL`. Runtime-loaded
 environment values, such as Bun's automatic dotenv loading, count as existing
-values too. File values are passed to the model factory without changing
+values too. `OPENAI_BASE_URL` from the file selects the endpoint for the built-in
+provider. File values are passed to the model factory without changing
 `process.env`. The built-in provider trims the key and rejects internal whitespace
 or control characters. Credential and file-loading diagnostics omit secret values.
 This checkout ignores `.env` and `.env.*` except `.env.example`.
