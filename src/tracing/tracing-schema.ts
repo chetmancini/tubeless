@@ -286,7 +286,7 @@ const progressDetailSchema = wireObject({
   outputSource: wireOptional(wireEnum(["override", "cache"])),
   completed: wireOptional(finiteNumber),
   depth: wireOptional(finiteNumber),
-  id: wireString({ maxLength: PIPELINE_TRACE_STRING_LIMIT }),
+  id: wireString({ allowEmpty: true, maxLength: PIPELINE_TRACE_STRING_LIMIT }),
   label: wireOptional(boundedString),
   name: wireOptional(boundedString),
   status: wireOptional(wireEnum(PIPELINE_PROGRESS_STATUSES)),

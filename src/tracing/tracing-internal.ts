@@ -74,7 +74,8 @@ function compactAttributes(
 ): Record<string, PipelineTraceAttributeValue> {
   return Object.fromEntries(
     Object.entries(attributes).filter(
-      (entry): entry is [string, PipelineTraceAttributeValue] => entry[1] !== undefined
+      (entry): entry is [string, PipelineTraceAttributeValue] =>
+        entry[1] !== undefined && (typeof entry[1] !== "number" || Number.isFinite(entry[1]))
     )
   );
 }
@@ -114,6 +115,7 @@ function traceProgress(
 ): Pick<PipelineTraceProgress, "detailCount" | "details"> | undefined {
   if (!details || details.length === 0) return undefined;
   const retained: PipelineStepProgressDetail[] = [];
+  let bytes = 2; // The enclosing brackets.
   for (const detail of details.slice(0, PIPELINE_TRACE_LIST_LIMIT)) {
     const row: PipelineStepProgressDetail = { id: boundTraceString(detail.id) };
     if (detail.name) row.name = boundTraceString(detail.name);
@@ -123,10 +125,10 @@ function traceProgress(
     }
     if (detail.label) row.label = boundTraceString(detail.label);
     if (detail.status && DETAIL_STATUSES.has(detail.status)) row.status = detail.status;
-    const next = [...retained, row];
-    if (traceEncoder.encode(JSON.stringify(next)).byteLength > PIPELINE_TRACE_DETAIL_BYTE_LIMIT) {
-      break;
-    }
+    const size =
+      traceEncoder.encode(JSON.stringify(row)).byteLength + (retained.length > 0 ? 1 : 0);
+    if (bytes + size > PIPELINE_TRACE_DETAIL_BYTE_LIMIT) break;
+    bytes += size;
     retained.push(row);
   }
   return {
@@ -358,10 +360,12 @@ export function createPipelineTraceEmitter(
             ...(event.progress
               ? {
                   progress: {
-                    completed: event.progress.completed,
+                    completed: Number.isFinite(event.progress.completed)
+                      ? event.progress.completed
+                      : 0,
                     ...(traceProgress(event.progress.details) ?? {}),
                     message: event.progress.message,
-                    total: event.progress.total,
+                    total: Number.isFinite(event.progress.total) ? event.progress.total : undefined,
                   },
                 }
               : {}),
@@ -438,6 +442,7 @@ export function createPipelineTraceEmitter(
       emit(fields);
     },
     reportAttempt: (stepId, attempt, attributes = {}, attemptId) => {
+      if (!Number.isFinite(attempt)) return;
       const fields: Extract<PipelineTraceEmission, { name: "step.attempted" }> = {
         name: "step.attempted",
         payload: { attempt, attributes: compactAttributes(attributes) },

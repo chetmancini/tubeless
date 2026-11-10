@@ -3,6 +3,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { createSteps, definePipeline, type PipelineLogger } from "../core/pipeline.js";
 import { defaultPipelineContext } from "../core/pipeline-execute.js";
 import { composeTraceExporters, type PipelineTraceEvent } from "./tracing.js";
+import { decodePipelineTraceEvent } from "./tracing-codec.js";
 
 function createLogger(): PipelineLogger & { warnings: string[] } {
   const warnings: string[] = [];
@@ -926,6 +927,123 @@ describe("pipeline tracing", () => {
       total: 5,
       status: "cancelled",
     });
+  });
+
+  it("keeps progress details within the detail byte limit", async () => {
+    const { step } = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        context.reportProgress({
+          completed: 1,
+          details: Array.from({ length: 128 }, (_, index) => ({
+            id: `item-${index}-${"x".repeat(4_000)}`,
+            label: "y".repeat(4_000),
+          })),
+        });
+        return "ok";
+      },
+    });
+    const pipeline = definePipeline({ id: "traced-detail-bytes", steps: [work] });
+    const events: PipelineTraceEvent[] = [];
+
+    await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log: createLogger(),
+      tracing: { exporter: { export: (event) => void events.push(event) } },
+    });
+
+    const event = events.find(
+      (event) => event.name === "step.running" && event.payload.progress?.completed === 1
+    );
+    if (event?.name !== "step.running") throw new Error("missing progress trace");
+    const details = event.payload.progress?.details;
+    if (!details?.length) throw new Error("missing progress details");
+    const byteLength = new TextEncoder().encode(JSON.stringify(details)).byteLength;
+    expect(byteLength).toBeLessThanOrEqual(256 * 1_024);
+    expect(byteLength + JSON.stringify(details[0]).length + 1).toBeGreaterThan(256 * 1_024);
+    expect(event.payload.progress?.detailCount).toBe(128);
+    expect(() => decodePipelineTraceEvent(event)).not.toThrow();
+  });
+
+  it("records non-finite progress as decodable events", async () => {
+    const { step } = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        context.reportProgress({
+          completed: Number.NaN,
+          total: Number.POSITIVE_INFINITY,
+          message: "odd",
+        });
+        return "ok";
+      },
+    });
+    const pipeline = definePipeline({ id: "traced-non-finite-progress", steps: [work] });
+    const events: PipelineTraceEvent[] = [];
+
+    await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log: createLogger(),
+      tracing: { exporter: { export: (event) => void events.push(event) } },
+    });
+
+    for (const event of events) expect(() => decodePipelineTraceEvent(event)).not.toThrow();
+    const event = events.find(
+      (event) => event.name === "step.running" && event.payload.progress?.message === "odd"
+    );
+    if (event?.name !== "step.running") throw new Error("missing progress trace");
+    expect(event.payload.progress).toMatchObject({ completed: 0, message: "odd" });
+    expect(event.payload.progress?.total).toBeUndefined();
+  });
+
+  it("records an empty progress detail id", async () => {
+    const { step } = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        context.reportProgress({ completed: 1, details: [{ id: "" }, { id: "b" }] });
+        return "ok";
+      },
+    });
+    const pipeline = definePipeline({ id: "traced-empty-detail-id", steps: [work] });
+    const events: PipelineTraceEvent[] = [];
+
+    await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log: createLogger(),
+      tracing: { exporter: { export: (event) => void events.push(event) } },
+    });
+
+    for (const event of events) expect(() => decodePipelineTraceEvent(event)).not.toThrow();
+    const event = events.find(
+      (event) => event.name === "step.running" && event.payload.progress?.completed === 1
+    );
+    if (event?.name !== "step.running") throw new Error("missing progress trace");
+    expect(event.payload.progress?.details).toEqual([{ id: "" }, { id: "b" }]);
+  });
+
+  it("drops non-finite attempt attributes", async () => {
+    const { step } = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        context.reportAttempt(1, { ratio: Number.NaN, label: "x" });
+        context.reportAttempt(Number.NaN);
+        context.reportAttempt(Number.POSITIVE_INFINITY);
+        context.reportAttempt(Number.NEGATIVE_INFINITY);
+        return "ok";
+      },
+    });
+    const pipeline = definePipeline({ id: "traced-non-finite-attempt", steps: [work] });
+    const events: PipelineTraceEvent[] = [];
+
+    await pipeline.run({}, undefined, {
+      ...defaultPipelineContext(),
+      log: createLogger(),
+      tracing: { exporter: { export: (event) => void events.push(event) } },
+    });
+
+    for (const event of events) expect(() => decodePipelineTraceEvent(event)).not.toThrow();
+    const attempts = events.filter((event) => event.name === "step.attempted");
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]?.payload).toEqual({ attempt: 1, attributes: { label: "x" } });
   });
 
   it("keeps tracing enabled for valid identifiers longer than metadata bounds", async () => {
