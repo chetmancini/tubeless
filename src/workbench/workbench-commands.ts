@@ -293,7 +293,10 @@ export async function runPlan(argv: readonly string[], io: WorkbenchCliIo): Prom
         const plan = loaded.view.plan(controls);
         const rendered = parsed.values.json
           ? renderPipelinePlan(plan, { format: "json", pretty: true })
-          : renderPipelinePlan(plan, { explain: parsed.values.explain ?? false });
+          : renderPipelinePlan(plan, { explain: parsed.values.explain ?? false })
+              .split("\n")
+              .map(terminalSafeText)
+              .join("\n");
         commandIo.stdout.write(`${rendered}\n`);
         return plan.ok
           ? TUBELESS_WORKBENCH_EXIT_CODE.success

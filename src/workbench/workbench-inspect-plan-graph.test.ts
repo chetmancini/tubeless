@@ -10,6 +10,43 @@ import {
 } from "./workbench.test-support.js";
 
 describe("workbench inspect, plan, and graph", () => {
+  it("strips terminal controls from human plan output but not from JSON", async () => {
+    const entry = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
+    const name = "Load\u001b[31m";
+    const description = "Reads\u202e data";
+    const { directory } = await writeModule(`
+      import { createSteps, definePipeline } from ${JSON.stringify(entry)};
+      const { step } = createSteps();
+      const load = step("load", {
+        name: ${JSON.stringify(name)},
+        description: ${JSON.stringify(description)},
+        run() { throw new Error("plan must not execute work"); },
+      });
+      export default definePipeline({ id: "terminal-controls", steps: [load] });
+    `);
+    for (const flags of [[], ["--explain"]]) {
+      const io = captureIo(directory);
+      expect(await runWorkbenchCli(["plan", ...flags, "pipeline.mjs"], io)).toBe(
+        TUBELESS_WORKBENCH_EXIT_CODE.success
+      );
+      expect(io.errors).toEqual([]);
+      const rendered = io.output.join("");
+      expect(rendered).toContain("Load");
+      expect(rendered).toContain("Reads");
+      expect(rendered).not.toContain("\u001b");
+      expect(rendered).not.toContain("\u202e");
+    }
+
+    const jsonIo = captureIo(directory);
+    expect(await runWorkbenchCli(["plan", "--json", "pipeline.mjs"], jsonIo)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.success
+    );
+    expect(jsonIo.errors).toEqual([]);
+    expect(JSON.parse(jsonIo.output.join(""))).toMatchObject({
+      steps: [expect.objectContaining({ id: "load", name, description })],
+    });
+  });
+
   it("filters metadata discovery without executing handlers or rendering dangling edges", async () => {
     const entry = pathToFileURL(path.resolve("dist/core/pipeline.js")).href;
     const { directory } = await writeModule(`
