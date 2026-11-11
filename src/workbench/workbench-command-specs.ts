@@ -364,8 +364,8 @@ Sign in to Tubeless Cloud with an expiring first-party session.
     usage: `Usage: tubeless cloud <list|run|logs> [options]
 
   list [--json]
-  run <pipeline-name-or-slug> [--input-file <path|->] [--detach] [--json]
-  run --id <cloud-pipeline-id> [--input-file <path|->] [--detach] [--json]
+  run <pipeline-name-or-slug> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach] [--json]
+  run --id <cloud-pipeline-id> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach] [--json]
   logs <run-id> [--follow] [--json]
 
 All commands accept --workspace <id>, --host <origin>, and --help.
