@@ -142,7 +142,8 @@ Read the corresponding package recipe before using these features:
   and owns isolated conversation state. The adapter preserves native history and
   compacts completed turns. Read project guidance in a separate turn before the
   work it governs. Compaction defaults to 768 KiB; set a smaller `compactAfterBytes`
-  for smaller-context models. Anthropic caches the shared system prefix and history;
+  for smaller-context models. Anthropic also compacts above 768 KiB of complete
+  request bytes, including tool schemas, to reserve reply space. It caches the shared system prefix and history;
   `promptCaching: "1h"` extends the default five-minute lifetime at a higher write
   price. Per-request `agent.model.*` trace attributes retain token/cache counters
   and timing, including compaction usage. Optional exploration follows required

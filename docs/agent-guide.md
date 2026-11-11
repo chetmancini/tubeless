@@ -461,7 +461,9 @@ read when a pipeline needs them.
   reasoning settings by default; the coding recipe and live evaluations explicitly
   request `reasoningEffort: "high"`, which requires a model that supports that setting.
   Both adapters compact at 768 KiB of history by default; use a lower
-  `compactAfterBytes` for smaller-context models. Anthropic caches the shared system
+  `compactAfterBytes` for smaller-context models. Anthropic also compacts above
+  768 KiB of complete request bytes to reserve space for the next reply, including
+  when a larger history threshold is configured. Anthropic caches the shared system
   prefix and growing history; `promptCaching: "1h"` extends the default five-minute
   lifetime at a higher write price. Trace events retain per-request `agent.model.*`
   token/cache counters, timing and compaction usage. See

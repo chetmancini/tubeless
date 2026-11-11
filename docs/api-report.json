@@ -295,7 +295,7 @@
     {
       "declaration": "./dist/agent/anthropic.d.ts",
       "exports": ["anthropicModel", "AnthropicModelOptions"],
-      "sha256": "4344d2875c9c1113a03cc6e3e784e7587f31ffdd56c795418979c59049334a95",
+      "sha256": "4dafb3978230aee34846ddd9cc38281ec10e1c679e34a3dd637d67e3db55289b",
       "specifier": "tubeless/agent/anthropic"
     },
     {

@@ -23,7 +23,7 @@ Package: `tubeless`
 | `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `3e07ffcf14fca14b6745fe7d019c4fb72df9a3e89ad0a0c0bd4e6c5219e21bc2` |                3 |
 | `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `7c805a8f0c385fec79a06ada238543826642822fb76ccb10dfe4b60d9e273291` |                2 |
 | `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `127b28979eafdd7d8a2c0f0b06b8d42291c72e7851962b3e72980d0b5ec3ac15` |                7 |
-| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `4344d2875c9c1113a03cc6e3e784e7587f31ffdd56c795418979c59049334a95` |                2 |
+| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `4dafb3978230aee34846ddd9cc38281ec10e1c679e34a3dd637d67e3db55289b` |                2 |
 | `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `5a8591686e68d24beaf3cc7337ff1eac5421b801ab2d39f6f3ebe1e275b56d36` |               12 |
 | `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `99166d4af25eb1b9edbf35a198dff6af6a41c175c879b4783f2803b53db9df39` |                4 |
 

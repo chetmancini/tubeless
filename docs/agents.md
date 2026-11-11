@@ -109,13 +109,17 @@ a higher write price. `promptCaching: false` omits all cache controls for compat
 servers that reject them. See [OpenAI caching](https://developers.openai.com/api/docs/guides/prompt-caching)
 and [Anthropic caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
 
-Both adapters compact completed history at 768 KiB by default, leaving 256 KiB below
-the 1 MiB request ceiling for the next result batch. A complete decision that would
-exceed the request ceiling also triggers compaction. This byte threshold preserves
-longer reusable prefixes; it is not a token count or a guarantee that a model's
-context window will fit. For smaller-context models, set a lower `compactAfterBytes`
-using observed token usage, with room for tool results and model output. `null`
-disables compaction but still enforces the HTTP request limit.
+Both adapters compact completed history at 768 KiB by default. Anthropic also
+compacts when the complete decision request, including tools and instructions,
+exceeds 768 KiB, leaving 256 KiB below the 1 MiB ceiling for the next assistant
+reply and compaction envelope. This full-request trigger applies even with a
+larger explicit history threshold. Newly added tool results can be shortened to
+fit the compaction request. OpenAI also compacts when a complete decision would
+exceed the request ceiling. These byte thresholds preserve longer reusable
+prefixes; they are not token counts or a guarantee that a model's context window
+will fit. For smaller-context models, set a lower `compactAfterBytes` using observed
+token usage, with room for tool results and model output. `null` disables all
+compaction triggers but still enforces the HTTP request limit.
 
 With tracing enabled (`--trace`, `--store`, or a `tracing.exporter`), every provider
 request emits a `step.attempted` event with `agent.model.*` attributes:
@@ -132,7 +136,10 @@ request emits a `step.attempted` event with `agent.model.*` attributes:
 
 For example, `agent.model.cacheReadTokens` is the full attribute name. Missing or
 invalid counters stay absent; zero means the provider explicitly reported zero.
-Anthropic compaction includes the billed counters from `usage.iterations`. Reminder
+Anthropic input totals require valid uncached input in every usage entry and valid
+cache counters wherever supplied; missing optional cache counters contribute zero.
+A missing or invalid required counter omits the total while other valid counters
+remain available. Anthropic compaction includes the billed counters from `usage.iterations`. Reminder
 requests and compaction calls have their own events, including usage reported on
 responses that later fail validation. Transport failures carry no token estimate.
 Only allowlisted numeric usage and request metadata are recorded, without prompt,
@@ -382,8 +389,8 @@ limits on optional and union-typed parameters. The adapter rejects more than 20 
 at definition. Set `strict: false` for larger tool sets or servers without strict
 support, or advertise fewer tools with `defaultTools`, allowlists or code mode.
 
-Once completed history exceeds `compactAfterBytes`, or a complete decision would exceed
-the request limit, the adapter requests
+Once completed history exceeds `compactAfterBytes`, or a complete decision exceeds
+768 KiB including tools and instructions, the adapter requests
 [on-demand compaction](https://platform.claude.com/docs/en/build-with-claude/compaction-on-demand)
 with the same system prompt and tools. It replaces the history with the returned assistant
 message, holding the signed summary block unchanged, followed by a short user continuation message. The `compact-2026-09-04` beta header is

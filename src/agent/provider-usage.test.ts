@@ -1,6 +1,76 @@
 import { expect, it, vi } from "vitest";
 import { modelRequestReporter } from "./provider-usage.js";
 
+it.each([-1, undefined, null, "100", 1.5, Number.POSITIVE_INFINITY])(
+  "omits Anthropic input totals when required uncached input is invalid: %j",
+  async (inputTokens) => {
+    const reportAttempt = vi.fn();
+    const report = modelRequestReporter("anthropic", "fixture", { turn: 1, reportAttempt });
+    await report("decision", async () => ({
+      usage: {
+        input_tokens: inputTokens,
+        output_tokens: 20,
+        cache_read_input_tokens: 200,
+        cache_creation_input_tokens: 300,
+      },
+    }));
+    const attributes = reportAttempt.mock.calls[0]![1];
+    expect(attributes["agent.model.inputTokens"]).toBeUndefined();
+    expect(attributes["agent.model.uncachedInputTokens"]).toBeUndefined();
+    expect(attributes).toMatchObject({
+      "agent.model.outputTokens": 20,
+      "agent.model.cacheReadTokens": 200,
+      "agent.model.cacheWriteTokens": 300,
+    });
+  }
+);
+
+it.each(["cache_read_input_tokens", "cache_creation_input_tokens"])(
+  "does not treat invalid Anthropic %s as an omitted optional counter",
+  async (field) => {
+    const reportAttempt = vi.fn();
+    const report = modelRequestReporter("anthropic", "fixture", { turn: 1, reportAttempt });
+    await report("decision", async () => ({
+      usage: {
+        input_tokens: 100,
+        cache_read_input_tokens: 200,
+        cache_creation_input_tokens: 300,
+        [field]: -1,
+      },
+    }));
+    expect(reportAttempt.mock.calls[0]![1]["agent.model.inputTokens"]).toBeUndefined();
+    expect(reportAttempt.mock.calls[0]![1]["agent.model.uncachedInputTokens"]).toBe(100);
+  }
+);
+
+it.each([-1, undefined])(
+  "omits partial Anthropic totals across compaction iterations with input %j",
+  async (inputTokens) => {
+    const reportAttempt = vi.fn();
+    const report = modelRequestReporter("anthropic", "fixture", { turn: 1, reportAttempt });
+    await report("compaction", async () => ({
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        iterations: [
+          {
+            type: "compaction",
+            input_tokens: inputTokens,
+            output_tokens: 20,
+            cache_read_input_tokens: 200,
+          },
+        ],
+      },
+    }));
+    expect(reportAttempt.mock.calls[0]![1]["agent.model.inputTokens"]).toBeUndefined();
+    expect(reportAttempt.mock.calls[0]![1]["agent.model.uncachedInputTokens"]).toBeUndefined();
+    expect(reportAttempt.mock.calls[0]![1]).toMatchObject({
+      "agent.model.outputTokens": 20,
+      "agent.model.cacheReadTokens": 200,
+    });
+  }
+);
+
 it("records OpenAI reads, writes by lifetime, reasoning and request order without response content", async () => {
   const reportAttempt = vi.fn();
   const report = modelRequestReporter("openai", "fixture", { turn: 2, reportAttempt });

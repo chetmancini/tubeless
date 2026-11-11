@@ -6,9 +6,20 @@ function count(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
-function sum(values: readonly (number | undefined)[]): number | undefined {
-  const known = values.filter((value) => value !== undefined);
-  return known.length ? count(known.reduce((total, value) => total + value, 0)) : undefined;
+function sum(values: readonly unknown[]): number | undefined {
+  if (!values.length) return undefined;
+  let total = 0;
+  for (const value of values) {
+    const tokens = count(value);
+    if (tokens === undefined) return undefined;
+    total += tokens;
+  }
+  return count(total);
+}
+
+// Cache fields may be absent when unused. Invalid supplied values still invalidate the sum.
+function optionalSum(values: readonly unknown[]): number | undefined {
+  return sum(values.filter((value) => value !== undefined));
 }
 
 /** Allowlisted numeric usage only; provider responses may contain private application data. */
@@ -30,31 +41,46 @@ function usageAttributes(provider: "openai" | "anthropic", body: unknown): Pipel
     };
   }
   // Compaction is billed in iterations; top-level counters exclude those calls.
-  const entries = [
+  if (
+    usage.iterations !== undefined &&
+    (!Array.isArray(usage.iterations) || !usage.iterations.every(record))
+  )
+    return {};
+  const entries: readonly Record<string, unknown>[] = [
     usage,
-    ...(Array.isArray(usage.iterations) ? usage.iterations.filter(record) : []),
+    ...(Array.isArray(usage.iterations) ? usage.iterations : []),
   ];
-  const uncached = sum(entries.map((entry) => count(entry.input_tokens)));
-  const reads = sum(entries.map((entry) => count(entry.cache_read_input_tokens)));
-  const writes = sum(entries.map((entry) => count(entry.cache_creation_input_tokens)));
+  const uncached = sum(entries.map((entry) => entry.input_tokens));
+  const reads = optionalSum(entries.map((entry) => entry.cache_read_input_tokens));
+  const writes = optionalSum(entries.map((entry) => entry.cache_creation_input_tokens));
   return {
-    "agent.model.inputTokens": sum([uncached, reads, writes]),
+    "agent.model.inputTokens": sum(
+      entries.flatMap((entry) => [
+        entry.input_tokens,
+        entry.cache_read_input_tokens === undefined ? 0 : entry.cache_read_input_tokens,
+        entry.cache_creation_input_tokens === undefined ? 0 : entry.cache_creation_input_tokens,
+      ])
+    ),
     "agent.model.uncachedInputTokens": uncached,
-    "agent.model.outputTokens": sum(entries.map((entry) => count(entry.output_tokens))),
+    "agent.model.outputTokens": sum(entries.map((entry) => entry.output_tokens)),
     "agent.model.cacheReadTokens": reads,
     "agent.model.cacheWriteTokens": writes,
-    "agent.model.cacheWrite5mTokens": sum(
+    "agent.model.cacheWrite5mTokens": optionalSum(
       entries.map((entry) =>
         record(entry.cache_creation)
-          ? count(entry.cache_creation.ephemeral_5m_input_tokens)
-          : undefined
+          ? entry.cache_creation.ephemeral_5m_input_tokens
+          : entry.cache_creation === undefined
+            ? undefined
+            : null
       )
     ),
-    "agent.model.cacheWrite1hTokens": sum(
+    "agent.model.cacheWrite1hTokens": optionalSum(
       entries.map((entry) =>
         record(entry.cache_creation)
-          ? count(entry.cache_creation.ephemeral_1h_input_tokens)
-          : undefined
+          ? entry.cache_creation.ephemeral_1h_input_tokens
+          : entry.cache_creation === undefined
+            ? undefined
+            : null
       )
     ),
   };

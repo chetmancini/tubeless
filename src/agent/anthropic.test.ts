@@ -2,7 +2,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineAgent, type AgentModel } from "./agent.js";
+import { defineAgent, defineTool, type AgentModel } from "./agent.js";
+import { schema, textSchema } from "./agent.test-support.js";
 import { anthropicModel } from "./anthropic.js";
 import { anthropicTool } from "./anthropic-protocol.js";
 
@@ -45,6 +46,61 @@ const headers = (fetcher: ReturnType<typeof vi.fn<typeof fetch>>, index: number)
   fetcher.mock.calls[index]![1]!.headers as Record<string, string>;
 
 describe("Anthropic model", () => {
+  it.each([undefined, 1_048_575])(
+    "reserves reply space when large tool schemas fill the request (threshold %j)",
+    async (compactAfterBytes) => {
+      const phases: string[] = [];
+      let decisions = 0;
+      const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
+        expect(Buffer.byteLength(init!.body as string)).toBeLessThanOrEqual(1_048_576);
+        const payload = JSON.parse(init!.body as string);
+        phases.push(payload.compaction ? "compaction" : "decision");
+        if (payload.compaction)
+          return message(
+            [{ type: "compaction", content: "Summary", signature: "fixture" }],
+            "compaction"
+          );
+        return ++decisions === 1
+          ? message([{ type: "text", text: "r".repeat(40 * 1024) }, use("custom", {})])
+          : message([finish()]);
+      });
+      vi.stubGlobal("fetch", fetcher);
+      const transport = anthropicModel({ apiKey: "fixture", compactAfterBytes });
+      const largeInput = schema<{}>(() => ({ value: {} }), {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+        description: "s".repeat(300 * 1024),
+      });
+      await defineAgent({
+        id: "schema-budget",
+        projectContext: false,
+        defaultTools: [],
+        tools: {
+          custom: defineTool({
+            description: "Custom",
+            inputSchema: largeInput,
+            outputSchema: textSchema,
+            run: () => "ok",
+          }),
+        },
+        model: (request, context) =>
+          transport(
+            {
+              ...request,
+              conversation: request.conversation ?? [
+                { role: "user", content: "h".repeat(700 * 1024) },
+              ],
+            },
+            context
+          ),
+      }).runOrThrow({ task: "Continue" });
+      expect(phases).toEqual(["compaction", "decision", "decision"]);
+      expect(body(fetcher, 0).tools).toEqual(body(fetcher, 1).tools);
+      expect(body(fetcher, 0).system).toEqual(body(fetcher, 1).system);
+    }
+  );
+
   it.each([true, "5m", "1h", false] as const)(
     "keeps a shared system boundary across tasks with promptCaching=%j",
     async (promptCaching) => {

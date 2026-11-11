@@ -47,7 +47,7 @@ export interface AnthropicModelOptions {
   readonly promptCaching?: boolean | "5m" | "1h";
   /**
    * Compact above this history size (default 786432 bytes), or when the complete decision
-   * exceeds the request limit. null never requests on-demand compaction.
+   * exceeds 768 KiB to reserve reply space. null never requests on-demand compaction.
    */
   readonly compactAfterBytes?: number | null;
   /**
@@ -199,8 +199,10 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
         compactAfterBytes !== null &&
         (request.outcomes.length > 0 || (newPrompt && request.conversation !== null)) &&
         (Buffer.byteLength(JSON.stringify(completed)) > compactAfterBytes ||
+          // Tools and instructions travel with compaction too. Compact before the next
+          // assistant reply can make that full request exceed the 1 MiB HTTP ceiling.
           Buffer.byteLength(JSON.stringify({ ...decisionRequest, messages: completed })) >
-            MAX_REQUEST_BYTES);
+            DEFAULT_COMPACT_AFTER_BYTES);
       // Compaction covers completed history only. The new prompt stays verbatim.
       const nextRequest = shouldCompact ? compactRequest : decisionRequest;
       const payload = shouldCompact ? history : completed;

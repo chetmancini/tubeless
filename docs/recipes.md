@@ -83,6 +83,7 @@ before file operations or task commands in its scope. The [Claude recipe](../exa
 uses the same factory with `anthropicModel()`; both adapters accept `baseUrl` for
 [compatible APIs](./agents.md#compatible-apis), retain per-request usage in traces, and
 compact at 768 KiB by default. Anthropic caches shared instructions and conversation;
+its full-request compaction trigger includes tool schemas and reserves reply space.
 see [prompt caching](./agents.md#prompt-caching-and-usage-traces) for lifetimes and counters.
 Custom OpenAI tools need inline strict schemas; oversized result
 batches use explicit previews while the harness keeps complete outcomes. See the
