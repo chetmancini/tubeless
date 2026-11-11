@@ -7,6 +7,7 @@ import {
   COMPACTION_BETA,
 } from "./anthropic-protocol.js";
 import {
+  DEFAULT_COMPACT_AFTER_BYTES,
   MAX_REQUEST_BYTES,
   providerBaseUrl,
   providerRequest,
@@ -14,6 +15,7 @@ import {
 } from "./provider-http.js";
 import { record } from "./provider-schema.js";
 import { boundedToolOutputs } from "./provider-tool-outputs.js";
+import { modelRequestReporter } from "./provider-usage.js";
 import { throwIfAborted } from "../utilities/abort.js";
 
 /** Messages API transport settings; credentials are resolved only when a decision executes. */
@@ -41,11 +43,11 @@ export interface AnthropicModelOptions {
    * the harness still validates every argument. Disable for servers without strict tool use.
    */
   readonly strict?: boolean;
-  /** Send top-level cache_control (default). Disable for servers that reject it. */
-  readonly promptCaching?: boolean;
+  /** Cache the shared system prefix and growing history (default 5m). false disables caching. */
+  readonly promptCaching?: boolean | "5m" | "1h";
   /**
-   * Compact above this history size (default 65536 bytes), or when the complete decision
-   * exceeds the request limit. null never requests on-demand compaction.
+   * Compact above this history size (default 786432 bytes), or when the complete decision
+   * exceeds 768 KiB to reserve reply space. null never requests on-demand compaction.
    */
   readonly compactAfterBytes?: number | null;
   /**
@@ -75,7 +77,7 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
     maxTokens = 32_000,
     strict = true,
     promptCaching = true,
-    compactAfterBytes = 65_536,
+    compactAfterBytes = DEFAULT_COMPACT_AFTER_BYTES,
     timeoutMs = 600_000,
   } = options;
   if (
@@ -89,7 +91,7 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
     timeoutMs < 1 ||
     timeoutMs > 2_147_483_647 ||
     typeof strict !== "boolean" ||
-    typeof promptCaching !== "boolean" ||
+    ![true, false, "5m", "1h"].includes(promptCaching) ||
     (apiKey !== undefined && authToken !== undefined) ||
     (authToken !== undefined && (typeof authToken !== "string" || !authToken.trim())) ||
     (model !== undefined && (typeof model !== "string" || !model.trim())) ||
@@ -109,6 +111,7 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
       throwIfAborted(signal, "Anthropic decision");
       // Validate descriptors before either compaction or a decision can perform I/O.
       const tools = anthropicTools(context, strict);
+      const reportRequest = modelRequestReporter("anthropic", selectedModel, context);
       if (
         request.conversation !== null &&
         (!Array.isArray(request.conversation) || !request.conversation.every(record))
@@ -126,25 +129,35 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
       const withPrompt = (history: readonly unknown[]) =>
         newPrompt ? appendUserText(history, request.task) : [...history];
       const send = (endpointLabel: string, payload: { messages: unknown[] }, beta: boolean) =>
-        providerRequest(
-          "Anthropic",
-          endpointLabel,
-          `${base}/v1/messages`,
-          {
-            ...credentials(apiKey, authToken),
-            "anthropic-version": "2023-06-01",
-            ...(beta || carriesCompaction(payload.messages)
-              ? { "anthropic-beta": COMPACTION_BETA }
-              : {}),
-          },
-          payload,
-          signal
+        reportRequest(endpointLabel === "compaction" ? "compaction" : "decision", () =>
+          providerRequest(
+            "Anthropic",
+            endpointLabel,
+            `${base}/v1/messages`,
+            {
+              ...credentials(apiKey, authToken),
+              "anthropic-version": "2023-06-01",
+              ...(beta || carriesCompaction(payload.messages)
+                ? { "anthropic-beta": COMPACTION_BETA }
+                : {}),
+            },
+            payload,
+            signal
+          )
         );
-      const system = `${request.instructions}\n\n${TOOL_RULE}`;
+      const cacheControl = {
+        type: "ephemeral",
+        ...(typeof promptCaching === "string" ? { ttl: promptCaching } : {}),
+      };
+      const systemText = `${request.instructions}\n\n${TOOL_RULE}`;
+      const system = promptCaching
+        ? [{ type: "text", text: systemText, cache_control: cacheControl }]
+        : systemText;
       // Summaries read the same system prompt and tools as the conversation.
       const compactRequest = {
         model: selectedModel,
         max_tokens: maxTokens,
+        ...(reasoningEffort === null ? {} : { output_config: { effort: reasoningEffort } }),
         system,
         tools,
         compaction: { type: "summarize", instructions: SUMMARY_INSTRUCTIONS },
@@ -154,7 +167,7 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
         model: selectedModel,
         max_tokens: maxTokens,
         ...(reasoningEffort === null ? {} : { output_config: { effort: reasoningEffort } }),
-        ...(promptCaching ? { cache_control: { type: "ephemeral" } } : {}),
+        ...(promptCaching ? { cache_control: cacheControl } : {}),
         system,
         tools,
         // Current models reject forced tool choice; the system rule and retry below steer instead.
@@ -186,8 +199,10 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
         compactAfterBytes !== null &&
         (request.outcomes.length > 0 || (newPrompt && request.conversation !== null)) &&
         (Buffer.byteLength(JSON.stringify(completed)) > compactAfterBytes ||
+          // Tools and instructions travel with compaction too. Compact before the next
+          // assistant reply can make that full request exceed the 1 MiB HTTP ceiling.
           Buffer.byteLength(JSON.stringify({ ...decisionRequest, messages: completed })) >
-            MAX_REQUEST_BYTES);
+            DEFAULT_COMPACT_AFTER_BYTES);
       // Compaction covers completed history only. The new prompt stays verbatim.
       const nextRequest = shouldCompact ? compactRequest : decisionRequest;
       const payload = shouldCompact ? history : completed;

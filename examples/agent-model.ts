@@ -6,6 +6,7 @@ export const CodingAgent = defineAgent({
   id: "coding-agent",
   name: "Workspace coding agent",
   description: "Investigate a task, edit the workspace, and verify the result with a model.",
-  implementationVersion: "coding-agent-v5",
+  implementationVersion: "coding-agent-v6",
+  // Native history stays reusable until 768 KiB; --trace retains model token/cache usage.
   model: openaiModel({ reasoningEffort: "high" }),
 });

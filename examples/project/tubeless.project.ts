@@ -114,6 +114,6 @@ export default defineProject(
   ],
   {
     name: "Example jobs",
-    description: "Import, enrich, and publish row datasets.",
+    description: "Import row datasets and run workspace agents with model usage traces.",
   }
 );

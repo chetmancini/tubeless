@@ -275,7 +275,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "9a307c0fbef947850e44dee73ae2869c5f236f93fbf64a29fe7c3788678a41db",
+      "sha256": "7c805a8f0c385fec79a06ada238543826642822fb76ccb10dfe4b60d9e273291",
       "specifier": "tubeless/agent/openai"
     },
     {
@@ -295,7 +295,7 @@
     {
       "declaration": "./dist/agent/anthropic.d.ts",
       "exports": ["anthropicModel", "AnthropicModelOptions"],
-      "sha256": "b3cd9beda9e4e8ddaf2a02719c49b9dbf86cfceefc8716dc59488a0bb52f026d",
+      "sha256": "4dafb3978230aee34846ddd9cc38281ec10e1c679e34a3dd637d67e3db55289b",
       "specifier": "tubeless/agent/anthropic"
     },
     {

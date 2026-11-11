@@ -1,9 +1,15 @@
 import type { AgentModel, AgentModelDescriptors } from "./model-types.js";
 import { openaiRequest } from "./openai-http.js";
-import { MAX_REQUEST_BYTES, providerBaseUrl, withProviderDeadline } from "./provider-http.js";
+import {
+  DEFAULT_COMPACT_AFTER_BYTES,
+  MAX_REQUEST_BYTES,
+  providerBaseUrl,
+  withProviderDeadline,
+} from "./provider-http.js";
 import { record } from "./provider-schema.js";
 import { openaiDecision, outputItems, parameter } from "./openai-protocol.js";
 import { boundedToolOutputs } from "./provider-tool-outputs.js";
+import { modelRequestReporter } from "./provider-usage.js";
 import { throwIfAborted } from "../utilities/abort.js";
 
 /** Responses transport settings; credentials are resolved only when a decision executes. */
@@ -28,7 +34,7 @@ export interface OpenAIModelOptions {
     | "max"
     | null;
   /**
-   * Compact above this history size (default 65536 bytes), or when the complete decision
+   * Compact above this history size (default 786432 bytes), or when the complete decision
    * exceeds the request limit. null never calls /responses/compact, for servers without it.
    */
   readonly compactAfterBytes?: number | null;
@@ -46,7 +52,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
     apiKey,
     baseUrl,
     reasoningEffort = null,
-    compactAfterBytes = 65_536,
+    compactAfterBytes = DEFAULT_COMPACT_AFTER_BYTES,
     timeoutMs = 60_000,
   } = options;
   if (
@@ -71,6 +77,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
       throwIfAborted(signal, "OpenAI decision");
       // Validate descriptors before either compaction or a decision can perform I/O.
       const tools = openaiTools(context);
+      const reportRequest = modelRequestReporter("openai", selectedModel, context);
       if (
         request.conversation !== null &&
         (!Array.isArray(request.conversation) || !request.conversation.every(record))
@@ -130,12 +137,8 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
       if (shouldCompact) {
         // Keep the new user request verbatim, outside the completed history window.
         if (newPrompt) input = input.slice(0, -1);
-        const compacted = await openaiRequest(
-          "responses/compact",
-          { ...compactRequest, input },
-          apiKey,
-          signal,
-          baseUrl
+        const compacted = await reportRequest("compaction", () =>
+          openaiRequest("responses/compact", { ...compactRequest, input }, apiKey, signal, baseUrl)
         );
         if (!record(compacted) || compacted.object !== "response.compaction")
           throw new Error("OpenAI returned invalid compaction");
@@ -144,12 +147,8 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
         if (newPrompt) input.push({ role: "user", content: request.task });
         context.log.log("Compacted agent conversation");
       }
-      const body = await openaiRequest(
-        "responses",
-        { ...decisionRequest, input },
-        apiKey,
-        signal,
-        baseUrl
+      const body = await reportRequest("decision", () =>
+        openaiRequest("responses", { ...decisionRequest, input }, apiKey, signal, baseUrl)
       );
       if (!record(body) || body.status !== "completed")
         throw new Error("OpenAI did not return a completed response");

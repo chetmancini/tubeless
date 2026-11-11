@@ -2,7 +2,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineAgent, type AgentModel } from "./agent.js";
+import { defineAgent, defineTool, type AgentModel } from "./agent.js";
+import { schema, textSchema } from "./agent.test-support.js";
 import { anthropicModel } from "./anthropic.js";
 import { anthropicTool } from "./anthropic-protocol.js";
 
@@ -45,6 +46,213 @@ const headers = (fetcher: ReturnType<typeof vi.fn<typeof fetch>>, index: number)
   fetcher.mock.calls[index]![1]!.headers as Record<string, string>;
 
 describe("Anthropic model", () => {
+  it.each([undefined, 1_048_575])(
+    "reserves reply space when large tool schemas fill the request (threshold %j)",
+    async (compactAfterBytes) => {
+      const phases: string[] = [];
+      let decisions = 0;
+      const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
+        expect(Buffer.byteLength(init!.body as string)).toBeLessThanOrEqual(1_048_576);
+        const payload = JSON.parse(init!.body as string);
+        phases.push(payload.compaction ? "compaction" : "decision");
+        if (payload.compaction)
+          return message(
+            [{ type: "compaction", content: "Summary", signature: "fixture" }],
+            "compaction"
+          );
+        return ++decisions === 1
+          ? message([{ type: "text", text: "r".repeat(40 * 1024) }, use("custom", {})])
+          : message([finish()]);
+      });
+      vi.stubGlobal("fetch", fetcher);
+      const transport = anthropicModel({ apiKey: "fixture", compactAfterBytes });
+      const largeInput = schema<{}>(() => ({ value: {} }), {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+        description: "s".repeat(300 * 1024),
+      });
+      await defineAgent({
+        id: "schema-budget",
+        projectContext: false,
+        defaultTools: [],
+        tools: {
+          custom: defineTool({
+            description: "Custom",
+            inputSchema: largeInput,
+            outputSchema: textSchema,
+            run: () => "ok",
+          }),
+        },
+        model: (request, context) =>
+          transport(
+            {
+              ...request,
+              conversation: request.conversation ?? [
+                { role: "user", content: "h".repeat(700 * 1024) },
+              ],
+            },
+            context
+          ),
+      }).runOrThrow({ task: "Continue" });
+      expect(phases).toEqual(["compaction", "decision", "decision"]);
+      expect(body(fetcher, 0).tools).toEqual(body(fetcher, 1).tools);
+      expect(body(fetcher, 0).system).toEqual(body(fetcher, 1).system);
+    }
+  );
+
+  it.each([true, "5m", "1h", false] as const)(
+    "keeps a shared system boundary across tasks with promptCaching=%j",
+    async (promptCaching) => {
+      const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => message([finish()]));
+      vi.stubGlobal("fetch", fetcher);
+      const agent = defineAgent({
+        id: "shared-prefix",
+        projectContext: false,
+        model: anthropicModel({ apiKey: "fixture", promptCaching }),
+      });
+      await agent.runOrThrow({ task: "First task" });
+      await agent.runOrThrow({ task: "Second task" });
+      const first = body(fetcher, 0);
+      const second = body(fetcher, 1);
+      expect(first.messages).not.toEqual(second.messages);
+      expect(first.tools).toEqual(second.tools);
+      expect(first.system).toEqual(second.system);
+      if (promptCaching === false) {
+        expect(typeof first.system).toBe("string");
+        expect(first).not.toHaveProperty("cache_control");
+      } else {
+        const cache = {
+          type: "ephemeral",
+          ...(typeof promptCaching === "string" ? { ttl: promptCaching } : {}),
+        };
+        expect(first.cache_control).toEqual(cache);
+        expect(first.system).toEqual([
+          { type: "text", text: expect.any(String), cache_control: cache },
+        ]);
+      }
+    }
+  );
+
+  it.each([
+    { historyBytes: 70_000, compactAfterBytes: undefined, compact: false },
+    { historyBytes: 800_000, compactAfterBytes: undefined, compact: true },
+    { historyBytes: 70_000, compactAfterBytes: 65_536, compact: true },
+    { historyBytes: 800_000, compactAfterBytes: null, compact: false },
+  ])(
+    "preserves growing prefixes until the configured compaction threshold: %j",
+    async ({ historyBytes, compactAfterBytes, compact }) => {
+      const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
+        const payload = JSON.parse(init!.body as string);
+        return payload.compaction
+          ? message(
+              [{ type: "compaction", content: "Summary", signature: "fixture" }],
+              "compaction"
+            )
+          : message([finish()]);
+      });
+      vi.stubGlobal("fetch", fetcher);
+      const transport = anthropicModel({ apiKey: "fixture", compactAfterBytes });
+      const history = [{ role: "user", content: "h".repeat(historyBytes) }];
+      await defineAgent({
+        id: "prefix",
+        projectContext: false,
+        model: (request, context) => transport({ ...request, conversation: history }, context),
+      }).runOrThrow({ task: "Continue" });
+      expect(
+        fetcher.mock.calls.map((_, index) => Boolean(body(fetcher, index).compaction))
+      ).toEqual(compact ? [true, false] : [false]);
+      if (!compact) expect(body(fetcher, 0).messages[0].content[0].text).toBe(history[0]!.content);
+    }
+  );
+
+  it("exports compaction iterations and tool-call reminders without losing usage", async () => {
+    const events: unknown[] = [];
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({
+          type: "message",
+          stop_reason: "compaction",
+          content: [{ type: "compaction", content: "Summary", signature: "fixture" }],
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+            iterations: [{ type: "compaction", input_tokens: 4000, output_tokens: 100 }],
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          type: "message",
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: "Working" }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 20,
+            cache_read_input_tokens: 900,
+            cache_creation_input_tokens: 0,
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          type: "message",
+          stop_reason: "tool_use",
+          content: [finish()],
+          usage: {
+            input_tokens: 50,
+            output_tokens: 10,
+            cache_read_input_tokens: 1000,
+            cache_creation_input_tokens: 0,
+          },
+        })
+      );
+    vi.stubGlobal("fetch", fetcher);
+    const transport = anthropicModel({
+      apiKey: "fixture",
+      compactAfterBytes: 1,
+      reasoningEffort: "high",
+    });
+    await defineAgent({
+      id: "usage",
+      projectContext: false,
+      model: (request, context) =>
+        transport({ ...request, conversation: [{ role: "user", content: "prior task" }] }, context),
+    }).runOrThrow({ task: "Continue" }, undefined, {
+      tracing: {
+        exporter: {
+          export(event) {
+            if (event.name === "step.attempted" && event.payload.attributes["agent.model.provider"])
+              events.push(event.payload.attributes);
+          },
+        },
+      },
+    });
+    expect(events).toEqual([
+      expect.objectContaining({
+        "agent.model.operation": "compaction",
+        "agent.model.request": 1,
+        "agent.model.inputTokens": 4000,
+        "agent.model.outputTokens": 100,
+      }),
+      expect.objectContaining({
+        "agent.model.operation": "decision",
+        "agent.model.request": 2,
+        "agent.model.inputTokens": 1000,
+        "agent.model.cacheReadTokens": 900,
+      }),
+      expect.objectContaining({
+        "agent.model.operation": "decision",
+        "agent.model.request": 3,
+        "agent.model.inputTokens": 1050,
+        "agent.model.cacheReadTokens": 1000,
+      }),
+    ]);
+    expect(body(fetcher, 0).system).toEqual(body(fetcher, 1).system);
+    expect(body(fetcher, 0).output_config).toEqual(body(fetcher, 1).output_config);
+  });
+
   it("sends Messages API tools, replays thinking verbatim, and returns tool results", async () => {
     const cwd = await workspace();
     const fetcher = vi
@@ -82,8 +290,14 @@ describe("Anthropic model", () => {
       tool_choice: { type: "auto" },
       messages: [{ role: "user", content: "Read target" }],
     });
-    expect(first.system).toContain("Always verify edits.");
-    expect(first.system).toContain("Call _finish alone");
+    expect(first.system).toEqual([
+      {
+        type: "text",
+        text: expect.stringContaining("Always verify edits."),
+        cache_control: { type: "ephemeral" },
+      },
+    ]);
+    expect(first.system[0].text).toContain("Call _finish alone");
     const read = first.tools.find((tool: { name: string }) => tool.name === "read");
     expect(read.strict).toBe(true);
     const path = read.input_schema.properties.input.properties.path;
@@ -95,6 +309,7 @@ describe("Anthropic model", () => {
     });
 
     const second = body(fetcher, 1);
+    expect(second.system).toEqual(first.system);
     expect(second.messages[1]).toEqual({
       role: "assistant",
       content: [
@@ -277,6 +492,7 @@ describe("Anthropic model", () => {
     expect(compaction).not.toHaveProperty("tool_choice");
     expect(compaction).not.toHaveProperty("cache_control");
     expect(compaction.tools).toEqual(body(fetcher, 0).tools);
+    expect(compaction.system).toEqual(body(fetcher, 0).system);
     expect(compaction.messages.at(-1).content[0]).toMatchObject({ type: "tool_result" });
 
     const decision = body(fetcher, 2);

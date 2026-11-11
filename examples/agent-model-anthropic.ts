@@ -6,6 +6,7 @@ export const ClaudeCodingAgent = defineAgent({
   id: "claude-coding-agent",
   name: "Workspace coding agent (Claude)",
   description: "Investigate a task, edit the workspace, and verify the result with Claude.",
-  implementationVersion: "claude-coding-agent-v1",
+  implementationVersion: "claude-coding-agent-v2",
+  // Shared instructions and history use five-minute caching; --trace retains usage.
   model: anthropicModel({ reasoningEffort: "high" }),
 });

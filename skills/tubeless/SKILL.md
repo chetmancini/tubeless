@@ -141,7 +141,13 @@ Read the corresponding package recipe before using these features:
   from the physical workspace path, shared by the model and every tool call,
   and owns isolated conversation state. The adapter preserves native history and
   compacts completed turns. Read project guidance in a separate turn before the
-  work it governs; optional exploration follows it. Custom OpenAI tool descriptors
+  work it governs. Compaction defaults to 768 KiB; set a smaller `compactAfterBytes`
+  for smaller-context models. Anthropic also compacts above 768 KiB of complete
+  request bytes, including tool schemas, to reserve reply space. It caches the shared system prefix and history;
+  `promptCaching: "1h"` extends the default five-minute lifetime at a higher write
+  price. Per-request `agent.model.*` trace attributes retain token/cache counters
+  and timing, including compaction usage. Optional exploration follows required
+  guidance reads. Custom OpenAI tool descriptors
   must be inline; provide
   `inputJsonSchema` when generated descriptors contain references. All object
   properties must be required, with `additionalProperties: false` at every object.
