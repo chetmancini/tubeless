@@ -1,6 +1,8 @@
 import { throwIfAborted } from "../utilities/abort.js";
 
 export const MAX_REQUEST_BYTES = 1_048_576;
+// Leave room for the next result batch without rewriting small, reusable histories.
+export const DEFAULT_COMPACT_AFTER_BYTES = 786_432;
 const MAX_RESPONSE_BYTES = 2_097_152;
 
 /** Resolve an http(s) base URL without a trailing slash, or throw a provider-labelled error. */

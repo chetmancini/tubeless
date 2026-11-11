@@ -33,6 +33,93 @@ const finish = () => call("_finish", { answer: "Done." }, "finish");
 const response = (output: unknown[]) => Response.json({ status: "completed", output });
 
 describe("OpenAI model", () => {
+  it.each([
+    { historyBytes: 70_000, compactAfterBytes: undefined, compact: false },
+    { historyBytes: 800_000, compactAfterBytes: undefined, compact: true },
+    { historyBytes: 70_000, compactAfterBytes: 65_536, compact: true },
+    { historyBytes: 800_000, compactAfterBytes: null, compact: false },
+  ])(
+    "preserves growing prefixes until the configured compaction threshold: %j",
+    async ({ historyBytes, compactAfterBytes, compact }) => {
+      const fetcher = vi.fn<typeof fetch>().mockImplementation(async (url) =>
+        String(url).endsWith("/compact")
+          ? Response.json({
+              object: "response.compaction",
+              output: [{ type: "compaction", encrypted_content: "summary" }],
+            })
+          : response([finish()])
+      );
+      vi.stubGlobal("fetch", fetcher);
+      const transport = openaiModel({ apiKey: "fixture", compactAfterBytes });
+      const history = [{ role: "user", content: "h".repeat(historyBytes) }];
+      await defineAgent({
+        id: "prefix",
+        projectContext: false,
+        model: (request, context) => transport({ ...request, conversation: history }, context),
+      }).runOrThrow({ task: "Continue" });
+      expect(fetcher.mock.calls.map(([url]) => String(url).endsWith("/compact"))).toEqual(
+        compact ? [true, false] : [false]
+      );
+      if (!compact)
+        expect(JSON.parse(fetcher.mock.calls[0]![1]!.body as string).input[0]).toEqual(history[0]);
+    }
+  );
+
+  it("exports decision and compaction usage as separate trace events", async () => {
+    const events: unknown[] = [];
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({
+          object: "response.compaction",
+          output: [{ type: "compaction", encrypted_content: "summary" }],
+          usage: { input_tokens: 5000, output_tokens: 100 },
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          status: "completed",
+          output: [finish()],
+          usage: {
+            input_tokens: 2000,
+            output_tokens: 20,
+            input_tokens_details: { cached_tokens: 1500 },
+          },
+        })
+      );
+    vi.stubGlobal("fetch", fetcher);
+    const transport = openaiModel({ apiKey: "fixture", compactAfterBytes: 1 });
+    await defineAgent({
+      id: "usage",
+      projectContext: false,
+      model: (request, context) =>
+        transport({ ...request, conversation: [{ role: "user", content: "prior task" }] }, context),
+    }).runOrThrow({ task: "Continue" }, undefined, {
+      tracing: {
+        exporter: {
+          export(event) {
+            if (event.name === "step.attempted" && event.payload.attributes["agent.model.provider"])
+              events.push(event.payload.attributes);
+          },
+        },
+      },
+    });
+    expect(events).toEqual([
+      expect.objectContaining({
+        "agent.model.operation": "compaction",
+        "agent.model.request": 1,
+        "agent.model.inputTokens": 5000,
+        "agent.model.outputTokens": 100,
+      }),
+      expect.objectContaining({
+        "agent.model.operation": "decision",
+        "agent.model.request": 2,
+        "agent.model.inputTokens": 2000,
+        "agent.model.cacheReadTokens": 1500,
+      }),
+    ]);
+  });
+
   it.each([undefined, null, "none", "minimal", "low", "medium", "high", "xhigh", "max"] as const)(
     "configures reasoning effort independently of model selection: %s",
     async (reasoningEffort) => {
@@ -260,7 +347,7 @@ describe("OpenAI model", () => {
       .mockResolvedValueOnce(response([finish()]));
     vi.stubGlobal("fetch", fetcher);
     const requests: AgentModelRequest[] = [];
-    const transport = openaiModel({ apiKey: "fixture" });
+    const transport = openaiModel({ apiKey: "fixture", compactAfterBytes: 65_536 });
     const agent = defineAgent({
       id: "large-batch",
       limits: { maxConcurrency: 8 },

@@ -74,11 +74,11 @@ const gpt = defineAgent({ id: "coding", model: openaiModel() });
 | `authToken`         | Explicit bearer token, for compatible servers that expect one              | Not applicable (`apiKey` is already a bearer)       |
 | `baseUrl`           | `ANTHROPIC_BASE_URL`, else `https://api.anthropic.com` (no `/v1`)          | `OPENAI_BASE_URL`, else `https://api.openai.com/v1` |
 | `reasoningEffort`   | Omitted; `low` through `max` sends `output_config.effort`                  | Omitted; `none` through `max` sends `reasoning`     |
-| `compactAfterBytes` | 64 KiB; `null` disables compaction                                         | 64 KiB; `null` disables compaction                  |
+| `compactAfterBytes` | 768 KiB; `null` disables compaction                                        | 768 KiB; `null` disables compaction                 |
 | `timeoutMs`         | 600000 per decision                                                        | 60000 per decision                                  |
 | `maxTokens`         | 32000 output tokens per request, thinking included                         | Not applicable                                      |
 | `strict`            | `true`; `false` sends tools without strict mode                            | Always strict                                       |
-| `promptCaching`     | `true` sends top-level `cache_control`; `false` omits it                   | Not applicable                                      |
+| `promptCaching`     | `true` (5 minutes), `"5m"`, `"1h"`, or `false` to disable caching          | Not applicable                                      |
 
 Every environment value is read when a decision executes, so imports, plans and dry
 runs need no credentials. Options always take precedence over the environment.
@@ -96,6 +96,49 @@ Add `instructions` to customize its behavior, `tools` to extend or override the
 defaults, and `limits` to bound execution. It remains an ordinary pipeline;
 `pipelineTool`, project registration, traces, and cancellation work as before.
 Use `defineAgentLoop` with `decide` when you need custom state or decisions.
+
+### Prompt caching and usage traces
+
+Both adapters preserve native history and keep tool definitions stable during a run.
+OpenAI uses automatic prompt caching. Anthropic places an explicit cache breakpoint
+after the shared system instructions and a moving automatic breakpoint on the
+conversation. The system breakpoint lets separate tasks reuse the same tools and
+instructions, subject to the provider's minimum cacheable length. Set
+`anthropicModel({ promptCaching: "1h" })` for longer pauses; the one-hour lifetime has
+a higher write price. `promptCaching: false` omits all cache controls for compatible
+servers that reject them. See [OpenAI caching](https://developers.openai.com/api/docs/guides/prompt-caching)
+and [Anthropic caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
+
+Both adapters compact completed history at 768 KiB by default, leaving 256 KiB below
+the 1 MiB request ceiling for the next result batch. A complete decision that would
+exceed the request ceiling also triggers compaction. This byte threshold preserves
+longer reusable prefixes; it is not a token count or a guarantee that a model's
+context window will fit. For smaller-context models, set a lower `compactAfterBytes`
+using observed token usage, with room for tool results and model output. `null`
+disables compaction but still enforces the HTTP request limit.
+
+With tracing enabled (`--trace`, `--store`, or a `tracing.exporter`), every provider
+request emits a `step.attempted` event with `agent.model.*` attributes:
+
+| Attribute                                    | Meaning                                                                                             |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `provider`, `name`, `operation`              | Provider, selected model, and `decision` or `compaction`                                            |
+| `request`, `durationMs`, `responseReceived`  | One-based request within the decision callback, elapsed time, and whether a parsed response arrived |
+| `inputTokens`, `outputTokens`                | Provider-reported usage; input includes cached reads and writes                                     |
+| `cacheReadTokens`, `cacheWriteTokens`        | Cached input reads and writes, when reported                                                        |
+| `cacheWrite5mTokens`, `cacheWrite1hTokens`   | Anthropic writes by lifetime, when reported                                                         |
+| `cacheWrite30mTokens`, `cacheWrite12hTokens` | OpenAI writes by lifetime, when reported                                                            |
+| `uncachedInputTokens`, `reasoningTokens`     | Anthropic uncached input or OpenAI reasoning output, when reported                                  |
+
+For example, `agent.model.cacheReadTokens` is the full attribute name. Missing or
+invalid counters stay absent; zero means the provider explicitly reported zero.
+Anthropic compaction includes the billed counters from `usage.iterations`. Reminder
+requests and compaction calls have their own events, including usage reported on
+responses that later fail validation. Transport failures carry no token estimate.
+Only allowlisted numeric usage and request metadata are recorded, without prompt,
+response, or credential content. Read the individual stored trace events; aggregate
+cache-read tokens divided by input tokens to measure reuse, and use the reported
+write lifetimes with the selected model's prices to calculate cost.
 
 ### Chat sessions
 
@@ -264,7 +307,7 @@ outcomes remain available to the harness and evaluation reports. This provider
 boundary keeps large batches from preventing compaction; it does not change tool
 execution or the outcomes supplied to custom `decide` callbacks.
 It uses `store: false` with client-owned history. Once completed history exceeds
-`compactAfterBytes` (64 KiB by default), or a complete decision would exceed the
+`compactAfterBytes` (768 KiB by default), or a complete decision would exceed the
 request limit, it calls the native
 [`/responses/compact` endpoint](https://developers.openai.com/api/docs/guides/compaction)
 and carries the entire returned context window into the next decision. The
@@ -318,8 +361,8 @@ compaction, which keeps it valid for models that check replayed thinking. Curren
 Claude models reject forced tool choice, so the adapter sends `tool_choice: "auto"` and
 instructs the model to respond only with tool calls. If a reply contains no tool call,
 the adapter appends that reply and one reminder, then asks once more. A second text-only
-reply fails the decision. Requests set top-level `cache_control` so repeated turns reuse
-the cached prefix.
+reply fails the decision. Requests cache both the shared system prefix and the growing
+conversation, as described in [prompt caching and usage traces](#prompt-caching-and-usage-traces).
 
 With `strict: true` (the default), tools use
 [strict tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use).

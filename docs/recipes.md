@@ -81,7 +81,10 @@ omit that option when selecting a model that does not support it. The recipe loa
 workspace path and uses that same cwd for all tool calls. The prompt requires nested guidance
 before file operations or task commands in its scope. The [Claude recipe](../examples/agent-model-anthropic.ts)
 uses the same factory with `anthropicModel()`; both adapters accept `baseUrl` for
-[compatible APIs](./agents.md#compatible-apis). Custom OpenAI tools need inline strict schemas; oversized result
+[compatible APIs](./agents.md#compatible-apis), retain per-request usage in traces, and
+compact at 768 KiB by default. Anthropic caches shared instructions and conversation;
+see [prompt caching](./agents.md#prompt-caching-and-usage-traces) for lifetimes and counters.
+Custom OpenAI tools need inline strict schemas; oversized result
 batches use explicit previews while the harness keeps complete outcomes. See the
 [model-agent contract](./agents.md#default-model-backed-agent).
 Record the [delegation recipe](../examples/agent-delegation.ts) with `--trace` or

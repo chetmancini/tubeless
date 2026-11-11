@@ -71,8 +71,10 @@ their source files.
   requests and responses, base URLs, deadlines that fail rather than cancel),
   `provider-schema.ts` (strict tool-parameter schemas) and `provider-tool-outputs.ts`
   (bounded tool results). `openai-http.ts` keeps OpenAI
-  authentication-error handling: known codes, no raw provider messages. The
-  provider-independent agent entrypoint imports none of them.
+  authentication-error handling: known codes, no raw provider messages. Shared
+  `provider-usage.ts` records per-request numeric token/cache counters and
+  timing through existing trace events, including compaction and reminder requests.
+  The provider-independent agent entrypoint imports none of them.
   The optional `tubeless/agent/mcp` entrypoint owns MCP sessions (`mcp-session.ts`),
   HTTP and lazily loaded stdio transports, and schema adaptation. Transports and
   schemas consume pure wire contracts and parsing from `mcp-protocol.ts`, independently
