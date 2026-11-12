@@ -542,6 +542,7 @@ tubeless run [options] <pipeline-id-or-file> [-- <command-args...>]
 
 - `-e, --export <name>` selects a pipeline or command export
 - `-p, --project <path>` looks up the pipeline ID in the selected project file
+- `--json` writes the complete public `PipelineRun` report to stdout
 - `--store <path>` appends run events to a local SQLite database
 - `--trace <path>` writes NDJSON traces to a file, or `-` for stdout
 
@@ -551,6 +552,29 @@ stderr so stdout stays valid NDJSON. To send events to OpenTelemetry or another 
 `PipelineTraceExporter` in your application; the [tracing recipe](../examples/tracing.ts)
 shows JSON and OpenTelemetry adapters. Use `composeTraceExporters` from `tubeless/tracing` for multiple
 destinations; a failed exporter does not stop the others or fail the pipeline.
+
+Use `--json` to read a result from a script or coding agent:
+
+```sh
+bunx tubeless run --json import -- --source rows.txt > run.json
+```
+
+Stdout contains one JSON document with the run ID, status, timings, step reports,
+errors, `finalized`, and `value` when finalized. Reporter output, logs, and custom
+command summaries go to stderr. Failed and cancelled runs still print their report
+and retain their usual nonzero exit codes. Dry runs use the same record with
+`dryRun: true`. Help, argument rejection, and setup failures produce no run report.
+
+Finalized values must round-trip through JSON without data loss. Values such as
+`undefined`, `bigint`, `Map`, class instances, cycles, non-finite numbers, or objects
+containing unsupported values cause an error on stderr, no JSON output, and a
+nonzero exit code. Return plain JSON data, using `null` for an empty result.
+Pipeline errors already contain the same JSON-safe diagnostics and bounded cause
+chains used by traces.
+
+`--json` combines with `--store` and file-based `--trace`. It cannot combine with
+`--trace -`, since both formats need stdout. Put `--json` before the application
+argument separator `--`.
 
 `run` accepts a pipeline ID from `defineProject` or a file exporting a pipeline
 or `definePipelineCommand`. An explicit command wins when present. Otherwise, one

@@ -15,7 +15,8 @@ import {
 } from "../tracing/tracing.js";
 import { toExitCode } from "../cli/cli-exit.js";
 import { CliHelpRequested, CliValidationError } from "../cli/cli.js";
-import type { PipelineContext } from "../core/pipeline.js";
+import type { PipelineContext, PipelineRun } from "../core/pipeline.js";
+import { serializeRunJson } from "./workbench-run-json.js";
 import {
   executeHostedCommandOperation,
   hostedCommandContext,
@@ -88,6 +89,9 @@ async function executeRun(
   parsed: ReturnType<typeof parseRunArgs>,
   io: WorkbenchCliIo
 ): Promise<number> {
+  if (parsed.values.json && parsed.values.trace === "-") {
+    return writeUsageError(io, "--json cannot be combined with --trace -.", RUN_USAGE);
+  }
   const registration = await resolveWorkbenchRegistration(
     parsed.positionals[0]!,
     parsed.values.export,
@@ -116,12 +120,13 @@ async function executeRun(
   let store: PipelineRunEventStore | undefined;
   let closeTrace: (() => Promise<void>) | undefined;
   let bindTraceSignal: ((signal: AbortSignal) => void) | undefined;
+  let completedRun: PipelineRun | undefined;
   let exitCode: number = TUBELESS_WORKBENCH_EXIT_CODE.execution;
   try {
     managedSignal = manageWorkbenchSignal(io);
     const signal = managedSignal.signal;
     const commandIo =
-      parsed.values.trace === "-"
+      parsed.values.json || parsed.values.trace === "-"
         ? { ...loaded.commandIo, stdout: loaded.commandIo.stderr }
         : loaded.commandIo;
     exitCode = await executePipelineCommand(
@@ -143,9 +148,20 @@ async function executeRun(
           exporters.push(writer.exporter);
         }
         bindTraceSignal?.(signal);
-        return exporters.length > 0
-          ? { tracing: { exporter: composeTraceExporters(exporters) } }
-          : undefined;
+        return {
+          ...(parsed.values.json
+            ? {
+                hooks: {
+                  onPipelineComplete: (run: PipelineRun) => {
+                    completedRun = run;
+                  },
+                },
+              }
+            : {}),
+          ...(exporters.length > 0
+            ? { tracing: { exporter: composeTraceExporters(exporters) } }
+            : {}),
+        };
       }
     );
     if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success && managedSignal.wasInterrupted()) {
@@ -169,6 +185,15 @@ async function executeRun(
       if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success) exitCode = toExitCode(error);
     }
     managedSignal?.cleanup();
+  }
+  if (parsed.values.json && completedRun) {
+    try {
+      // A cancelled run still has a report: do not pass its aborted execution signal.
+      await writeCliChunk(io.stdout, serializeRunJson(completedRun));
+    } catch (error) {
+      io.stderr.write(`Error: ${errorMessage(error)}\n`);
+      if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success) exitCode = toExitCode(error);
+    }
   }
   return exitCode;
 }

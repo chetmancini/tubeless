@@ -315,7 +315,11 @@ Read the corresponding package recipe before using these features:
   Default-export the project to select it for CLI and Studio. Without a default,
   exactly one distinct project may be exported; aliases are allowed.
 - Run a schema-backed pipeline file directly with
-  `tubeless run ./pipelines/import.ts -- --source rows.txt`. A marked
+  `tubeless run ./pipelines/import.ts -- --source rows.txt`. Use `run --json`
+  before `--` to read the full run report and finalized value on stdout; logs
+  and summaries go to stderr. Failed and cancelled runs still print reports
+  and retain their exit codes. Results must round-trip through JSON; use
+  `null` for an empty result. Do not combine `--json` with `--trace -`. A marked
   `definePipelineCommand` export wins when present; otherwise the file must expose
   one unique pipeline whose Standard JSON Schema input metadata supports inferred
   flags. Use `--export` to select among multiple exports. Schema-less or unsupported
