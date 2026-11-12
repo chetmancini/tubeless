@@ -146,7 +146,8 @@ Read the corresponding package recipe before using these features:
   request bytes, including tool schemas, to reserve reply space. It caches the shared system prefix and history;
   `promptCaching: "1h"` extends the default five-minute lifetime at a higher write
   price. Per-request `agent.model.*` trace attributes retain token/cache counters
-  and timing, including compaction usage. Optional exploration follows required
+  and timing, including compaction usage; `tubeless history <run-id>` sums them per
+  agent and per run. Optional exploration follows required
   guidance reads. Custom OpenAI tool descriptors
   must be inline; provide
   `inputJsonSchema` when generated descriptors contain references. All object

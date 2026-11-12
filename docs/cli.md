@@ -683,7 +683,8 @@ A pipeline with no recorded runs returns an empty list or event stream (exit `0`
 History reads recorded IDs directly without loading a project file or command module.
 By default, history prints a run list. Supply a run ID to see that run's steps,
 logs, and error details. Agent runs and parents containing agents also show their
-recorded turn/call/child structure, state versions, call counts, and termination.
+recorded turn/call/child structure, state versions, call counts, termination, and
+model token usage per agent and in total.
 JSON details add the linked `agentHistory.agents` projection. Descendants are
 included regardless of their pipeline IDs; `--events` remains scoped to the
 requested run only. Missing observations stay unknown, and missing terminal

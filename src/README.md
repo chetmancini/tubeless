@@ -284,8 +284,10 @@ and interactive reporter orchestration.
   It retains only required fields and copies retained identities and errors at the
   boundary. `run-store/definition-projection.ts` owns definition replacement and
   per-run start metadata, including timestamp and event-ID tie breaking.
-- `run-store/agent-projection.ts` retains typed agent attempt summaries;
-  `agent-history.ts` joins agent, turn and call identities across recorded runs.
+- `run-store/agent-projection.ts` retains typed agent attempt summaries and the
+  allowlisted model usage sums per turn; `agent-history.ts` joins agent, turn and call
+  identities across recorded runs and merges that usage per agent, subtree and run
+  without mixing models.
   Neither imports agent execution or a storage adapter. The workbench formats the
   joined history for text and JSON inspection.
 - `run-store/run-store-reader.ts` owns cursor pagination for both CLI history and
