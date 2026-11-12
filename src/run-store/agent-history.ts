@@ -68,7 +68,7 @@ function limited(error: PipelineTraceError | undefined): boolean {
 
 /**
  * Sum counters per provider and model in first-seen order. Absent counters were never
- * reported, so they stay absent; prices differ per model, so sums never cross models.
+ * reported, so they stay absent, and sums never cross models.
  */
 function mergeUsage(
   lists: readonly (readonly StoredAgentModelUsage[] | undefined)[]
