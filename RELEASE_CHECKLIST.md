@@ -16,7 +16,10 @@ Never move an existing release tag to retry publication.
 
 ## Public names
 
-These names are the pre-1.0 contract. Treat a change as breaking.
+These names are the pre-1.0 contract. Treat a change as breaking. A pull request
+that makes one carries the `breaking` label and a one-line migration note, so
+the generated release notes list it under "Breaking Changes"; removed exports
+are labelled automatically.
 
 | Kind               | Stable name                                                                                                                                                                                                                                                                                                                                | Notes                                                                                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

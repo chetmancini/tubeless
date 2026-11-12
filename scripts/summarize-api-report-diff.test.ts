@@ -8,8 +8,8 @@ import { summarizeApiReportDiff } from "./summarize-api-report-diff.mjs";
 
 const scriptPath = fileURLToPath(new URL("./summarize-api-report-diff.mjs", import.meta.url));
 
-function report(modules: Array<Record<string, unknown>>) {
-  return { schemaVersion: 1, packageName: "tubeless", modules };
+function report(modules: Array<Record<string, unknown>>, schemaVersion = 1) {
+  return { schemaVersion, packageName: "tubeless", modules };
 }
 
 function module(
@@ -59,16 +59,56 @@ describe("summarizeApiReportDiff", () => {
     expect(summary.markdown).not.toContain("hash:");
   });
 
-  it("notes hash-only changes when export names are unchanged", () => {
+  it("notes changed declarations when export names are unchanged", () => {
     const base = report([module("tubeless", "aaaaaaaaaaaaaaaa", ["createSteps"])]);
     const head = report([module("tubeless", "bbbbbbbbbbbbbbbb", ["createSteps"])]);
     const summary = summarizeApiReportDiff(base, head);
     expect(summary.changed).toBe(true);
     expect(summary.markdown).toContain("hash changed");
     expect(summary.markdown).toContain(
-      "declaration surface hash changed; exported names are unchanged"
+      "public declarations changed (comments and whitespace are ignored); exported names are unchanged. Check for signature changes."
     );
     expect(summary.markdown).toContain("`aaaaaaaa` → `bbbbbbbb`");
+  });
+
+  it("does not compare hashes across report schema versions", () => {
+    const base = report([module("tubeless", "aaaaaaaaaaaaaaaa", ["createSteps"])], 1);
+    const head = report([module("tubeless", "bbbbbbbbbbbbbbbb", ["createSteps"])], 2);
+    const summary = summarizeApiReportDiff(base, head);
+    expect(summary.changed).toBe(false);
+    expect(summary.markdown).toContain(
+      "Surface hashes are not comparable across report schema versions (`1` → `2`); only exported names were compared."
+    );
+    expect(summary.markdown).not.toContain("hash:");
+    expect(summary.markdown).toContain("The public API report is unchanged.");
+  });
+
+  it("reports removals when schema versions differ", () => {
+    const base = report(
+      [module("tubeless", "aaaaaaaaaaaaaaaa", ["createSteps", "definePipeline"])],
+      1
+    );
+    const head = report([module("tubeless", "bbbbbbbbbbbbbbbb", ["createSteps"])], 2);
+    const summary = summarizeApiReportDiff(base, head);
+    expect(summary.changed).toBe(true);
+    expect(summary.markdown).toContain("not comparable across report schema versions");
+    expect(summary.markdown).toContain("removed: `definePipeline`");
+    expect(summary.removed).toEqual(["tubeless: definePipeline"]);
+  });
+
+  it("collects removed exports and entrypoints", () => {
+    const base = report([
+      module("tubeless", "aaaaaaaaaaaaaaaa", ["createSteps", "definePipeline"]),
+      module("tubeless/project", "cccccccccccccccc", ["compilePipelineDocument"]),
+    ]);
+    const head = report([module("tubeless", "aaaaaaaaaaaaaaaa", ["createSteps"])]);
+    const summary = summarizeApiReportDiff(base, head);
+    expect(summary.removed).toHaveLength(3);
+    expect(summary.removed).toContain("tubeless: definePipeline");
+    expect(summary.removed).toContain("tubeless/project: (entrypoint)");
+    expect(summary.removed).toContain("tubeless/project: compilePipelineDocument");
+
+    expect(summarizeApiReportDiff(base, structuredClone(base)).removed).toEqual([]);
   });
 
   it("reports added and removed specifiers", () => {
@@ -91,22 +131,40 @@ describe("summarizeApiReportDiff", () => {
 });
 
 describe("summarize-api-report-diff CLI", () => {
-  it("exits 0 for --base-file/--head-file", () => {
+  function runCli(args: string[], base: unknown, head: unknown) {
     const root = mkdtempSync(join(tmpdir(), "tubeless-api-diff-"));
     const basePath = join(root, "base.json");
     const headPath = join(root, "head.json");
-    const payload = report([module("tubeless", "aaaaaaaaaaaaaaaa", ["createSteps"])]);
-    writeFileSync(basePath, `${JSON.stringify(payload, null, 2)}\n`);
-    writeFileSync(headPath, `${JSON.stringify(payload, null, 2)}\n`);
-
-    const result = spawnSync(
+    writeFileSync(basePath, `${JSON.stringify(base, null, 2)}\n`);
+    writeFileSync(headPath, `${JSON.stringify(head, null, 2)}\n`);
+    return spawnSync(
       process.execPath,
-      [scriptPath, "--base-file", basePath, "--head-file", headPath],
-      {
-        encoding: "utf8",
-      }
+      [scriptPath, ...args, "--base-file", basePath, "--head-file", headPath],
+      { encoding: "utf8" }
     );
+  }
+
+  it("exits 0 for --base-file/--head-file", () => {
+    const payload = report([module("tubeless", "aaaaaaaaaaaaaaaa", ["createSteps"])]);
+    const result = runCli([], payload, payload);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("The public API report is unchanged.");
+  });
+
+  it("prints only removed exports for --removed-only", () => {
+    const base = report([
+      module("tubeless", "aaaaaaaaaaaaaaaa", ["createSteps", "definePipeline"]),
+    ]);
+    const head = report([module("tubeless", "aaaaaaaaaaaaaaaa", ["createSteps"])]);
+    const result = runCli(["--removed-only"], base, head);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("tubeless: definePipeline\n");
+  });
+
+  it("prints nothing for --removed-only when nothing was removed", () => {
+    const payload = report([module("tubeless", "aaaaaaaaaaaaaaaa", ["createSteps"])]);
+    const result = runCli(["--removed-only"], payload, payload);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
   });
 });

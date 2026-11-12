@@ -43,7 +43,7 @@ function formatNames(label, names) {
 /**
  * @param {unknown} baseReport
  * @param {unknown} headReport
- * @returns {{ changed: boolean, markdown: string }}
+ * @returns {{ changed: boolean, markdown: string, removed: string[] }}
  */
 export function summarizeApiReportDiff(baseReport, headReport) {
   assertReport(baseReport, "Base API report");
@@ -53,6 +53,14 @@ export function summarizeApiReportDiff(baseReport, headReport) {
   const headModules = moduleMap(headReport);
   const specifiers = sorted(new Set([...baseModules.keys(), ...headModules.keys()]));
   const sections = [];
+  const removals = [];
+  const comparable = baseReport.schemaVersion === headReport.schemaVersion;
+  const schemaNotes = comparable
+    ? []
+    : [
+        `Surface hashes are not comparable across report schema versions (\`${baseReport.schemaVersion}\` → \`${headReport.schemaVersion}\`); only exported names were compared.`,
+        "",
+      ];
 
   for (const specifier of specifiers) {
     const base = baseModules.get(specifier);
@@ -71,13 +79,15 @@ export function summarizeApiReportDiff(baseReport, headReport) {
     }
 
     if (base && !head) {
-      const removed = sorted(exportSet(base));
+      const vanished = sorted(exportSet(base));
+      removals.push(`${specifier}: (entrypoint)`);
+      for (const name of vanished) removals.push(`${specifier}: ${name}`);
       sections.push(
         [
           `### \`${specifier}\` (removed)`,
           "",
-          ...(removed.length > 0
-            ? [formatNames("removed exports", removed)]
+          ...(vanished.length > 0
+            ? [formatNames("removed exports", vanished)]
             : ["- no named exports"]),
         ].join("\n")
       );
@@ -88,7 +98,8 @@ export function summarizeApiReportDiff(baseReport, headReport) {
     const headExports = exportSet(head);
     const added = sorted([...headExports].filter((name) => !baseExports.has(name)));
     const removed = sorted([...baseExports].filter((name) => !headExports.has(name)));
-    const hashChanged = base.sha256 !== head.sha256;
+    for (const name of removed) removals.push(`${specifier}: ${name}`);
+    const hashChanged = comparable && base.sha256 !== head.sha256;
 
     if (!hashChanged && added.length === 0 && removed.length === 0) continue;
 
@@ -100,7 +111,9 @@ export function summarizeApiReportDiff(baseReport, headReport) {
       lines.push(`- hash: \`${shortHash(base.sha256)}\` → \`${shortHash(head.sha256)}\``);
     }
     if (added.length === 0 && removed.length === 0) {
-      lines.push("- declaration surface hash changed; exported names are unchanged");
+      lines.push(
+        "- public declarations changed (comments and whitespace are ignored); exported names are unchanged. Check for signature changes."
+      );
     } else {
       const addedLine = formatNames("added", added);
       const removedLine = formatNames("removed", removed);
@@ -110,10 +123,19 @@ export function summarizeApiReportDiff(baseReport, headReport) {
     sections.push(lines.join("\n"));
   }
 
+  const removed = sorted(removals);
+
   if (sections.length === 0) {
     return {
       changed: false,
-      markdown: ["# Public API report", "", "The public API report is unchanged.", ""].join("\n"),
+      markdown: [
+        "# Public API report",
+        "",
+        ...schemaNotes,
+        "The public API report is unchanged.",
+        "",
+      ].join("\n"),
+      removed,
     };
   }
 
@@ -122,11 +144,13 @@ export function summarizeApiReportDiff(baseReport, headReport) {
     markdown: [
       "# Public API report",
       "",
+      ...schemaNotes,
       "Review this before merge.",
       "",
       ...sections.flatMap((section, index) => (index === 0 ? [section] : ["", section])),
       "",
     ].join("\n"),
+    removed,
   };
 }
 
@@ -147,6 +171,10 @@ function parseArgs(argv) {
   const options = {};
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === "--removed-only") {
+      options["removed-only"] = true;
+      continue;
+    }
     if (arg === "--base-file" || arg === "--head-file" || arg === "--git-base") {
       const value = argv[index + 1];
       if (!value || value.startsWith("--")) {
@@ -207,7 +235,13 @@ if (isMain) {
     const options = parseArgs(process.argv.slice(2));
     const { base, head } = loadReports(options);
     const summary = summarizeApiReportDiff(base, head);
-    process.stdout.write(summary.markdown);
+    if (options["removed-only"]) {
+      if (summary.removed.length > 0) {
+        process.stdout.write(`${summary.removed.join("\n")}\n`);
+      }
+    } else {
+      process.stdout.write(summary.markdown);
+    }
     process.exitCode = 0;
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

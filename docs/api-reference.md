@@ -2,7 +2,7 @@
 
 Generated from the package's emitted declaration files. Do not edit manually; run `bun run api:generate` from the package root.
 
-Each symbol links to its source declaration and uses the first sentence of its public doc comment.
+Each symbol links to its source declaration and uses the first sentence of its public doc comment. Surface hashes cover declaration text with comments and whitespace removed.
 
 Package: `tubeless`
 
@@ -10,22 +10,22 @@ Package: `tubeless`
 
 | Entrypoint                  | Declaration                               | Surface hash                                                       | Exported symbols |
 | --------------------------- | ----------------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless/agent/node`       | `./dist/agent/node.d.ts`                  | `3d2efb68143acf1b2bee4ca2237f7fce18aa62a9c07c12d20f163305f2a1107f` |                4 |
-| `tubeless/agent`            | `./dist/agent/agent.d.ts`                 | `856e8632c7ed6e33539676ad001f729f40ee05d5f21c6c1ffc61469c45652756` |               39 |
-| `tubeless`                  | `./dist/core/pipeline.d.ts`               | `d7b4c4588ef05c5777d4ef4e47dc28162bd3d877c98eaf0962a5b393cf89a202` |               78 |
-| `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `74dbacf02b09adc3ce4e11d4235e1cf561769d73f04796009ba27fde993dd092` |               31 |
-| `tubeless/batch`            | `./dist/utilities/batch.d.ts`             | `a09125c6849bb91b4bbba2f76c4248452d5288cf0c70671461de5846b1d17037` |                7 |
-| `tubeless/node`             | `./dist/node/node.d.ts`                   | `c08b54a83e8b350ee2e83b94f9c563638cb359cfde9bb18242337c7ab7481280` |               14 |
-| `tubeless/rate-limit`       | `./dist/utilities/rate-limit.d.ts`        | `01029b2a9f1504a66e396804ccc63a5b43dbcb63c002dd47918e315a90ac2a3a` |                1 |
-| `tubeless/retry`            | `./dist/utilities/retry.d.ts`             | `52ede846e87e3601426639a7bdc2de0a440c119470dc55324deb26cb312757fd` |                6 |
-| `tubeless/project`          | `./dist/project/project.d.ts`             | `84df2d5aeb22cd2a437eea22c04d8996175044e7852e0ea79b711a463a6d88c1` |                8 |
-| `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `3ece9cb8f6f200cbb17ca87d930af050f2c6da64b34af29db3372d7da9b2b234` |               10 |
-| `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `3e07ffcf14fca14b6745fe7d019c4fb72df9a3e89ad0a0c0bd4e6c5219e21bc2` |                3 |
-| `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `f5a01a937ca7bb71629827c940af9188af437614a9f65b425f5050f58d45e653` |                2 |
-| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `7892303a00e9f6cd3838a73afa50e8e0de4a2fd0b194206b88aa898d0f409c6d` |                7 |
-| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `b2ca2a4b3308b5e5dcd8918c232fec54462f69e1f0f99dedc8d6985c721c7143` |                2 |
-| `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `1c440fbbb9c541b5240dfbf6997affdcc56a421e2031575acf5cea388eb4277c` |               12 |
-| `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `ea4032c8ff266f4b37e5d9695e18c4b8d023c3210e82d631f2f8f96ec439417e` |                4 |
+| `tubeless/agent/node`       | `./dist/agent/node.d.ts`                  | `6912bcbcb0672c4447b111a126d15ce8bd619686eb598d468f96119316a274c2` |                4 |
+| `tubeless/agent`            | `./dist/agent/agent.d.ts`                 | `a42a4441aafe999a6cf5353b1e944baf7a9ad92f155f70f86bd83a69aaf2e72a` |               39 |
+| `tubeless`                  | `./dist/core/pipeline.d.ts`               | `49918690e665e26018fee1c2b91b69d4fb6ed8392019bc5e7b9c8c968e57e714` |               78 |
+| `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `f249afe90a1e1d6e3c746299f01dc4451992ee0fdf00dedb504fd810927fd18b` |               31 |
+| `tubeless/batch`            | `./dist/utilities/batch.d.ts`             | `856e4e759f1a62a4edd210d0291bc8b3d82b2e3e983bd37d7348bfb2b8993156` |                7 |
+| `tubeless/node`             | `./dist/node/node.d.ts`                   | `422bb3e80618ce3356fbfd98464090de92a50e59d1356a596844d3d16f7239aa` |               14 |
+| `tubeless/rate-limit`       | `./dist/utilities/rate-limit.d.ts`        | `21223a0ce096d7eb188e7aa38e4e0df70081b086f899dfea825b429308f6910e` |                1 |
+| `tubeless/retry`            | `./dist/utilities/retry.d.ts`             | `ae8bdf0276b1930e4052f88a4912efe7dc6b857a8a51dcf2399eac0514fc9a0b` |                6 |
+| `tubeless/project`          | `./dist/project/project.d.ts`             | `9170dd20b2acae4d619e3bcf9f27b9d528150ab4078730207f7a6a0fd79d7704` |                8 |
+| `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `fad0ef27da1fcd938ca4f1d838585f30bf2de892487c4068707ab7eff1169ab6` |               10 |
+| `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `739aa8c04dcddb9d868ffbf511bc0bf0884943eb9ca2b2e4d61ae51f25750e65` |                3 |
+| `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `5cc2899a2a81690adc5599ef87fff5e1b7ec51365091a35c61e1646a857153ff` |                2 |
+| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `bcb50d528fcebdd7f16d2a9fcca529e5e97dc7074b01cf3e3a58f9524b9ed243` |                7 |
+| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `ebe735ca3419a59313664b4c705a59d738d1662653bbdebf5204d1e35bc33016` |                2 |
+| `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `a1c5457e0fb8a100806f34059863979c634790fb6581a492f335ba88922b3d6a` |               12 |
+| `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `d555a2c2226fdd462e6f1222f8fdf079192f62274ad44bcc4b44e376a4f2e854` |                4 |
 
 ## Symbols
 
