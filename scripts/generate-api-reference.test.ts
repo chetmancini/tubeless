@@ -77,6 +77,25 @@ describe("hashDeclarationSurface", () => {
     expect(hashDeclarationSurface(join(root, "entry.d.ts"), root)).toBe(before);
   });
 
+  it("ignores a declaration file named only by a comment", () => {
+    const root = mkdtempSync(join(tmpdir(), "tubeless-api-comment-import-"));
+    writeFileSync(
+      join(root, "entry.d.ts"),
+      [
+        "/**",
+        ' * A pipeline. See import("./unrelated.js") for an example.',
+        " */",
+        "export interface Pipeline { run(): void }",
+        "",
+      ].join("\n")
+    );
+    writeFileSync(join(root, "unrelated.d.ts"), "export type Unused = { n: number };\n");
+    const before = hashDeclarationSurface(join(root, "entry.d.ts"), root);
+
+    writeFileSync(join(root, "unrelated.d.ts"), "export type Unused = { n: string };\n");
+    expect(hashDeclarationSurface(join(root, "entry.d.ts"), root)).toBe(before);
+  });
+
   it("changes when a string literal type changes", () => {
     const root = mkdtempSync(join(tmpdir(), "tubeless-api-literal-"));
     writeSurface(root, 'export type Mode = "a";\n');

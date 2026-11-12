@@ -168,6 +168,13 @@ export function resolveImportedDeclaration(fromPath, specifier) {
   return candidates.find((path) => existsSync(path));
 }
 
+const importSpecifierPattern = /(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/g;
+
+/**
+ * Declaration files an entry point is built from, keyed by absolute path. The
+ * scan sees declaration text only: a doc example that names another file's path
+ * must not pull that file into the surface hash.
+ */
 export function collectDeclarationSources(entryPath) {
   const sources = new Map();
   const pending = [resolve(entryPath)];
@@ -176,7 +183,7 @@ export function collectDeclarationSources(entryPath) {
     if (sources.has(path)) continue;
     const source = readFileSync(path, "utf8");
     sources.set(path, source);
-    for (const match of source.matchAll(/(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/g)) {
+    for (const match of normalizeDeclarationSource(source).matchAll(importSpecifierPattern)) {
       const next = resolveImportedDeclaration(path, match[1]);
       if (next) pending.push(next);
     }
