@@ -1,0 +1,50 @@
+name: api-label
+
+on:
+  pull_request:
+    paths:
+      - docs/api-report.json
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  label-breaking:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      # Runs no dependency code: the summarizer imports Node built-ins only.
+      - name: Label removed public exports as breaking
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "${BASE_REF}"
+          removed="$(node scripts/summarize-api-report-diff.mjs --git-base "origin/${BASE_REF}" --removed-only)"
+          if [[ -z "${removed}" ]]; then
+            echo "No public exports were removed."
+            exit 0
+          fi
+          {
+            echo "### Removed public exports"
+            echo
+            printf '%s\n' "${removed}" | sed 's/^/- /'
+          } >> "${GITHUB_STEP_SUMMARY}"
+          # Fork and Dependabot pull requests get a read-only token; do not fail them.
+          if ! gh api --method POST "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" -f 'labels[]=breaking' >/dev/null; then
+            echo "::warning::Could not apply the breaking label with this token. Apply it by hand."
+          fi
