@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import type { PipelineTraceEvent } from "../tracing/tracing-contracts.js";
 import { AgentProjection } from "./agent-projection.js";
 import type { StoredPipelineEvent } from "./run-store.js";
 
@@ -28,11 +29,12 @@ function dispatch(id: number, callId: string, tool: string): StoredPipelineEvent
 }
 
 type ModelAttributes = Record<string, string | number | boolean>;
+type TurnOverrides = Partial<Pick<PipelineTraceEvent, "stepId" | "parentRunId" | "iteration">>;
 
 function turnEvent(
   id: number,
   attributes: ModelAttributes,
-  overrides: Partial<StoredPipelineEvent> = {}
+  overrides: TurnOverrides = {}
 ): StoredPipelineEvent {
   return {
     id,
