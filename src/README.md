@@ -14,7 +14,7 @@ their source files.
 | `core/`       | Pipeline definitions, graph planning, execution, lifecycle and progress                                                                      |
 | `agent/`      | In-process decision validation, handler/pipeline tools, owned state, shared subtree admission                                                |
 | `tracing/`    | Trace contracts, internal emission and exporter composition                                                                                  |
-| `utilities/`  | Domain-independent cancellation, collections, batching, retry, rate limits and error branding                                                |
+| `utilities/`  | Domain-independent cancellation, collections, batching, retry, rate limits, error branding and the checkpoint store contract                 |
 | `cli/`        | Argument parsing, command declarations and pipeline adaptation                                                                               |
 | `reporter/`   | Terminal reporting and live ticker rendering                                                                                                 |
 | `render/`     | Plan and error formatting                                                                                                                    |

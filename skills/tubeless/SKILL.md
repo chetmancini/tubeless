@@ -299,7 +299,9 @@ Read the corresponding package recipe before using these features:
   redeclare built-in flags. `--resume` is available only with managed
   `checkpoint` configuration or an explicit `resume: true` command whose
   application code handles `values.resume`; unsupported commands reject it and
-  omit it from Studio forms. Read `docs/cli.md` for option mapping.
+  omit it from Studio forms. Steps read a managed checkpoint from
+  `context.checkpoint`; do not pass a checkpoint path or store through domain
+  options. Read `docs/cli.md` for option mapping.
   Export `defineProject(id, pipelines)` from `tubeless.project.ts` to expose
   schema-backed pipelines directly to the CLI and optional Studio. Use
   explicit adapters in the project's entry list for schema-less pipelines,

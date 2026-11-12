@@ -1,6 +1,7 @@
 import { childExecutionScope } from "./execution-scope.js";
 import type { PreparedOptions } from "./prepared-options.js";
 import { throwIfAborted } from "../utilities/abort.js";
+import { inMemoryCheckpointStore } from "../utilities/checkpoint-store.js";
 import { emitRejectedPlanLifecycle } from "./lifecycle.js";
 import { runConcurrentPartial } from "../utilities/batch.js";
 import {
@@ -194,11 +195,17 @@ function childTracingOptions(
 function childContext(
   context: PipelineStepContext<object>,
   identity: { pipelineId: string; stepId: string; itemKey?: string },
+  dryRun: boolean,
   traceItemKey = context.trace?.itemKey
 ): PipelineContext {
   return childExecutionScope(
     context,
     {
+      // A previewed child records into a copy, so its dry run cannot mark parent work done.
+      checkpoint:
+        dryRun && context.checkpoint
+          ? inMemoryCheckpointStore(context.checkpoint.entries())
+          : context.checkpoint,
       correlationId: context.correlationId,
       cwd: context.cwd,
       log: context.log,
@@ -229,6 +236,7 @@ export function invokeChildPipeline(
   const runtime = childContext(
     context,
     { pipelineId: pipeline.id, stepId: invocation.stepId, itemKey: invocation.itemKey },
+    controls.dryRun === true,
     invocation.itemKey
   );
   runtime.hooks = invocation.hooks;
@@ -345,11 +353,15 @@ export function createSingleChildRunner<TParentOptions extends object>(
       config.pipeline,
       domainOptions,
       controls,
-      childContext(context, {
-        pipelineId: config.pipeline.id,
-        stepId: config.stepId,
-        itemKey: config.itemKey,
-      }),
+      childContext(
+        context,
+        {
+          pipelineId: config.pipeline.id,
+          stepId: config.stepId,
+          itemKey: config.itemKey,
+        },
+        controls.dryRun === true
+      ),
       childHooks,
       `Child pipeline ${config.pipeline.id} `,
       childPlan
@@ -422,6 +434,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
                 stepId: config.stepId,
                 itemKey: key,
               },
+              controls.dryRun === true,
               key
             ),
             childHooks,

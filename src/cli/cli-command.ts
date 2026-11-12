@@ -1,5 +1,6 @@
 import * as path from "path";
 import { openCheckpoint, type CheckpointStore } from "../node/checkpoint.js";
+import { inMemoryCheckpointStore } from "../utilities/checkpoint-store.js";
 import {
   assertNoDuplicateFlags,
   assertValidEnvironmentFallbacks,
@@ -76,21 +77,6 @@ function manageMainSignal(context: CliContext): ManagedMainSignal {
     exitCode: () => (interruptedBy ? SIGNAL_EXIT_CODES[interruptedBy] : undefined),
     wasInterrupted: () => interruptedBy !== undefined,
     cleanup,
-  };
-}
-
-function inMemoryCheckpointView(seed: ReadonlyMap<string, unknown>): CheckpointStore {
-  const entries = new Map(seed);
-  return {
-    has: (key) => entries.has(key),
-    record: (key, meta) => {
-      entries.set(key, meta);
-    },
-    entries: () => entries,
-    flush: () => {},
-    clear: () => {
-      entries.clear();
-    },
   };
 }
 
@@ -223,7 +209,7 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     }
 
     const checkpoint = values.dryRun
-      ? inMemoryCheckpointView(!values.resume && hadExisting ? new Map() : store.entries())
+      ? inMemoryCheckpointStore(!values.resume && hadExisting ? new Map() : store.entries())
       : store;
     return { ...context, checkpoint };
   }

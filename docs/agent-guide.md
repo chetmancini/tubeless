@@ -303,6 +303,8 @@ read when a pipeline needs them.
   `--resume` is exposed only when `checkpoint` is configured or the command
   explicitly sets `resume: true` and handles `values.resume` itself. Otherwise
   the CLI rejects the flag and the descriptor omits the Studio control.
+  Steps read a managed checkpoint from `context.checkpoint`; do not pass a
+  checkpoint path or store through domain options.
   The returned command exposes an immutable `descriptor`; UI adapters should
   render those parameter definitions instead of parsing help text.
   Pass finite numbers and number arrays directly to `parseValues`; numeric strings
