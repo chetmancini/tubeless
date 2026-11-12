@@ -210,27 +210,31 @@ try {
   assertPackedDocumentationLinks(installedPackage);
 
   // Consumer declarations must compile without ambient Node typings or skipLibCheck.
-  writeFileSync(
-    join(consumerRoot, "cli.ts"),
-    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cli.ts"))
-  );
-  writeFileSync(
-    join(consumerRoot, "project.ts"),
-    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/project.ts"))
-  );
-  writeFileSync(
-    join(consumerRoot, "cloudflare.ts"),
-    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cloudflare.ts"))
-  );
-  writeFileSync(
-    join(consumerRoot, "cloudflare-cache.ts"),
-    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cloudflare-cache.ts"))
-  );
+  // Every fixture is copied and compiled, so a new entry-point fixture needs no script edit.
+  const fixtureDirectory = join(packageRoot, "scripts/fixtures/packed-consumer");
+  const fixtureFiles = readdirSync(fixtureDirectory)
+    .filter((name) => name.endsWith(".ts"))
+    .sort();
+  const fixtureSources = fixtureFiles.map((name) => {
+    const source = readFileSync(join(fixtureDirectory, name), "utf8");
+    writeFileSync(join(consumerRoot, name), source);
+    return source;
+  });
+  // An entry point no fixture imports ships declarations no consumer compilation covers.
+  for (const subpath of Object.keys(packageJson.exports)) {
+    const specifier =
+      subpath === "." ? packageJson.name : `${packageJson.name}/${subpath.slice(2)}`;
+    const statement = `from ${JSON.stringify(specifier)}`;
+    if (!fixtureSources.some((source) => source.includes(statement))) {
+      throw new Error(`Packed-consumer fixtures do not import ${specifier}`);
+    }
+  }
   writeFileSync(
     join(consumerRoot, "tsconfig.json"),
     JSON.stringify({
       compilerOptions: {
-        lib: ["ES2022", "DOM"],
+        // ESNext.Disposable supplies Symbol.asyncDispose, which tubeless/agent/mcp declares.
+        lib: ["ES2022", "DOM", "ESNext.Disposable"],
         module: "NodeNext",
         noEmit: true,
         skipLibCheck: false,
@@ -238,7 +242,7 @@ try {
         target: "ES2022",
         types: [],
       },
-      files: ["cli.ts", "project.ts", "cloudflare.ts", "cloudflare-cache.ts"],
+      files: fixtureFiles,
     })
   );
   run(join(packageRoot, "node_modules/.bin/tsc"), ["-p", "tsconfig.json"], consumerRoot);
