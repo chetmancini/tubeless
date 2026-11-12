@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { nodeVersionAtLeast, runInit } from "./workbench-init.js";
+import { runInit } from "./workbench-init.js";
 import { CLOUDFLARE_DEV_DEPENDENCIES, cloudflareScaffold } from "./workbench-init-cloudflare.js";
 
 const roots: string[] = [];
@@ -133,14 +133,6 @@ describe("tubeless init", () => {
     expect(existsSync(join(cwd, "vite.config.ts"))).toBe(false);
     expect(existsSync(join(cwd, "cloudflare.config.ts"))).toBe(false);
     expect(err.join("")).toContain(`${name} already exists. Vite loads only one config file`);
-  });
-
-  it("compares Node versions for the deploy tooling warning", () => {
-    expect(nodeVersionAtLeast("22.12.0", "22.12.0")).toBe(true);
-    expect(nodeVersionAtLeast("v24.1.0", "22.12.0")).toBe(true);
-    expect(nodeVersionAtLeast("22.11.9", "22.12.0")).toBe(false);
-    expect(nodeVersionAtLeast("22.6.0", "22.12.0")).toBe(false);
-    expect(nodeVersionAtLeast("23.0.0-pre", "22.12.0")).toBe(true);
   });
 
   it("validates the project before writing anything", async () => {

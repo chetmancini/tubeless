@@ -6,12 +6,14 @@ requires Bun 1.3.14 or later and loads TypeScript files directly.
 
 ```sh
 bunx tubeless --help
-npx tubeless --help # Also uses the executable's Bun runtime
+npx tubeless --help # Starts on Node.js, then hands off to Bun
 ```
 
-The executable uses `#!/usr/bin/env bun`, so Bun must be installed and available
-on `PATH` even when npm or `npx` installs the package. The library itself can run
-on Node.js 22.18 or later without Bun.
+The executable starts with a small Node.js launcher that hands the command to
+Bun. Bun must be on `PATH` even when npm or `npx` installs the package; without
+it the command says what to install and exits 1. On a machine with Bun but no
+Node.js, run the CLI through `bunx` or `bun run`; `bunx --bun tubeless` skips the
+Node.js start. The library itself runs on Node.js 22.18 or later without Bun.
 
 ## Commands
 

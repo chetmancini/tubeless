@@ -5,6 +5,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -144,6 +145,29 @@ function assertPackedDocumentationLinks(installedPackage) {
     assertPackedMarkdownLinks(join(packedDocs, name), `docs/${name}`);
   }
   assertPackedLlmsLinks(packedDocs);
+}
+
+function assertPackedLauncher(installedPackage, tubelessBin, consumerRoot) {
+  const launcher = join(installedPackage, "dist", "workbench", "workbench-launcher.js");
+  if (!readFileSync(launcher, "utf8").startsWith("#!/usr/bin/env node")) {
+    throw new Error("Packed tubeless launcher is not a Node.js executable");
+  }
+  // The installed bin must start on Node.js and explain what to install when Bun
+  // is absent. A PATH holding only a `node` symlink resolves the shebang while
+  // hiding every other executable, Bun included.
+  const nodeOnlyPath = join(temporaryRoot, "node-only-bin");
+  mkdirSync(nodeOnlyPath, { recursive: true });
+  symlinkSync(process.execPath, join(nodeOnlyPath, "node"));
+  const result = spawnSync(tubelessBin, ["--help"], {
+    cwd: consumerRoot,
+    encoding: "utf8",
+    env: { ...process.env, PATH: nodeOnlyPath },
+  });
+  if (result.status !== 1 || result.stdout !== "" || !result.stderr.includes("https://bun.sh")) {
+    throw new Error(
+      `Packed tubeless launcher without Bun returned status ${result.status}:\n${result.stdout}\n${result.stderr}`
+    );
+  }
 }
 
 function assertPackedExecutable(tubelessBin, installedPackage, consumerRoot) {
@@ -414,6 +438,7 @@ try {
   if (!existsSync(tubelessBin)) {
     throw new Error("Packed tubeless artifact is missing the tubeless executable");
   }
+  assertPackedLauncher(installedPackage, tubelessBin, consumerRoot);
   assertPackedExecutable(tubelessBin, installedPackage, consumerRoot);
   run(
     process.execPath,

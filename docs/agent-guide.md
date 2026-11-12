@@ -561,8 +561,10 @@ read when a pipeline needs them.
 ## Runtime rules
 
 - Library entrypoints are ESM-only and require Node.js 22.18 or later. The
-  `tubeless` CLI uses a `#!/usr/bin/env bun` entrypoint and requires Bun 1.3.14
-  or later on `PATH`.
+  `tubeless` CLI starts on Node.js and hands the command to Bun, so it requires
+  Bun 1.3.14 or later on `PATH`; without Bun the command says what to install and
+  exits 1. `bunx --bun tubeless` skips the Node.js start, and on a machine with
+  Bun but no Node.js run the CLI through `bunx` or `bun run`.
 - Use `context.log`, never direct `console` calls inside steps. Wide interactive
   terminals show recent logs beside progress automatically (120 columns by
   8 rows minimum). Set command `reporter.logPane` to `"off"` to disable the pane;

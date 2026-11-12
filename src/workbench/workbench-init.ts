@@ -11,6 +11,7 @@ import {
   DEFAULT_PIPELINE_PROJECT_FILE,
   loadPipelineProjectFile,
 } from "./workbench-project-loader.js";
+import { versionAtLeast } from "./workbench-runtime.js";
 import {
   errorMessage,
   TUBELESS_WORKBENCH_EXIT_CODE,
@@ -45,19 +46,6 @@ const TARGETS: ReadonlyMap<string, DeployTargetScaffold> = new Map([
 ]);
 
 const INIT_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.init);
-
-/** True when `current` (for example "22.11.0") is at least `minimum` ("22.12.0"); prerelease tags are ignored. */
-export function nodeVersionAtLeast(current: string, minimum: string): boolean {
-  const parse = (version: string) =>
-    version.replace(/^v/, "").split("-")[0]!.split(".").map(Number);
-  const [a, b] = [parse(current), parse(minimum)];
-  for (let index = 0; index < 3; index += 1) {
-    const left = a[index] ?? 0;
-    const right = b[index] ?? 0;
-    if (left !== right) return left > right;
-  }
-  return true;
-}
 
 /** Anything but a clean "not found" (for example ENOTDIR) counts as occupied, so init never writes through it. */
 async function occupied(path: string): Promise<boolean> {
@@ -121,7 +109,7 @@ export async function runInit(argv: readonly string[], io: WorkbenchCliIo): Prom
           return TUBELESS_WORKBENCH_EXIT_CODE.usage;
         }
         const node = process.versions.bun === undefined ? process.versions.node : undefined;
-        if (target.minimumNode && node && !nodeVersionAtLeast(node, target.minimumNode.version)) {
+        if (target.minimumNode && node && !versionAtLeast(node, target.minimumNode.version)) {
           commandIo.stderr.write(
             `Warning: Node ${node} is older than ${target.minimumNode.version}; ${target.minimumNode.reason}.\n`
           );
