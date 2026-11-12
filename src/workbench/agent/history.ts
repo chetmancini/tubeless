@@ -1,5 +1,31 @@
+import type { StoredAgentModelUsage } from "../../run-store/agent-projection.js";
 import type { AgentHistory } from "../../run-store/agent-history.js";
 import { terminalSafeText } from "../workbench-shared.js";
+
+/**
+ * `<label> <model> (<provider>)  requests 1  input 10 …`. Absent counters were never
+ * reported, so they are never printed as zero; the cache share is reads over input.
+ */
+function usageLine(label: string, entry: StoredAgentModelUsage): string {
+  const parts = [
+    `${label} ${terminalSafeText(entry.model)} (${terminalSafeText(entry.provider)})`,
+    `requests ${entry.requests}`,
+  ];
+  const input = entry.inputTokens;
+  if (input !== undefined) parts.push(`input ${input}`);
+  const cacheRead = entry.cacheReadTokens;
+  if (cacheRead !== undefined) {
+    const share =
+      input !== undefined && input > 0 ? ` (${Math.round((cacheRead / input) * 100)}%)` : "";
+    parts.push(`cache read ${cacheRead}${share}`);
+  }
+  if (entry.cacheWriteTokens !== undefined) parts.push(`cache write ${entry.cacheWriteTokens}`);
+  if (entry.outputTokens !== undefined) parts.push(`output ${entry.outputTokens}`);
+  if (entry.reasoningTokens !== undefined) parts.push(`reasoning ${entry.reasoningTokens}`);
+  parts.push(`model time ${Math.round(entry.durationMs)}ms`);
+  if (entry.requestsWithoutUsage > 0) parts.push(`${entry.requestsWithoutUsage} without usage`);
+  return parts.join("  ");
+}
 
 export function formatAgentHistory(history: AgentHistory): string {
   if (!history.agents.length) return "";
@@ -28,6 +54,7 @@ export function formatAgentHistory(history: AgentHistory): string {
       `${indent}Agent ${terminalSafeText(agent.pipelineId)}  ${agent.status}  termination ${agent.termination}  run ${terminalSafeText(agent.runId)}`
     );
     const rows: Row[] = [];
+    for (const entry of agent.usage ?? []) rows.push(`${indent}  ${usageLine("Usage", entry)}`);
     for (const turn of agent.turns) {
       const state = turn.stateVersion === undefined ? "unknown" : String(turn.stateVersion);
       const next = turn.nextStateVersion === undefined ? "" : ` -> ${turn.nextStateVersion}`;
@@ -56,5 +83,6 @@ export function formatAgentHistory(history: AgentHistory): string {
     }
     pending.push(...rows.reverse());
   }
+  for (const entry of history.usage ?? []) lines.push(usageLine("Usage total", entry));
   return `${lines.join("\n")}\n`;
 }

@@ -176,3 +176,108 @@ it("escapes terminal controls in call IDs and errors and labels incomplete obser
   expect(text).toContain("decision unknown");
   expect(text).toContain("run not recorded");
 });
+
+it("prints usage per agent and per run without inventing absent counters", () => {
+  const text = formatAgentHistory({
+    agents: [
+      {
+        runId: "root",
+        pipelineId: "usage-agent",
+        status: "completed",
+        termination: "finish",
+        usage: [
+          {
+            provider: "anthropic",
+            model: "claude\u001b[31mmodel",
+            requests: 2,
+            requestsWithoutUsage: 2,
+            durationMs: 1200.4,
+            inputTokens: 112,
+            uncachedInputTokens: 100,
+            cacheReadTokens: 28,
+            cacheWriteTokens: 7,
+            outputTokens: 30,
+            reasoningTokens: 5,
+          },
+          {
+            provider: "openai",
+            model: "only-requests",
+            requests: 1,
+            requestsWithoutUsage: 0,
+            durationMs: 0,
+          },
+        ],
+        turns: [],
+      },
+      {
+        runId: "quiet",
+        pipelineId: "quiet-agent",
+        status: "completed",
+        termination: "finish",
+        turns: [],
+      },
+    ],
+    usage: [
+      {
+        provider: "anthropic",
+        model: "claude\u001b[31mmodel",
+        requests: 2,
+        requestsWithoutUsage: 2,
+        durationMs: 1200.4,
+        inputTokens: 112,
+        cacheReadTokens: 28,
+        outputTokens: 30,
+      },
+    ],
+  });
+  expect(text).not.toContain("\u001b");
+  expect(text.split("\n").filter((line) => /^\s+Usage /.test(line))).toEqual([
+    "    Usage claude [31mmodel (anthropic)  requests 2  input 112  cache read 28 (25%)  cache write 7  output 30  reasoning 5  model time 1200ms  2 without usage",
+    "    Usage only-requests (openai)  requests 1  model time 0ms",
+  ]);
+  expect(text.split("\n").filter((line) => line.startsWith("Usage total "))).toEqual([
+    "Usage total claude [31mmodel (anthropic)  requests 2  input 112  cache read 28 (25%)  output 30  model time 1200ms  2 without usage",
+  ]);
+});
+
+it("omits the cache share and every usage line without counters", () => {
+  const withoutCounters = formatAgentHistory({
+    agents: [
+      {
+        runId: "root",
+        pipelineId: "usage-agent",
+        status: "running",
+        termination: "running",
+        usage: [
+          {
+            provider: "unknown",
+            model: "model",
+            requests: 1,
+            requestsWithoutUsage: 0,
+            durationMs: 3,
+            cacheReadTokens: 4,
+          },
+        ],
+        turns: [],
+      },
+    ],
+  });
+  expect(withoutCounters).toContain(
+    "Usage model (unknown)  requests 1  cache read 4  model time 3ms"
+  );
+  expect(withoutCounters).not.toContain("%");
+  expect(withoutCounters).not.toContain("Usage total");
+  expect(
+    formatAgentHistory({
+      agents: [
+        {
+          runId: "root",
+          pipelineId: "quiet-agent",
+          status: "completed",
+          termination: "finish",
+          turns: [],
+        },
+      ],
+    })
+  ).not.toContain("Usage");
+});

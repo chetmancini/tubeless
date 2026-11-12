@@ -271,9 +271,7 @@ it("bounds distinct models per turn and rejects invalid counters", () => {
       "agent.model.outputTokens": 5,
     })
   );
-  overflow.append(
-    modelRequest(1, { "agent.model.inputTokens": 1, "agent.model.outputTokens": 5 })
-  );
+  overflow.append(modelRequest(1, { "agent.model.inputTokens": 1, "agent.model.outputTokens": 5 }));
   expect(overflow.snapshot().agentTurn!.usage![0]).toMatchObject({
     inputTokens: Number.MAX_SAFE_INTEGER,
     outputTokens: 10,
@@ -282,7 +280,9 @@ it("bounds distinct models per turn and rejects invalid counters", () => {
 
 it("isolates usage snapshots from caller mutation", () => {
   const projection = new AgentProjection();
-  projection.append(modelRequest(0, { "agent.model.inputTokens": 10, "agent.model.outputTokens": 5 }));
+  projection.append(
+    modelRequest(0, { "agent.model.inputTokens": 10, "agent.model.outputTokens": 5 })
+  );
   const early = projection.snapshot();
   early.agentTurn!.usage![0]!.inputTokens = 999;
   early.agentTurn!.usage!.push({
@@ -292,7 +292,9 @@ it("isolates usage snapshots from caller mutation", () => {
     requestsWithoutUsage: 0,
     durationMs: 0,
   });
-  projection.append(modelRequest(1, { "agent.model.inputTokens": 10, "agent.model.outputTokens": 5 }));
+  projection.append(
+    modelRequest(1, { "agent.model.inputTokens": 10, "agent.model.outputTokens": 5 })
+  );
   const current = projection.snapshot();
   expect(current.agentTurn!.usage).toHaveLength(1);
   expect(current.agentTurn!.usage![0]!.inputTokens).toBe(20);
