@@ -68,7 +68,8 @@ their source files.
   clipping independently of filesystem operations.
   The optional `tubeless/agent/openai` and `tubeless/agent/anthropic` entrypoints own
   their provider protocols and compaction. They share `provider-http.ts` (bounded
-  requests and responses, base URLs, deadlines that fail rather than cancel),
+  requests and responses, bounded retries of transient failures, base URLs, deadlines
+  that fail rather than cancel),
   `provider-schema.ts` (strict tool-parameter schemas) and `provider-tool-outputs.ts`
   (bounded tool results). `openai-http.ts` keeps OpenAI
   authentication-error handling: known codes, no raw provider messages. Shared

@@ -198,10 +198,10 @@ refund races. Reject an oversized batch before any member starts. A finish on
 the last allowed turn succeeds. A continue on that last turn fails before tools
 start because no later decision could consume their results.
 
-`maxDecisions` counts harness callbacks, not hidden HTTP requests or money. V1
-adds no automatic retries. Provider SDK retries and internal requests within a
-handler remain the application's responsibility. Any future harness retries
-must consume the relevant admission budget.
+`maxDecisions` counts harness callbacks, not hidden HTTP requests or money. The
+harness itself adds no automatic retries. The OpenAI and Anthropic adapters
+retry transient HTTP failures inside one decision callback, so they consume no
+admission. Any future harness-level retry must consume the relevant admission budget.
 
 Allocate the shared execution scope on the root invocation, never on the
 definition. Core carries one private opaque scope slot through runtime
