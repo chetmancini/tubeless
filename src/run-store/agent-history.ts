@@ -1,6 +1,7 @@
 import type { PipelineTraceError } from "../tracing/tracing-contracts.js";
 import {
   AGENT_MODEL_COUNTERS,
+  addModelCounter,
   type StoredAgentCallMetadata,
   type StoredAgentDefinition,
   type StoredAgentModelUsage,
@@ -91,12 +92,7 @@ function mergeUsage(
       target.requests += entry.requests;
       target.requestsWithoutUsage += entry.requestsWithoutUsage;
       target.durationMs += entry.durationMs;
-      for (const name of AGENT_MODEL_COUNTERS) {
-        const value = entry[name];
-        if (value === undefined) continue;
-        const total = (target[name] ?? 0) + value;
-        if (Number.isSafeInteger(total)) target[name] = total;
-      }
+      for (const name of AGENT_MODEL_COUNTERS) addModelCounter(target, name, entry[name]);
     }
   }
   return merged.size ? [...merged.values()] : undefined;

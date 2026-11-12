@@ -58,6 +58,17 @@ export type StoredAgentModelUsage = {
   durationMs: number;
 } & { [Counter in AgentModelCounter]?: number };
 
+/** Add one allowlisted counter: absent values stay absent, and unsafe sums are skipped. */
+export function addModelCounter(
+  target: StoredAgentModelUsage,
+  name: AgentModelCounter,
+  value: number | undefined
+): void {
+  if (value === undefined) return;
+  const total = (target[name] ?? 0) + value;
+  if (Number.isSafeInteger(total)) target[name] = total;
+}
+
 /** Bounds retention for malformed traces that report unbounded model names. */
 const MAX_MODEL_USAGE_ENTRIES = 8;
 
@@ -186,12 +197,8 @@ export class AgentProjection {
     const duration = attributes["agent.model.durationMs"];
     if (typeof duration === "number" && Number.isFinite(duration) && duration >= 0)
       entry.durationMs += duration;
-    for (const name of AGENT_MODEL_COUNTERS) {
-      const value = count(attributes[`agent.model.${name}`]);
-      if (value === undefined) continue;
-      const total = (entry[name] ?? 0) + value;
-      if (Number.isSafeInteger(total)) entry[name] = total;
-    }
+    for (const name of AGENT_MODEL_COUNTERS)
+      addModelCounter(entry, name, count(attributes[`agent.model.${name}`]));
     if (
       count(attributes["agent.model.inputTokens"]) === undefined ||
       count(attributes["agent.model.outputTokens"]) === undefined

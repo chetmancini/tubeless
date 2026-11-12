@@ -55,7 +55,7 @@ function turnEvent(
 function modelRequest(
   id: number,
   attributes: ModelAttributes = {},
-  overrides: Partial<StoredPipelineEvent> = {}
+  overrides: TurnOverrides = {}
 ): StoredPipelineEvent {
   return turnEvent(
     id,
@@ -215,7 +215,7 @@ it("retains a turn whose only recorded request failed before any decision", () =
 });
 
 it("ignores model telemetry that is not attributable to a turn", () => {
-  const cases: Array<[string, Partial<StoredPipelineEvent>, ModelAttributes]> = [
+  const cases: Array<[string, TurnOverrides, ModelAttributes]> = [
     ["another step", { stepId: "calls" }, {}],
     ["a different parent run", { parentRunId: "elsewhere" }, {}],
     ["a turn that disagrees with the iteration", {}, { "agent.turn": 2 }],

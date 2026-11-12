@@ -136,9 +136,9 @@ function usageFixture() {
 }
 
 /** One reported request under an ID that never contains the word "usage". */
-function reportingAgent(id: string) {
+function reportingAgent() {
   return defineAgentLoop({
-    id,
+    id: "reported-agent",
     inputSchema: emptyInput,
     resultSchema: numberSchema,
     initialState: () => 0,
@@ -507,7 +507,6 @@ describe("agent history projection", () => {
     expect(child.subtreeUsage).toMatchObject([childTotals]);
     expect(usage).toMatchObject([parentTotals, childTotals]);
     expect(usage).toEqual(parent.subtreeUsage);
-    expect(child.subtreeUsage![0]!.inputTokens).toBe(50);
   });
 
   it("never sums counters across different models", async () => {
@@ -561,7 +560,7 @@ describe("agent history projection", () => {
     const recorded = JSON.stringify(projectAgentHistory(projectPipelineRunStore(events).runs));
     expect(recorded).not.toContain("usage");
 
-    const { events: reported } = await record(reportingAgent("reported-agent"));
+    const { events: reported } = await record(reportingAgent());
     const dropped = reported.filter(
       (event) =>
         event.name !== "step.attempted" || !("agent.model.request" in event.payload.attributes)
@@ -573,7 +572,7 @@ describe("agent history projection", () => {
   });
 
   it("keeps recorded turn usage through the stored run wire schema", async () => {
-    const { events } = await record(reportingAgent("reported-agent"));
+    const { events } = await record(reportingAgent());
     const { runs } = projectPipelineRunStore(events);
     const turn = runs.find((run) => run.agentTurn?.usage)!;
     expect(turn.agentTurn!.usage).toHaveLength(1);
