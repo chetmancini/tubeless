@@ -35,8 +35,11 @@ and `Bundler` module resolution. Projects that type-check declarations
 (`skipLibCheck: false`) without `@types/node` need `ESNext.Disposable` in `lib`
 for `tubeless/agent/mcp`.
 
-The executable uses `#!/usr/bin/env bun`, so Bun must be installed and available
-on `PATH` even when npm or `npx` installs the package.
+The executable starts a small Node.js launcher that hands the command to Bun, so
+Bun must be on `PATH` even when npm or `npx` installs the package; without Bun
+the command says what to install and exits 1. `bunx --bun tubeless` skips the
+Node.js start, and on a machine with Bun but no Node.js run the CLI through
+`bunx` or `bun run`.
 
 Supported operating systems are Linux and macOS. Windows is untested.
 
