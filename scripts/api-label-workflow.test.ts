@@ -9,6 +9,7 @@ const workflowPath = join(root, ".github/workflows/api-label.yml");
 interface WorkflowStep {
   uses?: string;
   run?: string;
+  env?: Record<string, string>;
 }
 interface WorkflowJob {
   permissions?: Record<string, string>;
@@ -54,6 +55,15 @@ describe("api-label workflow", () => {
     const uses = steps.flatMap((step) => (step.uses ? [step.uses] : []));
     expect(uses.length).toBeGreaterThan(0);
     for (const action of uses) expect(action).toMatch(/@[0-9a-f]{40}$/);
+  });
+
+  it("compares the pull request's base commit, not the moving base branch", () => {
+    const label = steps.find((step) => step.run?.includes("--removed-only"));
+    expect(label).toBeDefined();
+    expect(label?.env?.BASE_SHA).toBe("${{ github.event.pull_request.base.sha }}");
+    expect(label?.run).toContain('git fetch --no-tags --depth=1 origin "${BASE_SHA}"');
+    expect(label?.run).toContain('--git-base "${BASE_SHA}"');
+    expect(label?.run).not.toContain("BASE_REF");
   });
 
   it("runs no dependency code and no interpolated event data", () => {

@@ -29,12 +29,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          BASE_REF: ${{ github.base_ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          # The commit this pull request branched from, not the moving base
+          # branch: an export added to the branch meanwhile would otherwise look
+          # removed here and label an unrelated pull request.
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "${BASE_REF}"
-          removed="$(node scripts/summarize-api-report-diff.mjs --git-base "origin/${BASE_REF}" --removed-only)"
+          git fetch --no-tags --depth=1 origin "${BASE_SHA}"
+          removed="$(node scripts/summarize-api-report-diff.mjs --git-base "${BASE_SHA}" --removed-only)"
           if [[ -z "${removed}" ]]; then
             echo "No public exports were removed."
             exit 0
