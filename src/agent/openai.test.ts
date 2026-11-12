@@ -144,6 +144,13 @@ describe("OpenAI model", () => {
     );
   });
 
+  it.each([{ maxRetries: -1 }, { maxRetries: 1.5 }, { maxRetries: 11 }])(
+    "rejects an invalid retry count locally: %j",
+    (options) => {
+      expect(() => openaiModel(options)).toThrow("Invalid OpenAI model configuration");
+    }
+  );
+
   it.each([
     { model: undefined, environment: undefined, expected: "gpt-5.4-mini" },
     { model: undefined, environment: "", expected: "gpt-5.4-mini" },
@@ -385,7 +392,7 @@ describe("OpenAI model", () => {
     vi.stubGlobal("fetch", fetcher);
     const result = await defineAgent({
       id: "compact-error",
-      model: openaiModel({ apiKey: "fixture", compactAfterBytes: 1 }),
+      model: openaiModel({ apiKey: "fixture", compactAfterBytes: 1, maxRetries: 0 }),
     }).run({ task: "List" }, undefined, { cwd });
     expect(result.status).toBe("failed");
     expect(result.errors[0]!.message).toContain("responses/compact failed (HTTP 500)");
@@ -659,5 +666,134 @@ describe("OpenAI model", () => {
       "https://api.openai.com/v1/responses",
       "https://api.openai.com/v1/responses",
     ]);
+  });
+
+  it("retries a rate limit inside one decision without consuming an admission", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(null, { status: 429, headers: { "retry-after-ms": "1" } })
+      )
+      .mockResolvedValue(response([finish()]));
+    vi.stubGlobal("fetch", fetcher);
+    const result = await defineAgent({
+      id: "retry",
+      projectContext: false,
+      limits: { maxDecisions: 1 },
+      model: openaiModel({ apiKey: "fixture" }),
+    }).run({ task: "Finish" });
+    expect(result.status).toBe("completed");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports each retried attempt as its own trace event", async () => {
+    const events: unknown[] = [];
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(null, { status: 429, headers: { "retry-after-ms": "1" } })
+      )
+      .mockResolvedValue(response([finish()]));
+    vi.stubGlobal("fetch", fetcher);
+    await defineAgent({
+      id: "retry-trace",
+      projectContext: false,
+      model: openaiModel({ apiKey: "fixture" }),
+    }).runOrThrow({ task: "Finish" }, undefined, {
+      tracing: {
+        exporter: {
+          export(event) {
+            if (event.name === "step.attempted" && event.payload.attributes["agent.model.provider"])
+              events.push(event.payload.attributes);
+          },
+        },
+      },
+    });
+    expect(events).toEqual([
+      expect.objectContaining({
+        "agent.model.request": 1,
+        "agent.model.httpStatus": 429,
+        "agent.model.responseReceived": false,
+      }),
+      expect.objectContaining({
+        "agent.model.request": 2,
+        "agent.model.responseReceived": true,
+      }),
+    ]);
+  });
+
+  it("fails with the rate limit after exhausting the default retries", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 429, headers: { "retry-after-ms": "1" } }));
+    vi.stubGlobal("fetch", fetcher);
+    const result = await defineAgent({
+      id: "retry-exhausted",
+      projectContext: false,
+      model: openaiModel({ apiKey: "fixture" }),
+    }).run({ task: "Finish" });
+    expect(result.status).toBe("failed");
+    expect(result.errors[0]!.message).toContain("HTTP 429");
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it("never retries a client error and honors maxRetries: 0", async () => {
+    const rejected = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response("private provider error", { status: 400 }));
+    vi.stubGlobal("fetch", rejected);
+    const bad = await defineAgent({
+      id: "retry-400",
+      projectContext: false,
+      model: openaiModel({ apiKey: "fixture" }),
+    }).run({ task: "Finish" });
+    expect(bad.status).toBe("failed");
+    expect(rejected).toHaveBeenCalledTimes(1);
+
+    const unavailable = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 503 }));
+    vi.stubGlobal("fetch", unavailable);
+    const disabled = await defineAgent({
+      id: "retry-disabled",
+      projectContext: false,
+      model: openaiModel({ apiKey: "fixture", maxRetries: 0 }),
+    }).run({ task: "Finish" });
+    expect(disabled.status).toBe("failed");
+    expect(unavailable).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails with the rate limit rather than the deadline when Retry-After outlives it", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 429, headers: { "retry-after": "120" } }));
+    vi.stubGlobal("fetch", fetcher);
+    const result = await defineAgent({
+      id: "retry-deadline",
+      projectContext: false,
+      model: openaiModel({ apiKey: "fixture", timeoutMs: 1000 }),
+    }).run({ task: "Finish" });
+    expect(result.status).toBe("failed");
+    expect(result.errors[0]!.message).toContain("HTTP 429");
+    expect(result.errors[0]!.message).not.toContain("timed out");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps caller cancellation as a cancellation during backoff", async () => {
+    const controller = new AbortController();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(null, { status: 429, headers: { "retry-after-ms": "5000" } })
+      );
+    vi.stubGlobal("fetch", fetcher);
+    const log = { log: () => {}, warn: () => controller.abort(new Error("stop")), error: () => {} };
+    const result = await defineAgent({
+      id: "retry-cancel",
+      projectContext: false,
+      model: openaiModel({ apiKey: "fixture" }),
+    }).run({ task: "Finish" }, undefined, { signal: controller.signal, log });
+    expect(result.status).toBe("cancelled");
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
