@@ -25,9 +25,10 @@ remaining checks as a concurrent Tubeless pipeline and record `logs/check.ndjson
 `make help` lists the rest. `make install` runs `bun ci`.
 
 Package builds and type checks use the pinned `tsrs` compiler in its default
-mode to reduce memory use. Keep fast mode disabled. Packed-consumer checks use
-the pinned TypeScript compiler to verify the published declarations against
-the standard compiler.
+mode to reduce memory use. Keep fast mode disabled. Packed-consumer checks
+compile a fixture for every public entry point with both the pinned TypeScript
+compiler and the oldest supported one (`typescript-floor`), under `NodeNext`
+and `Bundler` resolution.
 
 ### Fast loops
 

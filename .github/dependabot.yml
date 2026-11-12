@@ -21,6 +21,8 @@ updates:
       # Keep Node types at the supported engines.node floor (22).
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # The floor compiler is raised deliberately, never by automation.
+      - dependency-name: "typescript-floor"
     groups:
       bun:
         patterns:

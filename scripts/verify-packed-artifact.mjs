@@ -22,8 +22,41 @@ if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 18)) {
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+const floorPackagePath = join(packageRoot, "node_modules/typescript-floor/package.json");
+if (!existsSync(floorPackagePath)) {
+  throw new Error(
+    "Packed-artifact verification requires the pinned typescript-floor dev dependency."
+  );
+}
+const floorVersion = JSON.parse(readFileSync(floorPackagePath, "utf8")).version;
+// The documented floor must name the compiler actually verified, or the claim drifts.
+const floorMajorMinor = floorVersion.split(".").slice(0, 2).join(".");
+if (
+  !readFileSync(join(packageRoot, "docs/getting-started.md"), "utf8").includes(
+    `TypeScript ${floorMajorMinor} or later`
+  )
+) {
+  throw new Error(
+    `docs/getting-started.md must state "TypeScript ${floorMajorMinor} or later" for typescript-floor ${floorVersion}.`
+  );
+}
 const temporaryRoot = mkdtempSync(join(tmpdir(), "tubeless-pack-"));
 const npm = resolveNpm();
+
+// The pinned compiler serves the repository and is the resolution target for `bunx tsc`;
+// the floor compiler is the oldest standard compiler the published declarations support.
+const compilers = [
+  {
+    label: `typescript ${packageJson.devDependencies.typescript}`,
+    command: join(packageRoot, "node_modules/typescript/bin/tsc"),
+    args: [],
+  },
+  {
+    label: `typescript-floor ${floorVersion}`,
+    command: process.execPath,
+    args: [join(packageRoot, "node_modules/typescript-floor/bin/tsc")],
+  },
+];
 
 function run(command, args, cwd) {
   const result = spawnSync(command, args, { cwd, encoding: "utf8", stdio: "pipe" });
@@ -33,6 +66,16 @@ function run(command, args, cwd) {
     );
   }
   return result.stdout;
+}
+
+// Name the compiler and the module resolution on failure: these compiles share one path.
+function compileConsumer(compiler, compilation, cwd) {
+  const resolution = compilation.moduleResolution ?? compilation.module;
+  try {
+    run(compiler.command, [...compiler.args, "-p", compilation.tsconfig], cwd);
+  } catch (error) {
+    throw new Error(`${compiler.label} / ${resolution}: ${error.message}`);
+  }
 }
 
 function assertPackedMarkdownLinks(filePath, packedName) {
@@ -210,38 +253,53 @@ try {
   assertPackedDocumentationLinks(installedPackage);
 
   // Consumer declarations must compile without ambient Node typings or skipLibCheck.
-  writeFileSync(
-    join(consumerRoot, "cli.ts"),
-    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cli.ts"))
-  );
-  writeFileSync(
-    join(consumerRoot, "project.ts"),
-    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/project.ts"))
-  );
-  writeFileSync(
-    join(consumerRoot, "cloudflare.ts"),
-    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cloudflare.ts"))
-  );
-  writeFileSync(
-    join(consumerRoot, "cloudflare-cache.ts"),
-    readFileSync(join(packageRoot, "scripts/fixtures/packed-consumer/cloudflare-cache.ts"))
-  );
-  writeFileSync(
-    join(consumerRoot, "tsconfig.json"),
-    JSON.stringify({
-      compilerOptions: {
-        lib: ["ES2022", "DOM"],
-        module: "NodeNext",
-        noEmit: true,
-        skipLibCheck: false,
-        strict: true,
-        target: "ES2022",
-        types: [],
-      },
-      files: ["cli.ts", "project.ts", "cloudflare.ts", "cloudflare-cache.ts"],
-    })
-  );
-  run(join(packageRoot, "node_modules/.bin/tsc"), ["-p", "tsconfig.json"], consumerRoot);
+  // Every fixture is copied and compiled, so a new entry-point fixture needs no script edit.
+  const fixtureDirectory = join(packageRoot, "scripts/fixtures/packed-consumer");
+  const fixtureFiles = readdirSync(fixtureDirectory)
+    .filter((name) => name.endsWith(".ts"))
+    .sort();
+  const fixtureSources = fixtureFiles.map((name) => {
+    const source = readFileSync(join(fixtureDirectory, name), "utf8");
+    writeFileSync(join(consumerRoot, name), source);
+    return source;
+  });
+  // An entry point no fixture imports ships declarations no consumer compilation covers.
+  for (const subpath of Object.keys(packageJson.exports)) {
+    const specifier =
+      subpath === "." ? packageJson.name : `${packageJson.name}/${subpath.slice(2)}`;
+    const statement = `from ${JSON.stringify(specifier)}`;
+    if (!fixtureSources.some((source) => source.includes(statement))) {
+      throw new Error(`Packed-consumer fixtures do not import ${specifier}`);
+    }
+  }
+  const consumerCompilations = [
+    { tsconfig: "tsconfig.json", module: "NodeNext" },
+    { tsconfig: "tsconfig.bundler.json", module: "ESNext", moduleResolution: "Bundler" },
+  ];
+  for (const compilation of consumerCompilations) {
+    writeFileSync(
+      join(consumerRoot, compilation.tsconfig),
+      JSON.stringify({
+        compilerOptions: {
+          // ESNext.Disposable supplies Symbol.asyncDispose, which tubeless/agent/mcp declares.
+          lib: ["ES2022", "DOM", "ESNext.Disposable"],
+          module: compilation.module,
+          moduleResolution: compilation.moduleResolution,
+          noEmit: true,
+          skipLibCheck: false,
+          strict: true,
+          target: "ES2022",
+          types: [],
+        },
+        files: fixtureFiles,
+      })
+    );
+  }
+  for (const compiler of compilers) {
+    for (const compilation of consumerCompilations) {
+      compileConsumer(compiler, compilation, consumerRoot);
+    }
+  }
   run("node", ["--experimental-strip-types", "project.ts"], consumerRoot);
   // The cache entry stays free of cloudflare:workers so projects using it load in Node.
   run("node", ["--experimental-strip-types", "cloudflare-cache.ts"], consumerRoot);
@@ -324,8 +382,8 @@ try {
     })
   );
   run(
-    join(packageRoot, "node_modules/.bin/tsc"),
-    ["-p", "tsconfig.worker-example.json"],
+    compilers[0].command,
+    [...compilers[0].args, "-p", "tsconfig.worker-example.json"],
     consumerRoot
   );
   run(
@@ -364,7 +422,7 @@ try {
   );
 
   process.stdout.write(
-    "Packed tubeless artifact layout, declarations, imports, and executable verified.\n"
+    `Packed tubeless artifact layout, declarations, imports, and executable verified with typescript ${packageJson.devDependencies.typescript} and typescript-floor ${floorVersion}.\n`
   );
 } finally {
   rmSync(temporaryRoot, { force: true, recursive: true });

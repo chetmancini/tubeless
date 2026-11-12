@@ -114,5 +114,3 @@ const typedResultValue: Promise<EchoResult> = typedResultProject
   .runOrThrow({ message: "hello" });
 // @ts-expect-error Annotating the finalizer preserves the exact project lookup id.
 typedResultProject.get("missing");
-void typedResultId;
-void typedResultValue;

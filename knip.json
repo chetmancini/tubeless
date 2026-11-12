@@ -19,6 +19,7 @@
   ],
   "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{js,mjs,ts}", "!scripts/fixtures/**"],
   "ignoreBinaries": ["mkfifo"],
+  "ignoreDependencies": ["typescript-floor"],
   "ignoreExportsUsedInFile": {
     "interface": true,
     "type": true
