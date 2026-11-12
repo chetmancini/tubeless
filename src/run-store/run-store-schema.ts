@@ -39,6 +39,23 @@ const agentCall = wireObject({
   tool: id,
   parentAttemptId: id,
 });
+const agentModelUsage = wireObject({
+  provider: id,
+  model: id,
+  requests: count,
+  requestsWithoutUsage: count,
+  durationMs: number,
+  inputTokens: wireOptional(count),
+  uncachedInputTokens: wireOptional(count),
+  outputTokens: wireOptional(count),
+  reasoningTokens: wireOptional(count),
+  cacheReadTokens: wireOptional(count),
+  cacheWriteTokens: wireOptional(count),
+  cacheWrite5mTokens: wireOptional(count),
+  cacheWrite1hTokens: wireOptional(count),
+  cacheWrite30mTokens: wireOptional(count),
+  cacheWrite12hTokens: wireOptional(count),
+});
 
 export const storedPipelineRunSchema: WireSchema<StoredPipelineRun> = wireObject({
   version: wireLiteral(RUN_MODEL_VERSION),
@@ -59,6 +76,7 @@ export const storedPipelineRunSchema: WireSchema<StoredPipelineRun> = wireObject
       callCount: wireOptional(count),
       callsAdmitted: wireOptional(count),
       calls: wireArray(agentCall),
+      usage: wireOptional(wireArray(agentModelUsage)),
     })
   ),
   agentCall: wireOptional(agentCall),

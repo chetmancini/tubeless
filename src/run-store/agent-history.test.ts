@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { defineAgentLoop, defineTool, pipelineTool, ToolError } from "../agent/agent.js";
+import {
+  createMemoryAgentCheckpointStore,
+  defineAgentLoop,
+  defineTool,
+  pipelineTool,
+  plainAgentCheckpointCodec,
+  ToolError,
+} from "../agent/agent.js";
 import { emptyInput, numberSchema } from "../agent/agent.test-support.js";
+import { checkedCheckpoint } from "../agent/checkpoint-format.js";
+import type { AgentCheckpointStore } from "../agent/checkpoint-types.js";
+import { modelRequestReporter } from "../agent/provider-usage.js";
 import { createSteps, definePipeline, type Pipeline } from "../core/pipeline.js";
 import { createPipelineTestRuntime } from "../testing/testing.js";
 import { decodeStoredTraceEvent } from "./run-store-event-decoder.js";
@@ -11,6 +21,7 @@ import {
 } from "./run-store.js";
 import { projectAgentHistory } from "./agent-history.js";
 import { createRunHistoryIndex, summarizeRun } from "./run-history.js";
+import { storedPipelineRunSchema } from "./run-store-schema.js";
 
 function fixture() {
   const child = defineAgentLoop({
@@ -81,6 +92,129 @@ async function record(pipeline: Pipeline<object, unknown>, dryRun = false, signa
     }
   );
   return { events, run };
+}
+
+/**
+ * Report one model exchange with provider-shaped usage. The reporter derives its own
+ * turn from the decision context, exactly as the OpenAI and Anthropic adapters do.
+ */
+function reportUsage(
+  provider: "openai" | "anthropic",
+  context: Parameters<typeof modelRequestReporter>[2],
+  model: string,
+  usage: Record<string, unknown>
+) {
+  return modelRequestReporter(provider, model, context)("decision", async () => ({ usage }));
+}
+
+/** Parent delegates once to a child; both report a different provider and model. */
+function usageFixture() {
+  const child = defineAgentLoop({
+    id: "usage-child",
+    inputSchema: emptyInput,
+    resultSchema: numberSchema,
+    initialState: () => 0,
+    decide: async (_state, context) => {
+      await reportUsage("openai", context, "child-model", {
+        input_tokens: 50,
+        output_tokens: 5,
+        input_tokens_details: { cached_tokens: 10 },
+      });
+      return { kind: "finish", result: 1 };
+    },
+  });
+  return defineAgentLoop({
+    id: "usage-parent",
+    inputSchema: emptyInput,
+    resultSchema: numberSchema,
+    initialState: () => 0,
+    tools: { delegate: pipelineTool(child, { description: "Delegate to the child agent" }) },
+    decide: async (state, context) => {
+      // Per-turn usage keeps every level's hand-checked sums distinct.
+      await reportUsage("anthropic", context, "parent-model", {
+        input_tokens: 100 * context.turn,
+        output_tokens: 10 * context.turn,
+        cache_read_input_tokens: 5 * context.turn,
+        cache_creation_input_tokens: 7 * context.turn,
+      });
+      return context.turn === 1
+        ? { kind: "continue", calls: [{ id: "delegate", tool: "delegate" as const, input: {} }] }
+        : { kind: "finish", result: state };
+    },
+  });
+}
+
+/** Fail the checkpoint write that advances a durable agent past its first turn. */
+function interruptTurnAdvance(store: AgentCheckpointStore): AgentCheckpointStore {
+  let failed = false;
+  return {
+    acquire: async (key) => {
+      const lease = await store.acquire(key);
+      return {
+        ...lease,
+        write: async (value) => {
+          await lease.write(value);
+          if (
+            failed ||
+            !Object.values(checkedCheckpoint(plainAgentCheckpointCodec.decode(value)).agents).some(
+              (agent) => agent.phase === "decide" && agent.execution.turn === 2
+            )
+          )
+            return;
+          failed = true;
+          throw new Error("simulated storage interruption");
+        },
+      };
+    },
+  };
+}
+
+/** A durable agent that reports usage each turn and resumes at its second logical turn. */
+function durableUsageAgent(store: AgentCheckpointStore) {
+  return defineAgentLoop({
+    id: "usage-durable",
+    implementationVersion: "1",
+    inputSchema: emptyInput,
+    resultSchema: numberSchema,
+    initialState: () => 0,
+    durability: { store, key: "job" },
+    tools: {
+      work: defineTool({
+        description: "Work",
+        inputSchema: emptyInput,
+        outputSchema: numberSchema,
+        run: () => 1,
+      }),
+    },
+    decide: async (_state, context) => {
+      await reportUsage("anthropic", context, "durable-model", {
+        input_tokens: 10 * context.turn,
+        output_tokens: context.turn,
+      });
+      return context.turn === 1
+        ? { kind: "continue", calls: [{ id: "work", tool: "work" as const, input: {} }] }
+        : { kind: "finish", result: 7 };
+    },
+    reduce: () => 0,
+  });
+}
+
+/** One reported request under an ID that never contains the word "usage". */
+function reportingAgent() {
+  return defineAgentLoop({
+    id: "reported-agent",
+    inputSchema: emptyInput,
+    resultSchema: numberSchema,
+    initialState: () => 0,
+    decide: async (_state, context) => {
+      await reportUsage("openai", context, "fixture-model", {
+        input_tokens: 10,
+        output_tokens: 1,
+        input_tokens_details: { cached_tokens: 4 },
+      });
+      return { kind: "finish", result: 1 };
+    },
+  });
 }
 
 describe("agent history projection", () => {
@@ -376,5 +510,193 @@ describe("agent history projection", () => {
     expect(projectAgentHistory(projectPipelineRunStore(ordinary.events).runs)).toEqual({
       agents: [],
     });
+  });
+
+  it("sums model usage per turn, agent, subtree and run", async () => {
+    const { events } = await record(usageFixture());
+    const { agents, usage } = projectAgentHistory(projectPipelineRunStore(events).runs);
+    const parent = agents.find((agent) => agent.pipelineId === "usage-parent")!;
+    const child = agents.find((agent) => agent.pipelineId === "usage-child")!;
+    expect(parent.turns.map((turn) => turn.usage)).toMatchObject([
+      [
+        {
+          provider: "anthropic",
+          model: "parent-model",
+          requests: 1,
+          requestsWithoutUsage: 0,
+          inputTokens: 112,
+          uncachedInputTokens: 100,
+          cacheReadTokens: 5,
+          cacheWriteTokens: 7,
+          outputTokens: 10,
+        },
+      ],
+      [
+        {
+          provider: "anthropic",
+          model: "parent-model",
+          requests: 1,
+          requestsWithoutUsage: 0,
+          inputTokens: 224,
+          uncachedInputTokens: 200,
+          cacheReadTokens: 10,
+          cacheWriteTokens: 14,
+          outputTokens: 20,
+        },
+      ],
+    ]);
+    const parentTotals = {
+      provider: "anthropic",
+      model: "parent-model",
+      requests: 2,
+      requestsWithoutUsage: 0,
+      inputTokens: 112 + 224,
+      uncachedInputTokens: 300,
+      cacheReadTokens: 15,
+      cacheWriteTokens: 21,
+      outputTokens: 30,
+    };
+    const childTotals = {
+      provider: "openai",
+      model: "child-model",
+      requests: 1,
+      requestsWithoutUsage: 0,
+      inputTokens: 50,
+      cacheReadTokens: 10,
+      outputTokens: 5,
+    };
+    expect(parent.usage).toMatchObject([parentTotals]);
+    expect(child.usage).toMatchObject([childTotals]);
+    expect(parent.subtreeUsage).toMatchObject([parentTotals, childTotals]);
+    expect(child.subtreeUsage).toMatchObject([childTotals]);
+    expect(usage).toMatchObject([parentTotals, childTotals]);
+    expect(usage).toEqual(parent.subtreeUsage);
+  });
+
+  it("never sums counters across different models", async () => {
+    const agent = defineAgentLoop({
+      id: "usage-switching",
+      inputSchema: emptyInput,
+      resultSchema: numberSchema,
+      initialState: () => 0,
+      tools: {
+        value: defineTool({
+          description: "Return a value",
+          inputSchema: numberSchema,
+          outputSchema: numberSchema,
+          run: (value) => value,
+        }),
+      },
+      decide: async (_state, context) => {
+        await reportUsage("openai", context, context.turn === 1 ? "model-a" : "model-b", {
+          input_tokens: 10,
+          output_tokens: 1,
+          input_tokens_details: { cached_tokens: 2 },
+        });
+        return context.turn === 1
+          ? { kind: "continue", calls: [{ id: "value", tool: "value" as const, input: 1 }] }
+          : { kind: "finish", result: 1 };
+      },
+    });
+    const { events } = await record(agent);
+    const history = projectAgentHistory(projectPipelineRunStore(events).runs);
+    const root = history.agents[0]!;
+    const perModel = (model: string) => ({
+      provider: "openai",
+      model,
+      requests: 1,
+      requestsWithoutUsage: 0,
+      inputTokens: 10,
+      cacheReadTokens: 2,
+      outputTokens: 1,
+    });
+    expect(root.turns.map((turn) => turn.usage)).toMatchObject([
+      [{ model: "model-a", inputTokens: 10, cacheReadTokens: 2, outputTokens: 1 }],
+      [{ model: "model-b", inputTokens: 10, cacheReadTokens: 2, outputTokens: 1 }],
+    ]);
+    expect(root.usage).toMatchObject([perModel("model-a"), perModel("model-b")]);
+    expect(root.subtreeUsage).toMatchObject([perModel("model-a"), perModel("model-b")]);
+    expect(history.usage).toEqual(root.usage);
+  });
+
+  it("keeps merged durations finite when turn sums would overflow", async () => {
+    const { events } = await record(usageFixture());
+    // Both parent turns report the largest finite double; their sum is not a number.
+    const runs = projectPipelineRunStore(events).runs.map((run) =>
+      run.agentTurn?.usage
+        ? {
+            ...run,
+            agentTurn: {
+              ...run.agentTurn,
+              usage: run.agentTurn.usage.map((entry) => ({
+                ...entry,
+                durationMs: Number.MAX_VALUE,
+              })),
+            },
+          }
+        : run
+    );
+    const root = projectAgentHistory(runs).agents.find(
+      (agent) => agent.pipelineId === "usage-parent"
+    )!;
+    expect(root.usage).toMatchObject([
+      { model: "parent-model", requests: 2, durationMs: Number.MAX_VALUE },
+    ]);
+    // The stored run wire schema keeps finite durations; an overflow would fail the decode.
+    expect(() =>
+      storedPipelineRunSchema.decode(
+        runs.find((run) => run.agentTurn?.usage)!,
+        "run"
+      )
+    ).not.toThrow();
+  });
+
+  it("omits usage from recordings without model requests", async () => {
+    const { events } = await record(fixture());
+    const recorded = JSON.stringify(projectAgentHistory(projectPipelineRunStore(events).runs));
+    expect(recorded).not.toContain("usage");
+
+    const { events: reported } = await record(reportingAgent());
+    const dropped = reported.filter(
+      (event) =>
+        event.name !== "step.attempted" || !("agent.model.request" in event.payload.attributes)
+    );
+    expect(dropped.length).toBeLessThan(reported.length);
+    expect(
+      JSON.stringify(projectAgentHistory(projectPipelineRunStore(dropped).runs))
+    ).not.toContain("usage");
+  });
+
+  it("keeps recorded turn usage through the stored run wire schema", async () => {
+    const { events } = await record(reportingAgent());
+    const { runs } = projectPipelineRunStore(events);
+    const turn = runs.find((run) => run.agentTurn?.usage)!;
+    expect(turn.agentTurn!.usage).toHaveLength(1);
+    const decoded = storedPipelineRunSchema.decode(turn, "run");
+    expect(decoded.agentTurn!.usage).toEqual(turn.agentTurn!.usage);
+  });
+
+  it("attributes usage from a durable agent that resumes past its first turn", async () => {
+    // A resumed invocation restarts its iteration index at 1 while the reporter keeps
+    // counting logical turns, so attribution cannot compare the two.
+    const agent = durableUsageAgent(interruptTurnAdvance(createMemoryAgentCheckpointStore()));
+    expect((await record(agent)).run.status).toBe("failed");
+    const { events } = await record(agent);
+    const { runs } = projectPipelineRunStore(events);
+    const root = projectAgentHistory(runs).agents.find(
+      (entry) => entry.pipelineId === "usage-durable"
+    )!;
+    const resumed = root.turns[0]!;
+    expect(resumed.usage).toMatchObject([
+      {
+        provider: "anthropic",
+        model: "durable-model",
+        requests: 1,
+        inputTokens: 20,
+        outputTokens: 2,
+      },
+    ]);
+    // Retention keeps the logical turn the reporter counted, not the invocation's index.
+    expect(runs.find((run) => run.runId === resumed.runId)!.agentTurn!.index).toBe(2);
   });
 });

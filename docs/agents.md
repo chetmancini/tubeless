@@ -143,9 +143,14 @@ remain available. Anthropic compaction includes the billed counters from `usage.
 requests and compaction calls have their own events, including usage reported on
 responses that later fail validation. Transport failures carry no token estimate.
 Only allowlisted numeric usage and request metadata are recorded, without prompt,
-response, or credential content. Read the individual stored trace events; aggregate
-cache-read tokens divided by input tokens to measure reuse, and use the reported
-write lifetimes with the selected model's prices to calculate cost.
+response, or credential content. `tubeless history <run-id>` sums them per agent and
+per run: the text view prints a `Usage` line per agent and a `Usage total` line per
+provider and model, and `--json` adds `usage` on each turn, `usage` (this agent's own
+turns) and `subtreeUsage` (own turns plus every descendant agent) on each agent, and
+`agentHistory.usage` for the run. An absent counter was never reported, never zero;
+`requestsWithoutUsage` above zero makes the sums a lower bound; the printed percentage
+is cache-read tokens divided by input tokens. Tubeless reports tokens only, so apply
+the selected model's prices to the per-model sums yourself.
 
 ### Chat sessions
 
@@ -1116,7 +1121,10 @@ JSON details add `agentHistory.agents`: each agent has its run ID, declared
 capabilities and limits, termination, and ordered turns with calls. Calls link to
 child agents with `childAgentRunIds`; each child has a `parentCall` containing the
 owning agent, turn, call ID, and call run ID. This keeps nested histories linked
-without duplicating subtrees. Existing run lists and `--events` output retain
+without duplicating subtrees. Each turn carries `usage`, each agent its own `usage`
+and a `subtreeUsage` that adds every descendant agent, and `agentHistory.usage` holds
+the run total; all are per provider and model, and an absent counter was not reported.
+Existing run lists and `--events` output retain
 their scope. `--pipeline` selects the requested root run; its detail still includes
 children with different pipeline IDs.
 
@@ -1199,6 +1207,9 @@ and deterministic mapping preserve child identities; ordinary pipelines are
 not themselves checkpointed step by step. Accepted call argument transforms,
 committed output transforms, and committed finish transforms are reused.
 Root input validation still runs on every invocation.
+Model usage recorded after a resume is attached to the resumed turn run, whose
+recorded turn metadata keeps the execution's logical turn number rather than the
+new invocation's iteration count.
 
 | Call state at restart       | Behavior                                                           |
 | --------------------------- | ------------------------------------------------------------------ |

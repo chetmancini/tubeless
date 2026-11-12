@@ -468,7 +468,8 @@ read when a pipeline needs them.
   when a larger history threshold is configured. Anthropic caches the shared system
   prefix and growing history; `promptCaching: "1h"` extends the default five-minute
   lifetime at a higher write price. Trace events retain per-request `agent.model.*`
-  token/cache counters, timing and compaction usage. See
+  token/cache counters, timing and compaction usage; `tubeless history <run-id>`
+  sums them per agent and per run. See
   [prompt caching and usage traces](./agents.md#prompt-caching-and-usage-traces).
   Use `bun run eval:agent`
   for opt-in paid workspace evaluations; routine CI stays credential-free.
