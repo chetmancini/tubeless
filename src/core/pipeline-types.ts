@@ -1,4 +1,5 @@
 import type { PipelineMetadata } from "../tracing/graph-metadata.js";
+import type { CheckpointStore } from "../utilities/checkpoint-store.js";
 import type { PipelineStepQuery } from "./pipeline-query.js";
 import type { StepCachePolicy } from "./pipeline-cache.js";
 import type { ArtifactRecord } from "../tracing/artifact-metadata.js";
@@ -39,6 +40,12 @@ export interface PipelineLogger {
 export interface PipelineContext {
   /** Optional caller-owned identifier used to correlate separate executions. */
   correlationId?: string;
+  /**
+   * Optional caller-owned set of completed item keys for resumable work. Pipeline
+   * commands with `checkpoint` configured supply their managed store here, replaced by
+   * an in-memory view during dry runs. Child pipelines inherit it. Absent otherwise.
+   */
+  checkpoint?: CheckpointStore;
   cwd: string;
   /** Hook sets run in order and failures are isolated per set. */
   hooks?: PipelineHooks | readonly PipelineHooks[];

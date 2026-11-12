@@ -199,6 +199,7 @@ function childContext(
   return childExecutionScope(
     context,
     {
+      checkpoint: context.checkpoint,
       correlationId: context.correlationId,
       cwd: context.cwd,
       log: context.log,

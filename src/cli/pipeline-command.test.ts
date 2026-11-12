@@ -2,11 +2,12 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { openCheckpoint } from "../node/checkpoint.js";
+import { openCheckpoint, type CheckpointStore } from "../node/checkpoint.js";
 import { definePipelineCommand, type CliContext, type CliParamsSchema } from "./cli.js";
 import { type ReporterOutput } from "../reporter/interactive-reporter.js";
 import { createSteps, definePipeline } from "../core/pipeline.js";
 import { defer } from "../core/child-pipeline.test-support.js";
+import { stubCheckpointStore } from "../utilities/checkpoint-store.test-support.js";
 import { renderPipelinePlan } from "../render/render.js";
 
 interface MiniOptions {
@@ -1030,6 +1031,126 @@ describe("definePipelineCommand", () => {
       expect(validationCalls).toBe(0);
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("forwards the managed checkpoint to steps", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-command-checkpoint-"));
+    const checkpointPath = path.join(directory, "run.checkpoint.json");
+    const seen: (CheckpointStore | undefined)[] = [];
+    const { step } = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        seen.push(context.checkpoint);
+        return "ok";
+      },
+    });
+    const command = definePipelineCommand(
+      definePipeline({ id: "checkpoint-pipeline", steps: [work], finalize: () => "ok" }),
+      { checkpoint: { path: checkpointPath }, reporter: false }
+    );
+
+    try {
+      await command.run([], { cwd: directory, log: testLog() });
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toBeDefined();
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("exposes recorded keys to steps when resuming", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-command-resume-"));
+    const checkpointPath = path.join(directory, "run.checkpoint.json");
+    const seeded = openCheckpoint(checkpointPath);
+    seeded.record("a");
+    seeded.flush();
+    let seenHasA: boolean | undefined;
+    const { step } = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        seenHasA = context.checkpoint?.has("a");
+        return "ok";
+      },
+    });
+    const command = definePipelineCommand(
+      definePipeline({ id: "checkpoint-resume", steps: [work], finalize: () => "ok" }),
+      { checkpoint: { path: checkpointPath }, reporter: false }
+    );
+
+    try {
+      await command.run(["--resume"], { cwd: directory, log: testLog() });
+      expect(seenHasA).toBe(true);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps a dry run's records in memory only", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-command-dry-run-"));
+    const checkpointPath = path.join(directory, "run.checkpoint.json");
+    const { step } = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        context.checkpoint?.record("b");
+        context.checkpoint?.flush();
+        return "ok";
+      },
+    });
+    const command = definePipelineCommand(
+      definePipeline({ id: "checkpoint-dry-run", steps: [work], finalize: () => "ok" }),
+      { checkpoint: { path: checkpointPath }, reporter: false }
+    );
+
+    try {
+      await command.run(["--dry-run"], { cwd: directory, log: testLog() });
+      expect(fs.existsSync(checkpointPath)).toBe(false);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves context.checkpoint undefined without checkpoint config", async () => {
+    const seen: (CheckpointStore | undefined)[] = [];
+    const { step } = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        seen.push(context.checkpoint);
+        return "ok";
+      },
+    });
+    const command = definePipelineCommand(
+      definePipeline({ id: "checkpoint-absent", steps: [work], finalize: () => "ok" }),
+      { reporter: false }
+    );
+
+    await command.run([]);
+    expect(seen).toEqual([undefined]);
+  });
+
+  it("prefers a caller-supplied checkpoint over the managed file", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-command-override-"));
+    const checkpointPath = path.join(directory, "run.checkpoint.json");
+    const stub = stubCheckpointStore();
+    const seen: (CheckpointStore | undefined)[] = [];
+    const { step } = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        seen.push(context.checkpoint);
+        return "ok";
+      },
+    });
+    const command = definePipelineCommand(
+      definePipeline({ id: "checkpoint-override", steps: [work], finalize: () => "ok" }),
+      { checkpoint: { path: checkpointPath }, reporter: false }
+    );
+
+    try {
+      await command.run([], { checkpoint: stub, cwd: directory, log: testLog() });
+      expect(seen).toEqual([stub]);
+      expect(fs.existsSync(checkpointPath)).toBe(false);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
     }
   });
 });

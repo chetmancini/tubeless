@@ -178,7 +178,10 @@ export interface CliContext {
   pipelineContext?: Omit<PipelineContext, "cwd" | "log" | "signal">;
   /** Optional caller-owned cancellation signal forwarded to command work. */
   signal?: AbortSignal;
-  /** Present whenever the command's `checkpoint` config is set; see `CliCheckpointConfig`. */
+  /**
+   * Present whenever the command's `checkpoint` config is set; see `CliCheckpointConfig`.
+   * Pipeline commands forward it to steps as `context.checkpoint`.
+   */
   checkpoint?: CheckpointStore;
 }
 

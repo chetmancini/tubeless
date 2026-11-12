@@ -1,5 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { createSteps, definePipeline, type Step } from "./pipeline.js";
+import { stubCheckpointStore } from "../utilities/checkpoint-store.test-support.js";
+import type { CheckpointStore } from "../utilities/checkpoint-store.js";
 
 describe("child-pipeline composition", () => {
   it("publishes resolved async child mappings to dependents and accepts resolved skip values", async () => {
@@ -84,5 +86,39 @@ describe("child-pipeline composition", () => {
     expect(failed.steps[0]).toMatchObject({
       error: { message: expect.stringContaining("map 1 failed") },
     });
+  });
+
+  it("child pipelines inherit the parent's checkpoint", async () => {
+    const stub = stubCheckpointStore();
+    const seen: (CheckpointStore | undefined)[] = [];
+    const { step: childStep } = createSteps<{ value: number }>();
+    const child = definePipeline({
+      id: "checkpoint-child",
+      steps: [
+        childStep("capture", {
+          run: (_inputs, context) => {
+            seen.push(context.checkpoint);
+            return context.options.value;
+          },
+        }),
+      ],
+      finalize: (outputs) => outputs.capture ?? 0,
+    });
+    const { fromPipeline, forEachPipeline } = createSteps();
+    const single = fromPipeline("single", { pipeline: child, mapOptions: () => ({ value: 1 }) });
+    const many = forEachPipeline("many", {
+      pipeline: child,
+      items: () => [2, 3],
+      key: (item) => String(item),
+      mapOptions: (item) => ({ value: item }),
+    });
+    const parent = definePipeline({
+      id: "checkpoint-parent",
+      steps: [single, many],
+      finalize: (outputs) => outputs.many,
+    });
+
+    expect(await parent.runOrThrow({}, undefined, { checkpoint: stub })).toEqual([2, 3]);
+    expect(seen).toEqual([stub, stub, stub]);
   });
 });

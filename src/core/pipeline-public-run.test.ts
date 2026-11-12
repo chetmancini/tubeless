@@ -1,7 +1,9 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { createSteps, definePipeline, requireOutputs } from "./pipeline.js";
 import type { PipelineRun } from "./pipeline.js";
+import type { CheckpointStore } from "../utilities/checkpoint-store.js";
 import { makePipeline, standardSchema, thrownDefinitionErrors } from "./pipeline.test-support.js";
+import { stubCheckpointStore } from "../utilities/checkpoint-store.test-support.js";
 
 describe("definePipeline run and selection", () => {
   it("returns one versioned run with public identities and timestamps", async () => {
@@ -53,6 +55,30 @@ describe("definePipeline run and selection", () => {
       status: "completed",
     });
     expect(log.log).toHaveBeenCalledWith("loading", "rows.json");
+  });
+
+  it("passes a caller-supplied checkpoint to steps", async () => {
+    const log = { error: vi.fn(), log: vi.fn(), warn: vi.fn() };
+    const stub = stubCheckpointStore();
+    const seen: (CheckpointStore | undefined)[] = [];
+    const { step } = createSteps();
+    const work = step("work", {
+      run: (_inputs, context) => {
+        expectTypeOf(context.checkpoint).toEqualTypeOf<CheckpointStore | undefined>();
+        seen.push(context.checkpoint);
+        return "ok";
+      },
+    });
+    const pipeline = definePipeline({
+      id: "checkpoint-context",
+      steps: [work],
+      finalize: () => "ok",
+    });
+
+    await pipeline.run({}, undefined, { checkpoint: stub, log });
+    await pipeline.run({}, undefined, { log });
+
+    expect(seen).toEqual([stub, undefined]);
   });
 
   it("ignores forged Studio preallocation symbols", async () => {

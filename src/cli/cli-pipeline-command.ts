@@ -416,6 +416,8 @@ export function definePipelineCommand<
         // SAFETY: TResult is extracted from this exact pipeline's runOrThrow return type.
         result = (await pipeline.runOrThrow(mapped, controls, {
           ...cliContext.pipelineContext,
+          // The managed store, or its dry-run view, wins over an executor-supplied one.
+          ...(cliContext.checkpoint ? { checkpoint: cliContext.checkpoint } : {}),
           cwd: runtimeContext.cwd,
           log: runtimeContext.log,
           hooks: hooks.length > 0 ? hooks : undefined,

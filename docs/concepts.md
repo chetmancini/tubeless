@@ -651,6 +651,7 @@ The step context supplies inputs and services controlled by the caller:
 - `context.sleep` for cancellation-aware, testable delays.
 - `context.reportProgress` to update progress and `context.reportAttempt` to report retries.
 - `context.cwd` as the base directory for relative paths.
+- `context.checkpoint` for the command's managed checkpoint, when one is configured.
 
 Callers may inject the logger, clock, sleep function, signal, hooks, and tracing.
 This makes a pipeline embeddable and deterministic under test.

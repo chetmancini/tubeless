@@ -309,7 +309,11 @@ settings include `name`, `description`, `positionals`, `summarize`, `hooks`,
 chooses interactive or plain output automatically.
 
 `--resume` is capability-gated. Configuring `checkpoint` exposes the flag and
-supplies the managed checkpoint store. Set `resume: true` only when application
+supplies the managed checkpoint store. Steps read that store as
+`context.checkpoint`, and child pipelines inherit it. A dry run receives an
+in-memory view, so recording never writes. The field is `undefined` when the
+pipeline runs without such a command; a programmatic caller may pass
+`{ checkpoint }` in the run context instead. Set `resume: true` only when application
 code owns the resume state and interprets `values.resume` itself. Commands with
 neither setting reject `--resume`, and their descriptors omit it so Studio does
 not render a resume control.
