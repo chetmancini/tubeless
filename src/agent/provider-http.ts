@@ -19,6 +19,23 @@ export function providerBaseUrl(provider: string, value: string): string {
   return url.href.replace(/\/+$/, "");
 }
 
+/** Read one body chunk. A dropped connection is retryable; a caller abort keeps its own cause. */
+async function readProviderChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+  provider: string
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  try {
+    return await reader.read();
+  } catch (error) {
+    if (signal.aborted) throw error;
+    throw new ProviderRequestError(`${provider} response interrupted`, {
+      retryable: true,
+      cause: error,
+    });
+  }
+}
+
 /** Read a bounded JSON body. The caller labels abort and size errors with `provider`. */
 export async function readProviderJson(
   response: Response,
@@ -33,7 +50,7 @@ export async function readProviderJson(
   try {
     while (true) {
       throwIfAborted(signal, `${provider} response`);
-      const chunk = await reader.read();
+      const chunk = await readProviderChunk(reader, signal, provider);
       if (chunk.done) break;
       bytes += chunk.value.byteLength;
       if (bytes > maxBytes) throw new Error(`${provider} response exceeds ${maxBytes} bytes`);

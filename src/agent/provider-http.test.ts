@@ -191,6 +191,18 @@ const stub = (status: number, headers: Record<string, string> = {}) =>
     vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status, headers }))
   );
 
+/** Headers arrive, then the connection drops before the body completes. */
+const brokenResponse = () =>
+  new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"answer":'));
+        controller.error(new Error("terminated"));
+      },
+    }),
+    { status: 200, headers: { "content-type": "application/json" } }
+  );
+
 const transient = (status?: number, retryAfterMs?: number) =>
   new ProviderRequestError(
     status === undefined
@@ -260,6 +272,26 @@ describe("provider HTTP failure classification", () => {
     expect(error.status).toBeUndefined();
     expect(error.retryable).toBe(true);
     expect(error.cause).toBe(dropped);
+  });
+
+  it("classifies a connection dropped mid-body as a retryable network failure", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(brokenResponse()));
+    const error = await failure(AbortSignal.timeout(2000));
+    expect(error.message).toBe("Fixture response interrupted");
+    expect(error.status).toBeUndefined();
+    expect(error.retryable).toBe(true);
+  });
+
+  it("retries a response dropped mid-body on the next attempt", async () => {
+    const payload = { answer: "ok" };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(brokenResponse())
+        .mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
+    );
+    await expect(retry(() => request(AbortSignal.timeout(2000)))).resolves.toEqual(payload);
   });
 
   it("returns the original rejection when the caller aborts the exchange", async () => {
