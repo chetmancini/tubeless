@@ -30,6 +30,11 @@ Command-by-command usage is in [the CLI](./cli.md).
 Library imports (`tubeless` and every subpath) are ESM-only and require
 Node.js 22.18 or later. They are dependency-free compiled JavaScript.
 
+Type declarations are verified with TypeScript 5.4 or later, under `NodeNext`
+and `Bundler` module resolution. Projects that type-check declarations
+(`skipLibCheck: false`) without `@types/node` need `ESNext.Disposable` in `lib`
+for `tubeless/agent/mcp`.
+
 The executable uses `#!/usr/bin/env bun`, so Bun must be installed and available
 on `PATH` even when npm or `npx` installs the package.
 
