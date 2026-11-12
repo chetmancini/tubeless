@@ -250,6 +250,11 @@ Run `make check` after changes; it builds before checking these boundaries.
   they cannot query, clear or close the store.
 - `workbench/workbench-launch-session.ts` owns one launch's acknowledgement after
   its start event is persisted, and tracks execution settlement and late failures.
+- `workbench/workbench-launcher.ts` is the package `bin` target. It owns runtime
+  selection and the missing or outdated Bun messages: started by Bun it loads the
+  direct entry, started by Node.js it replaces the process with Bun.
+  `workbench/workbench-runtime.ts` owns the minimum Bun version and those messages;
+  `workbench/workbench-bin.ts` stays the direct entry for explicit callers.
 
 The runtime graph check keeps launch execution independent of command entrypoints,
 the HTTP server and concrete storage adapters.

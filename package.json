@@ -38,7 +38,7 @@
   "sideEffects": false,
   "type": "module",
   "bin": {
-    "tubeless": "./dist/workbench/workbench-bin.js"
+    "tubeless": "./dist/workbench/workbench-launcher.js"
   },
   "files": [
     "dist",
