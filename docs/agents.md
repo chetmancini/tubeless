@@ -1207,6 +1207,9 @@ and deterministic mapping preserve child identities; ordinary pipelines are
 not themselves checkpointed step by step. Accepted call argument transforms,
 committed output transforms, and committed finish transforms are reused.
 Root input validation still runs on every invocation.
+Model usage recorded after a resume is attached to the resumed turn run, whose
+recorded turn metadata keeps the execution's logical turn number rather than the
+new invocation's iteration count.
 
 | Call state at restart       | Behavior                                                           |
 | --------------------------- | ------------------------------------------------------------------ |

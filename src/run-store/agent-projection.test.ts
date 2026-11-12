@@ -218,7 +218,7 @@ it("ignores model telemetry that is not attributable to a turn", () => {
   const cases: Array<[string, TurnOverrides, ModelAttributes]> = [
     ["another step", { stepId: "calls" }, {}],
     ["a different parent run", { parentRunId: "elsewhere" }, {}],
-    ["a turn that disagrees with the iteration", {}, { "agent.turn": 2 }],
+    ["a turn that is not a positive index", {}, { "agent.turn": 0 }],
     ["a blank provider", {}, { "agent.model.provider": "   " }],
     ["a zero request index", {}, { "agent.model.request": 0 }],
     ["no iteration", { iteration: undefined }, {}],
@@ -230,7 +230,27 @@ it("ignores model telemetry that is not attributable to a turn", () => {
   }
 });
 
-it("bounds distinct models per turn and rejects invalid counters", () => {
+it("attributes a request whose turn is ahead of the iteration index after a resume", () => {
+  const projection = new AgentProjection();
+  // A resumed invocation restarts its iteration index at 1 while the reporter keeps
+  // counting logical turns; the request's own turn still names the turn run's metadata.
+  projection.append(
+    modelRequest(
+      0,
+      { "agent.turn": 5 },
+      {
+        iteration: { runId: "agent", stepId: "agent", attemptId: "agent-attempt", index: 1 },
+      }
+    )
+  );
+  expect(projection.snapshot().agentTurn).toMatchObject({
+    agentRunId: "agent",
+    index: 5,
+    usage: [{ provider: "openai", model: "fixture-model", requests: 1 }],
+  });
+});
+
+it("bounds distinct models per turn and rejects invalid or overflowing counters", () => {
   const bounded = new AgentProjection();
   for (let index = 0; index < 9; index++)
     bounded.append(
@@ -278,6 +298,12 @@ it("bounds distinct models per turn and rejects invalid counters", () => {
     inputTokens: Number.MAX_SAFE_INTEGER,
     outputTokens: 10,
   });
+
+  const duration = new AgentProjection();
+  duration.append(modelRequest(0, { "agent.model.durationMs": Number.MAX_VALUE }));
+  duration.append(modelRequest(1, { "agent.model.durationMs": Number.MAX_VALUE }));
+  // An overflowing sum would fail the stored run wire schema, which requires finite numbers.
+  expect(duration.snapshot().agentTurn!.usage![0]!.durationMs).toBe(Number.MAX_VALUE);
 });
 
 it("isolates usage snapshots from caller mutation", () => {

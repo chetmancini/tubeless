@@ -120,17 +120,21 @@ export class AgentProjection {
     const request = count(attributes["agent.model.request"]);
     const iteration = event.iteration;
     // Model requests carry `agent.turn` but no `agent.runId`; the turn run owns their usage.
+    // A resumed invocation restarts `iteration.index` at 1 while the reporter keeps counting
+    // logical turns, so the two are not comparable: the request's own turn is authoritative.
+    const turn = count(attributes["agent.turn"]);
     if (
       provider &&
       model &&
       iteration &&
       event.stepId === "decide" &&
       event.parentRunId === iteration.runId &&
-      count(attributes["agent.turn"]) === iteration.index &&
+      turn !== undefined &&
+      turn >= 1 &&
       request !== undefined &&
       request >= 1
     ) {
-      this.#recordModelUsage(iteration, provider, model, attributes);
+      this.#recordModelUsage(iteration.runId, turn, provider, model, attributes);
       return;
     }
     const agentRunId = text(attributes["agent.runId"]);
@@ -180,12 +184,14 @@ export class AgentProjection {
 
   /** Sum one recognized model request; absent counters stay absent, never zero. */
   #recordModelUsage(
-    iteration: NonNullable<StoredPipelineEvent["iteration"]>,
+    agentRunId: string,
+    turn: number,
     provider: string,
     model: string,
     attributes: PipelineTraceAttributes
   ): void {
-    this.#turn ??= { agentRunId: iteration.runId, index: iteration.index };
+    // The request reports its own logical turn, which survives a durable resume.
+    this.#turn ??= { agentRunId, index: turn };
     const key = JSON.stringify([provider, model]);
     let entry = this.#usage.get(key);
     if (!entry) {
@@ -195,7 +201,13 @@ export class AgentProjection {
     }
     entry.requests += 1;
     const duration = attributes["agent.model.durationMs"];
-    if (typeof duration === "number" && Number.isFinite(duration) && duration >= 0)
+    // A sum that overflows to Infinity would fail the stored run wire schema.
+    if (
+      typeof duration === "number" &&
+      Number.isFinite(duration) &&
+      duration >= 0 &&
+      Number.isFinite(entry.durationMs + duration)
+    )
       entry.durationMs += duration;
     for (const name of AGENT_MODEL_COUNTERS)
       addModelCounter(entry, name, count(attributes[`agent.model.${name}`]));

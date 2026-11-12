@@ -91,7 +91,9 @@ function mergeUsage(
       }
       target.requests += entry.requests;
       target.requestsWithoutUsage += entry.requestsWithoutUsage;
-      target.durationMs += entry.durationMs;
+      // A sum that overflows to Infinity would fail the stored run wire schema.
+      if (Number.isFinite(target.durationMs + entry.durationMs))
+        target.durationMs += entry.durationMs;
       for (const name of AGENT_MODEL_COUNTERS) addModelCounter(target, name, entry[name]);
     }
   }

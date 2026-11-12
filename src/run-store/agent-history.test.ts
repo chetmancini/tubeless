@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { defineAgentLoop, defineTool, pipelineTool, ToolError } from "../agent/agent.js";
+import {
+  createMemoryAgentCheckpointStore,
+  defineAgentLoop,
+  defineTool,
+  pipelineTool,
+  plainAgentCheckpointCodec,
+  ToolError,
+} from "../agent/agent.js";
 import { emptyInput, numberSchema } from "../agent/agent.test-support.js";
+import { checkedCheckpoint } from "../agent/checkpoint-format.js";
+import type { AgentCheckpointStore } from "../agent/checkpoint-types.js";
 import { modelRequestReporter } from "../agent/provider-usage.js";
 import { createSteps, definePipeline, type Pipeline } from "../core/pipeline.js";
 import { createPipelineTestRuntime } from "../testing/testing.js";
@@ -132,6 +141,61 @@ function usageFixture() {
         ? { kind: "continue", calls: [{ id: "delegate", tool: "delegate" as const, input: {} }] }
         : { kind: "finish", result: state };
     },
+  });
+}
+
+/** Fail the checkpoint write that advances a durable agent past its first turn. */
+function interruptTurnAdvance(store: AgentCheckpointStore): AgentCheckpointStore {
+  let failed = false;
+  return {
+    acquire: async (key) => {
+      const lease = await store.acquire(key);
+      return {
+        ...lease,
+        write: async (value) => {
+          await lease.write(value);
+          if (
+            failed ||
+            !Object.values(checkedCheckpoint(plainAgentCheckpointCodec.decode(value)).agents).some(
+              (agent) => agent.phase === "decide" && agent.execution.turn === 2
+            )
+          )
+            return;
+          failed = true;
+          throw new Error("simulated storage interruption");
+        },
+      };
+    },
+  };
+}
+
+/** A durable agent that reports usage each turn and resumes at its second logical turn. */
+function durableUsageAgent(store: AgentCheckpointStore) {
+  return defineAgentLoop({
+    id: "usage-durable",
+    implementationVersion: "1",
+    inputSchema: emptyInput,
+    resultSchema: numberSchema,
+    initialState: () => 0,
+    durability: { store, key: "job" },
+    tools: {
+      work: defineTool({
+        description: "Work",
+        inputSchema: emptyInput,
+        outputSchema: numberSchema,
+        run: () => 1,
+      }),
+    },
+    decide: async (_state, context) => {
+      await reportUsage("anthropic", context, "durable-model", {
+        input_tokens: 10 * context.turn,
+        output_tokens: context.turn,
+      });
+      return context.turn === 1
+        ? { kind: "continue", calls: [{ id: "work", tool: "work" as const, input: {} }] }
+        : { kind: "finish", result: 7 };
+    },
+    reduce: () => 0,
   });
 }
 
@@ -555,6 +619,38 @@ describe("agent history projection", () => {
     expect(history.usage).toEqual(root.usage);
   });
 
+  it("keeps merged durations finite when turn sums would overflow", async () => {
+    const { events } = await record(usageFixture());
+    // Both parent turns report the largest finite double; their sum is not a number.
+    const runs = projectPipelineRunStore(events).runs.map((run) =>
+      run.agentTurn?.usage
+        ? {
+            ...run,
+            agentTurn: {
+              ...run.agentTurn,
+              usage: run.agentTurn.usage.map((entry) => ({
+                ...entry,
+                durationMs: Number.MAX_VALUE,
+              })),
+            },
+          }
+        : run
+    );
+    const root = projectAgentHistory(runs).agents.find(
+      (agent) => agent.pipelineId === "usage-parent"
+    )!;
+    expect(root.usage).toMatchObject([
+      { model: "parent-model", requests: 2, durationMs: Number.MAX_VALUE },
+    ]);
+    // The stored run wire schema keeps finite durations; an overflow would fail the decode.
+    expect(() =>
+      storedPipelineRunSchema.decode(
+        runs.find((run) => run.agentTurn?.usage)!,
+        "run"
+      )
+    ).not.toThrow();
+  });
+
   it("omits usage from recordings without model requests", async () => {
     const { events } = await record(fixture());
     const recorded = JSON.stringify(projectAgentHistory(projectPipelineRunStore(events).runs));
@@ -578,5 +674,29 @@ describe("agent history projection", () => {
     expect(turn.agentTurn!.usage).toHaveLength(1);
     const decoded = storedPipelineRunSchema.decode(turn, "run");
     expect(decoded.agentTurn!.usage).toEqual(turn.agentTurn!.usage);
+  });
+
+  it("attributes usage from a durable agent that resumes past its first turn", async () => {
+    // A resumed invocation restarts its iteration index at 1 while the reporter keeps
+    // counting logical turns, so attribution cannot compare the two.
+    const agent = durableUsageAgent(interruptTurnAdvance(createMemoryAgentCheckpointStore()));
+    expect((await record(agent)).run.status).toBe("failed");
+    const { events } = await record(agent);
+    const { runs } = projectPipelineRunStore(events);
+    const root = projectAgentHistory(runs).agents.find(
+      (entry) => entry.pipelineId === "usage-durable"
+    )!;
+    const resumed = root.turns[0]!;
+    expect(resumed.usage).toMatchObject([
+      {
+        provider: "anthropic",
+        model: "durable-model",
+        requests: 1,
+        inputTokens: 20,
+        outputTokens: 2,
+      },
+    ]);
+    // Retention keeps the logical turn the reporter counted, not the invocation's index.
+    expect(runs.find((run) => run.runId === resumed.runId)!.agentTurn!.index).toBe(2);
   });
 });
