@@ -48,8 +48,14 @@ Before changing usage or public behavior, read
 `docs/api-reference.md` or `docs/api-report.json` by hand; after an intentional
 public-surface change, run `bun run api:generate`. Keep examples on public
 package imports. Pull requests that change the report get a job summary of
-added and removed entrypoints and symbols; `api:check` only proves the report
-was regenerated.
+added and removed entrypoints and symbols. Surface hashes ignore comments and
+whitespace, so a changed hash with unchanged names means a public declaration
+changed; `api:check` itself only proves the report was regenerated. A pull
+request that removes a public export is labelled `breaking` automatically.
+Apply the label by hand when you change the signature or behavior of an
+existing export incompatibly. Either way, add a one-line migration note to the
+pull request description; the label lists the pull request under "Breaking
+Changes" in the release notes.
 
 ### Website
 
