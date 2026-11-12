@@ -64,7 +64,10 @@ if (bunVersion !== undefined) {
   if (typeof process.execve === "function") {
     const bun = findOnPath("bun");
     // argv[0] stays the found path: version-manager shims dispatch on its basename.
-    if (bun) process.execve(bun, [bun, ...args]);
+    // The environment is passed explicitly: Node.js 22.18 ignores the documented
+    // `process.env` default and would hand Bun an empty one, losing TUBELESS_TOKEN,
+    // HOME and PATH.
+    if (bun) process.execve(bun, [bun, ...args], process.env);
     else missingBun();
   } else {
     // Windows only, where Node.js has no execve and this file is untested. Mirror

@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -45,6 +45,23 @@ describe("tubeless CLI launcher", () => {
     expect(status).toBe(1);
     expect(stdout).toBe("");
     expect(stderr).toBe(missingBunMessage());
+  });
+
+  it("passes the environment through the Node.js handoff", () => {
+    // Node 22.18 ignores the documented `env` default of process.execve and
+    // passes an empty environment, which would strand TUBELESS_TOKEN, HOME and PATH.
+    const directory = emptyPath();
+    const fakeBun = join(directory, "bun");
+    writeFileSync(fakeBun, '#!/bin/sh\nprintf "%s" "$TUBELESS_LAUNCHER_ENV_MARKER"\n', {
+      mode: 0o755,
+    });
+    const { status, stdout } = spawnSync(process.execPath, [launcher, "--help"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: { ...process.env, PATH: directory, TUBELESS_LAUNCHER_ENV_MARKER: "visible" },
+    });
+    expect(status).toBe(0);
+    expect(stdout).toBe("visible");
   });
 
   it("reports the same failure as the direct entry for a missing file", () => {
