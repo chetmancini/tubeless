@@ -1,8 +1,10 @@
 import type { PipelineTraceError } from "../tracing/tracing-contracts.js";
-import type {
-  StoredAgentCallMetadata,
-  StoredAgentDefinition,
-  StoredAgentTurnMetadata,
+import {
+  AGENT_MODEL_COUNTERS,
+  type StoredAgentCallMetadata,
+  type StoredAgentDefinition,
+  type StoredAgentModelUsage,
+  type StoredAgentTurnMetadata,
 } from "./agent-projection.js";
 import type { StoredPipelineRun, StoredPipelineRunStatus } from "./run-store.js";
 
@@ -30,6 +32,7 @@ export interface AgentTurnHistory {
   callsAdmitted?: number;
   error?: PipelineTraceError;
   calls: AgentCallHistory[];
+  usage?: StoredAgentModelUsage[];
 }
 
 export interface AgentRunHistory {
@@ -40,12 +43,18 @@ export interface AgentRunHistory {
   definition?: StoredAgentDefinition;
   error?: PipelineTraceError;
   parentCall?: { agentRunId: string; turnRunId: string; callId: string; runId: string };
+  /** This agent's own turns only; never its child agents. */
+  usage?: StoredAgentModelUsage[];
+  /** Own turns plus every descendant agent, summed per provider and model. */
+  subtreeUsage?: StoredAgentModelUsage[];
   turns: AgentTurnHistory[];
 }
 
 /** Flat agent nodes with explicit call links avoid duplicating nested execution trees. */
 export interface AgentHistory {
   agents: AgentRunHistory[];
+  /** Every agent's own usage, merged once; subtree sums would double count here. */
+  usage?: StoredAgentModelUsage[];
 }
 
 function limited(error: PipelineTraceError | undefined): boolean {
@@ -55,6 +64,42 @@ function limited(error: PipelineTraceError | undefined): boolean {
     cause = cause.cause;
   }
   return false;
+}
+
+/**
+ * Sum counters per provider and model in first-seen order. Absent counters were never
+ * reported, so they stay absent; prices differ per model, so sums never cross models.
+ */
+function mergeUsage(
+  lists: readonly (readonly StoredAgentModelUsage[] | undefined)[]
+): StoredAgentModelUsage[] | undefined {
+  const merged = new Map<string, StoredAgentModelUsage>();
+  for (const list of lists) {
+    for (const entry of list ?? []) {
+      const key = JSON.stringify([entry.provider, entry.model]);
+      let target = merged.get(key);
+      if (!target) {
+        target = {
+          provider: entry.provider,
+          model: entry.model,
+          requests: 0,
+          requestsWithoutUsage: 0,
+          durationMs: 0,
+        };
+        merged.set(key, target);
+      }
+      target.requests += entry.requests;
+      target.requestsWithoutUsage += entry.requestsWithoutUsage;
+      target.durationMs += entry.durationMs;
+      for (const name of AGENT_MODEL_COUNTERS) {
+        const value = entry[name];
+        if (value === undefined) continue;
+        const total = (target[name] ?? 0) + value;
+        if (Number.isSafeInteger(total)) target[name] = total;
+      }
+    }
+  }
+  return merged.size ? [...merged.values()] : undefined;
 }
 
 /** Join recorded run identities; missing observations stay unknown, never inferred as success. */
@@ -140,7 +185,7 @@ export function projectAgentHistory(runs: readonly StoredPipelineRun[]): AgentHi
             });
           }
         }
-        return {
+        const historyTurn: AgentTurnHistory = {
           runId: turn.runId,
           index: turn.iteration!.index,
           attemptId: turn.iteration!.attemptId,
@@ -153,6 +198,8 @@ export function projectAgentHistory(runs: readonly StoredPipelineRun[]): AgentHi
           error: turn.error,
           calls,
         };
+        if (metadata?.usage) historyTurn.usage = metadata.usage;
+        return historyTurn;
       });
     let termination: AgentRunHistory["termination"] = run.status;
     if (
@@ -168,7 +215,7 @@ export function projectAgentHistory(runs: readonly StoredPipelineRun[]): AgentHi
       )
         termination = "skipped";
     }
-    return {
+    const history: AgentRunHistory = {
       runId: id,
       pipelineId: run.pipelineId,
       status: run.status,
@@ -177,6 +224,9 @@ export function projectAgentHistory(runs: readonly StoredPipelineRun[]): AgentHi
       error: run.error,
       turns,
     };
+    const ownUsage = mergeUsage(turns.map((turn) => turn.usage));
+    if (ownUsage) history.usage = ownUsage;
+    return history;
   });
   for (const agent of agents) {
     let ancestor = byId.get(agent.runId);
@@ -192,5 +242,27 @@ export function projectAgentHistory(runs: readonly StoredPipelineRun[]): AgentHi
       ancestor = ancestor.parentRunId ? byId.get(ancestor.parentRunId) : undefined;
     }
   }
-  return { agents };
+  // Links from damaged recordings can be cyclic, so walk each subtree once per agent.
+  const byAgentRunId = new Map(agents.map((agent) => [agent.runId, agent]));
+  for (const agent of agents) {
+    const lists: (readonly StoredAgentModelUsage[] | undefined)[] = [];
+    const walked = new Set<string>();
+    const pending = [agent];
+    while (pending.length) {
+      const node = pending.pop()!;
+      if (walked.has(node.runId)) continue;
+      walked.add(node.runId);
+      lists.push(node.usage);
+      for (const turn of node.turns)
+        for (const call of turn.calls)
+          for (const childId of call.childAgentRunIds) {
+            const child = byAgentRunId.get(childId);
+            if (child) pending.push(child);
+          }
+    }
+    const subtree = mergeUsage(lists);
+    if (subtree) agent.subtreeUsage = subtree;
+  }
+  const totalUsage = mergeUsage(agents.map((agent) => agent.usage));
+  return totalUsage ? { agents, usage: totalUsage } : { agents };
 }
