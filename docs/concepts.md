@@ -652,6 +652,8 @@ The step context supplies inputs and services controlled by the caller:
 - `context.reportProgress` to update progress and `context.reportAttempt` to report retries.
 - `context.cwd` as the base directory for relative paths.
 - `context.checkpoint` for the command's managed checkpoint, when one is configured.
+  Child pipelines inherit it; a child previewed with `controls: { dryRun: true }`
+  reads and records against a copy, so its preview cannot mark work done.
 
 Callers may inject the logger, clock, sleep function, signal, hooks, and tracing.
 This makes a pipeline embeddable and deterministic under test.

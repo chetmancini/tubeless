@@ -220,7 +220,8 @@ execution begins.
 In a dry run, each child step still follows its own policy. Mark child writes
 with `dryRun: "skip"` or provide a side-effect-free preview handler. You can
 also set a dry-run policy on the parent wrapper step to skip or preview the
-whole child workflow.
+whole child workflow. A previewed child reads and records against a copy of the
+managed checkpoint it inherits, so its preview cannot mark parent work done.
 
 Composition adds no checkpoints or crash recovery. Fan-out runs children
 concurrently within one parent step; it does not make the parent graph execute

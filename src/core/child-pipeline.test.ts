@@ -121,4 +121,54 @@ describe("child-pipeline composition", () => {
     expect(await parent.runOrThrow({}, undefined, { checkpoint: stub })).toEqual([2, 3]);
     expect(seen).toEqual([stub, stub, stub]);
   });
+
+  it("previews a dry-run child against a copy of the parent's checkpoint", async () => {
+    const recorded: string[] = [];
+    const stub = stubCheckpointStore({
+      has: (key) => key === "a",
+      entries: () => new Map([["a", undefined]]),
+      record: (key) => {
+        recorded.push(key);
+      },
+    });
+    const seen: { checkpoint: CheckpointStore | undefined; dryRun: boolean }[] = [];
+    const { step: childStep } = createSteps<{ value: number }>();
+    const child = definePipeline({
+      id: "checkpoint-preview-child",
+      steps: [
+        childStep("preview", {
+          run: (_inputs, context) => {
+            seen.push({ checkpoint: context.checkpoint, dryRun: context.dryRun });
+            context.checkpoint?.record("previewed");
+            context.checkpoint?.flush();
+            return context.checkpoint?.has("a") === true;
+          },
+        }),
+      ],
+      finalize: (outputs) => outputs.preview ?? false,
+    });
+    const { fromPipeline, forEachPipeline } = createSteps();
+    const single = fromPipeline("single", {
+      pipeline: child,
+      controls: { dryRun: true },
+      mapOptions: () => ({ value: 1 }),
+    });
+    const many = forEachPipeline("many", {
+      pipeline: child,
+      controls: { dryRun: true },
+      items: () => [2, 3],
+      key: (item) => String(item),
+      mapOptions: (item) => ({ value: item }),
+    });
+    const parent = definePipeline({
+      id: "checkpoint-preview-parent",
+      steps: [single, many],
+      finalize: (outputs) => outputs.many,
+    });
+
+    expect(await parent.runOrThrow({}, undefined, { checkpoint: stub })).toEqual([true, true]);
+    expect(seen.map(({ dryRun }) => dryRun)).toEqual([true, true, true]);
+    expect(seen.map(({ checkpoint }) => checkpoint)).not.toContain(stub);
+    expect(recorded).toEqual([]);
+  });
 });

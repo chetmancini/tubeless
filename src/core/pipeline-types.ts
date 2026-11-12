@@ -43,7 +43,9 @@ export interface PipelineContext {
   /**
    * Optional caller-owned set of completed item keys for resumable work. Pipeline
    * commands with `checkpoint` configured supply their managed store here, replaced by
-   * an in-memory view during dry runs. Child pipelines inherit it. Absent otherwise.
+   * an in-memory view during dry runs. Child pipelines inherit it, and a child
+   * previewed with `controls: { dryRun: true }` records into its own copy. Absent
+   * otherwise.
    */
   checkpoint?: CheckpointStore;
   cwd: string;
