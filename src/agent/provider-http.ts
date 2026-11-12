@@ -1,4 +1,4 @@
-import { throwIfAborted } from "../utilities/abort.js";
+import { abortableSleep, throwIfAborted } from "../utilities/abort.js";
 
 export const MAX_REQUEST_BYTES = 1_048_576;
 // Leave room for the next result batch without rewriting small, reusable histories.
@@ -19,6 +19,23 @@ export function providerBaseUrl(provider: string, value: string): string {
   return url.href.replace(/\/+$/, "");
 }
 
+/** Read one body chunk. A dropped connection is retryable; a caller abort keeps its own cause. */
+async function readProviderChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+  provider: string
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  try {
+    return await reader.read();
+  } catch (error) {
+    if (signal.aborted) throw error;
+    throw new ProviderRequestError(`${provider} response interrupted`, {
+      retryable: true,
+      cause: error,
+    });
+  }
+}
+
 /** Read a bounded JSON body. The caller labels abort and size errors with `provider`. */
 export async function readProviderJson(
   response: Response,
@@ -33,7 +50,7 @@ export async function readProviderJson(
   try {
     while (true) {
       throwIfAborted(signal, `${provider} response`);
-      const chunk = await reader.read();
+      const chunk = await readProviderChunk(reader, signal, provider);
       if (chunk.done) break;
       bytes += chunk.value.byteLength;
       if (bytes > maxBytes) throw new Error(`${provider} response exceeds ${maxBytes} bytes`);
@@ -49,6 +66,38 @@ export async function readProviderJson(
   } catch {
     throw new Error(`${provider} returned invalid JSON`);
   }
+}
+
+/** A failed provider HTTP exchange; `retryable` marks rate limits, timeouts, server errors and network failures. */
+export class ProviderRequestError extends Error {
+  readonly status: number | undefined;
+  readonly retryable: boolean;
+  readonly retryAfterMs: number | undefined;
+  constructor(
+    message: string,
+    details: { status?: number; retryable: boolean; retryAfterMs?: number; cause?: unknown }
+  ) {
+    super(message, details.cause === undefined ? undefined : { cause: details.cause });
+    this.name = "ProviderRequestError";
+    this.status = details.status;
+    this.retryable = details.retryable;
+    this.retryAfterMs = details.retryAfterMs;
+  }
+}
+
+/** Read `Retry-After` from a failed response. Never throws; an unusable value stays unknown. */
+function retryAfterMs(headers: Headers, now = Date.now()): number | undefined {
+  const milliseconds = headers.get("retry-after-ms");
+  if (milliseconds !== null) {
+    const parsed = Number(milliseconds.trim());
+    if (Number.isFinite(parsed) && parsed >= 0) return Math.ceil(parsed);
+  }
+  const header = headers.get("retry-after");
+  if (header === null) return undefined;
+  const value = header.trim();
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - now) : undefined;
 }
 
 /**
@@ -69,17 +118,31 @@ export async function providerRequest(
   if (Buffer.byteLength(body) > MAX_REQUEST_BYTES)
     throw new Error(`${provider} request exceeds 1 MiB`);
   throwIfAborted(signal, `${provider} request`);
-  const response = await fetch(url, {
-    method: "POST",
-    redirect: "manual",
-    headers: { ...headers, "Content-Type": "application/json" },
-    signal,
-    body,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      redirect: "manual",
+      headers: { ...headers, "Content-Type": "application/json" },
+      signal,
+      body,
+    });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    throw new ProviderRequestError(`${provider} ${endpoint} failed (network error)`, {
+      retryable: true,
+      cause: error,
+    });
+  }
   if (!response.ok) {
     const extra = onHttpError ? await onHttpError(response) : "";
     if (!onHttpError) await response.body?.cancel().catch(() => {});
-    throw new Error(`${provider} ${endpoint} failed (HTTP ${response.status})${extra}`);
+    const status = response.status;
+    throw new ProviderRequestError(`${provider} ${endpoint} failed (HTTP ${status})${extra}`, {
+      status,
+      retryable: status === 408 || status === 429 || (status >= 500 && status <= 599),
+      retryAfterMs: retryAfterMs(response.headers),
+    });
   }
   return readProviderJson(response, signal, MAX_RESPONSE_BYTES, provider);
 }
@@ -87,20 +150,67 @@ export async function providerRequest(
 /**
  * Run provider work under the caller's signal plus a deadline. Caller aborts stay
  * cancellations; a deadline alone becomes an ordinary failure, as in MCP sessions.
+ * `remainingMs` lets the work refuse a backoff wait that outlives the deadline.
  */
 export async function withProviderDeadline<T>(
   label: string,
   timeoutMs: number,
   caller: AbortSignal | undefined,
-  work: (signal: AbortSignal) => Promise<T>
+  work: (signal: AbortSignal, remainingMs: () => number) => Promise<T>
 ): Promise<T> {
   const deadline = AbortSignal.timeout(timeoutMs);
   const signal = caller ? AbortSignal.any([caller, deadline]) : deadline;
+  const started = performance.now();
   try {
-    return await work(signal);
+    return await work(signal, () => timeoutMs - (performance.now() - started));
   } catch (error) {
     if (!caller?.aborted && deadline.aborted)
       throw new Error(`${label} timed out after ${timeoutMs} ms`);
     throw error;
+  }
+}
+
+export const DEFAULT_MAX_RETRIES = 2;
+export const MAX_RETRIES_LIMIT = 10;
+const BASE_RETRY_DELAY_MS = 500;
+const MAX_BACKOFF_MS = 8_000;
+const MAX_RETRY_WAIT_MS = 60_000;
+
+/** Retry retryable ProviderRequestErrors with backoff, inside the caller's signal and deadline. */
+export async function withProviderRetry<T>(
+  options: {
+    maxRetries: number;
+    signal: AbortSignal;
+    remainingMs: () => number;
+    /** For example "OpenAI decision"; used in the abort label and the log line. */
+    label: string;
+    log?: (message: string) => void;
+    random?: () => number;
+    sleep?: (durationMs: number, signal: AbortSignal) => Promise<void>;
+  },
+  attempt: () => Promise<T>
+): Promise<T> {
+  for (let retry = 0; ; retry++) {
+    try {
+      return await attempt();
+    } catch (error) {
+      if (
+        !(error instanceof ProviderRequestError) ||
+        !error.retryable ||
+        retry >= options.maxRetries ||
+        options.signal.aborted
+      )
+        throw error;
+      const base = error.retryAfterMs ?? Math.min(BASE_RETRY_DELAY_MS * 2 ** retry, MAX_BACKOFF_MS);
+      const delayMs = Math.ceil(base + (options.random ?? Math.random)() * base * 0.25);
+      // Fail now with the real cause instead of sleeping into a timeout.
+      if (delayMs > MAX_RETRY_WAIT_MS || delayMs >= options.remainingMs()) throw error;
+      const reason = error.status === undefined ? "network error" : `HTTP ${error.status}`;
+      options.log?.(
+        `${options.label} failed (${reason}); retrying in ${delayMs} ms (retry ${retry + 1} of ${options.maxRetries})`
+      );
+      const sleep = options.sleep ?? ((ms, signal) => abortableSleep(ms, signal, options.label));
+      await sleep(delayMs, options.signal);
+    }
   }
 }

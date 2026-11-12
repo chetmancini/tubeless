@@ -110,7 +110,7 @@ export interface AgentLimits {
   readonly maxTurns?: number;
   /** Admitted subtree calls, including calls stopped before dispatch. Defaults to 100. */
   readonly maxCalls?: number;
-  /** Subtree decision callback admissions. Defaults to 100; provider retries are application-owned. */
+  /** Subtree decision callback admissions. Defaults to 100; adapter retries of one HTTP request do not consume admissions. */
   readonly maxDecisions?: number;
   /** Pipeline-tool delegation edges below this agent. Defaults to 4; zero allows leaf tools only. */
   readonly maxDepth?: number;

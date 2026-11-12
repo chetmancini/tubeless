@@ -76,6 +76,7 @@ const gpt = defineAgent({ id: "coding", model: openaiModel() });
 | `reasoningEffort`   | Omitted; `low` through `max` sends `output_config.effort`                  | Omitted; `none` through `max` sends `reasoning`     |
 | `compactAfterBytes` | 768 KiB; `null` disables compaction                                        | 768 KiB; `null` disables compaction                 |
 | `timeoutMs`         | 600000 per decision                                                        | 60000 per decision                                  |
+| `maxRetries`        | 2 extra attempts per HTTP request; `0` disables                            | Same                                                |
 | `maxTokens`         | 32000 output tokens per request, thinking included                         | Not applicable                                      |
 | `strict`            | `true`; `false` sends tools without strict mode                            | Always strict                                       |
 | `promptCaching`     | `true` (5 minutes), `"5m"`, `"1h"`, or `false` to disable caching          | Not applicable                                      |
@@ -128,6 +129,7 @@ request emits a `step.attempted` event with `agent.model.*` attributes:
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `provider`, `name`, `operation`              | Provider, selected model, and `decision` or `compaction`                                            |
 | `request`, `durationMs`, `responseReceived`  | One-based request within the decision callback, elapsed time, and whether a parsed response arrived |
+| `httpStatus`                                 | HTTP status of a failed exchange, when a response arrived                                           |
 | `inputTokens`, `outputTokens`                | Provider-reported usage; input includes cached reads and writes                                     |
 | `cacheReadTokens`, `cacheWriteTokens`        | Cached input reads and writes, when reported                                                        |
 | `cacheWrite5mTokens`, `cacheWrite1hTokens`   | Anthropic writes by lifetime, when reported                                                         |
@@ -136,6 +138,8 @@ request emits a `step.attempted` event with `agent.model.*` attributes:
 
 For example, `agent.model.cacheReadTokens` is the full attribute name. Missing or
 invalid counters stay absent; zero means the provider explicitly reported zero.
+Each retried attempt is its own event with the next `request` number, and
+`durationMs` excludes the backoff wait.
 Anthropic input totals require valid uncached input in every usage entry and valid
 cache counters wherever supplied; missing optional cache counters contribute zero.
 A missing or invalid required counter omits the total while other valid counters
@@ -331,13 +335,16 @@ prompt tells the model to re-read sources when exact text matters. Select a mode
 that supports both Responses function calling and compaction.
 
 One decision has a combined 60-second deadline (`timeoutMs`) and makes at most two
-HTTP requests: optional compaction and the decision itself. Harness decision budgets
-count callbacks, not these HTTP requests or tokens. Encoded requests are capped at
-1 MiB and responses at 2 MiB; these byte limits are not model token estimates.
+successful HTTP requests: optional compaction and the decision itself. Each request
+is retried up to `maxRetries` times (default 2) after HTTP 408, 429, 5xx or a
+dropped connection; waits honor `Retry-After`, stay inside `timeoutMs`, and
+`maxRetries: 0` disables them. Harness decision budgets count callbacks, not these
+HTTP requests or tokens. Encoded requests are capped at 1 MiB and responses at
+2 MiB; these byte limits are not model token estimates.
 If prior history or schemas leave no room even for the output markers, the run
 fails explicitly rather than dropping a call's result.
-Compaction failure, a still-oversized request, refusal, malformed output, or an
-incomplete response fails without silently dropping history or retrying. Streaming
+Compaction rejection, a still-oversized request, refusal, malformed output, and an
+incomplete response fail without silently dropping history and are never retried. Streaming
 and crash-safe resume are outside this helper's contract. `tubeless agent` owns an in-memory
 REPL session around it, retaining completed conversation across user prompts.
 The adapter appends each new task on the first decision of a prompt, closes its
@@ -403,9 +410,12 @@ sent only on that request and on later requests carrying the block. If no summar
 back, the decision continues with the uncompacted history and the request limit still
 applies. Set `compactAfterBytes: null` for servers or models without compaction.
 
-A decision makes at most three HTTP requests: optional compaction, the decision, and
-one tool-call reminder. `max_tokens`, refusal, and other unexpected stop reasons fail
-explicitly; raise `maxTokens` when long thinking reaches the cap. Run the Claude recipe
+A decision makes at most three successful HTTP requests: optional compaction, the
+decision, and one tool-call reminder. Each request is retried up to `maxRetries`
+times (default 2) after HTTP 408, 429, 5xx or a dropped connection, honoring
+`Retry-After` and never past `timeoutMs`; `maxRetries: 0` disables them. `max_tokens`,
+refusal, and other unexpected stop reasons fail explicitly; raise `maxTokens` when
+long thinking reaches the cap. Run the Claude recipe
 the same way as the OpenAI one:
 
 ```sh

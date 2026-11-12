@@ -1,5 +1,21 @@
 import { expect, it, vi } from "vitest";
+import { ProviderRequestError } from "./provider-http.js";
 import { modelRequestReporter } from "./provider-usage.js";
+
+it("records the HTTP status of a failed exchange without leaking the error message", async () => {
+  const reportAttempt = vi.fn();
+  const report = modelRequestReporter("openai", "fixture", { turn: 1, reportAttempt });
+  await expect(
+    report("decision", async () => {
+      throw new ProviderRequestError("PRIVATE", { status: 429, retryable: true });
+    })
+  ).rejects.toBeInstanceOf(ProviderRequestError);
+  expect(reportAttempt.mock.calls[0]![1]).toMatchObject({
+    "agent.model.httpStatus": 429,
+    "agent.model.responseReceived": false,
+  });
+  expect(JSON.stringify(reportAttempt.mock.calls)).not.toContain("PRIVATE");
+});
 
 it.each([-1, undefined, null, "100", 1.5, Number.POSITIVE_INFINITY])(
   "omits Anthropic input totals when required uncached input is invalid: %j",

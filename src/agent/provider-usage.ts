@@ -1,5 +1,6 @@
 import type { AgentDecisionContext } from "./agent-types.js";
 import type { PipelineTraceAttributes } from "../tracing/tracing-contracts.js";
+import { ProviderRequestError } from "./provider-http.js";
 import { record } from "./provider-schema.js";
 
 function count(value: unknown): number | undefined {
@@ -103,6 +104,10 @@ export function modelRequestReporter(
       received = true;
       attributes = usageAttributes(provider, body);
       return body;
+    } catch (error) {
+      if (error instanceof ProviderRequestError && error.status !== undefined)
+        attributes = { "agent.model.httpStatus": error.status };
+      throw error;
     } finally {
       context.reportAttempt(1, {
         ...attributes,

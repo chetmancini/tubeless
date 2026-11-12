@@ -1,8 +1,8 @@
 import { createServer, type RequestListener } from "node:http";
 import type { AddressInfo } from "node:net";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { httpTransport } from "./mcp-http.js";
-import { providerRequest } from "./provider-http.js";
+import { ProviderRequestError, providerRequest, withProviderRetry } from "./provider-http.js";
 
 async function server(handler: RequestListener) {
   const instance = createServer(handler);
@@ -161,4 +161,243 @@ describe("credential-bearing HTTP requests", () => {
       }
     }
   );
+});
+
+type RetryOptions = Parameters<typeof withProviderRetry>[0];
+
+const request = (signal: AbortSignal) =>
+  providerRequest(
+    "Fixture",
+    "decision",
+    "https://provider.test/v1/fixture",
+    credentials,
+    {},
+    signal
+  );
+
+async function failure(signal: AbortSignal): Promise<ProviderRequestError> {
+  try {
+    await request(signal);
+  } catch (error) {
+    if (error instanceof ProviderRequestError) return error;
+    throw error;
+  }
+  throw new Error("expected the request to fail");
+}
+
+const stub = (status: number, headers: Record<string, string> = {}) =>
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status, headers }))
+  );
+
+/** Headers arrive, then the connection drops before the body completes. */
+const brokenResponse = () =>
+  new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"answer":'));
+        controller.error(new Error("terminated"));
+      },
+    }),
+    { status: 200, headers: { "content-type": "application/json" } }
+  );
+
+const transient = (status?: number, retryAfterMs?: number) =>
+  new ProviderRequestError(
+    status === undefined
+      ? "Fixture decision failed (network error)"
+      : `Fixture decision failed (HTTP ${status})`,
+    { status, retryable: true, retryAfterMs }
+  );
+
+const retry = <T>(attempt: () => Promise<T>, overrides: Partial<RetryOptions> = {}) =>
+  withProviderRetry(
+    {
+      maxRetries: 2,
+      signal: new AbortController().signal,
+      remainingMs: () => 60_000,
+      label: "Fixture decision",
+      random: () => 0,
+      sleep: async () => {},
+      ...overrides,
+    },
+    attempt
+  );
+
+describe("provider HTTP failure classification", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reports a retryable rate limit with its Retry-After delay", async () => {
+    stub(429, { "retry-after": "2" });
+    const error = await failure(AbortSignal.timeout(2000));
+    expect(error.message).toBe("Fixture decision failed (HTTP 429)");
+    expect(error.status).toBe(429);
+    expect(error.retryable).toBe(true);
+    expect(error.retryAfterMs).toBe(2000);
+  });
+
+  it("prefers retry-after-ms and ignores unusable Retry-After values", async () => {
+    stub(429, { "retry-after-ms": "150", "retry-after": "2" });
+    expect((await failure(AbortSignal.timeout(2000))).retryAfterMs).toBe(150);
+
+    stub(429, { "retry-after": new Date(Date.now() + 5000).toUTCString() });
+    const dated = (await failure(AbortSignal.timeout(2000))).retryAfterMs;
+    expect(dated).toBeGreaterThan(0);
+    expect(dated).toBeLessThanOrEqual(5000);
+
+    stub(429, { "retry-after": "later" });
+    expect((await failure(AbortSignal.timeout(2000))).retryAfterMs).toBeUndefined();
+  });
+
+  it.each([400, 401, 403, 404, 307])("never retries HTTP %i", async (status) => {
+    stub(status);
+    const error = await failure(AbortSignal.timeout(2000));
+    expect(error.status).toBe(status);
+    expect(error.retryable).toBe(false);
+  });
+
+  it.each([408, 429, 500, 503, 529])("retries HTTP %i", async (status) => {
+    stub(status);
+    const error = await failure(AbortSignal.timeout(2000));
+    expect(error.status).toBe(status);
+    expect(error.retryable).toBe(true);
+  });
+
+  it("classifies a dropped connection as a retryable network failure", async () => {
+    const dropped = new TypeError("fetch failed");
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockRejectedValue(dropped));
+    const error = await failure(AbortSignal.timeout(2000));
+    expect(error.message).toBe("Fixture decision failed (network error)");
+    expect(error.status).toBeUndefined();
+    expect(error.retryable).toBe(true);
+    expect(error.cause).toBe(dropped);
+  });
+
+  it("classifies a connection dropped mid-body as a retryable network failure", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(brokenResponse()));
+    const error = await failure(AbortSignal.timeout(2000));
+    expect(error.message).toBe("Fixture response interrupted");
+    expect(error.status).toBeUndefined();
+    expect(error.retryable).toBe(true);
+  });
+
+  it("retries a response dropped mid-body on the next attempt", async () => {
+    const payload = { answer: "ok" };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(brokenResponse())
+        .mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
+    );
+    await expect(retry(() => request(AbortSignal.timeout(2000)))).resolves.toEqual(payload);
+  });
+
+  it("returns the original rejection when the caller aborts the exchange", async () => {
+    const controller = new AbortController();
+    const aborted = new Error("stop");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockImplementation(() => {
+        controller.abort(aborted);
+        return Promise.reject(aborted);
+      })
+    );
+    await expect(request(controller.signal)).rejects.toBe(aborted);
+  });
+});
+
+describe("provider retry policy", () => {
+  it("doubles the backoff and succeeds on the third attempt", async () => {
+    const sleeps: number[] = [];
+    const attempts = vi
+      .fn()
+      .mockRejectedValueOnce(transient(429))
+      .mockRejectedValueOnce(transient(429))
+      .mockResolvedValue("done");
+    await expect(
+      retry(() => attempts(), { sleep: async (ms) => void sleeps.push(ms) })
+    ).resolves.toBe("done");
+    expect(attempts).toHaveBeenCalledTimes(3);
+    expect(sleeps).toEqual([500, 1000]);
+  });
+
+  it("waits the server's Retry-After instead of the backoff schedule", async () => {
+    const sleeps: number[] = [];
+    const attempts = vi.fn().mockRejectedValueOnce(transient(429, 1200)).mockResolvedValue("done");
+    await expect(
+      retry(() => attempts(), { sleep: async (ms) => void sleeps.push(ms) })
+    ).resolves.toBe("done");
+    expect(attempts).toHaveBeenCalledTimes(2);
+    expect(sleeps).toEqual([1200]);
+  });
+
+  it("makes one attempt when retries are disabled", async () => {
+    const attempts = vi.fn().mockRejectedValue(transient(503));
+    await expect(retry(() => attempts(), { maxRetries: 0 })).rejects.toBeInstanceOf(
+      ProviderRequestError
+    );
+    expect(attempts).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry a non-retryable status or a plain error", async () => {
+    const rejected = vi.fn().mockRejectedValue(
+      new ProviderRequestError("Fixture decision failed (HTTP 400)", {
+        status: 400,
+        retryable: false,
+      })
+    );
+    await expect(retry(() => rejected())).rejects.toBeInstanceOf(ProviderRequestError);
+    expect(rejected).toHaveBeenCalledTimes(1);
+
+    const plain = vi.fn().mockRejectedValue(new Error("Fixture decision failed"));
+    await expect(retry(() => plain())).rejects.toThrow("Fixture decision failed");
+    expect(plain).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails instead of waiting past a minute or past the deadline", async () => {
+    const longWait = vi.fn().mockRejectedValue(transient(429, 120_000));
+    const sleeps: number[] = [];
+    await expect(
+      retry(() => longWait(), { sleep: async (ms) => void sleeps.push(ms) })
+    ).rejects.toBeInstanceOf(ProviderRequestError);
+    expect(longWait).toHaveBeenCalledTimes(1);
+    expect(sleeps).toEqual([]);
+
+    const noTime = vi.fn().mockRejectedValue(transient(429));
+    const none: number[] = [];
+    await expect(
+      retry(() => noTime(), {
+        remainingMs: () => 100,
+        sleep: async (ms) => void none.push(ms),
+      })
+    ).rejects.toBeInstanceOf(ProviderRequestError);
+    expect(noTime).toHaveBeenCalledTimes(1);
+    expect(none).toEqual([]);
+  });
+
+  it("rethrows the last failure once retries are exhausted", async () => {
+    const last = transient(503);
+    const attempts = vi.fn().mockRejectedValueOnce(transient(500)).mockRejectedValue(last);
+    await expect(retry(() => attempts())).rejects.toBe(last);
+    expect(attempts).toHaveBeenCalledTimes(3);
+  });
+
+  it("logs the status and the retry count but never the failure message", async () => {
+    const messages: string[] = [];
+    const attempts = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new ProviderRequestError("Fixture decision failed (HTTP 429): PRIVATE", {
+          status: 429,
+          retryable: true,
+        })
+      )
+      .mockResolvedValue("done");
+    await retry(() => attempts(), { log: (message) => messages.push(message) });
+    expect(messages).toEqual([
+      "Fixture decision failed (HTTP 429); retrying in 500 ms (retry 1 of 2)",
+    ]);
+  });
 });
