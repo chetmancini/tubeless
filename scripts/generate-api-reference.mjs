@@ -184,13 +184,84 @@ export function collectDeclarationSources(entryPath) {
   return sources;
 }
 
+/**
+ * Declaration text with comments removed and each whitespace run collapsed to one space.
+ * String and template literal types are kept verbatim. Declaration files hold no
+ * regular-expression literals, so `/` outside a literal can only start a comment.
+ */
+export function normalizeDeclarationSource(source) {
+  let out = "";
+  let index = 0;
+  // "template" while inside backticks; a brace depth while inside `${ … }`.
+  const stack = [];
+  const space = () => {
+    if (out !== "" && !out.endsWith(" ")) out += " ";
+  };
+  while (index < source.length) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (stack.at(-1) === "template") {
+      if (char === "\\") {
+        out += char + (next ?? "");
+        index += 2;
+      } else if (char === "$" && next === "{") {
+        stack.push(0);
+        out += "${";
+        index += 2;
+      } else {
+        if (char === "`") stack.pop();
+        out += char;
+        index += 1;
+      }
+      continue;
+    }
+    if (char === "/" && next === "/") {
+      const end = source.indexOf("\n", index);
+      index = end === -1 ? source.length : end;
+      space();
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      const end = source.indexOf("*/", index + 2);
+      index = end === -1 ? source.length : end + 2;
+      space();
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      let end = index + 1;
+      while (end < source.length && source[end] !== char && source[end] !== "\n") {
+        end += source[end] === "\\" ? 2 : 1;
+      }
+      out += source.slice(index, end + 1);
+      index = end + 1;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      space();
+      index += 1;
+      continue;
+    }
+    if (char === "`") stack.push("template");
+    else if (typeof stack.at(-1) === "number") {
+      if (char === "{") stack[stack.length - 1] += 1;
+      else if (char === "}") {
+        if (stack.at(-1) === 0) stack.pop();
+        else stack[stack.length - 1] -= 1;
+      }
+    }
+    out += char;
+    index += 1;
+  }
+  return out.trimEnd();
+}
+
 export function hashDeclarationSurface(entryPath, root = packageRoot) {
   const sources = collectDeclarationSources(entryPath);
   const hash = createHash("sha256");
   for (const path of [...sources.keys()].sort((left, right) => left.localeCompare(right))) {
     hash.update(relative(root, path));
     hash.update("\0");
-    hash.update(sources.get(path));
+    hash.update(normalizeDeclarationSource(sources.get(path)));
     hash.update("\0");
   }
   return hash.digest("hex");
@@ -236,14 +307,14 @@ async function generatedFiles() {
       exports: module.exports.map((symbol) => symbol.name),
     })),
     packageName: packageJson.name,
-    schemaVersion: 1,
+    schemaVersion: 2,
   };
   const markdown = [
     "# `tubeless` API reference",
     "",
     "Generated from the package's emitted declaration files. Do not edit manually; run `bun run api:generate` from the package root.",
     "",
-    "Each symbol links to its source declaration and uses the first sentence of its public doc comment.",
+    "Each symbol links to its source declaration and uses the first sentence of its public doc comment. Surface hashes cover declaration text with comments and whitespace removed.",
     "",
     `Package: \`${packageJson.name}\``,
     "",
