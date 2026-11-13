@@ -32,8 +32,9 @@ For a terminal prompt loop with model selection and the live pipeline reporter, 
 `tubeless agent --model gpt-5.4-mini`. Enter a task, read the answer, then prompt
 again; `/model <name>` changes the next task's model while retaining context.
 Completed prompts share conversation state through a [session](#chat-sessions); `/clear` starts fresh.
-`--prompt 'task'` runs once, and `--model-module ./model.ts`
-loads a custom provider factory. See the [agent CLI](./cli.md#prompt-a-workspace-agent)
+`--prompt 'task'` runs once, `--model-module ./model.ts`
+loads a custom provider factory, and `--store` or `--trace` records each prompt's run
+for `tubeless history` and Studio. See the [agent CLI](./cli.md#prompt-a-workspace-agent)
 for setup, cancellation, budgets, and the plugin contract.
 
 For general workspace tasks, supply a model and an ID:

@@ -129,6 +129,23 @@ or the OpenAI adapter's default. The agent reads project guidance and has the
 standard `read`, `write`, `edit`, `bash`, `list`, and `search` tools with the host's
 permissions. See [agents](./agents.md#default-model-backed-agent) for their contracts.
 
+Recording is off by default. `--store <path>` appends each prompt's run to a SQLite
+database and `--trace <path>` writes its NDJSON trace events to a file, with the
+same formats as `tubeless run`. Each prompt is one `tubeless-agent` run with its
+turns and tool calls as children, so `tubeless history`, Studio and the
+`agent.model.*` usage attributes see REPL work too:
+
+```sh
+tubeless agent --model gpt-5.4-mini --store .tubeless/runs.sqlite
+tubeless history --pipeline tubeless-agent
+```
+
+`--trace -` is rejected because stdout carries the conversation, and `--store` and
+`--trace` cannot name the same file. Recordings hold each prompt's run status,
+agent turns, tool activity, model usage and logs, but not the prompt or answer
+text, so they are not a saved conversation. Logs and tool activity can still
+contain workspace content; keep traces and stores as private as the workspace.
+
 To plug in another provider, pass `--model-module ./model.ts`. The trusted local
 module must default-export a factory accepting `{ model: string, signal: AbortSignal, env: Readonly<NodeJS.ProcessEnv> }` and returning
 an `AgentModel`, synchronously or asynchronously. Tubeless calls the factory for

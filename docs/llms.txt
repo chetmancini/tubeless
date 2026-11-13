@@ -65,7 +65,7 @@ Agent instructions:
 
 Advanced:
 
-- In-process agents: ./agents.md (default read/write/edit/bash/list/search tools, custom tools, scripted, OpenAI and Anthropic examples, compatible-API configuration, pipelineTool delegation, shared subtree limits, SQLite checkpoints, and execution environments). The OpenAI helper and `tubeless agent` REPL stay in memory; resume a `defineAgentLoop` or `defineAgent` run with an execution key. See ./agents.md#durable-execution.
+- In-process agents: ./agents.md (default read/write/edit/bash/list/search tools, custom tools, scripted, OpenAI and Anthropic examples, compatible-API configuration, pipelineTool delegation, shared subtree limits, SQLite checkpoints, and execution environments). The OpenAI helper and `tubeless agent` REPL stay in memory (`tubeless agent --store` or `--trace` records prompts for history but does not make them resumable); resume a `defineAgentLoop` or `defineAgent` run with an execution key. See ./agents.md#durable-execution.
 - Child pipelines: ./child-pipeline-composition.md
 - Remote steps: ./remote-step-composition.md
 - Tubeless and Airflow: ./airflow.md
