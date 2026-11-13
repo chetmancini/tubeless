@@ -142,7 +142,7 @@
         "StepCacheStore",
         "StepSkipDecision"
       ],
-      "sha256": "3513fa959348bcb0094cafa8ecda48bd0c3189fda8ef02f96e6e85f93b683553",
+      "sha256": "2d2d4d256dd3d2866e5b7e162edba7b32b4ad06346806b5114ea5a408134afa7",
       "specifier": "tubeless"
     },
     {
@@ -180,7 +180,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "1fed1623a6cce6e7138cbedbe93d0e16ab8bf3fda6a9b75271b6f6649c297bc6",
+      "sha256": "e510a345eb4b6677017c3e554f396d598a26fea89254c68100dfd3d366bf9bd7",
       "specifier": "tubeless/cli"
     },
     {
@@ -215,7 +215,7 @@
         "WorkerThreadContext",
         "writeJson"
       ],
-      "sha256": "09e637feb709673f5fcf7e4452e7dcdfeded22f0f2e2e749c153193b68ea3da8",
+      "sha256": "9af0294eaf7753f7777235ffbfb8d41406fd6ee156f133ccf7b5ba078bdecdd8",
       "specifier": "tubeless/node"
     },
     {
@@ -250,7 +250,7 @@
         "ProjectRegistry",
         "ProjectTraceContext"
       ],
-      "sha256": "d3de67a254a7555d49037ac0849eca4f9cd8c1890552c98b22a6421f907fbf89",
+      "sha256": "9c3a97aaf483562c8a8487afa4dbdc177517867dbe1aa774ccc9e5670993607d",
       "specifier": "tubeless/project"
     },
     {
@@ -267,7 +267,7 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "d389edf16c44af625168a753dc88ba9bbc2e30dc6461a812cd8a3839ee0854cd",
+      "sha256": "624fba9cfe9094c2166ed4bd30739659257bcaf17e61a2a1c9d2993bdd5a6b92",
       "specifier": "tubeless/testing"
     },
     {
@@ -324,13 +324,13 @@
         "WorkerLoaderCodemodeOptions",
         "WorkerLoaderLike"
       ],
-      "sha256": "6433ec850b454a9c20669ffaa82352dbaeca4816ed8f1a4f9403febc9755ab6a",
+      "sha256": "93350a8d8d7170ba3bf5744e3592a170e91335c1ce831f23991e443de7d701d7",
       "specifier": "tubeless/cloudflare"
     },
     {
       "declaration": "./dist/cloudflare/cloudflare-cache.d.ts",
       "exports": ["createR2CacheStore", "jsonCacheCodec", "R2BucketLike", "R2ObjectLike"],
-      "sha256": "3ca986a051f1ae4f85e91d37932d89731730b0f92fefe10664306c1bf91d1ef8",
+      "sha256": "117b062cd40442eafc325bca9e3d5015ffa9e94c08d54645bf4d154ec3d01c3c",
       "specifier": "tubeless/cloudflare/cache"
     }
   ],

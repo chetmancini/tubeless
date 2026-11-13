@@ -193,7 +193,7 @@ export type MappedChildProgressOptions = ToMappedChildStepProgressOptions;
  * - `"stop"` starts no further items, lets running items finish, then fails the step.
  * - `"collect"` completes the step with one {@link ForEachSettledItem} per item.
  *
- * Cancellation always cancels the step, whatever the policy.
+ * Cancellation is never collected; genuine failures take precedence over cancellation.
  */
 export type ForEachItemFailurePolicy = "fail" | "stop" | "collect";
 
@@ -208,11 +208,23 @@ export type ForEachSettledItem<T> =
       readonly error: PipelineErrorCause;
     };
 
-/** Output element of a `forEachPipeline` step: the item value, or its settled entry under `"collect"`. */
+/**
+ * Output element of a `forEachPipeline` step: the item value, or its settled entry
+ * under `"collect"`. `undefined` is the default `"fail"` policy.
+ */
 export type ForEachItemOutput<
   T,
-  TPolicy extends ForEachItemFailurePolicy,
+  TPolicy extends ForEachItemFailurePolicy | undefined,
 > = TPolicy extends "collect" ? ForEachSettledItem<T> : T;
+
+/**
+ * The `onItemFailure` slot that `forEachPipeline` infers its policy from. A present
+ * property is matched as required so a possibly-`undefined` value keeps the default
+ * policy in the inferred output; an optional target would drop that `undefined`.
+ */
+export type ForEachItemFailureOption<TPolicy extends ForEachItemFailurePolicy | undefined> =
+  | { onItemFailure: TPolicy }
+  | { onItemFailure?: undefined };
 
 export type MappedChildPipelineStepDefinition<
   TParentOptions extends object,

@@ -225,4 +225,29 @@ describe("forEachPipeline onItemFailure", () => {
       Step<"skippable", readonly ForEachSettledItem<string | undefined>[], ParentOptions>
     >();
   });
+
+  it("keeps the default-policy output when the policy may be undefined", () => {
+    interface ParentOptions {
+      policy?: "collect";
+    }
+    const { forEachPipeline } = createSteps<ParentOptions>();
+    const policy = undefined as "collect" | undefined;
+    const base = {
+      pipeline: failingChild(),
+      items: () => ["a"],
+      key: (item: string) => item,
+      mapOptions: (item: string) => ({ itemId: item }),
+    };
+    type Either = string | undefined | ForEachSettledItem<string | undefined>;
+    expectTypeOf(forEachPipeline("optional", { ...base, onItemFailure: policy })).toEqualTypeOf<
+      Step<"optional", readonly Either[], ParentOptions>
+    >();
+    const reusable: typeof base & { onItemFailure?: "collect" } = base;
+    expectTypeOf(forEachPipeline("reusable", reusable)).toEqualTypeOf<
+      Step<"reusable", readonly Either[], ParentOptions>
+    >();
+    expectTypeOf(
+      forEachPipeline("explicit-undefined", { ...base, onItemFailure: undefined })
+    ).toEqualTypeOf<Step<"explicit-undefined", readonly (string | undefined)[], ParentOptions>>();
+  });
 });

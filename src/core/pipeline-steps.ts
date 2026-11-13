@@ -19,6 +19,7 @@ import type {
   AnyStep,
   ChildPipelineStepDefinition,
   ChildPipelineStepDefinitionBase,
+  ForEachItemFailureOption,
   ForEachItemFailurePolicy,
   ForEachItemOutput,
   MappedChildPipelineStepDefinition,
@@ -374,7 +375,7 @@ function createStepFactory<
     TItem,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
-    TPolicy extends ForEachItemFailurePolicy = "fail",
+    TPolicy extends ForEachItemFailurePolicy | undefined = undefined,
   >(
     id: TId,
     definition: MappedChildPipelineStepDefinition<
@@ -383,11 +384,11 @@ function createStepFactory<
       TOptionalDeps,
       TChildPipeline,
       TItem
-    > & {
-      onItemFailure?: TPolicy;
-      skip?: never;
-      mapResult?: undefined;
-    }
+    > &
+      ForEachItemFailureOption<TPolicy> & {
+        skip?: never;
+        mapResult?: undefined;
+      }
   ): BuiltStep<
     TId,
     readonly ForEachItemOutput<PipelineResultOf<TChildPipeline>, TPolicy>[],
@@ -401,7 +402,7 @@ function createStepFactory<
     TOut,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
-    TPolicy extends ForEachItemFailurePolicy = "fail",
+    TPolicy extends ForEachItemFailurePolicy | undefined = undefined,
   >(
     id: TId,
     definition: MappedChildPipelineStepDefinition<
@@ -410,17 +411,17 @@ function createStepFactory<
       TOptionalDeps,
       TChildPipeline,
       TItem
-    > & {
-      onItemFailure?: TPolicy;
-      skip?: never;
-      mapResult(
-        value: PipelineResultOf<TChildPipeline>,
-        result: PipelineRun<PipelineResultOf<TChildPipeline>>,
-        item: TItem,
-        index: number,
-        context: PipelineStepContext<TOptions>
-      ): TOut;
-    }
+    > &
+      ForEachItemFailureOption<TPolicy> & {
+        skip?: never;
+        mapResult(
+          value: PipelineResultOf<TChildPipeline>,
+          result: PipelineRun<PipelineResultOf<TChildPipeline>>,
+          item: TItem,
+          index: number,
+          context: PipelineStepContext<TOptions>
+        ): TOut;
+      }
   ): BuiltStep<TId, readonly ForEachItemOutput<Awaited<TOut>, TPolicy>[], TOptions, TInputOptions>;
   function forEachPipeline<
     TId extends string,
@@ -428,7 +429,7 @@ function createStepFactory<
     TItem,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
-    TPolicy extends ForEachItemFailurePolicy = "fail",
+    TPolicy extends ForEachItemFailurePolicy | undefined = undefined,
     TDecision extends StepSkipDecision<
       readonly ForEachItemOutput<PipelineResultOf<TChildPipeline>, TPolicy>[]
     > = StepSkipDecision<readonly ForEachItemOutput<PipelineResultOf<TChildPipeline>, TPolicy>[]>,
@@ -440,19 +441,19 @@ function createStepFactory<
       TOptionalDeps,
       TChildPipeline,
       TItem
-    > & {
-      onItemFailure?: TPolicy;
-      skip:
-        | StepSkipPredicate<
-            TOptions,
-            TDeps,
-            TOptionalDeps,
-            readonly ForEachItemOutput<PipelineResultOf<TChildPipeline>, TPolicy>[],
-            TDecision
-          >
-        | undefined;
-      mapResult?: undefined;
-    }
+    > &
+      ForEachItemFailureOption<TPolicy> & {
+        skip:
+          | StepSkipPredicate<
+              TOptions,
+              TDeps,
+              TOptionalDeps,
+              readonly ForEachItemOutput<PipelineResultOf<TChildPipeline>, TPolicy>[],
+              TDecision
+            >
+          | undefined;
+        mapResult?: undefined;
+      }
   ): BuiltStep<
     TId,
     PolicySkippedOutput<
@@ -469,7 +470,7 @@ function createStepFactory<
     TOut,
     const TDeps extends readonly AnyStep<TOptions>[] = [],
     const TOptionalDeps extends readonly AnyStep<TOptions>[] = [],
-    TPolicy extends ForEachItemFailurePolicy = "fail",
+    TPolicy extends ForEachItemFailurePolicy | undefined = undefined,
     TDecision extends StepSkipDecision<
       NoInfer<readonly ForEachItemOutput<Awaited<TOut>, TPolicy>[]>
     > = StepSkipDecision<NoInfer<readonly ForEachItemOutput<Awaited<TOut>, TPolicy>[]>>,
@@ -481,25 +482,25 @@ function createStepFactory<
       TOptionalDeps,
       TChildPipeline,
       TItem
-    > & {
-      onItemFailure?: TPolicy;
-      skip:
-        | StepSkipPredicate<
-            TOptions,
-            TDeps,
-            TOptionalDeps,
-            NoInfer<readonly ForEachItemOutput<Awaited<TOut>, TPolicy>[]>,
-            TDecision
-          >
-        | undefined;
-      mapResult(
-        value: PipelineResultOf<TChildPipeline>,
-        result: PipelineRun<PipelineResultOf<TChildPipeline>>,
-        item: TItem,
-        index: number,
-        context: PipelineStepContext<TOptions>
-      ): TOut;
-    }
+    > &
+      ForEachItemFailureOption<TPolicy> & {
+        skip:
+          | StepSkipPredicate<
+              TOptions,
+              TDeps,
+              TOptionalDeps,
+              NoInfer<readonly ForEachItemOutput<Awaited<TOut>, TPolicy>[]>,
+              TDecision
+            >
+          | undefined;
+        mapResult(
+          value: PipelineResultOf<TChildPipeline>,
+          result: PipelineRun<PipelineResultOf<TChildPipeline>>,
+          item: TItem,
+          index: number,
+          context: PipelineStepContext<TOptions>
+        ): TOut;
+      }
   ): BuiltStep<
     TId,
     PolicySkippedOutput<readonly ForEachItemOutput<Awaited<TOut>, TPolicy>[], TDecision>,
