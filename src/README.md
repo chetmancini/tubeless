@@ -238,10 +238,15 @@ Run `make check` after changes; it builds before checking these boundaries.
 - `workbench/workbench-shared.ts` owns terminal-safe text formatting shared by
   local history and Cloud human output. Machine JSON retains original fields.
 - `workbench/workbench-run.ts` owns the `run` command's arguments, trace destinations,
-  and command execution. It translates failures into terminal output and exit codes
+  and command execution, including capture of the root completion report for
+  `run --json`. `workbench/workbench-run-json.ts` serializes that report and rejects
+  finalized values that would lose data in JSON. The run command translates failures into terminal output and exit codes
   through the shared hosted-command operation; it does not open stores or trace files
   until after command parsing succeeds. Studio executes validated values through
   `hosting/hosting-commands.ts` directly.
+  `workbench/workbench-bin.ts` reserves JSON stdout before loading application
+  modules and routes process stdout writes and console output to stderr; the
+  reusable workbench handlers leave process globals to their host.
 - `workbench/workbench-ui.ts` loads and validates registrations, opens the chosen
   store, starts the HTTP server and closes these resources.
 - `workbench/workbench-studio-launcher.ts` owns the collection of admitted launches,

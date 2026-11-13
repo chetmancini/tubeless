@@ -333,7 +333,12 @@ read when a pipeline needs them.
   `tubeless run <pipeline-file> -- <command-args>` for a uniquely selected
   schema-backed pipeline. A marked `definePipelineCommand` export wins when present;
   schema-less or unsupported inputs require one explicitly. Keep application flags after `--`; the command must
-  continue to own domain validation and option mapping. Pass `--trace <path>` for
+  continue to own domain validation and option mapping. Use `run --json` before
+  `--` to read the full run report and finalized value; logs and summaries go to
+  stderr. Failed and cancelled runs retain their exit codes and still print a
+  report. Finalized values must be plain JSON data; use `null` instead of
+  `undefined`. Help or failures before a run produce no report. `--json` cannot
+  combine with `--trace -`. Pass `--trace <path>` for
   NDJSON traces (`-` writes NDJSON to stdout and moves command output to stderr)
   and `--store` for SQLite; they compose. Use `tubeless history` to list or show
   recorded runs from SQLite, or pass `--trace` to inspect a finished NDJSON

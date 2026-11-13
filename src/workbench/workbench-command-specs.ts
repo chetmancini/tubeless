@@ -184,6 +184,10 @@ Schema-backed pipelines infer arguments; use definePipelineCommand for custom in
     passthrough: true,
     options: {
       ...REGISTRATION_OPTIONS,
+      json: {
+        type: "boolean",
+        description: "Emit the complete run report as JSON (command output goes to stderr)",
+      },
       store: {
         type: "string",
         description: "Append run events to a local SQLite database",

@@ -38,6 +38,7 @@ import { PublishCommand } from "./scripts/publish.ts";
 export default defineProject(
   "example-jobs",
   [
+    // Read its result with run --json validated-import -- --source rows.txt.
     ValidatedPipeline,
     definePipelineCommand(MetadataPipeline, { params: {} }),
     // Plain cached results and their receipts appear in history and Studio.

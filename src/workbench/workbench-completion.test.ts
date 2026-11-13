@@ -207,6 +207,9 @@ describe("tubeless __complete", () => {
 
   it("offers the pipeline command's own flags and choices after run <id> --", async () => {
     const directory = await writeProject();
+    expect(
+      (await complete(directory, "run", "--j")).lines.map((line) => line.split("\t")[0])
+    ).toEqual(["--json"]);
     const flags = await complete(directory, "run", "import-data", "--", "--");
     expect(flags.lines).toContain("--text\tText to import.");
     expect(flags.lines).toContain("--format");
