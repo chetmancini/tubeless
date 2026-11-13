@@ -27,14 +27,14 @@ export function createLaunchTracing<TContext extends ProjectTraceContext>(option
   };
   const owned = new Map<PipelineTraceExporter, PipelineTraceExporter>();
   let started = false;
-  const close = async () => {
-    if (started) return;
-    lifetime.abort(new DOMException("The launch ended before pipeline execution.", "AbortError"));
-    const exporters = [...owned.values()];
-    owned.clear();
-    await Promise.allSettled(exporters.map(async (exporter) => exporter.flush?.()));
-  };
   return {
+    async close() {
+      if (started) return;
+      lifetime.abort(new DOMException("The launch ended before pipeline execution.", "AbortError"));
+      const exporters = [...owned.values()];
+      owned.clear();
+      await Promise.allSettled(exporters.map(async (exporter) => exporter.flush?.()));
+    },
     prepare() {
       const exporters = [...options.exporters];
       for (const configuration of options.configurations) {
@@ -47,26 +47,24 @@ export function createLaunchTracing<TContext extends ProjectTraceContext>(option
           exporters.push(wrapped);
         }
       }
+      if (exporters.length === 0) return undefined;
       const composed = composeTraceExporters(exporters);
-      return exporters.length === 0
-        ? undefined
-        : {
-            exporter: {
-              export(event) {
-                started = true;
-                return composed.export(event);
-              },
-              flush: () => composed.flush?.(),
-            },
-            onExporterError: async (error) => {
-              await Promise.all(
-                options.configurations.map(async (configuration) =>
-                  configuration?.onExporterError?.(error)
-                )
-              );
-            },
-          };
+      return {
+        exporter: {
+          export(event) {
+            started = true;
+            return composed.export(event);
+          },
+          flush: () => composed.flush?.(),
+        },
+        onExporterError: async (error) => {
+          await Promise.all(
+            options.configurations.map(async (configuration) =>
+              configuration?.onExporterError?.(error)
+            )
+          );
+        },
+      };
     },
-    close,
   };
 }

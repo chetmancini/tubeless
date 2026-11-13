@@ -19,7 +19,6 @@ import {
   hostedCommandContext,
 } from "../hosting/hosting-commands.js";
 import { throwIfAborted } from "../utilities/abort.js";
-import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
 import { resolveWorkbenchRegistration } from "./workbench-project-loader.js";
 import {
   errorMessage,
@@ -41,33 +40,6 @@ export function parseRunArgs(argv: readonly string[]) {
     ...parseSubcommandArgs(workbenchArgs, WORKBENCH_SPECS.run.options),
     commandArgs,
   };
-}
-
-async function executePipelineCommand(
-  command: Pick<WorkbenchPipelineCommand, "parse" | "execute">,
-  args: readonly string[],
-  io: WorkbenchCliIo,
-  signal: AbortSignal,
-  prepareContext?: () => Promise<Omit<PipelineContext, "cwd" | "log" | "signal"> | undefined>
-): Promise<number> {
-  return executeHostedCommandOperation(
-    async () => {
-      const parsed = command.parse(args, hostedCommandContext(io, signal));
-      if (parsed.kind === "help") throw new CliHelpRequested(parsed.helpText);
-      if (parsed.kind === "error") throw new CliValidationError(parsed.errors, parsed.helpText);
-      throwIfAborted(signal, "Run recording setup");
-      let pipelineContext: Omit<PipelineContext, "cwd" | "log" | "signal"> | undefined;
-      try {
-        pipelineContext = await prepareContext?.();
-      } catch (error) {
-        throwIfAborted(signal, "Run recording setup");
-        throw error;
-      }
-      await command.execute(parsed.values, hostedCommandContext(io, signal, pipelineContext));
-    },
-    io,
-    signal
-  );
 }
 
 export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
@@ -118,7 +90,6 @@ async function executeRun(
   let store: PipelineRunEventStore | undefined;
   let launchTracing: LaunchTracing | undefined;
   let closeTrace: (() => Promise<void>) | undefined;
-  let bindTraceSignal: ((signal: AbortSignal) => void) | undefined;
   let completedRun: PipelineRun | undefined;
   let exitCode: number = TUBELESS_WORKBENCH_EXIT_CODE.execution;
   try {
@@ -128,41 +99,54 @@ async function executeRun(
       parsed.values.json || parsed.values.trace === "-"
         ? { ...loaded.commandIo, stdout: loaded.commandIo.stderr }
         : loaded.commandIo;
-    exitCode = await executePipelineCommand(
-      loaded.command,
-      parsed.commandArgs,
-      commandIo,
-      signal,
+    exitCode = await executeHostedCommandOperation(
       async () => {
-        const exporters: PipelineTraceExporter[] = [];
-        if (parsed.values.store) {
-          const { openSqlitePipelineRunStore } = await import("../run-store/run-store-sqlite.js");
-          store = await openSqlitePipelineRunStore(path.resolve(io.cwd, parsed.values.store));
-          exporters.push(store);
+        const input = loaded.command.parse(
+          parsed.commandArgs,
+          hostedCommandContext(commandIo, signal)
+        );
+        if (input.kind === "help") throw new CliHelpRequested(input.helpText);
+        if (input.kind === "error") throw new CliValidationError(input.errors, input.helpText);
+        throwIfAborted(signal, "Run recording setup");
+        let pipelineContext: Omit<PipelineContext, "cwd" | "log" | "signal">;
+        try {
+          const exporters: PipelineTraceExporter[] = [];
+          if (parsed.values.store) {
+            const { openSqlitePipelineRunStore } = await import("../run-store/run-store-sqlite.js");
+            store = await openSqlitePipelineRunStore(path.resolve(io.cwd, parsed.values.store));
+            exporters.push(store);
+          }
+          if (parsed.values.trace) {
+            const writer = await createRunTraceWriter(parsed.values.trace, io, signal);
+            closeTrace = writer.close;
+            exporters.push(writer.exporter);
+          }
+          launchTracing = createLaunchTracing({
+            context: { pipelineId: loaded.command.id, cwd: commandIo.cwd, signal },
+            configurations: [registration.tracing],
+            exporters,
+          });
+          pipelineContext = {
+            hooks: parsed.values.json
+              ? {
+                  onPipelineComplete: (run: PipelineRun) => {
+                    completedRun = run;
+                  },
+                }
+              : undefined,
+            tracing: launchTracing.prepare(),
+          };
+        } catch (error) {
+          throwIfAborted(signal, "Run recording setup");
+          throw error;
         }
-        if (parsed.values.trace) {
-          const writer = await createRunTraceWriter(parsed.values.trace, io, signal);
-          bindTraceSignal = writer.bindSignal;
-          closeTrace = writer.close;
-          exporters.push(writer.exporter);
-        }
-        bindTraceSignal?.(signal);
-        launchTracing = createLaunchTracing({
-          context: { pipelineId: loaded.command.id, cwd: commandIo.cwd, signal },
-          configurations: [registration.tracing],
-          exporters,
-        });
-        return {
-          hooks: parsed.values.json
-            ? {
-                onPipelineComplete: (run: PipelineRun) => {
-                  completedRun = run;
-                },
-              }
-            : undefined,
-          tracing: launchTracing.prepare(),
-        };
-      }
+        await loaded.command.execute(
+          input.values,
+          hostedCommandContext(commandIo, signal, pipelineContext)
+        );
+      },
+      commandIo,
+      signal
     );
     if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success && managedSignal.wasInterrupted()) {
       exitCode = TUBELESS_WORKBENCH_EXIT_CODE.cancellation;
@@ -202,30 +186,25 @@ async function executeRun(
 async function createRunTraceWriter(
   destination: string,
   io: WorkbenchCliIo,
-  signal?: AbortSignal
+  signal: AbortSignal
 ): Promise<{
-  bindSignal(signal: AbortSignal): void;
   close(): Promise<void>;
   exporter: PipelineTraceExporter;
 }> {
-  let writeSignal = signal;
   // Nested runs share this exporter but have separate emission queues. Serialize
   // at the destination so only one flush/error/close listener set is active.
   let writes = Promise.resolve();
   const writeEvent = (output: WorkbenchCliIo["stdout"], event: PipelineTraceEvent) => {
     const chunk = `${JSON.stringify(event)}\n`;
-    writes = writes.then(() => writeCliChunk(output, chunk, writeSignal));
+    writes = writes.then(() => writeCliChunk(output, chunk, signal));
     return writes;
   };
 
   if (destination === "-") {
     let writeError: Error | undefined;
     return {
-      bindSignal(next) {
-        writeSignal = next;
-      },
       close: async () => {
-        if (writeSignal?.aborted) return;
+        if (signal.aborted) return;
         if (writeError) throw writeError;
       },
       exporter: {
@@ -252,38 +231,20 @@ async function createRunTraceWriter(
   const destroyOnAbort = () => {
     if (!stream.destroyed) stream.destroy();
   };
-  // The signal is caller-owned and may outlive this writer (embedders reuse
-  // one signal across runs), so never leave a stale listener behind: detach
-  // before rebinding and on every terminal close path.
-  let boundSignal: AbortSignal | undefined;
-  const detachSignal = () => {
-    boundSignal?.removeEventListener("abort", destroyOnAbort);
-    boundSignal = undefined;
-  };
-  const bindSignal = (next: AbortSignal) => {
-    detachSignal();
-    writeSignal = next;
-    if (next.aborted) {
-      destroyOnAbort();
-      return;
-    }
-    boundSignal = next;
-    next.addEventListener("abort", destroyOnAbort, { once: true });
-  };
   await waitForWriteStreamOpen(stream, signal);
-  if (writeSignal) bindSignal(writeSignal);
+  if (signal.aborted) destroyOnAbort();
+  else signal.addEventListener("abort", destroyOnAbort, { once: true });
   return {
-    bindSignal,
     close: () =>
       new Promise((resolve, reject) => {
         const retainedError =
           writeError ?? (stream.errored instanceof Error ? stream.errored : undefined);
-        detachSignal();
+        signal.removeEventListener("abort", destroyOnAbort);
         if (retainedError) {
           reject(retainedError);
           return;
         }
-        if (writeSignal?.aborted || stream.destroyed) {
+        if (signal.aborted || stream.destroyed) {
           destroyOnAbort();
           resolve();
           return;
