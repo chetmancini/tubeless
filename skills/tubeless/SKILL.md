@@ -275,6 +275,9 @@ Read the corresponding package recipe before using these features:
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency
   (a positive finite integer; invalid static values are rejected when the step is
   created, and an invalid callback value fails the step before any child starts).
+  Set `onItemFailure: "stop"` to fail fast, or `"collect"` to complete with one
+  `{ key, index, ok, value | error }` entry per item when partial results are valid;
+  do not hand-roll a child `run()` loop for that. Cancellation is never collected.
   Omit `fromPipeline.mapOptions` when the parent's validated options satisfy the
   child's input type; it forwards them unchanged through child validation. Fan-out
   still requires explicit per-item mapping. Keep `mapOptions` limited to child

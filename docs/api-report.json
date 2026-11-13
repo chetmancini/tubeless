@@ -68,6 +68,9 @@
         "ArtifactSaver",
         "createSteps",
         "definePipeline",
+        "ForEachItemFailurePolicy",
+        "ForEachItemOutput",
+        "ForEachSettledItem",
         "isPipelineErrorCode",
         "IterationDecision",
         "IterationState",
@@ -139,7 +142,7 @@
         "StepCacheStore",
         "StepSkipDecision"
       ],
-      "sha256": "6bd9acad427e17154cb9c56e3b21c4cacef66e372f55d5b451886fcfbd03caad",
+      "sha256": "3513fa959348bcb0094cafa8ecda48bd0c3189fda8ef02f96e6e85f93b683553",
       "specifier": "tubeless"
     },
     {
@@ -177,7 +180,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "4c8a8e6acf0a5046299d7739c2d04b52f034c44c4861a23902f98bffcbead0ae",
+      "sha256": "1fed1623a6cce6e7138cbedbe93d0e16ab8bf3fda6a9b75271b6f6649c297bc6",
       "specifier": "tubeless/cli"
     },
     {
@@ -212,7 +215,7 @@
         "WorkerThreadContext",
         "writeJson"
       ],
-      "sha256": "89889b3747d6e597f8799d4bbfc3ee5fa811a76f0a9928e989b549ed91d8ecf7",
+      "sha256": "09e637feb709673f5fcf7e4452e7dcdfeded22f0f2e2e749c153193b68ea3da8",
       "specifier": "tubeless/node"
     },
     {
@@ -247,7 +250,7 @@
         "ProjectRegistry",
         "ProjectTraceContext"
       ],
-      "sha256": "e27d3eae0a268166cd6c681815c75e322ac92cb32f4083c8ac6127691d48a125",
+      "sha256": "d3de67a254a7555d49037ac0849eca4f9cd8c1890552c98b22a6421f907fbf89",
       "specifier": "tubeless/project"
     },
     {
@@ -264,7 +267,7 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "37fa6e609465c39dcf9e0faa45d7fd9411c8fd18141f71b6beec344be55fe0dc",
+      "sha256": "d389edf16c44af625168a753dc88ba9bbc2e30dc6461a812cd8a3839ee0854cd",
       "specifier": "tubeless/testing"
     },
     {
@@ -321,13 +324,13 @@
         "WorkerLoaderCodemodeOptions",
         "WorkerLoaderLike"
       ],
-      "sha256": "bba65c25f58b335d38f7fab24140261e3104fd73cf248f4b8ecd75aa09371a64",
+      "sha256": "6433ec850b454a9c20669ffaa82352dbaeca4816ed8f1a4f9403febc9755ab6a",
       "specifier": "tubeless/cloudflare"
     },
     {
       "declaration": "./dist/cloudflare/cloudflare-cache.d.ts",
       "exports": ["createR2CacheStore", "jsonCacheCodec", "R2BucketLike", "R2ObjectLike"],
-      "sha256": "6e2af51969db48b316dbcfc39ffac6654ca2cc9edaf51aec8ec06e3d43af1473",
+      "sha256": "3ca986a051f1ae4f85e91d37932d89731730b0f92fefe10664306c1bf91d1ef8",
       "specifier": "tubeless/cloudflare/cache"
     }
   ],

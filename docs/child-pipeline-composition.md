@@ -3,11 +3,11 @@
 Use a child pipeline when part of a workflow is useful on its own and should
 also run inside a larger pipeline. Tubeless provides three step builders:
 
-| Builder           | Use it to                                       | Step output                              |
-| ----------------- | ----------------------------------------------- | ---------------------------------------- |
-| `fromPipeline`    | Run one child pipeline                          | The child's final result                 |
-| `forEachPipeline` | Run the same child pipeline for a list of items | An array of child results in input order |
-| `iteratePipeline` | Repeat a child until a transition finishes      | The transition's final result            |
+| Builder           | Use it to                                       | Step output                                                                                  |
+| ----------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `fromPipeline`    | Run one child pipeline                          | The child's final result                                                                     |
+| `forEachPipeline` | Run the same child pipeline for a list of items | An array of child results in input order, or settled entries with `onItemFailure: "collect"` |
+| `iteratePipeline` | Repeat a child until a transition finishes      | The transition's final result                                                                |
 
 All three builders infer the child options and result types. They forward the
 parent's runtime context and report child progress through the parent step.
@@ -251,8 +251,24 @@ waiting for children that need the same slots could deadlock.
 
 A child must finish with status `"completed"` to provide a successful parent
 step output. `continueOnError` can let independent child work finish, but a
-failed child still fails the parent step. Successful siblings in a failed
-fan-out do not produce a partial parent-step output.
+failed child still fails the parent step.
+
+`forEachPipeline` takes `onItemFailure` to choose what an item failure does:
+
+| Value              | Behaviour                                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------------------------- |
+| `"fail"` (default) | Run every item, then fail the step. Successful siblings produce no partial output.                       |
+| `"stop"`           | Start no further items after the first failure, let running items finish, then fail the step.            |
+| `"collect"`        | Complete the step with one settled entry per item, in item order, so the next step decides what to keep. |
+
+Under `"collect"` the step output is `readonly ForEachSettledItem<T>[]`, where
+each entry is `{ key, index, ok: true, value }` or `{ key, index, ok: false, error }`.
+`error` is the same bounded, JSON-safe cause snapshot that `error.fanOut` uses,
+so collected output can flow into traces, checkpoints, and Studio. The step logs
+one warning naming how many items failed and otherwise reports as completed.
+Cancellation is never collected: a cancelled run, or a scheduler failure, fails or
+cancels the step exactly as under `"fail"`. See
+[`fan-out-partial-results.ts`](../examples/fan-out-partial-results.ts).
 
 Child failures use `code: "TUBELESS_CHILD_FAILED"`, `phase: "execution"`, and
 `kind: "child"`. The error identifies the child pipeline and first failing
@@ -264,10 +280,11 @@ Children receive the parent's exact `AbortSignal`. They must pass it to their
 I/O and other cancellable work. The adapter waits for running children to
 finish or cancel before returning.
 
-If partial child results are valid for your application, use an ordinary step
-that calls the child's `run()` and explicitly handles its report. Supply an
-appropriate child context; do not forward the parent's raw hooks or progress
-callback, which belong to the parent run's reporter.
+If partial fan-out results are valid for your application, use
+`onItemFailure: "collect"`. For a single child, use an ordinary step that calls the
+child's `run()` and explicitly handles its report. Supply an appropriate child
+context; do not forward the parent's raw hooks or progress callback, which belong
+to the parent run's reporter.
 
 ## Progress and hooks
 
@@ -318,7 +335,8 @@ run error and step report (also available to failure hooks, JSON error rendering
 with the original `index`, `key`, `keyTruncated`, `cancelled`, and a JSON-safe
 `error` cause snapshot. `failureCount` counts all failed started items;
 `omittedFailureCount` counts entries beyond the limit. Scheduler failures appear
-separately as `schedulerError`; unstarted items are not failures. Setup errors,
+separately as `schedulerError`; unstarted items, including those `"stop"` never
+started, are not failures. Setup errors,
 such as duplicate keys or an exception in `items`, have no `fanOut` diagnostic.
 
 Keys and snapshot strings are capped at 1024 UTF-16 code units, and cause chains
@@ -337,4 +355,4 @@ caller owns retry policy and side-effect safety. See the helper in
 [`fan-out-progress.ts`](../examples/fan-out-progress.ts).
 
 The diagnostics describe which items failed; they do not retry work or change
-the parent step's failure behavior.
+the parent step's failure behavior. Use `onItemFailure` for that.

@@ -12,6 +12,7 @@ import type {
 import type {
   InferSchemaInput,
   Pipeline,
+  PipelineErrorCause,
   PipelineExecutionContext,
   PipelinePlanStep,
   PipelineRunControls,
@@ -186,6 +187,33 @@ export type ChildPipelineStepDefinition<
  */
 export type MappedChildProgressOptions = ToMappedChildStepProgressOptions;
 
+/**
+ * What a `forEachPipeline` step does when an item's child run fails:
+ * - `"fail"` (default) runs every item, then fails the step.
+ * - `"stop"` starts no further items, lets running items finish, then fails the step.
+ * - `"collect"` completes the step with one {@link ForEachSettledItem} per item.
+ *
+ * Cancellation always cancels the step, whatever the policy.
+ */
+export type ForEachItemFailurePolicy = "fail" | "stop" | "collect";
+
+/** One item's outcome from `forEachPipeline` with `onItemFailure: "collect"`, in item order. */
+export type ForEachSettledItem<T> =
+  | { readonly key: string; readonly index: number; readonly ok: true; readonly value: T }
+  | {
+      readonly key: string;
+      readonly index: number;
+      readonly ok: false;
+      /** Bounded, JSON-safe snapshot of the item's failure and its cause chain. */
+      readonly error: PipelineErrorCause;
+    };
+
+/** Output element of a `forEachPipeline` step: the item value, or its settled entry under `"collect"`. */
+export type ForEachItemOutput<
+  T,
+  TPolicy extends ForEachItemFailurePolicy,
+> = TPolicy extends "collect" ? ForEachSettledItem<T> : T;
+
 export type MappedChildPipelineStepDefinition<
   TParentOptions extends object,
   TDeps extends readonly AnyStep<TParentOptions>[],
@@ -217,6 +245,8 @@ export type MappedChildPipelineStepDefinition<
    * Purely presentational — does not change scheduling or results.
    */
   progress?: MappedChildProgressOptions;
+  /** What happens when an item's child run fails; see {@link ForEachItemFailurePolicy}. Defaults to `"fail"`. */
+  onItemFailure?: ForEachItemFailurePolicy;
   controls?:
     | PipelineRunControlsOf<TChildPipeline>
     | ((

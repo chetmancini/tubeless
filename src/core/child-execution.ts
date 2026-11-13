@@ -5,10 +5,12 @@ import { inMemoryCheckpointStore } from "../utilities/checkpoint-store.js";
 import { emitRejectedPlanLifecycle } from "./lifecycle.js";
 import { runConcurrentPartial } from "../utilities/batch.js";
 import {
+  fanOutCause,
   isPipelineCancellation,
   PipelineChildError,
   PipelineExecutionError,
 } from "./pipeline-execution-error.js";
+import type { ForEachItemFailurePolicy, ForEachSettledItem } from "./pipeline-step-types.js";
 import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { duplicateValues } from "../utilities/collections.js";
@@ -153,6 +155,7 @@ export interface MappedChildExecutionConfig<TParentOptions extends object> {
     | number
     | ((inputs: ChildInputs, context: PipelineExecutionContext<TParentOptions>) => number);
   progress?: ToMappedChildStepProgressOptions;
+  onItemFailure?: ForEachItemFailurePolicy;
   controls?:
     | PipelineRunControls
     | ((
@@ -373,6 +376,79 @@ export function createSingleChildRunner<TParentOptions extends object>(
   };
 }
 
+type MappedOutcome =
+  | { key: string; index: number; ok: true; value: unknown }
+  | { error: Error; key: string; index: number; ok: false };
+
+/**
+ * Apply the `onItemFailure` policy to a finished fan-out: return item values,
+ * return settled entries under "collect", or throw the aggregated child error.
+ */
+function settleMappedOutcomes(
+  pipelineId: string,
+  policy: ForEachItemFailurePolicy,
+  fanOut: {
+    /** Started items in input order; unstarted items are absent. */
+    outcomes: readonly MappedOutcome[];
+    itemCount: number;
+    /** True when "stop" halted scheduling after a failure. */
+    stopped: boolean;
+    schedulerFailure: Error | undefined;
+  },
+  context: PipelineStepContext<object>
+): unknown[] {
+  const { outcomes, itemCount, stopped, schedulerFailure } = fanOut;
+  const failures = outcomes.filter(
+    (outcome): outcome is Extract<MappedOutcome, { ok: false }> => !outcome.ok
+  );
+  // A cancelled fan-out is never reported as a collected completion.
+  if (
+    policy === "collect" &&
+    schedulerFailure === undefined &&
+    !failures.some(({ error }) => isPipelineCancellation(error, context))
+  ) {
+    if (failures.length > 0) {
+      context.log.warn(
+        `Mapped child pipeline ${pipelineId} collected ${failures.length} of ${itemCount} item failure(s).`
+      );
+    }
+    return outcomes.map((outcome): ForEachSettledItem<unknown> =>
+      outcome.ok
+        ? outcome
+        : { key: outcome.key, index: outcome.index, ok: false, error: fanOutCause(outcome.error) }
+    );
+  }
+  if (failures.length === 0 && schedulerFailure === undefined) {
+    return outcomes.flatMap((outcome) => (outcome.ok ? [outcome.value] : []));
+  }
+  const details = failures.map(({ error, key }) => `${key}: ${error.message}`).join("; ");
+  const cancelled =
+    failures.every(({ error }) => isPipelineCancellation(error, context)) &&
+    (schedulerFailure === undefined || isPipelineCancellation(schedulerFailure, context));
+  const primaryError = cancelled
+    ? (failures[0]?.error ?? schedulerFailure)
+    : (failures.find(({ error }) => !isPipelineCancellation(error, context))?.error ??
+      failures[0]?.error ??
+      schedulerFailure);
+  const notStarted = itemCount - outcomes.length;
+  const stoppedNote =
+    stopped && notStarted > 0 ? ` (stopped; ${notStarted} item(s) not started)` : "";
+  const message =
+    failures.length > 0
+      ? `Mapped child pipeline ${pipelineId} failed for ${failures.length} item(s)${stoppedNote}: ${details}`
+      : `Mapped child pipeline ${pipelineId} failed: ${primaryError?.message ?? "aborted"}`;
+  throw new PipelineChildError(message, cancelled, primaryError, {
+    failures: failures.map(({ error, key, index }) => ({
+      error,
+      key,
+      index,
+      cancelled: isPipelineCancellation(error, context),
+    })),
+    failureCount: failures.length,
+    schedulerError: schedulerFailure,
+  });
+}
+
 export function createMappedChildRunner<TParentOptions extends object>(
   config: MappedChildExecutionConfig<TParentOptions>
 ): (inputs: ChildInputs, context: PipelineStepContext<TParentOptions>) => Promise<unknown[]> {
@@ -393,9 +469,10 @@ export function createMappedChildRunner<TParentOptions extends object>(
         `Mapped child pipeline ${config.pipeline.id} concurrency must be a positive finite integer, got ${concurrency}`
       );
     }
-    type Outcome =
-      | { key: string; ok: true; value: unknown }
-      | { error: Error; key: string; index: number; ok: false };
+    const policy = config.onItemFailure ?? "fail";
+    // Thrown after recording a failure under "stop" so the scheduler starts no further items.
+    const stopScheduling = new Error("Stop scheduling mapped items");
+    const settled = new Array<MappedOutcome | undefined>(items.length);
 
     const progress = hasProgressObserver(context)
       ? createMappedChildProgress(keys, concurrency, config.progress, context.reportProgress)
@@ -406,7 +483,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
     const partial = await runConcurrentPartial(
       items,
       { concurrency, signal: context.signal },
-      async (item, itemIndex): Promise<Outcome> => {
+      async (item, itemIndex): Promise<void> => {
         const key = keys[itemIndex]!;
         progress?.start(key);
         try {
@@ -448,56 +525,35 @@ export function createMappedChildRunner<TParentOptions extends object>(
             ? await config.mapResult(childResult.value, childResult, item, itemIndex, context)
             : childResult.value;
           progress?.complete(key);
-          return { key, ok: true, value };
+          settled[itemIndex] = { key, index: itemIndex, ok: true, value };
         } catch (error) {
           const cause = error instanceof Error ? error : new Error(String(error));
-          progress?.fail(key, cause, isPipelineCancellation(cause, context));
-          return { error: cause, key, index: itemIndex, ok: false };
+          const cancelled = isPipelineCancellation(cause, context);
+          progress?.fail(key, cause, cancelled);
+          settled[itemIndex] = { error: cause, key, index: itemIndex, ok: false };
+          if (policy === "stop" && !cancelled) throw stopScheduling;
         }
       }
     );
 
     progress?.finish();
-    const outcomes = partial.ok
-      ? partial.results
-      : partial.results.filter((outcome): outcome is Outcome => outcome !== undefined);
-    const schedulerFailure = partial.ok
-      ? undefined
-      : partial.failure instanceof Error
-        ? partial.failure
-        : new Error(String(partial.failure));
-
-    const failures = outcomes.filter(
-      (outcome): outcome is Extract<Outcome, { ok: false }> => !outcome.ok
-    );
-    if (failures.length > 0 || schedulerFailure !== undefined) {
-      const details = failures.map(({ error, key }) => `${key}: ${error.message}`).join("; ");
-      const cancelled =
-        failures.every(({ error }) => isPipelineCancellation(error, context)) &&
-        (schedulerFailure === undefined || isPipelineCancellation(schedulerFailure, context));
-      const primaryError = cancelled
-        ? (failures[0]?.error ?? schedulerFailure)
-        : (failures.find(({ error }) => !isPipelineCancellation(error, context))?.error ??
-          failures[0]?.error ??
-          schedulerFailure);
-      const message =
-        failures.length > 0
-          ? `Mapped child pipeline ${config.pipeline.id} failed for ${failures.length} item(s): ${details}`
-          : `Mapped child pipeline ${config.pipeline.id} failed: ${primaryError?.message ?? "aborted"}`;
-      throw new PipelineChildError(message, cancelled, primaryError, {
-        failures: failures.map(({ error, key, index }) => ({
-          error,
-          key,
-          index,
-          cancelled: isPipelineCancellation(error, context),
-        })),
-        failureCount: failures.length,
-        schedulerError: schedulerFailure,
-      });
+    const stopped = !partial.ok && partial.failure === stopScheduling;
+    let schedulerFailure: Error | undefined;
+    if (!partial.ok && !stopped) {
+      schedulerFailure =
+        partial.failure instanceof Error ? partial.failure : new Error(String(partial.failure));
     }
-    // SAFETY: when failures.length === 0 every outcome was produced by the
-    // success branch (return { key, ok: true, value }), so each outcome is
-    // necessarily `{ ok: true }`; the assertion narrows the union accordingly.
-    return outcomes.map((outcome) => (outcome as Extract<Outcome, { ok: true }>).value);
+    return settleMappedOutcomes(
+      config.pipeline.id,
+      policy,
+      {
+        // Items never started under "stop" or cancellation leave holes.
+        outcomes: settled.filter((outcome) => outcome !== undefined),
+        itemCount: items.length,
+        stopped,
+        schedulerFailure,
+      },
+      context
+    );
   };
 }
