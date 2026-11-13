@@ -259,16 +259,13 @@ describe("run --json", () => {
   });
 
   it("supports automatic commands from project IDs without a library change", async () => {
-    const { directory, filePath } = await valueFixture("null");
     const projectUrl = pathToFileURL(path.resolve("dist/project/project.js")).href;
-    await writeFile(
-      filePath,
-      `
+    const { directory } = await writeModule(`
       import { defineProject } from ${JSON.stringify(projectUrl)};
       import { ValidatedPipeline } from ${JSON.stringify(pathToFileURL(path.resolve("examples/validated-boundaries.ts")).href)};
       export default defineProject("json-project", [ValidatedPipeline]);
-    `
-    );
+    `);
+    directories.push(directory);
     const io = captureIo(directory);
     expect(
       await runCommand(

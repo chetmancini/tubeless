@@ -150,18 +150,15 @@ async function executeRun(
         }
         bindTraceSignal?.(signal);
         return {
-          ...(parsed.values.json
+          hooks: parsed.values.json
             ? {
-                hooks: {
-                  onPipelineComplete: (run: PipelineRun) => {
-                    completedRun = run;
-                  },
+                onPipelineComplete: (run: PipelineRun) => {
+                  completedRun = run;
                 },
               }
-            : {}),
-          ...(exporters.length > 0
-            ? { tracing: { exporter: composeTraceExporters(exporters) } }
-            : {}),
+            : undefined,
+          tracing:
+            exporters.length > 0 ? { exporter: composeTraceExporters(exporters) } : undefined,
         };
       }
     );
