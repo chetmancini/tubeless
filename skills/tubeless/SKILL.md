@@ -113,6 +113,16 @@ the installed declarations before using them; do not silently upgrade Tubeless.
   `compiled.metadata?.name` and `compiled.metadata?.description`, or spread
   `compiled.metadata` before explicit overrides. Authors/date remain descriptive;
   the project ID and execution cwd belong to registration.
+  For application trace destinations on CLI, Studio, and hosted launches, set
+  project `tracing: { exporters: (context) => [...] }`. Create fresh exporters
+  per launch; nested runs share them, and asynchronous export/flush is awaited.
+  Cloudflare app tracing factories also receive `env` and `launchId`. Cloudflare
+  caps each application export/flush at five seconds and the remaining run budget;
+  timed-out destinations retire while Studio keeps recording. Exporters still own
+  I/O cleanup; error-handler promises do not delay completion. Failures before a
+  run starts abort factory signals and flush returned application exporters.
+  Factories must release any resources they have not returned on signal abort.
+  Direct pipeline calls keep their own tracing context.
 
 ## Add only the capabilities the workflow needs
 

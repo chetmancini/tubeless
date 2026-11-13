@@ -10,22 +10,22 @@ Package: `tubeless`
 
 | Entrypoint                  | Declaration                               | Surface hash                                                       | Exported symbols |
 | --------------------------- | ----------------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless/agent/node`       | `./dist/agent/node.d.ts`                  | `6912bcbcb0672c4447b111a126d15ce8bd619686eb598d468f96119316a274c2` |                4 |
-| `tubeless/agent`            | `./dist/agent/agent.d.ts`                 | `a42a4441aafe999a6cf5353b1e944baf7a9ad92f155f70f86bd83a69aaf2e72a` |               39 |
-| `tubeless`                  | `./dist/core/pipeline.d.ts`               | `49918690e665e26018fee1c2b91b69d4fb6ed8392019bc5e7b9c8c968e57e714` |               78 |
-| `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `f249afe90a1e1d6e3c746299f01dc4451992ee0fdf00dedb504fd810927fd18b` |               31 |
+| `tubeless/agent/node`       | `./dist/agent/node.d.ts`                  | `c77cc7511595f76292751260d36cdcc7979902e4a6ba32d12fb437f52768638f` |                4 |
+| `tubeless/agent`            | `./dist/agent/agent.d.ts`                 | `3dbae48d40b24c3e2b0e4c6032f40816b6428c7662f7a0b9d0d1ecac39751cb0` |               39 |
+| `tubeless`                  | `./dist/core/pipeline.d.ts`               | `6bd9acad427e17154cb9c56e3b21c4cacef66e372f55d5b451886fcfbd03caad` |               78 |
+| `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `4c8a8e6acf0a5046299d7739c2d04b52f034c44c4861a23902f98bffcbead0ae` |               31 |
 | `tubeless/batch`            | `./dist/utilities/batch.d.ts`             | `856e4e759f1a62a4edd210d0291bc8b3d82b2e3e983bd37d7348bfb2b8993156` |                7 |
-| `tubeless/node`             | `./dist/node/node.d.ts`                   | `422bb3e80618ce3356fbfd98464090de92a50e59d1356a596844d3d16f7239aa` |               14 |
+| `tubeless/node`             | `./dist/node/node.d.ts`                   | `89889b3747d6e597f8799d4bbfc3ee5fa811a76f0a9928e989b549ed91d8ecf7` |               14 |
 | `tubeless/rate-limit`       | `./dist/utilities/rate-limit.d.ts`        | `21223a0ce096d7eb188e7aa38e4e0df70081b086f899dfea825b429308f6910e` |                1 |
 | `tubeless/retry`            | `./dist/utilities/retry.d.ts`             | `ae8bdf0276b1930e4052f88a4912efe7dc6b857a8a51dcf2399eac0514fc9a0b` |                6 |
-| `tubeless/project`          | `./dist/project/project.d.ts`             | `9170dd20b2acae4d619e3bcf9f27b9d528150ab4078730207f7a6a0fd79d7704` |                8 |
-| `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `fad0ef27da1fcd938ca4f1d838585f30bf2de892487c4068707ab7eff1169ab6` |               10 |
-| `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `739aa8c04dcddb9d868ffbf511bc0bf0884943eb9ca2b2e4d61ae51f25750e65` |                3 |
-| `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `f3eef185a80581c5c0a6e3f7bb33849072dd2d9b2f9e88eda85f76cd231d35f8` |                2 |
-| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `bcb50d528fcebdd7f16d2a9fcca529e5e97dc7074b01cf3e3a58f9524b9ed243` |                7 |
-| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `0ccaf388b0a951fb990d13ffa3e4a20d31858355433470e50330fa707a0b710e` |                2 |
-| `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `a1c5457e0fb8a100806f34059863979c634790fb6581a492f335ba88922b3d6a` |               12 |
-| `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `d555a2c2226fdd462e6f1222f8fdf079192f62274ad44bcc4b44e376a4f2e854` |                4 |
+| `tubeless/project`          | `./dist/project/project.d.ts`             | `e27d3eae0a268166cd6c681815c75e322ac92cb32f4083c8ac6127691d48a125` |                9 |
+| `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `37fa6e609465c39dcf9e0faa45d7fd9411c8fd18141f71b6beec344be55fe0dc` |               10 |
+| `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `7d52833c68a401c4fa69b221e5b7b37f9c2c0af089d02d8b89b8bdc8860ff1e2` |                4 |
+| `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `e1bf470c1e6f433908b08f824fc01e355435999331a8fd3e020e12760e5c9d83` |                2 |
+| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `5d60af3535a87d527222450e71863954a0ad4e3f672585af68ddc9d7e34eefa3` |                7 |
+| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `c3e3e6bad3bf562681b40eae299b724cac89769041118520c3290dce2725706f` |                2 |
+| `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `bba65c25f58b335d38f7fab24140261e3104fd73cf248f4b8ecd75aa09371a64` |               13 |
+| `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `6e2af51969db48b316dbcfc39ffac6654ca2cc9edaf51aec8ec06e3d43af1473` |                4 |
 
 ## Symbols
 
@@ -255,12 +255,13 @@ Package: `tubeless`
 | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | [`CompiledPipelineDocument`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-compiler.ts#L15) | Immutable compiled pipelines and descriptive metadata from a parsed document.     |
 | [`compilePipelineDocument`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-compiler.ts#L26)  | Compile parsed YAML or JSON into ordinary pipelines.                              |
-| [`defineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L67)            | Register each pipeline once, directly or through its explicit command.            |
+| [`defineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L81)            | Register each pipeline once, directly or through its explicit command.            |
 | [`PipelineDocumentError`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-document.ts#L72)    | A document shape or reference error; graph errors remain PipelineDefinitionError. |
 | [`PipelineDocumentMetadata`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-document.ts#L11) | Optional human-facing document information, never execution policy.               |
-| [`PipelineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L50)          | Immutable named pipeline collection, preserving each pipeline's exact type by id. |
-| [`ProjectOptions`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L40)           | Optional project presentation and execution directory.                            |
+| [`PipelineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L62)          | Immutable named pipeline collection, preserving each pipeline's exact type by id. |
+| [`ProjectOptions`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L50)           | Optional project presentation, execution directory, and launched-run tracing.     |
 | [`ProjectRegistry`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-registry.ts#L79)          | Only explicitly registered functions and schemas can be referenced by a document. |
+| [`ProjectTraceContext`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L42)      | Context for one CLI, Studio, or hosted command launch.                            |
 
 ### `tubeless/testing`
 
@@ -279,11 +280,12 @@ Package: `tubeless`
 
 ### `tubeless/tracing`
 
-| Symbol                                                                                                           | Description                                                              |
-| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| [`composeTraceExporters`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/tracing.ts#L12)          | Fan one trace stream out to multiple exporters.                          |
-| [`PipelineTraceEvent`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/tracing-contracts.ts#L4)    | A versioned lifecycle record with an event-specific, structured payload. |
-| [`PipelineTraceExporter`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/tracing-contracts.ts#L7) | Asynchronous boundary for trace destinations.                            |
+| Symbol                                                                                                                   | Description                                                              |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| [`composeTraceExporters`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/tracing.ts#L16)                  | Fan one trace stream out to multiple exporters.                          |
+| [`PipelineTraceEvent`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/tracing-contracts.ts#L4)            | A versioned lifecycle record with an event-specific, structured payload. |
+| [`PipelineTraceExporter`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/tracing-contracts.ts#L7)         | Asynchronous boundary for trace destinations.                            |
+| [`PipelineTraceExporterOptions`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/tracing-contracts.ts#L13) | Application-owned destinations created once for each launched command.   |
 
 ### `tubeless/agent/openai`
 
@@ -315,11 +317,12 @@ Package: `tubeless`
 
 | Symbol                                                                                                                               | Description                                                                                     |
 | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| [`CloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L43)                                | Worker handler and Durable Object classes that a Worker entry exports.                          |
-| [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L27)                         | Options for createCloudflareApp.                                                                |
-| [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L40)                 | Durable Object class to export from the Worker entry under its binding's export name.           |
-| [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L35)                             | Worker module handler to use as the Worker entry's default export.                              |
-| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L98)                          | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects.       |
+| [`CloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L55)                                | Worker handler and Durable Object classes that a Worker entry exports.                          |
+| [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L37)                         | Options for createCloudflareApp.                                                                |
+| [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L52)                 | Durable Object class to export from the Worker entry under its binding's export name.           |
+| [`CloudflareTraceContext`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L32)                       | Context for one admitted Cloudflare launch, including this Durable Object's bindings.           |
+| [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L47)                             | Worker module handler to use as the Worker entry's default export.                              |
+| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L110)                         | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects.       |
 | [`createR2CacheStore`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L24)                     | Step cache entries in R2.                                                                       |
 | [`createWorkerLoaderCodemodeExecutor`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-codemode.ts#L107) | Run each code-mode script in a fresh Cloudflare Dynamic Worker from a `worker_loaders` binding. |
 | [`jsonCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L132)                        | Lossless JSON codec for Workers, where the default V8 codec is unavailable.                     |

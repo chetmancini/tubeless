@@ -1,3 +1,5 @@
+import type { ProjectOptions } from "../project/pipeline-project.js";
+import { createLaunchTracing, type LaunchTracing } from "../hosting/launch-tracing.js";
 import type { PipelineRunControls } from "../core/pipeline.js";
 import type {
   PipelineRunStudioCommand,
@@ -17,6 +19,7 @@ export interface WorkbenchStudioRegistration {
   readonly command: Pick<WorkbenchPipelineCommand, "parseValues" | "execute" | "plan">;
   readonly commandIo: WorkbenchCliIo;
   readonly descriptor: PipelineRunStudioCommand;
+  readonly tracing?: ProjectOptions["tracing"];
 }
 
 /** Own live Studio executions; the caller owns the server and trace destination. */
@@ -76,13 +79,29 @@ export class WorkbenchStudioLauncher implements PipelineRunStudioLauncher {
     if (parsed.kind === "help") {
       return { accepted: false, errors: ["Help is not a launchable value set."] };
     }
+    const launchTracing = createLaunchTracing({
+      context: {
+        pipelineId: registration.descriptor.id,
+        cwd: registration.commandIo.cwd,
+        signal: session.signal,
+      },
+      configurations: [registration.tracing],
+      exporters: [session.pipelineContext.tracing!.exporter],
+    });
+    let tracing: ReturnType<LaunchTracing["prepare"]>;
+    try {
+      tracing = launchTracing.prepare();
+    } catch (error) {
+      await launchTracing.close();
+      return { accepted: false, errors: [errorMessage(error)] };
+    }
     const execution = executeHostedCommand(
       registration.command,
       parsed.values,
       registration.commandIo,
       session.signal,
-      session.pipelineContext
-    );
+      { tracing }
+    ).finally(() => launchTracing.close());
     const tracked = session.track(execution, (error) => {
       try {
         registration.commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);

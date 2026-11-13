@@ -1,3 +1,4 @@
+import { TracingExampleProject } from "../tracing.ts";
 import { MetadataPipeline } from "../graph-metadata.ts";
 import { definePipelineCommand } from "tubeless/cli";
 import { defineProject } from "tubeless/project";
@@ -40,6 +41,8 @@ export default defineProject(
   [
     // Read its result with run --json validated-import -- --source rows.txt.
     ValidatedPipeline,
+    // Its app exporters are configured by TracingExampleProject when launched separately.
+    ...TracingExampleProject.commands,
     definePipelineCommand(MetadataPipeline, { params: {} }),
     // Plain cached results and their receipts appear in history and Studio.
     CachedCountCommand,

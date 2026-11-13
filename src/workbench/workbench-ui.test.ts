@@ -113,7 +113,15 @@ async function writeStudioConfig(directory: string): Promise<string> {
     import { FixtureCommand } from "../pipeline.mjs";
     export default defineProject("studio", [FixtureCommand], {
       cwd: "..",
+      tracing: {
+        exporters: () => {
+          const events = [];
+          launches.push(events);
+          return [{ export: event => { events.push(event); } }];
+        },
+      },
     });
+    export const launches = [];
   `
   );
   return filePath;
@@ -277,7 +285,10 @@ describe("runUi", { timeout: 60_000 }, () => {
 
   it("registers studio commands and clears launch bookkeeping after the run settles", async () => {
     const { directory } = await writeCommandFixture();
-    await writeStudioConfig(directory);
+    const config = await writeStudioConfig(directory);
+    const { launches } = (await import(pathToFileURL(config).href)) as {
+      launches: { name: string; runId: string }[][];
+    };
     const controller = new AbortController();
     const io = { ...captureIo(directory), signal: controller.signal };
     const pending = runUi(
@@ -324,6 +335,7 @@ describe("runUi", { timeout: 60_000 }, () => {
 
       const commandId = payload.commands[0]?.id;
       expect(commandId).toBeDefined();
+      expect(launches).toEqual([]);
       const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
         body: JSON.stringify({ values: { message: "from-studio" } }),
         headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
@@ -343,6 +355,11 @@ describe("runUi", { timeout: 60_000 }, () => {
             expect.objectContaining({ runId: launch.runId, status: "completed" })
           );
           expect(snapshot.liveRunIds).toEqual([]);
+          expect(launches).toHaveLength(1);
+          expect(launches[0]?.at(-1)).toMatchObject({
+            name: "pipeline.completed",
+            runId: launch.runId,
+          });
         },
         { timeout: 10_000 }
       );

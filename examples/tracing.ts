@@ -1,4 +1,6 @@
 import { createSteps, definePipeline } from "tubeless";
+import { defineProject } from "tubeless/project";
+import { definePipelineCommand } from "tubeless/cli";
 import { withRetry } from "tubeless/retry";
 import {
   composeTraceExporters,
@@ -136,3 +138,19 @@ export async function runTracingExample(
     },
   });
 }
+
+/** Register application exporters once for CLI, Studio, and hosted launches. */
+export const TracingExampleProject = defineProject(
+  "tracing-example-project",
+  [
+    definePipelineCommand(TracingExamplePipeline, {
+      params: { rows: { type: "string", multiple: true } },
+    }),
+  ],
+  {
+    tracing: {
+      // Each launch owns its adapters; nested runs share that launch's destinations.
+      exporters: () => [createJsonExporter((line) => console.error(line))],
+    },
+  }
+);

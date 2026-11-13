@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Miniflare, NoOpLog, type WorkerdStructuredLog } from "miniflare";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFailed } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFailed, vi } from "vitest";
 import { manifestModules } from "./cloudflare-workerd.test-support.js";
 
 const AUD = "a".repeat(64);
@@ -30,10 +30,28 @@ const cached = cachedSteps.step("cached", { cache: { version: "v1" }, run: () =>
 const r2Cached = cachedSteps.step("r2-cached", { cache: { version: "v1", ...r2Cache }, run: () => ({ rows: [1, 2, 3] }) });
 const app = createCloudflareApp(defineProject("worker-test", [
   definePipeline({ id: "greeting", name: "Greeting", steps: [greet], finalize: greet }),
+  definePipeline({ id: "trace-timeout", steps: [greet], finalize: greet }),
   definePipeline({ id: "slow", steps: [wait], finalize: wait }),
   definePipeline({ id: "cached", steps: [cached], finalize: cached }),
   definePipeline({ id: "r2-cached", steps: [r2Cached], finalize: r2Cached }),
-]));
+], { tracing: {
+  exporters: () => [{ export(event) { if (event.name === "pipeline.completed") console.log("project-export:" + event.runId); } }],
+} }), { tracing: {
+  exporters: ({ env, pipelineId, launchId }) => {
+    const events = [];
+    return [
+      ...(pipelineId === "trace-timeout" ? [{ export: () => new Promise(() => {}) }] : []),
+      { export() { throw new Error("optional app destination unavailable"); } },
+      {
+        export(event) { events.push(event); },
+        async flush() {
+          const completed = events.findLast(event => event.name === "pipeline.completed");
+          if (completed) await env.TUBELESS_BUCKET.put("traces/" + completed.runId, JSON.stringify({ pipelineId, launchId, audience: env.ACCESS_AUD, events }));
+        },
+      },
+    ];
+  },
+} });
 bindCacheBucket(env.TUBELESS_BUCKET);
 export default app.worker;
 export const { TubelessStudio, TubelessRun } = app.durableObjects;
@@ -289,6 +307,7 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
     };
     expect(commands.map((command) => command.id)).toEqual([
       "greeting",
+      "trace-timeout",
       "slow",
       "cached",
       "r2-cached",
@@ -317,6 +336,51 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
       await (await call(`/api/runs/${encodeURIComponent(runId)}`)).json()
     );
     expect(detail).toContain("hello ada");
+  });
+
+  it("passes bindings to fresh per-launch exporters and awaits delivery beside project exporters", async () => {
+    // SAFETY: Miniflare's mapped binding types collapse to Request with this compiler;
+    // the configured binding is an R2 bucket and this test uses only its get/text surface.
+    const bucket = (await mf.getR2Bucket("TUBELESS_BUCKET", "tubeless-test")) as unknown as {
+      get(key: string): Promise<{ text(): Promise<string> } | null>;
+    };
+    const runIds: string[] = [];
+    for (const name of ["ada", "grace"]) {
+      const response = await launch("greeting", { name });
+      const { runId } = (await response.json()) as { runId: string };
+      runIds.push(runId);
+      expect(await runStatus(runId, (status) => status !== "running")).toBe("completed");
+      await vi.waitFor(async () => {
+        const object = await bucket.get(`traces/${runId}`);
+        expect(object).not.toBeNull();
+        const trace = JSON.parse(await object!.text()) as {
+          audience: string;
+          pipelineId: string;
+          launchId: string;
+          events: { name: string; runId: string }[];
+        };
+        expect(trace.audience).toBe(AUD);
+        expect(trace.pipelineId).toBe("greeting");
+        expect(trace.launchId).toEqual(expect.any(String));
+        expect(new Set(trace.events.map((event) => event.runId))).toEqual(new Set([runId]));
+        expect(trace.events.at(-1)?.name).toBe("pipeline.completed");
+      });
+      expect(workerLogs.some((line) => line.includes(`project-export:${runId}`))).toBe(true);
+    }
+    expect(new Set(runIds).size).toBe(2);
+  });
+
+  it("finishes Studio history when an application exporter never settles", async () => {
+    const response = await launch("trace-timeout", { name: "ada" });
+    expect(response.status).toBe(202);
+    const { runId } = (await response.json()) as { runId: string };
+    expect(await runStatus(runId, (status) => status !== "running")).toBe("completed");
+    expect(
+      workerLogs.some((line) =>
+        line.includes("Application trace exporter export exceeded its delivery deadline")
+      )
+    ).toBe(true);
+    expect(workerLogs.some((line) => line.includes(`project-export:${runId}`))).toBe(true);
   });
 
   it("records an options-schema rejection as a failed run", async () => {

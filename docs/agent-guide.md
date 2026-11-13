@@ -668,7 +668,18 @@ read when a pipeline needs them.
   [tracing recipe](../examples/tracing.ts). Use `composeTraceExporters` from `tubeless/tracing` when
   one run must fan out to multiple destinations; `onExporterError` reports the
   first partial drop, the failed destination is retired, and healthy exporters
-  keep receiving events.
+  keep receiving events. For CLI, Studio, and hosted launches, set project
+  `tracing: { exporters: (context) => [...] }`; each synchronous factory creates
+  fresh exporters for one command, and asynchronous export/flush is awaited.
+  Cloudflare also accepts `createCloudflareApp(project, { tracing })`; its factory
+  receives bindings in `context.env` plus `launchId`. Cloudflare caps each app
+  export/flush at five seconds and the remaining run budget, retiring timed-out
+  destinations while Studio continues recording. Exporters still own I/O cleanup.
+  Error-handler promises are observed for rejection but do not delay completion.
+  Before a run starts, setup or command-preparation failures abort factory signals
+  and flush returned application exporters; cleanup never masks the original error.
+  Factory errors reject launches before execution; direct pipeline calls still
+  supply their own tracing context.
 - Keep durable local observation opt-in. Use `tubeless run --store` for SQLite
   history and `tubeless run --trace` for portable NDJSON traces. Inspect them
   with `tubeless history` or `tubeless ui`. An older SQLite store is not upgraded

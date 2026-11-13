@@ -4,13 +4,19 @@ import {
   type HostedCommand,
   type HostedOutput,
 } from "../hosting/hosting-commands.js";
-import type { PipelineTraceEvent, PipelineTraceExporter } from "../tracing/tracing.js";
+import type {
+  PipelineTraceEvent,
+  PipelineTraceExporter,
+  PipelineTraceExporterOptions,
+} from "../tracing/tracing.js";
+import { createLaunchTracing, type LaunchTracing } from "../hosting/launch-tracing.js";
+import { boundCloudflareTraceExporter } from "./cloudflare-tracing.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
-
 import {
   MAX_RUN_DURATION_MS,
   HOST_TERMINATED,
   type RunJob,
+  type CloudflareRunTraceContext,
   type StudioIngest,
 } from "./cloudflare-run-contract.js";
 
@@ -173,6 +179,7 @@ export async function runHostedJob(options: {
   readonly commands: ReadonlyMap<string, HostedCommand>;
   readonly ingest: () => StudioIngest;
   readonly controller: AbortController;
+  readonly tracing?: PipelineTraceExporterOptions<CloudflareRunTraceContext>;
 }): Promise<void> {
   const { job, ingest, controller } = options;
   const entry = options.commands.get(job.commandId);
@@ -195,6 +202,13 @@ export async function runHostedJob(options: {
   // Core does not await exporters, so a refused batch could arrive after a step's side effects.
   // Admission happens before any user code runs; a refused launch was already closed by Studio.
   if (!(await admitted(ingest(), job.launchId))) return;
+  const deadlineAtMs = Date.now() + boundedDuration(job);
+  const traceContext = {
+    pipelineId: job.commandId,
+    cwd: output.cwd,
+    signal: controller.signal,
+    launchId: job.launchId,
+  };
   let recorded = false;
   let deliveryFailure: { readonly error: unknown } | undefined;
   const batches = new BatchingTraceExporter(
@@ -225,14 +239,22 @@ export async function runHostedJob(options: {
   const deadline = setTimeout(
     () =>
       controller.abort(new DOMException("The run exceeded its maximum duration.", "TimeoutError")),
-    boundedDuration(job)
+    Math.max(0, deadlineAtMs - Date.now())
   );
   let exitCode: number;
+  let launchTracing: LaunchTracing | undefined;
   try {
+    launchTracing = createLaunchTracing({
+      context: traceContext,
+      configurations: [entry.tracing, options.tracing],
+      exporters: [exporter],
+      wrapExporter: (destination) => boundCloudflareTraceExporter(destination, deadlineAtMs),
+    });
     exitCode = await executeHostedCommand(entry.command, parsed.values, output, controller.signal, {
-      tracing: { exporter },
+      tracing: launchTracing.prepare(),
     });
   } finally {
+    await launchTracing?.close();
     clearTimeout(deadline);
     // Drain pending events so no timer can deliver after the job's cleanup.
     await batches.flush().catch(() => {});
@@ -266,6 +288,7 @@ export class RunObjectCore {
       readonly commands: ReadonlyMap<string, HostedCommand>;
       readonly ingest: () => StudioIngest;
       readonly now?: () => number;
+      readonly tracing?: PipelineTraceExporterOptions<CloudflareRunTraceContext>;
     }
   ) {
     this.#now = deps.now ?? Date.now;
@@ -322,6 +345,7 @@ export class RunObjectCore {
         commands: this.deps.commands,
         ingest: this.deps.ingest,
         controller,
+        tracing: this.deps.tracing,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

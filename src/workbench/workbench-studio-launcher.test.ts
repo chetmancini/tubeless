@@ -1,3 +1,5 @@
+import { createSteps, definePipeline } from "../core/pipeline.js";
+import { definePipelineCommand } from "../cli/cli-pipeline-command.js";
 import { describe, expect, it, vi } from "vitest";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import {
@@ -170,4 +172,128 @@ describe("WorkbenchStudioLauncher", () => {
     expect(() => launcher.plan("missing", {})).toThrow("Pipeline planning is not available");
     expect(execute).not.toHaveBeenCalled();
   });
+});
+
+describe("Studio application tracing", () => {
+  it("records acknowledgements despite app exporter failures and drains each launch's flush", async () => {
+    const release = deferred();
+    const onExporterError = vi.fn();
+    const destinations: PipelineTraceEvent[][] = [];
+    const flushes: string[] = [];
+    const factory = vi.fn(() => {
+      const events: PipelineTraceEvent[] = [];
+      destinations.push(events);
+      return [
+        {
+          export() {
+            throw new Error("app exporter failed");
+          },
+        },
+        {
+          export(event: PipelineTraceEvent) {
+            events.push(event);
+          },
+          async flush() {
+            await release.promise;
+            flushes.push("flushed");
+          },
+        },
+      ];
+    });
+    const { step } = createSteps();
+    const work = step("work", { run: () => "ok" });
+    const command = definePipelineCommand(definePipeline({ id: "fixture", steps: [work] }), {
+      params: {},
+      reporter: false,
+    });
+    const entry = {
+      ...registration(command.execute),
+      command,
+      tracing: { exporters: factory, onExporterError },
+    };
+    const stored: PipelineTraceEvent[] = [];
+    const launcher = new WorkbenchStudioLauncher([entry], {
+      export: (event) => {
+        stored.push(event);
+      },
+    });
+    try {
+      const first = await launcher.launch("fixture", {});
+      const second = await launcher.launch("fixture", {});
+      expect(first.accepted).toBe(true);
+      expect(second.accepted).toBe(true);
+      expect(factory).toHaveBeenCalledTimes(2);
+      expect(factory).toHaveBeenCalledWith({
+        pipelineId: "fixture",
+        cwd: "/tmp",
+        signal: expect.any(AbortSignal),
+      });
+      expect(launcher.isBusy()).toBe(true);
+      expect(flushes).toEqual([]);
+      release.resolve();
+      await launcher.drain();
+      expect(flushes).toHaveLength(2);
+      expect(destinations.map((events) => events.at(-1)?.name)).toEqual([
+        "pipeline.completed",
+        "pipeline.completed",
+      ]);
+      expect(new Set(destinations.map((events) => events[0]?.runId)).size).toBe(2);
+      expect(stored.filter((event) => event.name === "pipeline.completed")).toHaveLength(2);
+      expect(onExporterError).toHaveBeenCalledTimes(2);
+    } finally {
+      release.resolve();
+      launcher.stop();
+      await launcher.drain();
+    }
+  });
+
+  it("rejects factory errors before execution and does not initialize exporters on parse errors", async () => {
+    const execute = vi.fn(async () => undefined);
+    const exporters = vi.fn(() => {
+      throw new Error("factory failed");
+    });
+    const entry = { ...registration(execute), tracing: { exporters } };
+    const launcher = new WorkbenchStudioLauncher([entry], { export: vi.fn() });
+    expect(await launcher.launch("fixture", {})).toEqual({
+      accepted: false,
+      errors: ["factory failed"],
+    });
+    entry.command.parseValues = () => ({ kind: "error", errors: ["invalid"], helpText: "help" });
+    expect(await launcher.launch("fixture", {})).toMatchObject({ accepted: false });
+    expect(exporters).toHaveBeenCalledTimes(1);
+    expect(execute).not.toHaveBeenCalled();
+    expect(launcher.isBusy()).toBe(false);
+  });
+});
+
+it("keeps Studio busy until pre-run exporter rollback finishes", async () => {
+  const cleanup = deferred();
+  let signal!: AbortSignal;
+  const flush = vi.fn(() => cleanup.promise);
+  const entry = {
+    ...registration(async () => {
+      throw new Error("command preparation failed");
+    }),
+    tracing: {
+      exporters: (context: { signal: AbortSignal }) => {
+        signal = context.signal;
+        return [{ export: vi.fn(), flush }];
+      },
+    },
+  };
+  const launcher = new WorkbenchStudioLauncher([entry], { export: vi.fn() });
+  const response = launcher.launch("fixture", {});
+  try {
+    await vi.waitFor(() => expect(flush).toHaveBeenCalledOnce());
+    expect(signal.aborted).toBe(true);
+    expect(launcher.isBusy()).toBe(true);
+    cleanup.resolve();
+    await expect(response).resolves.toMatchObject({ accepted: false });
+    await launcher.drain();
+    expect(launcher.isBusy()).toBe(false);
+  } finally {
+    cleanup.resolve();
+    launcher.stop();
+    await launcher.drain();
+  }
 });

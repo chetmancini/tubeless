@@ -3,6 +3,8 @@ import { didYouMean } from "../utilities/suggest.js";
 import type { PipelineCommand } from "../cli/cli-pipeline-command.js";
 import type { Pipeline } from "../core/pipeline.js";
 
+import type { PipelineTraceExporterOptions } from "../tracing/tracing-contracts.js";
+
 const PIPELINE_PROJECT_MARKER = Symbol.for("tubeless/pipeline-project/v1");
 
 export type AnyProjectPipeline = Pipeline<object, unknown, string, string, string>;
@@ -36,7 +38,15 @@ type PipelineById<
       : TPipeline
   : never;
 
-/** Optional project presentation and execution directory. */
+/** Context for one CLI, Studio, or hosted command launch. Run ids arrive in trace events. */
+export interface ProjectTraceContext {
+  readonly pipelineId: string;
+  readonly cwd: string;
+  /** Follows run cancellation; also aborts if launch setup ends without starting a run. */
+  readonly signal: AbortSignal;
+}
+
+/** Optional project presentation, execution directory, and launched-run tracing. */
 export interface ProjectOptions {
   /** Display name; defaults to the project id. */
   readonly name?: string;
@@ -44,6 +54,8 @@ export interface ProjectOptions {
   readonly description?: string;
   /** Execution directory for CLI and Studio, relative to the project file. */
   readonly cwd?: string;
+  /** Extra destinations for launched commands; direct pipeline calls keep their own context. */
+  readonly tracing?: PipelineTraceExporterOptions<ProjectTraceContext>;
 }
 
 /** Immutable named pipeline collection, preserving each pipeline's exact type by id. */
@@ -55,6 +67,8 @@ export interface PipelineProject<
   readonly name: string;
   readonly description?: string;
   readonly cwd?: string;
+  /** Extra destinations for launched commands; direct pipeline calls keep their own context. */
+  readonly tracing?: PipelineTraceExporterOptions<ProjectTraceContext>;
   /** Explicit commands from the entry list, in registration order. */
   readonly commands: readonly PipelineCommand<{}, unknown>[];
   /** Underlying pipelines from every entry, in registration order. */
@@ -94,6 +108,19 @@ export function defineProject(
     const value = options?.[field];
     if (value !== undefined && (typeof value !== "string" || value.trim().length === 0)) {
       throw new Error(`Project ${field} must be a non-empty string.`);
+    }
+  }
+  const tracing = options?.tracing;
+  if (tracing !== undefined) {
+    if (
+      typeof tracing !== "object" ||
+      tracing === null ||
+      typeof tracing.exporters !== "function"
+    ) {
+      throw new TypeError("Project tracing.exporters must be a function.");
+    }
+    if (tracing.onExporterError !== undefined && typeof tracing.onExporterError !== "function") {
+      throw new TypeError("Project tracing.onExporterError must be a function.");
     }
   }
   const name = options?.name ?? id;
@@ -148,6 +175,7 @@ export function defineProject(
     name,
     ...(description === undefined ? {} : { description }),
     ...(cwd === undefined ? {} : { cwd }),
+    ...(tracing === undefined ? {} : { tracing: Object.freeze({ ...tracing }) }),
     commands: Object.freeze(commands),
     pipelines: Object.freeze(pipelines),
     pipelineIds: Object.freeze(pipelines.map((pipeline) => pipeline.id)),

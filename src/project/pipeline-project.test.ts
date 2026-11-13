@@ -24,6 +24,23 @@ const beta = definePipeline({
 });
 
 describe("pipeline project", () => {
+  it("snapshots tracing without calling factories during definition or direct runs", async () => {
+    const exporters = vi.fn(() => []);
+    const tracing = { exporters };
+    const project = defineProject("traced", [alpha], { tracing });
+    tracing.exporters = vi.fn(() => []);
+    expect(Object.isFrozen(project.tracing)).toBe(true);
+    expect(project.tracing?.exporters).toBe(exporters);
+    await project.get("alpha").runOrThrow({ value: "hello" });
+    expect(exporters).not.toHaveBeenCalled();
+    expect(() =>
+      defineProject("bad", [], {
+        // @ts-expect-error Factories must be functions at runtime too.
+        tracing: { exporters: [] },
+      })
+    ).toThrow("tracing.exporters must be a function");
+  });
+
   it("preserves transformed inputs and results without executing or inferring commands", async () => {
     const validate = vi.fn((value: unknown) => {
       if (
