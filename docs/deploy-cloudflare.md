@@ -39,7 +39,7 @@ already exists, or any other Vite config file (`vite.config.js`, `.mjs`, `.cjs`,
 when the project is not `./tubeless.project.ts`. Then run the steps it prints:
 
 ```sh
-bun add tubeless && bun add -d --exact cf@1.0.0-beta.30 vite@8.3.8 @cloudflare/vite-plugin@2.0.0-beta.v.11   # npm install -D -E … / pnpm add -D -E …
+bun add tubeless && bun add -d --exact cf@1.0.0-beta.31 vite@8.3.8 @cloudflare/vite-plugin@2.0.0-beta.v.11   # npm install -D -E … / pnpm add -D -E …
 grep -qxF '.cloudflare/' .gitignore 2>/dev/null || printf '\n.cloudflare/\n' >> .gitignore   # cf build output and generated types
 npx cf auth login
 npx cf dev            # Studio on http://localhost:8787 (Access is skipped only on localhost)
