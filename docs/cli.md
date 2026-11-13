@@ -548,10 +548,50 @@ tubeless run [options] <pipeline-id-or-file> [-- <command-args...>]
 
 `--store` and `--trace` can be combined. Traces stay off stdout unless `--trace -`
 is set. When `--trace -` is set, the TTY reporter and command result go to
-stderr so stdout stays valid NDJSON. To send events to OpenTelemetry or another service, implement a
-`PipelineTraceExporter` in your application; the [tracing recipe](../examples/tracing.ts)
-shows JSON and OpenTelemetry adapters. Use `composeTraceExporters` from `tubeless/tracing` for multiple
-destinations; a failed exporter does not stop the others or fail the pipeline.
+stderr so stdout stays valid NDJSON.
+
+For application destinations, configure `tracing` on the project:
+
+```ts
+export default defineProject("jobs", [ImportCommand], {
+  tracing: {
+    exporters: ({ pipelineId, cwd, signal }) => [
+      createTelemetryExporter({ pipelineId, cwd, signal }),
+    ],
+    onExporterError: (error) => console.warn("Trace delivery failed", error),
+  },
+});
+```
+
+`createTelemetryExporter` is application code returning a `PipelineTraceExporter`;
+the [tracing recipe](../examples/tracing.ts) includes JSON and OpenTelemetry adapters
+and a complete `TracingExampleProject`. The synchronous factory runs once per
+command launch, after CLI argument parsing and opening built-in recording destinations,
+with the execution cwd and a signal that follows run cancellation.
+Return fresh exporters to isolate concurrent runs. CLI project-ID runs and Studio
+launches compose them with `--store`, `--trace`, or Studio's store; no recording
+flag is required. Help, discovery, planning, and rejected CLI arguments do not call
+the factory. Factory errors reject the launch before pipeline execution. If setup
+or command preparation fails before a run starts, Tubeless aborts the factory
+signal and attempts to flush each returned application exporter once. Cleanup
+failures do not replace the original error. A factory that allocates resources
+before throwing should release them when its context signal aborts.
+
+Nested runs share the launch's exporters. Their event `runId` and `parentRunId`
+identify each run; `pipeline.completed.payload.status` distinguishes success,
+failure, and cancellation. Tubeless awaits asynchronous `export` and `flush` calls
+before execution settles. A destination that fails is retired while healthy
+exporters continue; exporter failures are logged and reported to `onExporterError`
+without failing the pipeline. As with ordinary tracing, that callback reports the
+first observed exporter failure per pipeline run. Error-handler promises are
+observed for rejection but do not delay completion; put awaited delivery in the
+exporter. CLI and local Studio exporters own network timeouts and cleanup.
+[Cloudflare](./deploy-cloudflare.md#application-trace-exporters) caps each application
+export or flush at five seconds and the remaining run budget.
+
+Projects retain the original pipelines: calling `project.get(id).run()` directly
+or launching a standalone file uses the caller's tracing context. For direct runs,
+use `composeTraceExporters` from `tubeless/tracing` to combine destinations.
 
 Use `--json` to read a result from a script or coding agent:
 

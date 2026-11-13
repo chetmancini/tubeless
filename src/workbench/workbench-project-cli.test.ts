@@ -27,7 +27,13 @@ function captureIo(cwd: string): WorkbenchCliIo & { errors: string[]; output: st
   };
 }
 
-async function writeProjectFixture(): Promise<{
+async function writeProjectFixture(
+  options: {
+    readonly tracingSource?: string;
+    readonly moduleSource?: string;
+    readonly mapOptionsSource?: string;
+  } = {}
+): Promise<{
   directory: string;
   projectFile: string;
   workDirectory: string;
@@ -56,7 +62,7 @@ async function writeProjectFixture(): Promise<{
       export const FixtureCommand = definePipelineCommand(Pipeline, {
         name: "Import data",
         params: { text: { type: "string" } },
-        mapOptions: ({ text }) => ({ message: text.toUpperCase() }),
+        mapOptions: ${options.mapOptionsSource ?? "({ text }) => ({ message: text.toUpperCase() })"},
         reporter: false,
         summarize: (result) => [\`completed:\${result}\`],
       });
@@ -70,7 +76,9 @@ async function writeProjectFixture(): Promise<{
     import { FixtureCommand } from "../pipeline.mjs";
     export default defineProject("fixture", [FixtureCommand], {
       cwd: "./work",
+      ${options.tracingSource ? `tracing: ${options.tracingSource},` : ""}
     });
+    ${options.moduleSource ?? ""}
   `
   );
   await writeFile(
@@ -80,7 +88,9 @@ async function writeProjectFixture(): Promise<{
     import { FixtureCommand } from "./pipeline.mjs";
     export default defineProject("fixture", [FixtureCommand], {
       cwd: "./config/work",
+      ${options.tracingSource ? `tracing: ${options.tracingSource},` : ""}
     });
+    ${options.moduleSource ?? ""}
   `
   );
   return { directory, projectFile, workDirectory };
@@ -566,5 +576,133 @@ describe("project file workbench", () => {
 
     controller.abort();
     await expect(running).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+  });
+});
+
+describe("project trace exporters", () => {
+  async function tracedFixture(mapOptionsSource?: string) {
+    const fixture = await writeProjectFixture({
+      mapOptionsSource,
+      tracingSource: `{
+        exporters(context) {
+          if (state.throwFactory) throw new Error("factory failed");
+          const run = { context, events: [], flushed: false };
+          state.runs.push(run);
+          return [
+            { export() { throw new Error("destination failed"); } },
+            {
+              export(event) { run.events.push(event); },
+              async flush() {
+                await new Promise(resolve => setTimeout(resolve, 5));
+                run.flushed = true;
+              },
+            },
+          ];
+        },
+        onExporterError(error) { state.errors.push(error.message); },
+      }`,
+      moduleSource: "export const state = { runs: [], errors: [], throwFactory: false };",
+    });
+    const module = await import(pathToFileURL(fixture.projectFile).href);
+    const state = module.state as {
+      throwFactory: boolean;
+      errors: string[];
+      runs: {
+        context: { pipelineId: string; cwd: string; signal: AbortSignal };
+        events: { name: string }[];
+        flushed: boolean;
+      }[];
+    };
+    return { ...fixture, state };
+  }
+
+  it.each([false, true])(
+    "composes fresh exporters with optional recording (%s) and awaits flush",
+    async (record) => {
+      const { directory, projectFile, workDirectory, state } = await tracedFixture();
+      const io = captureIo(directory);
+      const args = ["run", "--project", projectFile];
+      if (record) args.push("--store", "runs.sqlite", "--trace", "run.ndjson");
+      args.push("import-data", "--", "--text", "hello");
+      for (let index = 0; index < 2; index += 1) {
+        expect(await runWorkbenchCli(args, io)).toBe(0);
+      }
+      expect(state.runs).toHaveLength(2);
+      for (const run of state.runs) {
+        expect(run.context).toMatchObject({ pipelineId: "import-data", cwd: workDirectory });
+        expect(run.context.signal.aborted).toBe(false);
+        expect(run.events.at(-1)?.name).toBe("pipeline.completed");
+        expect(run.flushed).toBe(true);
+      }
+      expect(state.errors).toEqual(["destination failed", "destination failed"]);
+      if (record) {
+        const events = (await readFile(path.join(directory, "run.ndjson"), "utf8"))
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line) as { name: string });
+        expect(events.at(-1)?.name).toBe("pipeline.completed");
+      }
+    }
+  );
+
+  it.each(["store", "trace"] as const)(
+    "opens the %s destination before creating app exporters",
+    async (destination) => {
+      const { directory, projectFile, state } = await tracedFixture();
+      const io = captureIo(directory);
+      expect(
+        await runWorkbenchCli(
+          [
+            "run",
+            "--project",
+            projectFile,
+            `--${destination}`,
+            directory,
+            "import-data",
+            "--",
+            "--text",
+            "hello",
+          ],
+          io
+        )
+      ).not.toBe(0);
+      expect(state.runs).toEqual([]);
+      expect(io.errors.join("")).toContain("Error:");
+    }
+  );
+
+  it("aborts and flushes app exporters if command mapping fails before a run", async () => {
+    const { directory, projectFile, state } = await tracedFixture(
+      '() => { throw new Error("mapping failed"); }'
+    );
+    const io = captureIo(directory);
+    const exitCode = await runWorkbenchCli(
+      ["run", "--project", projectFile, "import-data", "--", "--text", "hello"],
+      io
+    );
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.execution);
+    expect(io.errors.join("")).toContain("mapping failed");
+    expect(state.runs).toHaveLength(1);
+    expect(state.runs[0]?.context.signal.aborted).toBe(true);
+    expect(state.runs[0]?.flushed).toBe(true);
+    expect(state.runs[0]?.events).toEqual([]);
+  });
+
+  it("keeps discovery, help, and invalid inputs free of exporter setup and rejects a throwing factory", async () => {
+    const { directory, projectFile, state } = await tracedFixture();
+    const io = captureIo(directory);
+    await runWorkbenchCli(["list", "--project", projectFile], io);
+    await runWorkbenchCli(["run", "--project", projectFile, "import-data", "--", "--help"], io);
+    await runWorkbenchCli(["run", "--project", projectFile, "import-data", "--", "--unknown"], io);
+    expect(state.runs).toEqual([]);
+    state.throwFactory = true;
+    expect(
+      await runWorkbenchCli(
+        ["run", "--project", projectFile, "import-data", "--", "--text", "hello"],
+        io
+      )
+    ).not.toBe(0);
+    expect(io.errors.join("")).toContain("factory failed");
+    expect(io.output.join("")).not.toContain("cwd:");
   });
 });

@@ -2,9 +2,14 @@ import { DurableObject } from "cloudflare:workers";
 import type { AnyProjectPipeline, PipelineProject } from "../project/pipeline-project.js";
 import { hostedProjectCommands } from "../hosting/hosting-commands.js";
 import { errorResponse } from "../studio/server/http.js";
-import type { PipelineTraceEvent } from "../tracing/tracing.js";
+import type { PipelineTraceEvent, PipelineTraceExporterOptions } from "../tracing/tracing.js";
 import { createAccessAuthenticator, parseAccessConfig } from "./cloudflare-access.js";
-import { MAX_RUN_DURATION_MS, type RunJob, type StudioIngest } from "./cloudflare-run-contract.js";
+import {
+  MAX_RUN_DURATION_MS,
+  type RunJob,
+  type StudioIngest,
+  type CloudflareRunTraceContext,
+} from "./cloudflare-run-contract.js";
 import { RunObjectCore } from "./cloudflare-run.js";
 import { StudioObjectCore, type RunStubLike } from "./cloudflare-studio.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
@@ -23,8 +28,15 @@ export {
   type R2ObjectLike,
 } from "./cloudflare-cache.js";
 
+/** Context for one admitted Cloudflare launch, including this Durable Object's bindings. */
+export interface CloudflareTraceContext<TEnv = unknown> extends CloudflareRunTraceContext {
+  readonly env: TEnv;
+}
+
 /** Options for createCloudflareApp. */
-export interface CloudflareAppOptions {
+export interface CloudflareAppOptions<TEnv = unknown> {
+  /** Extra destinations composed with project exporters and Studio ingestion. */
+  readonly tracing?: PipelineTraceExporterOptions<CloudflareTraceContext<TEnv>>;
   readonly limits?: {
     /** Cooperative run deadline. Defaults to and may not exceed 14 minutes (alarm wall time is 15). */
     readonly maxRunDurationMs?: number;
@@ -95,9 +107,9 @@ function studioUnavailable(request: Request): Response {
 }
 
 /** Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects. */
-export function createCloudflareApp(
+export function createCloudflareApp<TEnv = unknown>(
   project: PipelineProject<string, readonly AnyProjectPipeline[]>,
-  options: CloudflareAppOptions = {}
+  options: CloudflareAppOptions<TEnv> = {}
 ): CloudflareApp {
   const maxRunDurationMs = maxRunDuration(options.limits?.maxRunDurationMs);
   const commands = new Map(
@@ -199,6 +211,18 @@ export function createCloudflareApp(
         storage: state.storage,
         commands,
         ingest: () => env.TUBELESS_STUDIO.getByName("default"),
+        tracing:
+          options.tracing === undefined
+            ? undefined
+            : {
+                exporters: (context) =>
+                  options.tracing!.exporters({
+                    ...context,
+                    // SAFETY: the application supplies its Worker bindings type at registration.
+                    env: env as TEnv,
+                  }),
+                onExporterError: options.tracing.onExporterError,
+              },
       });
     }
 

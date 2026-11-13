@@ -116,6 +116,10 @@ their source files.
   core to build pipelines from parsed documents; it performs no parsing or I/O.
   Project entries accept explicit command adapters through type-only references;
   the project entrypoint has no runtime dependency on CLI, workbench, storage or Studio.
+  Project tracing configuration references only trace contract types; workbench and
+  hosting create the launch's application exporters and compose concrete destinations.
+  `hosting/launch-tracing.ts` owns factory preparation, shared error reporting,
+  and abort/drain rollback when a launch never reaches pipeline execution.
 - Workbench is internal executable integration: it loads modules, selects storage
   adapters and supplies Studio launch capabilities. The public project API loads none of these.
   Normalize project pipelines and direct files into workbench
@@ -131,6 +135,8 @@ their source files.
   `cloudflare:` imports so project modules that use it still load in Node.
   `cloudflare/cloudflare-run-contract.ts` owns shared run jobs, ingestion,
   deadline limits and host-failure vocabulary without loading execution.
+  `cloudflare-tracing.ts` bounds optional application trace delivery by operation and
+  run deadlines, independently of Studio ingestion's retry and abort policy.
   `cloudflare/cloudflare-codemode.ts` is the Worker Loader code-mode executor; it imports
   only agent's executor types and realm setup, which it embeds in each Dynamic Worker.
 - Type-only imports can share contracts without loading their implementation.

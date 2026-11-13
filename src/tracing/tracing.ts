@@ -1,7 +1,11 @@
 import { formatExporterError, PartialPipelineTraceExporterError } from "./trace-exporter-error.js";
 import type { PipelineTraceExporter } from "./tracing-contracts.js";
 
-export type { PipelineTraceEvent, PipelineTraceExporter } from "./tracing-contracts.js";
+export type {
+  PipelineTraceEvent,
+  PipelineTraceExporter,
+  PipelineTraceExporterOptions,
+} from "./tracing-contracts.js";
 
 /**
  * Fan one trace stream out to multiple exporters. An exporter is retired after

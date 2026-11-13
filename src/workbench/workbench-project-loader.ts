@@ -8,7 +8,11 @@ import {
   type WorkbenchPipelineCommand,
 } from "./pipeline-module.js";
 import { commandForPipeline } from "../hosting/hosting-commands.js";
-import { isPipelineProject, type AnyProjectPipeline } from "../project/pipeline-project.js";
+import {
+  isPipelineProject,
+  type AnyProjectPipeline,
+  type ProjectOptions,
+} from "../project/pipeline-project.js";
 import { didYouMean } from "../utilities/suggest.js";
 import {
   errorMessage,
@@ -28,6 +32,7 @@ type LoadFailure = { exitCode: number };
 /** A source normalized once for discovery, planning, execution, and Studio. */
 export interface WorkbenchRegistration {
   readonly identity: string;
+  readonly tracing?: ProjectOptions["tracing"];
   readonly source: string;
   /** Pipeline id when available before loading the source. */
   readonly id?: string;
@@ -93,9 +98,11 @@ function createPipelineRegistration(
   pipeline: AnyProjectPipeline,
   filePath: string,
   cwd: string,
-  command?: WorkbenchPipelineCommand
+  command?: WorkbenchPipelineCommand,
+  tracing?: ProjectOptions["tracing"]
 ): WorkbenchRegistration {
   return {
+    tracing,
     identity: `project-pipeline\0${filePath}\0${pipeline.id}`,
     source: pipeline.id,
     id: pipeline.id,
@@ -147,7 +154,7 @@ export async function loadPipelineProjectFile(
       filePath,
       exportName,
       registrations: root.pipelines.map((pipeline) =>
-        createPipelineRegistration(pipeline, filePath, cwd, commands.get(pipeline.id))
+        createPipelineRegistration(pipeline, filePath, cwd, commands.get(pipeline.id), root.tracing)
       ),
       inventory: {
         id: root.id,

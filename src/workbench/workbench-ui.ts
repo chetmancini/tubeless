@@ -107,6 +107,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           const loaded = await source.loadCommand(io);
           if ("exitCode" in loaded) return loaded.exitCode;
           registrations.push({
+            tracing: source.tracing,
             command: loaded.command,
             commandIo: loaded.commandIo,
             descriptor: studioDescriptor(loaded.command),

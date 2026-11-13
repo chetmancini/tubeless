@@ -9,6 +9,14 @@ export interface PipelineTraceExporter {
   flush?(): void | Promise<void>;
 }
 
+/** Application-owned destinations created once for each launched command. */
+export interface PipelineTraceExporterOptions<TContext> {
+  /** Return fresh exporters; throwing rejects the launch before pipeline execution. */
+  readonly exporters: (context: TContext) => readonly PipelineTraceExporter[];
+  /** Best-effort error reporting; returned promises are observed but do not delay completion. */
+  readonly onExporterError?: (error: unknown) => void | Promise<void>;
+}
+
 export type PipelineTraceAttributeValue = Exclude<
   Extract<PipelineTraceEvent, { name: "step.attempted" }>["payload"]["attributes"][string],
   undefined

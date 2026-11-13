@@ -15,7 +15,11 @@ import type {
   PipelineRunControls,
 } from "../core/pipeline.js";
 import { causalPipelineErrors } from "../core/pipeline-diagnostics.js";
-import type { AnyProjectPipeline, PipelineProject } from "../project/pipeline-project.js";
+import type {
+  AnyProjectPipeline,
+  PipelineProject,
+  ProjectOptions,
+} from "../project/pipeline-project.js";
 import { renderPipelineError } from "../render/render.js";
 import type { PipelineRunStudioCommand } from "../studio/shared/protocol.js";
 import { isAbortError } from "../utilities/abort.js";
@@ -42,6 +46,7 @@ export interface HostedOutput {
 }
 
 export interface HostedCommand {
+  readonly tracing?: ProjectOptions["tracing"];
   readonly descriptor: PipelineRunStudioCommand;
   readonly command: HostedPipelineCommand;
 }
@@ -139,7 +144,7 @@ export function hostedProjectCommands(
       throw new Error(`Studio command id ${JSON.stringify(command.id)} is duplicated.`);
     }
     seen.add(command.id);
-    return { command, descriptor: studioDescriptor(command) };
+    return { command, descriptor: studioDescriptor(command), tracing: project.tracing };
   });
 }
 

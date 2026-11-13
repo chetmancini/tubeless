@@ -99,6 +99,49 @@ not a secret, but do not put credentials in these text bindings or anywhere else
 For a working deployment root, see [`examples/cloudflare/`](../examples/cloudflare/).
 It deploys the shared [example project](../examples/tubeless.project.ts).
 
+## Application trace exporters
+
+Cloudflare runs honor the project's `tracing.exporters` factory described in the
+[CLI guide](./cli.md#run). To use Worker bindings, add another factory on the app:
+
+```ts
+const app = createCloudflareApp<Env>(project, {
+  tracing: {
+    exporters: ({ env, pipelineId, launchId, signal }) => [
+      createTelemetryExporter({ token: env.TELEMETRY_TOKEN, pipelineId, launchId, signal }),
+    ],
+    onExporterError: (error) => console.warn("Trace delivery failed", error),
+  },
+});
+```
+
+`Env` is your application's bindings type and `createTelemetryExporter` is your
+adapter returning a `PipelineTraceExporter`. The factory receives the run Durable
+Object's bindings after Studio admits the launch. It also receives `cwd` (`/tmp`)
+and the run's abort signal. Project and app factories run once per launch; nested
+runs share their exporters. Both sets compose with Studio ingestion, so an app
+exporter failure does not remove Studio history or fail the pipeline. Studio
+ingestion failures still stop the run under the existing delivery policy.
+
+Factory errors fail the launch before pipeline execution. If a later factory or
+command preparation fails, Tubeless aborts the factory signal and attempts to
+flush previously returned exporters without replacing the original failure.
+Factories must release any resources they have not returned when that signal
+aborts. Normal runs retain the pipeline runtime's ordinary flushing.
+
+Cloudflare waits up to
+five seconds for each application `export` or `flush`, capped by the remaining run
+budget. A timed-out destination is retired so Studio ingestion and healthy
+exporters can finish. This applies to both project and app exporters. Studio's
+own ingestion keeps its existing retry and failure policy.
+
+A timeout stops Tubeless waiting; it cannot forcibly cancel application I/O.
+Exporters still own network deadlines and resource cleanup, including flush
+requests after cancellation. Project and app error handlers run independently;
+throwing or rejecting in one cannot suppress the other. Their promises are observed
+for rejection but do not delay alarm completion. Put required delivery in an
+exporter's `export` or `flush`.
+
 ## Run limits
 
 **A run executes inside one Durable Object alarm, so it has at most 15 minutes of

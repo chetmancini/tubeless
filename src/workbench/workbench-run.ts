@@ -8,11 +8,8 @@ import { createWriteStream, type WriteStream } from "node:fs";
 import { mkdir, readlink, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import type { PipelineRunEventStore } from "../run-store/run-store.js";
-import {
-  composeTraceExporters,
-  type PipelineTraceExporter,
-  type PipelineTraceEvent,
-} from "../tracing/tracing.js";
+import { type PipelineTraceExporter, type PipelineTraceEvent } from "../tracing/tracing.js";
+import { createLaunchTracing, type LaunchTracing } from "../hosting/launch-tracing.js";
 import { toExitCode } from "../cli/cli-exit.js";
 import { CliHelpRequested, CliValidationError } from "../cli/cli.js";
 import type { PipelineContext, PipelineRun } from "../core/pipeline.js";
@@ -119,6 +116,7 @@ async function executeRun(
 
   let managedSignal: ReturnType<typeof manageWorkbenchSignal> | undefined;
   let store: PipelineRunEventStore | undefined;
+  let launchTracing: LaunchTracing | undefined;
   let closeTrace: (() => Promise<void>) | undefined;
   let bindTraceSignal: ((signal: AbortSignal) => void) | undefined;
   let completedRun: PipelineRun | undefined;
@@ -149,6 +147,11 @@ async function executeRun(
           exporters.push(writer.exporter);
         }
         bindTraceSignal?.(signal);
+        launchTracing = createLaunchTracing({
+          context: { pipelineId: loaded.command.id, cwd: commandIo.cwd, signal },
+          configurations: [registration.tracing],
+          exporters,
+        });
         return {
           hooks: parsed.values.json
             ? {
@@ -157,8 +160,7 @@ async function executeRun(
                 },
               }
             : undefined,
-          tracing:
-            exporters.length > 0 ? { exporter: composeTraceExporters(exporters) } : undefined,
+          tracing: launchTracing.prepare(),
         };
       }
     );
@@ -170,6 +172,7 @@ async function executeRun(
     const interrupted = managedSignal?.wasInterrupted() ?? io.signal?.aborted === true;
     exitCode = interrupted ? TUBELESS_WORKBENCH_EXIT_CODE.cancellation : toExitCode(error);
   } finally {
+    await launchTracing?.close();
     try {
       await closeTrace?.();
     } catch (error) {

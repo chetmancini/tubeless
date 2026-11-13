@@ -1,4 +1,9 @@
-export { defineProject, type PipelineProject, type ProjectOptions } from "./pipeline-project.js";
+export {
+  defineProject,
+  type PipelineProject,
+  type ProjectOptions,
+  type ProjectTraceContext,
+} from "./pipeline-project.js";
 export {
   compilePipelineDocument,
   PipelineDocumentError,
