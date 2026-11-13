@@ -420,7 +420,9 @@ read when a pipeline needs them.
   Completed prompts share conversation state;
   each prompt has fresh budgets. `/model` changes the next run's model while
   retaining context; `/clear` starts a fresh conversation. `--prompt` runs once,
-  and `--no-graph` hides pipeline reporting. The interactive bike-inspired prompt
+  and `--no-graph` hides pipeline reporting. Recording is opt-in: `--store <path>`
+  or `--trace <path>` records each prompt as a `tubeless-agent` run for
+  `tubeless history` and Studio. The interactive bike-inspired prompt
   supports Tab completion of `/model`, `/clear`,
   `/help`, `/quit`, and `/exit`; double Tab lists matching commands.
   `--model-module` loads a trusted factory returning the public `AgentModel`

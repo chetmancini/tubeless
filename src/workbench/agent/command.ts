@@ -10,7 +10,11 @@ import { openaiModel } from "../../agent/openai.js";
 import { loadAgentEnvironment } from "./environment.js";
 import type { AgentModelFactory } from "./prompt.js";
 import { runAgentSession } from "./session.js";
+import { toExitCode } from "../../cli/cli-exit.js";
+import { composeTraceExporters } from "../../tracing/tracing.js";
+import { openWorkbenchRecording, recordingDestinationsConflict } from "../workbench-recording.js";
 import {
+  errorMessage,
   loadWorkbenchModule,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
@@ -105,6 +109,19 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
             `--tools accepts a comma-separated subset of ${DEFAULT_TOOLS.join(", ")}.`,
             AGENT_USAGE
           );
+        const destinations = { store: values.store, trace: values.trace };
+        if (values.trace === "-")
+          return writeUsageError(
+            io,
+            "--trace needs a file path; stdout carries the conversation.",
+            AGENT_USAGE
+          );
+        if (await recordingDestinationsConflict(destinations, io.cwd))
+          return writeUsageError(
+            io,
+            "--store and --trace cannot write to the same path.",
+            AGENT_USAGE
+          );
         if (values.prompt === undefined && !io.stdin)
           return writeUsageError(
             io,
@@ -116,20 +133,39 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
         if ("exitCode" in environment) return environment.exitCode;
         const factory = await loadModelFactory(values["model-module"], environment.env, io);
         if (typeof factory !== "function") return factory.exitCode;
-        return runAgentSession(
-          {
-            model: (values.model ?? environment.env.OPENAI_MODEL)?.trim() || "gpt-5.4-mini",
-            env: environment.env,
-            prompt: values.prompt,
-            instructions: values.instructions,
-            limits,
-            defaultTools,
-            codemode: values.codemode === true,
-            graph: !values["no-graph"],
-          },
-          factory,
-          io
+        // Recording outlives each prompt's cancellation so finished runs stay flushed.
+        const recording = await openWorkbenchRecording(
+          destinations,
+          io,
+          io.signal ?? new AbortController().signal
         );
+        let exitCode: number = TUBELESS_WORKBENCH_EXIT_CODE.execution;
+        try {
+          exitCode = await runAgentSession(
+            {
+              model: (values.model ?? environment.env.OPENAI_MODEL)?.trim() || "gpt-5.4-mini",
+              env: environment.env,
+              prompt: values.prompt,
+              instructions: values.instructions,
+              limits,
+              defaultTools,
+              codemode: values.codemode === true,
+              graph: !values["no-graph"],
+              tracing:
+                recording.exporters.length > 0
+                  ? { exporter: composeTraceExporters(recording.exporters) }
+                  : undefined,
+            },
+            factory,
+            io
+          );
+        } finally {
+          for (const error of await recording.close()) {
+            io.stderr.write(`Error: ${errorMessage(error)}\n`);
+            if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success) exitCode = toExitCode(error);
+          }
+        }
+        return exitCode;
       },
     },
     argv,

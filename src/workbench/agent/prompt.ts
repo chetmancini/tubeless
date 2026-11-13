@@ -7,6 +7,7 @@ import {
   type DefaultAgentToolName,
 } from "../../agent/agent.js";
 import type { PipelineLogger } from "../../core/pipeline.js";
+import type { PipelineTracingOptions } from "../../tracing/tracing-contracts.js";
 import { createPipelineReporter } from "../../reporter/interactive-reporter.js";
 import { safeTerminalLog, safeTerminalText } from "../../reporter/terminal-text.js";
 import { awaitWithAbort, throwIfAborted } from "../../utilities/abort.js";
@@ -31,6 +32,8 @@ export interface AgentPromptOptions {
   readonly defaultTools?: readonly DefaultAgentToolName[];
   readonly codemode?: boolean;
   readonly graph: boolean;
+  /** Records every prompt's run; the caller owns the destinations' lifetime. */
+  readonly tracing?: PipelineTracingOptions;
 }
 
 type PromptOutcome =
@@ -117,6 +120,7 @@ export async function executeAgentPrompt(
       // logs are sanitized separately from the reporter's trusted styling.
       log: reporter?.mode === "interactive" ? reporter.log : promptLogger(io),
       hooks: reporter?.hooks,
+      tracing: options.tracing,
     });
     if (run.status === "completed" && run.finalized) {
       outcome = { status: "completed", answer: run.value.answer };

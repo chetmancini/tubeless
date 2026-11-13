@@ -331,6 +331,18 @@ OpenAI needs an exported OPENAI_API_KEY or --env-file. Workspace tools run with 
         type: "boolean",
         description: "Hide pipeline reporting (keep model/tool logs and answers)",
       },
+      store: {
+        type: "string",
+        description: "Append each prompt's run to a local SQLite database",
+        valueName: "path",
+        completion: "file",
+      },
+      trace: {
+        type: "string",
+        description: "Write each prompt's NDJSON trace events to a file",
+        valueName: "path",
+        completion: "file",
+      },
     },
   },
   init: {

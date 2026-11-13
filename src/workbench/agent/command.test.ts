@@ -122,6 +122,61 @@ describe("tubeless agent", () => {
     }
   );
 
+  it("records each prompt's run to --store and --trace for history", async () => {
+    const { directory } = await fixture();
+    const io = { ...captureIo(directory), stdin: Readable.from(["first\nsecond\n/quit\n"]) };
+    expect(
+      await runWorkbenchCli(
+        [
+          "agent",
+          "--model-module",
+          "pipeline.mjs",
+          "--no-graph",
+          "--store",
+          "runs.sqlite",
+          "--trace",
+          "traces/runs.ndjson",
+        ],
+        io
+      )
+    ).toBe(0);
+    expect(io.errors).toEqual([]);
+    for (const source of [
+      ["--store", "runs.sqlite"],
+      ["--trace", "traces/runs.ndjson"],
+    ]) {
+      const history = captureIo(directory);
+      expect(
+        await runWorkbenchCli(
+          ["history", ...source, "--pipeline", "tubeless-agent", "--json"],
+          history
+        )
+      ).toBe(0);
+      const { runs } = JSON.parse(history.output.join("")) as {
+        runs: { pipelineId: string; status: string }[];
+      };
+      expect(runs).toHaveLength(2);
+      expect(runs.every(({ status }) => status === "completed")).toBe(true);
+    }
+  });
+
+  it.each([
+    [["--trace", "-"], "--trace needs a file path; stdout carries the conversation."],
+    [
+      ["--store", "runs.sqlite", "--trace", "runs.sqlite"],
+      "--store and --trace cannot write to the same path.",
+    ],
+  ])("rejects %j before loading the model", async (flags, message) => {
+    const io = captureIo("/tmp");
+    expect(
+      await runWorkbenchCli(
+        ["agent", "--model-module", "missing.mjs", "--prompt", "hi", ...flags],
+        io
+      )
+    ).toBe(1);
+    expect(io.errors.join("")).toContain(message);
+  });
+
   it("returns to the prompt after a failed task and drains EOF after the next task", async () => {
     const { directory } = await fixture();
     const io = { ...captureIo(directory), stdin: Readable.from(["seed\nbroken\nrecovered\n"]) };
