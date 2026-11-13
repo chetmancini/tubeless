@@ -16,6 +16,9 @@ dry runs with fake I/O. The general `tubeless` skill supports ongoing authoring.
    `tubeless/project`; retrieve one with `project.get(id)` and use its ordinary
    `plan`, `run`, `runOrThrow`, or `toMermaid` methods. Use the
    [project example](../examples/tubeless.project.ts) as the minimal reference.
+   To start a project from nothing, run `tubeless init`; it writes
+   `tubeless.project.ts` and `pipelines/import.ts` without overwriting anything,
+   so do not hand-write the first project file.
    Schema-backed pipelines are directly available to the CLI from project IDs or
    files, and to Studio from projects or registered command files.
    Automatic commands require Standard JSON Schema input metadata; schema-less

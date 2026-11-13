@@ -7,6 +7,7 @@ import {
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { cloudflareScaffold } from "./workbench-init-cloudflare.js";
+import { projectScaffold } from "./workbench-init-project.js";
 import {
   DEFAULT_PIPELINE_PROJECT_FILE,
   loadPipelineProjectFile,
@@ -19,29 +20,41 @@ import {
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
 
-export interface DeployTargetFile {
+export interface ScaffoldFile {
   readonly path: string;
   readonly contents: string;
 }
 
-/** One deploy target's scaffold. Runtime ports live in its public entrypoint, not here. */
-export interface DeployTargetScaffold {
+interface ScaffoldTarget {
   readonly id: string;
   readonly description: string;
+  /** Existing paths that block scaffolding although init would not write them, with a fix hint. */
+  readonly conflictsWith?: readonly { readonly path: string; readonly hint: string }[];
+  /** Node version the target's tooling needs; init warns (does not fail) below it. */
+  readonly minimumNode?: { readonly version: string; readonly reason: string };
+  readonly nextSteps: readonly string[];
+}
+
+/** Starts a new project, so no project file is loaded first. */
+export interface ProjectScaffold extends ScaffoldTarget {
+  readonly loadsProject: false;
+  files(): readonly ScaffoldFile[];
+}
+
+/** One deploy target's scaffold. Runtime ports live in its public entrypoint, not here. */
+export interface DeployTargetScaffold extends ScaffoldTarget {
+  /** The project is loaded, and every command derived, before anything is written. */
+  readonly loadsProject: true;
   files(context: {
     readonly cwd: string;
     readonly projectFile: string;
     /** "default" or the named export the project file exposes the project under. */
     readonly projectExport: string;
-  }): readonly DeployTargetFile[];
-  /** Existing paths that block scaffolding although init would not write them, with a fix hint. */
-  readonly conflictsWith?: readonly { readonly path: string; readonly hint: string }[];
-  /** Node version the target's deploy tooling needs; init warns (does not fail) below it. */
-  readonly minimumNode?: { readonly version: string; readonly reason: string };
-  readonly nextSteps: readonly string[];
+  }): readonly ScaffoldFile[];
 }
 
-const TARGETS: ReadonlyMap<string, DeployTargetScaffold> = new Map([
+const TARGETS = new Map<string, ProjectScaffold | DeployTargetScaffold>([
+  [projectScaffold.id, projectScaffold],
   [cloudflareScaffold.id, cloudflareScaffold],
 ]);
 
@@ -62,36 +75,49 @@ export async function runInit(argv: readonly string[], io: WorkbenchCliIo): Prom
     {
       spec: WORKBENCH_SPECS.init,
       parse: (args) => parseSubcommandArgs(args, WORKBENCH_SPECS.init.options),
-      positionalCountError: { count: 1, message: "Pass exactly one deploy target." },
       async run(parsed, commandIo) {
-        const targetId = parsed.positionals[0]!;
+        if (parsed.positionals.length > 1)
+          return writeUsageError(commandIo, "Pass at most one target.", INIT_USAGE);
+        const targetId = parsed.positionals[0] ?? projectScaffold.id;
         const target = TARGETS.get(targetId);
         if (!target) {
           return writeUsageError(
             commandIo,
-            `Unknown deploy target ${JSON.stringify(targetId)}. Available: ${[...TARGETS.keys()].join(", ")}.`,
+            `Unknown init target ${JSON.stringify(targetId)}. Available: ${[...TARGETS.keys()].join(", ")}.`,
             INIT_USAGE
           );
         }
-        const loaded = await loadPipelineProjectFile(
-          parsed.values.project ?? DEFAULT_PIPELINE_PROJECT_FILE,
-          commandIo
-        );
-        if ("exitCode" in loaded) return loaded.exitCode;
-        for (const registration of loaded.registrations) {
-          const command = await registration.loadCommand(commandIo);
-          if ("exitCode" in command) return command.exitCode;
-        }
-        let files: readonly DeployTargetFile[];
-        try {
-          files = target.files({
-            cwd: commandIo.cwd,
-            projectFile: loaded.filePath,
-            projectExport: loaded.exportName,
-          });
-        } catch (error) {
-          commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
-          return TUBELESS_WORKBENCH_EXIT_CODE.usage;
+        let files: readonly ScaffoldFile[];
+        if (target.loadsProject) {
+          const loaded = await loadPipelineProjectFile(
+            parsed.values.project ?? DEFAULT_PIPELINE_PROJECT_FILE,
+            commandIo
+          );
+          if ("exitCode" in loaded) return loaded.exitCode;
+          for (const registration of loaded.registrations) {
+            const command = await registration.loadCommand(commandIo);
+            if ("exitCode" in command) return command.exitCode;
+          }
+          try {
+            files = target.files({
+              cwd: commandIo.cwd,
+              projectFile: loaded.filePath,
+              projectExport: loaded.exportName,
+            });
+          } catch (error) {
+            commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
+            return TUBELESS_WORKBENCH_EXIT_CODE.usage;
+          }
+        } else {
+          // Bare `init` accepts every option until the default target is known.
+          if (parsed.values.project !== undefined) {
+            return writeUsageError(
+              commandIo,
+              `--project is not supported by init ${target.id}.`,
+              renderWorkbenchUsage(WORKBENCH_SPECS.init, target.id)
+            );
+          }
+          files = target.files();
         }
         const conflicts: string[] = [];
         for (const file of files)

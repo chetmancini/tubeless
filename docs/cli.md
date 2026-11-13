@@ -369,7 +369,7 @@ decimal-only text syntax.
 | `tubeless upgrade`    | An optional `--store` path       | Rewrites an older SQLite run store after `--yes`                    |
 | `tubeless ui`         | An optional project file         | Serves the local run studio; see [studio](./studio.md)              |
 | `tubeless completion` | `bash`, `zsh`, or `fish`         | Prints a shell completion script                                    |
-| `tubeless init`       | A deploy target                  | Scaffolds deployment files; see [init](#init)                       |
+| `tubeless init`       | An optional target               | Scaffolds a project or deployment files; see [init](#init)          |
 
 Use `tubeless validate [--json] pipelines.yaml` for a fast document-only check.
 It supports `.yaml`, `.yml`, and `.json`; it does not resolve handlers, check the
@@ -819,22 +819,38 @@ for Origin, login expiry, readiness, persistence, and shutdown behavior.
 ## Init
 
 ```sh
-tubeless init <target> [-p, --project <path>]
+tubeless init [project]
+tubeless init cloudflare [-p, --project <path>]
 ```
 
-Scaffold deployment files for a project. The one target today is `cloudflare`,
-which writes `cloudflare/worker.ts`, `cloudflare.config.ts` and `vite.config.ts`, and
+`tubeless init` (or `tubeless init project`) starts a project in the current
+directory without an existing project file. It writes `tubeless.project.ts` and
+`pipelines/import.ts`, the README quick start pipeline registered with an explicit
+command adapter, and leaves `package.json` alone. Rename the `my-app` project ID
+to suit. The output is identical to
+[`examples/starter/`](../examples/starter/tubeless.project.ts). Then:
+
+```sh
+bun add tubeless # If it is not installed yet.
+bunx tubeless list
+bunx tubeless plan import
+bunx tubeless run import -- --lines " Alpha " --lines Beta
+```
+
+`tubeless init cloudflare` scaffolds deployment files for an existing project. It
+writes `cloudflare/worker.ts`, `cloudflare.config.ts` and `vite.config.ts`, and
 prints an install step that pins `cf`, `vite` and `@cloudflare/vite-plugin`; the
 [Cloudflare guide](./deploy-cloudflare.md) covers deploying them.
-`--project` selects the project file (default `./tubeless.project.ts`).
+`--project` selects the project file (default `./tubeless.project.ts`) and is
+accepted only by deployment targets.
 
-`init` loads the project and derives every command before it writes anything, so
-a broken project fails with the usual load error. It never overwrites: if any
-target file already exists (for `cloudflare`, also any other Vite config file), it
-names the conflicts and writes nothing. It warns when Node is older than the target's
-deploy tooling needs (22.12 for `cloudflare`). After
-creating the files it prints the next steps for the target. An unknown target or a
-missing target argument is a usage error.
+A deployment target loads the project and derives every command before it writes
+anything, so a broken project fails with the usual load error. `init` never
+overwrites: if any target file already exists (for `cloudflare`, also any other Vite
+config file), it names the conflicts and writes nothing. It warns when Node is older
+than the target's deploy tooling needs (22.12 for `cloudflare`). After creating the
+files it prints the next steps for the target. An unknown target or more than one
+target is a usage error.
 
 ## Exit codes
 

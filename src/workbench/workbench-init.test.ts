@@ -1,10 +1,20 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { runInit } from "./workbench-init.js";
 import { CLOUDFLARE_DEV_DEPENDENCIES, cloudflareScaffold } from "./workbench-init-cloudflare.js";
+import { projectScaffold } from "./workbench-init-project.js";
+import { execFileAsync } from "./workbench.test-support.js";
 
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
@@ -147,7 +157,7 @@ describe("tubeless init", () => {
   it("rejects unknown targets", async () => {
     const { io, err } = workspace();
     expect(await init(io, "aws")).not.toBe(0);
-    expect(err.join("")).toContain("Available: cloudflare");
+    expect(err.join("")).toContain("Available: project, cloudflare");
   });
 
   it("keeps the checked-in example identical to the scaffold output", () => {
@@ -205,6 +215,70 @@ describe("tubeless init", () => {
       /^\d/
     );
     expect(devDependencies.miniflare).toBe(dependencies.miniflare);
+  });
+});
+
+describe("tubeless init project", () => {
+  const cli = (cwd: string, ...args: string[]) =>
+    execFileAsync("bun", [resolve("dist/workbench/workbench-bin.js"), ...args], { cwd });
+
+  it("defaults to a project that lists, runs and deploys without a hand-written file", async () => {
+    const { cwd, io, out } = workspace(null);
+    expect(await runInit([], io)).toBe(0);
+    expect(out.join("")).toContain("Created tubeless.project.ts\nCreated pipelines/import.ts\n");
+    for (const step of projectScaffold.nextSteps) expect(out.join("")).toContain(step);
+
+    // Resolve the scaffold's package imports to this build, as an installed package would.
+    mkdirSync(join(cwd, "node_modules"));
+    symlinkSync(resolve("."), join(cwd, "node_modules", "tubeless"), "dir");
+    const { stdout } = await cli(
+      cwd,
+      "run",
+      "--json",
+      "import",
+      "--",
+      "--lines",
+      " Alpha ",
+      "--lines",
+      "",
+      "--lines",
+      "Beta"
+    );
+    expect(JSON.parse(stdout)).toMatchObject({ status: "completed", value: ["alpha", "beta"] });
+    // Deployment targets load the project init just created.
+    await cli(cwd, "init", "cloudflare");
+    expect(readFileSync(join(cwd, "cloudflare/worker.ts"), "utf8")).toContain(
+      'import project from "../tubeless.project.ts";'
+    );
+  });
+
+  it("accepts the explicit target and never overwrites", async () => {
+    const { cwd, io, err } = workspace(null);
+    writeFileSync(join(cwd, "tubeless.project.ts"), "keep");
+    expect(await runInit(["project"], io)).toBe(1);
+    expect(err.join("")).toContain("Refusing to overwrite existing files: tubeless.project.ts");
+    expect(readFileSync(join(cwd, "tubeless.project.ts"), "utf8")).toBe("keep");
+    expect(existsSync(join(cwd, "pipelines/import.ts"))).toBe(false);
+  });
+
+  it.each([
+    [["--project", "jobs.ts"], "--project is not supported by init project."],
+    [["project", "--project", "jobs.ts"], "--project is not supported by init project."],
+    [["project", "cloudflare"], "Pass at most one target."],
+  ])("rejects %j before writing", async (argv, message) => {
+    const { cwd, io, err } = workspace(null);
+    expect(await runInit(argv, io)).toBe(1);
+    expect(err.join("")).toContain(message);
+    expect(existsSync(join(cwd, "tubeless.project.ts"))).toBe(false);
+  });
+
+  it("keeps the checked-in starter identical to the scaffold output", () => {
+    const root = resolve("examples/starter");
+    const files = projectScaffold.files();
+    expect(files.map((file) => file.path)).toEqual(["tubeless.project.ts", "pipelines/import.ts"]);
+    for (const file of files) {
+      expect(readFileSync(join(root, file.path), "utf8"), file.path).toBe(file.contents);
+    }
   });
 });
 

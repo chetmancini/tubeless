@@ -56,8 +56,9 @@ bunx tubeless run --project examples/tubeless.project.ts validated-import -- --s
 The project contains only pipelines. The workbench derives `--source` from the
 pipeline's input schema; there is no command wrapper.
 
-In your app, export `defineProject("my-app", [MyPipeline])` from
-`tubeless.project.ts`, then run `bunx tubeless list` with no `--project`.
+In your app, run `bunx tubeless init` to write a starter `tubeless.project.ts` and
+`pipelines/import.ts`, or export `defineProject("my-app", [MyPipeline])` from
+`tubeless.project.ts` yourself. Then run `bunx tubeless list` with no `--project`.
 Pipelines whose options schema exposes Standard JSON Schema input metadata get
 their flags automatically. Register commands directly in the list for custom command inputs
 or presentation. See [`examples/automatic-cli.ts`](../examples/automatic-cli.ts),
