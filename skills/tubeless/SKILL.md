@@ -334,6 +334,8 @@ Read the corresponding package recipe before using these features:
   one unique pipeline whose Standard JSON Schema input metadata supports inferred
   flags. Use `--export` to select among multiple exports. Schema-less or unsupported
   input shapes still require an explicit command adapter.
+- To start a project from nothing, run `tubeless init`; it writes
+  `tubeless.project.ts` and `pipelines/import.ts` and never overwrites files.
 - Use `pipelines/<name>.ts` for definitions. Add `scripts/<name>.ts` command
   wrappers only when explicit `params`, `mapOptions`, or presentation overrides
   are needed. Preserve existing consumer conventions.

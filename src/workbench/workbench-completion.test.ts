@@ -378,6 +378,8 @@ describe("tubeless __complete", () => {
     ["auth", "login", ["--host", "--no-browser", "--help"]],
     ["auth", "status", ["--host", "--json", "--help"]],
     ["auth", "logout", ["--host", "--help"]],
+    ["init", "project", ["--help"]],
+    ["init", "cloudflare", ["--project", "--help"]],
   ] as const)(
     "scopes %s %s flags to the options its parser accepts",
     async (command, nested, flags) => {

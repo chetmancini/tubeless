@@ -2,6 +2,11 @@ import { PIPELINE_MERMAID_DIRECTIONS } from "../core/pipeline-types.js";
 import { AGENT_REPL_HELP } from "./agent/commands.js";
 import type { WorkbenchCommandSpec } from "./workbench-subcommand.js";
 
+export const PROJECT_TARGET = {
+  id: "project",
+  description: "tubeless.project.ts and a starter pipeline (no existing project needed)",
+} as const;
+
 export const CLOUDFLARE_TARGET = {
   id: "cloudflare",
   description: "Worker, Durable Objects and R2 with Studio behind Cloudflare Access",
@@ -330,17 +335,23 @@ OpenAI needs an exported OPENAI_API_KEY or --env-file. Workspace tools run with 
   },
   init: {
     name: "init",
-    description: "Scaffold a deployment (cloudflare)",
-    usage: `Usage: tubeless init <target> [options]
+    description: "Scaffold a project, or a deployment (cloudflare)",
+    usage: `Usage: tubeless init [target] [options]
 
-Scaffold deployment files for a Tubeless project. Existing files are never overwritten.
+Scaffold a Tubeless project, or deployment files for an existing one. The
+default target is ${PROJECT_TARGET.id}. Existing files are never overwritten.
 
 Targets:
+  ${PROJECT_TARGET.id.padEnd(12)} ${PROJECT_TARGET.description}
   ${CLOUDFLARE_TARGET.id.padEnd(12)} ${CLOUDFLARE_TARGET.description}
 `,
-    positional: [CLOUDFLARE_TARGET.id],
+    subcommands: [PROJECT_TARGET.id, CLOUDFLARE_TARGET.id],
     options: {
-      project: PROJECT_FILE_OPTION,
+      project: {
+        ...PROJECT_FILE_OPTION,
+        description: "Existing project file to deploy (default: ./tubeless.project.ts)",
+        commands: [CLOUDFLARE_TARGET.id],
+      },
     },
   },
   auth: {

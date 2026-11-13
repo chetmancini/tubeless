@@ -206,6 +206,24 @@ function assertPackedExecutable(tubelessBin, installedPackage, consumerRoot) {
     }
   }
 }
+// The scaffold must load against the installed package with no hand edits.
+function assertPackedInit(tubelessBin, consumerRoot) {
+  const projectRoot = join(consumerRoot, "starter");
+  mkdirSync(projectRoot);
+  run(tubelessBin, ["init"], projectRoot);
+  const report = JSON.parse(
+    run(
+      tubelessBin,
+      ["run", "--json", "import", "--", "--lines", " Alpha ", "--lines", "Beta"],
+      projectRoot
+    )
+  );
+  if (report.status !== "completed" || JSON.stringify(report.value) !== '["alpha","beta"]') {
+    throw new Error(
+      `Packed init scaffold returned an invalid run report:\n${JSON.stringify(report)}`
+    );
+  }
+}
 try {
   const packedStdout = run(
     npm,
@@ -440,6 +458,7 @@ try {
   }
   assertPackedLauncher(installedPackage, tubelessBin, consumerRoot);
   assertPackedExecutable(tubelessBin, installedPackage, consumerRoot);
+  assertPackedInit(tubelessBin, consumerRoot);
   run(
     process.execPath,
     [join(packageRoot, "scripts/fixtures/packed-cloud-check.mjs"), tubelessBin],

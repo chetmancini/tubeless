@@ -63,6 +63,7 @@ export default defineConfig({ plugins: [cloudflare()] });
 
 export const cloudflareScaffold: DeployTargetScaffold = {
   ...CLOUDFLARE_TARGET,
+  loadsProject: true,
   files({ cwd, projectFile, projectExport }) {
     const name = workerName(cwd);
     const workerDirectory = join(cwd, "cloudflare");
