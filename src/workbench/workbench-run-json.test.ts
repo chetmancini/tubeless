@@ -1,4 +1,5 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Writable } from "node:stream";
@@ -39,6 +40,97 @@ async function valueFixture(expression: string) {
 }
 
 describe("run --json", () => {
+  it.each([
+    ["bun", "workbench-bin.js"],
+    ["node", "workbench-bin.js"],
+    ["node", "workbench-launcher.js"],
+  ])("keeps noisy imports and handlers off JSON stdout through %s %s", async (runtime, entry) => {
+    const { directory, filePath } = await valueFixture(`(() => {
+      console.log("handler console");
+      console.info("handler info");
+      console.debug("handler debug");
+      process.stdout.write("handler stdout\\n");
+      setTimeout(() => console.log("late console"), 20);
+      return { answer: 42 };
+    })()`);
+    await writeFile(
+      path.join(directory, "noisy.mjs"),
+      `
+      import nodeConsole, { log } from "node:console";
+      console.log("import console");
+      nodeConsole.log("import console module");
+      log("import named log");
+      process.stdout.write("import stdout\\n");
+    `
+    );
+    await writeFile(filePath, `import "./noisy.mjs";\n${await readFile(filePath, "utf8")}`);
+    const result = spawnSync(
+      runtime,
+      [path.resolve("dist/workbench", entry), "run", "--json", filePath],
+      {
+        encoding: "utf8",
+        timeout: 10_000,
+      }
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      pipelineId: "json-value",
+      status: "completed",
+      finalized: true,
+      value: { answer: 42 },
+    });
+    for (const message of [
+      "import console",
+      "import console module",
+      "import named log",
+      "import stdout",
+      "handler console",
+      "handler info",
+      "handler debug",
+      "handler stdout",
+      "late console",
+    ]) {
+      expect(result.stderr).toContain(message);
+    }
+  });
+
+  it("keeps import noise off stdout even when loading fails", async () => {
+    const { filePath } = await valueFixture("null");
+    await writeFile(filePath, `console.log("load noise"); throw new Error("load failure");`);
+    const result = spawnSync(
+      "bun",
+      ["dist/workbench/workbench-bin.js", "run", "--json", filePath],
+      {
+        encoding: "utf8",
+        timeout: 10_000,
+      }
+    );
+    expect(result.status).toBe(TUBELESS_WORKBENCH_EXIT_CODE.load);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("load noise");
+    expect(result.stderr).toContain("load failure");
+  });
+
+  it("leaves application --json flags after the separator in text mode", async () => {
+    const { filePath } = await valueFixture('(console.log("text mode console"), 42)');
+    const source = (await readFile(filePath, "utf8")).replace(
+      "params: {}",
+      'params: { json: { type: "boolean" } }'
+    );
+    await writeFile(filePath, source);
+    const result = spawnSync(
+      "bun",
+      ["dist/workbench/workbench-bin.js", "run", filePath, "--", "--json"],
+      {
+        encoding: "utf8",
+        timeout: 10_000,
+      }
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("text mode console");
+    expect(result.stderr).toBe("");
+  });
+
   it("prints the public run record and keeps logs and summaries on stderr", async () => {
     const { directory } = await commandFixture();
     const io = captureIo(directory);

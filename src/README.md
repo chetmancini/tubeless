@@ -244,6 +244,9 @@ Run `make check` after changes; it builds before checking these boundaries.
   through the shared hosted-command operation; it does not open stores or trace files
   until after command parsing succeeds. Studio executes validated values through
   `hosting/hosting-commands.ts` directly.
+  `workbench/workbench-bin.ts` reserves JSON stdout before loading application
+  modules and routes process stdout writes and console output to stderr; the
+  reusable workbench handlers leave process globals to their host.
 - `workbench/workbench-ui.ts` loads and validates registrations, opens the chosen
   store, starts the HTTP server and closes these resources.
 - `workbench/workbench-studio-launcher.ts` owns the collection of admitted launches,

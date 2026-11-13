@@ -35,7 +35,8 @@ import {
 
 const RUN_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.run);
 
-function parseRunArgs(argv: readonly string[]) {
+/** Shared with the executable so stdout routing uses the same workbench argument boundary. */
+export function parseRunArgs(argv: readonly string[]) {
   const separatorIndex = argv.indexOf("--");
   const workbenchArgs = separatorIndex === -1 ? argv : argv.slice(0, separatorIndex);
   const commandArgs = separatorIndex === -1 ? [] : argv.slice(separatorIndex + 1);
