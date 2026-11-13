@@ -1,5 +1,7 @@
 import { PassThrough, Readable } from "node:stream";
 import { spawn } from "node:child_process";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { runWorkbenchCli } from "../workbench.js";
@@ -158,6 +160,73 @@ describe("tubeless agent", () => {
       expect(runs).toHaveLength(2);
       expect(runs.every(({ status }) => status === "completed")).toBe(true);
     }
+  });
+
+  it("keeps recording usable after a cancelled prompt", async () => {
+    const { directory, filePath } = await fixture();
+    const stdin = new PassThrough();
+    const io = { ...captureIo(directory), stdin };
+    const fixtureModule = (await import(pathToFileURL(filePath).href)) as {
+      started: Promise<void>;
+    };
+    const onSpy = vi.spyOn(process, "on");
+    try {
+      const running = runWorkbenchCli(
+        [
+          "agent",
+          "--model-module",
+          "pipeline.mjs",
+          "--no-graph",
+          "--store",
+          "runs.sqlite",
+          "--trace",
+          "runs.ndjson",
+        ],
+        io
+      );
+      stdin.write("seed\nwait\n");
+      await fixtureModule.started;
+      const interrupt = onSpy.mock.calls.find(([name]) => name === "SIGINT")![1] as () => void;
+      interrupt();
+      stdin.end("after cancellation\n");
+      expect(await running).toBe(0);
+    } finally {
+      onSpy.mockRestore();
+      stdin.destroy();
+    }
+    for (const source of [
+      ["--store", "runs.sqlite"],
+      ["--trace", "runs.ndjson"],
+    ]) {
+      const history = captureIo(directory);
+      expect(
+        await runWorkbenchCli(
+          ["history", ...source, "--pipeline", "tubeless-agent", "--json"],
+          history
+        )
+      ).toBe(0);
+      const { runs } = JSON.parse(history.output.join("")) as { runs: { status: string }[] };
+      expect(runs.map(({ status }) => status).sort()).toEqual([
+        "cancelled",
+        "completed",
+        "completed",
+      ]);
+    }
+  });
+
+  it("reports a destination that cannot be opened instead of throwing", async () => {
+    const { directory } = await fixture();
+    // A file where the trace directory belongs makes the destination unwritable.
+    await writeFile(join(directory, "blocked"), "");
+    const io = captureIo(directory);
+    const code = await runWorkbenchCli(
+      ["agent", "--model-module", "pipeline.mjs", "--prompt", "hi", "--trace", "blocked/t.ndjson"],
+      io
+    );
+    expect(code).not.toBe(0);
+    expect(io.errors.join("")).toMatch(/^Error: .*blocked/m);
+    expect(io.errors.join("")).not.toMatch(/\n\s+at /);
+    expect(io.output.join("")).not.toContain("agent ·");
   });
 
   it.each([

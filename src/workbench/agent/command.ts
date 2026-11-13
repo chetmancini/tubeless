@@ -12,7 +12,11 @@ import type { AgentModelFactory } from "./prompt.js";
 import { runAgentSession } from "./session.js";
 import { toExitCode } from "../../cli/cli-exit.js";
 import { composeTraceExporters } from "../../tracing/tracing.js";
-import { openWorkbenchRecording, recordingDestinationsConflict } from "../workbench-recording.js";
+import {
+  openWorkbenchRecording,
+  recordingDestinationsConflict,
+  type WorkbenchRecording,
+} from "../workbench-recording.js";
 import {
   errorMessage,
   loadWorkbenchModule,
@@ -134,11 +138,17 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
         const factory = await loadModelFactory(values["model-module"], environment.env, io);
         if (typeof factory !== "function") return factory.exitCode;
         // Recording outlives each prompt's cancellation so finished runs stay flushed.
-        const recording = await openWorkbenchRecording(
-          destinations,
-          io,
-          io.signal ?? new AbortController().signal
-        );
+        let recording: WorkbenchRecording;
+        try {
+          recording = await openWorkbenchRecording(
+            destinations,
+            io,
+            io.signal ?? new AbortController().signal
+          );
+        } catch (error) {
+          io.stderr.write(`Error: ${errorMessage(error)}\n`);
+          return toExitCode(error);
+        }
         let exitCode: number = TUBELESS_WORKBENCH_EXIT_CODE.execution;
         try {
           exitCode = await runAgentSession(

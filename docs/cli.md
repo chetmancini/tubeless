@@ -141,8 +141,10 @@ tubeless history --pipeline tubeless-agent
 ```
 
 `--trace -` is rejected because stdout carries the conversation, and `--store` and
-`--trace` cannot name the same file. Recorded runs include prompts, answers, tool
-inputs and logs; keep traces and stores as private as the workspace.
+`--trace` cannot name the same file. Recordings hold each prompt's run status,
+agent turns, tool activity, model usage and logs, but not the prompt or answer
+text, so they are not a saved conversation. Logs and tool activity can still
+contain workspace content; keep traces and stores as private as the workspace.
 
 To plug in another provider, pass `--model-module ./model.ts`. The trusted local
 module must default-export a factory accepting `{ model: string, signal: AbortSignal, env: Readonly<NodeJS.ProcessEnv> }` and returning
