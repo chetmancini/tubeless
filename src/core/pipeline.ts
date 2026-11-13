@@ -105,7 +105,13 @@ export type {
 
 export type { PipelineDefinition } from "./pipeline-definition.js";
 
-export type { Step, MappedChildProgressOptions } from "./pipeline-steps.js";
+export type {
+  ForEachItemFailurePolicy,
+  ForEachItemOutput,
+  ForEachSettledItem,
+  Step,
+  MappedChildProgressOptions,
+} from "./pipeline-steps.js";
 
 type DuplicateStepIds<
   TSteps extends readonly AnyStep[],

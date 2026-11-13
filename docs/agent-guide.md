@@ -152,6 +152,9 @@ read when a pipeline needs them.
 
 - Use `fromPipeline` for one independently useful child workflow and
   `forEachPipeline` for runtime fan-out with stable keys and bounded concurrency.
+  Default fan-out runs every item, then fails; set `onItemFailure: "stop"` to fail
+  fast or `"collect"` to complete with per-item settled entries when partial results
+  are valid. Cancellation is never collected.
   Omit `fromPipeline.mapOptions` when the parent's validated domain options satisfy
   the child's input type; those options are forwarded unchanged and validated by
   the child. Otherwise provide a mapper. Fan-out still requires per-item mapping.

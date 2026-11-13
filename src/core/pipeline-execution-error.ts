@@ -178,7 +178,7 @@ function normalizePipelineCause(
 }
 
 // Fan-out snapshots bound every string as well as cause depth and item count.
-function fanOutCause(error: unknown): PipelineErrorCause {
+export function fanOutCause(error: unknown): PipelineErrorCause {
   const cause = normalizePipelineCause(error, new WeakSet<object>());
   let current: PipelineErrorCause | undefined = cause;
   while (current) {

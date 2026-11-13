@@ -246,6 +246,11 @@ export function buildMappedPipelineStep<TOptions extends object>(
       `forEachPipeline concurrency must be a positive finite integer, got ${configuredConcurrency}`
     );
   }
+  if (![undefined, "fail", "stop", "collect"].includes(config.onItemFailure)) {
+    throw new RangeError(
+      `forEachPipeline onItemFailure must be one of fail, stop, collect, got ${String(config.onItemFailure)}`
+    );
+  }
   const definition: StepDefinitionBody<TOptions> = {
     [STEP_NESTED_PIPELINE]: {
       mode: "for-each" as const,
