@@ -17,7 +17,18 @@ export async function openNdjsonAgentTranscriptWriter(
 ): Promise<NdjsonAgentTranscriptWriter> {
   const target = resolve(filename);
   await mkdir(dirname(target), { recursive: true });
-  const handle = await open(target, "a", 0o600);
+  const handle = await open(target, "a+", 0o600);
+  try {
+    const { size } = await handle.stat();
+    if (size > 0) {
+      const lastByte = Buffer.alloc(1);
+      await handle.read(lastByte, 0, 1, size - 1);
+      if (lastByte[0] !== 0x0a) await handle.writeFile("\n");
+    }
+  } catch (error) {
+    await handle.close();
+    throw error;
+  }
   let pending = Promise.resolve();
   let closed = false;
   let closing: Promise<void> | undefined;

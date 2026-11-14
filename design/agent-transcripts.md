@@ -99,10 +99,10 @@ receipt can reference an externally stored transcript after successful persisten
 without embedding content in traces. Clearing history must explicitly include its
 associated transcripts. Old history has no transcript and remains readable.
 
-`tubeless history <run-id>` should summarize availability and offer an explicit
-transcript view/export. Studio should offer a conversation view for the selected
-agent, with prompt, assistant, calls, outcomes and omission markers, linked to
-structural child runs. Pagination is bounded; live refresh follows sequence cursors.
+History renders the selected run's transcript in text or JSON. Studio offers a
+conversation view with prompts, assistant text, calls, outcomes and omission markers,
+linked to structural child runs. Pagination is bounded. Future mutable stores can
+add live refresh through sequence cursors.
 Show unavailable, partial, complete and limited recording states. Suppressed events
 have no tombstones; no records cannot establish whether capture was disabled or fully
 redacted, and must never imply an empty model conversation. Render content as text, never executable HTML. Transcript authorization
@@ -131,3 +131,8 @@ agent opt-in, code mode, previews, recovery, redactor isolation/failure, unsuppo
 values, UTF-8 record/total bounds, provider text allowlists and successful compaction.
 Compile a public-import example, regenerate API artifacts, rebuild the docs website
 and run `make check`. No live paid model request is needed for this stage.
+
+Artifact read-back also covers malformed/versioned records, private file creation,
+append boundaries and serialization, immutable snapshots, gaps and conflicts,
+run-scoped pagination, CLI output, Studio authorization, escaped rendering, and
+request retries/retirement. Exercise pagination and structural turn links in a browser.

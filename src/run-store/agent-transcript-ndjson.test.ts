@@ -75,6 +75,22 @@ describe("NDJSON transcript storage", () => {
     await expect(openNdjsonAgentTranscriptReader(path)).rejects.toThrow("Conflicting");
   });
 
+  it("appends after a final record without a newline and preserves existing permissions", async () => {
+    const path = await file();
+    await writeFile(path, JSON.stringify(transcriptRecord()), { mode: 0o640 });
+    const mode = (await stat(path)).mode;
+    const writer = await openNdjsonAgentTranscriptWriter(path);
+    await writer.write(transcriptRecord(2, { kind: "end", status: "completed" }));
+    await writer.close();
+    expect((await stat(path)).mode).toBe(mode);
+    const reader = await openNdjsonAgentTranscriptReader(path);
+    expect(await reader.list({ runId: "agent:one" })).toMatchObject({
+      status: "complete",
+      records: [transcriptRecord(), transcriptRecord(2, { kind: "end", status: "completed" })],
+    });
+    await reader.close();
+  });
+
   it("keeps the opened snapshot stable and labels a byte-limit ending explicitly", async () => {
     const path = await file();
     const { event: _, ...base } = transcriptRecord(2);
