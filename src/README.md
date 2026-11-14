@@ -65,6 +65,12 @@ their source files.
   Runtime call identity is typed invocation data, independent of tracing attributes.
   Storage and lossless codecs are separate contracts; `tubeless/agent/node` supplies local environment and SQLite
   adapters. Traces remain best-effort inspection, independent of recovery.
+  `transcript.ts` owns opt-in provider-neutral content records, bounded plain-JSON
+  snapshots, redaction and serialized delivery. Its invocation-local capture follows
+  the existing opaque agent scope through ordinary children and code-mode calls;
+  entering a child agent resets capture unless that agent explicitly opts in.
+  Provider modules publish only public text and successful compaction markers.
+  Transcript sinks are application-owned and have no storage or trace dependencies.
   `agent-limits.ts` owns execution defaults and validation rules shared with
   checkpoint restoration. `default-tool-limits.ts` owns workspace bounds shared
   by tool schemas, adapters and guidance; `default-tool-text.ts` owns UTF-8

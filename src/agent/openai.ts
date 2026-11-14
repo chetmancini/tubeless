@@ -14,6 +14,7 @@ import { openaiDecision, outputItems, parameter } from "./openai-protocol.js";
 import { boundedToolOutputs } from "./provider-tool-outputs.js";
 import { modelRequestReporter } from "./provider-usage.js";
 import { throwIfAborted } from "../utilities/abort.js";
+import { agentTranscript } from "./transcript.js";
 
 /** Responses transport settings; credentials are resolved only when a decision executes. */
 export interface OpenAIModelOptions {
@@ -188,11 +189,24 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
           if (input.length === 0) throw new Error("OpenAI returned empty compaction");
           if (newPrompt) input.push({ role: "user", content: request.task });
           context.log.log("Compacted agent conversation");
+          // Queue provider observations; the harness drains them outside the request deadline.
+          void agentTranscript(context)?.record(context.turn, {
+            kind: "compaction",
+            provider: "openai",
+          });
         }
         const body = await send("decision", "responses", { ...decisionRequest, input });
-        if (!record(body) || body.status !== "completed")
-          throw new Error("OpenAI did not return a completed response");
+        if (!record(body)) throw new Error("OpenAI did not return a completed response");
         const output = outputItems(body);
+        const transcript = agentTranscript(context);
+        if (transcript)
+          for (const item of output)
+            if (item.type === "message" && Array.isArray(item.content))
+              for (const part of item.content)
+                if (record(part) && part.type === "output_text" && typeof part.text === "string")
+                  void transcript.record(context.turn, { kind: "assistant", text: part.text });
+        if (body.status !== "completed")
+          throw new Error("OpenAI did not return a completed response");
         const decision = openaiDecision(output);
         const conversation = [...input, ...output];
         // A completed user prompt may be continued later. Close the adapter's

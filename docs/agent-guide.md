@@ -513,6 +513,16 @@ read when a pipeline needs them.
   Use `bun run eval:agent`
   for opt-in paid workspace evaluations; routine CI stays credential-free.
 
+- Set `transcript: { write, redact?, maxRecordBytes?, maxBytes? }` on an agent
+  only when its content should be captured. Supply the destination and redact
+  sensitive events before delivery; returning `null` suppresses an event. Each
+  invocation has an ordered queue and bounded UTF-8 records (64 KiB default/max)
+  and total bytes (1 MiB default). Omission and limit markers make incomplete
+  capture explicit. This is independent of `--trace`, `--store` and recovery;
+  child agents require their own opt-in. History/Studio currently show structural
+  records, not transcript content. Read [transcript contracts](./agents.md#opt-in-transcripts)
+  and adapt [the credential-free recipe](../examples/agent-transcript.ts).
+
 - To give an agent MCP server tools, `await connectMcpServers({ name: { url } | { command } })`
   from `tubeless/agent/mcp` and pass `tools: mcp.tools` (named `<server>__<tool>`).
   Connect inside the function that runs the agent, not at module scope, and close

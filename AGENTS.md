@@ -2,8 +2,11 @@
 
 - Read [`docs/agent-guide.md`](./docs/agent-guide.md) before changing usage or
   public behavior.
-- When generating or modifying pipelines, use the repository-local
-  [`tubeless` skill](./skills/tubeless/SKILL.md).
+- Use the repository-local [`tubeless` skill](./skills/tubeless/SKILL.md) when
+  authoring or updating consumer-facing pipeline examples or the repository's own
+  pipeline definitions. For library implementation, internal tests, CLI internals,
+  and Studio changes, follow this file and `src/README.md`; consult the skill when
+  consumer usage is relevant.
 - Preserve the dependency-free runtime and the checked public API boundary.
 - Keep executable examples on public package imports; they compile in CI.
 - Do not edit `docs/api-reference.md` or `docs/api-report.json` manually. Run

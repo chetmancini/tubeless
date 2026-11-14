@@ -48,6 +48,8 @@ export default defineProject(
     // Plain cached results and their receipts appear in history and Studio.
     CachedCountCommand,
     ScriptedAgent,
+    // For transcript capture, use createTranscriptAgent in ../agent-transcript.ts
+    // with an explicit application sink.
     OpenAIAgentCommand,
     // Live model decisions and tools share the physical run cwd, including through symlinks.
     // Scoped guidance precedes nested file operations and task commands in separate turns.

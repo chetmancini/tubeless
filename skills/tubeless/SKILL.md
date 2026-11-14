@@ -1,9 +1,14 @@
 ---
 name: tubeless
-description: Author, modify, or review typed Tubeless pipelines, pipeline-backed CLI commands, and projects in TypeScript projects. Use for dependency modeling, failure and skip policies, dry runs, child pipelines, and pipeline tests.
+description: Author, modify, or review typed Tubeless pipelines, pipeline-backed CLI commands, and projects in TypeScript applications. Use for dependency modeling, failure and skip policies, dry runs, child pipelines, and pipeline tests. Library implementation and internal tests follow the repository's maintainer guidance.
 ---
 
 # Author Tubeless pipelines
+
+This skill guides applications built with Tubeless. Within the Tubeless
+repository, use it for examples and pipeline definitions. Library implementation
+and internal tests follow the repository's maintainer guidance; tests may
+intentionally exercise invalid configurations or internal APIs.
 
 Use the project's installed Tubeless version and public package imports. Keep
 domain logic in ordinary functions and make orchestration explicit in the graph.
@@ -214,6 +219,12 @@ Read the corresponding package recipe before using these features:
   Record with `--trace` or `--store`; `tubeless history <run-id>` joins agent turns,
   calls and child agents with state versions, failures and termination. JSON
   details expose `agentHistory.agents`; missing observations remain unknown.
+  To capture content, explicitly supply `transcript: { write, redact? }` on each
+  agent. This separately bounded sink receives prompts, public provider text,
+  proposed decisions, validated calls/outcomes and compaction markers; return
+  `null` from redaction to suppress an event. Applications own storage and privacy.
+  It is independent of traces and recovery, and child agents need their own opt-in.
+  Read `docs/agents.md#opt-in-transcripts` and `examples/agent-transcript.ts`.
   Add `durability: { store, key }` with an explicit `implementationVersion` to
   persist decisions, call outcomes, child state and ancestor budgets. Every live
   child inheriting recovery also needs `implementationVersion`; bump it when

@@ -6,6 +6,7 @@ import type { AgentExecutionIdentity } from "./checkpoint-types.js";
 import type { AgentEnvironment } from "./environment.js";
 import type { AgentLimits } from "./agent-types.js";
 import { DEFAULT_AGENT_LIMITS, minimumAgentLimit, validAgentLimit } from "./agent-limits.js";
+import type { AgentTranscriptCapture } from "./transcript.js";
 
 export function resolvedLimits(limits: AgentLimits = {}): Required<AgentLimits> {
   for (const key of Object.keys(limits)) {
@@ -127,7 +128,8 @@ export class AgentExecutionScope implements ExecutionScope {
     readonly environment: AgentEnvironment,
     readonly route: readonly string[],
     private readonly agentRoute: readonly string[],
-    readonly journal?: AgentCheckpointSession
+    readonly journal?: AgentCheckpointSession,
+    readonly transcript?: AgentTranscriptCapture
   ) {}
 
   get agentKey(): string {
@@ -140,7 +142,8 @@ export class AgentExecutionScope implements ExecutionScope {
     id: string,
     environment: AgentEnvironment,
     definitionId: string,
-    journal?: AgentCheckpointSession
+    journal?: AgentCheckpointSession,
+    transcript?: AgentTranscriptCapture
   ): AgentExecutionScope {
     const parent = agentScope(context);
     const depth = parent?.depth ?? 0;
@@ -163,7 +166,8 @@ export class AgentExecutionScope implements ExecutionScope {
       environment,
       route,
       route,
-      journal
+      journal,
+      transcript
     );
   }
 
@@ -234,7 +238,8 @@ export class AgentExecutionScope implements ExecutionScope {
       this.environment,
       route,
       this.agentRoute,
-      this.journal
+      this.journal,
+      this.transcript
     );
   }
 
@@ -252,7 +257,8 @@ export class AgentExecutionScope implements ExecutionScope {
       this.environment,
       route,
       this.agentRoute,
-      this.journal
+      this.journal,
+      this.transcript
     );
   }
 
