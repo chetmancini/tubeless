@@ -23,6 +23,7 @@ import { resolvedLimits } from "./execution-scope.js";
 import { modelInstructions } from "./model-prompt.js";
 import { toolObject } from "./default-tool-schema.js";
 import { wireString } from "../tracing/wire-schema.js";
+import { agentTranscript, transcriptSettings, type AgentTranscriptOptions } from "./transcript.js";
 
 interface ModelState {
   instructions?: string;
@@ -66,6 +67,8 @@ interface AgentConfig<Id extends string, Result extends StandardSchemaV1, Regist
   readonly codemode?: CodemodeSetting;
   readonly limits?: AgentLimits;
   readonly environment?: AgentEnvironmentProvider;
+  /** Opt-in bounded content capture; the application supplies its destination. */
+  readonly transcript?: AgentTranscriptOptions;
 }
 
 type AgentPipeline<
@@ -112,6 +115,7 @@ export function defineAgent<Options extends StandardSchemaV1<object, object>>(
   // Tools are opaque immutable handles; schemas, providers and executors retain their services.
   const owned = Object.freeze({
     ...config,
+    transcript: transcriptSettings(config.transcript),
     tools: config.tools && Object.freeze({ ...config.tools }),
     defaultTools: Array.isArray(config.defaultTools)
       ? Object.freeze([...config.defaultTools])
@@ -206,15 +210,18 @@ function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
             context.environment,
             codemode !== false
           ));
-        const response = await model(
-          {
-            instructions: prompt,
-            task: describe(context.options),
-            conversation: state.conversation,
-            outcomes: state.outcomes,
-          },
-          context
-        );
+        const request = {
+          instructions: prompt,
+          task: describe(context.options),
+          conversation: state.conversation,
+          outcomes: state.outcomes,
+        };
+        await agentTranscript(context)?.record(context.turn, {
+          kind: "prompt",
+          instructions: prompt,
+          task: request.task,
+        });
+        const response = await model(request, context);
         // Sessions keep the finish response's conversation, which is never reduced into state.
         session?.observe(response.conversation);
         return {

@@ -8,7 +8,7 @@
         "openSqliteAgentCheckpointStore",
         "SqliteAgentCheckpointStore"
       ],
-      "sha256": "c77cc7511595f76292751260d36cdcc7979902e4a6ba32d12fb437f52768638f",
+      "sha256": "4bcc4602d50229c03b00cca0fd13718bfd1c2cfdb5092a84777b16720ad8eaaf",
       "specifier": "tubeless/agent/node"
     },
     {
@@ -36,6 +36,9 @@
         "AgentState",
         "AgentTool",
         "AgentToolContext",
+        "AgentTranscriptEvent",
+        "AgentTranscriptOptions",
+        "AgentTranscriptRecord",
         "CodemodeExecution",
         "CodemodeExecutionResult",
         "CodemodeExecutor",
@@ -54,7 +57,7 @@
         "plainAgentCheckpointCodec",
         "ToolError"
       ],
-      "sha256": "3dbae48d40b24c3e2b0e4c6032f40816b6428c7662f7a0b9d0d1ecac39751cb0",
+      "sha256": "eb93f783da5f20f19a051ca6414e97463795672a715050e00741f15d90c03aeb",
       "specifier": "tubeless/agent"
     },
     {
@@ -182,7 +185,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "43701c4983ec5ea374a2c782bb595309b017c592310680d1b37b2d39dc4ec92a",
+      "sha256": "dbfd538ef19d8fecc37f1c65c44d4972a735626d3082c1074261142ee7cc6b7f",
       "specifier": "tubeless/cli"
     },
     {
@@ -286,7 +289,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "e1bf470c1e6f433908b08f824fc01e355435999331a8fd3e020e12760e5c9d83",
+      "sha256": "ddb367b6873fa00af13e41707aaa186d5cacf94bd0df292ef423423ea463b6af",
       "specifier": "tubeless/agent/openai"
     },
     {
@@ -300,13 +303,13 @@
         "McpTool",
         "McpToolResult"
       ],
-      "sha256": "5d60af3535a87d527222450e71863954a0ad4e3f672585af68ddc9d7e34eefa3",
+      "sha256": "7bfaaf0d0f0dabdb41e5077c89db7b93e760eb045be317699f253af0ac06cca9",
       "specifier": "tubeless/agent/mcp"
     },
     {
       "declaration": "./dist/agent/anthropic.d.ts",
       "exports": ["anthropicModel", "AnthropicModelOptions"],
-      "sha256": "c3e3e6bad3bf562681b40eae299b724cac89769041118520c3290dce2725706f",
+      "sha256": "802f1cf939ab5386bd506739919705860d89e4c3f6ca65a1c416ffa649780461",
       "specifier": "tubeless/agent/anthropic"
     },
     {

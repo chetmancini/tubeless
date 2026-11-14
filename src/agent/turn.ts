@@ -25,6 +25,7 @@ import type { CallOutcome } from "./checkpoint-format.js";
 import type { RuntimeAgentDefinition } from "./compile-agent.js";
 import type { CompiledTool } from "./tools.js";
 import { executePreparedToolCall } from "./tool-execution.js";
+import { agentTranscript } from "./transcript.js";
 
 export interface TurnState<State> {
   state: AgentState<State>;
@@ -88,6 +89,10 @@ export function createAgentTurn<
         context.signal
       );
       throwIfAborted(context.signal, "Agent decision");
+      await agentTranscript(context)?.record(turn, {
+        kind: "decision",
+        decision: response.decision,
+      });
       const decision = decisionEnvelope(response.decision);
       context.reportAttempt(1, {
         ...attributes,
@@ -181,6 +186,11 @@ export function createAgentTurn<
               if (admission.reused)
                 context.reportAttempt(1, { ...attributes, "agent.checkpointReused": true });
               const { outcome } = admission;
+              await agentTranscript(context)?.record(execution.turn, {
+                kind: "outcome",
+                outcome,
+                ...(admission.reused ? { replayed: true } : {}),
+              });
               if (outcome.ok) progress.complete(call.id);
               else progress.fail(call.id, new Error(outcome.error.message), false);
               return outcome;

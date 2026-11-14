@@ -1,4 +1,5 @@
 import type { AgentModel, AgentModelDescriptors } from "./model-types.js";
+import { agentTranscript } from "./transcript.js";
 import {
   anthropicDecision,
   anthropicMessage,
@@ -263,6 +264,11 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
               { role: "user", content: "Continue the task from this summary." },
             ];
             context.log.log("Compacted agent conversation");
+            // Queue provider observations; the harness drains them outside the request deadline.
+            void agentTranscript(context)?.record(context.turn, {
+              kind: "compaction",
+              provider: "anthropic",
+            });
           } else {
             context.log.log(`Anthropic compaction returned no summary (${summary.stopReason})`);
           }
@@ -272,6 +278,11 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
           const response = anthropicMessage(
             await send("messages", { ...decisionRequest, messages }, false)
           );
+          const transcript = agentTranscript(context);
+          if (transcript)
+            for (const block of response.content)
+              if (block.type === "text" && typeof block.text === "string")
+                void transcript.record(context.turn, { kind: "assistant", text: block.text });
           if (response.stopReason === "max_tokens")
             throw new Error("Anthropic response reached max_tokens; raise maxTokens");
           if (response.stopReason === "refusal") throw new Error("Anthropic refused the request");

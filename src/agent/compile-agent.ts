@@ -15,6 +15,7 @@ import { resolvedLimits, agentScope } from "./execution-scope.js";
 import { createAgentTurn, type TurnState } from "./turn.js";
 import { initialAgentExecution, runAgentInvocation } from "./invocation.js";
 import { markAgent } from "./agent-identity.js";
+import { transcriptSettings } from "./transcript.js";
 import type {
   AgentDefinition,
   AgentDecisionContext,
@@ -86,7 +87,7 @@ export function compileAgent<
   readonly optionsSchema: Options;
   readonly definition: PipelineDefinitionSnapshot;
 } {
-  const config = { ...definition };
+  const config = { ...definition, transcript: transcriptSettings(definition.transcript) };
   if (
     config.durability &&
     (typeof config.implementationVersion !== "string" || !config.implementationVersion.trim())

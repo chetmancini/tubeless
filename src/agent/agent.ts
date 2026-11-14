@@ -52,6 +52,11 @@ export type {
 export { defineAgent } from "./model-agent.js";
 export { createAgentSession, type AgentSession } from "./agent-session.js";
 export type {
+  AgentTranscriptEvent,
+  AgentTranscriptOptions,
+  AgentTranscriptRecord,
+} from "./transcript.js";
+export type {
   AgentModel,
   AgentModelDescriptors,
   AgentModelRequest,
