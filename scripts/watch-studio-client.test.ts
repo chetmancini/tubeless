@@ -1,24 +1,44 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startStudioClientWatch } from "./watch-studio-client.mjs";
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const watchMock = vi.hoisted(() => ({
+  close: vi.fn(),
+  on: vi.fn(),
+  watch:
+    vi.fn<
+      (
+        path: string,
+        options: unknown,
+        listener: (event: string, filename: string | null) => void
+      ) => unknown
+    >(),
+}));
 
-async function waitForCount(calls: readonly unknown[], count: number) {
-  const start = Date.now();
-  while (calls.length < count) {
-    if (Date.now() - start > 2000) {
-      throw new Error(`expected ${count} generates, saw ${calls.length}`);
-    }
-    await delay(10);
-  }
+vi.mock("node:fs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:fs")>()),
+  watch: watchMock.watch,
+}));
+
+function changeSource(filename: string) {
+  const listener = watchMock.watch.mock.calls[0]?.[2];
+  if (!listener) throw new Error("Source watcher was not opened.");
+  listener("change", filename);
 }
 
 describe("startStudioClientWatch", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    watchMock.watch.mockReturnValue({ close: watchMock.close, on: watchMock.on });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("debounces all source changes, queues an active rebuild, and stops on close", async () => {
     const root = mkdtempSync(join(tmpdir(), "tubeless-studio-watch-"));
     mkdirSync(join(root, "src/studio/browser"), { recursive: true });
@@ -33,44 +53,47 @@ describe("startStudioClientWatch", () => {
     writeFileSync(join(root, "dist/cloudflare/cloudflare-studio-client.d.ts"), "ok\n");
 
     const pending: Array<() => void> = [];
-    let warmup = true;
     const handle = startStudioClientWatch({
       packageRoot: root,
       debounceMs: 40,
-      generate: () =>
-        new Promise<void>((resolve) => {
-          if (warmup) resolve();
-          else pending.push(resolve);
-        }),
+      generate: () => new Promise<void>((resolve) => pending.push(resolve)),
     });
     try {
-      // A watch started just after the fixture writes can still observe them.
-      await delay(400);
-      warmup = false;
-      await delay(80);
+      expect(watchMock.watch).toHaveBeenCalledWith(
+        join(root, "src"),
+        { recursive: true },
+        expect.any(Function)
+      );
+      await vi.advanceTimersByTimeAsync(80);
       expect(pending).toHaveLength(0);
 
+      // Control event delivery: native watchers may delay or coalesce writes.
       // Neither file is imported by the browser entry; all source changes rebuild.
-      writeFileSync(join(root, "src/cli/cli-parser.ts"), "export const n = 2;\n");
-      await delay(15);
-      const leaf = join(root, "src/studio/browser/leaf.ts");
-      writeFileSync(leaf, 'export const label = "Studio 2";\n');
-      await waitForCount(pending, 1);
-      await delay(80);
+      changeSource("cli/cli-parser.ts");
+      await vi.advanceTimersByTimeAsync(15);
+      changeSource("studio/browser/leaf.ts");
+      await vi.advanceTimersByTimeAsync(39);
+      expect(pending).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
       expect(pending).toHaveLength(1);
 
-      writeFileSync(leaf, 'export const label = "Studio 4";\n');
-      await delay(120);
+      changeSource("studio/browser/leaf.ts");
+      await vi.advanceTimersByTimeAsync(40);
+      changeSource("cli/cli-parser.ts");
+      await vi.advanceTimersByTimeAsync(40);
       expect(pending).toHaveLength(1);
       pending[0]?.();
-      await waitForCount(pending, 2);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pending).toHaveLength(2);
       pending[1]?.();
-      await delay(150);
+      await vi.advanceTimersByTimeAsync(150);
       expect(pending).toHaveLength(2);
 
+      changeSource("studio/browser/leaf.ts");
       handle.close();
-      writeFileSync(leaf, 'export const label = "Studio 5";\n');
-      await delay(150);
+      expect(watchMock.close).toHaveBeenCalledOnce();
+      changeSource("studio/browser/leaf.ts");
+      await vi.advanceTimersByTimeAsync(150);
       expect(pending).toHaveLength(2);
     } finally {
       handle.close();
@@ -96,19 +119,20 @@ describe("startStudioClientWatch", () => {
       writeFileSync(join(root, output), "ok\n");
     }
 
-    const calls: string[] = [];
+    const generate = vi.fn(async () => {
+      if (generate.mock.calls.length === 1) throw new Error("Studio client bundle failed.");
+    });
     const handle = startStudioClientWatch({
       packageRoot: root,
       debounceMs: 20,
-      generate: async () => {
-        calls.push("run");
-        if (calls.length === 1) throw new Error("Studio client bundle failed.");
-      },
+      generate,
     });
     try {
-      await waitForCount(calls, 1);
-      writeFileSync(join(root, "src/studio/browser/entry.ts"), 'export const text = "Studio 2";\n');
-      await waitForCount(calls, 2);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(generate).toHaveBeenCalledOnce();
+      changeSource("studio/browser/entry.ts");
+      await vi.advanceTimersByTimeAsync(20);
+      expect(generate).toHaveBeenCalledTimes(2);
     } finally {
       handle.close();
       rmSync(root, { recursive: true, force: true });
