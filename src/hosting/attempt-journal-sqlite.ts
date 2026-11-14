@@ -37,14 +37,6 @@ export class SqliteAttemptJournal {
       storage.sql.exec(statement);
   }
 
-  hasLaunch(launchId: string): boolean {
-    return (
-      this.storage.sql
-        .exec("SELECT 1 FROM tubeless_attempts WHERE launch_id = ?", launchId)
-        .toArray().length > 0
-    );
-  }
-
   create(definition: HostedAttemptDefinition): void {
     this.storage.sql.exec(
       "INSERT INTO tubeless_attempts (attempt_id, launch_id, pipeline_id, deployment_id) VALUES (?, ?, ?, ?)",
@@ -132,7 +124,7 @@ export class SqliteAttemptJournal {
     pipelineId: string,
     rootRunId: string | undefined,
     events: readonly PipelineTraceEvent[]
-  ): void {
+  ): string {
     let root = rootRunId;
     for (const event of events) {
       if (event.name === "pipeline.started") {
@@ -169,6 +161,9 @@ export class SqliteAttemptJournal {
           throw new HostedAttemptConflict("events");
       }
     }
+    // Every accepted owned batch belongs to a bound root, including the first batch.
+    if (root === undefined) throw new HostedAttemptConflict("events");
+    return root;
   }
 
   #run(runId: string) {

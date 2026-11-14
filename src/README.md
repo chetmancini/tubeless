@@ -153,7 +153,10 @@ their source files.
   and run-binding tables within the adapter's surrounding transaction.
   `attempt-batch.ts` decodes current-version events and hashes an owned snapshot of
   the exact envelope bytes. Ownership, events, sequence and the original receipt
-  commit together. These operations are not exposed by the existing trusted RPC
+  commit together. Trusted liveness, cancellation lookup and reconciliation read
+  only trusted launches; shared history still includes owned attempts. Each append
+  path validates one launch snapshot before the common transactional commit.
+  These operations are not exposed by the existing trusted RPC
   or HTTP API; claim uncertainty never authorizes another execution.
   `hosting/run-coordinator.ts` owns launch validation, start acknowledgements,
   ingestion and cancellation through that store and a `HostedExecutor`. Its

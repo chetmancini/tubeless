@@ -121,7 +121,6 @@ describe("persisted hosted attempts", () => {
         const store = new SqliteHostedLaunchStore(storage, unusedEvents);
         parentPort.once("message", async () => {
           try { parentPort.postMessage(await store.claimAttempt(workerData.owner, "release-1", 1)); }
-          catch (error) { throw error; }
           finally { db.close(); }
         });
         parentPort.postMessage("ready");
@@ -251,7 +250,27 @@ describe("persisted hosted attempts", () => {
       conflict("ownership")
     );
     expect(await store.listEvents()).toHaveLength(1);
-    expect(await store.liveRunIds()).toEqual(["root"]);
+    expect((await store.listEvents()).some((event) => event.name === "pipeline.completed")).toBe(
+      false
+    );
+  });
+
+  it("keeps owned attempts out of the trusted launcher's lifecycle queries", async () => {
+    const { store } = await claimed();
+    await store.acceptAttemptBatch(owner, body(0, [started()]));
+    expect(await store.liveRunIds()).toEqual([]);
+    expect(await store.launchIdForRun("root")).toBeUndefined();
+    expect(await store.stale(1000)).toEqual([]);
+    expect(await store.nextReconcileAt(100)).toBeUndefined();
+
+    await store.create("trusted", "command", 10);
+    const trustedStart = { ...started("trusted-root"), timestampMs: 20 };
+    await store.acceptBatch("trusted", 0, [trustedStart]);
+    expect(await store.liveRunIds()).toEqual(["trusted-root"]);
+    expect(await store.launchIdForRun("trusted-root")).toBe("trusted");
+    expect(await store.stale(20)).toEqual(["trusted"]);
+    expect(await store.nextReconcileAt(100)).toBe(120);
+    expect(await store.listEvents()).toHaveLength(2);
   });
 
   it("never grants a revoked pending attempt", async () => {

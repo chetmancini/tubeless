@@ -36,12 +36,12 @@ export interface HostedLaunchStore extends PipelineRunEventReader {
   fail(launchId: string, message: string, nowMs: number): Promise<void>;
   /** Atomically fail only if admission has not been granted. */
   failUnadmitted(launchId: string, message: string, nowMs: number): Promise<void>;
-  /** Bound root ids for running launches, in creation order. */
+  /** Bound root ids for running trusted launches, in creation order. */
   liveRunIds(): Promise<readonly string[]>;
-  /** Resolve only a running launch owned by the supplied root run. */
+  /** Resolve only a running trusted launch owned by the supplied root run. */
   launchIdForRun(runId: string): Promise<string | undefined>;
-  /** Open launches whose root-start time (or creation time before start) is <= cutoff. */
+  /** Open trusted launches whose root-start/creation time is <= cutoff. */
   stale(cutoffMs: number): Promise<readonly string[]>;
-  /** Earliest open root-start/creation timestamp plus delay, or undefined when idle. */
+  /** Earliest open trusted root-start/creation timestamp plus delay, or undefined when idle. */
   nextReconcileAt(delayMs: number): Promise<number | undefined>;
 }

@@ -31,10 +31,18 @@ export interface LaunchEventStore {
   append(events: readonly PipelineTraceEvent[]): void;
 }
 
+// Only this launcher's trusted executions participate in its cancellation and recovery policy.
+const TRUSTED_LAUNCHES = `WITH trusted_launches AS (
+  SELECT launch.* FROM tubeless_launches AS launch
+  WHERE NOT EXISTS (
+    SELECT 1 FROM tubeless_attempts AS attempt WHERE attempt.launch_id = launch.launch_id
+  )
+)`;
+
 // A launch may wait for admission before its execution budget begins. Reuse the
 // persisted root start through the run-id index, with creation time for old or
 // unstarted launches that have no root start event.
-const ACTIVE_LAUNCHES = `WITH active_launches AS (
+const ACTIVE_LAUNCHES = `${TRUSTED_LAUNCHES}, active_launches AS (
   SELECT launch_id, created_at_ms,
     CASE WHEN state = 'running' THEN COALESCE((
       SELECT timestamp_ms FROM pipeline_run_events AS event
@@ -43,7 +51,7 @@ const ACTIVE_LAUNCHES = `WITH active_launches AS (
         AND event.parent_run_id IS NULL
       ORDER BY event.id LIMIT 1
     ), created_at_ms) ELSE created_at_ms END AS started_at_ms
-  FROM tubeless_launches AS launch
+  FROM trusted_launches AS launch
   WHERE state IN ('starting', 'running')
 )`;
 
@@ -51,16 +59,15 @@ type LaunchState = "starting" | "running" | "finished" | "failed";
 
 interface LaunchRecord {
   readonly launchId: string;
-  readonly commandId: string;
   readonly runId?: string;
   readonly pipelineId?: string;
   readonly dryRun: boolean;
   readonly stepCount: number;
   readonly state: LaunchState;
+  readonly ownership: "trusted" | "attempt";
   /** The executor was cleared to execute user code; a start failure must not close it. */
   readonly admitted: boolean;
   readonly lastBatch: number;
-  readonly createdAtMs: number;
 }
 
 const TERMINAL: ReadonlySet<LaunchState> = new Set(["finished", "failed"]);
@@ -134,21 +141,25 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttempt
 
   #get(launchId: string): LaunchRecord | undefined {
     const row = this.storage.sql
-      .exec("SELECT * FROM tubeless_launches WHERE launch_id = ?", launchId)
+      .exec(
+        `SELECT launch.*, attempt.attempt_id FROM tubeless_launches AS launch
+         LEFT JOIN tubeless_attempts AS attempt ON attempt.launch_id = launch.launch_id
+         WHERE launch.launch_id = ?`,
+        launchId
+      )
       .toArray()[0];
     if (!row) return undefined;
     return {
       launchId: String(row.launch_id),
-      commandId: String(row.command_id),
       ...(row.run_id == null ? {} : { runId: String(row.run_id) }),
       ...(row.pipeline_id == null ? {} : { pipelineId: String(row.pipeline_id) }),
       dryRun: Number(row.dry_run) === 1,
       stepCount: Number(row.step_count),
       // SAFETY: state is only ever written from LaunchState literals in this class.
       state: row.state as LaunchState,
+      ownership: row.attempt_id === null ? "trusted" : "attempt",
       admitted: Number(row.admitted) === 1,
       lastBatch: Number(row.last_batch),
-      createdAtMs: Number(row.created_at_ms),
     };
   }
 
@@ -156,7 +167,7 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttempt
   async admit(launchId: string): Promise<boolean> {
     return this.storage.transactionSync(() => {
       const launch = this.#get(launchId);
-      if (!launch || TERMINAL.has(launch.state) || this.#attempts.hasLaunch(launchId)) return false;
+      if (!launch || TERMINAL.has(launch.state) || launch.ownership === "attempt") return false;
       this.storage.sql.exec(
         "UPDATE tubeless_launches SET admitted = 1 WHERE launch_id = ?",
         launchId
@@ -175,27 +186,28 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttempt
     events: readonly PipelineTraceEvent[]
   ): Promise<BatchAcknowledgement> {
     return this.storage.transactionSync(() => {
-      if (this.#attempts.hasLaunch(launchId)) throw new HostedAttemptConflict("ownership");
-      return this.#recordBatch(launchId, sequence, events);
+      const launch = this.#get(launchId);
+      if (!launch) throw new Error(`Unknown launch ${JSON.stringify(launchId)}.`);
+      if (launch.ownership === "attempt") throw new HostedAttemptConflict("ownership");
+      if (sequence <= launch.lastBatch)
+        return { accepted: true, ...(launch.runId === undefined ? {} : { runId: launch.runId }) };
+      // Rejected writes never consume a committed sequence.
+      if (TERMINAL.has(launch.state)) return { accepted: false };
+      if (sequence > launch.lastBatch + 1)
+        throw new Error(
+          `Launch ${launchId} expected batch ${launch.lastBatch + 1} but received ${sequence}.`
+        );
+      const runId = this.#commitBatch(launch, sequence, events);
+      return { accepted: true, ...(runId === undefined ? {} : { runId }) };
     });
   }
 
-  #recordBatch(
-    launchId: string,
+  /** Append and transition an already-validated launch within the caller's transaction. */
+  #commitBatch(
+    launch: LaunchRecord,
     sequence: number,
     events: readonly PipelineTraceEvent[]
-  ): BatchAcknowledgement {
-    const launch = this.#get(launchId);
-    if (!launch) throw new Error(`Unknown launch ${JSON.stringify(launchId)}.`);
-    if (sequence <= launch.lastBatch)
-      return { accepted: true, ...(launch.runId === undefined ? {} : { runId: launch.runId }) };
-    // Closed launches reject every new batch. Do not advance the committed
-    // sequence for dropped writes, so their retries keep the same acknowledgement.
-    if (TERMINAL.has(launch.state)) return { accepted: false };
-    if (sequence > launch.lastBatch + 1)
-      throw new Error(
-        `Launch ${launchId} expected batch ${launch.lastBatch + 1} but received ${sequence}.`
-      );
+  ): string | undefined {
     this.events.append(events);
     let { runId, pipelineId, dryRun, stepCount, state } = launch;
     for (const event of events) {
@@ -227,12 +239,9 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttempt
       stepCount,
       state,
       sequence,
-      launchId
+      launch.launchId
     );
-    return {
-      accepted: true,
-      ...(runId === undefined ? {} : { runId }),
-    };
+    return runId;
   }
 
   async createAttempt(definition: HostedAttemptDefinition): Promise<void> {
@@ -297,17 +306,15 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttempt
       if (!launch || TERMINAL.has(launch.state)) return { accepted: false };
       if (batch.sequence !== launch.lastBatch + 1)
         throw new HostedAttemptConflict("sequence", launch.lastBatch + 1);
-      this.#attempts.bindEvents(identity, attempt.pipelineId, launch.runId, batch.events);
-      const acknowledgement = this.#recordBatch(identity.launchId, batch.sequence, batch.events);
-      if (!acknowledgement.accepted || acknowledgement.runId === undefined)
-        throw new Error("Hosted attempt transaction did not bind a root run.");
-      this.#attempts.record(
-        identity.attemptId,
-        batch.sequence,
-        batch.digest,
-        acknowledgement.runId
+      const runId = this.#attempts.bindEvents(
+        identity,
+        attempt.pipelineId,
+        launch.runId,
+        batch.events
       );
-      return { accepted: true, runId: acknowledgement.runId };
+      this.#commitBatch(launch, batch.sequence, batch.events);
+      this.#attempts.record(identity.attemptId, batch.sequence, batch.digest, runId);
+      return { accepted: true, runId };
     });
   }
 
@@ -360,7 +367,7 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttempt
   async liveRunIds(): Promise<readonly string[]> {
     return this.storage.sql
       .exec(
-        "SELECT run_id FROM tubeless_launches WHERE state = 'running' AND run_id IS NOT NULL ORDER BY created_at_ms"
+        `${TRUSTED_LAUNCHES} SELECT run_id FROM trusted_launches WHERE state = 'running' AND run_id IS NOT NULL ORDER BY created_at_ms`
       )
       .toArray()
       .map((row) => String(row.run_id));
@@ -368,7 +375,10 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttempt
 
   async launchIdForRun(runId: string): Promise<string | undefined> {
     const row = this.storage.sql
-      .exec("SELECT launch_id FROM tubeless_launches WHERE run_id = ? AND state = 'running'", runId)
+      .exec(
+        `${TRUSTED_LAUNCHES} SELECT launch_id FROM trusted_launches WHERE run_id = ? AND state = 'running'`,
+        runId
+      )
       .toArray()[0];
     return row ? String(row.launch_id) : undefined;
   }

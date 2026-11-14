@@ -84,8 +84,12 @@ The trusted `HostedLaunchStore.acceptBatch` path accepts any sequence at or belo
 the committed high-water mark as a duplicate, without comparing event content.
 It relies on the current single-run-object caller. Owned attempts use the separate
 operations below; their launches cannot use the trusted admission or append path
-to bypass owner checks. Neither path is an authenticated network service. Do not
-mount `StudioIngest` as HTTP merely by decoding requests into its interface.
+to bypass owner checks. Trusted liveness, cancellation lookup and reconciliation
+queries exclude owned attempts, so Cloudflare's alarm policy cannot declare a
+remote worker terminated. History readers still include both paths; the owner of
+remote execution must supply its own cancellation and recovery policy. Neither
+path is an authenticated network service. Do not mount `StudioIngest` as HTTP
+merely by decoding requests into its interface.
 
 Admission is consent, not a distributed execution lease. The Durable Object run
 state and alarm serialization prevent a second execution. Repeated `admit` calls
@@ -138,6 +142,10 @@ inserts the receipt. A root must match the provisioned pipeline. Reject another
 root, a reused run ID (including one in trusted history), children before their
 parents, foreign parents, and inconsistent event pipeline/parent identities.
 A failure at any point rolls back bindings, history, launch state and receipt.
+Each append path loads and validates one launch snapshot before calling the
+shared commit operation. Owned-event validation returns the bound root directly;
+the attempt path does not re-enter the trusted high-water replay policy or
+reinterpret an optional-root acknowledgement after writing.
 
 An identical committed retry returns its original acknowledgement, including
 after completion or collector reopen. Altering even whitespace at an accepted
