@@ -887,6 +887,7 @@ tubeless history [options] [run-id]
 - `--pipeline <id>` filters by the exact recorded pipeline ID
 - `--json` emits the projected run list, or one projected run when `run-id` is set
 - `--events` emits raw store events as NDJSON (run-scoped when `run-id` is set)
+- `--transcript <path>` attaches a finished agent transcript for the selected run; requires `run-id` and cannot combine with `--events` or `--clear`
 - `--clear` deletes all recorded events from a SQLite store and compacts it; requires `--yes` and cannot combine with `--trace`, `--json`, `--events`, or a run id
 - `--yes` confirms `--clear`; there is no interactive prompt
 
@@ -898,6 +899,9 @@ against the full ID or the UUID after its `:`. An ambiguous prefix lists the
 matching runs and exits `1`.
 A pipeline with no recorded runs returns an empty list or event stream (exit `0`).
 History reads recorded IDs directly without loading a project file or command module.
+With `--transcript`, text output adds the selected agent's saved content and JSON
+adds a `transcript` object. This is an explicit, read-only artifact, independent of
+`--store` and `--trace`; see [transcript inspection](./agents.md#save-and-inspect-a-transcript).
 By default, history prints a run list. Supply a run ID to see that run's steps,
 logs, and error details. Agent runs and parents containing agents also show their
 recorded turn/call/child structure, state versions, call counts, termination, and

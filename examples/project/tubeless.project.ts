@@ -49,7 +49,8 @@ export default defineProject(
     CachedCountCommand,
     ScriptedAgent,
     // For transcript capture, use createTranscriptAgent in ../agent-transcript.ts
-    // with an explicit application sink.
+    // with openNdjsonAgentTranscriptWriter from tubeless/agent/node and an explicit path.
+    // Attach the finished file to history or ui with --transcript <path>.
     OpenAIAgentCommand,
     // Live model decisions and tools share the physical run cwd, including through symlinks.
     // Scoped guidance precedes nested file operations and task commands in separate turns.

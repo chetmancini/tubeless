@@ -1,0 +1,46 @@
+import { mkdir, open } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import {
+  decodeAgentTranscriptRecord,
+  type AgentTranscriptRecord,
+} from "../tracing/agent-transcript.js";
+
+/** An application-owned transcript destination. Close it after all agents have settled. */
+export interface NdjsonAgentTranscriptWriter {
+  write(record: AgentTranscriptRecord): Promise<void>;
+  close(): Promise<void>;
+}
+
+/** Append validated records to an explicit NDJSON path; newly created files use mode 0600. */
+export async function openNdjsonAgentTranscriptWriter(
+  filename: string
+): Promise<NdjsonAgentTranscriptWriter> {
+  const target = resolve(filename);
+  await mkdir(dirname(target), { recursive: true });
+  const handle = await open(target, "a+", 0o600);
+  try {
+    const { size } = await handle.stat();
+    if (size > 0) {
+      const lastByte = Buffer.alloc(1);
+      await handle.read(lastByte, 0, 1, size - 1);
+      if (lastByte[0] !== 0x0a) await handle.writeFile("\n");
+    }
+  } catch (error) {
+    await handle.close();
+    throw error;
+  }
+  let pending = Promise.resolve();
+  let closing: Promise<void> | undefined;
+  return {
+    async write(record) {
+      if (closing) throw new Error("Cannot write a closed transcript destination");
+      const line = JSON.stringify(decodeAgentTranscriptRecord(record)) + "\n";
+      pending = pending.then(() => handle.writeFile(line));
+      return pending;
+    },
+    close() {
+      closing ??= pending.finally(() => handle.close());
+      return closing;
+    },
+  };
+}

@@ -155,10 +155,10 @@ export class AgentProjection {
     if (
       event.iteration.runId !== agentRunId ||
       event.parentRunId !== agentRunId ||
-      event.iteration.index !== index ||
       !["decide", "calls", "reduce"].includes(event.stepId)
     )
       return;
+    // Logical agent turns continue after resume; invocation-local iteration indexes restart.
     this.#turn ??= { agentRunId, index };
     if (call) {
       if (event.stepId === "calls" && event.attemptId === parentAttemptId) {

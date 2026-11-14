@@ -17,6 +17,8 @@ import {
 import { readPipelineEventPages, readPipelineRunTree } from "../run-store/run-store-reader.js";
 import { projectAgentHistory } from "../run-store/agent-history.js";
 import { formatAgentHistory } from "./agent/history.js";
+import { readAgentTranscript, formatAgentTranscript } from "./agent/transcript.js";
+import type { AgentTranscriptReader } from "../tracing/agent-transcript.js";
 import {
   DEFAULT_PIPELINE_RUN_STORE,
   terminalSafeText,
@@ -189,6 +191,16 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
         if (parsed.positionals.length > 1) {
           return writeUsageError(commandIo, "Pass at most one run id.", HISTORY_USAGE);
         }
+        if (
+          parsed.values.transcript &&
+          (parsed.positionals.length !== 1 || parsed.values.events || parsed.values.clear)
+        ) {
+          return writeUsageError(
+            commandIo,
+            "--transcript requires a run id and cannot combine with --events or --clear.",
+            HISTORY_USAGE
+          );
+        }
         if (parsed.values.clear) {
           if (parsed.values.trace) {
             return writeUsageError(
@@ -305,7 +317,15 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
           commandIo.stderr.write(`Error: ${resolution.error}\n`);
           return undefined;
         };
+        let transcripts: AgentTranscriptReader | undefined;
         try {
+          if (parsed.values.transcript) {
+            const { openNdjsonAgentTranscriptReader } =
+              await import("../run-store/agent-transcript-ndjson.js");
+            transcripts = await openNdjsonAgentTranscriptReader(
+              path.resolve(commandIo.cwd, parsed.values.transcript)
+            );
+          }
           if (parsed.values.events) {
             if (runId === undefined) {
               await writeEvents(scope);
@@ -328,13 +348,21 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
               if (!run) throw new Error(`Run ${JSON.stringify(resolved)} left the store mid-read.`);
             }
             const agentHistory = projectAgentHistory(await readPipelineRunTree(store, run));
-            const detail = agentHistory.agents.length ? { ...run, agentHistory } : run;
+            const transcript = transcripts
+              ? await readAgentTranscript(transcripts, run.runId)
+              : undefined;
+            const detail = {
+              ...run,
+              ...(agentHistory.agents.length ? { agentHistory } : {}),
+              ...(transcript ? { transcript } : {}),
+            };
             await writeCliChunk(
               commandIo.stdout,
               parsed.values.json
                 ? `${JSON.stringify(detail, null, 2)}\n`
                 : formatRunDetail(run) +
-                    (agentHistory.agents.length ? `\n${formatAgentHistory(agentHistory)}` : "")
+                    (agentHistory.agents.length ? `\n${formatAgentHistory(agentHistory)}` : "") +
+                    (transcript ? `\n${formatAgentTranscript(transcript)}` : "")
             );
             return TUBELESS_WORKBENCH_EXIT_CODE.success;
           }
@@ -353,6 +381,7 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
           commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
           return TUBELESS_WORKBENCH_EXIT_CODE.load;
         } finally {
+          await transcripts?.close();
           await store.close();
         }
       },

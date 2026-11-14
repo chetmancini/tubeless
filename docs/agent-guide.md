@@ -519,8 +519,12 @@ read when a pipeline needs them.
   invocation has an ordered queue and bounded UTF-8 records (64 KiB default/max)
   and total bytes (1 MiB default). Omission and limit markers make incomplete
   capture explicit. This is independent of `--trace`, `--store` and recovery;
-  child agents require their own opt-in. History/Studio currently show structural
-  records, not transcript content. Read [transcript contracts](./agents.md#opt-in-transcripts)
+  child agents require their own opt-in. Use `openNdjsonAgentTranscriptWriter(path)`
+  from `tubeless/agent/node`, then close it after all agents settle. Attach the
+  finished file with `history --transcript <path> <run-id>` or `ui --transcript <path>`
+  alongside its structural trace/store. Studio pages content in a Transcript tab;
+  attached files are immutable snapshots and disable history clearing.
+  Read [transcript contracts](./agents.md#opt-in-transcripts)
   and adapt [the credential-free recipe](../examples/agent-transcript.ts).
 
 - To give an agent MCP server tools, `await connectMcpServers({ name: { url } | { command } })`

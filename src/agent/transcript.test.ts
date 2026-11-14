@@ -166,6 +166,47 @@ describe("agent transcript capture", () => {
     expect(new Set(records.map((record) => record.runId)).size).toBe(1);
   });
 
+  it.each([false, true])("captures once-validated pipeline options (mapped=%s)", async (mapped) => {
+    const records: AgentTranscriptRecord[] = [];
+    const validate = vi.fn(async (value: unknown) => ({
+      value: { n: Number((value as { n: string }).n) },
+    }));
+    const { step } = createSteps(schema<{ n: string }, { n: number }>(validate));
+    const received: object[] = [];
+    const work = step("work", {
+      run: (_inputs, context) => {
+        received.push(context.options);
+        return context.options.n;
+      },
+    });
+    const child = definePipeline({ id: "transformed-tool", steps: [work] });
+    const mapOptions = vi.fn((n: number) => ({ n: String(n) }));
+    const tool = mapped
+      ? pipelineTool(child, { description: "Transform", inputSchema: numberSchema, mapOptions })
+      : pipelineTool(child, { description: "Transform" });
+    await defineAgentLoop({
+      ...base,
+      tools: { child: tool },
+      transcript: collect(records),
+      decide: (_state, context) =>
+        context.turn === 1
+          ? {
+              kind: "continue",
+              calls: [{ id: "child-call", tool: "child", input: mapped ? 2 : { n: "2" } }],
+            }
+          : finish,
+    }).runOrThrow();
+    expect(validate).toHaveBeenCalledOnce();
+    expect(mapOptions).toHaveBeenCalledTimes(mapped ? 1 : 0);
+    expect(received).toEqual([{ n: 2 }]);
+    expect(events(records).find((event) => event.kind === "call")).toEqual({
+      kind: "call",
+      id: "child-call",
+      tool: "child",
+      input: received[0],
+    });
+  });
+
   it("owns redaction inputs, supports suppression and never changes runtime data", async () => {
     const records: AgentTranscriptRecord[] = [];
     const decision = { kind: "finish", result: 4 };

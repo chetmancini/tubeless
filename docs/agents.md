@@ -1186,9 +1186,61 @@ Child agents need their own explicit `transcript` option. A parent's transcript 
 still contain its calls to the child and returned values. Planning and skipped dry
 runs emit nothing; explicitly authored previews emit records marked `dryRun: true`.
 The [credential-free transcript recipe](../examples/agent-transcript.ts) shows a
-caller-selected NDJSON destination and decision suppression. History and Studio
-currently render structural traces; transcript readers and evaluation helpers are
-described in the [feature design](https://github.com/chetmancini/tubeless/blob/main/design/agent-transcripts.md).
+caller-selected NDJSON destination and decision suppression.
+
+### Save and inspect a transcript
+
+Use `openNdjsonAgentTranscriptWriter(path)` from `tubeless/agent/node` for a
+validated NDJSON sink. Pass `writer.write` to `transcript.write`, then await
+`writer.close()` after all agents using it have settled. Writes from simultaneous
+invocations are serialized. Newly created files use mode `0600`; existing file
+permissions and retention remain application-owned. The writer appends and never
+truncates an existing file. It records content only; configure structural tracing
+separately so history and Studio can join records by run ID.
+
+```ts
+import { openNdjsonAgentTranscriptWriter } from "tubeless/agent/node";
+
+const writer = await openNdjsonAgentTranscriptWriter(".tubeless/transcript.ndjson");
+try {
+  // Supply this writer to your agent's transcript option.
+  const agent = defineAgent({
+    id: "recorded",
+    model: openaiModel(),
+    transcript: { write: writer.write },
+  });
+  await agent.runOrThrow({ task: "Inspect this workspace." });
+} finally {
+  await writer.close();
+}
+```
+
+Attach a finished transcript to its structural SQLite history or NDJSON trace:
+
+```sh
+tubeless history --store .tubeless/runs.sqlite --transcript .tubeless/transcript.ndjson <agent-run-id>
+tubeless history --trace run.ndjson --transcript .tubeless/transcript.ndjson --json <agent-run-id>
+tubeless ui --trace run.ndjson --transcript .tubeless/transcript.ndjson
+```
+
+History adds the selected run's content; JSON includes a `transcript` with records
+and recording status. Studio adds a **Transcript** tab to runs with available
+content, with paginated records and **Open turn** links. Nested agents retain their
+own transcripts: open their run to inspect their conversation. No content is added
+to ordinary history responses without an attached transcript source.
+
+The reader validates the entire file before displaying content. It accepts at most
+64 MiB, 100,000 lines and 64 KiB per record, checks version and event shapes,
+deduplicates identical `(runId, sequence)` records and rejects conflicting records.
+It sorts each run by sequence. Gaps or a missing end marker produce `partial`;
+a byte-limit marker produces `limited`; a terminal end without gaps produces
+`complete`. These labels describe the recording, independently of the agent's
+execution status. No matching records means `unavailable`, which may include fully
+suppressed capture. The file is a read-only snapshot; reopen history or restart
+Studio to see later appends. History clearing is disabled while Studio has an
+attached transcript artifact, so clearing structural events cannot leave its content
+behind unnoticed. SQLite/Cloudflare transcript persistence and evaluation helpers
+remain subsequent work in the [feature design](https://github.com/chetmancini/tubeless/blob/main/design/agent-transcripts.md).
 
 ## Inspection and recordings
 

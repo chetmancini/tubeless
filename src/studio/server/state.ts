@@ -114,6 +114,13 @@ export class PipelineRunStudioEventState {
     });
   }
 
+  agentTurnRuns(runId: string, turns: readonly number[]): Promise<Record<string, string>> {
+    return this.#serialize(async () => {
+      await this.#appendNewEvents();
+      return this.#indexedHistory().agentTurnRuns(runId, turns);
+    });
+  }
+
   definition(
     pipelineId: string,
     definitionId?: string

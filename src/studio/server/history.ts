@@ -155,6 +155,19 @@ export class StudioHistory {
     return { children: window.children, page, childCount: window.childCount };
   }
 
+  /** Resolve logical agent turns, including resumed turns beyond the child-summary window. */
+  agentTurnRuns(runId: string, turns: readonly number[]): Record<string, string> {
+    const requested = new Set(turns.filter((turn) => turn > 0));
+    return Object.fromEntries(
+      this.#index
+        .childrenOf(runId)
+        .filter(
+          (child) => child.agentTurn?.agentRunId === runId && requested.has(child.agentTurn.index)
+        )
+        .map((child) => [child.agentTurn!.index, child.runId])
+    );
+  }
+
   definition(pipelineId: string, definitionId?: string): StoredPipelineDefinition | undefined {
     return this.source.definitions.find(
       (entry) => entry.pipelineId === pipelineId && entry.identity?.definitionId === definitionId
