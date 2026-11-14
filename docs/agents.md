@@ -520,6 +520,11 @@ forced compaction, a typed agent given its input as task text or JSON, and a
 49-tool inventory. Reports record each case's tool count and descriptor bytes.
 Add `--only=<id>,<id>` to rerun selected cases. They
 also require existing tests and unrelated work to remain intact.
+Use `--provider=anthropic` with `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`
+to run the same cases through Claude; OpenAI remains the default. The direct
+49-tool case disables Anthropic strict tool schemas to fit its inventory; the
+harness still validates every input and output. Code mode uses one advertised
+tool and retains strict schemas. Reports identify the provider and model.
 `bun run eval:agent -- --codemode` runs the same cases through one `codemode` tool,
 except the typed triage cases: they have no tools, so they run directly in both modes.
 Each result records its effective `codemode`.
@@ -532,6 +537,11 @@ are separate from credential-free CI. Reports retain full call arguments, observ
 tool outcomes, decision batches with the outcomes supplied to each decision, and
 any completed answer and verification output, including when a
 later assertion fails. The disposable workspaces are still removed after each task.
+These observations come from transcript events, including successful compaction
+markers, and each result also retains its raw `transcript`. The published replay's
+`calls`, `outcomes` and `turns` fields keep their existing shape. Proposal calls stay
+in `calls`; `toolLog` uses validated call inputs and matching outcomes, including
+nested code-mode calls. Incomplete transcript evidence fails the evaluation.
 The recovery task must request the missing-file read alone, then choose recovery
 in the next decision that receives its `ENOENT` outcome. That batch's results
 must contain the current configuration or reveal its location. Speculative
@@ -541,6 +551,54 @@ The read-only nested-guidance task must load `src/AGENTS.md` in an earlier turn
 than `src/code.txt`, apply its answer convention, and preserve every fixture file.
 Passing them is evidence for these specific
 tasks, not a general reliability guarantee.
+
+## Evaluate your own agent
+
+Use `createAgentTranscriptCollector()` from `tubeless/testing` as an agent's
+`transcript` option. After the run settles, call `collector.assertComplete()`
+before asserting on `collector.records`. The records are immutable snapshots;
+the collector retains at most 16 MiB by default across all runs. Set `maxBytes`
+to a smaller positive byte limit when needed. A capture or collector error,
+omission, byte-limit marker, sequence gap, conflicting identity or absent end
+marker makes the completeness assertion fail. Pass a run ID to check one run;
+without it, every retained run must be complete. A complete recording may describe
+a failed or cancelled execution, so check the run result separately. Suppressed
+events leave no tombstone; avoid redaction that removes evidence required by an
+evaluation.
+
+`createAgentTestWorkspace(files, { name? })` writes caller-supplied text fixtures
+inside an owned temporary directory and returns its physical `cwd`.
+`workspace.assertUnchanged()` checks all files, directories and symlinks against
+their initial state. Pass relative file or directory paths to check a preserved
+subset while allowing intentional edits elsewhere. Symlink targets are compared
+without following them. Always await `workspace.close()` in `finally`; cleanup
+removes only that temporary workspace. This helper requires Node or Bun and
+loads filesystem modules only when called.
+
+```ts
+import { createAgentTestWorkspace, createAgentTranscriptCollector } from "tubeless/testing";
+
+const workspace = await createAgentTestWorkspace({ "input.txt": "fixture\n" });
+const collector = createAgentTranscriptCollector();
+try {
+  const agent = defineAgent({ id: "evaluated", model, transcript: collector });
+  const result = await agent.runOrThrow(
+    { task: "Read input.txt without changing files." },
+    undefined,
+    { cwd: workspace.cwd }
+  );
+  collector.assertComplete();
+  await workspace.assertUnchanged();
+  // Use your assertion library with result and collector.records.
+} finally {
+  await workspace.close();
+}
+```
+
+The [scripted evaluation recipe](../examples/agent-evaluation.ts) exercises a real
+read tool without provider credentials. Use scripted models in CI and make live
+provider runs an explicit choice. These helpers impose no scoring framework or
+model selection policy.
 
 ## Connect a model
 
@@ -1239,8 +1297,9 @@ execution status. No matching records means `unavailable`, which may include ful
 suppressed capture. The file is a read-only snapshot; reopen history or restart
 Studio to see later appends. History clearing is disabled while Studio has an
 attached transcript artifact, so clearing structural events cannot leave its content
-behind unnoticed. SQLite/Cloudflare transcript persistence and evaluation helpers
-remain subsequent work in the [feature design](https://github.com/chetmancini/tubeless/blob/main/design/agent-transcripts.md).
+behind unnoticed. Evaluation helpers are available from `tubeless/testing`;
+SQLite/Cloudflare transcript persistence remains subsequent work in the
+[feature design](https://github.com/chetmancini/tubeless/blob/main/design/agent-transcripts.md).
 
 ## Inspection and recordings
 

@@ -44,6 +44,7 @@ const sequences = {
     [["_finish", {answer: "Scoped code: cobalt"}]],
   ],
 };
+if (process.env.EVAL_RECOVERY === "transcript-omission") sequences["typed-triage-json"][0][0][1].urgent = ["x".repeat(70000)];
 if (process.env.EVAL_RECOVERY === "triage-wrong") sequences["typed-triage-json"][0][0][1].urgent = ["T2", "T4"];
 // Offline code mode: one script chains both inventory tools through the Node executor.
 if (process.env.EVAL_CODEMODE === "1")
@@ -128,14 +129,21 @@ globalThis.fetch = async (url, options) => {
   if (url === "https://api.openai.com/v1/responses/compact") {
     return Response.json({object: "response.compaction", output: [{type: "compaction", encrypted_content: "fixture"}]});
   }
-  if (url !== "https://api.openai.com/v1/responses") throw new Error("Unexpected fixture request");
+  const anthropic = url === "https://api.anthropic.com/v1/messages";
+  if (!anthropic && url !== "https://api.openai.com/v1/responses") throw new Error("Unexpected fixture request");
   const body = JSON.parse(options.body);
-  if (body.reasoning?.effort !== "high") throw new Error("Evaluation must explicitly request high reasoning");
-  const kind = Object.keys(sequences).find(name => body.instructions.includes("tubeless-eval-" + name + "-"));
+  if (anthropic && body.compaction) return Response.json({type: "message", role: "assistant", stop_reason: "compaction", content: [{type: "compaction", content: "Fixture summary", signature: "fixture"}]});
+  if ((anthropic ? body.output_config?.effort : body.reasoning?.effort) !== "high") throw new Error("Evaluation must explicitly request high reasoning");
+  const instructions = anthropic ? (Array.isArray(body.system) ? body.system.map(block => block.text).join("\n") : body.system) : body.instructions;
+  const kind = Object.keys(sequences).find(name => instructions.includes("tubeless-eval-" + name + "-"));
   if (!kind) throw new Error("Unrecognized fixture");
   const turn = turns.get(kind) ?? 0;
   turns.set(kind, turn + 1);
   const batch = sequences[kind][turn] ?? [["_finish", {answer: "Fixture completed."}]];
+  if (anthropic) return Response.json({type: "message", role: "assistant", stop_reason: "tool_use", content: batch.map(([name, input], index) => ({
+    type: "tool_use", name, id: kind + "-" + turn + "-" + index,
+    input: {[name === "_finish" ? "result" : "input"]: input},
+  }))});
   return Response.json({status: "completed", output: batch.map(([name, input], index) => ({
     type: "function_call", name, call_id: kind + "-" + turn + "-" + index,
     arguments: JSON.stringify({[name === "_finish" ? "result" : "input"]: input}),
@@ -453,3 +461,104 @@ it("runs selected cases offline in code mode through generated declarations", as
   }
   // One child spawn with a 30_000 ms inner timeout: 30_000 + 10_000.
 }, 40_000);
+
+it.each([false, true])(
+  "runs Anthropic evaluations offline (codemode=%s)",
+  async (codemode) => {
+    const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-anthropic-"));
+    try {
+      const mockPath = join(directory, "provider.mjs");
+      const reportPath = join(directory, "report.json");
+      await writeFile(mockPath, preload);
+      execFileSync(
+        process.execPath,
+        [
+          "--import",
+          mockPath,
+          "scripts/eval-agent.mjs",
+          "--provider=anthropic",
+          ...(codemode ? ["--codemode", "--only=large-inventory,typed-triage-json"] : []),
+          reportPath,
+        ],
+        {
+          encoding: "utf8",
+          timeout: 30_000,
+          env: {
+            ...process.env,
+            OPENAI_API_KEY: "",
+            ANTHROPIC_API_KEY: "offline-fixture",
+            ANTHROPIC_MODEL: "offline-anthropic",
+            EVAL_RECOVERY: "ordered",
+            EVAL_CODEMODE: codemode ? "1" : "0",
+          },
+        }
+      );
+      const report = JSON.parse(await readFile(reportPath, "utf8"));
+      expect(report).toMatchObject({ provider: "anthropic", model: "offline-anthropic", codemode });
+      expect(report.results.every((result: { passed: boolean }) => result.passed)).toBe(true);
+      expect(report.results).toHaveLength(codemode ? 2 : 8);
+      const inventory = report.results.find(
+        (result: { id: string }) => result.id === "large-inventory"
+      );
+      expect(inventory.toolLog).toMatchObject([
+        { tool: "support__get_ticket" },
+        { tool: "billing__get_balance" },
+      ]);
+      for (const result of report.results) {
+        expect(result.transcript.at(-1)).toMatchObject({
+          event: { kind: "end", status: "completed" },
+        });
+        expect(result.turns).toHaveLength(result.turnCount);
+      }
+      if (!codemode) {
+        const recovery = report.results.find(
+          (result: { id: string }) => result.id === "recover-and-compact"
+        );
+        expect(recovery.compactions).toBeGreaterThan(0);
+        expect(recovery.transcript).toContainEqual(
+          expect.objectContaining({ event: { kind: "compaction", provider: "anthropic" } })
+        );
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+  40_000
+);
+
+it("fails an evaluation whose transcript omits evidence even if the agent completes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-omission-"));
+  try {
+    const mockPath = join(directory, "provider.mjs");
+    const reportPath = join(directory, "report.json");
+    await writeFile(mockPath, preload);
+    expect(() =>
+      execFileSync(
+        process.execPath,
+        ["--import", mockPath, "scripts/eval-agent.mjs", "--only=typed-triage-json", reportPath],
+        {
+          encoding: "utf8",
+          timeout: 20_000,
+          env: {
+            ...process.env,
+            OPENAI_API_KEY: "offline-fixture",
+            EVAL_RECOVERY: "transcript-omission",
+          },
+        }
+      )
+    ).toThrow();
+    const { results } = JSON.parse(await readFile(reportPath, "utf8"));
+    expect(results[0]).toMatchObject({
+      passed: false,
+      error: "Transcript evidence is incomplete or conflicting",
+    });
+    expect(results[0].transcript).toContainEqual(
+      expect.objectContaining({ omitted: "decision", reason: "record-limit" })
+    );
+    expect(results[0].transcript.at(-1)).toMatchObject({
+      event: { kind: "end", status: "completed" },
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

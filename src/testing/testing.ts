@@ -14,6 +14,13 @@ import type {
   PipelineStepStatus,
 } from "../core/pipeline.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
+export { createAgentTranscriptCollector } from "./agent-transcript.js";
+export type {
+  AgentTranscriptCollector,
+  AgentTranscriptCollectorOptions,
+} from "./agent-transcript.js";
+export { createAgentTestWorkspace } from "./agent-workspace.js";
+export type { AgentTestWorkspace, AgentTestWorkspaceOptions } from "./agent-workspace.js";
 
 const overrideValue: unique symbol = Symbol("pipelineTestOverride");
 

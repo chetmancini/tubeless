@@ -2,8 +2,8 @@
 
 Design for [issue 286](https://github.com/chetmancini/tubeless/issues/286).
 Implemented: opt-in capture, a public Node NDJSON writer, validated artifact readers,
-CLI history inspection and a paginated Studio conversation view. SQLite/Cloudflare
-transcript persistence and public evaluation helpers remain subsequent stages.
+CLI history inspection, a paginated Studio conversation view and public evaluation
+helpers. SQLite/Cloudflare transcript persistence remains a subsequent stage.
 
 ## Contract and ownership
 
@@ -108,18 +108,23 @@ have no tombstones; no records cannot establish whether capture was disabled or 
 redacted, and must never imply an empty model conversation. Render content as text, never executable HTML. Transcript authorization
 must match history authorization; storage paths and credentials stay server-side.
 
-## Evaluation: subsequent stage
+## Evaluation: implemented
 
-Extract fixture workspace setup/cleanup, immutable-file checks, transcript collection
-and assertion reporting from `scripts/eval-agent.mjs` into `tubeless/testing` helpers.
-Keep paid provider selection, credentials and product-specific scoring in the script.
-Use scripted models in CI and run opt-in live cases through both bundled providers.
-Reports consume transcript decisions/outcomes and compaction markers, eliminating
-model wrappers and log-message matching. Assertions must detect omitted content
-instead of treating an incomplete transcript as complete evidence.
+`tubeless/testing` exposes a bounded `createAgentTranscriptCollector` with
+`assertComplete(runId?)`, and a Node/Bun `createAgentTestWorkspace` with preserved-tree
+assertions and owned cleanup. Complete evidence requires contiguous records,
+consistent identity and a terminal end, with no omission/limit markers or collector
+failure. Execution success remains a separate assertion. Suppression has no
+tombstones and cannot be inferred from records alone.
 
-The website replay should consume that same normalized evaluation output. Preserve
-its existing report format through an explicit projection during migration. Token
+The evaluator uses these helpers and supports OpenAI and Anthropic, while retaining
+provider credentials, selection and fixture-specific scoring in the script. It
+collects decisions/outcomes and compaction markers from transcripts. Descriptor
+measurements use the provider's existing definition-time check hook. Offline CI
+exercises both wire protocols, code mode, compaction and incomplete evidence.
+
+The website replay retains its report format through an explicit transcript
+projection; reports also retain raw records and validated nested tool calls. Token
 streaming remains separate work: it needs bounded partial-text events, sink
 backpressure and final-message reconciliation before it can extend this format.
 

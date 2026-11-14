@@ -263,6 +263,12 @@
     {
       "declaration": "./dist/testing/testing.d.ts",
       "exports": [
+        "AgentTestWorkspace",
+        "AgentTestWorkspaceOptions",
+        "AgentTranscriptCollector",
+        "AgentTranscriptCollectorOptions",
+        "createAgentTestWorkspace",
+        "createAgentTranscriptCollector",
         "createPipelineTestRuntime",
         "overrideStep",
         "PipelineTestClock",
@@ -274,7 +280,7 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "624fba9cfe9094c2166ed4bd30739659257bcaf17e61a2a1c9d2993bdd5a6b92",
+      "sha256": "cd5fd3029cf000684f6746897beefe1a0dc93d601ccd2fe09d77c3161dca3e72",
       "specifier": "tubeless/testing"
     },
     {

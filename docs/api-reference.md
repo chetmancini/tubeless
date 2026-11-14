@@ -19,7 +19,7 @@ Package: `tubeless`
 | `tubeless/rate-limit`       | `./dist/utilities/rate-limit.d.ts`        | `21223a0ce096d7eb188e7aa38e4e0df70081b086f899dfea825b429308f6910e` |                1 |
 | `tubeless/retry`            | `./dist/utilities/retry.d.ts`             | `ae8bdf0276b1930e4052f88a4912efe7dc6b857a8a51dcf2399eac0514fc9a0b` |                6 |
 | `tubeless/project`          | `./dist/project/project.d.ts`             | `9c3a97aaf483562c8a8487afa4dbdc177517867dbe1aa774ccc9e5670993607d` |                9 |
-| `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `624fba9cfe9094c2166ed4bd30739659257bcaf17e61a2a1c9d2993bdd5a6b92` |               10 |
+| `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `cd5fd3029cf000684f6746897beefe1a0dc93d601ccd2fe09d77c3161dca3e72` |               16 |
 | `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `7d52833c68a401c4fa69b221e5b7b37f9c2c0af089d02d8b89b8bdc8860ff1e2` |                4 |
 | `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `b043602a6e761d6b717bf94ca91891970b16cf729b0e55c9d968f842ad2f56f7` |                2 |
 | `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `6f42795904af78589670e5cf4b53d2a5e7a49bd5ab32bab3c3771e32192b8dd1` |                7 |
@@ -275,18 +275,24 @@ Package: `tubeless`
 
 ### `tubeless/testing`
 
-| Symbol                                                                                                        | Description                                                                                 |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| [`createPipelineTestRuntime`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L165)  | Create a deterministic runtime without installing a test framework or fake-timer package.   |
-| [`overrideStep`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L26)                | Supply a resolved handler output, before the step's outputSchema validation/transformation. |
-| [`PipelineTestClock`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L94)           | Monotonic caller-controlled clock used by a pipeline test runtime.                          |
-| [`PipelineTestLogEntry`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L87)        | One silent logger call captured by a pipeline test runtime.                                 |
-| [`PipelineTestLogLevel`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L84)        | Log levels captured by a pipeline test runtime.                                             |
-| [`PipelineTestOverride`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L21)        | A typed step/value pair created by overrideStep; only accepted by test runs.                |
-| [`PipelineTestRunControls`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L34)     | Test-only controls.                                                                         |
-| [`PipelineTestRuntime`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L118)        | Framework-neutral runtime, observations, and typed execution helpers for pipeline tests.    |
-| [`PipelineTestRuntimeOptions`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L108) | Clock, directory, and sleep overrides for a pipeline test runtime.                          |
-| [`PipelineTestSleep`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L101)          | Optional replacement for the default immediate, clock-advancing test sleep.                 |
+| Symbol                                                                                                                     | Description                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [`AgentTestWorkspace`](https://github.com/chetmancini/tubeless/blob/main/src/testing/agent-workspace.ts#L2)                | A disposable Node/Bun workspace whose initial file tree can be checked after a run.         |
+| [`AgentTestWorkspaceOptions`](https://github.com/chetmancini/tubeless/blob/main/src/testing/agent-workspace.ts#L11)        | Naming options for a disposable evaluation workspace.                                       |
+| [`AgentTranscriptCollector`](https://github.com/chetmancini/tubeless/blob/main/src/testing/agent-transcript.ts#L7)         | A bounded in-memory transcript sink for one evaluation or a small group of runs.            |
+| [`AgentTranscriptCollectorOptions`](https://github.com/chetmancini/tubeless/blob/main/src/testing/agent-transcript.ts#L17) | Bounds on retained evaluation evidence.                                                     |
+| [`createAgentTestWorkspace`](https://github.com/chetmancini/tubeless/blob/main/src/testing/agent-workspace.ts#L17)         | Create text fixtures in an owned temporary directory.                                       |
+| [`createAgentTranscriptCollector`](https://github.com/chetmancini/tubeless/blob/main/src/testing/agent-transcript.ts#L23)  | Collect owned records without loading agent execution or a model provider.                  |
+| [`createPipelineTestRuntime`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L172)               | Create a deterministic runtime without installing a test framework or fake-timer package.   |
+| [`overrideStep`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L33)                             | Supply a resolved handler output, before the step's outputSchema validation/transformation. |
+| [`PipelineTestClock`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L101)                       | Monotonic caller-controlled clock used by a pipeline test runtime.                          |
+| [`PipelineTestLogEntry`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L94)                     | One silent logger call captured by a pipeline test runtime.                                 |
+| [`PipelineTestLogLevel`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L91)                     | Log levels captured by a pipeline test runtime.                                             |
+| [`PipelineTestOverride`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L28)                     | A typed step/value pair created by overrideStep; only accepted by test runs.                |
+| [`PipelineTestRunControls`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L41)                  | Test-only controls.                                                                         |
+| [`PipelineTestRuntime`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L125)                     | Framework-neutral runtime, observations, and typed execution helpers for pipeline tests.    |
+| [`PipelineTestRuntimeOptions`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L115)              | Clock, directory, and sleep overrides for a pipeline test runtime.                          |
+| [`PipelineTestSleep`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L108)                       | Optional replacement for the default immediate, clock-advancing test sleep.                 |
 
 ### `tubeless/tracing`
 
