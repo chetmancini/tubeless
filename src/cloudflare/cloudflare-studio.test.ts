@@ -3,6 +3,7 @@ import { createSteps, definePipeline, type StandardSchemaV1 } from "../core/pipe
 import { defineProject } from "../project/project.js";
 import { hostedProjectCommands } from "../hosting/hosting-commands.js";
 import { createFakeDurableStorage } from "./cloudflare-storage.test-support.js";
+import { SqliteHostedLaunchStore } from "../hosting/launch-store-sqlite.js";
 import { openDurableRunStore } from "./cloudflare-run-store.js";
 import { RunObjectCore } from "./cloudflare-run.js";
 import type { RunJob, StudioIngest } from "../hosting/run-contract.js";
@@ -326,6 +327,42 @@ describe("Studio object", () => {
     expect(console.error).toHaveBeenCalledWith(
       expect.objectContaining({ message: "storage down" })
     );
+  });
+
+  it("does not reconcile remotely owned attempts as terminated Cloudflare runs", async () => {
+    const { studio, storage } = setup({ now: () => 500_000 });
+    const store = new SqliteHostedLaunchStore(storage, openDurableRunStore(storage));
+    const owner = { launchId: "remote", attemptId: "attempt", workerId: "worker" };
+    await store.createAttempt({
+      ...owner,
+      commandId: "greeting",
+      pipelineId: "remote",
+      deploymentId: "release",
+      createdAtMs: 0,
+    });
+    await store.claimAttempt(owner, "release", 1);
+    await store.acceptAttemptBatch(
+      owner,
+      new TextEncoder().encode(
+        JSON.stringify({
+          attemptId: owner.attemptId,
+          sequence: 0,
+          events: [
+            {
+              version: 3,
+              name: "pipeline.started",
+              pipelineId: "remote",
+              runId: "remote-root",
+              timestampMs: 1,
+              payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+            },
+          ],
+        })
+      )
+    );
+    await studio.alarm();
+    expect((await store.listEvents()).map((event) => event.name)).toEqual(["pipeline.started"]);
+    expect(storage.alarmAtMs()).toBeUndefined();
   });
 
   it("does not touch the run object when the reconcile alarm cannot be scheduled", async () => {

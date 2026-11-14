@@ -14,14 +14,14 @@ export type BatchAcknowledgement =
 export interface HostedLaunchStore extends PipelineRunEventReader {
   /** Create a new starting launch; reject duplicate ids without modifying history. */
   create(launchId: string, commandId: string, nowMs: number): Promise<void>;
-  /** Grant repeatable consent for open launches; return false for unknown or terminal launches. */
+  /** Grant repeatable consent for open trusted launches; owned attempts require their claim operation. */
   admit(launchId: string): Promise<boolean>;
   /**
    * Atomically append history, bind the first root start, update terminal state and
    * advance sequence. Ack committed sequences with the persisted root run id,
    * including replays after completion. Reject gaps for open launches; reject new terminal-launch
    * batches without advancing the committed sequence. Rejected retries stay
-   * rejected. This trusted port does not verify digests.
+   * rejected. Reject ownerless writes to owned attempts. This trusted port does not verify digests.
    */
   acceptBatch(
     launchId: string,
@@ -36,12 +36,12 @@ export interface HostedLaunchStore extends PipelineRunEventReader {
   fail(launchId: string, message: string, nowMs: number): Promise<void>;
   /** Atomically fail only if admission has not been granted. */
   failUnadmitted(launchId: string, message: string, nowMs: number): Promise<void>;
-  /** Bound root ids for running launches, in creation order. */
+  /** Bound root ids for running trusted launches, in creation order. */
   liveRunIds(): Promise<readonly string[]>;
-  /** Resolve only a running launch owned by the supplied root run. */
+  /** Resolve only a running trusted launch owned by the supplied root run. */
   launchIdForRun(runId: string): Promise<string | undefined>;
-  /** Open launches whose root-start time (or creation time before start) is <= cutoff. */
+  /** Open trusted launches whose root-start/creation time is <= cutoff. */
   stale(cutoffMs: number): Promise<readonly string[]>;
-  /** Earliest open root-start/creation timestamp plus delay, or undefined when idle. */
+  /** Earliest open trusted root-start/creation timestamp plus delay, or undefined when idle. */
   nextReconcileAt(delayMs: number): Promise<number | undefined>;
 }
