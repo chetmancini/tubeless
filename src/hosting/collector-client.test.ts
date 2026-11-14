@@ -151,12 +151,15 @@ describe("collector delivery client", () => {
     });
     await worker.claim();
     const appended = worker.append([started()]);
+    const logged = worker.append([log()]);
     const failed = worker.reportFailure("Worker exited");
     await expect(worker.append([log()])).rejects.toThrow();
     await appended;
+    await logged;
     expect(await failed).toBe(true);
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toBe(bodies[1]);
+    expect(await events.listEvents()).toHaveLength(3);
     expect((await events.listEvents()).at(-1)).toMatchObject({
       name: "pipeline.completed",
       payload: { status: "failed" },
@@ -269,5 +272,42 @@ describe("collector delivery client", () => {
     await expect(worker.append([log()])).rejects.toMatchObject({ status: 503 });
     expect(transport).toHaveBeenCalledTimes(5);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    { accepted: true },
+    { accepted: false },
+    { accepted: true, runId: "root", unexpected: true },
+  ])(
+    "rejects malformed batch acknowledgement %j without retrying or reusing its sequence",
+    async (ack) => {
+      const { client } = await setup();
+      const transport = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(json({ admitted: true }))
+        .mockImplementation(async () => json(ack));
+      const worker = client(transport);
+      await worker.claim();
+      await expect(worker.append([started()])).rejects.toThrow();
+      await expect(worker.append([log()])).rejects.toThrow();
+      expect(transport).toHaveBeenCalledTimes(2);
+    }
+  );
+
+  it("closes delivery on HTTP 410 and refuses writes queued behind the closed batch", async () => {
+    const { client } = await setup();
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ admitted: true }))
+      .mockResolvedValue(new Response(null, { status: 410 }));
+    const worker = client(transport);
+    await worker.claim();
+    const first = worker.append([started()]);
+    const second = worker.append([log()]);
+    const refused = expect(second).rejects.toThrow();
+    expect(await first).toEqual({ accepted: false });
+    await refused;
+    await expect(worker.append([log()])).rejects.toThrow();
+    expect(transport).toHaveBeenCalledTimes(2);
   });
 });

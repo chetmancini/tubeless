@@ -159,8 +159,8 @@ their source files.
   claim per launch, fenced event writes and explicit revocation. The same SQLite
   adapter owns the attempt, replay-receipt and run-binding tables within its
   transactions.
-  `attempt-batch.ts` decodes current-version events and hashes an owned snapshot of
-  the exact envelope bytes. Ownership, events, sequence and the original receipt
+  `attempt-batch.ts` owns count/byte batch encoding, current-version event decoding
+  and hashing an owned snapshot of the exact envelope bytes. Ownership, events, sequence and the original receipt
   commit together. Trusted liveness, cancellation lookup and reconciliation read
   only trusted launches; shared history still includes owned attempts. Each append
   path validates one launch snapshot before the common transactional commit.
@@ -169,10 +169,14 @@ their source files.
   checks persisted expiry and revocation inside every authenticated write transaction.
   `collector-http.ts` owns the separate Fetch handler, authenticating before bounded
   body reads. `collector-protocol.ts` owns strict envelopes and transport limits.
-  `collector-client.ts` owns one worker invocation, a single claim, exact-byte retries,
-  ordered batch splitting and explicit failure reporting after execution exits.
+  `collector-client.ts` owns one worker invocation's admission and delivery lifecycle,
+  ordered batch queue and explicit failure reporting after execution exits.
+  `collector-transport.ts` owns HTTPS requests, deadlines, exact-byte retries and
+  typed replies. Strict collector envelopes use the canonical wire-object decoder;
+  stored-event reads retain tolerant decoding for history compatibility.
   `utilities/read-body.ts` supplies bounded, cancellable byte reading for the collector,
-  delivery client and Studio JSON parsing. Claim uncertainty never authorizes execution;
+  delivery client and Studio JSON parsing, using one bounded buffer independent of
+  chunk count. Claim uncertainty never authorizes execution;
   delivery failure never automatically declares termination. These operations are
   not mounted in Studio or exposed by the existing trusted Cloudflare RPC.
   `hosting/run-coordinator.ts` owns launch validation, start acknowledgements,

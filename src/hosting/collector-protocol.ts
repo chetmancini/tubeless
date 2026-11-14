@@ -2,7 +2,7 @@ import {
   wireObject,
   wireString,
   wireBoolean,
-  wireOptional,
+  wireLiteral,
   type WireSchema,
 } from "../tracing/wire-schema.js";
 
@@ -13,21 +13,34 @@ export const COLLECTOR_FAILURE_BYTES = 65_536;
 export const COLLECTOR_MESSAGE_BYTES = 8192;
 export const COLLECTOR_RESPONSE_BYTES = 8192;
 const collectorId = wireString({ maxLength: 256 });
-export const claimSchema = wireObject({
-  attemptId: collectorId,
-  deploymentId: collectorId,
-});
-export const failureSchema = wireObject({
-  attemptId: collectorId,
-  failureId: collectorId,
-  message: wireString({ allowEmpty: true }),
-});
-export const claimReplySchema = wireObject({ admitted: wireBoolean() });
-export const batchReplySchema = wireObject({
-  accepted: wireBoolean(),
-  runId: wireOptional(collectorId),
-});
-export const failureReplySchema = wireObject({ recorded: wireBoolean() });
+export const claimSchema = wireObject(
+  { attemptId: collectorId, deploymentId: collectorId },
+  { strict: true }
+);
+export const failureSchema = wireObject(
+  { attemptId: collectorId, failureId: collectorId, message: wireString({ allowEmpty: true }) },
+  { strict: true }
+);
+export const claimReplySchema = wireObject({ admitted: wireBoolean() }, { strict: true });
+export const batchReplySchema = wireObject(
+  { accepted: wireLiteral(true), runId: collectorId },
+  { strict: true }
+);
+export const failureReplySchema = wireObject({ recorded: wireBoolean() }, { strict: true });
+
+export class CollectorRequestError extends Error {
+  constructor(
+    readonly status: number,
+    readonly retryable: boolean
+  ) {
+    super(
+      status === 0
+        ? "Collector delivery could not be confirmed."
+        : `Collector request failed (${status}).`
+    );
+    this.name = "CollectorRequestError";
+  }
+}
 
 export class CollectorInputError extends Error {
   constructor(readonly status = 400) {
@@ -40,14 +53,13 @@ export class CollectorAuthorityError extends Error {
   }
 }
 
-/** Strict request envelopes; trace-event compatibility remains with the canonical decoder. */
-export function decodeCollectorJson<T extends object>(body: Uint8Array, schema: WireSchema<T>): T {
+/** Sanitize wire diagnostics; envelope strictness belongs to each declared schema. */
+export function decodeCollectorJson<T>(body: Uint8Array, schema: WireSchema<T>): T {
   try {
-    const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
-    if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error();
-    const decoded = schema.decode(value, "request");
-    if (Object.keys(value).some((key) => !Object.hasOwn(decoded, key))) throw new Error();
-    return decoded;
+    return schema.decode(
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body)),
+      "request"
+    );
   } catch {
     throw new CollectorInputError();
   }
