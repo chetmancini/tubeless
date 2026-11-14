@@ -196,7 +196,7 @@ export async function runHostedJob(options: {
     return;
   }
   // Core does not await exporters, so a refused batch could arrive after a step's side effects.
-  // Admission happens before any user code runs; a refused launch was already closed by Studio.
+  // Admission precedes command execution; a refused launch was already closed by Studio.
   if (!(await admitted(ingest(), job.launchId))) return;
   const deadlineAtMs = Date.now() + job.maxRunDurationMs;
   const traceContext = {

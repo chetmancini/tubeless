@@ -39,7 +39,7 @@ recorded events and requires no migration.
 ## Current guarantees and limits
 
 The runner parses values and obtains admission before executing a command. A
-refused or unconfirmed admission never starts user code. It sends one ordered
+refused or unconfirmed admission never starts pipeline execution. It sends one ordered
 sequence of event batches and retries failed delivery through a fresh ingest
 capability. Refusal or exhausted retries aborts execution; active work still
 depends on cooperative cancellation. Final flushing drains delivery timers.
