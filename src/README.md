@@ -149,8 +149,8 @@ their source files.
   rejected terminal writes never advance the committed sequence.
   `hosting/attempt-store.ts` adds the internal owned-attempt contract: one worker
   claim per launch, fenced event writes and explicit revocation. The same SQLite
-  adapter implements it; `attempt-journal-sqlite.ts` owns attempt, replay-receipt
-  and run-binding tables within the adapter's surrounding transaction.
+  adapter owns the attempt, replay-receipt and run-binding tables within its
+  transactions.
   `attempt-batch.ts` decodes current-version events and hashes an owned snapshot of
   the exact envelope bytes. Ownership, events, sequence and the original receipt
   commit together. Trusted liveness, cancellation lookup and reconciliation read

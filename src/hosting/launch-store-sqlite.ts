@@ -1,5 +1,4 @@
 import { decodeAttemptBatch } from "./attempt-batch.js";
-import { SqliteAttemptJournal } from "./attempt-journal-sqlite.js";
 import {
   HostedAttemptConflict,
   assertAttemptId,
@@ -103,7 +102,6 @@ function hostTerminatedEvent(
 
 /** SQLite launch/history adapter; event appends and launch transitions share one connection. */
 export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttemptStore {
-  readonly #attempts: SqliteAttemptJournal;
   constructor(
     private readonly storage: SqliteLaunchStorage,
     private readonly events: LaunchEventStore & PipelineRunEventReader
@@ -123,7 +121,31 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttempt
     storage.sql.exec(
       "CREATE INDEX IF NOT EXISTS tubeless_launches_run_id_idx ON tubeless_launches(run_id)"
     );
-    this.#attempts = new SqliteAttemptJournal(storage);
+    for (const statement of [
+      `CREATE TABLE IF NOT EXISTS tubeless_attempts (
+        attempt_id TEXT PRIMARY KEY,
+        launch_id TEXT NOT NULL UNIQUE,
+        pipeline_id TEXT NOT NULL,
+        deployment_id TEXT NOT NULL,
+        worker_id TEXT,
+        claimed_at_ms INTEGER,
+        revoked INTEGER NOT NULL DEFAULT 0
+      )`,
+      `CREATE TABLE IF NOT EXISTS tubeless_attempt_batches (
+        attempt_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL,
+        digest TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        PRIMARY KEY (attempt_id, sequence)
+      )`,
+      `CREATE TABLE IF NOT EXISTS tubeless_attempt_runs (
+        run_id TEXT PRIMARY KEY,
+        attempt_id TEXT NOT NULL,
+        pipeline_id TEXT NOT NULL,
+        parent_run_id TEXT
+      )`,
+    ])
+      storage.sql.exec(statement);
   }
 
   async create(launchId: string, commandId: string, nowMs: number): Promise<void> {
@@ -257,7 +279,13 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttempt
       throw new Error("Invalid hosted attempt creation time.");
     this.storage.transactionSync(() => {
       this.#create(definition.launchId, definition.commandId, definition.createdAtMs);
-      this.#attempts.create(definition);
+      this.storage.sql.exec(
+        "INSERT INTO tubeless_attempts (attempt_id, launch_id, pipeline_id, deployment_id) VALUES (?, ?, ?, ?)",
+        definition.attemptId,
+        definition.launchId,
+        definition.pipelineId,
+        definition.deploymentId
+      );
     });
   }
 
@@ -272,12 +300,21 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttempt
       throw new Error("Invalid hosted attempt claim time.");
     return this.storage.transactionSync(() => {
       const launch = this.#get(owner.launchId);
+      if (!launch || TERMINAL.has(launch.state)) return false;
+      const attempt = this.#getAttempt(owner);
       if (
-        !launch ||
-        TERMINAL.has(launch.state) ||
-        !this.#attempts.claim(owner, deploymentId, nowMs)
+        !attempt ||
+        attempt.worker_id !== null ||
+        Number(attempt.revoked) !== 0 ||
+        attempt.deployment_id !== deploymentId
       )
         return false;
+      this.storage.sql.exec(
+        "UPDATE tubeless_attempts SET worker_id = ?, claimed_at_ms = ? WHERE attempt_id = ?",
+        owner.workerId,
+        nowMs,
+        owner.attemptId
+      );
       this.storage.sql.exec(
         "UPDATE tubeless_launches SET admitted = 1 WHERE launch_id = ?",
         owner.launchId
@@ -298,22 +335,34 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttempt
     for (const id of Object.values(identity)) assertAttemptId(id);
     const batch = await decodeAttemptBatch(body);
     return this.storage.transactionSync(() => {
-      const attempt = this.#attempts.requireOwner(identity);
-      if (batch.attemptId !== identity.attemptId) throw new HostedAttemptConflict("ownership");
-      const replay = this.#attempts.replay(identity.attemptId, batch.sequence, batch.digest);
+      const attempt = this.#getAttempt(identity);
+      if (
+        !attempt ||
+        attempt.worker_id !== identity.workerId ||
+        Number(attempt.revoked) !== 0 ||
+        batch.attemptId !== identity.attemptId
+      )
+        throw new HostedAttemptConflict("ownership");
+      const replay = this.#replay(identity.attemptId, batch.sequence, batch.digest);
       if (replay) return replay;
       const launch = this.#get(identity.launchId);
       if (!launch || TERMINAL.has(launch.state)) return { accepted: false };
       if (batch.sequence !== launch.lastBatch + 1)
         throw new HostedAttemptConflict("sequence", launch.lastBatch + 1);
-      const runId = this.#attempts.bindEvents(
+      const runId = this.#bindEvents(
         identity,
-        attempt.pipelineId,
+        String(attempt.pipeline_id),
         launch.runId,
         batch.events
       );
       this.#commitBatch(launch, batch.sequence, batch.events);
-      this.#attempts.record(identity.attemptId, batch.sequence, batch.digest, runId);
+      this.storage.sql.exec(
+        "INSERT INTO tubeless_attempt_batches (attempt_id, sequence, digest, run_id) VALUES (?, ?, ?, ?)",
+        identity.attemptId,
+        batch.sequence,
+        batch.digest,
+        runId
+      );
       return { accepted: true, runId };
     });
   }
@@ -321,7 +370,93 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttempt
   async revokeAttempt(launchId: string, attemptId: string): Promise<void> {
     assertAttemptId(launchId);
     assertAttemptId(attemptId);
-    this.storage.transactionSync(() => this.#attempts.revoke(launchId, attemptId));
+    this.storage.transactionSync(() =>
+      this.storage.sql.exec(
+        "UPDATE tubeless_attempts SET revoked = 1 WHERE launch_id = ? AND attempt_id = ?",
+        launchId,
+        attemptId
+      )
+    );
+  }
+
+  #getAttempt(owner: HostedAttemptOwner) {
+    return this.storage.sql
+      .exec(
+        "SELECT * FROM tubeless_attempts WHERE launch_id = ? AND attempt_id = ?",
+        owner.launchId,
+        owner.attemptId
+      )
+      .toArray()[0];
+  }
+
+  #replay(
+    attemptId: string,
+    sequence: number,
+    digest: string
+  ): AttemptBatchAcknowledgement | undefined {
+    const row = this.storage.sql
+      .exec(
+        "SELECT digest, run_id FROM tubeless_attempt_batches WHERE attempt_id = ? AND sequence = ?",
+        attemptId,
+        sequence
+      )
+      .toArray()[0];
+    if (!row) return undefined;
+    if (row.digest !== digest) throw new HostedAttemptConflict("replay");
+    return { accepted: true, runId: String(row.run_id) };
+  }
+
+  #bindEvents(
+    owner: HostedAttemptOwner,
+    pipelineId: string,
+    rootRunId: string | undefined,
+    events: readonly PipelineTraceEvent[]
+  ): string {
+    let root = rootRunId;
+    for (const event of events) {
+      if (event.name === "pipeline.started") {
+        // A run id cannot be stolen from either another attempt or trusted history.
+        const recorded = this.storage.sql
+          .exec("SELECT 1 FROM pipeline_run_events WHERE run_id = ? LIMIT 1", event.runId)
+          .toArray()[0];
+        const bound = this.#runBinding(event.runId);
+        if (recorded || bound) throw new HostedAttemptConflict("events");
+        if (event.parentRunId === undefined) {
+          if (root !== undefined || event.pipelineId !== pipelineId)
+            throw new HostedAttemptConflict("events");
+          root = event.runId;
+        } else {
+          const parent = this.#runBinding(event.parentRunId);
+          if (!parent || parent.attempt_id !== owner.attemptId)
+            throw new HostedAttemptConflict("events");
+        }
+        this.storage.sql.exec(
+          "INSERT INTO tubeless_attempt_runs (run_id, attempt_id, pipeline_id, parent_run_id) VALUES (?, ?, ?, ?)",
+          event.runId,
+          owner.attemptId,
+          event.pipelineId,
+          event.parentRunId ?? null
+        );
+      } else {
+        const run = this.#runBinding(event.runId);
+        if (
+          !run ||
+          run.attempt_id !== owner.attemptId ||
+          run.pipeline_id !== event.pipelineId ||
+          run.parent_run_id !== (event.parentRunId ?? null)
+        )
+          throw new HostedAttemptConflict("events");
+      }
+    }
+    // Every accepted owned batch belongs to a bound root, including the first batch.
+    if (root === undefined) throw new HostedAttemptConflict("events");
+    return root;
+  }
+
+  #runBinding(runId: string) {
+    return this.storage.sql
+      .exec("SELECT * FROM tubeless_attempt_runs WHERE run_id = ?", runId)
+      .toArray()[0];
   }
 
   async failUnadmitted(launchId: string, message: string, nowMs: number): Promise<void> {
