@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import type { AgentTranscriptPage } from "../../tracing/agent-transcript.js";
+import type { StudioTranscriptPage } from "../shared/schema.js";
 import type { StudioApi } from "./transport.js";
 
 /** Retain successful pages on failure and retire requests when the selected run changes. */
 export function useTranscript(load: NonNullable<StudioApi["loadTranscript"]>, runId: string) {
   const generation = useRef(0);
   const inFlight = useRef(false);
-  const [page, setPage] = useState<AgentTranscriptPage>();
+  const [result, setResult] = useState<StudioTranscriptPage>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const request = (afterSequence = 0) => {
@@ -19,10 +19,17 @@ export function useTranscript(load: NonNullable<StudioApi["loadTranscript"]>, ru
       (next) => {
         if (current !== generation.current) return;
         inFlight.current = false;
-        setPage((previous) => ({
+        setResult((previous) => ({
           ...next,
-          records:
-            afterSequence && previous ? [...previous.records, ...next.records] : next.records,
+          transcript: {
+            ...next.transcript,
+            records:
+              afterSequence && previous
+                ? [...previous.transcript.records, ...next.transcript.records]
+                : next.transcript.records,
+          },
+          turnRuns:
+            afterSequence && previous ? { ...previous.turnRuns, ...next.turnRuns } : next.turnRuns,
         }));
         setLoading(false);
       },
@@ -37,18 +44,19 @@ export function useTranscript(load: NonNullable<StudioApi["loadTranscript"]>, ru
   useEffect(() => {
     generation.current++;
     inFlight.current = false;
-    setPage(undefined);
+    setResult(undefined);
     request();
     return () => {
       generation.current++;
     };
   }, [load, runId]);
   return {
-    page,
+    page: result?.transcript,
+    turnRuns: result?.turnRuns ?? {},
     loading,
     error,
     more: () => {
-      if (!loading) request(page?.nextSequence ?? 0);
+      if (!loading) request(result?.transcript.nextSequence ?? 0);
     },
   };
 }

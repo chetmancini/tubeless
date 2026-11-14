@@ -2,7 +2,6 @@ import type {
   AgentTranscriptPage,
   AgentTranscriptRecord,
 } from "../../../tracing/agent-transcript.js";
-import type { StudioRunDetail } from "../../shared/schema.js";
 import type { StudioApi } from "../transport.js";
 import { useTranscript } from "../transcript-resource.js";
 
@@ -76,11 +75,11 @@ function RecordContent({ record }: { record: AgentTranscriptRecord }) {
 
 export function TranscriptRecords({
   page,
-  detail,
+  turnRuns,
   onOpenRun,
 }: {
   page: AgentTranscriptPage;
-  detail: StudioRunDetail;
+  turnRuns: Readonly<Record<string, string>>;
   onOpenRun(id: string): void;
 }) {
   return (
@@ -101,7 +100,7 @@ export function TranscriptRecords({
         </p>
       )}
       {page.records.map((record, index) => {
-        const turn = detail.children.find((child) => child.origin?.iteration === record.turn);
+        const turnRunId = turnRuns[record.turn];
         return (
           <section key={record.sequence} class="transcript-record">
             {(index === 0 || record.turn !== page.records[index - 1]?.turn) && (
@@ -110,11 +109,11 @@ export function TranscriptRecords({
                   {record.turn ? `Turn ${record.turn}` : "Invocation"}
                   {record.dryRun ? " · preview" : ""}
                 </span>
-                {turn && record.turn > 0 && (
+                {turnRunId && record.turn > 0 && (
                   <button
                     type="button"
                     class="secondary-button"
-                    onClick={() => onOpenRun(turn.runId)}
+                    onClick={() => onOpenRun(turnRunId)}
                   >
                     Open turn
                   </button>
@@ -131,18 +130,22 @@ export function TranscriptRecords({
 
 export function TranscriptView({
   load,
-  detail,
+  runId,
   onOpenRun,
 }: {
   load: NonNullable<StudioApi["loadTranscript"]>;
-  detail: StudioRunDetail;
+  runId: string;
   onOpenRun(id: string): void;
 }) {
-  const resource = useTranscript(load, detail.run.runId);
+  const resource = useTranscript(load, runId);
   return (
     <div aria-busy={resource.loading}>
       {resource.page && (
-        <TranscriptRecords page={resource.page} detail={detail} onOpenRun={onOpenRun} />
+        <TranscriptRecords
+          page={resource.page}
+          turnRuns={resource.turnRuns}
+          onOpenRun={onOpenRun}
+        />
       )}
       {resource.loading && <p role="status">Loading transcript…</p>}
       {resource.error && <p role="alert">{resource.error}</p>}

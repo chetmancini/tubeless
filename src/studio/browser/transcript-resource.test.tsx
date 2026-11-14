@@ -1,7 +1,7 @@
 import { render } from "preact";
 import { act } from "preact/test-utils";
 import { afterEach, expect, it, vi } from "vitest";
-import type { AgentTranscriptPage } from "../../tracing/agent-transcript.js";
+import type { StudioTranscriptPage } from "../shared/schema.js";
 import { transcriptRecord } from "../../tracing/agent-transcript.test-support.js";
 import { useTranscript } from "./transcript-resource.js";
 import type { StudioApi } from "./transport.js";
@@ -11,20 +11,23 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await act(() => render(null, root));
 });
 function pending() {
-  let resolve!: (page: AgentTranscriptPage) => void;
+  let resolve!: (page: StudioTranscriptPage) => void;
   let reject!: (error: Error) => void;
-  const promise = new Promise<AgentTranscriptPage>((yes, no) => {
+  const promise = new Promise<StudioTranscriptPage>((yes, no) => {
     resolve = yes;
     reject = no;
   });
   return { promise, resolve, reject };
 }
-function page(sequence = 1, runId = "run", nextSequence?: number): AgentTranscriptPage {
+function page(sequence = 1, runId = "run", nextSequence?: number): StudioTranscriptPage {
   return {
-    runId,
-    status: "partial",
-    records: [transcriptRecord(sequence, { kind: "assistant", text: "text" }, runId)],
-    ...(nextSequence === undefined ? {} : { nextSequence }),
+    transcript: {
+      runId,
+      status: "partial",
+      records: [transcriptRecord(sequence, { kind: "assistant", text: "text" }, runId)],
+      ...(nextSequence === undefined ? {} : { nextSequence }),
+    },
+    turnRuns: { [sequence]: `${runId}-turn-${sequence}` },
   };
 }
 async function mount(load: NonNullable<StudioApi["loadTranscript"]>) {
@@ -63,6 +66,7 @@ it("coalesces page requests, retains prior records on error and retries the same
     .mockReturnValueOnce(retry.promise);
   const mounted = await mount(load);
   expect(mounted.state.page?.records).toHaveLength(1);
+  expect(mounted.state.turnRuns).toEqual({ 1: "run-turn-1" });
   await act(() => {
     mounted.state.more();
     mounted.state.more();
@@ -75,6 +79,7 @@ it("coalesces page requests, retains prior records on error and retries the same
   expect(load).toHaveBeenLastCalledWith("run", 1);
   await act(async () => retry.resolve(page(2)));
   expect(mounted.state.page?.records.map((record) => record.sequence)).toEqual([1, 2]);
+  expect(mounted.state.turnRuns).toEqual({ 1: "run-turn-1", 2: "run-turn-2" });
   expect(mounted.state.error).toBeUndefined();
 });
 
@@ -90,5 +95,6 @@ it("retires an old run's request before displaying another run", async () => {
   await act(async () => next.resolve(page(1, "new-run")));
   await act(async () => old.resolve(page(1, "run")));
   expect(mounted.state.page?.runId).toBe("new-run");
+  expect(mounted.state.turnRuns).toEqual({ 1: "new-run-turn-1" });
   expect(mounted.state.loading).toBe(false);
 });

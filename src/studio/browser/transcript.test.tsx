@@ -1,15 +1,11 @@
 import { renderToString } from "preact-render-to-string";
 import { describe, expect, it, vi } from "vitest";
 import { transcriptRecord } from "../../tracing/agent-transcript.test-support.js";
-import { studioRunDetail } from "../server/listener.test-support.js";
-import { projectPipelineRunStore } from "../../run-store/run-store.js";
-import { recordedRun } from "../server/events.test-support.js";
 import { TranscriptRecords } from "./components/transcript.js";
 import { createStudioApi } from "./transport.js";
 
 describe("Studio transcript display and transport", () => {
-  it("renders content as escaped text and keeps omissions and partial capture visible", () => {
-    const detail = studioRunDetail(projectPipelineRunStore(recordedRun()).runs[0]!);
+  it("escapes content and renders omissions, partial capture and later-turn links", () => {
     const { event: _, ...base } = transcriptRecord(2);
     const html = renderToString(
       <TranscriptRecords
@@ -17,15 +13,18 @@ describe("Studio transcript display and transport", () => {
           runId: "run",
           status: "partial",
           records: [
-            transcriptRecord(
-              1,
-              { kind: "assistant", text: "<script>alert('private')</script>" },
-              "run"
-            ),
+            {
+              ...transcriptRecord(
+                1,
+                { kind: "assistant", text: "<script>alert('private')</script>" },
+                "run"
+              ),
+              turn: 17,
+            },
             { ...base, runId: "run", omitted: "outcome", reason: "record-limit" },
           ],
         }}
-        detail={detail}
+        turnRuns={{ 17: "turn-17" }}
         onOpenRun={() => {}}
       />
     );
@@ -34,6 +33,8 @@ describe("Studio transcript display and transport", () => {
     expect(html).toContain("outcome omitted");
     expect(html).toContain("record-limit");
     expect(html).toContain("partial");
+    expect(html).toContain("Turn 17");
+    expect(html.match(/Open turn/g)).toHaveLength(1);
   });
 
   it("checks transcript identities, cursors and records at the transport boundary", async () => {
@@ -42,18 +43,24 @@ describe("Studio transcript display and transport", () => {
       status: "partial",
       records: [transcriptRecord(1, { kind: "assistant", text: "text" }, "run")],
     };
-    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => Response.json(page));
+    const payload = { transcript: page, turnRuns: { 1: "turn-1" } };
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => Response.json(payload));
     const api = createStudioApi(fetcher, "/admin");
-    expect(await api.loadTranscript!("run")).toEqual(page);
+    expect(await api.loadTranscript!("run")).toEqual(payload);
     expect(fetcher).toHaveBeenCalledWith(
       "/admin/api/runs/run/transcript?afterSequence=0",
       expect.objectContaining({ cache: "no-store" })
     );
     await expect(api.loadTranscript!("run", 1)).rejects.toThrow("invalid response");
-    fetcher.mockResolvedValue(Response.json({ ...page, runId: "other" }));
+    fetcher.mockResolvedValue(
+      Response.json({ ...payload, transcript: { ...page, runId: "other" } })
+    );
     await expect(api.loadTranscript!("run")).rejects.toThrow("invalid response");
     fetcher.mockResolvedValue(
-      Response.json({ ...page, records: [{ ...page.records[0], version: 7 }] })
+      Response.json({
+        ...payload,
+        transcript: { ...page, records: [{ ...page.records[0], version: 7 }] },
+      })
     );
     await expect(api.loadTranscript!("run")).rejects.toThrow("invalid response");
   });

@@ -744,7 +744,7 @@ function RunDetail({
           <TranscriptView
             key={run.runId}
             load={api.loadTranscript}
-            detail={detail}
+            runId={run.runId}
             onOpenRun={onSelect}
           />
         )}

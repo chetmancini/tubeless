@@ -177,7 +177,13 @@ export function createStudioApiHandler(
         );
         if (page.runId !== runId || page.records.some((record) => record.sequence <= afterSequence))
           throw new Error("Transcript reader returned a mismatched run or cursor");
-        return jsonResponse(page);
+        return jsonResponse({
+          transcript: page,
+          turnRuns: await eventState.agentTurnRuns(
+            runId,
+            page.records.map((record) => record.turn)
+          ),
+        });
       }
       const cancelMatch = /^\/api\/runs\/([^/]+)\/cancel$/.exec(url.pathname);
       if (request.method === "POST" && cancelMatch) {

@@ -1,9 +1,5 @@
 import type { StoredPipelineDefinition } from "../../run-store/run-store.js";
 import type { PipelinePlan, PipelineRunControls } from "../../core/pipeline.js";
-import {
-  agentTranscriptPageSchema,
-  type AgentTranscriptPage,
-} from "../../tracing/agent-transcript.js";
 import type {
   PipelineRunStudioCommand,
   PipelineRunStudioLaunchRequest,
@@ -15,11 +11,13 @@ import {
   studioPlanSchema,
   studioRunDetailSchema,
   studioChildRunsSchema,
+  studioTranscriptPageSchema,
   studioDefinitionSchema,
   studioDefinitionRunsSchema,
   type StudioSnapshot,
   type StudioRunDetail,
   type StudioChildRuns,
+  type StudioTranscriptPage,
   type StudioDefinitionRuns,
 } from "../shared/schema.js";
 export type {
@@ -61,7 +59,7 @@ export interface StudioApi {
   loadCapabilities(): Promise<StudioCapabilities>;
   loadCommands(): Promise<PipelineRunStudioCommand[]>;
   loadRunDetail(runId: string): Promise<StudioRunDetail | null>;
-  loadTranscript?(runId: string, afterSequence?: number): Promise<AgentTranscriptPage>;
+  loadTranscript?(runId: string, afterSequence?: number): Promise<StudioTranscriptPage>;
   loadChildRuns(runId: string, page: number): Promise<StudioChildRuns | null>;
   loadSnapshot(query?: StudioHistoryQuery): Promise<StudioSnapshot>;
   loadDefinition(pipelineId: string, definitionId?: string): Promise<StoredPipelineDefinition>;
@@ -214,11 +212,11 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
       );
       const payload = await readJson(response);
       if (!response.ok) throw responseError(payload, "Transcript request failed.", response.status);
-      const page = parseStudioPayload(agentTranscriptPageSchema, payload);
+      const page = parseStudioPayload(studioTranscriptPageSchema, payload);
       if (
         !page ||
-        page.runId !== runId ||
-        page.records.some((record) => record.sequence <= afterSequence)
+        page.transcript.runId !== runId ||
+        page.transcript.records.some((record) => record.sequence <= afterSequence)
       )
         throw invalidResponse("transcript");
       return page;

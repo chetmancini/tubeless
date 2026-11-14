@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { transcriptRecord } from "../../tracing/agent-transcript.test-support.js";
 import { createStudioApiHandler } from "./api.js";
 import { createStudioRequestHandler } from "./handler.js";
-import { memoryStore, recordedRun } from "./events.test-support.js";
+import { memoryStore, recordedRun, storedEvent } from "./events.test-support.js";
 
 const page = {
   runId: "run",
@@ -31,7 +31,7 @@ describe("Studio transcript routes", () => {
     expect(JSON.stringify(payload)).not.toContain("Private transcript content");
     expect(list).toHaveBeenCalledWith({ runId: "run", limit: 1 });
     const response = await get("/api/runs/run/transcript?afterSequence=0");
-    expect(await response.json()).toEqual(page);
+    expect(await response.json()).toEqual({ transcript: page, turnRuns: {} });
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
@@ -42,6 +42,66 @@ describe("Studio transcript routes", () => {
       expect((await get("/api/runs/run/transcript?afterSequence=" + value)).status).toBe(400);
     expect(list).not.toHaveBeenCalled();
   });
+
+  it.each([false, true])(
+    "resolves logical turn links beyond the child window (resumed=%s)",
+    async (resumed) => {
+      const records = [
+        { ...transcriptRecord(1), runId: "run", turn: 17 },
+        { ...transcriptRecord(2), runId: "run", turn: 20 },
+      ];
+      const api = createStudioApiHandler({
+        store: memoryStore([
+          ...recordedRun(),
+          ...Array.from({ length: 21 }, (_, index) => {
+            const parentRunId = index === 20 ? "other-run" : "run";
+            const turn = index === 20 ? 17 : index + (resumed ? 2 : 1);
+            const identity = {
+              pipelineId: "turn",
+              runId: index === 20 ? "other-turn" : `turn-${turn}`,
+              parentRunId,
+              timestampMs: index + 3,
+              version: 3,
+              iteration: {
+                runId: parentRunId,
+                stepId: "agent",
+                attemptId: "attempt",
+                index: index + 1,
+              },
+            };
+            return [
+              storedEvent({ ...identity, id: index * 2 + 3, name: "pipeline.started" }),
+              storedEvent({
+                ...identity,
+                id: index * 2 + 4,
+                name: "step.attempted",
+                stepId: "decide",
+                attemptId: "decide-attempt",
+                payload: {
+                  attempt: 1,
+                  attributes: { "agent.runId": parentRunId, "agent.turn": turn },
+                },
+              }),
+            ];
+          }).flat(),
+        ]),
+        transcripts: { list: async () => ({ ...page, records }) },
+      });
+      const get = (path: string) =>
+        api(new Request("http://studio.local" + path), new URL("http://studio.local" + path));
+      const detail = await (await get("/api/runs/run")).json();
+      expect(detail.children).toHaveLength(16);
+      expect(detail.children.some((child: { runId: string }) => child.runId === "turn-20")).toBe(
+        false
+      );
+      const response = await get("/api/runs/run/transcript");
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        transcript: { ...page, records },
+        turnRuns: { 17: "turn-17", 20: "turn-20" },
+      });
+    }
+  );
 
   it("rejects adapter pages outside the requested run or cursor", async () => {
     const { get, list } = apiFixture();
