@@ -10,10 +10,10 @@
     "preview": "astro preview"
   },
   "devDependencies": {
-    "@astrojs/markdown-satteri": "0.4.7",
+    "@astrojs/markdown-satteri": "0.4.8",
     "@astrojs/ts-content-mapper": "0.2.0",
-    "@types/node": "22.20.5",
-    "astro": "7.4.7",
+    "@types/node": "26.6.6",
+    "astro": "7.4.10",
     "satteri": "0.11.7",
     "tsrs": "0.23.0-ts7.1.0-beta"
   }
