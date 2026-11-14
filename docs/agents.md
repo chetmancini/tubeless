@@ -37,6 +37,13 @@ loads a custom provider factory, and `--store` or `--trace` records each prompt'
 for `tubeless history` and Studio. See the [agent CLI](./cli.md#prompt-a-workspace-agent)
 for setup, cancellation, budgets, and the plugin contract.
 
+To use an existing agent with its own model, tools and environment, run
+`tubeless agent <agent-id|file>`. Use `--project` for an explicit project or
+`--export` for a named file export. The CLI accepts agents with the default
+`{ task }` and `{ answer }` schemas and preserves their configuration; use
+`tubeless run` for typed agents. See [agent selection](./cli.md#select-a-defined-agent)
+and the [credential-free chat recipe](../examples/agent-chat.ts).
+
 For general workspace tasks, supply a model and an ID:
 
 ```ts

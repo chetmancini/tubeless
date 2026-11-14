@@ -19,6 +19,9 @@ Node.js start. The library itself runs on Node.js 22.18 or later without Bun.
 
 ### Prompt a workspace agent
 
+Omit the optional agent argument to use the built-in workspace agent. To chat with
+your application's agent, see [select a defined agent](#select-a-defined-agent).
+
 Export `OPENAI_API_KEY` to child processes, then start the terminal prompt loop:
 
 ```sh
@@ -162,6 +165,44 @@ tubeless history --pipeline tubeless-agent
 agent turns, tool activity, model usage and logs, but not the prompt or answer
 text, so they are not a saved conversation. Logs and tool activity can still
 contain workspace content; keep traces and stores as private as the workspace.
+
+#### Select a defined agent
+
+Pass a project entry ID or module file to continue a conversation with an existing
+`defineAgent` agent. Resolution matches `tubeless run`: use the current directory's
+`tubeless.project.ts`, select another project with `--project`, or choose a file
+export with `--export`. A registered command adapter resolves to its original
+agent; chat does not invoke its parameter mapping or presentation callbacks.
+
+```sh
+tubeless agent coding-agent
+tubeless agent coding-agent --project ./jobs/tubeless.project.ts
+tubeless agent ./agents/support.ts --export SupportAgent
+# Credential-free example from this checkout:
+bun run tubeless -- agent ./examples/agent-chat.ts
+```
+
+The CLI creates a session from the selected agent, preserving its model, custom
+tools, child pipelines, MCP-backed tools and execution environment. The project
+controls the execution cwd. Project tracing factories run once per prompt;
+`--store` and `--trace` compose with them and record runs under the agent's own ID.
+Recording remains opt-in. `/clear`, cancellation and failed-prompt recovery have
+the same conversation behavior as the built-in agent.
+
+The selected agent must use `defineAgent` with its default input and result
+schemas: omit `inputSchema` and `resultSchema` to use `{ task: string }` and
+`{ answer: string }`. Use `tubeless run` for typed agents, custom result schemas,
+`defineAgentLoop` agents, or other pipelines. Application-level
+`createAgentSession` still supports typed agents; this restriction belongs to
+the CLI's text prompt and answer interface.
+
+Selected agents own their configuration. The CLI rejects `--model`, `--provider`,
+`--model-module`, `--env-file`, `--instructions`, `--tools`, `--codemode`, and
+`--max-turns`/`--max-calls`/`--max-concurrency` rather than ignoring them or replacing
+the agent's settings. Configure those in the agent definition and export its
+credentials to the process. `/model` reports that the agent owns its model;
+`/model <name>` explains how to change the definition and leaves the session intact.
+`--prompt`, `--no-graph`, `--store` and `--trace` work in both modes.
 
 #### Configure named providers
 
