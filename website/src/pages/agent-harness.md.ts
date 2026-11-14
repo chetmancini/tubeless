@@ -19,6 +19,8 @@ Export OPENAI_API_KEY to child processes, then run from your workspace:
 bunx tubeless agent --model gpt-5.4-mini
 \`\`\`
 
+For Anthropic, export \`ANTHROPIC_API_KEY\` and run \`bunx tubeless agent --provider anthropic\`. Set \`ANTHROPIC_MODEL\` or pass \`--model\` to choose a model; \`/model\` stays within the selected provider.
+
 Or keep the key in a local dotenv file and run \`bunx tubeless agent --env-file .env.agent\`. Existing environment values take precedence over the file. If the key is already set in your shell, \`export OPENAI_API_KEY\` makes it available to Tubeless.
 
 Enter a task, watch its pipeline execution, read the answer, and prompt again. Agent mode uses the same reporter as \`tubeless run\`: shimmer, colors, spinners, elapsed time, and logs alongside nested model turns and tool calls. Wide terminals show a separate log pane; redirected output uses plain pipeline logs.

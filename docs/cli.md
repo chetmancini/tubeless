@@ -32,6 +32,21 @@ Seeing a value with `echo $OPENAI_API_KEY` does not prove it is exported. Withou
 checks that credentials are present before opening the REPL and explains how to
 fix a missing key. OpenAI validates the key when the model makes a request.
 
+For the built-in Anthropic provider, export `ANTHROPIC_API_KEY` and select it explicitly:
+
+```sh
+export ANTHROPIC_API_KEY
+tubeless agent --provider anthropic
+```
+
+`--provider` accepts `openai` (the default) or `anthropic`. Model names do not
+select a provider. Anthropic defaults to `ANTHROPIC_MODEL` or `claude-opus-5-5`;
+OpenAI defaults to `OPENAI_MODEL` or `gpt-5.4-mini`. `--model` overrides either
+default. `/model` changes models within the selected provider, preserving its
+conversation format. Start a new CLI session to change providers.
+Anthropic also accepts `ANTHROPIC_AUTH_TOKEN` as a bearer token when no nonblank
+`ANTHROPIC_API_KEY` is set; the API key takes precedence when both are supplied.
+
 Alternatively, keep credentials in a local dotenv file and select it explicitly:
 
 ```dotenv
@@ -49,11 +64,12 @@ tubeless agent --env-file .env.agent
 built-in dotenv parser, supporting quotes, comments, whitespace, and an optional
 `export` prefix. It treats values as literal text, without shell execution or
 variable expansion. Existing process environment values take precedence over the
-file, including empty values; `--model` overrides `OPENAI_MODEL`. Runtime-loaded
+file, including empty values; `--model` overrides the selected provider's model variable. Runtime-loaded
 environment values, such as Bun's automatic dotenv loading, count as existing
-values too. `OPENAI_BASE_URL` from the file selects the endpoint for the built-in
-provider. File values are passed to the model factory without changing
-`process.env`. The built-in provider trims the key and rejects internal whitespace
+values too. `OPENAI_BASE_URL` or `ANTHROPIC_BASE_URL` from the file selects the endpoint
+for the corresponding built-in provider. Anthropic uses an API root without `/v1`.
+File values are passed to the model factory without changing
+`process.env`. Built-in providers trim credentials and reject internal whitespace
 or control characters. Credential and file-loading diagnostics omit secret values.
 This checkout ignores `.env` and `.env.*` except `.env.example`.
 
@@ -124,8 +140,8 @@ SIGTERM ends the session with 7. `--max-turns`, `--max-calls`, and
 `--max-concurrency` override the ordinary agent budgets; `--instructions` appends
 instructions to the default prompt. `--tools read,list,search` limits the default tools the agent may use.
 `--codemode` offers one `codemode` tool whose
-JavaScript scripts call the workspace tools; see [code mode](./agents.md#code-mode). Model selection defaults to `OPENAI_MODEL`
-or the OpenAI adapter's default. The agent reads project guidance and has the
+JavaScript scripts call the workspace tools; see [code mode](./agents.md#code-mode).
+The agent reads project guidance and has the
 standard `read`, `write`, `edit`, `bash`, `list`, and `search` tools with the host's
 permissions. See [agents](./agents.md#default-model-backed-agent) for their contracts.
 
@@ -146,7 +162,9 @@ agent turns, tool activity, model usage and logs, but not the prompt or answer
 text, so they are not a saved conversation. Logs and tool activity can still
 contain workspace content; keep traces and stores as private as the workspace.
 
-To plug in another provider, pass `--model-module ./model.ts`. The trusted local
+To plug in a custom provider, pass `--model-module ./model.ts`. This is mutually
+exclusive with an explicit `--provider`. Custom factories retain the default model
+selection (`--model`, then `OPENAI_MODEL`, then `gpt-5.4-mini`). The trusted local
 module must default-export a factory accepting `{ model: string, signal: AbortSignal, env: Readonly<NodeJS.ProcessEnv> }` and returning
 an `AgentModel`, synchronously or asynchronously. Tubeless calls the factory for
 each task with the currently selected model, that task's cancellation signal,

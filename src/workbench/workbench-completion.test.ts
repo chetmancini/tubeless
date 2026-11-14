@@ -142,6 +142,10 @@ describe("tubeless __complete", () => {
     expect((await complete(tmpdir(), "graph", "--direction", "")).lines).toEqual(directions);
     expect((await complete(tmpdir(), "graph", "-d", "")).lines).toEqual(directions);
     expect((await complete(tmpdir(), "completion", "")).lines).toEqual(["bash", "zsh", "fish"]);
+    expect((await complete(tmpdir(), "agent", "--provider", "")).values).toEqual([
+      "openai",
+      "anthropic",
+    ]);
   });
 
   it("offers project pipeline ids plus file paths", async () => {
