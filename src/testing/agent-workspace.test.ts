@@ -1,7 +1,10 @@
-import { readFile, writeFile, rm, symlink, access, mkdir } from "node:fs/promises";
+import { readFile, writeFile, rm, symlink, access, mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createAgentTestWorkspace } from "./testing.js";
+
+vi.mock("node:fs/promises", { spy: true });
+const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
 
 describe("agent evaluation workspace", () => {
   it("creates physical fixture paths and preserves selected files while allowing intentional edits", async () => {
@@ -48,6 +51,39 @@ describe("agent evaluation workspace", () => {
     try {
       await expect(workspace.assertUnchanged(["../escape"])).rejects.toThrow("Fixture paths");
     } finally {
+      await workspace.close();
+    }
+  });
+
+  it("checks selected paths without reading unrelated files or directories", async () => {
+    const workspace = await createAgentTestWorkspace({
+      "src/preserved.txt": "preserve",
+      "unrelated.bin": "unreadable output",
+      "build/artifact.bin": "unreadable output",
+    });
+    vi.mocked(readFile).mockImplementation((path, ...options) => {
+      if (String(path).endsWith(".bin")) throw new Error("Unrelated file is unreadable");
+      return actualFs.readFile(path, ...options);
+    });
+    vi.mocked(readdir).mockImplementation((path, ...options) => {
+      if (String(path).endsWith("/build")) throw new Error("Unrelated directory is unreadable");
+      return actualFs.readdir(path, ...options);
+    });
+    try {
+      await expect(workspace.assertUnchanged(["src/preserved.txt"])).resolves.toBeUndefined();
+      await expect(workspace.assertUnchanged(["src"])).resolves.toBeUndefined();
+      await expect(workspace.assertUnchanged()).rejects.toThrow("unreadable");
+      await writeFile(join(workspace.cwd, "src/new.txt"), "new");
+      await expect(workspace.assertUnchanged(["src/preserved.txt"])).resolves.toBeUndefined();
+      await expect(workspace.assertUnchanged(["src"])).rejects.toThrow("Workspace changed");
+      await rm(join(workspace.cwd, "src"), { recursive: true });
+      await symlink("build", join(workspace.cwd, "src"));
+      await expect(workspace.assertUnchanged(["src/preserved.txt"])).rejects.toThrow(
+        "Workspace changed: src"
+      );
+    } finally {
+      vi.mocked(readFile).mockRestore();
+      vi.mocked(readdir).mockRestore();
       await workspace.close();
     }
   });

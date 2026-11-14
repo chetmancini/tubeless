@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -79,6 +79,15 @@ const failedRead = {
   "code-failed": "/src/code.txt",
 }[process.env.EVAL_RECOVERY];
 const missingStartup = process.env.EVAL_RECOVERY === "startup-missing";
+if (process.env.EVAL_RECOVERY === "setup-failed") {
+  const writeFile = fs.writeFile;
+  fs.writeFile = async (path, ...args) => {
+    if (path.includes("tubeless-eval-investigate-edit-verify-") && path.endsWith("/price.mjs"))
+      throw new Error("Fixture setup denied");
+    return writeFile(path, ...args);
+  };
+  syncBuiltinESMExports();
+}
 if (failedRead || missingStartup) {
   // Fail only the tool's file open, leaving fixture setup and independent checks intact.
   const open = fs.open;
@@ -526,7 +535,23 @@ it.each([false, true])(
   40_000
 );
 
-it("fails an evaluation whose transcript omits evidence even if the agent completes", async () => {
+it.each([
+  {
+    mode: "transcript-omission",
+    only: "typed-triage-json",
+    error: "Transcript evidence is incomplete or conflicting",
+    evidence: expect.arrayContaining([
+      expect.objectContaining({ omitted: "decision", reason: "record-limit" }),
+      expect.objectContaining({ event: { kind: "end", status: "completed" } }),
+    ]),
+  },
+  {
+    mode: "setup-failed",
+    only: "investigate-edit-verify,typed-triage-json",
+    error: "Fixture setup denied",
+    evidence: [],
+  },
+])("retains a failed evaluation report and cleans up ($mode)", async (fixture) => {
   const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-omission-"));
   try {
     const mockPath = join(directory, "provider.mjs");
@@ -535,14 +560,15 @@ it("fails an evaluation whose transcript omits evidence even if the agent comple
     expect(() =>
       execFileSync(
         process.execPath,
-        ["--import", mockPath, "scripts/eval-agent.mjs", "--only=typed-triage-json", reportPath],
+        ["--import", mockPath, "scripts/eval-agent.mjs", `--only=${fixture.only}`, reportPath],
         {
           encoding: "utf8",
           timeout: 20_000,
           env: {
             ...process.env,
             OPENAI_API_KEY: "offline-fixture",
-            EVAL_RECOVERY: "transcript-omission",
+            EVAL_RECOVERY: fixture.mode,
+            TMPDIR: directory,
           },
         }
       )
@@ -550,14 +576,12 @@ it("fails an evaluation whose transcript omits evidence even if the agent comple
     const { results } = JSON.parse(await readFile(reportPath, "utf8"));
     expect(results[0]).toMatchObject({
       passed: false,
-      error: "Transcript evidence is incomplete or conflicting",
+      error: fixture.error,
+      transcript: fixture.evidence,
     });
-    expect(results[0].transcript).toContainEqual(
-      expect.objectContaining({ omitted: "decision", reason: "record-limit" })
-    );
-    expect(results[0].transcript.at(-1)).toMatchObject({
-      event: { kind: "end", status: "completed" },
-    });
+    expect(results).toHaveLength(fixture.only.split(",").length);
+    expect(results.slice(1).every((result: { passed: boolean }) => result.passed)).toBe(true);
+    expect((await readdir(directory)).sort()).toEqual(["provider.mjs", "report.json"]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

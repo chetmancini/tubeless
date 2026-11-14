@@ -52,12 +52,13 @@ export async function createAgentTestWorkspace(
       await fs.mkdir(path.dirname(target), { recursive: true });
       await fs.writeFile(target, content);
     }
-    const snapshot = async () => {
+    const snapshot = async (includes: (name: string) => boolean = () => true) => {
       const entries = new Map<string, string>();
       const walk = async (directory: string): Promise<void> => {
         for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
           const target = path.join(directory, entry.name);
           const key = path.relative(cwd, target).split(path.sep).join("/");
+          if (!includes(key)) continue;
           if (entry.isSymbolicLink()) entries.set(key, `link:${await fs.readlink(target)}`);
           else if (entry.isDirectory()) {
             entries.set(key, "directory");
@@ -84,10 +85,15 @@ export async function createAgentTestWorkspace(
       async assertUnchanged(paths) {
         if (closing) throw new Error("Evaluation workspace is closed");
         const selected = paths?.map((name) => localPath(name).relative);
-        const current = await snapshot();
+        // Include parents so replacing a selected file's directory cannot hide a change.
+        const includes = (name: string) =>
+          selected === undefined ||
+          selected.some(
+            (root) => name === root || name.startsWith(root + "/") || root.startsWith(name + "/")
+          );
+        const current = await snapshot(includes);
         for (const name of new Set([...initial.keys(), ...current.keys()])) {
-          if (selected && !selected.some((root) => name === root || name.startsWith(root + "/")))
-            continue;
+          if (!includes(name)) continue;
           if (initial.get(name) !== current.get(name))
             throw new Error(`Workspace changed: ${name}`);
         }
