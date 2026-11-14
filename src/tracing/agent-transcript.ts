@@ -98,9 +98,14 @@ const eventSchemas = {
 
 const encoder = new TextEncoder();
 const bytes = (text: string) => encoder.encode(text).length;
+const MAX_CONTENT_DEPTH = 64;
 
 /** Bound copying work before invoking application code; never invoke getters or toJSON. */
-export function snapshotTranscriptContent<T>(input: T, budget: number): T {
+export function snapshotTranscriptContent<T>(
+  input: T,
+  budget: number,
+  maxDepth = MAX_CONTENT_DEPTH
+): T {
   const ancestors = new Set<object>();
   const charge = (size: number) => {
     budget -= size;
@@ -111,7 +116,7 @@ export function snapshotTranscriptContent<T>(input: T, budget: number): T {
     charge(bytes(JSON.stringify(value)));
   };
   const copy = (value: unknown, depth: number): unknown => {
-    if (depth > 64) throw new TranscriptContentOmission("unsupported-content");
+    if (depth > maxDepth) throw new TranscriptContentOmission("unsupported-content");
     if (typeof value === "string") {
       string(value);
       return value;
@@ -200,7 +205,12 @@ const envelopeSchema = wireObject({
 
 /** Decode at file, writer and transport boundaries without invoking getters or toJSON. */
 export function decodeAgentTranscriptRecord(value: unknown): AgentTranscriptRecord {
-  const owned = snapshotTranscriptContent(value, MAX_TRANSCRIPT_RECORD_BYTES * 2);
+  // The record envelope adds one level around the event whose capture depth starts at zero.
+  const owned = snapshotTranscriptContent(
+    value,
+    MAX_TRANSCRIPT_RECORD_BYTES * 2,
+    MAX_CONTENT_DEPTH + 1
+  );
   if (!owned || typeof owned !== "object" || Array.isArray(owned))
     throw new Error("Expected transcript record");
   const envelope = envelopeSchema.decode(owned, "Transcript");

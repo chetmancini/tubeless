@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { openNdjsonAgentTranscriptWriter } from "../agent/ndjson-transcript.js";
+import { defineAgentLoop, defineTool } from "../agent/agent.js";
+import { emptyInput, numberSchema, schema } from "../agent/agent.test-support.js";
 import { transcriptRecord } from "../tracing/agent-transcript.test-support.js";
 import { openNdjsonAgentTranscriptReader } from "./agent-transcript-ndjson.js";
 
@@ -19,6 +21,62 @@ async function file() {
 }
 
 describe("NDJSON transcript storage", () => {
+  it.each([63, 64])(
+    "round-trips capture at its content depth boundary (input depth=%s)",
+    async (depth) => {
+      let input: unknown = "leaf";
+      for (let index = 0; index < depth; index++) input = { nested: input };
+      const path = await file();
+      const writer = await openNdjsonAgentTranscriptWriter(path);
+      if (depth === 64)
+        await expect(
+          writer.write(
+            transcriptRecord(1, {
+              kind: "call",
+              id: "too-deep",
+              tool: "inspect",
+              input,
+            })
+          )
+        ).rejects.toThrow("unsupported-content");
+      const run = await defineAgentLoop({
+        id: "depth-boundary",
+        inputSchema: emptyInput,
+        resultSchema: numberSchema,
+        defaultTools: [],
+        initialState: () => 0,
+        tools: {
+          inspect: defineTool({
+            description: "Accept nested JSON",
+            inputSchema: schema<unknown>((value) => ({ value })),
+            outputSchema: numberSchema,
+            run: () => 4,
+          }),
+        },
+        transcript: { write: writer.write },
+        decide: (_state, context) =>
+          context.turn === 1
+            ? { kind: "continue", calls: [{ id: "inspect", tool: "inspect", input }] }
+            : { kind: "finish", result: 4 },
+      }).run();
+      await writer.close();
+      expect(run.status).toBe("completed");
+      const reader = await openNdjsonAgentTranscriptReader(path);
+      const page = await reader.list({ runId: run.runId });
+      expect(page.status).toBe("complete");
+      if (depth === 63)
+        expect(
+          page.records.find((record) => "event" in record && record.event.kind === "call")
+        ).toMatchObject({ event: { kind: "call", input } });
+      else
+        expect(page.records).toContainEqual(
+          expect.objectContaining({ omitted: "call", reason: "unsupported-content" })
+        );
+      expect(page.records.at(-1)).toMatchObject({ event: { kind: "end", status: "completed" } });
+      await reader.close();
+    }
+  );
+
   it("serializes concurrent writes, creates private files and pages independent run sequences", async () => {
     const path = await file();
     const writer = await openNdjsonAgentTranscriptWriter(path);

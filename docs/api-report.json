@@ -10,7 +10,7 @@
         "openSqliteAgentCheckpointStore",
         "SqliteAgentCheckpointStore"
       ],
-      "sha256": "a6103d5e3871d203dc6344dd64934ac717e698d7f034f7acd6bdf6a3f8808354",
+      "sha256": "8f5bd4859f6a2363fddcd9eedcd52967865553c3eb213e4f274a8aadd085dda9",
       "specifier": "tubeless/agent/node"
     },
     {
@@ -59,7 +59,7 @@
         "plainAgentCheckpointCodec",
         "ToolError"
       ],
-      "sha256": "e9d980a04bf6487c158f56c9b9c1238294453a54c522d05307f9e75b0fdec21c",
+      "sha256": "7b6112b89ea29d051bdaccf5804de81c60d3f18e8e232218703ac86739d6dc47",
       "specifier": "tubeless/agent"
     },
     {
@@ -187,7 +187,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "3b60cfcdd76c1685387a85a414300c18b9c90c512e947b04bd20c6864837cd7b",
+      "sha256": "863ddb20386ebe6e48c2a86fe4c8b35c0790dd98af17dd8ef02db2cd9f1794aa",
       "specifier": "tubeless/cli"
     },
     {
@@ -291,7 +291,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "91bd7153f93d30b918b547c7cdd77cede70d404ca394ad613753edbe03e05e41",
+      "sha256": "84721c2cd59b04ca8c9d008737282c76f5b0691a81157ad5b1b240db38280d36",
       "specifier": "tubeless/agent/openai"
     },
     {
@@ -305,13 +305,13 @@
         "McpTool",
         "McpToolResult"
       ],
-      "sha256": "76b8e3e1144a461c64cd641ac30e4a940f348a4bfa121b6243c5db8fa01d7f64",
+      "sha256": "4ddb8da6ce8999f90556c5b514d626ad7253d436f069567b63996a9f5858e267",
       "specifier": "tubeless/agent/mcp"
     },
     {
       "declaration": "./dist/agent/anthropic.d.ts",
       "exports": ["anthropicModel", "AnthropicModelOptions"],
-      "sha256": "04f6724ae9ad0dcfc39da3ed40bb54b72681b68d4f65877604abfece88c16c3e",
+      "sha256": "01b2269f2c5551e357cb2aa5dbb9398c5e228b59590b24ea48512c10b5a78998",
       "specifier": "tubeless/agent/anthropic"
     },
     {
