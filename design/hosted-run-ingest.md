@@ -4,7 +4,8 @@ Issue: [#289](https://github.com/chetmancini/tubeless/issues/289).
 
 This change separates trusted hosted execution, launch coordination and storage
 while preserving the public Cloudflare API. The HTTP section below is a proposed
-next contract, not a shipped endpoint. A Node-process test executor exercises the
+next contract, not a shipped endpoint. Owned-attempt persistence and exact-byte
+replay records are implemented internally. A Node-process test executor exercises the
 shared coordination contract alongside Cloudflare; it is not a deployed remote
 target or a second production execution lifecycle. No new public package subpath
 is introduced.
@@ -79,11 +80,12 @@ sequence of event batches and retries failed delivery through a fresh ingest
 capability. Refusal or exhausted retries aborts execution; active work still
 depends on cooperative cancellation. Final flushing drains delivery timers.
 
-The SQLite adapter accepts any sequence at or below the committed high-water mark as a
-duplicate, without comparing event content. It does not authenticate an executor
-or validate that every event belongs to that launch. Those assumptions are
-appropriate only for its current trusted, single-run-object caller. The extracted
-port must not be mounted as HTTP merely by decoding JSON into `StudioIngest`.
+The trusted `HostedLaunchStore.acceptBatch` path accepts any sequence at or below
+the committed high-water mark as a duplicate, without comparing event content.
+It relies on the current single-run-object caller. Owned attempts use the separate
+operations below; their launches cannot use the trusted admission or append path
+to bypass owner checks. Neither path is an authenticated network service. Do not
+mount `StudioIngest` as HTTP merely by decoding requests into its interface.
 
 Admission is consent, not a distributed execution lease. The Durable Object run
 state and alarm serialization prevent a second execution. Repeated `admit` calls
@@ -94,6 +96,65 @@ handlers. Keep the current non-rethrowing alarm path and persisted running marke
 Its SQL transactions keep launch changes and appended events atomic.
 [Alarm API](https://developers.cloudflare.com/durable-objects/api/alarms/),
 [SQLite storage](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/).
+
+## Implemented attempt persistence
+
+`HostedAttemptStore` is an internal operation-level contract implemented by
+`SqliteHostedLaunchStore`. It does not dispatch jobs or issue credentials. The
+host provisions a new launch and its only attempt atomically with an expected
+pipeline ID and host-selected deployment revision. Provisioning conflicting IDs
+rejects without overwriting records or leaving an orphan launch. Existing launch
+and event tables keep their layout; the adapter adds three tables on open:
+
+- `tubeless_attempts`: the unique launch/attempt association, expected pipeline and
+  deployment IDs, winning worker invocation, claim time and revocation marker.
+- `tubeless_attempt_runs`: globally unique root/descendant run bindings with stable
+  pipeline and parent identities.
+- `tubeless_attempt_batches`: exact-body SHA-256 digests and original root-run
+  acknowledgements keyed by attempt and committed sequence. Store no extra copy
+  of raw request bodies here.
+
+`claimAttempt` grants execution exactly once to the first matching worker and
+marks launch admission in the same transaction. Workers must generate a fresh
+invocation ID, independently of a redelivered job. Repeating even the winning
+worker's claim returns false. A lost claim reply leaves permission unconfirmed;
+the worker must not run, and neither a restart nor elapsed time grants a new
+owner. Preserve launch/attempt IDs on uncertain provisioning instead of creating
+a fresh execution. There is no takeover or automatic execution retry in this
+slice. The deployment ID check binds declared configuration; it is not binary
+attestation and still requires a trusted launcher and authenticated worker setup.
+
+`acceptAttemptBatch` accepts an owner identity and exact UTF-8 bytes for
+`{ attemptId, sequence, events }`. It copies both before asynchronous hashing,
+uses the canonical stored-event decoder, and requires trace version 3. The
+internal envelope allows 1–50 events, at most 1 MiB of encoded bytes, and bounded
+nonempty IDs; retain workload probes before publishing transport limits. The
+HTTP layer must enforce limits while reading and authenticate before parsing.
+
+Inside one synchronous SQLite transaction, the adapter checks the persisted
+owner, revocation and body scope; compares any existing receipt; validates root
+and descendant ownership; appends events; advances launch state/sequence; and
+inserts the receipt. A root must match the provisioned pipeline. Reject another
+root, a reused run ID (including one in trusted history), children before their
+parents, foreign parents, and inconsistent event pipeline/parent identities.
+A failure at any point rolls back bindings, history, launch state and receipt.
+
+An identical committed retry returns its original acknowledgement, including
+after completion or collector reopen. Altering even whitespace at an accepted
+sequence conflicts. A gap reports the expected next sequence; a closed launch
+refuses new writes without consuming their sequence. Revocation blocks both new
+writes and receipt replays, including a batch whose hashing began before the
+revocation committed. It does not terminate a worker or synthesize terminal
+history. Existing host-admin failure operations still require evidence of actual
+host failure; lost contact alone is not that evidence.
+
+The persistence tests cover parallel claims from independent Node worker
+connections, close/reopen and competing writers, altered retries, ownership
+violations, schema rejection and rollback after event and receipt failures. The
+Durable Object SQL fixture exercises the same operations without new platform
+imports. Existing Cloudflare launches continue using trusted RPC; production
+worker dispatch, credential authority and failure-report transport remain work
+for the following slices.
 
 ## Proposed HTTP contract
 
@@ -172,11 +233,11 @@ equality. Inputs and credentials are not tracing metadata.
 
 ### Admission, lost contact and cancellation
 
-Before implementing remote admission, add a persisted attempt/ownership contract
-alongside the launch record. Specify how a worker proves exclusive ownership and
-how duplicate queue deliveries are fenced. Retrying a batch must never retry
-pipeline execution. A timed-out admission request has an uncertain outcome; do
-not execute or provision a fresh attempt based on that timeout.
+Use the persisted attempt/ownership operations for remote admission. Bind each
+request to its authenticated attempt and fresh worker invocation; duplicate queue
+deliveries must not obtain another execution grant. Retrying a batch must never
+retry pipeline execution. A timed-out claim request has an uncertain outcome;
+do not execute or provision a fresh attempt based on that timeout.
 
 An expired heartbeat or failed HTTP request does not prove that a container
 stopped. Record lost contact as an uncertain host outcome, retain possible side
@@ -200,9 +261,10 @@ with an independent SQLite adapter. Expand runtime-graph checks to every hosting
 module: no Cloudflare/platform imports, concrete stores or Node listener assets.
 Keep public exports and declarations unchanged apart from generated path hashes.
 
-Before shipping HTTP ingestion, implement and test all of the following together:
+Before shipping HTTP ingestion, connect and test all of the following together.
+The persistence operations above cover the storage portion, not the full path:
 
-1. A concrete independent executor and persisted admission/attempt fencing.
+1. A concrete independent executor using persisted admission/attempt fencing.
 2. Launch-scoped credential issuance, verification, expiry/revocation and redaction.
 3. Atomic replay digests and durable run/descendant ownership, including concurrent
    duplicate requests, altered retries, sequence gaps and transaction rollback.

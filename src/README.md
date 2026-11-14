@@ -147,6 +147,14 @@ their source files.
   History and launch mutations commit together; `failUnadmitted` checks admission
   atomically. Accepted batch replies carry the persisted root identity on replay;
   rejected terminal writes never advance the committed sequence.
+  `hosting/attempt-store.ts` adds the internal owned-attempt contract: one worker
+  claim per launch, fenced event writes and explicit revocation. The same SQLite
+  adapter implements it; `attempt-journal-sqlite.ts` owns attempt, replay-receipt
+  and run-binding tables within the adapter's surrounding transaction.
+  `attempt-batch.ts` decodes current-version events and hashes an owned snapshot of
+  the exact envelope bytes. Ownership, events, sequence and the original receipt
+  commit together. These operations are not exposed by the existing trusted RPC
+  or HTTP API; claim uncertainty never authorizes another execution.
   `hosting/run-coordinator.ts` owns launch validation, start acknowledgements,
   ingestion and cancellation through that store and a `HostedExecutor`. Its
   observed dispatch task arranges recovery before execution, independently of
