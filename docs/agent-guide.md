@@ -425,9 +425,17 @@ read when a pipeline needs them.
   `tubeless history` and Studio. The interactive bike-inspired prompt
   supports Tab completion of `/model`, `/clear`,
   `/help`, `/quit`, and `/exit`; double Tab lists matching commands.
-  `--model-module` loads a trusted factory returning the public `AgentModel`
-  callback and cannot be combined with `--provider`. The built-in provider defaults
-  to OpenAI; use `--provider anthropic` for Anthropic. Export `OPENAI_API_KEY` or
+  `--provider` selects a named configuration. Built-in presets are `openai` (default)
+  and `anthropic`; their factories choose API adapters and public-service defaults.
+  For other services, default-export a registry of `AgentProvider` entries from
+  `tubeless/cli`, then use `--model-module ./agent-models.ts --provider baseten`.
+  Each entry declares `model`, optional `modelEnv` and `credentialEnv` variable names,
+  and a `createModel` factory. Only the selected entry is checked; a module replaces
+  the built-in registry and unknown names never fall back to a public endpoint.
+  Adapt [the Baseten registry](../examples/agent-providers.ts): it uses the Messages
+  API with its own endpoint and bearer token, disabling unsupported features.
+  A default-exported single factory remains supported without `--provider`.
+  Export `OPENAI_API_KEY` or
   `ANTHROPIC_API_KEY` for the selected provider, or select a dotenv
   file with `--env-file`; existing process environment values take precedence.
   `--model` overrides `OPENAI_MODEL` or `ANTHROPIC_MODEL`; `/model` stays within the

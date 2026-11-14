@@ -35,7 +35,7 @@ const composition = readFileSync(join(__REPO_ROOT__, "examples/agent-pipeline.ts
       <p>Tool activity shows what is happening: file paths for reads, writes, and edits; command previews for bash; paths and queries for listing and searching. The tree and logs include completion summaries such as bytes written, lines read, and command exit codes.</p>
       <p>The bike-inspired <code>◯╱◯ ❯</code> prompt has cyan accents. Press Tab to complete a slash command, or Tab twice after <code>/</code> to list commands. Completed prompts retain conversation, answers, and tool history. Use <code>/model &lt;name&gt;</code> to change models, <code>/clear</code> to start fresh, or <code>/quit</code> to exit. Ctrl-C cancels active work and returns to the prompt.</p>
       <p>Other pipelines can use <code>createSteps().waitForInput</code> to wait for terminal, web, or application input through a pluggable read callback. <a href={href("docs/concepts") + "#wait-for-user-or-application-input"}>Read the input-step guide.</a></p>
-      <p>Plug in another provider with <code>--model-module ./model.ts</code>, or run one task with <code>--prompt</code>. <a href={href("docs/cli") + "#prompt-a-workspace-agent"}>Read the agent CLI guide.</a></p>
+      <p>Configure named services with <code>--model-module ./agent-models.ts --provider baseten</code>. Each entry chooses its API adapter, endpoint, credentials, and model. A single model factory also works with <code>--model-module ./model.ts</code>. Run one task with <code>--prompt</code>. <a href={href("docs/cli") + "#configure-named-providers"}>Read the provider configuration guide.</a></p>
     </section>
 
     <section class="section" id="compose">

@@ -219,13 +219,23 @@ describe("agent provider selection", () => {
   it.each([
     ["--provider", "unknown"],
     ["--provider", " "],
-    ["--provider", "anthropic", "--model-module", "missing.ts"],
-    ["--provider", "openai", "--model-module", "missing.ts"],
   ])("rejects invalid provider combinations before loading modules: %j", async (...flags) => {
     const fetcher = mockAnthropic();
     const io = captureIo("/tmp");
     expect(await runWorkbenchCli(["agent", "--prompt", "hi", ...flags], io)).toBe(1);
     expect(io.errors.join("")).toContain("Usage: tubeless agent");
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("requires a registry to select a provider from a model module", async () => {
+    const { directory } = await writeModule("export default () => () => {}; ");
+    const io = captureIo(directory);
+    expect(
+      await runWorkbenchCli(
+        ["agent", "--provider", "anthropic", "--model-module", "pipeline.mjs", "--prompt", "hi"],
+        io
+      )
+    ).toBe(1);
+    expect(io.errors.join("")).toContain("requires a provider registry");
   });
 });

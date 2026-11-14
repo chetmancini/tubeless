@@ -4,12 +4,9 @@ import {
   parseSubcommandArgs,
   runWorkbenchSubcommand,
 } from "../workbench-subcommand.js";
-import { pathToFileURL } from "node:url";
 import type { AgentLimits, DefaultAgentToolName } from "../../agent/agent.js";
-import { openaiModel } from "../../agent/openai.js";
-import { anthropicModel } from "../../agent/anthropic.js";
 import { loadAgentEnvironment } from "./environment.js";
-import type { AgentModelFactory } from "./prompt.js";
+import { loadAgentProvider } from "./provider.js";
 import { runAgentSession } from "./session.js";
 import { toExitCode } from "../../cli/cli-exit.js";
 import { composeTraceExporters } from "../../tracing/tracing.js";
@@ -20,73 +17,12 @@ import {
 } from "../workbench-recording.js";
 import {
   errorMessage,
-  loadWorkbenchModule,
   TUBELESS_WORKBENCH_EXIT_CODE,
   writeUsageError,
   type WorkbenchCliIo,
 } from "../workbench-shared.js";
 
 const AGENT_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.agent);
-async function loadModelFactory(
-  file: string | undefined,
-  provider: "openai" | "anthropic",
-  env: Readonly<NodeJS.ProcessEnv>,
-  io: WorkbenchCliIo
-): Promise<AgentModelFactory | { exitCode: number }> {
-  if (!file) {
-    let credentialName = provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
-    if (
-      provider === "anthropic" &&
-      !env.ANTHROPIC_API_KEY?.trim() &&
-      env.ANTHROPIC_AUTH_TOKEN?.trim()
-    )
-      credentialName = "ANTHROPIC_AUTH_TOKEN";
-    const credential = env[credentialName]?.trim();
-    if (!credential) {
-      io.stderr.write(
-        `Error: ${credentialName} is missing from the agent environment.\n` +
-          `If echo $${credentialName} works, run export ${credentialName} in that shell, then retry.\n` +
-          "Alternatively, use tubeless agent --env-file /path/to/.env.\n"
-      );
-      return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.usage };
-    }
-    if (!/^[\x21-\x7e]+$/.test(credential)) {
-      io.stderr.write(
-        `Error: ${credentialName} must be a single token without whitespace or control characters.\n`
-      );
-      return { exitCode: TUBELESS_WORKBENCH_EXIT_CODE.usage };
-    }
-    if (provider === "anthropic") {
-      const baseUrl = env.ANTHROPIC_BASE_URL?.trim() || undefined;
-      return ({ model }) =>
-        anthropicModel({
-          model,
-          ...(credentialName === "ANTHROPIC_AUTH_TOKEN"
-            ? { authToken: credential }
-            : { apiKey: credential }),
-          ...(baseUrl ? { baseUrl } : {}),
-        });
-    }
-    const baseUrl = env.OPENAI_BASE_URL?.trim() || undefined;
-    return ({ model }) =>
-      openaiModel({ model, apiKey: credential, ...(baseUrl ? { baseUrl } : {}) });
-  }
-  return loadWorkbenchModule(file, io, async (filePath) => {
-    const module: unknown = await import(pathToFileURL(filePath).href);
-    if (
-      typeof module !== "object" ||
-      module === null ||
-      !("default" in module) ||
-      typeof module.default !== "function"
-    )
-      throw new Error(
-        "Model module must default-export a factory ({ model, signal, env }) => AgentModel."
-      );
-    // SAFETY: this is a trusted plugin; the task boundary validates the factory's return value.
-    return module.default as AgentModelFactory;
-  });
-}
-
 const DEFAULT_TOOLS: readonly DefaultAgentToolName[] = [
   "read",
   "write",
@@ -108,15 +44,10 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
         message: "Use --prompt for a task or start the REPL without positional arguments.",
       },
       async run({ values }, io) {
-        const provider = values.provider ?? "openai";
-        if (provider !== "openai" && provider !== "anthropic")
-          return writeUsageError(io, "--provider accepts openai or anthropic.", AGENT_USAGE);
-        if (values.provider !== undefined && values["model-module"] !== undefined)
-          return writeUsageError(
-            io,
-            "--provider and --model-module cannot be used together.",
-            AGENT_USAGE
-          );
+        if (values.provider !== undefined && !values.provider.trim())
+          return writeUsageError(io, "Provider name must not be blank.", AGENT_USAGE);
+        if (values["model-module"] !== undefined && !values["model-module"].trim())
+          return writeUsageError(io, "Model module must not be blank.", AGENT_USAGE);
         if (values.model !== undefined && !values.model.trim())
           return writeUsageError(io, "Model name must not be blank.", AGENT_USAGE);
         if (values.prompt !== undefined && !values.prompt.trim())
@@ -165,13 +96,13 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
         if (io.signal?.aborted) return TUBELESS_WORKBENCH_EXIT_CODE.cancellation;
         const environment = await loadAgentEnvironment(values["env-file"], io);
         if ("exitCode" in environment) return environment.exitCode;
-        const factory = await loadModelFactory(
+        const selected = await loadAgentProvider(
           values["model-module"],
-          provider,
+          values.provider,
           environment.env,
           io
         );
-        if (typeof factory !== "function") return factory.exitCode;
+        if ("exitCode" in selected) return selected.exitCode;
         // Recording outlives each prompt's cancellation so finished runs stay flushed.
         let recording: WorkbenchRecording;
         try {
@@ -188,11 +119,7 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
         try {
           exitCode = await runAgentSession(
             {
-              model:
-                (
-                  values.model ??
-                  environment.env[provider === "anthropic" ? "ANTHROPIC_MODEL" : "OPENAI_MODEL"]
-                )?.trim() || (provider === "anthropic" ? "claude-opus-5-5" : "gpt-5.4-mini"),
+              model: values.model?.trim() || selected.model,
               env: environment.env,
               prompt: values.prompt,
               instructions: values.instructions,
@@ -205,7 +132,7 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
                   ? { exporter: composeTraceExporters(recording.exporters) }
                   : undefined,
             },
-            factory,
+            selected.factory,
             io
           );
         } finally {

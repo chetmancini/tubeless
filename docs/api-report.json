@@ -148,6 +148,8 @@
     {
       "declaration": "./dist/cli/cli.d.ts",
       "exports": [
+        "AgentModelFactory",
+        "AgentProvider",
         "CliBooleanParam",
         "CliCheckpointConfig",
         "CliCommand",
@@ -180,7 +182,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "e510a345eb4b6677017c3e554f396d598a26fea89254c68100dfd3d366bf9bd7",
+      "sha256": "43701c4983ec5ea374a2c782bb595309b017c592310680d1b37b2d39dc4ec92a",
       "specifier": "tubeless/cli"
     },
     {

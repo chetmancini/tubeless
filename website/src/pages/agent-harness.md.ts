@@ -27,7 +27,9 @@ Enter a task, watch its pipeline execution, read the answer, and prompt again. A
 
 Tool activity shows what is happening: file paths for reads, writes, and edits; command previews for bash; paths and queries for listing and searching. The tree and logs include completion summaries such as bytes written, lines read, and command exit codes.
 
-The bike-inspired \`◯╱◯ ❯\` prompt has cyan accents. Press Tab to complete a slash command, or Tab twice after / to list commands. Completed prompts retain conversation, answers, and tool history. Use /model <name> to change models, /clear to start fresh, or /quit to exit. Ctrl-C cancels active work and returns to the prompt. Plug in another provider with --model-module ./model.ts, or run one task with --prompt. [Read the agent CLI guide](${absUrl("docs/cli.md#prompt-a-workspace-agent")}).
+The bike-inspired \`◯╱◯ ❯\` prompt has cyan accents. Press Tab to complete a slash command, or Tab twice after / to list commands. Completed prompts retain conversation, answers, and tool history. Use /model <name> to change models, /clear to start fresh, or /quit to exit. Ctrl-C cancels active work and returns to the prompt.
+
+Configure named services with \`--model-module ./agent-models.ts --provider baseten\`. Each entry chooses its API adapter, endpoint, credentials, and model. A single model factory also works with \`--model-module ./model.ts\`. Run one task with \`--prompt\`. [Read the provider configuration guide](${absUrl("docs/cli.md#configure-named-providers")}).
 
 Other pipelines can use \`createSteps().waitForInput\` to wait for terminal, web, or application input through a pluggable read callback. [Read the input-step guide](${absUrl("docs/concepts.md#wait-for-user-or-application-input")}).
 

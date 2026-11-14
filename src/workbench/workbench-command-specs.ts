@@ -271,7 +271,7 @@ Workspace tools run with your host permissions.`,
     options: {
       provider: {
         type: "string",
-        description: "Built-in model provider (default openai); exclusive with --model-module",
+        description: "Named model configuration (default openai); built-in or from --model-module",
         valueName: "name",
         completion: ["openai", "anthropic"],
       },
@@ -283,7 +283,7 @@ Workspace tools run with your host permissions.`,
       },
       "model-module": {
         type: "string",
-        description: "Default-export a factory ({ model, signal, env }) => AgentModel",
+        description: "Default-export a named provider registry or a single model factory",
         valueName: "file",
         completion: "file",
       },

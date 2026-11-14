@@ -18,6 +18,7 @@ export {
   type CliStringParam,
 } from "./cli-types.js";
 export { defineCommand } from "./cli-command.js";
+export type { AgentModelFactory, AgentProvider } from "./cli-agent-provider.js";
 
 export {
   definePipelineCommand,
