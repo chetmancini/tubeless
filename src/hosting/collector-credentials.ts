@@ -1,9 +1,5 @@
 import type { HostedAttemptDefinition } from "./attempt-store.js";
-import type {
-  CollectorCredential,
-  StoredCollectorCredential,
-  HostedCollectorStore,
-} from "./collector-store.js";
+import type { StoredCollectorCredential, HostedCollectorStore } from "./collector-store.js";
 
 const hex = (bytes: Uint8Array) =>
   Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -41,8 +37,7 @@ export async function provisionCollectorAttempt(
   const verifier = hex(
     new Uint8Array(await crypto.subtle.sign("HMAC", await key(secret, ["sign"]), context(record)))
   );
-  const credential: CollectorCredential = { ...record, verifier };
-  await store.provisionCollectorAttempt(attempt, credential);
+  await store.provisionCollectorAttempt(attempt, { ...record, verifier });
   return `${record.credentialId}.${secret}`;
 }
 

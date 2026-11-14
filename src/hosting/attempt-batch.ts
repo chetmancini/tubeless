@@ -77,14 +77,10 @@ export async function decodeAttemptBatch(body: Uint8Array): Promise<{
 
 /** A fresh, validated current-version event for either transport direction. */
 export function decodeAttemptEvent(value: unknown): PipelineTraceEvent {
-  try {
-    const event = decodeStoredTraceEvent(value);
-    if (event.version !== PIPELINE_TRACE_VERSION) throw new CollectorInputError();
-    assertAttemptId(event.runId);
-    assertAttemptId(event.pipelineId);
-    if (event.parentRunId !== undefined) assertAttemptId(event.parentRunId);
-    return event;
-  } catch {
-    throw new CollectorInputError();
-  }
+  const event = decodeStoredTraceEvent(value);
+  if (event.version !== PIPELINE_TRACE_VERSION) throw new CollectorInputError();
+  assertAttemptId(event.runId);
+  assertAttemptId(event.pipelineId);
+  if (event.parentRunId !== undefined) assertAttemptId(event.parentRunId);
+  return event;
 }
