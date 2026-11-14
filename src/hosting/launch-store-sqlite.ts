@@ -1,3 +1,13 @@
+import { decodeAttemptBatch } from "./attempt-batch.js";
+import { SqliteAttemptJournal } from "./attempt-journal-sqlite.js";
+import {
+  HostedAttemptConflict,
+  assertAttemptId,
+  type AttemptBatchAcknowledgement,
+  type HostedAttemptDefinition,
+  type HostedAttemptOwner,
+  type HostedAttemptStore,
+} from "./attempt-store.js";
 import type { BatchAcknowledgement, HostedLaunchStore } from "./launch-store.js";
 import type { PipelineRunEventQuery, PipelineRunEventReader } from "../run-store/run-store.js";
 import {
@@ -85,7 +95,8 @@ function hostTerminatedEvent(
 }
 
 /** SQLite launch/history adapter; event appends and launch transitions share one connection. */
-export class SqliteHostedLaunchStore implements HostedLaunchStore {
+export class SqliteHostedLaunchStore implements HostedLaunchStore, HostedAttemptStore {
+  readonly #attempts: SqliteAttemptJournal;
   constructor(
     private readonly storage: SqliteLaunchStorage,
     private readonly events: LaunchEventStore & PipelineRunEventReader
@@ -105,9 +116,14 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore {
     storage.sql.exec(
       "CREATE INDEX IF NOT EXISTS tubeless_launches_run_id_idx ON tubeless_launches(run_id)"
     );
+    this.#attempts = new SqliteAttemptJournal(storage);
   }
 
   async create(launchId: string, commandId: string, nowMs: number): Promise<void> {
+    this.#create(launchId, commandId, nowMs);
+  }
+
+  #create(launchId: string, commandId: string, nowMs: number): void {
     this.storage.sql.exec(
       "INSERT INTO tubeless_launches (launch_id, command_id, state, created_at_ms) VALUES (?, ?, 'starting', ?)",
       launchId,
@@ -140,7 +156,7 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore {
   async admit(launchId: string): Promise<boolean> {
     return this.storage.transactionSync(() => {
       const launch = this.#get(launchId);
-      if (!launch || TERMINAL.has(launch.state)) return false;
+      if (!launch || TERMINAL.has(launch.state) || this.#attempts.hasLaunch(launchId)) return false;
       this.storage.sql.exec(
         "UPDATE tubeless_launches SET admitted = 1 WHERE launch_id = ?",
         launchId
@@ -159,55 +175,146 @@ export class SqliteHostedLaunchStore implements HostedLaunchStore {
     events: readonly PipelineTraceEvent[]
   ): Promise<BatchAcknowledgement> {
     return this.storage.transactionSync(() => {
-      const launch = this.#get(launchId);
-      if (!launch) throw new Error(`Unknown launch ${JSON.stringify(launchId)}.`);
-      if (sequence <= launch.lastBatch)
-        return { accepted: true, ...(launch.runId === undefined ? {} : { runId: launch.runId }) };
-      // Closed launches reject every new batch. Do not advance the committed
-      // sequence for dropped writes, so their retries keep the same acknowledgement.
-      if (TERMINAL.has(launch.state)) return { accepted: false };
-      if (sequence > launch.lastBatch + 1)
-        throw new Error(
-          `Launch ${launchId} expected batch ${launch.lastBatch + 1} but received ${sequence}.`
-        );
-      this.events.append(events);
-      let { runId, pipelineId, dryRun, stepCount, state } = launch;
-      for (const event of events) {
-        if (
-          runId === undefined &&
-          event.name === "pipeline.started" &&
-          event.parentRunId === undefined
-        ) {
-          runId = event.runId;
-          pipelineId = event.pipelineId;
-          dryRun = event.payload.dryRun;
-          stepCount = event.payload.stepCount;
-          state = "running";
-        } else if (
-          runId !== undefined &&
-          event.name === "pipeline.completed" &&
-          event.runId === runId
-        ) {
-          state = "finished";
-        }
+      if (this.#attempts.hasLaunch(launchId)) throw new HostedAttemptConflict("ownership");
+      return this.#recordBatch(launchId, sequence, events);
+    });
+  }
+
+  #recordBatch(
+    launchId: string,
+    sequence: number,
+    events: readonly PipelineTraceEvent[]
+  ): BatchAcknowledgement {
+    const launch = this.#get(launchId);
+    if (!launch) throw new Error(`Unknown launch ${JSON.stringify(launchId)}.`);
+    if (sequence <= launch.lastBatch)
+      return { accepted: true, ...(launch.runId === undefined ? {} : { runId: launch.runId }) };
+    // Closed launches reject every new batch. Do not advance the committed
+    // sequence for dropped writes, so their retries keep the same acknowledgement.
+    if (TERMINAL.has(launch.state)) return { accepted: false };
+    if (sequence > launch.lastBatch + 1)
+      throw new Error(
+        `Launch ${launchId} expected batch ${launch.lastBatch + 1} but received ${sequence}.`
+      );
+    this.events.append(events);
+    let { runId, pipelineId, dryRun, stepCount, state } = launch;
+    for (const event of events) {
+      if (
+        runId === undefined &&
+        event.name === "pipeline.started" &&
+        event.parentRunId === undefined
+      ) {
+        runId = event.runId;
+        pipelineId = event.pipelineId;
+        dryRun = event.payload.dryRun;
+        stepCount = event.payload.stepCount;
+        state = "running";
+      } else if (
+        runId !== undefined &&
+        event.name === "pipeline.completed" &&
+        event.runId === runId
+      ) {
+        state = "finished";
       }
-      this.storage.sql.exec(
-        `UPDATE tubeless_launches
+    }
+    this.storage.sql.exec(
+      `UPDATE tubeless_launches
          SET run_id = ?, pipeline_id = ?, dry_run = ?, step_count = ?, state = ?, last_batch = ?
          WHERE launch_id = ?`,
-        runId ?? null,
-        pipelineId ?? null,
-        dryRun ? 1 : 0,
-        stepCount,
-        state,
-        sequence,
-        launchId
-      );
-      return {
-        accepted: true,
-        ...(runId === undefined ? {} : { runId }),
-      };
+      runId ?? null,
+      pipelineId ?? null,
+      dryRun ? 1 : 0,
+      stepCount,
+      state,
+      sequence,
+      launchId
+    );
+    return {
+      accepted: true,
+      ...(runId === undefined ? {} : { runId }),
+    };
+  }
+
+  async createAttempt(definition: HostedAttemptDefinition): Promise<void> {
+    for (const id of [
+      definition.launchId,
+      definition.attemptId,
+      definition.commandId,
+      definition.pipelineId,
+      definition.deploymentId,
+    ])
+      assertAttemptId(id);
+    if (!Number.isSafeInteger(definition.createdAtMs) || definition.createdAtMs < 0)
+      throw new Error("Invalid hosted attempt creation time.");
+    this.storage.transactionSync(() => {
+      this.#create(definition.launchId, definition.commandId, definition.createdAtMs);
+      this.#attempts.create(definition);
     });
+  }
+
+  async claimAttempt(
+    owner: HostedAttemptOwner,
+    deploymentId: string,
+    nowMs: number
+  ): Promise<boolean> {
+    for (const id of [owner.launchId, owner.attemptId, owner.workerId, deploymentId])
+      assertAttemptId(id);
+    if (!Number.isSafeInteger(nowMs) || nowMs < 0)
+      throw new Error("Invalid hosted attempt claim time.");
+    return this.storage.transactionSync(() => {
+      const launch = this.#get(owner.launchId);
+      if (
+        !launch ||
+        TERMINAL.has(launch.state) ||
+        !this.#attempts.claim(owner, deploymentId, nowMs)
+      )
+        return false;
+      this.storage.sql.exec(
+        "UPDATE tubeless_launches SET admitted = 1 WHERE launch_id = ?",
+        owner.launchId
+      );
+      return true;
+    });
+  }
+
+  async acceptAttemptBatch(
+    owner: HostedAttemptOwner,
+    body: Uint8Array
+  ): Promise<AttemptBatchAcknowledgement> {
+    const identity = {
+      launchId: owner.launchId,
+      attemptId: owner.attemptId,
+      workerId: owner.workerId,
+    };
+    for (const id of Object.values(identity)) assertAttemptId(id);
+    const batch = await decodeAttemptBatch(body);
+    return this.storage.transactionSync(() => {
+      const attempt = this.#attempts.requireOwner(identity);
+      if (batch.attemptId !== identity.attemptId) throw new HostedAttemptConflict("ownership");
+      const replay = this.#attempts.replay(identity.attemptId, batch.sequence, batch.digest);
+      if (replay) return replay;
+      const launch = this.#get(identity.launchId);
+      if (!launch || TERMINAL.has(launch.state)) return { accepted: false };
+      if (batch.sequence !== launch.lastBatch + 1)
+        throw new HostedAttemptConflict("sequence", launch.lastBatch + 1);
+      this.#attempts.bindEvents(identity, attempt.pipelineId, launch.runId, batch.events);
+      const acknowledgement = this.#recordBatch(identity.launchId, batch.sequence, batch.events);
+      if (!acknowledgement.accepted || acknowledgement.runId === undefined)
+        throw new Error("Hosted attempt transaction did not bind a root run.");
+      this.#attempts.record(
+        identity.attemptId,
+        batch.sequence,
+        batch.digest,
+        acknowledgement.runId
+      );
+      return { accepted: true, runId: acknowledgement.runId };
+    });
+  }
+
+  async revokeAttempt(launchId: string, attemptId: string): Promise<void> {
+    assertAttemptId(launchId);
+    assertAttemptId(attemptId);
+    this.storage.transactionSync(() => this.#attempts.revoke(launchId, attemptId));
   }
 
   async failUnadmitted(launchId: string, message: string, nowMs: number): Promise<void> {

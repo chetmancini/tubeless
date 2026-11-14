@@ -14,14 +14,14 @@ export type BatchAcknowledgement =
 export interface HostedLaunchStore extends PipelineRunEventReader {
   /** Create a new starting launch; reject duplicate ids without modifying history. */
   create(launchId: string, commandId: string, nowMs: number): Promise<void>;
-  /** Grant repeatable consent for open launches; return false for unknown or terminal launches. */
+  /** Grant repeatable consent for open trusted launches; owned attempts require their claim operation. */
   admit(launchId: string): Promise<boolean>;
   /**
    * Atomically append history, bind the first root start, update terminal state and
    * advance sequence. Ack committed sequences with the persisted root run id,
    * including replays after completion. Reject gaps for open launches; reject new terminal-launch
    * batches without advancing the committed sequence. Rejected retries stay
-   * rejected. This trusted port does not verify digests.
+   * rejected. Reject ownerless writes to owned attempts. This trusted port does not verify digests.
    */
   acceptBatch(
     launchId: string,
