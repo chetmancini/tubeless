@@ -8,6 +8,7 @@ import { callInvocation, type PreparedCall } from "./decision.js";
 import { expectedToolFailure } from "./tool-failure.js";
 import type { ToolActivity } from "./tool-progress.js";
 import type { ToolInvocation } from "./tools.js";
+import { agentTranscript } from "./transcript.js";
 
 type ToolExecutionResult =
   | { readonly ok: true; readonly value: unknown; readonly label?: string }
@@ -32,6 +33,12 @@ export async function executePreparedToolCall(
         activity = started;
       },
     });
+    await agentTranscript(context)?.record(invocation.turn, {
+      kind: "call",
+      id: call.id,
+      tool: call.tool.name,
+      input: call.kind === "handler" ? call.input : call.options,
+    });
     const run = await invokeChildPipeline(call.tool.pipeline, prepared.options, prepared.context, {
       ...child,
       plan: call.plan,
@@ -42,6 +49,10 @@ export async function executePreparedToolCall(
       const label = activity?.complete(run.value);
       if (label !== undefined) context.log.log(label);
       activity = undefined;
+      await agentTranscript(context)?.record(invocation.turn, {
+        kind: "outcome",
+        outcome: { id: call.id, tool: call.tool.name, ok: true, value: run.value },
+      });
       return { ok: true, value: run.value, label };
     }
     const failure = new PipelineExecutionError(run);
@@ -49,6 +60,10 @@ export async function executePreparedToolCall(
     if (!expected) throw failure;
     if (activity) context.log.warn(`${activity.action}: failed`);
     activity = undefined;
+    await agentTranscript(context)?.record(invocation.turn, {
+      kind: "outcome",
+      outcome: { id: call.id, tool: call.tool.name, ok: false, error: expected },
+    });
     return { ok: false, error: expected, failure };
   } catch (error) {
     if (activity)

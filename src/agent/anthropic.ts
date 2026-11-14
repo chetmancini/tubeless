@@ -1,4 +1,5 @@
 import type { AgentModel, AgentModelDescriptors } from "./model-types.js";
+import { agentTranscript } from "./transcript.js";
 import {
   anthropicDecision,
   anthropicMessage,
@@ -263,6 +264,10 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
               { role: "user", content: "Continue the task from this summary." },
             ];
             context.log.log("Compacted agent conversation");
+            await agentTranscript(context)?.record(context.turn, {
+              kind: "compaction",
+              provider: "anthropic",
+            });
           } else {
             context.log.log(`Anthropic compaction returned no summary (${summary.stopReason})`);
           }
@@ -280,6 +285,11 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
           if (response.content.length === 0) throw new Error("Anthropic returned empty content");
           // Keep every block, including thinking and signatures, exactly as returned.
           messages = [...messages, { role: "assistant", content: response.content }];
+          const transcript = agentTranscript(context);
+          if (transcript)
+            for (const block of response.content)
+              if (block.type === "text" && typeof block.text === "string")
+                await transcript.record(context.turn, { kind: "assistant", text: block.text });
           const decision = anthropicDecision(response.content);
           if (decision) return { decision, conversation: messages };
           if (attempt > 0) throw new Error("Anthropic returned no tool calls");

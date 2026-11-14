@@ -7,11 +7,27 @@ import { EnvironmentWorkspaceAgent } from "../../examples/agent-environment.js";
 import { CodemodeAgent } from "../../examples/agent-codemode.js";
 import { ExtractTriagePipeline } from "../../examples/agent-extract.js";
 import { createDurableWorkspaceAgent } from "../../examples/agent-durable.js";
+import { runTranscriptExample } from "../../examples/agent-transcript.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 describe("public agent recipe", () => {
+  it("writes an opt-in transcript to the caller's destination with redacted decisions", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "tubeless-transcript-recipe-"));
+    try {
+      const destination = join(cwd, "private", "transcript.ndjson");
+      expect(await runTranscriptExample(destination, "hello")).toEqual({ answer: "HELLO" });
+      const records = (await readFile(destination, "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      expect(records.map((record) => record.event.kind)).toEqual(["call", "outcome", "end"]);
+      expect(records.map((record) => record.sequence)).toEqual([1, 2, 3]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
   it("lists a real workspace through the public Node environment adapter", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "tubeless-environment-recipe-"));
     try {

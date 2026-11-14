@@ -1,4 +1,5 @@
 import { setExecutionScope } from "../core/execution-scope.js";
+import { isPipelineCancellation } from "../core/pipeline-execution-error.js";
 import type { PipelineDefinitionSnapshot, PipelineStepContext } from "../core/pipeline-types.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { agentError, ownState } from "./agent-state.js";
@@ -13,6 +14,11 @@ import {
 } from "./environment.js";
 import { AgentExecutionScope, agentScope } from "./execution-scope.js";
 import type { TurnState } from "./turn.js";
+import {
+  AgentTranscriptCapture,
+  transcriptSettings,
+  type AgentTranscriptOptions,
+} from "./transcript.js";
 
 export function initialAgentExecution<State>(
   initialize: () => State,
@@ -30,6 +36,7 @@ export async function runAgentInvocation<Options extends object, State>(
     implementationVersion?: string;
     environment?: AgentEnvironmentProvider;
     durability?: AgentDurability<Options>;
+    transcript?: AgentTranscriptOptions;
     initialState(options: Options): State;
     onCompletedReplay?(state: AgentState<State>): void;
     limits: Required<AgentLimits>;
@@ -68,6 +75,8 @@ export async function runAgentInvocation<Options extends object, State>(
     throw new Error("Agent environment requires a nonblank cwd of at most 4096 characters");
   throwIfAborted(context.signal, "Agent workspace");
   const scoped = { ...context, cwd };
+  const settings = transcriptSettings(config.transcript);
+  const transcript = settings && new AgentTranscriptCapture(settings, config.id, scoped);
   const journal =
     inherited ??
     (durability
@@ -84,7 +93,8 @@ export async function runAgentInvocation<Options extends object, State>(
       context.runId,
       environment,
       config.id,
-      journal
+      journal,
+      transcript
     );
     setExecutionScope(scoped, scope);
     if (journal) {
@@ -111,16 +121,26 @@ export async function runAgentInvocation<Options extends object, State>(
           // SAFETY: recovery matched the owning definition before restoring its state.
           config.onCompletedReplay(ownState(saved.completedState.state) as AgentState<State>);
         }
+        await transcript?.record(0, { kind: "end", status: "completed", replayed: true });
         return saved.result;
       }
       if (saved.phase === "failed") throw agentError(saved.failure.code, saved.failure.message);
     }
+    let result: unknown;
     try {
-      return await run(scoped);
+      result = await run(scoped);
     } catch (error) {
       await journal?.fail(scope.agentKey, error, context.signal);
       throw error;
     }
+    await transcript?.record(transcript.turn, { kind: "end", status: "completed" });
+    return result;
+  } catch (error) {
+    await transcript?.record(transcript.turn, {
+      kind: "end",
+      status: isPipelineCancellation(error, context) ? "cancelled" : "failed",
+    });
+    throw error;
   } finally {
     if (journal && !inherited) await journal.close();
   }

@@ -3,6 +3,7 @@ import type { AgentEnvironment, AgentEnvironmentProvider } from "./environment.j
 import type { AgentDurability, AgentExecutionIdentity } from "./checkpoint-types.js";
 import type { DefaultAgentTools } from "./default-tools.js";
 import type { CodemodeExecutor } from "./codemode-executor.js";
+import type { AgentTranscriptOptions } from "./transcript.js";
 
 export type Awaitable<T> = T | Promise<T>;
 export type Input<S extends StandardSchemaV1> = NonNullable<S["~standard"]["types"]>["input"];
@@ -173,6 +174,8 @@ export interface AgentDefinition<
   readonly environment?: AgentEnvironmentProvider;
   /** Acknowledged recovery checkpoints; requires an explicit implementationVersion. */
   readonly durability?: AgentDurability<Output<Options>>;
+  /** Opt-in bounded content capture, separate from traces and recovery checkpoints. */
+  readonly transcript?: AgentTranscriptOptions;
   initialState(options: Output<Options>): State;
   decide(
     state: AgentState<NoInfer<State>>,

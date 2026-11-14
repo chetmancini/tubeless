@@ -1101,6 +1101,90 @@ decision source. Tools skip by default and require their own preview handler.
 A skipped required tool or agent output fails finalization instead of inventing
 an observation or answer.
 
+## Opt-in transcripts
+
+Set `transcript` on `defineAgent` or `defineAgentLoop` to observe content in a
+provider-neutral format. Without it, no transcript content is copied or delivered.
+Capture is independent of structural tracing, `--trace`, `--store` and durable
+checkpoints. The application supplies the sink; Tubeless chooses no storage path.
+
+```ts
+import { defineAgent, type AgentTranscriptRecord } from "tubeless/agent";
+import { openaiModel } from "tubeless/agent/openai";
+
+const records: AgentTranscriptRecord[] = [];
+const agent = defineAgent({
+  id: "inspectable-agent",
+  model: openaiModel(),
+  transcript: {
+    write: (record) => {
+      records.push(record);
+    },
+    // Suppress instructions and task text; apply your application's policy to other events.
+    redact: (event) => (event.kind === "prompt" ? null : event),
+  },
+});
+await agent.runOrThrow({ task: "List the files in this workspace." });
+```
+
+Each version-1 record has `agentId`, `runId`, optional `parentRunId`, `sequence`,
+`timestamp`, `turn` and `dryRun`. `runId` is the owning agent invocation's ID,
+which joins structural history. Sequences start at one for each invocation;
+concurrent runs can share a sink but have separate sequences and byte budgets.
+An ordinary record has an `event` from this union:
+
+| Kind         | Content                                                                                                           |
+| ------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `prompt`     | Task and assembled instructions for a model decision; excludes native history.                                    |
+| `assistant`  | One public text block from a bundled provider's response.                                                         |
+| `decision`   | Raw proposed decision before harness validation; includes call arguments or finish data.                          |
+| `call`       | Call ID, tool name and validated tool input, including script-issued calls.                                       |
+| `outcome`    | Call ID, tool name, validated value or expected tool error; reused outcomes have `replayed: true`.                |
+| `compaction` | Provider name after successful compaction; excludes native summary state.                                         |
+| `end`        | Agent invocation status: `completed`, `failed` or `cancelled`. Completed checkpoint replay adds `replayed: true`. |
+
+Custom loops emit decisions, calls, outcomes and completion. Model-backed agents
+also emit prompts; the bundled OpenAI and Anthropic adapters add public text and
+compaction markers. Capture excludes opaque conversation state, encrypted reasoning,
+thinking blocks, signatures and raw HTTP bodies. It describes observed actions and
+model output; it is not a replayable provider conversation. A recorded proposal can
+still fail validation. Successful tools in a subsequently failed batch remain recorded;
+fatal error details stay in structural history rather than transcript end events.
+
+Content can include project guidance, file contents, scripts and tool errors. Supply
+`redact` to return a replacement event of the same kind or `null` to suppress it.
+The redactor sees an owned, frozen snapshot and cannot change runtime values or
+envelope identity. Only finite plain JSON content is retained: cycles, accessors,
+class instances, undefined values and excessive depth produce
+`{ omitted: <event kind>, reason: "unsupported-content" }` instead of an event.
+
+`maxRecordBytes` bounds the full JSON record plus newline: default and maximum
+64 KiB, minimum 1 KiB. `maxBytes` bounds each invocation: default 1 MiB, maximum
+16 MiB, minimum twice `maxRecordBytes`. Content is bounded before redaction and
+rechecked afterwards. Oversized events produce a `record-limit` omission without
+passing the original content to the redactor. One record's budget is reserved for
+`{ limit: "maxBytes" }`; after it is written, capture stops, including the end event.
+An envelope that cannot fit disables capture. Omission markers contain no original
+content. Neither omitted content nor a missing end event establishes an empty or
+failed conversation.
+
+Delivery is awaited and serialized per invocation, in observation order. Tool
+outcomes follow completion order; use call IDs to match decisions. Sink or redactor
+failure disables that invocation's capture with a fixed warning and leaves the
+agent's execution unchanged. Applications own sink I/O deadlines, permissions,
+retention and access. Slow writes delay the run. This is best-effort inspection;
+process death can leave partial records. Recovery continues to use its acknowledged
+checkpoint store. Completed recovery emits only an end marker for the new run,
+without duplicating historical content.
+
+Child agents need their own explicit `transcript` option. A parent's transcript can
+still contain its calls to the child and returned values. Planning and skipped dry
+runs emit nothing; explicitly authored previews emit records marked `dryRun: true`.
+The [credential-free transcript recipe](../examples/agent-transcript.ts) shows a
+caller-selected NDJSON destination and decision suppression. History and Studio
+currently render structural traces; transcript readers and evaluation helpers are
+described in the [feature design](https://github.com/chetmancini/tubeless/blob/main/design/agent-transcripts.md).
+
 ## Inspection and recordings
 
 Plans show the bounded turn pipeline and the agent's capability inventory and
