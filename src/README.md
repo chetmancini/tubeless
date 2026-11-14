@@ -135,20 +135,20 @@ their source files.
   context. `hosting/run.ts` owns execution admission, ordered batching, history bounds,
   cooperative deadlines and final delivery. Targets supply output/cwd and any
   application-exporter wrapper; the shared runner does not select a target or a global
-  runtime limit. `hosting/launch-registry.ts` owns launch transitions over synchronous
-  SQLite transactions and an event-append port, reusing pure run-store SQL queries.
-  `hosting/launch-store.ts` defines the async operation-level persistence port;
-  `createSqliteLaunchStore` adapts the SQLite implementation. History and launch
-  mutations share a transaction; `failUnadmitted` must check admission atomically.
+  runtime limit. `hosting/launch-store.ts` defines the async operation-level
+  persistence port; `hosting/launch-store-sqlite.ts` implements it directly over
+  synchronous SQLite transactions and event appends on the same connection.
+  History and launch mutations commit together; `failUnadmitted` checks admission
+  atomically. Accepted batch replies carry the persisted root identity on replay;
+  rejected terminal writes never advance the committed sequence.
   `hosting/run-coordinator.ts` owns launch validation, start acknowledgements,
-  ingestion and cancellation through that store and a `HostedExecutor`. Targets
-  own dispatch deduplication and recovery scheduling, without leaking stubs or
-  alarms into the coordinator. Studio accepts async live-run reads.
-  `workbench/process-hosted-executor.ts` supplies an internal Node-process reference
-  executor, with cooperative cancellation and drain-before-storage-close. Its
-  dispatch deduplication lasts only for that executor instance; it never resumes
-  executions after restart.
-  Drivers and event-store schema initialization remain outside hosting.
+  ingestion and cancellation through that store and a `HostedExecutor`. Its
+  observed dispatch task arranges recovery before execution, independently of
+  the response timeout. Targets own dispatch deduplication and recovery scheduling,
+  without leaking stubs or alarms into the coordinator. Studio accepts async
+  live-run reads. Drivers and event-store schema initialization remain target-owned.
+  `hosting/process-executor.test-support.ts` exercises the shared contracts in a
+  Node process; the CLI retains its existing execution lifecycle.
   See the [hosted execution and ingest design](../design/hosted-run-ingest.md) before
   exposing this trusted port to a network. HTTP ingestion is a proposed contract,
   with separate admission, credential, ownership and replay requirements.

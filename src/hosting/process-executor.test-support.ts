@@ -1,10 +1,10 @@
-import type { HostedCommand, HostedOutput } from "../hosting/hosting-commands.js";
-import type { HostedExecutor } from "../hosting/run-coordinator.js";
-import type { StudioIngest } from "../hosting/run-contract.js";
-import { runHostedJob } from "../hosting/run.js";
+import type { HostedCommand, HostedOutput } from "./hosting-commands.js";
+import type { HostedExecutor } from "./run-coordinator.js";
+import type { StudioIngest } from "./run-contract.js";
+import { runHostedJob } from "./run.js";
 
 /**
- * Reference executor for one Node process. The owner supplies the collector and
+ * Test executor for one Node process. The owner supplies the collector and
  * output, stops dispatch before close, and closes storage only after close drains.
  * Launch ids are retained for this executor's lifetime; restart never resumes jobs.
  * This is cooperative execution, not process isolation or a distributed lease.

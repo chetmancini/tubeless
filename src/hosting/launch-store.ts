@@ -1,13 +1,9 @@
 import type { PipelineRunEventReader } from "../run-store/run-store.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
-export interface BatchOutcome {
-  readonly duplicate: boolean;
-  /** The launch was already terminal, so this new batch was not appended. */
-  readonly dropped: boolean;
-  readonly boundRunId?: string;
-  readonly terminal: boolean;
-}
+export type BatchAcknowledgement =
+  | { readonly accepted: false }
+  | { readonly accepted: true; readonly runId?: string };
 
 /**
  * Trusted collector persistence. Every mutation commits atomically, including
@@ -22,14 +18,16 @@ export interface HostedLaunchStore extends PipelineRunEventReader {
   admit(launchId: string): Promise<boolean>;
   /**
    * Atomically append history, bind the first root start, update terminal state and
-   * advance sequence. Ack old sequences without appending, reject gaps, and drop
-   * new batches for terminal launches. This trusted port does not verify digests.
+   * advance sequence. Ack committed sequences with the persisted root run id,
+   * including replays after completion. Reject gaps for open launches; reject new terminal-launch
+   * batches without advancing the committed sequence. Rejected retries stay
+   * rejected. This trusted port does not verify digests.
    */
   acceptBatch(
     launchId: string,
     sequence: number,
     events: readonly PipelineTraceEvent[]
-  ): Promise<BatchOutcome>;
+  ): Promise<BatchAcknowledgement>;
   /**
    * Close an open launch and synthesize completions for its open run subtree,
    * children first. Ignore unknown/terminal launches. The caller owns evidence

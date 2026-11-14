@@ -2,11 +2,12 @@
 
 Issue: [#289](https://github.com/chetmancini/tubeless/issues/289).
 
-This change extracts the existing trusted hosted-run path without changing its
-execution or persistence semantics. The HTTP section below is a proposed next
-contract, not a shipped endpoint. An internal Node-process executor validates the
+This change separates trusted hosted execution, launch coordination and storage
+while preserving the public Cloudflare API. The HTTP section below is a proposed
+next contract, not a shipped endpoint. A Node-process test executor exercises the
 shared coordination contract alongside Cloudflare; it is not a deployed remote
-target. No new public package subpath is introduced.
+target or a second production execution lifecycle. No new public package subpath
+is introduced.
 
 ## Ownership decision
 
@@ -34,8 +35,13 @@ re-export is needed for these private modules.
 (start and request cancellation by launch ID) and `HostedLaunchStore` (async
 atomic launch/history operations). Neither exposes SQL, Durable Objects or alarms.
 Targets arrange recovery before dispatch through `scheduleReconcile`; a scheduling
-failure prevents dispatch. Cancellation acknowledges a request, not termination.
-Studio awaits live-run reads so remote databases do not need a synchronous cache.
+failure prevents dispatch. The coordinator observes preparation and dispatch in
+a background task, independently of its start-acknowledgement timeout. A stalled
+store, scheduler or failure recording cannot hold the response open indefinitely.
+Timing out does not cancel dispatch: the run may still start after recovery is
+arranged, as the response warns. Cancellation acknowledges a request, not
+termination. Studio awaits live-run reads so remote databases do not need a
+synchronous cache.
 
 Keep transaction semantics inside each store adapter. Batch acceptance commits
 history and its launch sequence/state together. `failUnadmitted` atomically checks
@@ -43,21 +49,27 @@ admission and fails a launch; splitting that into a read followed by a write wou
 race on an async backend. `fail` records a host-reported failure and closes its
 open subtree; the caller must supply evidence appropriate to its platform.
 
-`createSqliteLaunchStore` implements that port using the existing synchronous
-SQLite registry and event append handle on the same connection. Schema
-initialization, storage versions, connections and drivers remain adapter-owned.
-Table names, indexes, sequence handling and recorded events stay unchanged;
-no migration is required. A different database implements the operation contract,
-rather than emulating SQLite SQL or synchronous transactions.
+`SqliteHostedLaunchStore` implements the port directly, with synchronous
+transaction bodies and event appends on the same connection. Return the persisted
+root run ID on accepted batch replays, including after completion or a collector
+restart. A committed batch whose store reply was lost can then acknowledge its
+start on retry. Reject new terminal-launch batches without advancing the committed
+sequence, so rejected retries stay rejected. Table names, indexes and event
+representations remain unchanged; no migration is required. Schema initialization,
+storage versions, connections and drivers remain adapter-owned. A different
+database implements the operation contract rather than emulating SQLite SQL or
+synchronous transactions.
 
-The internal `createProcessHostedExecutor` runs the shared runner in a Node
+The test-only `createProcessHostedExecutor` in
+`src/hosting/process-executor.test-support.ts` runs the shared runner in a Node
 process with explicit output/cwd, active controllers and drain/close operations.
-Integration tests drive it through Studio using native SQLite, async store calls,
-cancellation, duplicate dispatch and a closed/reopened collector database. This
-proves a second execution path, not a second database implementation. Deduplication
-lasts for one executor instance; restarts never resume jobs automatically. Keep
-it internal: it does not provide isolation, durable scheduling, distributed
-attempt fencing or production recovery after process death.
+Integration tests drive it through Studio using native SQLite, cancellation,
+duplicate dispatch and a closed/reopened collector database. Fault injection
+covers lost store replies and stalled preparation, dispatch and failure writes.
+This validates the contract with a second execution path, not a second production
+executor or database implementation. The CLI retains its existing local launcher.
+The test executor's deduplication lasts for one instance; it provides no isolation,
+durable scheduling, distributed attempt fencing or recovery after process death.
 
 ## Current guarantees and limits
 
@@ -67,7 +79,7 @@ sequence of event batches and retries failed delivery through a fresh ingest
 capability. Refusal or exhausted retries aborts execution; active work still
 depends on cooperative cancellation. Final flushing drains delivery timers.
 
-The existing registry accepts any sequence at or below the high-water mark as a
+The SQLite adapter accepts any sequence at or below the committed high-water mark as a
 duplicate, without comparing event content. It does not authenticate an executor
 or validate that every event belongs to that launch. Those assumptions are
 appropriate only for its current trusted, single-run-object caller. The extracted

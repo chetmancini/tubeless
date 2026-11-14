@@ -69,7 +69,6 @@ export class HostedRunCoordinator implements PipelineRunStudioLauncher, StudioIn
     if (parsed.kind === "help")
       return { accepted: false, errors: ["Help is not a launchable value set."] };
     const launchId = crypto.randomUUID();
-    await this.store.create(launchId, commandId, (this.deps.now ?? Date.now)());
     const acknowledged = new Promise<PipelineRunStudioLaunchResult>((resolve) =>
       this.#waiters.set(launchId, resolve)
     );
@@ -84,28 +83,33 @@ export class HostedRunCoordinator implements PipelineRunStudioLauncher, StudioIn
         }),
       timeoutMs
     );
-    try {
-      // Schedule the reconciler before the run can exist so a started run is never unreconciled.
-      await this.deps.scheduleReconcile();
-    } catch (error) {
-      clearTimeout(timeout);
-      await this.#failStart(launchId, error, START_FAILED);
-      return await acknowledged;
-    }
-    void Promise.resolve()
-      .then(() =>
-        this.deps.executor.start({
-          launchId,
-          commandId,
-          values,
-          maxRunDurationMs: this.deps.maxRunDurationMs,
-        })
-      )
-      .catch((error: unknown) => this.#failStart(launchId, error, START_UNCONFIRMED));
+    void this.#dispatch({
+      launchId,
+      commandId,
+      values,
+      maxRunDurationMs: this.deps.maxRunDurationMs,
+    });
     try {
       return await acknowledged;
     } finally {
       clearTimeout(timeout);
+    }
+  }
+
+  /** Observe the whole dispatch task without holding the acknowledgement response open. */
+  async #dispatch(job: RunJob): Promise<void> {
+    try {
+      await this.store.create(job.launchId, job.commandId, (this.deps.now ?? Date.now)());
+      // Recovery must be arranged before the executor can run user code.
+      await this.deps.scheduleReconcile();
+    } catch (error) {
+      await this.#failStart(job.launchId, error, START_FAILED);
+      return;
+    }
+    try {
+      await this.deps.executor.start(job);
+    } catch (error) {
+      await this.#failStart(job.launchId, error, START_UNCONFIRMED);
     }
   }
 
@@ -150,9 +154,10 @@ export class HostedRunCoordinator implements PipelineRunStudioLauncher, StudioIn
     sequence: number,
     events: PipelineTraceEvent[]
   ): Promise<{ accepted: boolean }> {
-    const outcome = await this.store.acceptBatch(launchId, sequence, events);
-    if (outcome.boundRunId) this.#settle(launchId, { accepted: true, runId: outcome.boundRunId });
-    return { accepted: !outcome.dropped };
+    const acknowledgement = await this.store.acceptBatch(launchId, sequence, events);
+    if (acknowledgement.accepted && acknowledgement.runId !== undefined)
+      this.#settle(launchId, { accepted: true, runId: acknowledgement.runId });
+    return { accepted: acknowledgement.accepted };
   }
 
   async reportFailure(launchId: string, message: string): Promise<void> {

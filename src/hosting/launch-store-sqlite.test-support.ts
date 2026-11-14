@@ -9,18 +9,14 @@ import {
   storedRunEvent,
   type RunEventRecord,
 } from "../run-store/run-store-sql.js";
-import {
-  createSqliteLaunchStore,
-  LaunchRegistry,
-  type LaunchRegistryStorage,
-} from "./launch-registry.js";
+import { SqliteHostedLaunchStore, type SqliteLaunchStorage } from "./launch-store-sqlite.js";
 
 /** A second, plain SQLite adapter: no Durable Object storage, alarms, KV or schema metadata. */
-export function createLaunchRegistryFixture(filename = ":memory:") {
+export function createSqliteLaunchStoreFixture(filename = ":memory:") {
   const database = new DatabaseSync(filename);
   for (const statement of [...RUN_EVENT_TABLE_STATEMENTS, ...RUN_EVENT_TRIGGER_STATEMENTS])
     database.exec(statement);
-  const storage: LaunchRegistryStorage = {
+  const storage: SqliteLaunchStorage = {
     sql: {
       exec(query, ...bindings) {
         // SAFETY: fixtures supply SQLite scalar bindings and read row objects.
@@ -44,7 +40,7 @@ export function createLaunchRegistryFixture(filename = ":memory:") {
     },
   };
   let closed = false;
-  const store = {
+  const events = {
     append(events: readonly PipelineTraceEvent[]) {
       for (const event of events) storage.sql.exec(RUN_EVENT_INSERT_SQL, ...runEventRow(event));
     },
@@ -63,8 +59,12 @@ export function createLaunchRegistryFixture(filename = ":memory:") {
   };
   return {
     storage,
-    store,
-    registry: new LaunchRegistry(storage, store),
-    launches: createSqliteLaunchStore(storage, store),
+    events,
+    store: new SqliteHostedLaunchStore(storage, events),
+    readLaunch(launchId: string) {
+      return storage.sql
+        .exec("SELECT * FROM tubeless_launches WHERE launch_id = ?", launchId)
+        .toArray()[0];
+    },
   };
 }

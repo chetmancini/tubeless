@@ -1,7 +1,7 @@
 import type { RunJob, StudioIngest } from "../hosting/run-contract.js";
 import type { HostedCommand, HostedOutput } from "../hosting/hosting-commands.js";
 import { createStudioHost, type StudioHost } from "../hosting/hosting-studio.js";
-import { createSqliteLaunchStore } from "../hosting/launch-registry.js";
+import { SqliteHostedLaunchStore } from "../hosting/launch-store-sqlite.js";
 import type { HostedLaunchStore } from "../hosting/launch-store.js";
 import { HostedRunCoordinator } from "../hosting/run-coordinator.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
@@ -40,7 +40,7 @@ export class StudioObjectCore implements StudioIngest {
 
   constructor(private readonly deps: StudioObjectDependencies) {
     this.#now = deps.now ?? Date.now;
-    this.#store = createSqliteLaunchStore(deps.storage, openDurableRunStore(deps.storage));
+    this.#store = new SqliteHostedLaunchStore(deps.storage, openDurableRunStore(deps.storage));
     this.#coordinator = new HostedRunCoordinator(
       {
         commands: deps.commands,
