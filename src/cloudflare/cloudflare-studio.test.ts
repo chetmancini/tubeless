@@ -5,7 +5,7 @@ import { hostedProjectCommands } from "../hosting/hosting-commands.js";
 import { createFakeDurableStorage } from "./cloudflare-storage.test-support.js";
 import { openDurableRunStore } from "./cloudflare-run-store.js";
 import { RunObjectCore } from "./cloudflare-run.js";
-import type { RunJob, StudioIngest } from "./cloudflare-run-contract.js";
+import type { RunJob, StudioIngest } from "../hosting/run-contract.js";
 import { StudioObjectCore, type RunStubLike } from "./cloudflare-studio.js";
 
 const inputSchema = (minimum: number): StandardSchemaV1<{ name: string }, { name: string }> => ({

@@ -131,13 +131,26 @@ their source files.
 - Hosting composes CLI command adapters, project, Studio and storage contracts for
   deployment targets. It never imports workbench, concrete storage adapters, the Node
   HTTP listener or platform modules. Workbench and deploy-target entrypoints consume it.
+  `hosting/run-contract.ts` owns trusted run jobs, collector ingestion and launch trace
+  context. `hosting/run.ts` owns execution admission, ordered batching, history bounds,
+  cooperative deadlines and final delivery. Targets supply output/cwd and any
+  application-exporter wrapper; the shared runner does not select a target or a global
+  runtime limit. `hosting/launch-registry.ts` owns launch transitions over synchronous
+  SQLite transactions and an event-append port, reusing pure run-store SQL queries.
+  Drivers and event-store schema initialization remain outside hosting.
+  See the [hosted execution and ingest design](../design/hosted-run-ingest.md) before
+  exposing this trusted port to a network. HTTP ingestion is a proposed contract,
+  with separate admission, credential, ownership and replay requirements.
 - The Cloudflare target composes hosting, Studio and storage contracts inside Durable
   Objects. Only `cloudflare/cloudflare.ts` imports `cloudflare:workers`; nothing outside
   `cloudflare/` imports it, and its public declarations stay structural. The
   `tubeless/cloudflare/cache` entry (`cloudflare/cloudflare-cache.ts`) must stay free of
   `cloudflare:` imports so project modules that use it still load in Node.
-  `cloudflare/cloudflare-run-contract.ts` owns shared run jobs, ingestion,
-  deadline limits and host-failure vocabulary without loading execution.
+  `cloudflare/cloudflare-run-contract.ts` owns Cloudflare's deadline limit,
+  host-failure vocabulary and public trace context without loading execution.
+  `cloudflare/cloudflare-run.ts` retains alarm/KV state, the watchdog and cleanup;
+  its runner wrapper supplies console output, caps the shared job budget and wraps
+  application exporters with Cloudflare's existing delivery policy.
   `cloudflare-tracing.ts` bounds optional application trace delivery by operation and
   run deadlines, independently of Studio ingestion's retry and abort policy.
   `cloudflare/cloudflare-codemode.ts` is the Worker Loader code-mode executor; it imports

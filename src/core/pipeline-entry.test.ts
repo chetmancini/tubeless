@@ -35,7 +35,7 @@ const allowedDependencies: Record<string, readonly string[]> = {
   cli: ["core", "node", "reporter", "utilities"],
   testing: ["core", "utilities"],
   project: ["core", "utilities"],
-  hosting: ["cli", "core", "project", "render", "studio", "tracing", "utilities"],
+  hosting: ["cli", "core", "project", "render", "run-store", "studio", "tracing", "utilities"],
   // The Worker Loader code-mode executor embeds agent's dependency-free script realm setup.
   cloudflare: [
     "agent",
@@ -299,7 +299,9 @@ describe("module runtime boundaries", () => {
   });
 
   it("keeps the hosting kit free of workbench, storage adapters and the HTTP listener", () => {
-    const pending = [resolve(dist, "hosting/hosting-commands.js")];
+    const pending = readdirSync(resolve(dist, "hosting"))
+      .filter((file) => file.endsWith(".js"))
+      .map((file) => resolve(dist, "hosting", file));
     const visited = new Set<string>();
     while (pending.length > 0) {
       const file = pending.pop()!;
@@ -307,6 +309,7 @@ describe("module runtime boundaries", () => {
       visited.add(file);
       const name = relative(dist, file).split(sep).join("/");
       expect(moduleName(file), `Hosting reaches ${name}`).not.toBe("workbench");
+      expect(moduleName(file), `Hosting reaches ${name}`).not.toBe("cloudflare");
       expect(name).not.toMatch(
         /^run-store\/run-store-(sqlite|ndjson)\.js$|^studio\/server\/(listener|node-http|client-script)\.js$/
       );

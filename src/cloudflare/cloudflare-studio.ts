@@ -1,3 +1,4 @@
+import type { RunJob, StudioIngest } from "../hosting/run-contract.js";
 import type { PipelineRunControls } from "../core/pipeline.js";
 import {
   hostedCommandContext,
@@ -12,9 +13,9 @@ import type {
   PipelineRunStudioLaunchResult,
 } from "../studio/shared/protocol.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
-import { LaunchRegistry } from "./cloudflare-launches.js";
+import { LaunchRegistry } from "../hosting/launch-registry.js";
 import { openDurableRunStore, type DurableRunStore } from "./cloudflare-run-store.js";
-import { HOST_TERMINATED, type RunJob, type StudioIngest } from "./cloudflare-run-contract.js";
+import { HOST_TERMINATED } from "./cloudflare-run-contract.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 
 const RECONCILE_GRACE_MS = 120_000;

@@ -5,8 +5,19 @@ import {
 } from "../run-store/run-store-sql.js";
 import { PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
-import type { DurableRunStore } from "./cloudflare-run-store.js";
-import type { DurableStorageLike } from "./cloudflare-storage.js";
+
+/** Synchronous SQLite port; adapter and schema initialization remain target-owned. */
+export interface LaunchRegistryStorage {
+  readonly sql: {
+    exec(query: string, ...bindings: unknown[]): { toArray(): Record<string, unknown>[] };
+  };
+  transactionSync<T>(fn: () => T): T;
+}
+
+/** Appends share the registry's surrounding transaction. */
+export interface LaunchEventStore {
+  append(events: readonly PipelineTraceEvent[]): void;
+}
 
 // A launch may wait for admission before its execution budget begins. Reuse the
 // persisted root start through the run-id index, with creation time for old or
@@ -79,11 +90,11 @@ function hostTerminatedEvent(
   };
 }
 
-/** Owns launch admission state in the Studio object; all transitions are transactional. */
+/** Owns hosted launch admission state; all transitions are transactional. */
 export class LaunchRegistry {
   constructor(
-    private readonly storage: Pick<DurableStorageLike, "sql" | "transactionSync">,
-    private readonly store: DurableRunStore
+    private readonly storage: LaunchRegistryStorage,
+    private readonly store: LaunchEventStore
   ) {
     storage.sql.exec(`CREATE TABLE IF NOT EXISTS tubeless_launches (
       launch_id TEXT PRIMARY KEY,

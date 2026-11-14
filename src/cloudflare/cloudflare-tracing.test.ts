@@ -2,14 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProjectTraceContext } from "../project/project.js";
 import type { PipelineTraceEvent, PipelineTraceExporterOptions } from "../tracing/tracing.js";
 import { createFakeDurableStorage } from "./cloudflare-storage.test-support.js";
-import { RunObjectCore, runHostedJob } from "./cloudflare-run.js";
-import {
-  commands,
-  completedStatus,
-  ingest,
-  job,
-  sideEffect,
-} from "./cloudflare-run.test-support.js";
+import { RunObjectCore, runCloudflareJob } from "./cloudflare-run.js";
+import { commands, completedStatus, ingest, job, sideEffect } from "../hosting/run.test-support.js";
 
 beforeEach(() => {
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -59,7 +53,7 @@ describe("Cloudflare application exporters", () => {
         commandId: entry.command.id,
       };
       let settled = false;
-      const execution = runHostedJob({
+      const execution = runCloudflareJob({
         job: launchJob,
         commands: new Map([[entry.command.id, { ...entry, tracing: projectTracing }]]),
         controller,
@@ -109,7 +103,7 @@ describe("Cloudflare application exporters", () => {
       const appHandler = vi.fn();
       const entry = commands.get("greeting")!;
       const { studio, batches, failures } = ingest();
-      await runHostedJob({
+      await runCloudflareJob({
         job: job({ name: "ada" }),
         commands: new Map([
           [
@@ -152,7 +146,7 @@ describe("Cloudflare application exporters", () => {
         throw new Error("app handler failed");
       });
       const { studio, batches, failures } = ingest();
-      await runHostedJob({
+      await runCloudflareJob({
         job: job({ name: "ada" }),
         commands,
         controller: new AbortController(),
@@ -213,7 +207,7 @@ describe("Cloudflare application exporters", () => {
         const { studio, batches, failures } = ingest();
         const controller = new AbortController();
         let settled = false;
-        const execution = runHostedJob({
+        const execution = runCloudflareJob({
           job: job({ name: "ada" }),
           commands: new Map([
             [
@@ -269,7 +263,7 @@ describe("Cloudflare application exporters", () => {
       const { studio, batches, failures } = ingest();
       const controller = new AbortController();
       let settled = false;
-      const execution = runHostedJob({
+      const execution = runCloudflareJob({
         job: { ...job({ name: "ada" }), maxRunDurationMs: 25 },
         commands,
         controller,
@@ -313,7 +307,7 @@ describe("Cloudflare application exporters", () => {
     const { studio, batches, failures } = ingest();
     const controller = new AbortController();
     let settled = false;
-    const execution = runHostedJob({
+    const execution = runCloudflareJob({
       job: { ...job({ name: "ada" }), commandId: "waiting" },
       commands,
       controller,
@@ -393,7 +387,7 @@ describe("Cloudflare application exporters", () => {
     const flush = vi.fn(() => blocked);
     const { studio } = ingest();
     let failure: unknown;
-    const execution = runHostedJob({
+    const execution = runCloudflareJob({
       job: job({ name: "ada" }),
       controller: new AbortController(),
       ingest: () => studio,

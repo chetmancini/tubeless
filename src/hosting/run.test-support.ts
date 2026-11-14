@@ -1,9 +1,9 @@
 import { vi } from "vitest";
 import { createSteps, definePipeline, type StandardSchemaV1 } from "../core/pipeline.js";
 import { defineProject } from "../project/project.js";
-import { hostedProjectCommands } from "../hosting/hosting-commands.js";
+import { hostedProjectCommands } from "./hosting-commands.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
-import type { RunJob, StudioIngest } from "./cloudflare-run-contract.js";
+import type { RunJob, StudioIngest } from "./run-contract.js";
 
 function schema<T>(validate: (value: unknown) => T | undefined): StandardSchemaV1<T, T> {
   return {

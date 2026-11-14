@@ -326,7 +326,7 @@
         "WorkerLoaderCodemodeOptions",
         "WorkerLoaderLike"
       ],
-      "sha256": "93350a8d8d7170ba3bf5744e3592a170e91335c1ce831f23991e443de7d701d7",
+      "sha256": "1375149ab21ff20916e08788da2553e0d2559839d57ba8606a4509bea8f0e033",
       "specifier": "tubeless/cloudflare"
     },
     {
