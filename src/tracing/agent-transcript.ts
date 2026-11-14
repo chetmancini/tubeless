@@ -165,10 +165,18 @@ export function snapshotTranscriptContent<T>(
   return copy(input, 0) as T;
 }
 
-export function validateTranscriptEvent(event: AgentTranscriptEvent): void {
-  if (!Object.hasOwn(eventSchemas, event.kind))
+export function validateTranscriptEvent(event: unknown): asserts event is AgentTranscriptEvent {
+  if (
+    !event ||
+    typeof event !== "object" ||
+    Array.isArray(event) ||
+    !("kind" in event) ||
+    typeof event.kind !== "string" ||
+    !Object.hasOwn(eventSchemas, event.kind)
+  )
     throw new Error("Unsupported transcript event kind");
-  eventSchemas[event.kind].decode(event, "Transcript event");
+  // SAFETY: own-key membership selects a declared event kind; its schema checks the fields.
+  eventSchemas[event.kind as AgentTranscriptEvent["kind"]].decode(event, "Transcript event");
 }
 
 export const MAX_TRANSCRIPT_RECORD_BYTES = 65_536;
@@ -220,21 +228,10 @@ export function decodeAgentTranscriptRecord(value: unknown): AgentTranscriptReco
   let record: AgentTranscriptRecord;
   if (Object.hasOwn(fields, "event")) {
     const event = fields.event;
-    if (
-      !event ||
-      typeof event !== "object" ||
-      Array.isArray(event) ||
-      !("kind" in event) ||
-      typeof event.kind !== "string" ||
-      !Object.hasOwn(eventSchemas, event.kind)
-    )
-      throw new Error("Unsupported transcript event kind");
-    // SAFETY: the kind selects a known schema; its required fields are checked before returning.
-    const typed = event as AgentTranscriptEvent;
-    validateTranscriptEvent(typed);
-    if ((typed.kind === "end") !== (envelope.turn === 0))
+    validateTranscriptEvent(event);
+    if ((event.kind === "end") !== (envelope.turn === 0))
       throw new Error("Only transcript end events use turn zero");
-    record = { ...envelope, event: typed };
+    record = { ...envelope, event };
   } else if (Object.hasOwn(fields, "omitted")) {
     const omitted = wireEnum([
       "prompt",

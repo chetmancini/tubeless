@@ -46,23 +46,23 @@ describe("Studio transcript display and transport", () => {
     const payload = { transcript: page, turnRuns: { 1: "turn-1" } };
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => Response.json(payload));
     const api = createStudioApi(fetcher, "/admin");
-    expect(await api.loadTranscript!("run")).toEqual(payload);
+    expect(await api.loadTranscript("run")).toEqual(payload);
     expect(fetcher).toHaveBeenCalledWith(
       "/admin/api/runs/run/transcript?afterSequence=0",
       expect.objectContaining({ cache: "no-store" })
     );
-    await expect(api.loadTranscript!("run", 1)).rejects.toThrow("invalid response");
+    await expect(api.loadTranscript("run", 1)).rejects.toThrow("invalid response");
     fetcher.mockResolvedValue(
       Response.json({ ...payload, transcript: { ...page, runId: "other" } })
     );
-    await expect(api.loadTranscript!("run")).rejects.toThrow("invalid response");
+    await expect(api.loadTranscript("run")).rejects.toThrow("invalid response");
     fetcher.mockResolvedValue(
       Response.json({
         ...payload,
         transcript: { ...page, records: [{ ...page.records[0], version: 7 }] },
       })
     );
-    await expect(api.loadTranscript!("run")).rejects.toThrow("invalid response");
+    await expect(api.loadTranscript("run")).rejects.toThrow("invalid response");
   });
 
   it("notifies and locks out access after a transcript authorization denial", async () => {
@@ -70,7 +70,7 @@ describe("Studio transcript display and transport", () => {
     const api = createStudioApi(fetcher);
     const denied = vi.fn();
     api.subscribeAccessDenied!(denied);
-    await expect(api.loadTranscript!("run")).rejects.toThrow("Access denied");
+    await expect(api.loadTranscript("run")).rejects.toThrow("Access denied");
     await expect(api.loadRunDetail("run")).rejects.toThrow("Access denied");
     expect(fetcher).toHaveBeenCalledOnce();
     expect(denied).toHaveBeenCalledWith(403);

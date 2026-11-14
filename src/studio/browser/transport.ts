@@ -59,7 +59,7 @@ export interface StudioApi {
   loadCapabilities(): Promise<StudioCapabilities>;
   loadCommands(): Promise<PipelineRunStudioCommand[]>;
   loadRunDetail(runId: string): Promise<StudioRunDetail | null>;
-  loadTranscript?(runId: string, afterSequence?: number): Promise<StudioTranscriptPage>;
+  loadTranscript(runId: string, afterSequence?: number): Promise<StudioTranscriptPage>;
   loadChildRuns(runId: string, page: number): Promise<StudioChildRuns | null>;
   loadSnapshot(query?: StudioHistoryQuery): Promise<StudioSnapshot>;
   loadDefinition(pipelineId: string, definitionId?: string): Promise<StoredPipelineDefinition>;

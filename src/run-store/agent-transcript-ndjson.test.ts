@@ -80,14 +80,15 @@ describe("NDJSON transcript storage", () => {
   it("serializes concurrent writes, creates private files and pages independent run sequences", async () => {
     const path = await file();
     const writer = await openNdjsonAgentTranscriptWriter(path);
-    await Promise.all([
+    const writes = [
       ...Array.from({ length: 45 }, (_, index) => writer.write(transcriptRecord(index + 1))),
       writer.write(transcriptRecord(46, { kind: "end", status: "completed" })),
       writer.write(transcriptRecord(1, { kind: "assistant", text: "Other run" }, "other")),
-    ]);
-    await writer.close();
-    await writer.close();
+    ];
+    const closing = writer.close();
+    expect(writer.close()).toBe(closing);
     await expect(writer.write(transcriptRecord())).rejects.toThrow("closed");
+    await Promise.all([...writes, closing]);
     expect((await stat(path)).mode & 0o077).toBe(0);
     const reader = await openNdjsonAgentTranscriptReader(path);
     const first = await reader.list({ runId: "agent:one" });

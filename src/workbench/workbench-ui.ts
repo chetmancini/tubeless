@@ -170,7 +170,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
             store,
             transcripts,
           };
-          if (isLoopbackHost && writableStore && !hosting && !transcripts) {
+          if (isLoopbackHost && writableStore && !hosting) {
             studioOptions.history = {
               clear: () => writableStore!.clearHistory(),
               isBusy: () => launcher?.isBusy() ?? false,

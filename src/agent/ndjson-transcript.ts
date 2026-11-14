@@ -30,11 +30,10 @@ export async function openNdjsonAgentTranscriptWriter(
     throw error;
   }
   let pending = Promise.resolve();
-  let closed = false;
   let closing: Promise<void> | undefined;
   return {
     write(record) {
-      if (closed) return Promise.reject(new Error("Cannot write a closed transcript destination"));
+      if (closing) return Promise.reject(new Error("Cannot write a closed transcript destination"));
       let line: string;
       try {
         line = JSON.stringify(decodeAgentTranscriptRecord(record)) + "\n";
@@ -45,7 +44,6 @@ export async function openNdjsonAgentTranscriptWriter(
       return pending;
     },
     close() {
-      closed = true;
       closing ??= (async () => {
         try {
           await pending;

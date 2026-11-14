@@ -30,7 +30,7 @@ function page(sequence = 1, runId = "run", nextSequence?: number): StudioTranscr
     turnRuns: { [sequence]: `${runId}-turn-${sequence}` },
   };
 }
-async function mount(load: NonNullable<StudioApi["loadTranscript"]>) {
+async function mount(load: StudioApi["loadTranscript"]) {
   // The probe emits no DOM, so Preact only needs root metadata.
   const root = {
     nodeType: 1,
@@ -60,7 +60,7 @@ it("coalesces page requests, retains prior records on error and retries the same
   const next = pending();
   const retry = pending();
   const load = vi
-    .fn<NonNullable<StudioApi["loadTranscript"]>>()
+    .fn<StudioApi["loadTranscript"]>()
     .mockResolvedValueOnce(page(1, "run", 1))
     .mockReturnValueOnce(next.promise)
     .mockReturnValueOnce(retry.promise);
@@ -87,7 +87,7 @@ it("retires an old run's request before displaying another run", async () => {
   const old = pending();
   const next = pending();
   const load = vi
-    .fn<NonNullable<StudioApi["loadTranscript"]>>()
+    .fn<StudioApi["loadTranscript"]>()
     .mockReturnValueOnce(old.promise)
     .mockReturnValueOnce(next.promise);
   const mounted = await mount(load);

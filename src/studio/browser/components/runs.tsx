@@ -575,7 +575,7 @@ function RunDetail({
   };
   const tabs: [RunTab, string][] = [
     ["steps", `Steps · ${run.steps.length}`],
-    ...(detail.transcriptAvailable && api?.loadTranscript
+    ...(detail.transcriptAvailable && api
       ? [["transcript", "Transcript"] as [RunTab, string]]
       : []),
     ...(run.logs.length ? [["logs", `Logs · ${run.logs.length}`] as [RunTab, string]] : []),
@@ -740,7 +740,7 @@ function RunDetail({
           </>
         )}
         {activeTab === "logs" && <RunLogs key={run.runId} logs={run.logs} />}
-        {activeTab === "transcript" && api?.loadTranscript && (
+        {activeTab === "transcript" && api && (
           <TranscriptView
             key={run.runId}
             load={api.loadTranscript}

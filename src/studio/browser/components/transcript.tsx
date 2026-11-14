@@ -133,7 +133,7 @@ export function TranscriptView({
   runId,
   onOpenRun,
 }: {
-  load: NonNullable<StudioApi["loadTranscript"]>;
+  load: StudioApi["loadTranscript"];
   runId: string;
   onOpenRun(id: string): void;
 }) {

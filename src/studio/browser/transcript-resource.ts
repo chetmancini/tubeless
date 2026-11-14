@@ -3,7 +3,7 @@ import type { StudioTranscriptPage } from "../shared/schema.js";
 import type { StudioApi } from "./transport.js";
 
 /** Retain successful pages on failure and retire requests when the selected run changes. */
-export function useTranscript(load: NonNullable<StudioApi["loadTranscript"]>, runId: string) {
+export function useTranscript(load: StudioApi["loadTranscript"], runId: string) {
   const generation = useRef(0);
   const inFlight = useRef(false);
   const [result, setResult] = useState<StudioTranscriptPage>();
