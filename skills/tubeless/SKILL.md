@@ -1,9 +1,14 @@
 ---
 name: tubeless
-description: Author, modify, or review typed Tubeless pipelines, pipeline-backed CLI commands, and projects in TypeScript projects. Use for dependency modeling, failure and skip policies, dry runs, child pipelines, and pipeline tests.
+description: Author, modify, or review typed Tubeless pipelines, pipeline-backed CLI commands, and projects in TypeScript applications. Use for dependency modeling, failure and skip policies, dry runs, child pipelines, and pipeline tests. Library implementation and internal tests follow the repository's maintainer guidance.
 ---
 
 # Author Tubeless pipelines
+
+This skill guides applications built with Tubeless. Within the Tubeless
+repository, use it for examples and pipeline definitions. Library implementation
+and internal tests follow the repository's maintainer guidance; tests may
+intentionally exercise invalid configurations or internal APIs.
 
 Use the project's installed Tubeless version and public package imports. Keep
 domain logic in ordinary functions and make orchestration explicit in the graph.
