@@ -9,11 +9,15 @@ import {
   storedRunEvent,
   type RunEventRecord,
 } from "../run-store/run-store-sql.js";
-import { LaunchRegistry, type LaunchRegistryStorage } from "./launch-registry.js";
+import {
+  createSqliteLaunchStore,
+  LaunchRegistry,
+  type LaunchRegistryStorage,
+} from "./launch-registry.js";
 
 /** A second, plain SQLite adapter: no Durable Object storage, alarms, KV or schema metadata. */
-export function createLaunchRegistryFixture() {
-  const database = new DatabaseSync(":memory:");
+export function createLaunchRegistryFixture(filename = ":memory:") {
+  const database = new DatabaseSync(filename);
   for (const statement of [...RUN_EVENT_TABLE_STATEMENTS, ...RUN_EVENT_TRIGGER_STATEMENTS])
     database.exec(statement);
   const storage: LaunchRegistryStorage = {
@@ -39,20 +43,28 @@ export function createLaunchRegistryFixture() {
       }
     },
   };
+  let closed = false;
   const store = {
     append(events: readonly PipelineTraceEvent[]) {
       for (const event of events) storage.sql.exec(RUN_EVENT_INSERT_SQL, ...runEventRow(event));
     },
-    async listEvents() {
-      const { sql, params } = runEventListQuery({});
+    async listEvents(query = {}) {
+      const { sql, params } = runEventListQuery(query);
       // SAFETY: this query reads complete rows from the owned event table.
       return (storage.sql.exec(sql, ...params).toArray() as unknown as RunEventRecord[]).map(
         storedRunEvent
       );
     },
     close() {
+      if (closed) return;
+      closed = true;
       database.close();
     },
   };
-  return { storage, store, registry: new LaunchRegistry(storage, store) };
+  return {
+    storage,
+    store,
+    registry: new LaunchRegistry(storage, store),
+    launches: createSqliteLaunchStore(storage, store),
+  };
 }

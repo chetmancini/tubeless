@@ -1,3 +1,5 @@
+import type { BatchOutcome, HostedLaunchStore } from "./launch-store.js";
+import type { PipelineRunEventReader } from "../run-store/run-store.js";
 import {
   openSubtreeStartsQuery,
   storedRunEvent,
@@ -45,18 +47,10 @@ export interface LaunchRecord {
   readonly dryRun: boolean;
   readonly stepCount: number;
   readonly state: LaunchState;
-  /** The run object was cleared to execute user code; a start failure must not close it. */
+  /** The executor was cleared to execute user code; a start failure must not close it. */
   readonly admitted: boolean;
   readonly lastBatch: number;
   readonly createdAtMs: number;
-}
-
-export interface BatchOutcome {
-  readonly duplicate: boolean;
-  /** The launch was already terminal, so this new batch was not appended. */
-  readonly dropped: boolean;
-  readonly boundRunId?: string;
-  readonly terminal: boolean;
 }
 
 const TERMINAL: ReadonlySet<LaunchState> = new Set(["finished", "failed"]);
@@ -226,17 +220,27 @@ export class LaunchRegistry {
     });
   }
 
+  failUnadmitted(launchId: string, message: string, nowMs: number): void {
+    this.storage.transactionSync(() => {
+      const launch = this.get(launchId);
+      if (launch && !launch.admitted) this.#fail(launch, message, nowMs);
+    });
+  }
+
   fail(launchId: string, message: string, nowMs: number): void {
     this.storage.transactionSync(() => {
       const launch = this.get(launchId);
-      if (!launch || TERMINAL.has(launch.state)) return;
-      if (launch.runId)
-        this.store.append(this.#openSubtreeCompletions(launch.runId, message, nowMs));
-      this.storage.sql.exec(
-        "UPDATE tubeless_launches SET state = 'failed' WHERE launch_id = ?",
-        launchId
-      );
+      if (launch) this.#fail(launch, message, nowMs);
     });
+  }
+
+  #fail(launch: LaunchRecord, message: string, nowMs: number): void {
+    if (TERMINAL.has(launch.state)) return;
+    if (launch.runId) this.store.append(this.#openSubtreeCompletions(launch.runId, message, nowMs));
+    this.storage.sql.exec(
+      "UPDATE tubeless_launches SET state = 'failed' WHERE launch_id = ?",
+      launch.launchId
+    );
   }
 
   /** Close the bound run and every nested run it left open, children before parents. */
@@ -295,4 +299,25 @@ export class LaunchRegistry {
         .toArray().length > 0
     );
   }
+}
+
+/** SQLite implementation of the async collector port; both handles share one connection. */
+export function createSqliteLaunchStore(
+  storage: LaunchRegistryStorage,
+  events: LaunchEventStore & PipelineRunEventReader
+): HostedLaunchStore {
+  const registry = new LaunchRegistry(storage, events);
+  return {
+    create: async (id, command, now) => registry.create(id, command, now),
+    admit: async (id) => registry.admit(id),
+    acceptBatch: async (id, sequence, batch) => registry.acceptBatch(id, sequence, batch),
+    fail: async (id, message, now) => registry.fail(id, message, now),
+    failUnadmitted: async (id, message, now) => registry.failUnadmitted(id, message, now),
+    liveRunIds: async () => registry.liveRunIds(),
+    launchIdForRun: async (id) => registry.launchIdForRun(id),
+    stale: async (cutoff) => registry.stale(cutoff),
+    nextReconcileAt: async (delay) => registry.nextReconcileAt(delay),
+    listEvents: (query) => events.listEvents(query),
+    close: () => events.close(),
+  };
 }

@@ -4,8 +4,9 @@ Issue: [#289](https://github.com/chetmancini/tubeless/issues/289).
 
 This change extracts the existing trusted hosted-run path without changing its
 execution or persistence semantics. The HTTP section below is a proposed next
-contract, not a shipped endpoint. No second deployment target is selected and no
-new public package subpath is introduced.
+contract, not a shipped endpoint. An internal Node-process executor validates the
+shared coordination contract alongside Cloudflare; it is not a deployed remote
+target. No new public package subpath is introduced.
 
 ## Ownership decision
 
@@ -20,7 +21,7 @@ the public project API.
 | Ordered batching, delivery retries, bounded history text    | Durable Object RPC stubs                                        |
 | Parse, admit, execute, flush, report delivery/setup failure | Alarm admission, watchdog, KV cleanup, live cancellation        |
 | Per-job cooperative deadline                                | Fourteen-minute maximum and five-second app-exporter operations |
-| Launch state and sequence transactions over SQLite          | Durable Object SQL adapter and event-store schema setup         |
+| Async launch coordination and atomic store operations       | Durable Object SQL adapter, schema setup and recovery alarms    |
 | Launch/run linkage and existing host-failure completion     | Access authentication, Worker routing, R2 and Worker Loader     |
 
 The runner uses the job's execution budget. Cloudflare clamps that budget before
@@ -29,12 +30,34 @@ receives the actual run deadline, so operation timeouts remain inside that budge
 The Cloudflare alarm state machine and watchdog stay together. No compatibility
 re-export is needed for these private modules.
 
-The launch registry needs only synchronous SQL transactions and event appends.
-Its reads intentionally use the existing event-table queries; this is reusable
-SQLite bookkeeping, not a database-independent persistence framework. Schema
+`HostedRunCoordinator` consumes two internal capabilities: `HostedExecutor`
+(start and request cancellation by launch ID) and `HostedLaunchStore` (async
+atomic launch/history operations). Neither exposes SQL, Durable Objects or alarms.
+Targets arrange recovery before dispatch through `scheduleReconcile`; a scheduling
+failure prevents dispatch. Cancellation acknowledges a request, not termination.
+Studio awaits live-run reads so remote databases do not need a synchronous cache.
+
+Keep transaction semantics inside each store adapter. Batch acceptance commits
+history and its launch sequence/state together. `failUnadmitted` atomically checks
+admission and fails a launch; splitting that into a read followed by a write would
+race on an async backend. `fail` records a host-reported failure and closes its
+open subtree; the caller must supply evidence appropriate to its platform.
+
+`createSqliteLaunchStore` implements that port using the existing synchronous
+SQLite registry and event append handle on the same connection. Schema
 initialization, storage versions, connections and drivers remain adapter-owned.
-Moving the registry does not change table names, indexes, sequence handling or
-recorded events and requires no migration.
+Table names, indexes, sequence handling and recorded events stay unchanged;
+no migration is required. A different database implements the operation contract,
+rather than emulating SQLite SQL or synchronous transactions.
+
+The internal `createProcessHostedExecutor` runs the shared runner in a Node
+process with explicit output/cwd, active controllers and drain/close operations.
+Integration tests drive it through Studio using native SQLite, async store calls,
+cancellation, duplicate dispatch and a closed/reopened collector database. This
+proves a second execution path, not a second database implementation. Deduplication
+lasts for one executor instance; restarts never resume jobs automatically. Keep
+it internal: it does not provide isolation, durable scheduling, distributed
+attempt fencing or production recovery after process death.
 
 ## Current guarantees and limits
 

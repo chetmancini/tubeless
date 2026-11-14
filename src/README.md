@@ -137,6 +137,17 @@ their source files.
   application-exporter wrapper; the shared runner does not select a target or a global
   runtime limit. `hosting/launch-registry.ts` owns launch transitions over synchronous
   SQLite transactions and an event-append port, reusing pure run-store SQL queries.
+  `hosting/launch-store.ts` defines the async operation-level persistence port;
+  `createSqliteLaunchStore` adapts the SQLite implementation. History and launch
+  mutations share a transaction; `failUnadmitted` must check admission atomically.
+  `hosting/run-coordinator.ts` owns launch validation, start acknowledgements,
+  ingestion and cancellation through that store and a `HostedExecutor`. Targets
+  own dispatch deduplication and recovery scheduling, without leaking stubs or
+  alarms into the coordinator. Studio accepts async live-run reads.
+  `workbench/process-hosted-executor.ts` supplies an internal Node-process reference
+  executor, with cooperative cancellation and drain-before-storage-close. Its
+  dispatch deduplication lasts only for that executor instance; it never resumes
+  executions after restart.
   Drivers and event-store schema initialization remain outside hosting.
   See the [hosted execution and ingest design](../design/hosted-run-ingest.md) before
   exposing this trusted port to a network. HTTP ingestion is a proposed contract,

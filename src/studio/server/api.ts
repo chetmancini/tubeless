@@ -77,7 +77,7 @@ export function createStudioApiHandler(
           url.searchParams.get("run"),
           pipelineId
         );
-        const liveRunIds = launcher?.liveRunIds?.() ?? [];
+        const liveRunIds = (await launcher?.liveRunIds?.()) ?? [];
         const etag = `"${await sha256Hex(JSON.stringify([instanceId, snapshot.revision, url.search, liveRunIds]))}"`;
         if (request.headers.get("if-none-match") === etag) {
           return new Response(null, { status: 304, headers: { etag } });
