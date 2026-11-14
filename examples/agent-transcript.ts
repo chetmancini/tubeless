@@ -1,6 +1,7 @@
-import { appendFile, mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
+import type { PipelineContext } from "tubeless";
 import { defineAgentLoop, type AgentTranscriptOptions } from "tubeless/agent";
+import { openNdjsonAgentTranscriptWriter } from "tubeless/agent/node";
 import { textAnswer, textOptions, textTools } from "./agent.js";
 
 /** The caller chooses a private destination; importing the recipe performs no file I/O. */
@@ -28,15 +29,22 @@ export function createTranscriptAgent(transcript: AgentTranscriptOptions) {
 }
 
 /** Append bounded records to application-owned NDJSON, separately from --trace and --store. */
-export async function runTranscriptExample(destination: string, question = "hello") {
-  const path = resolve(destination);
-  await mkdir(dirname(path), { recursive: true });
-  const agent = createTranscriptAgent({
-    write: async (record) => {
-      await appendFile(path, `${JSON.stringify(record)}\n`, { mode: 0o600 });
-    },
-    // Drop raw proposals; keep validated tool inputs/outcomes and completion.
-    redact: (event) => (event.kind === "decision" ? null : event),
-  });
-  return agent.runOrThrow({ question });
+export async function runTranscriptExample(
+  destination: string,
+  question = "hello",
+  context: Partial<PipelineContext> = {}
+) {
+  const writer = await openNdjsonAgentTranscriptWriter(
+    resolve(context.cwd ?? process.cwd(), destination)
+  );
+  try {
+    const agent = createTranscriptAgent({
+      write: writer.write,
+      // Drop raw proposals; keep validated tool inputs/outcomes and completion.
+      redact: (event) => (event.kind === "decision" ? null : event),
+    });
+    return await agent.runOrThrow({ question }, undefined, context);
+  } finally {
+    await writer.close();
+  }
 }

@@ -11,6 +11,7 @@ import type { StoredPipelineRun } from "../../../run-store/run-store.js";
 import type { StudioApi } from "../transport.js";
 import type { StudioRunSelection } from "../data-controller.js";
 import { EmptyView, preferredScrollBehavior } from "./common.js";
+import { TranscriptView } from "./transcript.js";
 
 function dateTime(ms: number): string {
   if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return "";
@@ -241,7 +242,7 @@ export function NestedRuns({
 }
 
 type StepView = "timeline" | "graph";
-type RunTab = "steps" | "logs" | "nested" | "details";
+type RunTab = "steps" | "logs" | "nested" | "details" | "transcript";
 
 const clockFormat = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
 
@@ -574,6 +575,9 @@ function RunDetail({
   };
   const tabs: [RunTab, string][] = [
     ["steps", `Steps · ${run.steps.length}`],
+    ...(detail.transcriptAvailable && api?.loadTranscript
+      ? [["transcript", "Transcript"] as [RunTab, string]]
+      : []),
     ...(run.logs.length ? [["logs", `Logs · ${run.logs.length}`] as [RunTab, string]] : []),
     ...(detail.childCount
       ? [["nested", `Nested runs · ${detail.descendantCount}`] as [RunTab, string]]
@@ -736,6 +740,14 @@ function RunDetail({
           </>
         )}
         {activeTab === "logs" && <RunLogs key={run.runId} logs={run.logs} />}
+        {activeTab === "transcript" && api?.loadTranscript && (
+          <TranscriptView
+            key={run.runId}
+            load={api.loadTranscript}
+            runId={run.runId}
+            onOpenRun={onSelect}
+          />
+        )}
         {activeTab === "nested" && (
           <NestedRuns key={run.runId} api={api} detail={detail} onSelect={onSelect} />
         )}

@@ -38,7 +38,10 @@ export async function executePreparedToolCall(
       kind: "call",
       id: call.id,
       tool: call.tool.name,
-      input: call.kind === "handler" ? call.input : call.options,
+      input:
+        call.kind === "handler"
+          ? call.input
+          : call.preparedOptions.read(call.tool.pipeline.optionsSchema, call.options),
     });
     const run = await invokeChildPipeline(call.tool.pipeline, prepared.options, prepared.context, {
       ...child,

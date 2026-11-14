@@ -1,8 +1,9 @@
 # Agent transcripts
 
 Design for [issue 286](https://github.com/chetmancini/tubeless/issues/286).
-The first implementation delivers capture. Reading transcripts in history and
-Studio, and public evaluation helpers, are subsequent stages.
+Implemented: opt-in capture, a public Node NDJSON writer, validated artifact readers,
+CLI history inspection and a paginated Studio conversation view. SQLite/Cloudflare
+transcript persistence and public evaluation helpers remain subsequent stages.
 
 ## Contract and ownership
 
@@ -80,9 +81,17 @@ Dry-run skips create no transcript. Explicit preview callbacks create records ma
 `dryRun`. Planning performs no capture. Replay does not re-export historical content;
 records from different attempts remain distinct by runtime run ID.
 
-## Reading: subsequent stage
+## Reading: implemented artifact slice
 
-Add an optional transcript reader/writer capability beside the run event store.
+Keep transcript readers separate from run-event readers. The current implementation
+accepts an explicit finished NDJSON artifact through `--transcript <path>` on history
+and Studio. It validates version, size and fields, deduplicates identical records,
+rejects conflicts and pages by sequence. New Node writers serialize appends and use
+private file permissions on creation. Reader snapshots never change after opening.
+Studio serves content only for IDs present in structural history, behind the same
+authentication and Host checks, and disables clearing while the artifact is attached.
+
+For subsequent SQLite/Cloudflare storage, add optional capabilities beside the run event store.
 Use `(runId, sequence)` for pagination and idempotent ingestion; validate the record
 version and byte bounds at ingestion. SQLite may store separate rows; NDJSON uses
 a separate file; Cloudflare uses separate bounded rows or object storage. An artifact
@@ -90,12 +99,13 @@ receipt can reference an externally stored transcript after successful persisten
 without embedding content in traces. Clearing history must explicitly include its
 associated transcripts. Old history has no transcript and remains readable.
 
-`tubeless history <run-id>` should summarize availability and offer an explicit
-transcript view/export. Studio should offer a conversation view for the selected
-agent, with prompt, assistant, calls, outcomes and omission markers, linked to
-structural child runs. Pagination is bounded; live refresh follows sequence cursors.
-Missing, redacted and truncated content must be distinguishable from an empty
-conversation. Render content as text, never executable HTML. Transcript authorization
+History renders the selected run's transcript in text or JSON. Studio offers a
+conversation view with prompts, assistant text, calls, outcomes and omission markers,
+linked to structural child runs. Pagination is bounded. Future mutable stores can
+add live refresh through sequence cursors.
+Show unavailable, partial, complete and limited recording states. Suppressed events
+have no tombstones; no records cannot establish whether capture was disabled or fully
+redacted, and must never imply an empty model conversation. Render content as text, never executable HTML. Transcript authorization
 must match history authorization; storage paths and credentials stay server-side.
 
 ## Evaluation: subsequent stage
@@ -121,3 +131,8 @@ agent opt-in, code mode, previews, recovery, redactor isolation/failure, unsuppo
 values, UTF-8 record/total bounds, provider text allowlists and successful compaction.
 Compile a public-import example, regenerate API artifacts, rebuild the docs website
 and run `make check`. No live paid model request is needed for this stage.
+
+Artifact read-back also covers malformed/versioned records, private file creation,
+append boundaries and serialization, immutable snapshots, gaps and conflicts,
+run-scoped pagination, CLI output, Studio authorization, escaped rendering, and
+request retries/retirement. Exercise pagination and structural turn links in a browser.

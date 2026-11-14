@@ -1,5 +1,5 @@
 import { runEventPageLimit } from "./run-store-query.js";
-import { open } from "node:fs/promises";
+import { readNdjsonArtifact } from "./ndjson-artifact.js";
 import * as path from "node:path";
 import type {
   PipelineRunEventQuery,
@@ -50,70 +50,16 @@ export async function openNdjsonPipelineRunStore(
     "maxEventBytes"
   );
   const maxEvents = positiveInteger(options.maxEvents, DEFAULT_MAX_EVENTS, "maxEvents");
-  const handle = await open(resolvedFilename, "r");
-  let contents: Buffer;
-  try {
-    const fileStat = await handle.stat();
-    if (!fileStat.isFile()) throw new Error(`${resolvedFilename} is not a regular file.`);
-    if (fileStat.size > maxBytes) {
-      throw new Error(`${resolvedFilename} exceeds the ${maxBytes}-byte NDJSON trace limit.`);
-    }
-    const chunks: Buffer[] = [];
-    let byteLength = 0;
-    for await (const chunk of handle.createReadStream({ autoClose: false })) {
-      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      byteLength += buffer.byteLength;
-      if (byteLength > maxBytes) {
-        throw new Error(`${resolvedFilename} exceeds the ${maxBytes}-byte NDJSON trace limit.`);
-      }
-      chunks.push(buffer);
-    }
-    contents = Buffer.concat(chunks, byteLength);
-  } finally {
-    await handle.close();
-  }
-
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  const events: StoredPipelineEvent[] = [];
-  let lineNumber = 0;
-  let lineStart = 0;
-  for (let cursor = 0; cursor <= contents.length; cursor += 1) {
-    if (cursor < contents.length && contents[cursor] !== 0x0a) continue;
-    lineNumber += 1;
-    let lineEnd = cursor;
-    if (lineEnd > lineStart && contents[lineEnd - 1] === 0x0d) lineEnd -= 1;
-    const byteLength = lineEnd - lineStart;
-    if (byteLength > maxEventBytes) {
-      throw new Error(
-        `${resolvedFilename} line ${lineNumber} exceeds the ${maxEventBytes}-byte event limit.`
-      );
-    }
-    const line = contents.subarray(lineStart, lineEnd);
-    lineStart = cursor + 1;
-    if (line.every((byte) => byte === 0x20 || byte === 0x09)) continue;
-    if (events.length >= maxEvents) {
-      throw new Error(`${resolvedFilename} exceeds the ${maxEvents}-event NDJSON trace limit.`);
-    }
-    let decoded: string;
-    try {
-      decoded = decoder.decode(line);
-    } catch {
-      throw new Error(`${resolvedFilename} line ${lineNumber} is not valid UTF-8.`);
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(decoded);
-    } catch {
-      throw new Error(`${resolvedFilename} line ${lineNumber} is not valid JSON.`);
-    }
-    try {
-      const event = decodeStoredTraceEvent(parsed);
-      events.push({ ...event, id: events.length });
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "event is invalid";
-      throw new Error(`${resolvedFilename} line ${lineNumber} is invalid: ${detail}.`);
-    }
-  }
+  const events = await readNdjsonArtifact(
+    resolvedFilename,
+    {
+      maxBytes,
+      maxLineBytes: maxEventBytes,
+      maxRecords: maxEvents,
+      kind: "trace",
+    },
+    (value, id) => ({ ...decodeStoredTraceEvent(value), id })
+  );
 
   // Resolve subtrees through recorded parent links without scanning unrelated runs.
   const eventsByRun = new Map<string, StoredPipelineEvent[]>();

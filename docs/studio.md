@@ -35,6 +35,19 @@ bunx tubeless ui --trace run.ndjson
 The NDJSON view is always read-only. It cannot launch commands or clear history,
 and does not accept a project file or `--command`.
 
+Add `--transcript <path>` to attach a finished agent transcript alongside either
+event source. Runs with content gain a **Transcript** tab: prompts, public assistant
+text, proposed decisions, tool calls/results, and explicit omissions. Content is
+paged, and **Open turn** links connect it to structural run history. Each nested
+agent has its own conversation. Partial and limited recordings remain inspectable;
+their labels do not replace the run's execution status.
+
+Transcript files are validated and opened as immutable snapshots. Restart Studio
+to load later appends. History clearing is disabled while a transcript artifact is
+attached; the external file remains application-owned. The API exposes neither
+its path nor a route to select other files. Transcript reads pass through Studio's
+existing authentication and Host checks. See [save and inspect a transcript](./agents.md#save-and-inspect-a-transcript).
+
 ## Use the browser controls
 
 Studio reads top-down: pick a pipeline, open one of its runs, then select a step.

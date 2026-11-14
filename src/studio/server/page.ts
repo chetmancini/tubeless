@@ -191,6 +191,9 @@ export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
     .log-level.error { color: #ff8c84; }
     .log-level.warn { color: #e8bd72; }
     .log-message { overflow-wrap: anywhere; }
+    .transcript-record { padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+    .transcript-record pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; font: 11px/1.6 var(--mono); }
+    .transcript-record summary { cursor: pointer; font-weight: 600; }
     @media (max-width: 900px) { .log-filters { grid-template-columns: 1fr 1fr; } .log-filters label:first-child { grid-column: 1 / -1; } }
     .empty { min-height: 330px; padding: 38px; display: grid; place-items: center; text-align: center; color: var(--muted); }
     .empty-icon { width: 44px; height: 44px; margin: 0 auto 13px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 12px; background: #fafbf8; }

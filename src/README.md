@@ -64,9 +64,11 @@ their source files.
   calls; `turn.ts` orchestrates decisions, calls and reduction through those operations.
   Runtime call identity is typed invocation data, independent of tracing attributes.
   Storage and lossless codecs are separate contracts; `tubeless/agent/node` supplies local environment and SQLite
-  adapters. Traces remain best-effort inspection, independent of recovery.
-  `transcript.ts` owns opt-in provider-neutral content records, bounded plain-JSON
-  snapshots, redaction and serialized delivery. Its invocation-local capture follows
+  adapters and an explicit NDJSON transcript writer. Traces remain best-effort inspection, independent of recovery.
+  `transcript.ts` owns opt-in content capture, redaction and serialized delivery.
+  `tracing/agent-transcript.ts` owns the pure record contract, bounded plain-JSON
+  snapshots and wire validation shared with artifact readers and Studio.
+  Invocation-local capture follows
   the existing opaque agent scope through ordinary children and code-mode calls;
   entering a child agent resets capture unless that agent explicitly opts in.
   Provider modules publish only public text and successful compaction markers.
@@ -113,9 +115,15 @@ their source files.
   Tracing shares type-only pipeline contracts with core.
 - Reporters and rendering consume core. Storage consumes core and trace contracts;
   storage never depends on the studio or workbench.
+  `run-store/ndjson-artifact.ts` validates bounded, finished files for both trace
+  and transcript readers. Transcript readers index immutable snapshots separately
+  from structural run events.
 - Studio consumes storage and pure trace schemas, and accepts optional launcher/history capabilities.
   It shares type-only pipeline and CLI descriptors; it does not load command
   execution or a concrete storage adapter itself.
+  `browser/transcript-resource.ts` owns transcript pagination and stale-request
+  retirement; `browser/components/transcript.tsx` renders content as text and links
+  turns to structural child runs.
 - CLI adapts pipelines with Node helpers and terminal reporters. It must not load
   workbench, storage or Studio, including through lazy imports.
   `cli-schema.ts` owns the supported inference subset, rejecting reference validation

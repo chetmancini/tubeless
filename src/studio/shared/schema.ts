@@ -12,6 +12,7 @@ import {
   storedRunSummarySchema,
 } from "../../run-store/run-store-schema.js";
 import { pipelineMetadataSchema } from "../../tracing/graph-metadata.js";
+import { agentTranscriptPageSchema } from "../../tracing/agent-transcript.js";
 import {
   agentMetadataSchema,
   iterationControlsSchema,
@@ -31,6 +32,7 @@ import {
   wireObject,
   wireOptional,
   wireRefine,
+  wireRecord,
   wireString,
   wireTransform,
   wireUnion,
@@ -183,6 +185,7 @@ export const studioChildStepSchema = wireObject({
   count,
 });
 export const studioRunDetailSchema = wireObject({
+  transcriptAvailable: wireOptional(wireBoolean()),
   run: storedPipelineRunSchema,
   ancestors: wireArray(storedRunSummarySchema),
   children: wireArray(storedRunSummarySchema),
@@ -195,6 +198,10 @@ export const studioChildRunsSchema = wireObject({
   page: count,
   childCount: count,
 });
+export const studioTranscriptPageSchema = wireObject({
+  transcript: agentTranscriptPageSchema,
+  turnRuns: wireRecord(id),
+});
 export const studioDefinitionSchema = wireObject({ definition: storedPipelineDefinitionSchema });
 export const studioDefinitionRunsSchema = wireObject({
   runs: wireArray(storedRunSummarySchema, { maxItems: STUDIO_HISTORY_PAGE_SIZE }),
@@ -206,6 +213,7 @@ export type StudioPipelineSummary = InferWireSchema<typeof studioPipelineSummary
 export type StudioChildStep = InferWireSchema<typeof studioChildStepSchema>;
 export type StudioRunDetail = InferWireSchema<typeof studioRunDetailSchema>;
 export type StudioChildRuns = InferWireSchema<typeof studioChildRunsSchema>;
+export type StudioTranscriptPage = InferWireSchema<typeof studioTranscriptPageSchema>;
 export type StudioDefinitionRuns = InferWireSchema<typeof studioDefinitionRunsSchema>;
 
 export function parseStudioPayload<T>(schema: WireSchema<T>, value: unknown): T | undefined {

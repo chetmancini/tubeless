@@ -183,6 +183,7 @@ describe("module runtime boundaries", () => {
       "studio/server/history.js",
       "studio/server/run-details.js",
       "studio/shared/schema.js",
+      "tracing/agent-transcript.js",
       "tracing/artifact-metadata.js",
       "tracing/graph-metadata.js",
       "tracing/tracing-schema.js",

@@ -11,11 +11,13 @@ import {
   studioPlanSchema,
   studioRunDetailSchema,
   studioChildRunsSchema,
+  studioTranscriptPageSchema,
   studioDefinitionSchema,
   studioDefinitionRunsSchema,
   type StudioSnapshot,
   type StudioRunDetail,
   type StudioChildRuns,
+  type StudioTranscriptPage,
   type StudioDefinitionRuns,
 } from "../shared/schema.js";
 export type {
@@ -57,6 +59,7 @@ export interface StudioApi {
   loadCapabilities(): Promise<StudioCapabilities>;
   loadCommands(): Promise<PipelineRunStudioCommand[]>;
   loadRunDetail(runId: string): Promise<StudioRunDetail | null>;
+  loadTranscript?(runId: string, afterSequence?: number): Promise<StudioTranscriptPage>;
   loadChildRuns(runId: string, page: number): Promise<StudioChildRuns | null>;
   loadSnapshot(query?: StudioHistoryQuery): Promise<StudioSnapshot>;
   loadDefinition(pipelineId: string, definitionId?: string): Promise<StoredPipelineDefinition>;
@@ -201,6 +204,22 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
       const parsed = parseStudioPayload(studioChildRunsSchema, payload);
       if (!parsed) throw invalidResponse("child runs");
       return parsed;
+    },
+    async loadTranscript(runId, afterSequence = 0) {
+      const response = await request(
+        "/api/runs/" + encodeURIComponent(runId) + "/transcript?afterSequence=" + afterSequence,
+        { cache: "no-store" }
+      );
+      const payload = await readJson(response);
+      if (!response.ok) throw responseError(payload, "Transcript request failed.", response.status);
+      const page = parseStudioPayload(studioTranscriptPageSchema, payload);
+      if (
+        !page ||
+        page.transcript.runId !== runId ||
+        page.transcript.records.some((record) => record.sequence <= afterSequence)
+      )
+        throw invalidResponse("transcript");
+      return page;
     },
     async loadCommands() {
       const response = await request("/api/commands", { cache: "no-store" });
