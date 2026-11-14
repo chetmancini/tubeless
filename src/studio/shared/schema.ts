@@ -183,6 +183,7 @@ export const studioChildStepSchema = wireObject({
   count,
 });
 export const studioRunDetailSchema = wireObject({
+  transcriptAvailable: wireOptional(wireBoolean()),
   run: storedPipelineRunSchema,
   ancestors: wireArray(storedRunSummarySchema),
   children: wireArray(storedRunSummarySchema),

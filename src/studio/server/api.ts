@@ -1,5 +1,9 @@
 import type { PipelineRunEventReader } from "../../run-store/run-store.js";
 import {
+  agentTranscriptPageSchema,
+  type AgentTranscriptReader,
+} from "../../tracing/agent-transcript.js";
+import {
   isPipelineRunStudioParameter,
   parseStudioLaunchRequest,
   parseStudioPlanInput,
@@ -26,13 +30,16 @@ export interface PipelineRunStudioApiOptions {
   /** Optional execution capability. Omit it to keep the studio read-only. */
   launcher?: PipelineRunStudioLauncher;
   store: Pick<PipelineRunEventReader, "listEvents">;
+  /** Explicit transcript source, behind the same authentication and run scope as history. */
+  transcripts?: Pick<AgentTranscriptReader, "list">;
 }
 
 /** Own API routes and their state without opening a listener or concrete storage. */
 export function createStudioApiHandler(
   options: PipelineRunStudioApiOptions
 ): (request: Request, url: URL) => Promise<Response> {
-  const history = options.history;
+  // An attached artifact is read-only; never advertise deletion that would leave its content behind.
+  const history = options.transcripts ? undefined : options.history;
   const launcher = options.launcher;
   const commands = [...(launcher?.commands ?? [])];
   const commandById = new Map<string, PipelineRunStudioCommand>();
@@ -129,13 +136,48 @@ export function createStudioApiHandler(
         const runId = decodePathSegment(runMatch[1]!);
         const detail = await eventState.detail(runId);
         return detail
-          ? jsonResponse(detail)
+          ? jsonResponse({
+              ...detail,
+              ...(options.transcripts
+                ? {
+                    transcriptAvailable:
+                      (await options.transcripts.list({ runId, limit: 1 })).records.length > 0,
+                  }
+                : {}),
+            })
           : errorResponse(
               404,
               "run_not_found",
               "Run not found.",
               "Refresh /api/snapshot and choose an available runId."
             );
+      }
+      const transcriptMatch = /^\/api\/runs\/([^/]+)\/transcript$/.exec(url.pathname);
+      if (request.method === "GET" && transcriptMatch) {
+        const runId = decodePathSegment(transcriptMatch[1]!);
+        const cursor = url.searchParams.get("afterSequence") ?? "0";
+        if (!/^\d+$/.test(cursor) || !Number.isSafeInteger(Number(cursor)))
+          throw new StudioRequestError(
+            "invalid_cursor",
+            "Invalid transcript cursor.",
+            400,
+            "Use a nonnegative safe integer."
+          );
+        if (!options.transcripts || !(await eventState.detail(runId)))
+          return errorResponse(
+            404,
+            "transcript_not_found",
+            "Transcript not available for this run.",
+            "Choose a recorded agent run with a transcript source."
+          );
+        const afterSequence = Number(cursor);
+        const page = agentTranscriptPageSchema.decode(
+          await options.transcripts.list({ runId, afterSequence }),
+          "Transcript page"
+        );
+        if (page.runId !== runId || page.records.some((record) => record.sequence <= afterSequence))
+          throw new Error("Transcript reader returned a mismatched run or cursor");
+        return jsonResponse(page);
       }
       const cancelMatch = /^\/api\/runs\/([^/]+)\/cancel$/.exec(url.pathname);
       if (request.method === "POST" && cancelMatch) {

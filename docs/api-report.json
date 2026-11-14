@@ -5,10 +5,12 @@
       "exports": [
         "createNodeAgentEnvironment",
         "createNodeCodemodeExecutor",
+        "NdjsonAgentTranscriptWriter",
+        "openNdjsonAgentTranscriptWriter",
         "openSqliteAgentCheckpointStore",
         "SqliteAgentCheckpointStore"
       ],
-      "sha256": "4bcc4602d50229c03b00cca0fd13718bfd1c2cfdb5092a84777b16720ad8eaaf",
+      "sha256": "a6103d5e3871d203dc6344dd64934ac717e698d7f034f7acd6bdf6a3f8808354",
       "specifier": "tubeless/agent/node"
     },
     {
@@ -57,7 +59,7 @@
         "plainAgentCheckpointCodec",
         "ToolError"
       ],
-      "sha256": "eb93f783da5f20f19a051ca6414e97463795672a715050e00741f15d90c03aeb",
+      "sha256": "e9d980a04bf6487c158f56c9b9c1238294453a54c522d05307f9e75b0fdec21c",
       "specifier": "tubeless/agent"
     },
     {
@@ -185,7 +187,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "dbfd538ef19d8fecc37f1c65c44d4972a735626d3082c1074261142ee7cc6b7f",
+      "sha256": "3b60cfcdd76c1685387a85a414300c18b9c90c512e947b04bd20c6864837cd7b",
       "specifier": "tubeless/cli"
     },
     {
@@ -289,7 +291,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "ddb367b6873fa00af13e41707aaa186d5cacf94bd0df292ef423423ea463b6af",
+      "sha256": "91bd7153f93d30b918b547c7cdd77cede70d404ca394ad613753edbe03e05e41",
       "specifier": "tubeless/agent/openai"
     },
     {
@@ -303,13 +305,13 @@
         "McpTool",
         "McpToolResult"
       ],
-      "sha256": "7bfaaf0d0f0dabdb41e5077c89db7b93e760eb045be317699f253af0ac06cca9",
+      "sha256": "76b8e3e1144a461c64cd641ac30e4a940f348a4bfa121b6243c5db8fa01d7f64",
       "specifier": "tubeless/agent/mcp"
     },
     {
       "declaration": "./dist/agent/anthropic.d.ts",
       "exports": ["anthropicModel", "AnthropicModelOptions"],
-      "sha256": "802f1cf939ab5386bd506739919705860d89e4c3f6ca65a1c416ffa649780461",
+      "sha256": "04f6724ae9ad0dcfc39da3ed40bb54b72681b68d4f65877604abfece88c16c3e",
       "specifier": "tubeless/agent/anthropic"
     },
     {

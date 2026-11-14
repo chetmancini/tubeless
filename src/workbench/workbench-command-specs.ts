@@ -232,6 +232,12 @@ Run details include recorded agent turns, tool calls, and child agents.
       },
       json: { type: "boolean", description: "Emit the projected run list or run as JSON" },
       events: { type: "boolean", description: "Emit raw store events as NDJSON" },
+      transcript: {
+        type: "string",
+        description: "Read a finished agent transcript alongside a selected run",
+        valueName: "path",
+        completion: "file",
+      },
       clear: {
         type: "boolean",
         description: "Delete all recorded history from a SQLite store (requires --yes)",
@@ -525,6 +531,12 @@ pipeline or definePipelineCommand modules directly, and only with a writable SQL
           "Host behind an authenticated gateway (requires TUBELESS_STUDIO_GATEWAY_TOKEN)",
         valueName: "url",
         completion: "text",
+      },
+      transcript: {
+        type: "string",
+        description: "Attach a finished agent transcript artifact for conversation inspection",
+        valueName: "path",
+        completion: "file",
       },
     },
   },

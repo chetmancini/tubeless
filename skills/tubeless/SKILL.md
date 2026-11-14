@@ -224,6 +224,10 @@ Read the corresponding package recipe before using these features:
   proposed decisions, validated calls/outcomes and compaction markers; return
   `null` from redaction to suppress an event. Applications own storage and privacy.
   It is independent of traces and recovery, and child agents need their own opt-in.
+  Use `openNdjsonAgentTranscriptWriter(path)` from `tubeless/agent/node` and close
+  it after all agents settle. Inspect a finished artifact with `history --transcript
+  <path> <run-id>` or `ui --transcript <path>` alongside structural tracing. Studio's
+  Transcript tab pages content; attached artifacts are immutable and disable clearing.
   Read `docs/agents.md#opt-in-transcripts` and `examples/agent-transcript.ts`.
   Add `durability: { store, key }` with an explicit `implementationVersion` to
   persist decisions, call outcomes, child state and ancestor budgets. Every live

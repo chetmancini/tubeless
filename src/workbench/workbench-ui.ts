@@ -11,6 +11,7 @@ import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import { loadPipelineProjectFile, createModuleRegistration } from "./workbench-project-loader.js";
 import { onFirstProcessSignal } from "../cli/cli-signal.js";
 import type { PipelineRunEventReader } from "../run-store/run-store.js";
+import type { AgentTranscriptReader } from "../tracing/agent-transcript.js";
 import {
   WorkbenchStudioLauncher,
   type WorkbenchStudioRegistration,
@@ -130,6 +131,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           parsed.values.trace ?? parsed.values.store ?? DEFAULT_PIPELINE_RUN_STORE
         );
         let store: PipelineRunEventReader | undefined;
+        let transcripts: AgentTranscriptReader | undefined;
         let writableStore: SqlitePipelineRunStore | undefined;
         let server:
           | Awaited<
@@ -141,6 +143,13 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
         let storeOpened = false;
         try {
           const { startPipelineRunStudio } = await import("../studio/server/listener.js");
+          if (parsed.values.transcript) {
+            const { openNdjsonAgentTranscriptReader } =
+              await import("../run-store/agent-transcript-ndjson.js");
+            transcripts = await openNdjsonAgentTranscriptReader(
+              path.resolve(io.cwd, parsed.values.transcript)
+            );
+          }
           if (parsed.values.trace) {
             const { openNdjsonPipelineRunStore } = await import("../run-store/run-store-ndjson.js");
             store = await openNdjsonPipelineRunStore(filename);
@@ -159,8 +168,9 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
             launcher,
             port,
             store,
+            transcripts,
           };
-          if (isLoopbackHost && writableStore && !hosting) {
+          if (isLoopbackHost && writableStore && !hosting && !transcripts) {
             studioOptions.history = {
               clear: () => writableStore!.clearHistory(),
               isBusy: () => launcher?.isBusy() ?? false,
@@ -202,6 +212,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           await server?.close();
           await launcher?.drain();
           await store?.close();
+          await transcripts?.close();
           disposeProcessSignals?.();
         }
       },
