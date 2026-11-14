@@ -33,7 +33,8 @@ export async function executePreparedToolCall(
         activity = started;
       },
     });
-    await agentTranscript(context)?.record(invocation.turn, {
+    // Code-mode calls run under a script deadline; the agent drains delivery outside it.
+    void agentTranscript(context)?.record(invocation.turn, {
       kind: "call",
       id: call.id,
       tool: call.tool.name,
@@ -49,7 +50,7 @@ export async function executePreparedToolCall(
       const label = activity?.complete(run.value);
       if (label !== undefined) context.log.log(label);
       activity = undefined;
-      await agentTranscript(context)?.record(invocation.turn, {
+      void agentTranscript(context)?.record(invocation.turn, {
         kind: "outcome",
         outcome: { id: call.id, tool: call.tool.name, ok: true, value: run.value },
       });
@@ -60,7 +61,7 @@ export async function executePreparedToolCall(
     if (!expected) throw failure;
     if (activity) context.log.warn(`${activity.action}: failed`);
     activity = undefined;
-    await agentTranscript(context)?.record(invocation.turn, {
+    void agentTranscript(context)?.record(invocation.turn, {
       kind: "outcome",
       outcome: { id: call.id, tool: call.tool.name, ok: false, error: expected },
     });

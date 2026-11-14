@@ -65,7 +65,7 @@ envelope that cannot fit disables delivery. These bounds apply before storage, s
 Cloudflare can store records separately without adding content to bounded trace rows.
 
 Delivery is awaited and serialized per invocation, including concurrent tool results.
-Providers enqueue observations without awaiting sinks inside their request deadlines;
+Providers and tools enqueue observations without awaiting sinks inside provider or code-mode deadlines;
 the harness drains those observations with the next decision or terminal record,
 including when a provider rejects its response.
 Records follow observation/completion order; call IDs join results to their decisions.

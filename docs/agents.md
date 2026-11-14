@@ -1172,8 +1172,8 @@ content. Neither omitted content nor a missing end event establishes an empty or
 failed conversation.
 
 Delivery is awaited and serialized per invocation, in observation order. Providers
-enqueue observations during requests; the harness drains delivery outside provider
-request deadlines, including after rejected responses. Tool
+and tools enqueue observations during execution; the harness drains delivery outside
+provider request and code-mode script deadlines, including after rejected responses. Tool
 outcomes follow completion order; use call IDs to match decisions. Sink or redactor
 failure disables that invocation's capture with a fixed warning and leaves the
 agent's execution unchanged. Applications own sink I/O deadlines, permissions,

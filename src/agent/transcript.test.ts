@@ -12,6 +12,7 @@ import {
   type AgentTranscriptEvent,
   type AgentTranscriptOptions,
   type AgentTranscriptRecord,
+  type CodemodeExecutor,
 } from "./agent.js";
 import { emptyInput, numberSchema, schema } from "./agent.test-support.js";
 import { agentTranscript } from "./transcript.js";
@@ -546,6 +547,102 @@ describe("agent transcript capture", () => {
         .map((event) => event.outcome.tool)
     ).toEqual(["double", "codemode"]);
   });
+
+  it.each([
+    { kind: "call", failure: false, blocked: "write" },
+    { kind: "call", failure: false, blocked: "redact" },
+    { kind: "outcome", failure: false, blocked: "write" },
+    { kind: "outcome", failure: false, blocked: "redact" },
+    { kind: "outcome", failure: true, blocked: "write" },
+    { kind: "outcome", failure: true, blocked: "redact" },
+  ] as const)(
+    "keeps code-mode deadlines independent of $blocked for $kind (failure=$failure)",
+    async ({ kind, failure, blocked }) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const release = defer();
+      const capturing = defer();
+      const records: AgentTranscriptRecord[] = [];
+      const wait = async (event: AgentTranscriptEvent) => {
+        if (
+          (event.kind === "call" && kind === "call" && event.tool === "double") ||
+          (event.kind === "outcome" && kind === "outcome" && event.outcome.tool === "double")
+        ) {
+          capturing.resolve();
+          await release.promise;
+        }
+      };
+      const executor: CodemodeExecutor = {
+        execute: async (execution) => ({
+          ok: true,
+          result: await execution.call("double", "2"),
+          logs: [],
+          logsTruncated: false,
+        }),
+      };
+      const agent = defineAgentLoop({
+        ...base,
+        tools: {
+          double: defineTool({
+            description: "Double or report an expected failure",
+            inputSchema: numberSchema,
+            outputSchema: numberSchema,
+            run: (value) => {
+              if (failure) throw new ToolError("EXPECTED", "Expected failure");
+              return value * 2;
+            },
+          }),
+        },
+        codemode: { executor },
+        transcript: {
+          redact: async (event) => {
+            if (blocked === "redact") await wait(event);
+            return event;
+          },
+          write: async (record) => {
+            if (blocked === "write" && "event" in record) await wait(record.event);
+            records.push(record);
+          },
+        },
+        decide: (_state, context) =>
+          context.turn === 1
+            ? {
+                kind: "continue",
+                calls: [
+                  {
+                    id: "script",
+                    tool: "codemode",
+                    input: { code: "return await tools.double(2);" },
+                  },
+                ],
+              }
+            : finish,
+      });
+      const run = agent.run();
+      try {
+        await capturing.promise;
+        await vi.advanceTimersByTimeAsync(60_001);
+      } finally {
+        release.resolve();
+        await run;
+        vi.useRealTimers();
+      }
+      expect((await run).status).toBe("completed");
+      const outcome = events(records).find(
+        (event) => event.kind === "outcome" && event.outcome.tool === "codemode"
+      );
+      expect(outcome).toMatchObject({
+        kind: "outcome",
+        outcome: {
+          ok: true,
+          value: {
+            result: failure
+              ? { ok: false, code: "EXPECTED", message: "Expected failure" }
+              : { ok: true, value: 4 },
+          },
+        },
+      });
+    }
+  );
 
   it("captures previews only when explicitly executed, and does nothing during planning", async () => {
     const records: AgentTranscriptRecord[] = [];
