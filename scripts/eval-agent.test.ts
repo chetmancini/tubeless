@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -160,6 +160,38 @@ globalThis.fetch = async (url, options) => {
 };
 `;
 
+async function runEvaluation(args: string[] = [], env: Record<string, string> = {}) {
+  const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-report-"));
+  try {
+    const mockPath = join(directory, "provider.mjs");
+    const reportPath = join(directory, "report.json");
+    await writeFile(mockPath, preload);
+    const { status, error } = spawnSync(
+      process.execPath,
+      ["--import", mockPath, "scripts/eval-agent.mjs", ...args, reportPath],
+      {
+        encoding: "utf8",
+        timeout: 30_000,
+        env: {
+          ...process.env,
+          OPENAI_API_KEY: "offline-fixture",
+          OPENAI_MODEL: "offline-fixture",
+          EVAL_RECOVERY: "ordered",
+          EVAL_CODEMODE: "0",
+          ...env,
+          TMPDIR: directory,
+        },
+      }
+    );
+    expect(error).toBeUndefined();
+    const report = JSON.parse(await readFile(reportPath, "utf8"));
+    expect((await readdir(directory)).sort()).toEqual(["provider.mjs", "report.json"]);
+    return { status, report };
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 const recoveryError = "The error-observing decision must read or locate the current configuration";
 const guidanceError = "Nested guidance must be read before the requested first task read";
 const readOnlyError = "Read-only task must use only read, list, and search tools";
@@ -225,311 +257,244 @@ it.each([
 ] as const)(
   "retains decision batches and acceptance verdicts for %s",
   async (mode, expectedError, expectedGuidanceError, expectedStartupError?: string) => {
-    const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-report-"));
-    try {
-      const mockPath = join(directory, "provider.mjs");
-      const reportPath = join(directory, "report.json");
-      await writeFile(mockPath, preload);
-      const run = () =>
-        execFileSync(
-          process.execPath,
-          ["--import", mockPath, "scripts/eval-agent.mjs", reportPath],
-          {
-            encoding: "utf8",
-            timeout: 20_000,
-            env: {
-              ...process.env,
-              OPENAI_API_KEY: "offline-fixture",
-              OPENAI_MODEL: "offline-fixture",
-              EVAL_RECOVERY: mode,
-            },
-          }
-        );
-      const guidanceFailure = expectedGuidanceError !== undefined;
-      const aggregateError = {
-        "aggregate-wrong": "Answer must be exactly Total: 1362",
-        "aggregate-create": "Read-only task must not change workspace files",
-        "aggregate-restore": "Read-only task must not call write or edit",
-        "aggregate-guess": "Agent must observe the data files it aggregates",
-      }[mode as string];
-      const aggregateFailure = aggregateError !== undefined;
-      const triageFailure = mode === "triage-wrong";
-      const inventoryFailure = mode === "inventory-guess";
-      if (
-        expectedError ||
+    const { status, report } = await runEvaluation([], { EVAL_RECOVERY: mode });
+    const guidanceFailure = expectedGuidanceError !== undefined;
+    const aggregateError = {
+      "aggregate-wrong": "Answer must be exactly Total: 1362",
+      "aggregate-create": "Read-only task must not change workspace files",
+      "aggregate-restore": "Read-only task must not call write or edit",
+      "aggregate-guess": "Agent must observe the data files it aggregates",
+    }[mode as string];
+    const aggregateFailure = aggregateError !== undefined;
+    const triageFailure = mode === "triage-wrong";
+    const inventoryFailure = mode === "inventory-guess";
+    expect(status).toBe(
+      expectedError ||
         guidanceFailure ||
         expectedStartupError ||
         aggregateFailure ||
         triageFailure ||
         inventoryFailure
-      )
-        expect(run).toThrow();
-      else run();
-      const report = JSON.parse(await readFile(reportPath, "utf8"));
-      const results = Object.fromEntries(
-        report.results.map((result: { id: string }) => [result.id, result])
+        ? 1
+        : 0
+    );
+    const results = Object.fromEntries(
+      report.results.map((result: { id: string }) => [result.id, result])
+    );
+    const price = results["investigate-edit-verify"];
+    const project = results["project-context"];
+    const guidance = results["nested-guidance"];
+    const recovery = results["recover-and-compact"];
+    expect(results["aggregate-files"]).toMatchObject({
+      passed: !aggregateFailure,
+      answer: mode === "aggregate-wrong" ? "Total: 13620" : "Total: 1362",
+      verification: "aggregate checks passed",
+    });
+    expect(results["aggregate-files"].error).toBe(aggregateError);
+    for (const result of report.results)
+      expect(result).toEqual(
+        expect.objectContaining({
+          toolCount: expect.any(Number),
+          toolDescriptorBytes: expect.any(Number),
+        })
       );
-      const price = results["investigate-edit-verify"];
-      const project = results["project-context"];
-      const guidance = results["nested-guidance"];
-      const recovery = results["recover-and-compact"];
-      expect(results["aggregate-files"]).toMatchObject({
-        passed: !aggregateFailure,
-        answer: mode === "aggregate-wrong" ? "Total: 13620" : "Total: 1362",
-        verification: "aggregate checks passed",
-      });
-      expect(results["aggregate-files"].error).toBe(aggregateError);
-      for (const result of report.results)
-        expect(result).toEqual(
-          expect.objectContaining({
-            toolCount: expect.any(Number),
-            toolDescriptorBytes: expect.any(Number),
-          })
-        );
-      expect(results["typed-triage-text"]).toMatchObject({
-        passed: true,
-        output: { urgent: ["T6", "T2", "T4"] },
-        toolCount: 0,
-      });
-      expect(results["typed-triage-json"]).toMatchObject({
-        passed: !triageFailure,
-        ...(triageFailure
-          ? { error: "Urgent tickets must be exactly T2, T4 and T6; got T2, T4" }
-          : {}),
-      });
-      expect(results["large-inventory"]).toMatchObject(
-        inventoryFailure
-          ? {
-              passed: false,
-              error: "Agent must look up ticket S-1042, then the balance of its customer",
-            }
-          : {
-              passed: true,
-              codemode: false,
-              output: { answer: "Balance: 1234.56 USD" },
-              toolCount: 49,
-              turnCount: 3,
-              toolLog: [
-                { tool: "support__get_ticket", ok: true },
-                { tool: "billing__get_balance", ok: true, input: { customerId: "C-77" } },
-              ],
-            }
-      );
-      expect(results["typed-triage-text"].codemode).toBe(false);
-      expect(results["investigate-edit-verify"].codemode).toBe(false);
-      expect(results["large-inventory"].toolDescriptorBytes).toBeGreaterThan(5000);
-      expect(price.passed).toBe(true);
-      expect(project).toMatchObject({
-        passed: expectedStartupError === undefined,
-        answer: "Fixture completed.",
-        verification: "greeting checks passed",
-      });
-      expect(project.error).toBe(expectedStartupError);
-      if (expectedStartupError === startupError) {
-        expect(project.turns[1].outcomes[0]).toMatchObject({
-          id: project.turns[0].decision.calls[0].id,
-          ok: true,
-        });
-      }
-      if (mode === "startup-failed-check") {
-        expect(project.turns[1].outcomes[0]).toMatchObject({
-          tool: "bash",
-          ok: true,
-          value: { exitCode: 1 },
-        });
-      }
-      expect(guidance).toMatchObject({
-        passed: !guidanceFailure,
-        answer: "Scoped code: cobalt",
-        verification: "guidance checks passed",
-      });
-      expect(guidance.error).toBe(expectedGuidanceError);
-      if (["guidance-empty", "code-empty", "guidance-failed", "code-failed"].includes(mode)) {
-        const index = mode.startsWith("guidance-") ? 0 : 1;
-        expect(guidance.turns[index + 1].outcomes[0]).toMatchObject({
-          id: guidance.turns[index].decision.calls[0].id,
-          tool: "read",
-          ...(mode.endsWith("empty")
-            ? { ok: true, value: { content: "" } }
-            : { ok: false, error: { code: "EACCES" } }),
-        });
-      }
-      if (expectedGuidanceError === readOnlyError) {
-        const mutations = guidance.outcomes.filter((outcome: { tool: string }) =>
-          ["write", "edit", "bash"].includes(outcome.tool)
-        );
-        expect(mutations.length).toBeGreaterThan(0);
-        expect(mutations.every((outcome: { ok: boolean }) => outcome.ok)).toBe(true);
-      }
-      expect(price.calls[0]).toMatchObject({
-        id: "investigate-edit-verify-0-0",
-        tool: "read",
-        input: { path: "price.mjs" },
-      });
-      expect(price.outcomes[0]).toMatchObject({
-        id: price.calls[0].id,
+    expect(results["typed-triage-text"]).toMatchObject({
+      passed: true,
+      output: { urgent: ["T6", "T2", "T4"] },
+      toolCount: 0,
+    });
+    expect(results["typed-triage-json"]).toMatchObject({
+      passed: !triageFailure,
+      ...(triageFailure
+        ? { error: "Urgent tickets must be exactly T2, T4 and T6; got T2, T4" }
+        : {}),
+    });
+    expect(results["large-inventory"]).toMatchObject(
+      inventoryFailure
+        ? {
+            passed: false,
+            error: "Agent must look up ticket S-1042, then the balance of its customer",
+          }
+        : {
+            passed: true,
+            codemode: false,
+            output: { answer: "Balance: 1234.56 USD" },
+            toolCount: 49,
+            turnCount: 3,
+            toolLog: [
+              { tool: "support__get_ticket", ok: true },
+              { tool: "billing__get_balance", ok: true, input: { customerId: "C-77" } },
+            ],
+          }
+    );
+    expect(results["typed-triage-text"].codemode).toBe(false);
+    expect(results["investigate-edit-verify"].codemode).toBe(false);
+    expect(results["large-inventory"].toolDescriptorBytes).toBeGreaterThan(5000);
+    expect(price.passed).toBe(true);
+    expect(project).toMatchObject({
+      passed: expectedStartupError === undefined,
+      answer: "Fixture completed.",
+      verification: "greeting checks passed",
+    });
+    expect(project.error).toBe(expectedStartupError);
+    if (expectedStartupError === startupError) {
+      expect(project.turns[1].outcomes[0]).toMatchObject({
+        id: project.turns[0].decision.calls[0].id,
         ok: true,
-        value: { content: expect.stringContaining("Math.floor") },
       });
-      expect(recovery).toMatchObject({
-        passed: expectedError === undefined,
-        answer: "Fixture completed.",
-        verification: "config checks passed",
-      });
-      expect(recovery.error).toBe(expectedError);
-      expect(recovery.compactions).toBeGreaterThan(0);
-      expect(recovery.outcomes.at(-1)).toMatchObject({
+    }
+    if (mode === "startup-failed-check") {
+      expect(project.turns[1].outcomes[0]).toMatchObject({
         tool: "bash",
         ok: true,
-        value: { exitCode: 0, stdout: "config checks passed\n" },
+        value: { exitCode: 1 },
       });
-      expect(recovery.turns[0].outcomes).toEqual([]);
-      expect(recovery.turns[0].decision.calls).toEqual(
-        recovery.calls.slice(0, mode === "batched" ? 2 : 1)
+    }
+    expect(guidance).toMatchObject({
+      passed: !guidanceFailure,
+      answer: "Scoped code: cobalt",
+      verification: "guidance checks passed",
+    });
+    expect(guidance.error).toBe(expectedGuidanceError);
+    if (["guidance-empty", "code-empty", "guidance-failed", "code-failed"].includes(mode)) {
+      const index = mode.startsWith("guidance-") ? 0 : 1;
+      expect(guidance.turns[index + 1].outcomes[0]).toMatchObject({
+        id: guidance.turns[index].decision.calls[0].id,
+        tool: "read",
+        ...(mode.endsWith("empty")
+          ? { ok: true, value: { content: "" } }
+          : { ok: false, error: { code: "EACCES" } }),
+      });
+    }
+    if (expectedGuidanceError === readOnlyError) {
+      const mutations = guidance.outcomes.filter((outcome: { tool: string }) =>
+        ["write", "edit", "bash"].includes(outcome.tool)
       );
-      if (mode === "skipped") {
-        expect(recovery.calls[0].input).toEqual({ path: "config/current.json" });
-      } else {
-        expect(recovery.calls[0].input).toEqual({ path: "legacy-config.json" });
-        expect(recovery.turns[1].outcomes[0]).toMatchObject({
-          id: recovery.calls[0].id,
-          tool: "read",
-          ok: false,
-          error: { code: "ENOENT" },
+      expect(mutations.length).toBeGreaterThan(0);
+      expect(mutations.every((outcome: { ok: boolean }) => outcome.ok)).toBe(true);
+    }
+    expect(price.calls[0]).toMatchObject({
+      id: "investigate-edit-verify-0-0",
+      tool: "read",
+      input: { path: "price.mjs" },
+    });
+    expect(price.outcomes[0]).toMatchObject({
+      id: price.calls[0].id,
+      ok: true,
+      value: { content: expect.stringContaining("Math.floor") },
+    });
+    expect(recovery).toMatchObject({
+      passed: expectedError === undefined,
+      answer: "Fixture completed.",
+      verification: "config checks passed",
+    });
+    expect(recovery.error).toBe(expectedError);
+    expect(recovery.compactions).toBeGreaterThan(0);
+    expect(recovery.outcomes.at(-1)).toMatchObject({
+      tool: "bash",
+      ok: true,
+      value: { exitCode: 0, stdout: "config checks passed\n" },
+    });
+    expect(recovery.turns[0].outcomes).toEqual([]);
+    expect(recovery.turns[0].decision.calls).toEqual(
+      recovery.calls.slice(0, mode === "batched" ? 2 : 1)
+    );
+    if (mode === "skipped") {
+      expect(recovery.calls[0].input).toEqual({ path: "config/current.json" });
+    } else {
+      expect(recovery.calls[0].input).toEqual({ path: "legacy-config.json" });
+      expect(recovery.turns[1].outcomes[0]).toMatchObject({
+        id: recovery.calls[0].id,
+        tool: "read",
+        ok: false,
+        error: { code: "ENOENT" },
+      });
+      if (mode === "ordered") {
+        expect(recovery.turns[1].decision.calls[0].input).toEqual({
+          path: "config/current.json",
         });
-        if (mode === "ordered") {
-          expect(recovery.turns[1].decision.calls[0].input).toEqual({
-            path: "config/current.json",
-          });
-        } else if (expectedError === recoveryError) {
-          // The third decision recovers successfully, but must not rescue the second one's verdict.
-          expect(recovery.turns[2].decision.calls[0].input).toEqual({
-            path: "config/current.json",
-          });
-        }
+      } else if (expectedError === recoveryError) {
+        // The third decision recovers successfully, but must not rescue the second one's verdict.
+        expect(recovery.turns[2].decision.calls[0].input).toEqual({
+          path: "config/current.json",
+        });
       }
-    } finally {
-      await rm(directory, { recursive: true, force: true });
     }
   },
-  // One child spawn with a 20_000 ms inner timeout: 20_000 + 10_000.
-  30_000
+  // One child spawn with a 30_000 ms inner timeout: 30_000 + 10_000.
+  40_000
 );
 
 it("runs selected cases offline in code mode through generated declarations", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-report-"));
-  try {
-    const mockPath = join(directory, "provider.mjs");
-    const reportPath = join(directory, "report.json");
-    await writeFile(mockPath, preload);
-    execFileSync(
-      process.execPath,
-      [
-        "--import",
-        mockPath,
-        "scripts/eval-agent.mjs",
-        "--codemode",
-        "--only=large-inventory,typed-triage-json",
-        reportPath,
-      ],
-      {
-        encoding: "utf8",
-        timeout: 30_000,
-        env: {
-          ...process.env,
-          OPENAI_API_KEY: "offline-fixture",
-          OPENAI_MODEL: "offline-fixture",
-          EVAL_CODEMODE: "1",
-        },
-      }
-    );
-    const report = JSON.parse(await readFile(reportPath, "utf8"));
-    expect(report.codemode).toBe(true);
-    expect(report.results.map(({ id }: { id: string }) => id)).toEqual([
-      "typed-triage-json",
-      "large-inventory",
-    ]);
-    const [triage, inventory] = report.results;
-    expect(triage).toMatchObject({ passed: true, toolCount: 0, codemode: false });
-    expect(inventory).toMatchObject({
-      passed: true,
-      codemode: true,
-      toolCount: 1,
-      toolLog: [{ tool: "support__get_ticket" }, { tool: "billing__get_balance" }],
-      output: { answer: "Balance: 1234.56 USD" },
-      calls: [{ tool: "codemode" }],
-    });
-    expect(inventory.toolDescriptorBytes).toBeGreaterThan(5000);
-    expect(inventory.outcomes[0]).toMatchObject({
-      tool: "codemode",
-      ok: true,
-      value: { result: { customerId: "C-77", balance: 1234.56, currency: "USD" } },
-    });
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+  const { status, report } = await runEvaluation(
+    ["--codemode", "--only=large-inventory,typed-triage-json"],
+    { EVAL_CODEMODE: "1" }
+  );
+  expect(status).toBe(0);
+  expect(report.codemode).toBe(true);
+  expect(report.results.map(({ id }: { id: string }) => id)).toEqual([
+    "typed-triage-json",
+    "large-inventory",
+  ]);
+  const [triage, inventory] = report.results;
+  expect(triage).toMatchObject({ passed: true, toolCount: 0, codemode: false });
+  expect(inventory).toMatchObject({
+    passed: true,
+    codemode: true,
+    toolCount: 1,
+    toolLog: [{ tool: "support__get_ticket" }, { tool: "billing__get_balance" }],
+    output: { answer: "Balance: 1234.56 USD" },
+    calls: [{ tool: "codemode" }],
+  });
+  expect(inventory.toolDescriptorBytes).toBeGreaterThan(5000);
+  expect(inventory.outcomes[0]).toMatchObject({
+    tool: "codemode",
+    ok: true,
+    value: { result: { customerId: "C-77", balance: 1234.56, currency: "USD" } },
+  });
   // One child spawn with a 30_000 ms inner timeout: 30_000 + 10_000.
 }, 40_000);
 
 it.each([false, true])(
   "runs Anthropic evaluations offline (codemode=%s)",
   async (codemode) => {
-    const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-anthropic-"));
-    try {
-      const mockPath = join(directory, "provider.mjs");
-      const reportPath = join(directory, "report.json");
-      await writeFile(mockPath, preload);
-      execFileSync(
-        process.execPath,
-        [
-          "--import",
-          mockPath,
-          "scripts/eval-agent.mjs",
-          "--provider=anthropic",
-          ...(codemode ? ["--codemode", "--only=large-inventory,typed-triage-json"] : []),
-          reportPath,
-        ],
-        {
-          encoding: "utf8",
-          timeout: 30_000,
-          env: {
-            ...process.env,
-            OPENAI_API_KEY: "",
-            ANTHROPIC_API_KEY: "offline-fixture",
-            ANTHROPIC_MODEL: "offline-anthropic",
-            EVAL_RECOVERY: "ordered",
-            EVAL_CODEMODE: codemode ? "1" : "0",
-          },
-        }
-      );
-      const report = JSON.parse(await readFile(reportPath, "utf8"));
-      expect(report).toMatchObject({ provider: "anthropic", model: "offline-anthropic", codemode });
-      expect(report.results.every((result: { passed: boolean }) => result.passed)).toBe(true);
-      expect(report.results).toHaveLength(codemode ? 2 : 8);
-      const inventory = report.results.find(
-        (result: { id: string }) => result.id === "large-inventory"
-      );
-      expect(inventory.toolLog).toMatchObject([
-        { tool: "support__get_ticket" },
-        { tool: "billing__get_balance" },
-      ]);
-      for (const result of report.results) {
-        expect(result.transcript.at(-1)).toMatchObject({
-          event: { kind: "end", status: "completed" },
-        });
-        expect(result.turns).toHaveLength(result.turnCount);
+    const { status, report } = await runEvaluation(
+      [
+        "--provider=anthropic",
+        ...(codemode ? ["--codemode", "--only=large-inventory,typed-triage-json"] : []),
+      ],
+      {
+        OPENAI_API_KEY: "",
+        ANTHROPIC_API_KEY: "offline-fixture",
+        ANTHROPIC_MODEL: "offline-anthropic",
+        EVAL_CODEMODE: codemode ? "1" : "0",
       }
-      if (!codemode) {
-        const recovery = report.results.find(
-          (result: { id: string }) => result.id === "recover-and-compact"
-        );
-        expect(recovery.compactions).toBeGreaterThan(0);
-        expect(recovery.transcript).toContainEqual(
-          expect.objectContaining({ event: { kind: "compaction", provider: "anthropic" } })
-        );
-      }
-    } finally {
-      await rm(directory, { recursive: true, force: true });
+    );
+    expect(status).toBe(0);
+    expect(report).toMatchObject({ provider: "anthropic", model: "offline-anthropic", codemode });
+    expect(report.results.every((result: { passed: boolean }) => result.passed)).toBe(true);
+    expect(report.results).toHaveLength(codemode ? 2 : 8);
+    const inventory = report.results.find(
+      (result: { id: string }) => result.id === "large-inventory"
+    );
+    expect(inventory.toolLog).toMatchObject([
+      { tool: "support__get_ticket" },
+      { tool: "billing__get_balance" },
+    ]);
+    for (const result of report.results) {
+      expect(result.transcript.at(-1)).toMatchObject({
+        event: { kind: "end", status: "completed" },
+      });
+      expect(result.turns).toHaveLength(result.turnCount);
+    }
+    if (!codemode) {
+      const recovery = report.results.find(
+        (result: { id: string }) => result.id === "recover-and-compact"
+      );
+      expect(recovery.compactions).toBeGreaterThan(0);
+      expect(recovery.transcript).toContainEqual(
+        expect.objectContaining({ event: { kind: "compaction", provider: "anthropic" } })
+      );
     }
   },
   40_000
@@ -551,29 +516,14 @@ it.each([
     error: "Fixture setup denied",
     evidence: [],
   },
-])("retains a failed evaluation report and cleans up ($mode)", async (fixture) => {
-  const directory = await mkdtemp(join(tmpdir(), "tubeless-eval-omission-"));
-  try {
-    const mockPath = join(directory, "provider.mjs");
-    const reportPath = join(directory, "report.json");
-    await writeFile(mockPath, preload);
-    expect(() =>
-      execFileSync(
-        process.execPath,
-        ["--import", mockPath, "scripts/eval-agent.mjs", `--only=${fixture.only}`, reportPath],
-        {
-          encoding: "utf8",
-          timeout: 20_000,
-          env: {
-            ...process.env,
-            OPENAI_API_KEY: "offline-fixture",
-            EVAL_RECOVERY: fixture.mode,
-            TMPDIR: directory,
-          },
-        }
-      )
-    ).toThrow();
-    const { results } = JSON.parse(await readFile(reportPath, "utf8"));
+])(
+  "retains a failed evaluation report and cleans up ($mode)",
+  async (fixture) => {
+    const { status, report } = await runEvaluation([`--only=${fixture.only}`], {
+      EVAL_RECOVERY: fixture.mode,
+    });
+    expect(status).toBe(1);
+    const { results } = report;
     expect(results[0]).toMatchObject({
       passed: false,
       error: fixture.error,
@@ -581,8 +531,6 @@ it.each([
     });
     expect(results).toHaveLength(fixture.only.split(",").length);
     expect(results.slice(1).every((result: { passed: boolean }) => result.passed)).toBe(true);
-    expect((await readdir(directory)).sort()).toEqual(["provider.mjs", "report.json"]);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
+  },
+  40_000
+);
