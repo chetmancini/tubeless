@@ -155,6 +155,14 @@ describe("tubeless __complete", () => {
       "report",
       ":files",
     ]);
+    expect((await complete(directory, "agent", "")).lines).toEqual([
+      "import-data",
+      "report",
+      ":files",
+    ]);
+    expect(
+      (await complete(directory, "agent", "--project", "tubeless.project.ts", "re")).lines
+    ).toEqual(["report", ":files"]);
     expect((await complete(directory, "inspect", "--json", "re")).lines).toEqual([
       "report",
       ":files",

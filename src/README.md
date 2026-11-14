@@ -53,6 +53,9 @@ their source files.
   `createAgentSession`: a session compiles from that same snapshot with hooks that seed each run's
   initial conversation and observe each decision's, committing the finish conversation
   only after the run completes and finalizes.
+  `chat-session.ts` uses a private versioned symbol to let the workbench request default task/answer
+  sessions from the defining package instance, including separately installed copies.
+  Typed agents retain ordinary session support but do not expose that CLI chat capability.
   `invocation.ts` owns environment resolution, checkpoint leases, terminal recovery
   and execution initialization. `checkpoint-session.ts` owns typed, acknowledged
   subtree transitions and persisted budget charges; callers cannot mutate the journal.
@@ -212,6 +215,9 @@ Run `make check` after changes; it builds before checking these boundaries.
   metadata without executing command help or loading optional command implementations.
 
 - `workbench/agent/command.ts` owns agent command validation and session setup.
+  `workbench/agent/defined-agent.ts` reuses workbench registration to select an
+  agent's chat session without invoking command mappings. Registrations supply
+  the execution cwd and project tracing independently of command adapters.
   `workbench/agent/provider.ts` loads trusted factories or named provider registries,
   checks the selected configuration and credentials, and resolves its default model.
   `workbench/agent/builtin-providers.ts` supplies public-service presets through
@@ -224,10 +230,10 @@ Run `make check` after changes; it builds before checking these boundaries.
   parsing, and readline completion so these interfaces stay aligned.
   `workbench/agent/session.ts` owns prompt sequencing through native async iteration, REPL
   commands, retained conversation, and session cancellation. `workbench/agent/prompt.ts`
-  owns one cancellable model initialization
-  and agent run, disposing the standard pipeline reporter before publishing its
-  outcome. It runs prompts through one public `createAgentSession` whose agent's model
-  delegates to each prompt's factory result. Nested turns and tool calls use existing
+  owns each prompt's tracing, optional cancellable model initialization and agent run,
+  disposing the standard pipeline reporter before publishing its outcome. Both modes
+  use `createAgentSession`; the built-in agent delegates to each prompt's factory
+  result, while a selected agent retains its own model. Nested turns and tool calls use existing
   progress hooks. It composes the existing model agent and configured model factory
   without changing their ownership.
   `workbench/agent/input.ts` uses readline's prompt API for terminals and bounded

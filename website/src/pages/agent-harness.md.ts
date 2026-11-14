@@ -13,6 +13,8 @@ Each model turn can choose a new batch of registered tools or finish. [Watch an 
 
 ## Prompt an agent in your terminal
 
+Use your own agent with \`bunx tubeless agent <agent-id|file>\`. Select a project with \`--project\` or a file export with \`--export\`. Chat retains its model, tools, environment, and conversation. [Read the agent selection guide](${absUrl("docs/cli.md#select-a-defined-agent")}).
+
 Export OPENAI_API_KEY to child processes, then run from your workspace:
 
 \`\`\`sh

@@ -9,6 +9,8 @@ import {
 import type { PipelineLogger } from "../../core/pipeline.js";
 import type { PipelineTracingOptions } from "../../tracing/tracing-contracts.js";
 import type { AgentModelFactory } from "../../cli/cli-agent-provider.js";
+import type { ProjectOptions } from "../../project/pipeline-project.js";
+import { createLaunchTracing } from "../../hosting/launch-tracing.js";
 import { createPipelineReporter } from "../../reporter/interactive-reporter.js";
 import { safeTerminalLog, safeTerminalText } from "../../reporter/terminal-text.js";
 import { awaitWithAbort, throwIfAborted } from "../../utilities/abort.js";
@@ -20,28 +22,37 @@ import {
 } from "../workbench-shared.js";
 
 export interface AgentPromptOptions {
-  readonly model: string;
+  readonly label: string;
+  readonly graph: boolean;
+  /** Records every prompt's run; the caller owns the destinations' lifetime. */
+  readonly tracing?: PipelineTracingOptions;
+  readonly projectTracing?: ProjectOptions["tracing"];
+}
+
+interface BuiltinAgentOptions {
   readonly env: Readonly<NodeJS.ProcessEnv>;
   readonly instructions?: string;
   readonly limits: AgentLimits;
   readonly defaultTools?: readonly DefaultAgentToolName[];
   readonly codemode?: boolean;
-  readonly graph: boolean;
-  /** Records every prompt's run; the caller owns the destinations' lifetime. */
-  readonly tracing?: PipelineTracingOptions;
 }
 
 type PromptOutcome =
   | { readonly status: "completed"; readonly answer: string }
   | { readonly status: "failed" | "cancelled"; readonly message: string };
 
-/** One REPL conversation; each prompt selects the provider its factory returned. */
+/** One CLI conversation; only built-in sessions initialize a model for each prompt. */
 export interface AgentPromptSession {
+  readonly id: string;
   readonly session: AgentSession<{ task: string }, { answer: string }>;
-  use(model: AgentModel): void;
+  /** Absent when an application-defined agent owns its fixed model. */
+  prepare?(model: string, signal: AbortSignal): Promise<void>;
 }
 
-export function createPromptSession(options: AgentPromptOptions): AgentPromptSession {
+export function createPromptSession(
+  options: BuiltinAgentOptions,
+  factory: AgentModelFactory
+): AgentPromptSession {
   let provider: AgentModel | undefined;
   const agent = defineAgent({
     id: "tubeless-agent",
@@ -55,9 +66,19 @@ export function createPromptSession(options: AgentPromptOptions): AgentPromptSes
     codemode: options.codemode,
   });
   return {
+    id: agent.id,
     session: createAgentSession(agent),
-    use: (model) => {
-      provider = model;
+    async prepare(model, signal) {
+      throwIfAborted(signal, "Model initialization");
+      const initialized: unknown = await awaitWithAbort(
+        Promise.resolve(factory({ model, signal, env: options.env })),
+        signal,
+        "Model initialization"
+      );
+      if (typeof initialized !== "function")
+        throw new Error("Model factory must return an AgentModel function.");
+      // SAFETY: trusted plugin; the agent validates every returned decision.
+      provider = initialized as AgentModel;
     },
   };
 }
@@ -82,12 +103,11 @@ function promptLogger(io: WorkbenchCliIo): PipelineLogger {
 export async function executeAgentPrompt(
   task: string,
   options: AgentPromptOptions,
-  factory: AgentModelFactory,
   io: WorkbenchCliIo,
   signal: AbortSignal,
   chat: AgentPromptSession
 ): Promise<number> {
-  io.stdout.write(`\nagent · ${safeTerminalText(options.model)}\n`);
+  io.stdout.write(`\nagent · ${safeTerminalText(options.label)}\n`);
   const context = commandContext(io, signal);
   const reporter = options.graph
     ? createPipelineReporter<{ answer: string }>({
@@ -96,17 +116,14 @@ export async function executeAgentPrompt(
       })
     : undefined;
   let outcome: PromptOutcome;
+  const tracing = createLaunchTracing({
+    context: { pipelineId: chat.id, cwd: io.cwd, signal },
+    configurations: [options.projectTracing],
+    exporters: options.tracing ? [options.tracing.exporter] : [],
+  });
   try {
     throwIfAborted(signal, "Model initialization");
-    const model: unknown = await awaitWithAbort(
-      Promise.resolve(factory({ model: options.model, signal, env: options.env })),
-      signal,
-      "Model initialization"
-    );
-    if (typeof model !== "function")
-      throw new Error("Model factory must return an AgentModel function.");
-    // SAFETY: the plugin is trusted code; the agent validates every returned decision.
-    chat.use(model as AgentModel);
+    await chat.prepare?.(options.label, signal);
     // The session commits the conversation only after this run completes and finalizes.
     const run = await chat.session.run({ task }, undefined, {
       cwd: io.cwd,
@@ -115,7 +132,7 @@ export async function executeAgentPrompt(
       // logs are sanitized separately from the reporter's trusted styling.
       log: reporter?.mode === "interactive" ? reporter.log : promptLogger(io),
       hooks: reporter?.hooks,
-      tracing: options.tracing,
+      tracing: tracing.prepare(),
     });
     if (run.status === "completed" && run.finalized) {
       outcome = { status: "completed", answer: run.value.answer };
@@ -133,6 +150,7 @@ export async function executeAgentPrompt(
       message: `${status === "cancelled" ? "Cancelled" : "Error"}: ${safeTerminalText(errorMessage(error))}`,
     };
   } finally {
+    await tracing.close();
     reporter?.dispose();
   }
   if (outcome.status === "completed") {

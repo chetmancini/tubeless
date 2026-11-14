@@ -405,6 +405,17 @@ read when a pipeline needs them.
 
 ### Agents
 
+- Chat with a project-defined agent using `tubeless agent <id|file>`, with
+  optional `--project` or `--export` selection as on `tubeless run`. Keep the
+  agent's default `{ task }` and `{ answer }` schemas: custom input/result
+  schemas, `defineAgentLoop` and ordinary pipelines require `tubeless run`.
+  The session retains the agent's model, tools, environment and limits, plus
+  the project's cwd and per-prompt tracing. CLI model, provider, env-file,
+  instruction, tool and budget overrides are rejected; `/model` is read-only.
+  `--prompt`, `--no-graph`, `--store` and `--trace` work normally, recording
+  under the selected agent's ID. Follow [agent selection](./cli.md#select-a-defined-agent)
+  and the [chat recipe](../examples/agent-chat.ts).
+
 - Use `waitForInput` from `createSteps` for a pluggable user/application input
   boundary in any pipeline. It uses ordinary lifecycle and output validation,
   remains pending until input arrives, honors cancellation, and skips dry runs

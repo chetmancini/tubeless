@@ -7,6 +7,8 @@ import {
 import type { AgentLimits, DefaultAgentToolName } from "../../agent/agent.js";
 import { loadAgentEnvironment } from "./environment.js";
 import { loadAgentProvider } from "./provider.js";
+import { loadDefinedAgent } from "./defined-agent.js";
+import { createPromptSession, type AgentPromptSession, type AgentPromptOptions } from "./prompt.js";
 import { runAgentSession } from "./session.js";
 import { toExitCode } from "../../cli/cli-exit.js";
 import { composeTraceExporters } from "../../tracing/tracing.js";
@@ -39,11 +41,37 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
     {
       spec: WORKBENCH_SPECS.agent,
       parse: (args) => parseSubcommandArgs(args, WORKBENCH_SPECS.agent.options),
-      positionalCountError: {
-        count: 0,
-        message: "Use --prompt for a task or start the REPL without positional arguments.",
-      },
-      async run({ values }, io) {
+      async run({ values, positionals }, io) {
+        if (positionals.length > 1)
+          return writeUsageError(io, "Pass at most one agent ID or file.", AGENT_USAGE);
+        const target = positionals[0];
+        if (target === undefined && (values.project !== undefined || values.export !== undefined))
+          return writeUsageError(
+            io,
+            "Pass an agent ID or file with --project or --export.",
+            AGENT_USAGE
+          );
+        if (target !== undefined) {
+          const overrides = [
+            "provider",
+            "model",
+            "model-module",
+            "env-file",
+            "instructions",
+            "tools",
+            "codemode",
+            "max-turns",
+            "max-calls",
+            "max-concurrency",
+          ] as const;
+          const provided = overrides.filter((key) => values[key] !== undefined);
+          if (provided.length)
+            return writeUsageError(
+              io,
+              `Selected agents own their configuration; remove ${provided.map((key) => `--${key}`).join(", ")} and configure the agent definition instead.`,
+              AGENT_USAGE
+            );
+        }
         if (values.provider !== undefined && !values.provider.trim())
           return writeUsageError(io, "Provider name must not be blank.", AGENT_USAGE);
         if (values["model-module"] !== undefined && !values["model-module"].trim())
@@ -94,15 +122,45 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
             AGENT_USAGE
           );
         if (io.signal?.aborted) return TUBELESS_WORKBENCH_EXIT_CODE.cancellation;
-        const environment = await loadAgentEnvironment(values["env-file"], io);
-        if ("exitCode" in environment) return environment.exitCode;
-        const selected = await loadAgentProvider(
-          values["model-module"],
-          values.provider,
-          environment.env,
-          io
-        );
-        if ("exitCode" in selected) return selected.exitCode;
+        let chat: AgentPromptSession;
+        let label: string;
+        let commandIo = io;
+        let projectTracing: AgentPromptOptions["projectTracing"];
+        if (target !== undefined) {
+          const selected = await loadDefinedAgent(
+            target,
+            values.export,
+            values.project,
+            io,
+            AGENT_USAGE
+          );
+          if ("exitCode" in selected) return selected.exitCode;
+          chat = selected.chat;
+          label = chat.id;
+          commandIo = { ...io, cwd: selected.cwd };
+          projectTracing = selected.tracing;
+        } else {
+          const environment = await loadAgentEnvironment(values["env-file"], io);
+          if ("exitCode" in environment) return environment.exitCode;
+          const selected = await loadAgentProvider(
+            values["model-module"],
+            values.provider,
+            environment.env,
+            io
+          );
+          if ("exitCode" in selected) return selected.exitCode;
+          label = values.model?.trim() || selected.model;
+          chat = createPromptSession(
+            {
+              env: environment.env,
+              instructions: values.instructions,
+              limits,
+              defaultTools,
+              codemode: values.codemode === true,
+            },
+            selected.factory
+          );
+        }
         // Recording outlives each prompt's cancellation so finished runs stay flushed.
         let recording: WorkbenchRecording;
         try {
@@ -119,21 +177,17 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
         try {
           exitCode = await runAgentSession(
             {
-              model: values.model?.trim() || selected.model,
-              env: environment.env,
+              label,
+              projectTracing,
               prompt: values.prompt,
-              instructions: values.instructions,
-              limits,
-              defaultTools,
-              codemode: values.codemode === true,
               graph: !values["no-graph"],
               tracing:
                 recording.exporters.length > 0
                   ? { exporter: composeTraceExporters(recording.exporters) }
                   : undefined,
             },
-            selected.factory,
-            io
+            chat,
+            commandIo
           );
         } finally {
           for (const error of await recording.close()) {

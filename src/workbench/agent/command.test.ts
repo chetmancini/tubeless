@@ -328,7 +328,7 @@ describe("tubeless agent", () => {
     ["--max-calls", "-1"],
     ["--max-concurrency", "1.5"],
     ["--unknown"],
-    ["unexpected"],
+    ["first", "second"],
   ])("rejects invalid arguments %j before loading providers", async (...args) => {
     const io = captureIo("/tmp");
     expect(await runWorkbenchCli(["agent", "--prompt", "task", ...args], io)).toBe(1);

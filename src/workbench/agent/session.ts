@@ -2,20 +2,18 @@ import { safeTerminalText } from "../../reporter/terminal-text.js";
 import { createReporterTheme } from "../../reporter/reporter.js";
 import { AGENT_REPL_HELP, parseAgentCommand } from "./commands.js";
 import { AgentInput } from "./input.js";
-import { createPromptSession, executeAgentPrompt, type AgentPromptOptions } from "./prompt.js";
-import type { AgentModelFactory } from "../../cli/cli-agent-provider.js";
+import { executeAgentPrompt, type AgentPromptOptions, type AgentPromptSession } from "./prompt.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "../workbench-shared.js";
 
 /** Own commands and session cancellation; single prompts use the same task loop. */
 export async function runAgentSession(
   options: AgentPromptOptions & { readonly prompt?: string },
-  factory: AgentModelFactory,
+  chat: AgentPromptSession,
   io: WorkbenchCliIo
 ): Promise<number> {
   const session = new AbortController();
   let active: AbortController | undefined;
-  let selectedModel = options.model;
-  const chat = createPromptSession(options);
+  let selectedModel = options.label;
   let exitCode: number = TUBELESS_WORKBENCH_EXIT_CODE.success;
   const interrupt = () => {
     if (active) active.abort();
@@ -65,6 +63,14 @@ export async function runAgentSession(
           continue;
         }
         if (command?.action === "model") {
+          if (!chat.prepare) {
+            if (command.value)
+              io.stderr.write(
+                "Selected agents own their model; change the agent definition to switch models.\n"
+              );
+            else io.stdout.write(`Model: configured by agent ${safeTerminalText(chat.id)}\n`);
+            continue;
+          }
           selectedModel = command.value || selectedModel;
           io.stdout.write(`Model: ${safeTerminalText(selectedModel)}\n`);
           continue;
@@ -77,8 +83,7 @@ export async function runAgentSession(
       try {
         exitCode = await executeAgentPrompt(
           task,
-          { ...options, model: selectedModel },
-          factory,
+          { ...options, label: selectedModel },
           io,
           AbortSignal.any([session.signal, active.signal]),
           chat

@@ -259,16 +259,20 @@ codes to TUBELESS_. Version 3 adds a column. Run this before an unattended
   agent: {
     name: "agent",
     description: "Prompt a workspace agent with a live execution DAG",
-    usage: `Usage: tubeless agent [options]
+    usage: `Usage: tubeless agent [agent-id|file] [options]
 
 Prompt a workspace agent, watch its pipeline execution, then prompt again.
-Prompts share conversation context; each execution has fresh limits and the default tools.
+Prompts share completed conversation context; each execution has fresh limits.
+Select a defineAgent agent by project ID or file, or omit it for the built-in workspace agent.
 `,
+    positional: "pipeline",
     footer: `REPL commands:
 ${AGENT_REPL_HELP}
-Export OPENAI_API_KEY (default) or ANTHROPIC_API_KEY (--provider anthropic), or use --env-file.
+For the built-in agent, export OPENAI_API_KEY (default) or ANTHROPIC_API_KEY (--provider anthropic), or use --env-file.
+Selected agents keep their own model, tools, environment and limits; configuration flags apply only to the built-in agent.
 Workspace tools run with your host permissions.`,
     options: {
+      ...REGISTRATION_OPTIONS,
       provider: {
         type: "string",
         description: "Named model configuration (default openai); built-in or from --model-module",

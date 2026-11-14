@@ -14,6 +14,7 @@ import { ScriptedAgent } from "../agent.ts";
 import { DelegatingAgentCommand } from "../agent-delegation.ts";
 import { AgentPipelineCommand } from "../agent-pipeline.js";
 import { CodingAgent } from "../agent-model.js";
+import { ChatAgent } from "../agent-chat.js";
 import { ClaudeCodingAgent } from "../agent-model-anthropic.js";
 import { EnvironmentWorkspaceAgent } from "../agent-environment.js";
 import { CodemodeAgent } from "../agent-codemode.js";
@@ -51,6 +52,8 @@ export default defineProject(
     // Live model decisions and tools share the physical run cwd, including through symlinks.
     // Scoped guidance precedes nested file operations and task commands in separate turns.
     CodingAgent,
+    // Chat with this credential-free agent: tubeless agent chat-agent --project this-file.
+    ChatAgent,
     // For built-in Claude chat without a project: tubeless agent --provider anthropic.
     // From the checkout, use --model-module ./examples/agent-providers.ts --provider baseten.
     ClaudeCodingAgent,

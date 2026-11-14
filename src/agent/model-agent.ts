@@ -17,6 +17,7 @@ import type {
 import type { AgentModel } from "./model-types.js";
 import { compileAgent } from "./compile-agent.js";
 import { registerSessionAgent, type SessionHooks } from "./agent-session.js";
+import { registerChatAgent } from "./chat-session.js";
 import { agentError, jsonDescriptor } from "./agent-state.js";
 import { resolvedLimits } from "./execution-scope.js";
 import { modelInstructions } from "./model-prompt.js";
@@ -129,6 +130,7 @@ export function defineAgent<Options extends StandardSchemaV1<object, object>>(
   });
   const agent = compileModelAgent(owned);
   registerSessionAgent(agent, (hooks) => compileModelAgent(owned, hooks));
+  if (owned.inputSchema === undefined && owned.resultSchema === undefined) registerChatAgent(agent);
   return agent;
 }
 

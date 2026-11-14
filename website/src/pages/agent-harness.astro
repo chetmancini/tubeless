@@ -27,6 +27,7 @@ const composition = readFileSync(join(__REPO_ROOT__, "examples/agent-pipeline.ts
 
     <section class="section" id="terminal">
       <h2>Prompt an agent in your terminal.</h2>
+      <p>Use your own agent with <code>bunx tubeless agent &lt;agent-id|file&gt;</code>. Select a project with <code>--project</code> or a file export with <code>--export</code>. Chat retains its model, tools, environment, and conversation. <a href={href("docs/cli") + "#select-a-defined-agent"}>Read the agent selection guide.</a></p>
       <p>Export <code>OPENAI_API_KEY</code> to child processes, then start the prompt loop from your workspace:</p>
       <CodeBlock code="bunx tubeless agent --model gpt-5.4-mini" lang="sh" />
       <p>For Anthropic, export <code>ANTHROPIC_API_KEY</code> and run <code>bunx tubeless agent --provider anthropic</code>. Set <code>ANTHROPIC_MODEL</code> or pass <code>--model</code> to choose a model; <code>/model</code> stays within the selected provider.</p>

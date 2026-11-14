@@ -32,6 +32,7 @@ type LoadFailure = { exitCode: number };
 /** A source normalized once for discovery, planning, execution, and Studio. */
 export interface WorkbenchRegistration {
   readonly identity: string;
+  readonly cwd: string;
   readonly tracing?: ProjectOptions["tracing"];
   readonly source: string;
   /** Pipeline id when available before loading the source. */
@@ -58,6 +59,7 @@ export function createModuleRegistration(
 ): WorkbenchRegistration {
   filePath = path.resolve(cwd, filePath);
   return {
+    cwd,
     identity: `${filePath}\0${exportName ?? ""}`,
     source: filePath,
     async loadPlan(io) {
@@ -102,6 +104,7 @@ function createPipelineRegistration(
   tracing?: ProjectOptions["tracing"]
 ): WorkbenchRegistration {
   return {
+    cwd,
     tracing,
     identity: `project-pipeline\0${filePath}\0${pipeline.id}`,
     source: pipeline.id,
