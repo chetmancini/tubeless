@@ -13,7 +13,7 @@ Package: `tubeless`
 | `tubeless/agent/node`       | `./dist/agent/node.d.ts`                  | `c77cc7511595f76292751260d36cdcc7979902e4a6ba32d12fb437f52768638f` |                4 |
 | `tubeless/agent`            | `./dist/agent/agent.d.ts`                 | `3dbae48d40b24c3e2b0e4c6032f40816b6428c7662f7a0b9d0d1ecac39751cb0` |               39 |
 | `tubeless`                  | `./dist/core/pipeline.d.ts`               | `2d2d4d256dd3d2866e5b7e162edba7b32b4ad06346806b5114ea5a408134afa7` |               81 |
-| `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `e510a345eb4b6677017c3e554f396d598a26fea89254c68100dfd3d366bf9bd7` |               31 |
+| `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `43701c4983ec5ea374a2c782bb595309b017c592310680d1b37b2d39dc4ec92a` |               33 |
 | `tubeless/batch`            | `./dist/utilities/batch.d.ts`             | `856e4e759f1a62a4edd210d0291bc8b3d82b2e3e983bd37d7348bfb2b8993156` |                7 |
 | `tubeless/node`             | `./dist/node/node.d.ts`                   | `9af0294eaf7753f7777235ffbfb8d41406fd6ee156f133ccf7b5ba078bdecdd8` |               14 |
 | `tubeless/rate-limit`       | `./dist/utilities/rate-limit.d.ts`        | `21223a0ce096d7eb188e7aa38e4e0df70081b086f899dfea825b429308f6910e` |                1 |
@@ -170,39 +170,41 @@ Package: `tubeless`
 
 ### `tubeless/cli`
 
-| Symbol                                                                                                                  | Description                                                                         |
-| ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| [`CliBooleanParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L57)                         | Declarative configuration for a boolean command parameter.                          |
-| [`CliCheckpointConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L216)                    | Checkpoint persistence settings for resumable commands.                             |
-| [`CliCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L266)                             | Typed command that can parse, validate, execute, or own a CLI entry point.          |
-| [`CliCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L235)                       | Declarative configuration consumed by `defineCommand`.                              |
-| [`CliCommandDescriptor`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L104)                   | Immutable, presentation-neutral command contract shared by CLI and UI adapters.     |
-| [`CliContext`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L170)                             | Runtime services and environment passed to a command.                               |
-| [`CliHelpRequested`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L207)                       | Control-flow error thrown when command help was requested.                          |
-| [`CliNumberParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L45)                          | Declarative configuration for a numeric command parameter.                          |
-| [`CliParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L76)                                | Any supported declarative command parameter configuration.                          |
-| [`CliParameterDescriptor`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L82)                  | JSON-safe description of one validated command parameter for non-terminal clients.  |
-| [`CliParams`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L163)                              | Validated values returned from a command's parameter schema.                        |
-| [`CliParamsSchema`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L79)                         | Named parameter schema accepted by `defineCommand`.                                 |
-| [`CliParamType`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L14)                            | Supported value kinds for declarative command parameters.                           |
-| [`CliParseResult`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L189)                         | Successful values, help text, or validation errors returned by command parsing.     |
-| [`CliPathParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L64)                            | Declarative configuration for a filesystem path command parameter.                  |
-| [`CliStringParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L35)                          | Declarative configuration for a string command parameter.                           |
-| [`CliValidationError`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L195)                     | Error thrown when command-line arguments fail schema validation.                    |
-| [`defineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-command.ts#L319)                        | Create a typed command from a declarative parameter schema and run handler.         |
-| [`definePipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L296)       | Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input. |
-| [`DefinePipelineCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L149) | Configuration for a typed pipeline command.                                         |
-| [`PipelineCliParseResult`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L56)       | Parse result returned by commands created with `definePipelineCommand`.             |
-| [`PipelineCliValues`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L47)            | Validated domain parameters plus the built-in pipeline execution controls.          |
-| [`PipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L62)              | Typed CLI facade over a pipeline with planning and graph helpers.                   |
-| [`PipelineCommandHookConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L102)   | Static or lazily constructed lifecycle hooks for a pipeline command.                |
-| [`PipelineCommandHookContext`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L93)   | Parsed values and CLI services passed to a pipeline hook factory.                   |
-| [`PipelineReporterConfig`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L51)  | Rendering and output settings for automatic, plain, or interactive reporting.       |
-| [`PipelineReporterMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L33)    | Rendering mode selected for pipeline lifecycle reporting.                           |
-| [`ReporterColorMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L6)                    | Policy for ANSI color in terminal reporter output.                                  |
-| [`ReporterOutput`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L37)          | Writable terminal-like destination used by the interactive reporter.                |
-| [`ReporterSymbolMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L8)                   | Symbol set used for step lifecycle markers in reporter output.                      |
-| [`ReporterTerminalCapabilities`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L11)        | Detected or caller-overridden terminal rendering capabilities.                      |
+| Symbol                                                                                                                  | Description                                                                               |
+| ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [`AgentModelFactory`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-agent-provider.ts#L4)               | Create a model for one CLI prompt with the selected model and scoped environment.         |
+| [`AgentProvider`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-agent-provider.ts#L11)                  | One named CLI model configuration; its factory owns the API, endpoint and authentication. |
+| [`CliBooleanParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L57)                         | Declarative configuration for a boolean command parameter.                                |
+| [`CliCheckpointConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L216)                    | Checkpoint persistence settings for resumable commands.                                   |
+| [`CliCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L266)                             | Typed command that can parse, validate, execute, or own a CLI entry point.                |
+| [`CliCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L235)                       | Declarative configuration consumed by `defineCommand`.                                    |
+| [`CliCommandDescriptor`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L104)                   | Immutable, presentation-neutral command contract shared by CLI and UI adapters.           |
+| [`CliContext`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L170)                             | Runtime services and environment passed to a command.                                     |
+| [`CliHelpRequested`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L207)                       | Control-flow error thrown when command help was requested.                                |
+| [`CliNumberParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L45)                          | Declarative configuration for a numeric command parameter.                                |
+| [`CliParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L76)                                | Any supported declarative command parameter configuration.                                |
+| [`CliParameterDescriptor`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L82)                  | JSON-safe description of one validated command parameter for non-terminal clients.        |
+| [`CliParams`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L163)                              | Validated values returned from a command's parameter schema.                              |
+| [`CliParamsSchema`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L79)                         | Named parameter schema accepted by `defineCommand`.                                       |
+| [`CliParamType`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L14)                            | Supported value kinds for declarative command parameters.                                 |
+| [`CliParseResult`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L189)                         | Successful values, help text, or validation errors returned by command parsing.           |
+| [`CliPathParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L64)                            | Declarative configuration for a filesystem path command parameter.                        |
+| [`CliStringParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L35)                          | Declarative configuration for a string command parameter.                                 |
+| [`CliValidationError`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L195)                     | Error thrown when command-line arguments fail schema validation.                          |
+| [`defineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-command.ts#L319)                        | Create a typed command from a declarative parameter schema and run handler.               |
+| [`definePipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L296)       | Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input.       |
+| [`DefinePipelineCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L149) | Configuration for a typed pipeline command.                                               |
+| [`PipelineCliParseResult`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L56)       | Parse result returned by commands created with `definePipelineCommand`.                   |
+| [`PipelineCliValues`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L47)            | Validated domain parameters plus the built-in pipeline execution controls.                |
+| [`PipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L62)              | Typed CLI facade over a pipeline with planning and graph helpers.                         |
+| [`PipelineCommandHookConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L102)   | Static or lazily constructed lifecycle hooks for a pipeline command.                      |
+| [`PipelineCommandHookContext`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L93)   | Parsed values and CLI services passed to a pipeline hook factory.                         |
+| [`PipelineReporterConfig`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L51)  | Rendering and output settings for automatic, plain, or interactive reporting.             |
+| [`PipelineReporterMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L33)    | Rendering mode selected for pipeline lifecycle reporting.                                 |
+| [`ReporterColorMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L6)                    | Policy for ANSI color in terminal reporter output.                                        |
+| [`ReporterOutput`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L37)          | Writable terminal-like destination used by the interactive reporter.                      |
+| [`ReporterSymbolMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L8)                   | Symbol set used for step lifecycle markers in reporter output.                            |
+| [`ReporterTerminalCapabilities`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L11)        | Detected or caller-overridden terminal rendering capabilities.                            |
 
 ### `tubeless/batch`
 

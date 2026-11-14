@@ -336,7 +336,7 @@ describe("tubeless agent", () => {
   });
 
   it("validates the plugin export and factory return value", async () => {
-    const badExport = await writeModule("export default {}; ");
+    const badExport = await writeModule("export default 42; ");
     const io = captureIo(badExport.directory);
     expect(
       await runWorkbenchCli(["agent", "--prompt", "hello", "--model-module", "pipeline.mjs"], io)

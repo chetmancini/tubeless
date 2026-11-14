@@ -5,7 +5,7 @@ const COMMANDS = [
     name: "/model",
     arguments: " [name]",
     action: "model",
-    description: "Show or change the model for the next task.",
+    description: "Show or change the model within the selected provider.",
   },
   { name: "/clear", arguments: "", action: "clear", description: "Start a fresh conversation." },
   { name: "/help", arguments: "", action: "help", description: "Show these commands." },

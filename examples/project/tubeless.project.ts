@@ -51,6 +51,8 @@ export default defineProject(
     // Live model decisions and tools share the physical run cwd, including through symlinks.
     // Scoped guidance precedes nested file operations and task commands in separate turns.
     CodingAgent,
+    // For built-in Claude chat without a project: tubeless agent --provider anthropic.
+    // From the checkout, use --model-module ./examples/agent-providers.ts --provider baseten.
     ClaudeCodingAgent,
     EnvironmentWorkspaceAgent,
     // Permitted code mode: one script chains workspace tools; each nested call is a child run.

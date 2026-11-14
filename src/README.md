@@ -211,7 +211,13 @@ Run `make check` after changes; it builds before checking these boundaries.
   nested-command option validation. `workbench/workbench-completion.ts` reads the same
   metadata without executing command help or loading optional command implementations.
 
-- `workbench/agent/command.ts` owns agent command validation and model-module loading.
+- `workbench/agent/command.ts` owns agent command validation and session setup.
+  `workbench/agent/provider.ts` loads trusted factories or named provider registries,
+  checks the selected configuration and credentials, and resolves its default model.
+  `workbench/agent/builtin-providers.ts` supplies public-service presets through
+  that same registry contract. Factories own API, endpoint and authentication choices;
+  the resolver has no protocol dispatch. `cli/cli-agent-provider.ts` owns the public
+  type-only configuration contract, without adding a runtime dependency on agents to CLI.
   `workbench/agent/environment.ts` parses explicitly selected dotenv files and
   merges them with the process environment without mutating global values.
   `workbench/agent/commands.ts` owns shared slash command declarations, help,
@@ -222,7 +228,7 @@ Run `make check` after changes; it builds before checking these boundaries.
   and agent run, disposing the standard pipeline reporter before publishing its
   outcome. It runs prompts through one public `createAgentSession` whose agent's model
   delegates to each prompt's factory result. Nested turns and tool calls use existing
-  progress hooks. It composes the existing model agent and optional OpenAI transport
+  progress hooks. It composes the existing model agent and configured model factory
   without changing their ownership.
   `workbench/agent/input.ts` uses readline's prompt API for terminals and bounded
   iteration for pipes; it owns the themed prompt, native Tab completion, and

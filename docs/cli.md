@@ -32,6 +32,22 @@ Seeing a value with `echo $OPENAI_API_KEY` does not prove it is exported. Withou
 checks that credentials are present before opening the REPL and explains how to
 fix a missing key. OpenAI validates the key when the model makes a request.
 
+For the built-in Anthropic provider, export `ANTHROPIC_API_KEY` and select it explicitly:
+
+```sh
+export ANTHROPIC_API_KEY
+tubeless agent --provider anthropic
+```
+
+`--provider` selects a named configuration. The built-in registry contains `openai`
+(the default) and `anthropic`; a model module can supply other names. Model names do not
+select a provider. Anthropic defaults to `ANTHROPIC_MODEL` or `claude-opus-5-5`;
+OpenAI defaults to `OPENAI_MODEL` or `gpt-5.4-mini`. `--model` overrides either
+default. `/model` changes models within the selected provider, preserving its
+conversation format. Start a new CLI session to change providers.
+Anthropic also accepts `ANTHROPIC_AUTH_TOKEN` as a bearer token when no nonblank
+`ANTHROPIC_API_KEY` is set; the API key takes precedence when both are supplied.
+
 Alternatively, keep credentials in a local dotenv file and select it explicitly:
 
 ```dotenv
@@ -49,11 +65,12 @@ tubeless agent --env-file .env.agent
 built-in dotenv parser, supporting quotes, comments, whitespace, and an optional
 `export` prefix. It treats values as literal text, without shell execution or
 variable expansion. Existing process environment values take precedence over the
-file, including empty values; `--model` overrides `OPENAI_MODEL`. Runtime-loaded
+file, including empty values; `--model` overrides the selected provider's model variable. Runtime-loaded
 environment values, such as Bun's automatic dotenv loading, count as existing
-values too. `OPENAI_BASE_URL` from the file selects the endpoint for the built-in
-provider. File values are passed to the model factory without changing
-`process.env`. The built-in provider trims the key and rejects internal whitespace
+values too. `OPENAI_BASE_URL` or `ANTHROPIC_BASE_URL` from the file selects the endpoint
+for the corresponding built-in provider. Anthropic uses an API root without `/v1`.
+File values are passed to the model factory without changing
+`process.env`. Built-in providers trim credentials and reject internal whitespace
 or control characters. Credential and file-loading diagnostics omit secret values.
 This checkout ignores `.env` and `.env.*` except `.env.example`.
 
@@ -124,8 +141,8 @@ SIGTERM ends the session with 7. `--max-turns`, `--max-calls`, and
 `--max-concurrency` override the ordinary agent budgets; `--instructions` appends
 instructions to the default prompt. `--tools read,list,search` limits the default tools the agent may use.
 `--codemode` offers one `codemode` tool whose
-JavaScript scripts call the workspace tools; see [code mode](./agents.md#code-mode). Model selection defaults to `OPENAI_MODEL`
-or the OpenAI adapter's default. The agent reads project guidance and has the
+JavaScript scripts call the workspace tools; see [code mode](./agents.md#code-mode).
+The agent reads project guidance and has the
 standard `read`, `write`, `edit`, `bash`, `list`, and `search` tools with the host's
 permissions. See [agents](./agents.md#default-model-backed-agent) for their contracts.
 
@@ -146,8 +163,78 @@ agent turns, tool activity, model usage and logs, but not the prompt or answer
 text, so they are not a saved conversation. Logs and tool activity can still
 contain workspace content; keep traces and stores as private as the workspace.
 
-To plug in another provider, pass `--model-module ./model.ts`. The trusted local
-module must default-export a factory accepting `{ model: string, signal: AbortSignal, env: Readonly<NodeJS.ProcessEnv> }` and returning
+#### Configure named providers
+
+Provider names identify configurations, not API formats. A service using the
+Anthropic Messages API can have its own endpoint, bearer token, model, and feature
+settings. A service using the OpenAI Responses API can use `openaiModel()`;
+an unrelated API can supply any `AgentModel` factory. Adding a service does not
+require changing the CLI's provider resolver.
+
+Default-export a registry from a trusted local module. Use the public
+`AgentProvider` type from `tubeless/cli` to check its shape:
+
+```ts
+// agent-models.ts
+import type { AgentProvider } from "tubeless/cli";
+import { anthropicModel } from "tubeless/agent/anthropic";
+
+export default {
+  baseten: {
+    model: "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    modelEnv: "BASETEN_MODEL",
+    credentialEnv: ["BASETEN_API_KEY"],
+    createModel: ({ model, env }) =>
+      anthropicModel({
+        model,
+        baseUrl: "https://inference.baseten.co",
+        authToken: env.BASETEN_API_KEY?.trim(),
+        strict: false,
+        promptCaching: false,
+        compactAfterBytes: null,
+      }),
+  },
+} satisfies Readonly<Record<string, AgentProvider>>;
+```
+
+```sh
+export BASETEN_API_KEY
+tubeless agent --model-module ./agent-models.ts --provider baseten
+# From this checkout:
+bun run tubeless -- agent --model-module ./examples/agent-providers.ts --provider baseten
+```
+
+The selected entry's `model` is the default. Its optional `modelEnv` overrides
+that default; `--model` overrides both. `/model` selects another model within the
+same configuration, retaining its conversation. `createModel` runs once per prompt
+with `{ model, signal, env }`, including scoped `--env-file` values.
+
+`credentialEnv` is an optional list of credential variable names in priority order.
+Before opening the REPL, the CLI requires a nonblank value from that list and
+rejects whitespace or controls within the selected token. Omit the list for
+factories with other authentication methods. The factory owns authentication and
+must read the same scoped `env`; the CLI does not inject credentials into adapters
+or mutate `process.env`. Only the selected entry's configuration and credentials
+are checked; unused factories are never called.
+
+An explicit model module replaces the built-in registry. Select its entry with
+`--provider`; omission selects `openai`. An unknown name fails without falling
+back to a public service. Shell completion suggests the built-in names without
+importing local modules; type configured names directly.
+
+The [compiled provider registry](../examples/agent-providers.ts) includes Baseten.
+Its Messages API is in beta and uses bearer authentication; the example disables
+strict tools, prompt caching and compaction. Check the
+[Baseten API reference](https://docs.baseten.co/reference/inference-api/messages)
+for currently supported models and fields. OpenAI-compatible Chat Completions
+alone does not satisfy the Responses adapter; see [compatible APIs](./agents.md#compatible-apis).
+
+#### Supply a single model factory
+
+`--model-module ./model.ts` also accepts a default-exported factory when no
+`--provider` is supplied. This form keeps the existing default model selection
+(`--model`, then `OPENAI_MODEL`, then `gpt-5.4-mini`). The factory accepts
+`{ model: string, signal: AbortSignal, env: Readonly<Record<string, string | undefined>> }` and returns
 an `AgentModel`, synchronously or asynchronously. Tubeless calls the factory for
 each task with the currently selected model, that task's cancellation signal,
 and the resolved environment. Custom factories use `env` for provider credentials

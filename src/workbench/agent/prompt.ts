@@ -8,6 +8,7 @@ import {
 } from "../../agent/agent.js";
 import type { PipelineLogger } from "../../core/pipeline.js";
 import type { PipelineTracingOptions } from "../../tracing/tracing-contracts.js";
+import type { AgentModelFactory } from "../../cli/cli-agent-provider.js";
 import { createPipelineReporter } from "../../reporter/interactive-reporter.js";
 import { safeTerminalLog, safeTerminalText } from "../../reporter/terminal-text.js";
 import { awaitWithAbort, throwIfAborted } from "../../utilities/abort.js";
@@ -17,12 +18,6 @@ import {
   TUBELESS_WORKBENCH_EXIT_CODE,
   type WorkbenchCliIo,
 } from "../workbench-shared.js";
-
-export type AgentModelFactory = (options: {
-  readonly model: string;
-  readonly signal: AbortSignal;
-  readonly env: Readonly<NodeJS.ProcessEnv>;
-}) => AgentModel | Promise<AgentModel>;
 
 export interface AgentPromptOptions {
   readonly model: string;

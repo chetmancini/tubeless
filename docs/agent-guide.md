@@ -425,10 +425,23 @@ read when a pipeline needs them.
   `tubeless history` and Studio. The interactive bike-inspired prompt
   supports Tab completion of `/model`, `/clear`,
   `/help`, `/quit`, and `/exit`; double Tab lists matching commands.
-  `--model-module` loads a trusted factory returning the public `AgentModel`
-  callback. Export `OPENAI_API_KEY` for the built-in provider or select a dotenv
+  `--provider` selects a named configuration. Built-in presets are `openai` (default)
+  and `anthropic`; their factories choose API adapters and public-service defaults.
+  For other services, default-export a registry of `AgentProvider` entries from
+  `tubeless/cli`, then use `--model-module ./agent-models.ts --provider baseten`.
+  Each entry declares `model`, optional `modelEnv` and `credentialEnv` variable names,
+  and a `createModel` factory. Only the selected entry is checked; a module replaces
+  the built-in registry and unknown names never fall back to a public endpoint.
+  Adapt [the Baseten registry](../examples/agent-providers.ts): it uses the Messages
+  API with its own endpoint and bearer token, disabling unsupported features.
+  A default-exported single factory remains supported without `--provider`.
+  Export `OPENAI_API_KEY` or
+  `ANTHROPIC_API_KEY` for the selected provider, or select a dotenv
   file with `--env-file`; existing process environment values take precedence.
-  Missing-key checks are local; OpenAI authenticates model requests. HTTP 401
+  `--model` overrides `OPENAI_MODEL` or `ANTHROPIC_MODEL`; `/model` stays within the
+  selected provider. Anthropic also accepts `ANTHROPIC_AUTH_TOKEN` when no API key
+  is set, and `ANTHROPIC_BASE_URL` for a compatible API root without `/v1`.
+  Missing-key checks are local; providers authenticate model requests. OpenAI HTTP 401
   diagnostics expose known rejection codes and safe recovery advice without raw
   provider messages. Restart the CLI after replacing credentials.
   Factories receive `{ model, signal, env }` with the resolved environment;

@@ -266,17 +266,24 @@ Prompts share conversation context; each execution has fresh limits and the defa
 `,
     footer: `REPL commands:
 ${AGENT_REPL_HELP}
-OpenAI needs an exported OPENAI_API_KEY or --env-file. Workspace tools run with your host permissions.`,
+Export OPENAI_API_KEY (default) or ANTHROPIC_API_KEY (--provider anthropic), or use --env-file.
+Workspace tools run with your host permissions.`,
     options: {
+      provider: {
+        type: "string",
+        description: "Named model configuration (default openai); built-in or from --model-module",
+        valueName: "name",
+        completion: ["openai", "anthropic"],
+      },
       model: {
         type: "string",
-        description: "Model name (defaults to OPENAI_MODEL or gpt-5.4-mini)",
+        description: "Model name (defaults to the selected provider's environment or model)",
         valueName: "name",
         completion: "text",
       },
       "model-module": {
         type: "string",
-        description: "Default-export a factory ({ model, signal, env }) => AgentModel",
+        description: "Default-export a named provider registry or a single model factory",
         valueName: "file",
         completion: "file",
       },

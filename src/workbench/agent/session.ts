@@ -2,12 +2,8 @@ import { safeTerminalText } from "../../reporter/terminal-text.js";
 import { createReporterTheme } from "../../reporter/reporter.js";
 import { AGENT_REPL_HELP, parseAgentCommand } from "./commands.js";
 import { AgentInput } from "./input.js";
-import {
-  createPromptSession,
-  executeAgentPrompt,
-  type AgentModelFactory,
-  type AgentPromptOptions,
-} from "./prompt.js";
+import { createPromptSession, executeAgentPrompt, type AgentPromptOptions } from "./prompt.js";
+import type { AgentModelFactory } from "../../cli/cli-agent-provider.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "../workbench-shared.js";
 
 /** Own commands and session cancellation; single prompts use the same task loop. */
