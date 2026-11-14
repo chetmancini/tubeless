@@ -24,7 +24,7 @@ Package: `tubeless`
 | `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `ddb367b6873fa00af13e41707aaa186d5cacf94bd0df292ef423423ea463b6af` |                2 |
 | `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `7bfaaf0d0f0dabdb41e5077c89db7b93e760eb045be317699f253af0ac06cca9` |                7 |
 | `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `802f1cf939ab5386bd506739919705860d89e4c3f6ca65a1c416ffa649780461` |                2 |
-| `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `93350a8d8d7170ba3bf5744e3592a170e91335c1ce831f23991e443de7d701d7` |               13 |
+| `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `1375149ab21ff20916e08788da2553e0d2559839d57ba8606a4509bea8f0e033` |               13 |
 | `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `117b062cd40442eafc325bca9e3d5015ffa9e94c08d54645bf4d154ec3d01c3c` |                4 |
 
 ## Symbols
@@ -325,12 +325,12 @@ Package: `tubeless`
 
 | Symbol                                                                                                                               | Description                                                                                     |
 | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| [`CloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L55)                                | Worker handler and Durable Object classes that a Worker entry exports.                          |
-| [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L37)                         | Options for createCloudflareApp.                                                                |
-| [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L52)                 | Durable Object class to export from the Worker entry under its binding's export name.           |
-| [`CloudflareTraceContext`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L32)                       | Context for one admitted Cloudflare launch, including this Durable Object's bindings.           |
-| [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L47)                             | Worker module handler to use as the Worker entry's default export.                              |
-| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L110)                         | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects.       |
+| [`CloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L51)                                | Worker handler and Durable Object classes that a Worker entry exports.                          |
+| [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L33)                         | Options for createCloudflareApp.                                                                |
+| [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L48)                 | Durable Object class to export from the Worker entry under its binding's export name.           |
+| [`CloudflareTraceContext`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L28)                       | Context for one admitted Cloudflare launch, including this Durable Object's bindings.           |
+| [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L43)                             | Worker module handler to use as the Worker entry's default export.                              |
+| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L106)                         | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects.       |
 | [`createR2CacheStore`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L24)                     | Step cache entries in R2.                                                                       |
 | [`createWorkerLoaderCodemodeExecutor`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-codemode.ts#L107) | Run each code-mode script in a fresh Cloudflare Dynamic Worker from a `worker_loaders` binding. |
 | [`jsonCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L132)                        | Lossless JSON codec for Workers, where the default V8 codec is unavailable.                     |
