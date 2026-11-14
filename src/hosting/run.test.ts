@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
-import { commands, completedStatus, ingest, job, sideEffect } from "./run.test-support.js";
+import { commands, completedStatus, ingest, job } from "./run.test-support.js";
 import {
   BatchingTraceExporter,
   runHostedJob,
