@@ -1,6 +1,17 @@
 import type { PipelineStepContext } from "../core/pipeline-types.js";
 import type { Awaitable } from "./agent-types.js";
 import { agentScope } from "./execution-scope.js";
+import {
+  wireBoolean,
+  wireCustom,
+  wireEnum,
+  wireLiteral,
+  wireObject,
+  wireOptional,
+  wireString,
+  wireUnion,
+  type WireSchema,
+} from "../tracing/wire-schema.js";
 
 /** Provider-neutral observations; decisions are proposals, not evidence of acceptance. */
 export type AgentTranscriptEvent =
@@ -58,11 +69,15 @@ export interface AgentTranscriptOptions {
   readonly maxBytes?: number;
 }
 
-type Settings = Required<Pick<AgentTranscriptOptions, "maxRecordBytes" | "maxBytes">> &
+export type AgentTranscriptSettings = Required<
+  Pick<AgentTranscriptOptions, "maxRecordBytes" | "maxBytes">
+> &
   AgentTranscriptOptions;
 
 /** Snapshot services and bounds when compiling, including the definition reused by sessions. */
-export function transcriptSettings(options?: AgentTranscriptOptions): Settings | undefined {
+export function transcriptSettings(
+  options?: AgentTranscriptOptions
+): AgentTranscriptSettings | undefined {
   if (options === undefined) return undefined;
   const { write, redact, maxRecordBytes = 65_536, maxBytes = 1_048_576 } = options ?? {};
   if (
@@ -91,11 +106,44 @@ type Payload =
   | { event: AgentTranscriptEvent }
   | { omitted: AgentTranscriptEvent["kind"]; reason: Omitted["reason"] };
 
+const text = wireString({ allowEmpty: true });
+const present = wireCustom({}, (value, path) => {
+  if (value === undefined) throw new Error(`${path} is required`);
+  return value;
+});
+const callFields = { id: text, tool: text };
+const eventSchemas = {
+  prompt: wireObject({ task: text, instructions: text }),
+  assistant: wireObject({ text }),
+  decision: wireObject({ decision: present }),
+  call: wireObject({ ...callFields, input: present }),
+  outcome: wireObject({
+    outcome: wireUnion([
+      wireObject({ ...callFields, ok: wireLiteral(true), value: present }),
+      wireObject({
+        ...callFields,
+        ok: wireLiteral(false),
+        error: wireObject({ code: text, message: text }),
+      }),
+    ]),
+    replayed: wireOptional(wireBoolean()),
+  }),
+  compaction: wireObject({ provider: text }),
+  end: wireObject({
+    status: wireEnum(["completed", "failed", "cancelled"]),
+    replayed: wireOptional(wireBoolean()),
+  }),
+} satisfies {
+  [Kind in AgentTranscriptEvent["kind"]]: WireSchema<
+    Omit<Extract<AgentTranscriptEvent, { kind: Kind }>, "kind">
+  >;
+};
+
 const encoder = new TextEncoder();
 const bytes = (text: string) => encoder.encode(text).length;
 
 /** Bound copying work before invoking application code; never invoke getters or toJSON. */
-function snapshot<T>(input: T, budget: number): T {
+function snapshot(input: AgentTranscriptEvent, budget: number): AgentTranscriptEvent {
   const ancestors = new Set<object>();
   const charge = (size: number) => {
     budget -= size;
@@ -150,7 +198,7 @@ function snapshot<T>(input: T, budget: number): T {
     return Object.freeze(result);
   };
   // SAFETY: the bounded plain-data copy preserves JSON-compatible input and freezes it.
-  return copy(input, 0) as T;
+  return copy(input, 0) as AgentTranscriptEvent;
 }
 
 export function agentTranscript(context: object): AgentTranscriptCapture | undefined {
@@ -163,16 +211,13 @@ export class AgentTranscriptCapture {
   private sequence = 0;
   private used = 0;
   private stopped = false;
-  turn = 0;
-
   constructor(
-    private readonly settings: Settings,
+    private readonly settings: AgentTranscriptSettings,
     private readonly agentId: string,
     private readonly context: PipelineStepContext<object>
   ) {}
 
   record(turn: number, event: AgentTranscriptEvent): Promise<void> {
-    this.turn = turn;
     if (this.stopped) return this.pending;
     let payload: Payload | undefined;
     try {
@@ -202,17 +247,6 @@ export class AgentTranscriptCapture {
   private async deliver(turn: number, payload: Payload): Promise<void> {
     const { maxRecordBytes, maxBytes, redact, write } = this.settings;
     const kind = "event" in payload ? payload.event.kind : payload.omitted;
-    if ("event" in payload && redact)
-      try {
-        const redacted = await redact(payload.event);
-        if (redacted === null) return;
-        const replacement = snapshot(redacted, maxRecordBytes);
-        if (replacement.kind !== kind) throw new Error("Redaction changed event kind");
-        payload = { event: replacement };
-      } catch (error) {
-        if (!(error instanceof Omitted)) throw error;
-        payload = { omitted: kind, reason: error.reason };
-      }
     const envelope = {
       version: 1 as const,
       agentId: this.agentId,
@@ -223,10 +257,26 @@ export class AgentTranscriptCapture {
       turn,
       dryRun: this.context.dryRun,
     };
-    let record: AgentTranscriptRecord = { ...envelope, ...payload };
     const size = (value: AgentTranscriptRecord) => bytes(JSON.stringify(value)) + 1;
-    if (size(record) > maxRecordBytes)
-      record = { ...envelope, omitted: kind, reason: "record-limit" };
+    const bound = (content: Payload): AgentTranscriptRecord => {
+      const record = { ...envelope, ...content };
+      return size(record) <= maxRecordBytes
+        ? record
+        : { ...envelope, omitted: kind, reason: "record-limit" };
+    };
+    let record = bound(payload);
+    if ("event" in record && redact)
+      try {
+        const redacted = await redact(record.event);
+        if (redacted === null) return;
+        const replacement = snapshot(redacted, maxRecordBytes);
+        if (replacement.kind !== kind) throw new Error("Redaction changed event kind");
+        eventSchemas[kind].decode(replacement, "Transcript event");
+        record = bound({ event: replacement });
+      } catch (error) {
+        if (!(error instanceof Omitted)) throw error;
+        record = bound({ omitted: kind, reason: error.reason });
+      }
     if (this.used + size(record) > maxBytes - maxRecordBytes) {
       record = { ...envelope, limit: "maxBytes" };
       this.stopped = true;

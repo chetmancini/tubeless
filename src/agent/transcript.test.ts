@@ -161,7 +161,7 @@ describe("agent transcript capture", () => {
       { kind: "end", status: "completed" },
     ]);
     expect(records.map((record) => record.sequence)).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(records.map((record) => record.turn)).toEqual([1, 1, 1, 1, 1, 2, 2]);
+    expect(records.map((record) => record.turn)).toEqual([1, 1, 1, 1, 1, 2, 0]);
     expect(new Set(records.map((record) => record.runId)).size).toBe(1);
   });
 
@@ -212,6 +212,82 @@ describe("agent transcript capture", () => {
       expect(write).toHaveBeenCalledTimes(failure === "sink" ? 1 : 0);
     }
   );
+
+  it.each([
+    {
+      event: { kind: "prompt", task: "task", instructions: "guidance" },
+      replacement: { kind: "prompt", task: 42, instructions: "guidance" },
+    },
+    { event: { kind: "assistant", text: "visible" }, replacement: { kind: "assistant" } },
+    { event: { kind: "decision", decision: finish }, replacement: { kind: "decision" } },
+    {
+      event: { kind: "call", id: "one", tool: "double", input: 2 },
+      replacement: { kind: "call", id: "one", tool: "double" },
+    },
+    {
+      event: { kind: "outcome", outcome: { id: "one", tool: "double", ok: true, value: 4 } },
+      replacement: { kind: "outcome", outcome: { id: "one", tool: "double", ok: true } },
+    },
+    {
+      event: {
+        kind: "outcome",
+        outcome: {
+          id: "one",
+          tool: "double",
+          ok: false,
+          error: { code: "MISSING", message: "missing" },
+        },
+      },
+      replacement: {
+        kind: "outcome",
+        outcome: { id: "one", tool: "double", ok: false, error: { code: 42, message: "missing" } },
+      },
+    },
+    {
+      event: { kind: "compaction", provider: "openai" },
+      replacement: { kind: "compaction", provider: false },
+    },
+    {
+      event: { kind: "end", status: "completed" },
+      replacement: { kind: "end", status: "unknown" },
+    },
+  ] satisfies readonly { event: AgentTranscriptEvent; replacement: unknown }[])(
+    "rejects malformed $event.kind redactions before delivery",
+    async ({ event, replacement }) => {
+      const write = vi.fn();
+      const warn = vi.fn();
+      const agent = defineAgentLoop({
+        ...base,
+        transcript: { write, redact: () => replacement as AgentTranscriptEvent },
+        decide: async (_state, context) => {
+          await agentTranscript(context)!.record(context.turn, event);
+          return finish;
+        },
+      });
+      expect(await agent.runOrThrow({}, undefined, { log: { log() {}, warn, error() {} } })).toBe(
+        4
+      );
+      expect(write).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledOnce();
+    }
+  );
+
+  it("includes the envelope in the size limit before calling redaction", async () => {
+    const records: AgentTranscriptRecord[] = [];
+    const redact = vi.fn((event: AgentTranscriptEvent) => event);
+    const event = { kind: "assistant" as const, text: "x".repeat(900) };
+    expect(Buffer.byteLength(JSON.stringify(event))).toBeLessThan(1024);
+    await defineAgentLoop({
+      ...base,
+      transcript: { ...collect(records), redact, maxRecordBytes: 1024, maxBytes: 4096 },
+      decide: async (_state, context) => {
+        await agentTranscript(context)!.record(context.turn, event);
+        return finish;
+      },
+    }).runOrThrow();
+    expect(records[0]).toMatchObject({ omitted: "assistant", reason: "record-limit" });
+    expect(redact.mock.calls.some(([event]) => event.kind === "assistant")).toBe(false);
+  });
 
   it("bounds UTF-8 records before and after redaction and reserves a total-limit marker", async () => {
     const records: AgentTranscriptRecord[] = [];

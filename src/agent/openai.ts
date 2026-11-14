@@ -189,23 +189,25 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
           if (input.length === 0) throw new Error("OpenAI returned empty compaction");
           if (newPrompt) input.push({ role: "user", content: request.task });
           context.log.log("Compacted agent conversation");
-          await agentTranscript(context)?.record(context.turn, {
+          // Queue provider observations; the harness drains them outside the request deadline.
+          void agentTranscript(context)?.record(context.turn, {
             kind: "compaction",
             provider: "openai",
           });
         }
         const body = await send("decision", "responses", { ...decisionRequest, input });
-        if (!record(body) || body.status !== "completed")
-          throw new Error("OpenAI did not return a completed response");
+        if (!record(body)) throw new Error("OpenAI did not return a completed response");
         const output = outputItems(body);
-        const decision = openaiDecision(output);
         const transcript = agentTranscript(context);
         if (transcript)
           for (const item of output)
             if (item.type === "message" && Array.isArray(item.content))
               for (const part of item.content)
                 if (record(part) && part.type === "output_text" && typeof part.text === "string")
-                  await transcript.record(context.turn, { kind: "assistant", text: part.text });
+                  void transcript.record(context.turn, { kind: "assistant", text: part.text });
+        if (body.status !== "completed")
+          throw new Error("OpenAI did not return a completed response");
+        const decision = openaiDecision(output);
         const conversation = [...input, ...output];
         // A completed user prompt may be continued later. Close the adapter's
         // synthetic tool call before another user message enters native history.

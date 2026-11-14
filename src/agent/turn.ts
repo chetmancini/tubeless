@@ -58,8 +58,6 @@ export function createAgentTurn<
     run: async (_inputs, context): Promise<Decision> => {
       const { execution, options, agentRunId } = context.options;
       const { turn, stateVersion, state, calls } = execution;
-      const transcript = agentTranscript(context);
-      if (transcript) transcript.turn = turn;
       throwIfAborted(context.signal, "Agent decision");
       const scope = agentScope(context)!;
       const saved = scope.journal?.agent(scope.agentKey);

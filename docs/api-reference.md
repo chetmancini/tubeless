@@ -10,10 +10,10 @@ Package: `tubeless`
 
 | Entrypoint                  | Declaration                               | Surface hash                                                       | Exported symbols |
 | --------------------------- | ----------------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless/agent/node`       | `./dist/agent/node.d.ts`                  | `664d6365905d16054012efcbee93008358d16ea7e27403414884082c6430b11e` |                4 |
-| `tubeless/agent`            | `./dist/agent/agent.d.ts`                 | `3c72dbbf726ac499dbd70e2dd520676e6e9b832729ad2ee6462cc89364314e15` |               42 |
+| `tubeless/agent/node`       | `./dist/agent/node.d.ts`                  | `4bcc4602d50229c03b00cca0fd13718bfd1c2cfdb5092a84777b16720ad8eaaf` |                4 |
+| `tubeless/agent`            | `./dist/agent/agent.d.ts`                 | `eb93f783da5f20f19a051ca6414e97463795672a715050e00741f15d90c03aeb` |               42 |
 | `tubeless`                  | `./dist/core/pipeline.d.ts`               | `2d2d4d256dd3d2866e5b7e162edba7b32b4ad06346806b5114ea5a408134afa7` |               81 |
-| `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `4d07c2465797178fd2d20628b6468888661575b6755c2754f8aa8264c92dde1a` |               33 |
+| `tubeless/cli`              | `./dist/cli/cli.d.ts`                     | `dbfd538ef19d8fecc37f1c65c44d4972a735626d3082c1074261142ee7cc6b7f` |               33 |
 | `tubeless/batch`            | `./dist/utilities/batch.d.ts`             | `856e4e759f1a62a4edd210d0291bc8b3d82b2e3e983bd37d7348bfb2b8993156` |                7 |
 | `tubeless/node`             | `./dist/node/node.d.ts`                   | `9af0294eaf7753f7777235ffbfb8d41406fd6ee156f133ccf7b5ba078bdecdd8` |               14 |
 | `tubeless/rate-limit`       | `./dist/utilities/rate-limit.d.ts`        | `21223a0ce096d7eb188e7aa38e4e0df70081b086f899dfea825b429308f6910e` |                1 |
@@ -21,9 +21,9 @@ Package: `tubeless`
 | `tubeless/project`          | `./dist/project/project.d.ts`             | `9c3a97aaf483562c8a8487afa4dbdc177517867dbe1aa774ccc9e5670993607d` |                9 |
 | `tubeless/testing`          | `./dist/testing/testing.d.ts`             | `624fba9cfe9094c2166ed4bd30739659257bcaf17e61a2a1c9d2993bdd5a6b92` |               10 |
 | `tubeless/tracing`          | `./dist/tracing/tracing.d.ts`             | `7d52833c68a401c4fa69b221e5b7b37f9c2c0af089d02d8b89b8bdc8860ff1e2` |                4 |
-| `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `55ee7327e818fb15d6d40f8a82c0f2405ba2483cf41b2ee9320328fa4cd88e50` |                2 |
-| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `ac3f735869a4427663c25b5aafb032e66e16815775a265badc53b2669695ea02` |                7 |
-| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `5b402c1a5e7fd13d307a7001d85250829d8259b2eace8fbcf49c448dc2f30ed6` |                2 |
+| `tubeless/agent/openai`     | `./dist/agent/openai.d.ts`                | `ddb367b6873fa00af13e41707aaa186d5cacf94bd0df292ef423423ea463b6af` |                2 |
+| `tubeless/agent/mcp`        | `./dist/agent/mcp.d.ts`                   | `7bfaaf0d0f0dabdb41e5077c89db7b93e760eb045be317699f253af0ac06cca9` |                7 |
+| `tubeless/agent/anthropic`  | `./dist/agent/anthropic.d.ts`             | `802f1cf939ab5386bd506739919705860d89e4c3f6ca65a1c416ffa649780461` |                2 |
 | `tubeless/cloudflare`       | `./dist/cloudflare/cloudflare.d.ts`       | `93350a8d8d7170ba3bf5744e3592a170e91335c1ce831f23991e443de7d701d7` |               13 |
 | `tubeless/cloudflare/cache` | `./dist/cloudflare/cloudflare-cache.d.ts` | `117b062cd40442eafc325bca9e3d5015ffa9e94c08d54645bf4d154ec3d01c3c` |                4 |
 
@@ -64,9 +64,9 @@ Package: `tubeless`
 | [`AgentState`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L12)                                  | Deeply read-only view of the owned plain-data state supplied to agent callbacks.                 |
 | [`AgentTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L16)                                   | Opaque capability created by defineTool or pipelineTool; model decisions contain data only.      |
 | [`AgentToolContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L123)                           | Step services and the workspace capability available to a registered tool.                       |
-| [`AgentTranscriptEvent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/transcript.ts#L6)                          | Provider-neutral observations; decisions are proposals, not evidence of acceptance.              |
-| [`AgentTranscriptOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/transcript.ts#L50)                       | Explicit content capture; applications own storage, retention and I/O deadlines.                 |
-| [`AgentTranscriptRecord`](https://github.com/chetmancini/tubeless/blob/main/src/agent/transcript.ts#L31)                        | One bounded inspection record.                                                                   |
+| [`AgentTranscriptEvent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/transcript.ts#L17)                         | Provider-neutral observations; decisions are proposals, not evidence of acceptance.              |
+| [`AgentTranscriptOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/transcript.ts#L61)                       | Explicit content capture; applications own storage, retention and I/O deadlines.                 |
+| [`AgentTranscriptRecord`](https://github.com/chetmancini/tubeless/blob/main/src/agent/transcript.ts#L42)                        | One bounded inspection record.                                                                   |
 | [`CodemodeExecution`](https://github.com/chetmancini/tubeless/blob/main/src/agent/codemode-executor.ts#L4)                      | One script for an executor to run, with the JSON-text bridge to its tools.                       |
 | [`CodemodeExecutionResult`](https://github.com/chetmancini/tubeless/blob/main/src/agent/codemode-executor.ts#L20)               | A script's JSON result text and console lines, or the error that ended it.                       |
 | [`CodemodeExecutor`](https://github.com/chetmancini/tubeless/blob/main/src/agent/codemode-executor.ts#L39)                      | Runs code-mode scripts in an isolated sandbox.                                                   |

@@ -13,7 +13,8 @@ ordinary pipelines and code-mode calls inside an agent retain its capture scope.
 The sink may be shared, but must partition records by `runId`.
 
 Records use a separate versioned envelope with agent ID, agent run ID, optional
-parent run ID, sequence, timestamp, turn and dry-run flag. They do not extend trace
+parent run ID, sequence, timestamp, turn and dry-run flag. Reserve turn zero for
+invocation-level end events and use one-based turns for decisions and tools. They do not extend trace
 events, definition identities, run reports or recovery checkpoints. Their run ID
 joins existing structural history even when trace exporting is disabled.
 
@@ -44,7 +45,8 @@ contents, scripts and tool errors. Opt-in is independent of `--store` and `--tra
 No built-in destination is selected. Applications own destination permissions,
 retention, deletion, access controls and any durable storage. Their redactor receives
 an owned, frozen event and returns a replacement of the same kind, or `null` to
-suppress it. It cannot mutate runtime values or envelope identity.
+suppress it. It cannot mutate runtime values or envelope identity. Validate the
+replacement's kind and required fields before delivery; invalid replacements disable capture.
 
 Before redaction, content is copied through a bounded plain-JSON projection. Cycles,
 accessors, nonfinite numbers, undefined values, class instances and excessive depth
@@ -63,6 +65,9 @@ envelope that cannot fit disables delivery. These bounds apply before storage, s
 Cloudflare can store records separately without adding content to bounded trace rows.
 
 Delivery is awaited and serialized per invocation, including concurrent tool results.
+Providers enqueue observations without awaiting sinks inside their request deadlines;
+the harness drains those observations with the next decision or terminal record,
+including when a provider rejects its response.
 Records follow observation/completion order; call IDs join results to their decisions.
 There is no cross-run total order. A sink or redactor failure disables that invocation's
 capture and emits one fixed warning without exception text or content. Agent results,

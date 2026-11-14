@@ -11,7 +11,6 @@ import { OverrideExamplePipeline } from "../step-output-overrides.ts";
 import { CachedCountCommand } from "../step-output-cache.ts";
 import { PaginatedPipeline } from "../iteration.ts";
 import { ScriptedAgent } from "../agent.ts";
-import { TranscriptAgent } from "../agent-transcript.js";
 import { DelegatingAgentCommand } from "../agent-delegation.ts";
 import { AgentPipelineCommand } from "../agent-pipeline.js";
 import { CodingAgent } from "../agent-model.js";
@@ -49,8 +48,8 @@ export default defineProject(
     // Plain cached results and their receipts appear in history and Studio.
     CachedCountCommand,
     ScriptedAgent,
-    // The transcript recipe supplies an explicit sink, independently of structural tracing.
-    TranscriptAgent,
+    // For transcript capture, use createTranscriptAgent in ../agent-transcript.ts
+    // with an explicit application sink.
     OpenAIAgentCommand,
     // Live model decisions and tools share the physical run cwd, including through symlinks.
     // Scoped guidance precedes nested file operations and task commands in separate turns.

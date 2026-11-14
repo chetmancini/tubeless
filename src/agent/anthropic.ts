@@ -264,7 +264,8 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
               { role: "user", content: "Continue the task from this summary." },
             ];
             context.log.log("Compacted agent conversation");
-            await agentTranscript(context)?.record(context.turn, {
+            // Queue provider observations; the harness drains them outside the request deadline.
+            void agentTranscript(context)?.record(context.turn, {
               kind: "compaction",
               provider: "anthropic",
             });
@@ -277,6 +278,11 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
           const response = anthropicMessage(
             await send("messages", { ...decisionRequest, messages }, false)
           );
+          const transcript = agentTranscript(context);
+          if (transcript)
+            for (const block of response.content)
+              if (block.type === "text" && typeof block.text === "string")
+                void transcript.record(context.turn, { kind: "assistant", text: block.text });
           if (response.stopReason === "max_tokens")
             throw new Error("Anthropic response reached max_tokens; raise maxTokens");
           if (response.stopReason === "refusal") throw new Error("Anthropic refused the request");
@@ -285,11 +291,6 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
           if (response.content.length === 0) throw new Error("Anthropic returned empty content");
           // Keep every block, including thinking and signatures, exactly as returned.
           messages = [...messages, { role: "assistant", content: response.content }];
-          const transcript = agentTranscript(context);
-          if (transcript)
-            for (const block of response.content)
-              if (block.type === "text" && typeof block.text === "string")
-                await transcript.record(context.turn, { kind: "assistant", text: block.text });
           const decision = anthropicDecision(response.content);
           if (decision) return { decision, conversation: messages };
           if (attempt > 0) throw new Error("Anthropic returned no tool calls");

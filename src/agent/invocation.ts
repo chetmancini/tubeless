@@ -14,11 +14,7 @@ import {
 } from "./environment.js";
 import { AgentExecutionScope, agentScope } from "./execution-scope.js";
 import type { TurnState } from "./turn.js";
-import {
-  AgentTranscriptCapture,
-  transcriptSettings,
-  type AgentTranscriptOptions,
-} from "./transcript.js";
+import { AgentTranscriptCapture, type AgentTranscriptSettings } from "./transcript.js";
 
 export function initialAgentExecution<State>(
   initialize: () => State,
@@ -36,7 +32,7 @@ export async function runAgentInvocation<Options extends object, State>(
     implementationVersion?: string;
     environment?: AgentEnvironmentProvider;
     durability?: AgentDurability<Options>;
-    transcript?: AgentTranscriptOptions;
+    transcript?: AgentTranscriptSettings;
     initialState(options: Options): State;
     onCompletedReplay?(state: AgentState<State>): void;
     limits: Required<AgentLimits>;
@@ -75,8 +71,8 @@ export async function runAgentInvocation<Options extends object, State>(
     throw new Error("Agent environment requires a nonblank cwd of at most 4096 characters");
   throwIfAborted(context.signal, "Agent workspace");
   const scoped = { ...context, cwd };
-  const settings = transcriptSettings(config.transcript);
-  const transcript = settings && new AgentTranscriptCapture(settings, config.id, scoped);
+  const transcript =
+    config.transcript && new AgentTranscriptCapture(config.transcript, config.id, scoped);
   const journal =
     inherited ??
     (durability
@@ -133,10 +129,10 @@ export async function runAgentInvocation<Options extends object, State>(
       await journal?.fail(scope.agentKey, error, context.signal);
       throw error;
     }
-    await transcript?.record(transcript.turn, { kind: "end", status: "completed" });
+    await transcript?.record(0, { kind: "end", status: "completed" });
     return result;
   } catch (error) {
-    await transcript?.record(transcript.turn, {
+    await transcript?.record(0, {
       kind: "end",
       status: isPipelineCancellation(error, context) ? "cancelled" : "failed",
     });

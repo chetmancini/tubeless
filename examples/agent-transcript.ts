@@ -4,7 +4,7 @@ import { defineAgentLoop, type AgentTranscriptOptions } from "tubeless/agent";
 import { textAnswer, textOptions, textTools } from "./agent.js";
 
 /** The caller chooses a private destination; importing the recipe performs no file I/O. */
-export function createTranscriptAgent(transcript?: AgentTranscriptOptions) {
+export function createTranscriptAgent(transcript: AgentTranscriptOptions) {
   return defineAgentLoop({
     id: "transcript-agent",
     name: "Transcript agent",
@@ -40,6 +40,3 @@ export async function runTranscriptExample(destination: string, question = "hell
   });
   return agent.runOrThrow({ question });
 }
-
-// The catalog has no capture destination. Use the factory to choose one explicitly.
-export const TranscriptAgent = createTranscriptAgent();

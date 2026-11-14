@@ -1129,7 +1129,8 @@ await agent.runOrThrow({ task: "List the files in this workspace." });
 
 Each version-1 record has `agentId`, `runId`, optional `parentRunId`, `sequence`,
 `timestamp`, `turn` and `dryRun`. `runId` is the owning agent invocation's ID,
-which joins structural history. Sequences start at one for each invocation;
+which joins structural history. Reserve `turn: 0` for invocation-level end events;
+number decision and tool events from turn one. Sequences start at one for each invocation;
 concurrent runs can share a sink but have separate sequences and byte budgets.
 An ordinary record has an `event` from this union:
 
@@ -1154,7 +1155,9 @@ fatal error details stay in structural history rather than transcript end events
 Content can include project guidance, file contents, scripts and tool errors. Supply
 `redact` to return a replacement event of the same kind or `null` to suppress it.
 The redactor sees an owned, frozen snapshot and cannot change runtime values or
-envelope identity. Only finite plain JSON content is retained: cycles, accessors,
+envelope identity. Tubeless checks JSON-compatible replacements for the same kind
+and required fields before delivery, and disables capture if those checks fail.
+Only finite plain JSON content is retained: cycles, accessors,
 class instances, undefined values and excessive depth produce
 `{ omitted: <event kind>, reason: "unsupported-content" }` instead of an event.
 
@@ -1168,7 +1171,9 @@ An envelope that cannot fit disables capture. Omission markers contain no origin
 content. Neither omitted content nor a missing end event establishes an empty or
 failed conversation.
 
-Delivery is awaited and serialized per invocation, in observation order. Tool
+Delivery is awaited and serialized per invocation, in observation order. Providers
+enqueue observations during requests; the harness drains delivery outside provider
+request deadlines, including after rejected responses. Tool
 outcomes follow completion order; use call IDs to match decisions. Sink or redactor
 failure disables that invocation's capture with a fixed warning and leaves the
 agent's execution unchanged. Applications own sink I/O deadlines, permissions,
