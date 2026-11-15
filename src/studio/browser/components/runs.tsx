@@ -575,7 +575,7 @@ function RunDetail({
   };
   const tabs: [RunTab, string][] = [
     ["steps", `Steps · ${run.steps.length}`],
-    ...((detail.transcriptAvailable || (detail.transcriptLive && run.agent)) && api
+    ...(detail.transcriptAvailable && api
       ? [["transcript", "Transcript"] as [RunTab, string]]
       : []),
     ...(run.logs.length ? [["logs", `Logs · ${run.logs.length}`] as [RunTab, string]] : []),

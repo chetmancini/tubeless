@@ -103,7 +103,10 @@ it("retires an old run's request before displaying another run", async () => {
     .mockReturnValueOnce(old.promise)
     .mockReturnValueOnce(next.promise);
   const mounted = await mount(load);
+  const oldMore = mounted.state.more;
   await mounted.update("new-run");
+  await act(() => oldMore());
+  expect(load).toHaveBeenCalledTimes(2);
   await act(async () => next.resolve(page(1, "new-run")));
   await act(async () => old.resolve(page(1, "run")));
   expect(mounted.state.page?.runId).toBe("new-run");

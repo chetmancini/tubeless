@@ -143,8 +143,8 @@ export function createStudioApiHandler(
               ...(transcripts
                 ? {
                     transcriptAvailable:
+                      (transcriptLive && detail.run.agent !== undefined) ||
                       (await transcripts.list({ runId, limit: 1 })).records.length > 0,
-                    transcriptLive,
                   }
                 : {}),
             })

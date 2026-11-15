@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { defineAgentLoop } from "../../agent/agent.js";
+import { emptyInput, numberSchema } from "../../agent/agent.test-support.js";
 import { transcriptRecord } from "../../tracing/agent-transcript.test-support.js";
 import { createStudioApiHandler } from "./api.js";
 import { createStudioRequestHandler } from "./handler.js";
@@ -40,25 +42,57 @@ describe("Studio transcript routes", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("advertises mutable store content before the first transcript record arrives", async () => {
-    const list = vi.fn(async () => ({ runId: "run", records: [], status: "unavailable" as const }));
-    const api = createStudioApiHandler({
-      store: { ...memoryStore(recordedRun()), transcripts: { list } },
-    });
-    const get = (path: string) =>
-      api(new Request("http://studio.local" + path), new URL("http://studio.local" + path));
-    expect(await (await get("/api/runs/run")).json()).toMatchObject({
-      transcriptAvailable: false,
-      transcriptLive: true,
-    });
-    const first = await (await get("/api/runs/run/transcript")).json();
-    expect(first).toMatchObject({
-      live: true,
-      sourceId: expect.any(String),
-      transcript: { status: "unavailable" },
-    });
-    expect((await (await get("/api/runs/run/transcript")).json()).sourceId).toBe(first.sourceId);
-  });
+  it.each([
+    { agentRun: true, mutable: true, available: true },
+    { agentRun: false, mutable: true, available: false },
+    { agentRun: true, mutable: false, available: false },
+  ])(
+    "advertises an empty transcript view (agent=$agentRun, mutable=$mutable)",
+    async ({ agentRun, mutable, available }) => {
+      const agent = defineAgentLoop({
+        id: "fixture",
+        inputSchema: emptyInput,
+        resultSchema: numberSchema,
+        defaultTools: [],
+        tools: {},
+        initialState: () => 0,
+        decide: () => ({ kind: "finish", result: 0 }),
+        reduce: () => 0,
+      });
+      const events = recordedRun();
+      if (agentRun)
+        events[0] = storedEvent({
+          ...events[0]!,
+          version: 3,
+          payload: {
+            ...events[0]!.payload,
+            definitionIdentity: agent.definition?.identity,
+            definitionSnapshot: agent.definition,
+          },
+        });
+      const list = vi.fn(async () => ({
+        runId: "run",
+        records: [],
+        status: "unavailable" as const,
+      }));
+      const api = createStudioApiHandler({
+        store: { ...memoryStore(events), ...(mutable ? { transcripts: { list } } : {}) },
+        ...(mutable ? {} : { transcripts: { list } }),
+      });
+      const get = (path: string) =>
+        api(new Request("http://studio.local" + path), new URL("http://studio.local" + path));
+      expect(await (await get("/api/runs/run")).json()).toMatchObject({
+        transcriptAvailable: available,
+      });
+      const first = await (await get("/api/runs/run/transcript")).json();
+      expect(first).toMatchObject({
+        live: mutable,
+        sourceId: expect.any(String),
+        transcript: { status: "unavailable" },
+      });
+      expect((await (await get("/api/runs/run/transcript")).json()).sourceId).toBe(first.sourceId);
+    }
+  );
 
   it("validates cursor and run scope before reading content", async () => {
     const { get, list } = apiFixture();

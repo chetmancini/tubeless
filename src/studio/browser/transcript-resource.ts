@@ -1,23 +1,21 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import type { StudioTranscriptPage } from "../shared/schema.js";
 import type { StudioApi } from "./transport.js";
 
 export const TRANSCRIPT_REFRESH_MS = 1_200;
 type TranscriptApi = Pick<StudioApi, "loadTranscript" | "subscribeAccessDenied">;
 interface TranscriptState {
-  api?: TranscriptApi;
+  api: TranscriptApi;
   runId: string;
   result?: StudioTranscriptPage;
   loading: boolean;
   error?: string;
+  more(): void;
 }
 
 /** One visible conversation owns its requests, pagination and mutable-source refresh timer. */
 export function useTranscript(api: TranscriptApi, runId: string) {
-  const actions = useRef<{ api: TranscriptApi; runId: string; more(): void } | undefined>(
-    undefined
-  );
-  const [state, setState] = useState<TranscriptState>({ runId: "", loading: true });
+  const [state, setState] = useState<TranscriptState>();
   useEffect(() => {
     let active = true;
     let result: StudioTranscriptPage | undefined;
@@ -25,7 +23,7 @@ export function useTranscript(api: TranscriptApi, runId: string) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const hidden = () => typeof document !== "undefined" && document.hidden;
     const publish = (loading: boolean, error?: string) =>
-      setState({ api, runId, result, loading, error });
+      setState({ api, runId, result, loading, error, more: load });
     const cursor = () => result?.transcript.records.at(-1)?.sequence ?? 0;
     const refreshable = () =>
       result?.live && ["partial", "unavailable"].includes(result.transcript.status);
@@ -78,7 +76,6 @@ export function useTranscript(api: TranscriptApi, runId: string) {
         publish(false);
       } else if (!result || refreshable()) load();
     };
-    actions.current = { api, runId, more: load };
     publish(true);
     const unsubscribe = api.subscribeAccessDenied?.((status) => {
       active = false;
@@ -96,15 +93,12 @@ export function useTranscript(api: TranscriptApi, runId: string) {
         document.removeEventListener("visibilitychange", visibility);
     };
   }, [api, runId]);
-  const current = state.api === api && state.runId === runId;
+  const current = state?.api === api && state.runId === runId ? state : undefined;
   return {
-    page: current ? state.result?.transcript : undefined,
-    turnRuns: current ? (state.result?.turnRuns ?? {}) : {},
-    loading: !current || state.loading,
-    error: current ? state.error : undefined,
-    more() {
-      const action = actions.current;
-      if (action?.api === api && action.runId === runId) action.more();
-    },
+    page: current?.result?.transcript,
+    turnRuns: current?.result?.turnRuns ?? {},
+    loading: current?.loading ?? true,
+    error: current?.error,
+    more: current?.more ?? (() => {}),
   };
 }
