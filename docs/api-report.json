@@ -327,7 +327,9 @@
         "CloudflareAppOptions",
         "CloudflareDurableObjectClass",
         "CloudflareTraceContext",
+        "CloudflareTranscriptIngest",
         "CloudflareWorker",
+        "createCloudflareAgentTranscriptWriter",
         "createCloudflareApp",
         "createR2CacheStore",
         "createWorkerLoaderCodemodeExecutor",
@@ -337,7 +339,7 @@
         "WorkerLoaderCodemodeOptions",
         "WorkerLoaderLike"
       ],
-      "sha256": "356ba531876efcb06cc2cae139fcb9965cdb40d73878f750a909c0edb9ff62ab",
+      "sha256": "e74c1e2ddbc259c221e33f9c82ee6118994d3adb85212b7a7d1efb747c6290b7",
       "specifier": "tubeless/cloudflare"
     },
     {
@@ -345,6 +347,12 @@
       "exports": ["createR2CacheStore", "jsonCacheCodec", "R2BucketLike", "R2ObjectLike"],
       "sha256": "30fb378be8c6f3082958f425e421c286278c526e2ab91cece8d65c06abcfd5a7",
       "specifier": "tubeless/cloudflare/cache"
+    },
+    {
+      "declaration": "./dist/cloudflare/cloudflare-transcript.d.ts",
+      "exports": ["CloudflareTranscriptIngest", "createCloudflareAgentTranscriptWriter"],
+      "sha256": "c350b42df69b23b4ca110d1b71bba99491a049df097636c03485903d66d11b37",
+      "specifier": "tubeless/cloudflare/transcript"
     }
   ],
   "packageName": "tubeless",

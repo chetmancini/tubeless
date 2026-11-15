@@ -258,6 +258,11 @@ read when a pipeline needs them.
   `cache: { version, ...r2Cache }`. Those steps fail in local Node runs unless another
   bucket or store is supplied. The default file store and V8 codec fail on Workers, and
   `jsonCacheCodec` accepts only plain JSON data.
+- Opt in to hosted agent content with `createCloudflareAgentTranscriptWriter` from
+  `tubeless/cloudflare/transcript`, passing a getter for the private Studio RPC stub.
+  Supply its `write` on each agent with explicit redaction and capture bounds.
+  Studio reads content under history's Access rules; clearing deletes content and
+  events atomically and refuses active launches. See [Cloudflare transcripts](./deploy-cloudflare.md#opt-in-agent-transcripts).
 - Respect the run limit: one run executes in one Durable Object alarm and is aborted at
   14 minutes (`limits.maxRunDurationMs` cannot raise it). Keep single steps short, put
   long ones behind `fromRemote`, and use a host engine for multi-hour workflows.

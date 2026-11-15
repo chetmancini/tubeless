@@ -119,6 +119,9 @@ function hostTerminatedEvent(
 export class SqliteHostedLaunchStore
   implements HostedLaunchStore, HostedAttemptStore, HostedCollectorStore
 {
+  get transcripts() {
+    return this.events.transcripts;
+  }
   constructor(
     private readonly storage: SqliteLaunchStorage,
     private readonly events: LaunchEventStore & PipelineRunEventReader,

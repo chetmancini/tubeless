@@ -3,9 +3,11 @@ import { createStudioApiHandler } from "../studio/server/api.js";
 import { createStudioRequestHandler } from "../studio/server/handler.js";
 import { createStudioPage } from "../studio/server/page.js";
 import type { PipelineRunStudioLauncher } from "../studio/shared/protocol.js";
+import type { PipelineRunStudioHistoryMaintenance } from "../studio/server/state.js";
 
 export interface StudioHostOptions {
-  readonly store: Pick<PipelineRunEventReader, "listEvents">;
+  readonly store: Pick<PipelineRunEventReader, "listEvents" | "transcripts">;
+  readonly history?: PipelineRunStudioHistoryMaintenance;
   readonly launcher?: PipelineRunStudioLauncher;
   readonly clientScript: string;
   readonly authenticate?: (
@@ -19,7 +21,11 @@ export interface StudioHost {
 
 /** Compose Studio for a host whose platform already routed the request by hostname. */
 export async function createStudioHost(options: StudioHostOptions): Promise<StudioHost> {
-  const api = createStudioApiHandler({ store: options.store, launcher: options.launcher });
+  const api = createStudioApiHandler({
+    store: options.store,
+    launcher: options.launcher,
+    history: options.history,
+  });
   const page = await createStudioPage(options.clientScript);
   const handle = createStudioRequestHandler({
     api,

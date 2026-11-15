@@ -4,8 +4,8 @@ Design for [issue 286](https://github.com/chetmancini/tubeless/issues/286).
 Implemented: opt-in capture, a public Node NDJSON writer, validated artifact readers,
 CLI history inspection, a paginated Studio conversation view and public evaluation
 helpers, explicit SQLite artifact import, direct SQLite capture for the built-in
-workspace CLI and live Studio refresh (#321). Follow-ups are tracked separately:
-Cloudflare persistence (#322) and terminal token streaming (#323).
+workspace CLI, live Studio refresh (#321), and Cloudflare persistence (#322).
+Terminal token streaming remains tracked separately (#323).
 
 ## Contract and ownership
 
@@ -98,8 +98,8 @@ beside its event interface. `history --import-transcript <path>` validates a fin
 artifact and stores separate version-1 rows keyed by `(runId, sequence)`. Matching
 structural history is required. Identical records are idempotent; conflicts and
 identity changes roll back the entire import. The optional table is created only
-by explicit import or capture, and does not change the structural event schema or the
-Cloudflare adapter. Reads use bounded sequence pages from a consistent transaction
+by explicit import or capture, and does not change the structural event schema.
+Reads use bounded sequence pages from a consistent transaction
 snapshot. History clearing deletes content and events in the same transaction.
 Old history without content remains readable. Imports inherit the database's
 permissions and leave source artifacts unchanged.
@@ -113,9 +113,30 @@ apply. The flag captures application content without a custom redactor, and sele
 project/file agents retain ownership of their existing sinks. `--store` alone never
 enables capture. Capture failures preserve ordinary best-effort semantics.
 
-For subsequent Cloudflare storage, preserve these record and ownership boundaries. Cloudflare can use separate bounded rows or object storage.
-An artifact receipt can reference externally stored content after successful
-persistence without embedding it in traces.
+### Cloudflare storage and ingestion contract
+
+The deployment's Studio Durable Object owns separate transcript rows keyed by
+`(runId, sequence)`, alongside the structural history that authorizes their use.
+Its existing single-tenant deployment and Cloudflare Access boundary also own
+content reads and history deletion. No object paths, bindings or credentials are
+sent to Studio clients. Capture stays off until each agent supplies the explicit
+Cloudflare writer as its transcript sink; redaction and capture budgets stay with
+that agent, including independently configured child agents.
+
+The trusted `appendTranscript(record)` RPC validates the provider-neutral envelope
+and matches the agent, parent and dry-run identity to an existing structural start.
+Missing starts return `accepted: false`; conflicting records throw and roll back.
+Identical records are idempotent, including retries after completion. The writer
+owns a bounded delivery deadline and retries because structural events can still
+be buffered, or an RPC acknowledgement can be lost after committing. Failed
+delivery disables capture under the ordinary best-effort transcript contract and
+does not become a recovery log or an execution acknowledgement.
+
+Transcript reads reuse bounded sequence pagination and recording-status semantics.
+Tables are created only on the first accepted content write, so old history remains
+readable. History clearing refuses active launches and atomically deletes trace
+events and content. Closed launch receipts remain to prevent late event retries
+from recreating deleted history; orphaned transcript retries are refused.
 
 History renders the selected run's transcript in text or JSON. Studio offers a
 conversation view with prompts, assistant text, calls, outcomes and omission markers,

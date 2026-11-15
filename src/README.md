@@ -119,6 +119,8 @@ their source files.
   and transcript readers. Artifact readers index immutable snapshots separately
   from structural run events. `run-store/agent-transcript-sqlite.ts` owns explicit,
   atomic transcript ingestion, bounded live queries and coordinated history deletion.
+  `agent-transcript-sql.ts` shares schema, idempotency and page semantics between
+  native SQLite and Durable Objects; adapters own transactions and SQL execution.
   The optional version-1 content table does not change the event schema. SQLite
   adapters share built-in driver queries and transactions through `sqlite-database.ts`.
   Studio uses the history store's optional transcript reader automatically; explicit
@@ -225,6 +227,9 @@ their source files.
   `cloudflare/` imports it, and its public declarations stay structural. The
   `tubeless/cloudflare/cache` entry (`cloudflare/cloudflare-cache.ts`) must stay free of
   `cloudflare:` imports so project modules that use it still load in Node.
+  `tubeless/cloudflare/transcript` is also platform-neutral. Its explicit writer
+  retries bounded trusted RPC delivery; the Studio object owns run-identity checks,
+  content reads and atomic history/content deletion, refusing active launches.
   `cloudflare/cloudflare-run-contract.ts` owns Cloudflare's deadline limit,
   host-failure vocabulary and public trace context without loading execution.
   `cloudflare/cloudflare-run.ts` retains alarm/KV state, the watchdog and cleanup;

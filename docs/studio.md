@@ -42,6 +42,11 @@ Stored content is deleted atomically with its structural history when clearing
 is available. Agent runs in SQLite history expose a **Transcript** tab before
 content arrives. Opening it does not enable capture.
 
+Cloudflare uses the same view when an agent explicitly supplies its
+[Cloudflare transcript writer](./deploy-cloudflare.md#opt-in-agent-transcripts).
+Content shares history's Cloudflare Access rules. Clearing events and content is
+atomic and refuses while launches are active.
+
 While visible, unavailable and partial SQLite transcripts refresh every 1.2 seconds
 using bounded sequence cursors. Loaded records stay visible as later records arrive,
 including records imported into earlier gaps. Complete and limited recordings stop
