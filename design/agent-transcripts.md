@@ -3,8 +3,9 @@
 Design for [issue 286](https://github.com/chetmancini/tubeless/issues/286).
 Implemented: opt-in capture, a public Node NDJSON writer, validated artifact readers,
 CLI history inspection, a paginated Studio conversation view and public evaluation
-helpers and explicit SQLite artifact import. Direct SQLite capture and Cloudflare
-transcript persistence remain subsequent stages.
+helpers, explicit SQLite artifact import and direct SQLite capture for the built-in
+workspace CLI. Follow-ups are tracked separately: live Studio refresh (#321),
+Cloudflare persistence (#322), and terminal token streaming (#323).
 
 ## Contract and ownership
 
@@ -97,14 +98,22 @@ beside its event interface. `history --import-transcript <path>` validates a fin
 artifact and stores separate version-1 rows keyed by `(runId, sequence)`. Matching
 structural history is required. Identical records are idempotent; conflicts and
 identity changes roll back the entire import. The optional table is created only
-by explicit import, and does not change the structural event schema or the
+by explicit import or capture, and does not change the structural event schema or the
 Cloudflare adapter. Reads use bounded sequence pages from a consistent transaction
 snapshot. History clearing deletes content and events in the same transaction.
 Old history without content remains readable. Imports inherit the database's
 permissions and leave source artifacts unchanged.
 
-For subsequent direct capture or Cloudflare storage, preserve these record and
-ownership boundaries. Cloudflare can use separate bounded rows or object storage.
+The built-in CLI opts in with `agent --store <path> --capture-transcript` (#320).
+The workbench opens the store before constructing its agent, supplies a sink using
+existing ingestion, and keeps it alive until all prompts and cancellation drains
+settle. Every accepted content record first flushes buffered structural events so
+its run is already owned by history. Default per-record and per-run capture bounds
+apply. The flag captures application content without a custom redactor, and selected
+project/file agents retain ownership of their existing sinks. `--store` alone never
+enables capture. Capture failures preserve ordinary best-effort semantics.
+
+For subsequent Cloudflare storage, preserve these record and ownership boundaries. Cloudflare can use separate bounded rows or object storage.
 An artifact receipt can reference externally stored content after successful
 persistence without embedding it in traces.
 
@@ -156,3 +165,8 @@ conflicts, orphaned content, transaction rollback, bounded pagination and status
 read-only artifact preservation, multiple connections, and atomic event/content
 deletion. The CLI/Studio integration imports real capture output, removes the
 original artifact, inspects the saved content and clears the owning history.
+
+Direct CLI capture validation covers default-off recording, separate prompt
+sequences, real tool values, failed and cancelled prompts followed by further work,
+private sink failures, early flag validation, and a credential-free public model
+executed with Bun as well as the Node CLI tests.

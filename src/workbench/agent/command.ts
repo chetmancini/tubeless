@@ -4,7 +4,11 @@ import {
   parseSubcommandArgs,
   runWorkbenchSubcommand,
 } from "../workbench-subcommand.js";
-import type { AgentLimits, DefaultAgentToolName } from "../../agent/agent.js";
+import type {
+  AgentLimits,
+  AgentTranscriptOptions,
+  DefaultAgentToolName,
+} from "../../agent/agent.js";
 import { loadAgentEnvironment } from "./environment.js";
 import { loadAgentProvider } from "./provider.js";
 import { loadDefinedAgent } from "./defined-agent.js";
@@ -63,6 +67,7 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
             "max-turns",
             "max-calls",
             "max-concurrency",
+            "capture-transcript",
           ] as const;
           const provided = overrides.filter((key) => values[key] !== undefined);
           if (provided.length)
@@ -102,7 +107,13 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
             `--tools accepts a comma-separated subset of ${DEFAULT_TOOLS.join(", ")}.`,
             AGENT_USAGE
           );
-        const destinations = { store: values.store, trace: values.trace };
+        if (values["capture-transcript"] && !values.store)
+          return writeUsageError(io, "--capture-transcript requires --store.", AGENT_USAGE);
+        const destinations = {
+          store: values.store,
+          trace: values.trace,
+          captureTranscript: values["capture-transcript"],
+        };
         if (values.trace === "-")
           return writeUsageError(
             io,
@@ -122,7 +133,7 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
             AGENT_USAGE
           );
         if (io.signal?.aborted) return TUBELESS_WORKBENCH_EXIT_CODE.cancellation;
-        let chat: AgentPromptSession;
+        let createChat: (transcript?: AgentTranscriptOptions) => AgentPromptSession;
         let label: string;
         let commandIo = io;
         let projectTracing: AgentPromptOptions["projectTracing"];
@@ -135,8 +146,8 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
             AGENT_USAGE
           );
           if ("exitCode" in selected) return selected.exitCode;
-          chat = selected.chat;
-          label = chat.id;
+          createChat = () => selected.chat;
+          label = selected.chat.id;
           commandIo = { ...io, cwd: selected.cwd };
           projectTracing = selected.tracing;
         } else {
@@ -150,16 +161,18 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
           );
           if ("exitCode" in selected) return selected.exitCode;
           label = values.model?.trim() || selected.model;
-          chat = createPromptSession(
-            {
-              env: environment.env,
-              instructions: values.instructions,
-              limits,
-              defaultTools,
-              codemode: values.codemode === true,
-            },
-            selected.factory
-          );
+          createChat = (transcript) =>
+            createPromptSession(
+              {
+                env: environment.env,
+                instructions: values.instructions,
+                limits,
+                defaultTools,
+                codemode: values.codemode === true,
+                transcript,
+              },
+              selected.factory
+            );
         }
         // Recording outlives each prompt's cancellation so finished runs stay flushed.
         let recording: WorkbenchRecording;
@@ -186,7 +199,7 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
                   ? { exporter: composeTraceExporters(recording.exporters) }
                   : undefined,
             },
-            chat,
+            createChat(recording.transcript),
             commandIo
           );
         } finally {

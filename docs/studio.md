@@ -36,7 +36,9 @@ The NDJSON view is always read-only. It cannot launch commands or clear history,
 and does not accept a project file or `--command`.
 
 Studio automatically reads transcripts imported with
-`history --store <path> --import-transcript <path>`. Stored content is deleted
+`history --store <path> --import-transcript <path>`, or captured directly by the
+built-in workspace agent with `agent --store <path> --capture-transcript`.
+Stored content is deleted
 atomically with its structural history when clearing is available. Reopen the
 transcript view after importing additional records.
 

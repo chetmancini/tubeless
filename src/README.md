@@ -289,6 +289,10 @@ Run `make check` after changes; it builds before checking these boundaries.
   metadata without executing command help or loading optional command implementations.
 
 - `workbench/agent/command.ts` owns agent command validation and session setup.
+  `workbench/workbench-recording.ts` owns optional direct SQLite transcript capture
+  for the built-in CLI agent, using the same store as structural recording. Ingestion
+  drains pending trace events before accepting content, and the store outlives prompt
+  cancellation. The workbench supplies the sink; agent execution never loads storage.
   `workbench/agent/defined-agent.ts` reuses workbench registration to select an
   agent's chat session without invoking command mappings. Registrations supply
   the execution cwd and project tracing independently of command adapters.

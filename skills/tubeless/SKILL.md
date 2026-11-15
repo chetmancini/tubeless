@@ -231,6 +231,9 @@ Read the corresponding package recipe before using these features:
   Use `history --store <path> --import-transcript <path>` to retain the finished
   content in SQLite after recording its structural events. History and Studio
   then read it automatically; history clearing deletes the stored content too.
+  The built-in CLI supports `agent --store <path> --capture-transcript` for direct
+  SQLite capture with default bounds and no custom redactor. `--store` alone
+  remains structural; this flag cannot override selected agents' transcript sinks.
   Read `docs/agents.md#opt-in-transcripts` and `examples/agent-transcript.ts`.
   Add `durability: { store, key }` with an explicit `implementationVersion` to
   persist decisions, call outcomes, child state and ancestor budgets. Every live

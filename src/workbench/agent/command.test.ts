@@ -179,6 +179,7 @@ describe("tubeless agent", () => {
           "--no-graph",
           "--store",
           "runs.sqlite",
+          "--capture-transcript",
           "--trace",
           "runs.ndjson",
         ],
@@ -205,12 +206,27 @@ describe("tubeless agent", () => {
           history
         )
       ).toBe(0);
-      const { runs } = JSON.parse(history.output.join("")) as { runs: { status: string }[] };
+      const { runs } = JSON.parse(history.output.join("")) as {
+        runs: { runId: string; status: string }[];
+      };
       expect(runs.map(({ status }) => status).sort()).toEqual([
         "cancelled",
         "completed",
         "completed",
       ]);
+      if (source[0] === "--store") {
+        for (const run of runs) {
+          const detail = captureIo(directory);
+          expect(await runWorkbenchCli(["history", ...source, "--json", run.runId], detail)).toBe(
+            0
+          );
+          const { transcript } = JSON.parse(detail.output.join(""));
+          expect(transcript.status).toBe("complete");
+          expect(transcript.records.at(-1)).toMatchObject({
+            event: { kind: "end", status: run.status },
+          });
+        }
+      }
     }
   });
 
