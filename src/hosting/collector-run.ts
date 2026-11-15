@@ -9,9 +9,9 @@ import { MAX_TIMEOUT_DELAY_MS, throwIfAborted } from "../utilities/abort.js";
 export interface CollectorRunJob extends RunJob {
   readonly attemptId: string;
 }
-export type CollectorRunResult =
-  | { readonly status: "refused" | "unconfirmed" }
-  | { readonly status: "finished"; readonly recorded: boolean; readonly delivered: boolean };
+export type CollectorRunResult = {
+  readonly status: "refused" | "unconfirmed" | "history-confirmed" | "history-unconfirmed";
+};
 
 /** Claim once before loading user code. The supervisor owns failure reporting after worker exit. */
 export async function runCollectorJob(options: {
@@ -48,22 +48,6 @@ export async function runCollectorJob(options: {
   } catch {
     return { status: "unconfirmed" };
   }
-  let delivered = true;
-  const batches = new BatchingTraceExporter(
-    async (_sequence, events) => {
-      if (!(await client.append(events)).accepted) throw new Error("Collector closed the attempt.");
-    },
-    {
-      maxEvents: COLLECTOR_BATCH_EVENTS,
-      maxDelayMs: 250,
-      retries: 0,
-      retryDelayMs: 0,
-      onFailure(error) {
-        delivered = false;
-        controller.abort(error);
-      },
-    }
-  );
   try {
     await onClaim(client.workerId);
     throwIfAborted(controller.signal, "Worker execution");
@@ -75,7 +59,20 @@ export async function runCollectorJob(options: {
       hostedCommandContext(output, controller.signal)
     );
     if (parsed.kind !== "values") throw new Error("Invalid pipeline command values.");
-    const { recorded } = await executeHostedRun({
+    const batches = new BatchingTraceExporter(
+      async (_sequence, events) => {
+        if (!(await client.append(events)).accepted)
+          throw new Error("Collector closed the attempt.");
+      },
+      {
+        maxEvents: COLLECTOR_BATCH_EVENTS,
+        maxDelayMs: 250,
+        retries: 0,
+        retryDelayMs: 0,
+        onFailure: (error) => controller.abort(error),
+      }
+    );
+    const { history } = await executeHostedRun({
       job,
       entry,
       values: parsed.values,
@@ -83,10 +80,8 @@ export async function runCollectorJob(options: {
       controller,
       exporter: batches,
     });
-    return { status: "finished", recorded, delivered };
+    return { status: history.status === "complete" ? "history-confirmed" : "history-unconfirmed" };
   } catch {
-    return { status: "finished", recorded: false, delivered: false };
-  } finally {
-    await batches.flush().catch(() => {});
+    return { status: "history-unconfirmed" };
   }
 }

@@ -4,6 +4,7 @@ import { provisionCollectorAttempt } from "./collector-credentials.js";
 import { createHostedCollector } from "./collector-http.js";
 import { runCollectorJob } from "./collector-run.js";
 import { commands, job } from "./run.test-support.js";
+import { started } from "./collector.test-support.js";
 
 const cleanup: (() => void)[] = [];
 afterEach(() => {
@@ -51,7 +52,7 @@ describe("collector job admission and supervision boundary", () => {
     const pending = runCollectorJob(options);
     options.job.values.name = "changed";
     options.job.commandId = "missing";
-    expect(await pending).toEqual({ status: "finished", recorded: true, delivered: true });
+    expect(await pending).toEqual({ status: "history-confirmed" });
     expect(options.onClaim).toHaveBeenCalledOnce();
     expect(options.loadCommands).toHaveBeenCalledOnce();
     expect(
@@ -89,9 +90,7 @@ describe("collector job admission and supervision boundary", () => {
     const { options, readLaunch, store } = await setup();
     options.loadCommands.mockRejectedValue(new Error("secret module details"));
     expect(await runCollectorJob(options)).toEqual({
-      status: "finished",
-      recorded: false,
-      delivered: false,
+      status: "history-unconfirmed",
     });
     expect(options.onClaim).toHaveBeenCalledOnce();
     expect(readLaunch("l1")?.state).toBe("starting");
@@ -107,9 +106,7 @@ describe("collector job admission and supervision boundary", () => {
       return response;
     });
     expect(await runCollectorJob(options)).toEqual({
-      status: "finished",
-      recorded: false,
-      delivered: false,
+      status: "history-unconfirmed",
     });
     expect(options.onClaim).toHaveBeenCalledOnce();
     expect(options.loadCommands).not.toHaveBeenCalled();
@@ -120,5 +117,32 @@ describe("collector job admission and supervision boundary", () => {
     options.job.maxRunDurationMs = 0;
     await expect(runCollectorJob(options)).rejects.toThrow("budget");
     expect(options.fetch).not.toHaveBeenCalled();
+  });
+
+  it("leaves a delivered root start unconfirmed when no terminal event was emitted", async () => {
+    const { options, readLaunch, store } = await setup();
+    const entry = commands.get("greeting")!;
+    options.loadCommands.mockResolvedValue(
+      new Map([
+        [
+          "greeting",
+          {
+            ...entry,
+            command: {
+              ...entry.command,
+              async execute(_values, context) {
+                await context!.pipelineContext!.tracing!.exporter.export({
+                  ...started(),
+                  pipelineId: "greeting",
+                });
+              },
+            },
+          },
+        ],
+      ])
+    );
+    expect(await runCollectorJob(options)).toEqual({ status: "history-unconfirmed" });
+    expect(readLaunch("l1")?.state).toBe("running");
+    expect((await store.listEvents()).map((event) => event.name)).toEqual(["pipeline.started"]);
   });
 });

@@ -1,11 +1,13 @@
 import type { WireSchema } from "../tracing/wire-schema.js";
 import type { AttemptBatchAcknowledgement } from "./attempt-store.js";
+import { assertAttemptId } from "./attempt-store.js";
 import { withRetry } from "../utilities/retry.js";
 import { awaitWithAbort } from "../utilities/abort.js";
 import { readBoundedBody } from "../utilities/read-body.js";
 import {
   COLLECTOR_RESPONSE_BYTES,
   CollectorRequestError,
+  assertCollectorFailureMessage,
   batchReplySchema,
   claimReplySchema,
   failureReplySchema,
@@ -113,6 +115,19 @@ export function createCollectorTransport(options: {
         throw cause;
       }
     },
-    reportFailure: (body: Uint8Array) => request("failure", body, failureReplySchema),
+    async reportFailure(input: { readonly attemptId: string; readonly message: string }) {
+      const { attemptId, message } = input;
+      assertAttemptId(attemptId);
+      assertCollectorFailureMessage(message);
+      // Prepare one immutable identity/body before request() starts delivery retries.
+      const body = new TextEncoder().encode(
+        JSON.stringify({
+          attemptId,
+          failureId: crypto.randomUUID(),
+          message,
+        })
+      );
+      return request("failure", body, failureReplySchema);
+    },
   };
 }

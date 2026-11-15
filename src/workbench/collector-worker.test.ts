@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startCollectorWorker } from "../../dist/workbench/collector-worker.js";
 import { workerFixture } from "./collector-worker.test-support.js";
@@ -25,6 +26,63 @@ async function setup() {
 }
 
 describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
+  it.each([
+    { flags: ["--eval"] },
+    { flags: ["-e"] },
+    { flags: ["--print"] },
+    { flags: ["-p"] },
+    { flags: ["--input-type=module", "--eval"] },
+  ])("uses the fixed bootstrap when the parent runs with $flags", async ({ flags }) => {
+    const { workerOptions, module, state } = await setup();
+    const supervisor = new URL("../../dist/workbench/collector-worker.js", import.meta.url).href;
+    const source = `
+      if (process.env.TUBELESS_EVAL_REENTRY === '1') {
+        // Bound this regression test even if an eval-inheriting worker reruns its parent.
+        process.exit(2);
+      } else {
+        import(${JSON.stringify(supervisor)}).then(({ startCollectorWorker }) => {
+          process.once('message', async packet => {
+            const worker = startCollectorWorker({
+              ...packet, module: new URL(packet.module),
+              env: { ...packet.env, TUBELESS_EVAL_REENTRY: '1' },
+            });
+            const result = await worker.completed;
+            process.send(result, () => process.exit(0));
+          });
+        });
+      }
+    `;
+    const launcher = spawn(process.execPath, [...flags, source], {
+      env: workerOptions.env,
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
+    });
+    let resolveResult!: (result: unknown) => void;
+    let rejectResult!: (error: Error) => void;
+    const received = new Promise<unknown>((resolve, reject) => {
+      resolveResult = resolve;
+      rejectResult = reject;
+    });
+    launcher.once("message", resolveResult);
+    launcher.once("error", rejectResult);
+    const closed = new Promise<void>((resolve) => launcher.once("close", () => resolve()));
+    launcher.once("close", () =>
+      rejectResult(new Error("Eval launcher closed before its result."))
+    );
+    cleanups.push(async () => {
+      launcher.kill("SIGKILL");
+      await closed;
+    });
+    launcher.send({ ...workerOptions, fetch: undefined, module: module.href });
+    expect(await received).toMatchObject({
+      code: 0,
+      outcome: { status: "history-confirmed" },
+      failureReport: "not-needed",
+    });
+    await closed;
+    expect(state.requests.filter((request) => request.operation === "admit")).toHaveLength(1);
+    expect(state.fixture.readLaunch("launch")?.state).toBe("finished");
+  });
+
   it("streams a nested run from a separate process, survives collector restart and a lost commit reply, and renders Studio history", async () => {
     const { state, start, effectFile } = await setup();
     state.dropBatchAndRestart = true;
@@ -32,7 +90,7 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     expect(await worker.completed).toMatchObject({
       code: 0,
       failureReport: "not-needed",
-      outcome: { status: "finished", recorded: true, delivered: true },
+      outcome: { status: "history-confirmed" },
     });
     expect(Number((await readFile(effectFile, "utf8")).trim())).not.toBe(process.pid);
     const batches = state.requests.filter((request) => request.operation === "batches");
@@ -60,7 +118,9 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     const { start, importFile, effectFile, state } = await setup();
     const workers = [start(), start()];
     const results = await Promise.all(workers.map((worker) => worker.completed));
-    expect(results.filter((result) => result.outcome?.status === "finished")).toHaveLength(1);
+    expect(results.filter((result) => result.outcome?.status === "history-confirmed")).toHaveLength(
+      1
+    );
     expect(results.filter((result) => result.outcome?.status === "refused")).toHaveLength(1);
     expect((await start().completed).outcome?.status).toBe("refused");
     expect((await readFile(importFile, "utf8")).trim().split("\n")).toHaveLength(1);
@@ -94,7 +154,7 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     await writeModule("ipc-noise");
     expect(await start().completed).toMatchObject({
       code: 0,
-      outcome: { status: "finished", delivered: true },
+      outcome: { status: "history-confirmed" },
       failureReport: "not-needed",
     });
   });
@@ -109,7 +169,7 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     expect(worker.cancel()).toBe(true);
     expect(await worker.completed).toMatchObject({
       code: 0,
-      outcome: { delivered: true },
+      outcome: { status: "history-confirmed" },
       failureReport: "not-needed",
     });
     expect(worker.cancel()).toBe(false);
@@ -197,7 +257,7 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     state.unavailableFailure = true;
     const missing = new URL("missing.mjs", module);
     expect(await start({ module: missing }).completed).toMatchObject({
-      outcome: { status: "finished", recorded: false },
+      outcome: { status: "history-unconfirmed" },
       failureReport: "unconfirmed",
     });
     expect(state.fixture.readLaunch("launch")?.state).toBe("starting");
@@ -209,12 +269,28 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     const { writeModule, start, state } = await setup();
     await writeModule("oversized");
     expect(await start().completed).toMatchObject({
-      outcome: { status: "finished", delivered: false },
+      outcome: { status: "history-unconfirmed" },
       failureReport: "recorded",
     });
     const events = await state.fixture.store.listEvents();
     expect(events.map((event) => event.name)).toEqual(["pipeline.started", "pipeline.completed"]);
     expect(events.every((event) => event.pipelineId === "parent")).toBe(true);
     expect(state.fixture.readLaunch("launch")?.state).toBe("failed");
+  });
+
+  it("reports partial root history after observing a clean worker exit", async () => {
+    const { writeModule, start, state } = await setup();
+    await writeModule("partial");
+    expect(await start().completed).toMatchObject({
+      code: 0,
+      outcome: { status: "history-unconfirmed" },
+      failureReport: "recorded",
+    });
+    expect(state.failureWhileAlive).toBe(false);
+    expect(state.fixture.readLaunch("launch")?.state).toBe("failed");
+    expect((await state.fixture.store.listEvents()).map((event) => event.name)).toEqual([
+      "pipeline.started",
+      "pipeline.completed",
+    ]);
   });
 });

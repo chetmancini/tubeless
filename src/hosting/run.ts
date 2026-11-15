@@ -198,7 +198,6 @@ export async function runHostedJob(options: {
   // Core does not await exporters, so a refused batch could arrive after a step's side effects.
   // Admission precedes command execution; a refused launch was already closed by Studio.
   if (!(await admitted(ingest(), job.launchId))) return;
-  let deliveryFailure: { readonly error: unknown } | undefined;
   const batches = new BatchingTraceExporter(
     async (sequence, events) => {
       const { accepted } = await ingest().appendEvents(job.launchId, sequence, events);
@@ -211,13 +210,10 @@ export async function runHostedJob(options: {
       maxDelayMs: 250,
       retries: 4,
       retryDelayMs: 250,
-      onFailure: (error) => {
-        deliveryFailure = { error };
-        controller.abort(error);
-      },
+      onFailure: (error) => controller.abort(error),
     }
   );
-  const { exitCode, recorded } = await executeHostedRun({
+  const { exitCode, history } = await executeHostedRun({
     job,
     entry,
     values: parsed.values,
@@ -227,16 +223,16 @@ export async function runHostedJob(options: {
     wrapExporter,
     tracing: options.tracing,
   });
-  if (deliveryFailure) {
+  if (history.status === "unconfirmed") {
     // The run may be fully recorded locally yet unknown to Studio; tell it, best effort.
-    const { error } = deliveryFailure;
+    const { error } = history;
     const message = error instanceof Error ? error.message : String(error);
     await ingest()
       .reportFailure(job.launchId, `Run events could not be delivered to Studio: ${message}`)
       .catch((reportError: unknown) => {
         console.error(reportError);
       });
-  } else if (!recorded) {
+  } else if (history.status === "absent") {
     const detail = output.tail();
     await ingest().reportFailure(
       job.launchId,
@@ -245,6 +241,11 @@ export async function runHostedJob(options: {
   }
 }
 
+/** Confirmed event extent after the delivery barrier, or explicit delivery uncertainty. */
+export type HostedRunHistory =
+  | { readonly status: "absent" | "partial" | "complete" }
+  | { readonly status: "unconfirmed"; readonly error: unknown };
+
 /** Execute an already-admitted command. Targets own admission, transport and failure evidence. */
 export async function executeHostedRun(options: {
   readonly job: RunJob;
@@ -252,22 +253,32 @@ export async function executeHostedRun(options: {
   readonly values: Record<string, unknown>;
   readonly controller: AbortController;
   readonly output: HostedOutput;
-  readonly exporter: PipelineTraceExporter;
+  readonly exporter: PipelineTraceExporter & { flush(): Promise<void> };
   readonly wrapExporter?: (
     exporter: PipelineTraceExporter,
     deadlineAtMs: number
   ) => PipelineTraceExporter;
   readonly tracing?: PipelineTraceExporterOptions<HostedRunTraceContext>;
-}): Promise<{ exitCode: number; recorded: boolean }> {
+}): Promise<{ exitCode: number; history: HostedRunHistory }> {
   const { job, entry, controller, output, wrapExporter } = options;
   const deadlineAtMs = Date.now() + job.maxRunDurationMs;
-  let recorded = false;
+  let rootRunId: string | undefined;
+  let history: HostedRunHistory = { status: "absent" };
   const exporter: PipelineTraceExporter = {
     export(event) {
-      if (isTopLevelStart(event)) recorded = true;
+      if (isTopLevelStart(event) && rootRunId === undefined) {
+        rootRunId = event.runId;
+        history = { status: "partial" };
+      } else if (
+        event.name === "pipeline.completed" &&
+        event.parentRunId === undefined &&
+        event.runId === rootRunId
+      ) {
+        history = { status: "complete" };
+      }
       return options.exporter.export(boundHostedEvent(event));
     },
-    flush: () => options.exporter.flush?.(),
+    flush: () => options.exporter.flush(),
   };
   const deadline = setTimeout(
     () =>
@@ -275,6 +286,7 @@ export async function executeHostedRun(options: {
     Math.max(0, deadlineAtMs - Date.now())
   );
   let launchTracing: LaunchTracing | undefined;
+  let exitCode: number;
   try {
     launchTracing = createLaunchTracing({
       context: {
@@ -287,7 +299,7 @@ export async function executeHostedRun(options: {
       exporters: [exporter],
       wrapExporter: wrapExporter && ((destination) => wrapExporter(destination, deadlineAtMs)),
     });
-    const exitCode = await executeHostedCommand(
+    exitCode = await executeHostedCommand(
       entry.command,
       options.values,
       output,
@@ -296,7 +308,6 @@ export async function executeHostedRun(options: {
         tracing: launchTracing.prepare(),
       }
     );
-    return { exitCode, recorded };
   } finally {
     try {
       await launchTracing?.close();
@@ -304,10 +315,11 @@ export async function executeHostedRun(options: {
       clearTimeout(deadline);
       // Drain delivery even if an application exporter fails during cleanup.
       try {
-        await options.exporter.flush?.();
-      } catch {
-        /* The target observes delivery failures. */
+        await options.exporter.flush();
+      } catch (error) {
+        history = { status: "unconfirmed", error };
       }
     }
   }
+  return { exitCode, history };
 }

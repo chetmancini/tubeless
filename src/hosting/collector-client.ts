@@ -1,7 +1,7 @@
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import type { AttemptBatchAcknowledgement } from "./attempt-store.js";
 import { assertAttemptId } from "./attempt-store.js";
-import { COLLECTOR_MESSAGE_BYTES, CollectorRequestError } from "./collector-protocol.js";
+import { assertCollectorFailureMessage, CollectorRequestError } from "./collector-protocol.js";
 import { decodeAttemptEvent, encodeAttemptBatches } from "./attempt-batch.js";
 import { createCollectorTransport } from "./collector-transport.js";
 
@@ -66,15 +66,11 @@ export function createHostedCollectorClient(options: {
     },
     async reportFailure(message: string): Promise<boolean> {
       if (phase !== "active") throw new CollectorRequestError(0, false);
-      if (encoder.encode(message).byteLength > COLLECTOR_MESSAGE_BYTES)
-        throw new CollectorRequestError(413, false);
+      assertCollectorFailureMessage(message);
       phase = "ending";
       await tail.catch(() => {});
-      const bytes = encoder.encode(
-        JSON.stringify({ attemptId, failureId: crypto.randomUUID(), message })
-      );
       try {
-        return (await transport.reportFailure(bytes)).recorded;
+        return (await transport.reportFailure({ attemptId, message })).recorded;
       } finally {
         phase = "closed";
       }

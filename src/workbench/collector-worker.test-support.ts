@@ -168,7 +168,7 @@ export async function workerFixture() {
       if (${JSON.stringify(mode)} === 'ipc-noise') {
         process.send('application message');
         process.send({ type: 'claimed', workerId: 42 });
-        process.send({ type: 'done', result: { status: 'finished', recorded: 'invalid', delivered: true } });
+        process.send({ type: 'done', result: { status: 'history-confirmed', unexpected: true } });
       }
       if (${JSON.stringify(mode)} === 'setup-hang') await new Promise(() => {});
       const { step, fromPipeline } = createSteps();
@@ -194,7 +194,14 @@ export async function workerFixture() {
       const child = definePipeline({ id: 'child', steps: [leaf], finalize: leaf });
       const nested = fromPipeline('nested', { pipeline: child, mapOptions: () => ({}) });
       const parent = definePipeline({ id: 'parent', steps: [nested], finalize: nested });
-      export default definePipelineCommand(parent, { params: [] });
+      const command = definePipelineCommand(parent, { params: [] });
+      if (${JSON.stringify(mode)} === 'partial') command.execute = async (_values, context) => {
+        await context.pipelineContext.tracing.exporter.export({
+          version: 3, name: 'pipeline.started', pipelineId: 'parent', runId: 'partial-root', timestampMs: Date.now(),
+          payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+        });
+      };
+      export default command;
     `
     );
     return pathToFileURL(moduleFile);

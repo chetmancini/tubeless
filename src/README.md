@@ -172,9 +172,12 @@ their source files.
   `collector-client.ts` owns one worker invocation's admission and delivery lifecycle,
   ordered batch queue and explicit failure reporting after execution exits.
   `collector-transport.ts` owns HTTPS requests, deadlines, exact-byte retries and
-  typed replies. `collector-run.ts` claims once before loading application code,
+  typed replies and typed failure reports, encoding their identity/body once before retries.
+  `collector-run.ts` claims once before loading application code,
   then uses the same admitted execution path with transport-owned retries. It
-  returns execution/delivery evidence without declaring remote termination.
+  returns explicit history confirmation without declaring remote termination. The
+  shared execution path owns final draining and confirms only a matching root
+  completion after successful delivery; a root start alone remains partial history.
   Strict collector envelopes use the canonical wire-object decoder;
   stored-event reads retain tolerant decoding for history compatibility.
   `utilities/read-body.ts` supplies bounded, cancellable byte reading for the collector,
@@ -195,7 +198,8 @@ their source files.
   production routing, durable dispatch and recovery remain target-owned.
   `workbench/collector-worker.ts` is the internal Node process supervisor: the host
   supplies an already-provisioned job, compiled module and trusted deployment ID.
-  Its fixed runtime receives credentials over private IPC, claims before importing
+  Its fixed runtime starts without inherited parent CLI arguments, receives
+  credentials over private IPC, claims before importing
   application code, and flushes history before exiting. The parent bounds startup
   and post-claim execution, requests cancellation, and forces exit after a grace
   period. Only observed process closure authorizes the parent's authenticated

@@ -1,12 +1,10 @@
 import type { CollectorRunJob } from "../hosting/collector-run.js";
 import {
-  wireBoolean,
   wireDiscriminatedUnion,
   wireEnum,
   wireLiteral,
   wireObject,
   wireString,
-  wireUnion,
   type InferWireSchema,
 } from "../tracing/wire-schema.js";
 
@@ -21,13 +19,12 @@ export interface CollectorWorkerStart {
   readonly exportName?: string;
 }
 export type CollectorWorkerRequest = CollectorWorkerStart | { readonly type: "cancel" };
-const resultSchema = wireUnion([
-  wireObject({ status: wireEnum(["refused", "unconfirmed"]) }, { strict: true }),
-  wireObject(
-    { status: wireLiteral("finished"), recorded: wireBoolean(), delivered: wireBoolean() },
-    { strict: true }
-  ),
-]);
+const resultSchema = wireObject(
+  {
+    status: wireEnum(["refused", "unconfirmed", "history-confirmed", "history-unconfirmed"]),
+  },
+  { strict: true }
+);
 export const collectorWorkerResponseSchema = wireDiscriminatedUnion("type", {
   claimed: wireObject(
     { type: wireLiteral("claimed"), workerId: wireString({ maxLength: 256 }) },

@@ -1,7 +1,6 @@
 import { fork } from "node:child_process";
 import type { CollectorRunJob, CollectorRunResult } from "../hosting/collector-run.js";
 import { createCollectorTransport } from "../hosting/collector-transport.js";
-import { fileWorkerExecArgv } from "../utilities/worker-argv.js";
 import { MAX_TIMEOUT_DELAY_MS } from "../utilities/abort.js";
 import type {
   CollectorWorkerRequest,
@@ -57,7 +56,8 @@ export function startCollectorWorker(options: {
   const child = fork(new URL("./collector-worker-runtime.js", import.meta.url), [], {
     cwd: options.cwd,
     env: options.env,
-    execArgv: fileWorkerExecArgv(process.execArgv),
+    // This compiled entrypoint needs no parent eval, print, preload or loader flags.
+    execArgv: [],
     stdio: ["ignore", "ignore", "ignore", "ipc"],
     serialization: "advanced",
   });
@@ -105,11 +105,7 @@ export function startCollectorWorker(options: {
     signal: NodeJS.Signals | null
   ): Promise<CollectorWorkerResult> {
     const result = { code, signal, ...(outcome === undefined ? {} : { outcome }) };
-    if (
-      code === 0 &&
-      (outcome?.status === "refused" ||
-        (outcome?.status === "finished" && outcome.recorded && outcome.delivered))
-    )
+    if (code === 0 && (outcome?.status === "refused" || outcome?.status === "history-confirmed"))
       return { ...result, failureReport: "not-needed" };
     if (!workerId) return { ...result, failureReport: "unconfirmed" };
     try {
@@ -120,15 +116,10 @@ export function startCollectorWorker(options: {
         token,
         fetch: transportFetch,
       });
-      const { recorded } = await transport.reportFailure(
-        new TextEncoder().encode(
-          JSON.stringify({
-            attemptId: packet.job.attemptId,
-            failureId: crypto.randomUUID(),
-            message: `Hosted worker exited before confirming its run history (code ${code}, signal ${signal}).`,
-          })
-        )
-      );
+      const { recorded } = await transport.reportFailure({
+        attemptId: packet.job.attemptId,
+        message: `Hosted worker exited before confirming its run history (code ${code}, signal ${signal}).`,
+      });
       return { ...result, failureReport: recorded ? "recorded" : "closed" };
     } catch {
       return { ...result, failureReport: "unconfirmed" };

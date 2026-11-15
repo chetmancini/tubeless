@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHostedCollectorClient } from "./collector-client.js";
+import { createCollectorTransport } from "./collector-transport.js";
 import { collectorFixture, started, completed, log } from "./collector.test-support.js";
 
 const cleanup: (() => void)[] = [];
@@ -16,6 +17,29 @@ async function setup() {
 const json = (value: unknown) => Response.json(value);
 
 describe("collector delivery client", () => {
+  it("bounds typed failure reports in bytes for both direct and stateful callers", async () => {
+    const { client, token } = await setup();
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const transport = createCollectorTransport({
+      baseUrl: "https://collector.test",
+      launchId: "launch",
+      workerId: "worker",
+      token,
+      fetch,
+    });
+    const message = "💥".repeat(2049);
+    await expect(transport.reportFailure({ attemptId: "attempt", message })).rejects.toMatchObject({
+      status: 413,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    const worker = client();
+    await worker.claim();
+    await expect(worker.reportFailure(message)).rejects.toMatchObject({ status: 413 });
+    expect(await worker.append([started(), completed()])).toEqual({
+      accepted: true,
+      runId: "root",
+    });
+  });
   it("delivers through the Fetch handler, retries exact committed bytes, and preserves queued snapshots", async () => {
     const { collector, client, events } = await setup();
     const deliveries: Uint8Array[] = [];

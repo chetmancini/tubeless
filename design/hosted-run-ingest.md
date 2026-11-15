@@ -288,14 +288,18 @@ inventing a run. Bound and sanitize transport diagnostics independently from tra
 loading application modules or parsing values. It owns a snapshot of job input,
 reports the confirmed worker invocation to its supervisor, and calls the shared
 `executeHostedRun` path for command execution, trace context, history bounds,
-cooperative deadlines and final flushing. The trusted Cloudflare wrapper retains
+cooperative deadlines and final flushing. This path owns the final delivery
+barrier and returns absent, partial, complete, or unconfirmed history only after
+draining; only a matching root completion can establish complete history. The
+trusted Cloudflare wrapper retains
 its existing admission, retry and failure policy. The remote wrapper batches with
 zero outer retries; only the HTTP client retries delivery. A failed delivery
 poisons the ordered queue and requests cooperative cancellation.
 
 Keep execution and delivery cancellation separate: cancelling a command must
-still allow its terminal history to flush. Return refused, unconfirmed, or finished
-execution/delivery evidence to the supervisor. Never turn lost contact, setup
+still allow its terminal history to flush. Return refused or unconfirmed admission,
+or explicitly confirmed/unconfirmed history, to the supervisor. Do not promote a
+delivered root start to terminal-history confirmation. Never turn lost contact, setup
 failure or a returned command promise into a synthetic termination report from
 inside the runner.
 
@@ -306,6 +310,8 @@ never select executable code. The private IPC packet carries the credential
 separately from application values, argv, environment and logs. The fixed runtime
 selects a pipeline or explicit pipeline command only after a confirmed claim.
 Application output goes through trace history; raw child stdio is not forwarded.
+Start the compiled runtime with an empty `execArgv`; parent eval, print and preload
+CLI arguments must not replace or run ahead of that bootstrap.
 
 Bound startup/claim separately from post-claim execution. Default startup to
 30 seconds and cooperative cancellation grace to one second. Arm the execution
@@ -314,7 +320,9 @@ watchdog on a confirmed claim so application module loading is also covered.
 cancellation is ignored, force `SIGKILL` after the grace period. After observing
 closure, the parent may submit an owner-scoped failure report using its independent
 delivery lifetime. Preserve a successful terminal event and replay a lost failure
-reply with the same failure ID/body. Return an unconfirmed report outcome when
+reply with the same failure ID/body. Use the collector transport's typed
+failure-report operation to validate and encode one request identity/body for both
+the stateful client and platform supervisors. Return an unconfirmed report outcome when
 delivery fails or no owner was confirmed; never provision another attempt or
 retry execution automatically.
 
@@ -341,7 +349,8 @@ Worker integration tests use separate OS processes and real HTTPS with a private
 test CA, keeping TLS verification enabled. Exercise duplicate dispatch and late
 redelivery, refusal before module loading, lost claim replies, collector/SQLite
 reopen after a committed batch whose reply was lost, nested history through Studio,
-cooperative cancellation, hung module loading, hard termination, lost contact
+eval/print parent launchers, partial root history, cooperative cancellation, hung
+module loading, hard termination, lost contact
 without false terminal history, and failure-report retries after observed exit.
 Probe real nested definition snapshots: accept ordinary recordings and reject an
 oversized child snapshot without altering its identity or inventing child history;
