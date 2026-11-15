@@ -3,7 +3,8 @@
 Design for [issue 286](https://github.com/chetmancini/tubeless/issues/286).
 Implemented: opt-in capture, a public Node NDJSON writer, validated artifact readers,
 CLI history inspection, a paginated Studio conversation view and public evaluation
-helpers. SQLite/Cloudflare transcript persistence remains a subsequent stage.
+helpers and explicit SQLite artifact import. Direct SQLite capture and Cloudflare
+transcript persistence remain subsequent stages.
 
 ## Contract and ownership
 
@@ -81,7 +82,7 @@ Dry-run skips create no transcript. Explicit preview callbacks create records ma
 `dryRun`. Planning performs no capture. Replay does not re-export historical content;
 records from different attempts remain distinct by runtime run ID.
 
-## Reading: implemented artifact slice
+## Reading: artifacts and SQLite import
 
 Keep transcript readers separate from run-event readers. The current implementation
 accepts an explicit finished NDJSON artifact through `--transcript <path>` on history
@@ -91,18 +92,26 @@ private file permissions on creation. Reader snapshots never change after openin
 Studio serves content only for IDs present in structural history, behind the same
 authentication and Host checks, and disables clearing while the artifact is attached.
 
-For subsequent SQLite/Cloudflare storage, add optional capabilities beside the run event store.
-Use `(runId, sequence)` for pagination and idempotent ingestion; validate the record
-version and byte bounds at ingestion. SQLite may store separate rows; NDJSON uses
-a separate file; Cloudflare uses separate bounded rows or object storage. An artifact
-receipt can reference an externally stored transcript after successful persistence,
-without embedding content in traces. Clearing history must explicitly include its
-associated transcripts. Old history has no transcript and remains readable.
+SQLite history offers an optional transcript reader and atomic import capability
+beside its event interface. `history --import-transcript <path>` validates a finished
+artifact and stores separate version-1 rows keyed by `(runId, sequence)`. Matching
+structural history is required. Identical records are idempotent; conflicts and
+identity changes roll back the entire import. The optional table is created only
+by explicit import, and does not change the structural event schema or the
+Cloudflare adapter. Reads use bounded sequence pages from a consistent transaction
+snapshot. History clearing deletes content and events in the same transaction.
+Old history without content remains readable. Imports inherit the database's
+permissions and leave source artifacts unchanged.
+
+For subsequent direct capture or Cloudflare storage, preserve these record and
+ownership boundaries. Cloudflare can use separate bounded rows or object storage.
+An artifact receipt can reference externally stored content after successful
+persistence without embedding it in traces.
 
 History renders the selected run's transcript in text or JSON. Studio offers a
 conversation view with prompts, assistant text, calls, outcomes and omission markers,
-linked to structural child runs. Pagination is bounded. Future mutable stores can
-add live refresh through sequence cursors.
+linked to structural child runs. Pagination is bounded. Imported SQLite content uses the same reader; reopen a conversation view after
+further imports. Automatic live refresh remains subsequent work.
 Show unavailable, partial, complete and limited recording states. Suppressed events
 have no tombstones; no records cannot establish whether capture was disabled or fully
 redacted, and must never imply an empty model conversation. Render content as text, never executable HTML. Transcript authorization
@@ -141,3 +150,9 @@ Artifact read-back also covers malformed/versioned records, private file creatio
 append boundaries and serialization, immutable snapshots, gaps and conflicts,
 run-scoped pagination, CLI output, Studio authorization, escaped rendering, and
 request retries/retirement. Exercise pagination and structural turn links in a browser.
+
+SQLite import validation additionally covers idempotent writes, identity and key
+conflicts, orphaned content, transaction rollback, bounded pagination and statuses,
+read-only artifact preservation, multiple connections, and atomic event/content
+deletion. The CLI/Studio integration imports real capture output, removes the
+original artifact, inspects the saved content and clears the owning history.

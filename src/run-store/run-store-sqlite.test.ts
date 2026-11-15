@@ -154,8 +154,7 @@ describe("SQLite pipeline run store", () => {
       this: DatabaseSync,
       sql
     ) {
-      if (sql.includes("DELETE FROM pipeline_run_events"))
-        return original.call(this, sql.replace("COMMIT;", "SELECT missing_clear_table;"));
+      if (sql === "COMMIT") return original.call(this, "SELECT missing_clear_table;");
       return original.call(this, sql);
     });
     try {

@@ -1,13 +1,15 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTranscriptAgent } from "../../examples/agent-transcript.js";
 import { openNdjsonAgentTranscriptWriter } from "../agent/ndjson-transcript.js";
 import type { PipelineTraceEvent } from "../tracing/tracing-contracts.js";
 import { captureIo } from "./workbench.test-support.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE } from "./workbench-shared.js";
 import { runHistory } from "./workbench-history.js";
+import { openSqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
+import { runUi } from "./workbench-ui.js";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -34,7 +36,18 @@ async function fixture() {
   });
   await writer.close();
   await writeFile(trace, events.map((event) => JSON.stringify(event)).join("\n"));
-  return { cwd, transcript, trace, runId: run.runId };
+  return { cwd, transcript, trace, runId: run.runId, events };
+}
+
+async function recordHistory(files: Awaited<ReturnType<typeof fixture>>) {
+  const filename = join(files.cwd, "runs.sqlite");
+  const store = await openSqlitePipelineRunStore(filename);
+  try {
+    for (const event of files.events) await store.export(event);
+  } finally {
+    await store.close();
+  }
+  return filename;
 }
 
 describe("history transcript inspection", () => {
@@ -92,5 +105,90 @@ describe("history transcript inspection", () => {
       await runHistory(["--trace", files.trace, "--transcript", files.transcript, files.runId], io)
     ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.load);
     expect(io.errors.join("")).not.toContain("private malformed content");
+  });
+
+  it("imports once, reads automatically and clears stored transcripts with history", async () => {
+    const files = await fixture();
+    const store = await recordHistory(files);
+    for (const imported of [5, 0]) {
+      const io = captureIo(files.cwd);
+      expect(
+        await runHistory(["--store", store, "--import-transcript", files.transcript, "--json"], io)
+      ).toBe(0);
+      expect(JSON.parse(io.output.join(""))).toEqual({ imported });
+    }
+    await rm(files.transcript);
+    const detail = captureIo(files.cwd);
+    expect(await runHistory(["--store", store, "--json", files.runId], detail)).toBe(0);
+    expect(JSON.parse(detail.output.join("")).transcript).toMatchObject({
+      status: "complete",
+      records: expect.any(Array),
+    });
+    const text = captureIo(files.cwd);
+    expect(await runHistory(["--store", store, files.runId], text)).toBe(0);
+    expect(text.output.join("")).toContain("HELLO");
+
+    const controller = new AbortController();
+    const io = { ...captureIo(files.cwd), signal: controller.signal };
+    const running = runUi(["--store", store, "--port", "0"], io);
+    try {
+      await vi.waitFor(
+        () => expect(io.output.join("")).toContain("Tubeless local studio: http://"),
+        { timeout: 10_000 }
+      );
+      const url = /Tubeless local studio: (http:\/\/[^\n]+)/.exec(io.output.join(""))![1];
+      expect(
+        await (await fetch(`${url}/api/runs/${encodeURIComponent(files.runId)}`)).json()
+      ).toMatchObject({ transcriptAvailable: true });
+      expect(
+        await (await fetch(`${url}/api/runs/${encodeURIComponent(files.runId)}/transcript`)).json()
+      ).toMatchObject({ transcript: { status: "complete" } });
+      expect(await (await fetch(`${url}/api/capabilities`)).json()).toMatchObject({
+        canClearHistory: true,
+      });
+      const cleared = await fetch(`${url}/api/history`, {
+        method: "DELETE",
+        headers: { "x-tubeless-studio-clear-history": "1" },
+      });
+      expect(cleared.status).toBe(200);
+    } finally {
+      controller.abort();
+      await running;
+    }
+    const reader = await openSqlitePipelineRunStore(store, { initialize: false, readOnly: true });
+    try {
+      expect(await reader.listEvents()).toEqual([]);
+      expect(await reader.transcripts.list({ runId: files.runId })).toMatchObject({
+        records: [],
+        status: "unavailable",
+      });
+    } finally {
+      await reader.close();
+    }
+  }, 20_000);
+
+  it("refuses invalid import combinations and leaves history unchanged for malformed artifacts", async () => {
+    const files = await fixture();
+    const store = await recordHistory(files);
+    for (const extra of [
+      [files.runId],
+      ["--trace", files.trace],
+      ["--transcript", files.transcript],
+      ["--clear", "--yes"],
+      ["--events"],
+      ["--pipeline", "agent"],
+    ]) {
+      expect(
+        await runHistory(["--import-transcript", files.transcript, ...extra], captureIo(files.cwd))
+      ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    }
+    const before = await readFile(store);
+    await writeFile(files.transcript, "{private malformed content");
+    const io = captureIo(files.cwd);
+    expect(await runHistory(["--store", store, "--import-transcript", files.transcript], io)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(io.errors.join("")).not.toContain("private malformed content");
+    expect(await readFile(store)).toEqual(before);
   });
 });

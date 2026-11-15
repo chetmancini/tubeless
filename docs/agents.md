@@ -1284,8 +1284,8 @@ tubeless ui --trace run.ndjson --transcript .tubeless/transcript.ndjson
 History adds the selected run's content; JSON includes a `transcript` with records
 and recording status. Studio adds a **Transcript** tab to runs with available
 content, with paginated records and **Open turn** links. Nested agents retain their
-own transcripts: open their run to inspect their conversation. No content is added
-to ordinary history responses without an attached transcript source.
+own transcripts: open their run to inspect their conversation. History also reads content previously imported into its SQLite store. Runs without
+stored content keep their existing history response shape.
 
 The reader validates the entire file before displaying content. It accepts at most
 64 MiB, 100,000 lines and 64 KiB per record, checks version and event shapes,
@@ -1297,8 +1297,31 @@ execution status. No matching records means `unavailable`, which may include ful
 suppressed capture. The file is a read-only snapshot; reopen history or restart
 Studio to see later appends. History clearing is disabled while Studio has an
 attached transcript artifact, so clearing structural events cannot leave its content
-behind unnoticed. Evaluation helpers are available from `tubeless/testing`;
-SQLite/Cloudflare transcript persistence remains subsequent work in the
+behind unnoticed.
+
+To keep the content with SQLite history, import the finished artifact explicitly:
+
+```sh
+tubeless history --store .tubeless/runs.sqlite --import-transcript .tubeless/transcript.ndjson
+tubeless history --store .tubeless/runs.sqlite <agent-run-id>
+tubeless ui --store .tubeless/runs.sqlite
+```
+
+Every transcript run must already exist in that store's structural history. The
+import validates all records, keeps identical `(runId, sequence)` records once, and
+rejects conflicting content or run identities. An import failure rolls back all
+of its content changes. `--json` returns the number of newly imported records.
+History and Studio then read the saved content without `--transcript`; the source
+file is no longer needed for inspection. Reopen a transcript view after importing
+more records. Clearing SQLite history also deletes its stored transcripts in the
+same transaction. Import leaves the original artifact unchanged.
+
+Content stays in a separate table and inherits the existing database's filesystem
+permissions. Protect the database and its sidecars accordingly. Recording a run
+with `--store` still does not capture content automatically. Existing event-store
+schema versions are unchanged; older writable stores still require the normal
+explicit upgrade. Cloudflare persistence and direct streaming into SQLite remain
+subsequent work in the
 [feature design](https://github.com/chetmancini/tubeless/blob/main/design/agent-transcripts.md).
 
 ## Inspection and recordings

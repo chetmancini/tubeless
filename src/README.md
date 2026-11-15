@@ -116,8 +116,13 @@ their source files.
 - Reporters and rendering consume core. Storage consumes core and trace contracts;
   storage never depends on the studio or workbench.
   `run-store/ndjson-artifact.ts` validates bounded, finished files for both trace
-  and transcript readers. Transcript readers index immutable snapshots separately
-  from structural run events.
+  and transcript readers. Artifact readers index immutable snapshots separately
+  from structural run events. `run-store/agent-transcript-sqlite.ts` owns explicit,
+  atomic transcript ingestion, bounded live queries and coordinated history deletion.
+  The optional version-1 content table does not change the event schema. SQLite
+  adapters share built-in driver queries and transactions through `sqlite-database.ts`.
+  Studio uses the history store's optional transcript reader automatically; explicit
+  artifact readers remain separately owned and disable clearing.
 - Studio consumes storage and pure trace schemas, and accepts optional launcher/history capabilities.
   It shares type-only pipeline and CLI descriptors; it does not load command
   execution or a concrete storage adapter itself.

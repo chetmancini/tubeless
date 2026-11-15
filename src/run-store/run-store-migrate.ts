@@ -6,16 +6,11 @@ import {
   runEventRow,
 } from "./run-store-sql.js";
 
-interface SqliteStatement {
-  all(...params: unknown[]): unknown[];
-  run(...params: unknown[]): void;
-}
-
-interface RunStoreDatabase {
-  exec(sql: string): void;
-  prepare?(sql: string): SqliteStatement;
-  query?(sql: string): SqliteStatement;
-}
+import {
+  sqliteStatement as statement,
+  sqliteTransaction as inTransaction,
+  type SqliteDatabase as RunStoreDatabase,
+} from "./sqlite-database.js";
 
 /**
  * Highest schema version this file knows how to produce.
@@ -109,12 +104,6 @@ export function upgradeSqliteRunStore(database: RunStoreDatabase): void {
   });
 }
 
-function statement(database: RunStoreDatabase, sql: string): SqliteStatement {
-  const prepared = database.query?.(sql) ?? database.prepare?.(sql);
-  if (!prepared) throw new Error("The current SQLite runtime does not support prepared queries.");
-  return prepared;
-}
-
 function isEventTable(columns: ReadonlySet<string>): boolean {
   return (
     columns.has("id") &&
@@ -134,21 +123,6 @@ function isPayloadStore(columns: ReadonlySet<string>): boolean {
   return (
     columns.has("payload_json") && columns.has("correlation_id") && !columns.has("attributes_json")
   );
-}
-
-function inTransaction(database: RunStoreDatabase, change: () => void): void {
-  database.exec("BEGIN IMMEDIATE");
-  try {
-    change();
-    database.exec("COMMIT");
-  } catch (error) {
-    try {
-      database.exec("ROLLBACK");
-    } catch {
-      // The failed change is the error callers can act on.
-    }
-    throw error;
-  }
 }
 
 function addCorrelationColumn(database: RunStoreDatabase): void {

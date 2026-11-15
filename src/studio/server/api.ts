@@ -29,7 +29,7 @@ export interface PipelineRunStudioApiOptions {
   history?: PipelineRunStudioHistoryMaintenance;
   /** Optional execution capability. Omit it to keep the studio read-only. */
   launcher?: PipelineRunStudioLauncher;
-  store: Pick<PipelineRunEventReader, "listEvents">;
+  store: Pick<PipelineRunEventReader, "listEvents" | "transcripts">;
   /** Explicit transcript source, behind the same authentication and run scope as history. */
   transcripts?: Pick<AgentTranscriptReader, "list">;
 }
@@ -40,6 +40,7 @@ export function createStudioApiHandler(
 ): (request: Request, url: URL) => Promise<Response> {
   // An attached artifact is read-only; never advertise deletion that would leave its content behind.
   const history = options.transcripts ? undefined : options.history;
+  const transcripts = options.transcripts ?? options.store.transcripts;
   const launcher = options.launcher;
   const commands = [...(launcher?.commands ?? [])];
   const commandById = new Map<string, PipelineRunStudioCommand>();
@@ -138,10 +139,10 @@ export function createStudioApiHandler(
         return detail
           ? jsonResponse({
               ...detail,
-              ...(options.transcripts
+              ...(transcripts
                 ? {
                     transcriptAvailable:
-                      (await options.transcripts.list({ runId, limit: 1 })).records.length > 0,
+                      (await transcripts.list({ runId, limit: 1 })).records.length > 0,
                   }
                 : {}),
             })
@@ -163,7 +164,7 @@ export function createStudioApiHandler(
             400,
             "Use a nonnegative safe integer."
           );
-        if (!options.transcripts || !(await eventState.detail(runId)))
+        if (!transcripts || !(await eventState.detail(runId)))
           return errorResponse(
             404,
             "transcript_not_found",
@@ -172,7 +173,7 @@ export function createStudioApiHandler(
           );
         const afterSequence = Number(cursor);
         const page = agentTranscriptPageSchema.decode(
-          await options.transcripts.list({ runId, afterSequence }),
+          await transcripts.list({ runId, afterSequence }),
           "Transcript page"
         );
         if (page.runId !== runId || page.records.some((record) => record.sequence <= afterSequence))

@@ -50,7 +50,7 @@ export default defineProject(
     ScriptedAgent,
     // For transcript capture, use createTranscriptAgent in ../agent-transcript.ts
     // with openNdjsonAgentTranscriptWriter from tubeless/agent/node and an explicit path.
-    // Attach the finished file to history or ui with --transcript <path>.
+    // Attach it with --transcript <path>, or retain it with history --import-transcript <path>.
     // For credential-free evaluations with owned fixtures, run ../agent-evaluation.ts's helper.
     OpenAIAgentCommand,
     // Live model decisions and tools share the physical run cwd, including through symlinks.

@@ -228,6 +228,9 @@ Read the corresponding package recipe before using these features:
   it after all agents settle. Inspect a finished artifact with `history --transcript
   <path> <run-id>` or `ui --transcript <path>` alongside structural tracing. Studio's
   Transcript tab pages content; attached artifacts are immutable and disable clearing.
+  Use `history --store <path> --import-transcript <path>` to retain the finished
+  content in SQLite after recording its structural events. History and Studio
+  then read it automatically; history clearing deletes the stored content too.
   Read `docs/agents.md#opt-in-transcripts` and `examples/agent-transcript.ts`.
   Add `durability: { store, key }` with an explicit `implementationVersion` to
   persist decisions, call outcomes, child state and ancestor budgets. Every live
