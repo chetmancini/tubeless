@@ -5,12 +5,10 @@ Issue: [#289](https://github.com/chetmancini/tubeless/issues/289).
 This change separates trusted hosted execution, launch coordination and storage
 while preserving the public Cloudflare API. Owned-attempt persistence, credential
 provisioning, a Fetch-native collector and a delivery client are implemented
-internally. A supervised one-shot Node worker now exercises those contracts over
-HTTPS and reads persisted cancellation intent; no public deploy target or production route is added. A
-Node-process test executor exercises the
-shared coordination contract alongside Cloudflare; it is not a deployed remote
-target or a second production execution lifecycle. No new public package subpath
-is introduced.
+internally. An internal Node host connects Studio launches to supervised one-shot
+workers over HTTPS, including persisted cancellation and start acknowledgements.
+The application supplies the catalog, authentication, listeners and storage. No
+public deploy target, CLI command or package subpath is introduced.
 
 ## Ownership decision
 
@@ -34,10 +32,12 @@ receives the actual run deadline, so operation timeouts remain inside that budge
 The Cloudflare alarm state machine and watchdog stay together. No compatibility
 re-export is needed for these private modules.
 
-`HostedRunCoordinator` consumes two internal capabilities: `HostedExecutor`
-(start and request cancellation by launch ID) and `HostedLaunchStore` (async
-atomic launch/history operations). Neither exposes SQL, Durable Objects or alarms.
-Targets arrange recovery before dispatch through `scheduleReconcile`; a scheduling
+`HostedRunCoordinator` consumes a typed `HostedRunDriver`: prepare a private
+dispatch value, start it, atomically fail an unadmitted launch, and provide scoped
+cancellation and live-run reads. It owns browser value validation and acknowledgement
+waiters, not ingestion authority or SQL. `createTrustedHostedRun` supplies the
+existing trusted store/executor policy and a separate RPC ingest capability.
+Cloudflare arranges recovery before dispatch through `scheduleReconcile`; a scheduling
 failure prevents dispatch. The coordinator observes preparation and dispatch in
 a background task, independently of its start-acknowledgement timeout. A stalled
 store, scheduler or failure recording cannot hold the response open indefinitely.
@@ -365,6 +365,52 @@ resolution. After claim, only the worker's delivered terminal history or observe
 process closure can establish its outcome. Production admin routing, dispatch,
 supervisor recovery and process-tree policy remain target responsibilities.
 
+## Studio-to-worker host composition
+
+`createCollectorHostedRun` supplies the owned-attempt driver and a separate
+authenticated collector. Validate the submitted command values before provisioning
+an attempt and credential. Keep the bearer secret only in the private dispatch
+packet; persist its verifier, expected pipeline and deployment identity atomically.
+Accept a browser launch only after a committed batch returns its root run ID.
+Claim acknowledgement or a successful fork alone does not acknowledge a Studio
+run. Replayed batches retain the same persisted acknowledgement after a lost reply.
+A committed supervisor failure can settle a pending pre-root launch without
+inventing a run ID. A lost claim reply remains uncertain until the bounded start
+wait expires; neither dispatch nor execution is retried automatically.
+
+`createCollectorWorkerHost` in `workbench/collector-worker-host.ts` wires this driver
+to the existing Node supervisor. Supply one explicit command/module catalog,
+deployment ID, HTTPS collector URL, worker environment/cwd and execution budgets.
+The host normalizes process budgets before provisioning and sizes credentials for
+startup, execution, cancellation grace and final failure-report delivery. Modules
+come only from the trusted catalog. Snapshot submitted values before asynchronous
+provisioning; keep credentials out of browser responses, application values and logs.
+
+The factory returns separate `studio` and `collector` Fetch handlers, plus `drain`
+and `close`. Require an explicit Studio authentication callback. The application
+serves the collector separately with TLS and executor credentials; Studio session
+authority grants no collector access, and worker credentials grant no Studio
+access. The host does not open listeners or own the supplied store.
+
+Owned liveness and run-based cancellation are scoped to the configured deployment
+and top-level root. They exclude trusted runs, foreign deployments and child run
+IDs. Request cancellation atomically against a running owned root; delivered
+terminal history remains authoritative. These queries do not widen Cloudflare's
+trusted cancellation or stale-launch recovery policy.
+
+`drain` awaits current dispatch tasks and supervised worker completion. `close`
+first closes Studio admission and settles pending browser responses, prevents delayed
+preparation from dispatching, cancels active workers, then drains. Keep listeners
+and storage available through final worker delivery and close storage afterward.
+A start-response timeout leaves dispatch observed and allows a late persisted
+start; host closure prevents that late dispatch. Storage operations remain
+caller-owned and must settle before shutdown can drain them safely.
+
+This is a process-owned integration. Production routing, durable dispatch,
+supervisor restart recovery and resolution of cancelled unclaimed launches remain
+target-owned. Restarting a host can read persisted history and cancellation state;
+it does not recover process handles or prove an older worker terminated.
+
 ## Validation and delivery gates
 
 Preserve the existing Cloudflare alarm, reconciliation, tracing and real-workerd
@@ -387,6 +433,11 @@ module loading, hard termination, lost contact
 without false terminal history, and failure-report retries after observed exit.
 Exercise cancellation before claim, intent surviving collector restart, control
 outages, hung workers and aborted control reads with late transport failures.
+Drive Studio launch/live/cancel requests through the Node host and real HTTPS
+worker delivery, including a lost batch reply and a lost claim, pre-root failure,
+input validation before provisioning, authority separation, shutdown, and history
+after reopening storage. Verify deployment-scoped owned controls independently of
+trusted cancellation and stale-launch queries.
 Probe real nested definition snapshots: accept ordinary recordings and reject an
 oversized child snapshot without altering its identity or inventing child history;
 preserve and close the already-recorded root after worker exit.

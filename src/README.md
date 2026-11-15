@@ -198,10 +198,15 @@ their source files.
   chunk count. Claim uncertainty never authorizes execution;
   delivery failure never automatically declares termination. These operations are
   not mounted in Studio or exposed by the existing trusted Cloudflare RPC.
-  `hosting/run-coordinator.ts` owns launch validation, start acknowledgements,
-  ingestion and cancellation through that store and a `HostedExecutor`. Its
-  observed dispatch task arranges recovery before execution, independently of
-  the response timeout. Targets own dispatch deduplication and recovery scheduling,
+  `hosting/run-coordinator.ts` owns launch validation and start acknowledgements
+  through a typed `HostedRunDriver`, with scoped cancellation and liveness. It
+  observes preparation and dispatch independently of the response timeout, and
+  closes admission before draining dispatch tasks. `trusted-run-coordinator.ts`
+  supplies trusted store/executor policy, recovery scheduling and separate RPC ingest;
+  `collector-coordinator.ts` supplies credential provisioning, deployment-scoped
+  owned controls and authenticated ingest. Notify acknowledgements only after
+  committed history or failure writes, including accepted batch replays.
+  Targets own dispatch deduplication and recovery scheduling,
   without leaking stubs or alarms into the coordinator. Studio accepts async
   live-run reads. Drivers and event-store schema initialization remain target-owned.
   `hosting/process-executor.test-support.ts` exercises the shared contracts in a
@@ -222,6 +227,12 @@ their source files.
   `collector-worker-runtime.ts` reuses command selection without loading CLI startup,
   a collector listener or concrete storage. No new CLI command or deploy target is
   selected by these modules.
+  `workbench/collector-worker-host.ts` composes an explicit command/module catalog,
+  the owned coordinator and supervised workers into separate Studio and collector
+  Fetch handlers. Require application authentication for Studio; the application
+  owns TLS routing and storage. Close admission and drain preparation/processes
+  before closing storage. This process-owned host does not recover worker handles
+  or infer termination after a restart.
 - The Cloudflare target composes hosting, Studio and storage contracts inside Durable
   Objects. Only `cloudflare/cloudflare.ts` imports `cloudflare:workers`; nothing outside
   `cloudflare/` imports it, and its public declarations stay structural. The

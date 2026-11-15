@@ -419,16 +419,54 @@ export class SqliteHostedLaunchStore
   async requestAttemptCancellation(launchId: string, attemptId: string): Promise<boolean> {
     assertAttemptId(launchId);
     assertAttemptId(attemptId);
+    return this.storage.transactionSync(() =>
+      this.#requestAttemptCancellation(launchId, attemptId)
+    );
+  }
+
+  #requestAttemptCancellation(launchId: string, attemptId: string): boolean {
+    const launch = this.#get(launchId);
+    const attempt = this.#getAttempt({ launchId, attemptId });
+    if (!launch || TERMINAL.has(launch.state) || !attempt || Number(attempt.revoked) !== 0)
+      return false;
+    this.storage.sql.exec(
+      "INSERT OR IGNORE INTO tubeless_attempt_cancellations (attempt_id) VALUES (?)",
+      attemptId
+    );
+    return true;
+  }
+
+  async liveAttemptRunIds(deploymentId: string): Promise<readonly string[]> {
+    assertAttemptId(deploymentId);
+    return this.storage.sql
+      .exec(
+        `SELECT launch.run_id FROM tubeless_launches AS launch
+       JOIN tubeless_attempts AS attempt ON attempt.launch_id = launch.launch_id
+       WHERE attempt.deployment_id = ? AND launch.state = 'running' AND launch.run_id IS NOT NULL
+       ORDER BY launch.created_at_ms`,
+        deploymentId
+      )
+      .toArray()
+      .map((row) => String(row.run_id));
+  }
+
+  async requestAttemptRunCancellation(runId: string, deploymentId: string): Promise<boolean> {
+    assertAttemptId(runId);
+    assertAttemptId(deploymentId);
     return this.storage.transactionSync(() => {
-      const launch = this.#get(launchId);
-      const attempt = this.#getAttempt({ launchId, attemptId });
-      if (!launch || TERMINAL.has(launch.state) || !attempt || Number(attempt.revoked) !== 0)
-        return false;
-      this.storage.sql.exec(
-        "INSERT OR IGNORE INTO tubeless_attempt_cancellations (attempt_id) VALUES (?)",
-        attemptId
+      const row = this.storage.sql
+        .exec(
+          `SELECT attempt.launch_id, attempt.attempt_id FROM tubeless_attempts AS attempt
+         JOIN tubeless_launches AS launch ON launch.launch_id = attempt.launch_id
+         WHERE launch.run_id = ? AND launch.state = 'running' AND attempt.deployment_id = ?`,
+          runId,
+          deploymentId
+        )
+        .toArray()[0];
+      return (
+        row !== undefined &&
+        this.#requestAttemptCancellation(String(row.launch_id), String(row.attempt_id))
       );
-      return true;
     });
   }
 

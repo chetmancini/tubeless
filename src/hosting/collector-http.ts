@@ -23,7 +23,7 @@ interface CollectorOperation {
 
 /** Separate executor ingress; never mount this as a Studio admin/browser capability. */
 export function createHostedCollector(options: {
-  readonly store: HostedCollectorStore;
+  readonly store: Omit<HostedCollectorStore, "provisionCollectorAttempt">;
   readonly now?: () => number;
 }) {
   const now = options.now ?? Date.now;

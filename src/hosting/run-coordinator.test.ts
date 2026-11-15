@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
-import { HostedRunCoordinator } from "./run-coordinator.js";
+import type { HostedRunCoordinator } from "./run-coordinator.js";
+import type { StudioIngest } from "./run-contract.js";
+import { createTrustedHostedRun } from "./trusted-run-coordinator.js";
 import { createStudioHost } from "./hosting-studio.js";
 import { createSqliteLaunchStoreFixture } from "./launch-store-sqlite.test-support.js";
 import { commands, job, sideEffect } from "./run.test-support.js";
@@ -22,11 +24,12 @@ function setup(options: { filename?: string; startTimeoutMs?: number } = {}) {
   const fixture = createSqliteLaunchStoreFixture(options.filename);
   cleanups.push(() => fixture.store.close());
   let coordinator!: HostedRunCoordinator;
+  let ingest!: StudioIngest;
   const output = { cwd: process.cwd(), stdout: { write: vi.fn() }, stderr: { write: vi.fn() } };
-  const executor = createProcessHostedExecutor({ commands, output, ingest: () => coordinator });
+  const executor = createProcessHostedExecutor({ commands, output, ingest: () => ingest });
   cleanups.push(() => executor.close());
   const scheduleReconcile = vi.fn(async () => {});
-  coordinator = new HostedRunCoordinator(
+  const hosted = createTrustedHostedRun(
     {
       commands,
       output,
@@ -37,7 +40,9 @@ function setup(options: { filename?: string; startTimeoutMs?: number } = {}) {
     },
     fixture.store
   );
-  return { ...fixture, coordinator, executor, scheduleReconcile };
+  coordinator = hosted.launcher;
+  ingest = hosted.ingest;
+  return { ...fixture, coordinator, ingest, executor, scheduleReconcile };
 }
 
 function request(path: string, body?: unknown) {
@@ -189,7 +194,7 @@ describe("hosted acknowledgement failures", () => {
   });
 
   it("acknowledges a retried batch that already completed its launch", async () => {
-    const { coordinator, executor, store } = setup();
+    const { coordinator, ingest, executor, store } = setup();
     const accept = store.acceptBatch.bind(store);
     vi.spyOn(store, "acceptBatch").mockImplementationOnce(async (...args) => {
       await accept(...args);
@@ -220,11 +225,9 @@ describe("hosted acknowledgement failures", () => {
       },
     ];
     vi.spyOn(executor, "start").mockImplementation(async (job) => {
-      await coordinator.admit(job.launchId);
-      await expect(coordinator.appendEvents(job.launchId, 0, batch)).rejects.toThrow(
-        "reply was lost"
-      );
-      expect(await coordinator.appendEvents(job.launchId, 0, batch)).toEqual({ accepted: true });
+      await ingest.admit(job.launchId);
+      await expect(ingest.appendEvents(job.launchId, 0, batch)).rejects.toThrow("reply was lost");
+      expect(await ingest.appendEvents(job.launchId, 0, batch)).toEqual({ accepted: true });
     });
     expect(await coordinator.launch("greeting", { name: "Ada" })).toEqual({
       accepted: true,
