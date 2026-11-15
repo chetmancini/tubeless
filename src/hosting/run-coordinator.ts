@@ -25,12 +25,23 @@ export interface HostedRunDriver<TDispatch> {
   liveRunIds(): Promise<readonly string[]>;
 }
 
+/** Host-only stage diagnostics; deliberately excludes raw errors, credentials and input values. */
+export interface HostedRunDiagnostic {
+  readonly code:
+    | "TUBELESS_HOST_PREPARATION_FAILED"
+    | "TUBELESS_HOST_DISPATCH_FAILED"
+    | "TUBELESS_HOST_FAILURE_RECORDING_FAILED";
+  readonly launchId: string;
+  readonly commandId: string;
+}
+
 export interface HostedRunCoordinatorOptions<TDispatch> {
   readonly commands: ReadonlyMap<string, HostedCommand>;
   readonly driver: HostedRunDriver<TDispatch>;
   readonly output: HostedOutput;
   readonly maxRunDurationMs: number;
   readonly startTimeoutMs?: number;
+  readonly onDiagnostic?: (diagnostic: HostedRunDiagnostic) => void | Promise<void>;
 }
 
 const START_FAILED = "The run host could not start the run.";
@@ -61,6 +72,7 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
       output: deps.output,
       maxRunDurationMs: deps.maxRunDurationMs,
       startTimeoutMs,
+      onDiagnostic: deps.onDiagnostic?.bind(deps),
     };
     this.commands = [...this.deps.commands.values()].map((entry) => entry.descriptor);
   }
@@ -129,28 +141,41 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
     let dispatch: TDispatch;
     try {
       dispatch = await this.deps.driver.prepare(job);
-      if (this.#closed) throw new Error("The run host is stopping.");
     } catch {
-      await this.#failStart(job.launchId, START_FAILED);
+      this.#diagnose(job, "TUBELESS_HOST_PREPARATION_FAILED");
+      await this.#failStart(job, START_FAILED);
       return;
     }
+    if (this.#closed) return this.#failStart(job, START_FAILED);
     try {
       await this.deps.driver.start(dispatch);
     } catch {
-      await this.#failStart(job.launchId, START_UNCONFIRMED);
+      this.#diagnose(job, "TUBELESS_HOST_DISPATCH_FAILED");
+      await this.#failStart(job, START_UNCONFIRMED);
     }
   }
 
   /** Runs inside a voided promise chain, so it must never throw. */
-  async #failStart(launchId: string, message: string): Promise<void> {
+  async #failStart(job: RunJob, message: string): Promise<void> {
     try {
       // An admitted run is executing user code; it records its own outcome or is reconciled.
-      await this.deps.driver.failUnadmitted(launchId, message);
+      await this.deps.driver.failUnadmitted(job.launchId, message);
     } catch {
+      this.#diagnose(job, "TUBELESS_HOST_FAILURE_RECORDING_FAILED");
       // Target-owned recovery must reconcile the launch later.
       console.error("The run host could not persist launch failure.");
     }
-    this.acknowledge(launchId, { accepted: false, errors: [message] });
+    this.acknowledge(job.launchId, { accepted: false, errors: [message] });
+  }
+
+  #diagnose(job: RunJob, code: HostedRunDiagnostic["code"]): void {
+    try {
+      void Promise.resolve(
+        this.deps.onDiagnostic?.({ code, launchId: job.launchId, commandId: job.commandId })
+      ).catch(() => {});
+    } catch {
+      // Diagnostics must not interrupt failure fencing or launch acknowledgement.
+    }
   }
 
   /** Notify only after the corresponding history/failure transaction committed. */

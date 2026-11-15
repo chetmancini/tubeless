@@ -64,6 +64,25 @@ async function setup(mode = "nested") {
 }
 
 describe("Studio launches supervised collector workers", { timeout: 15_000 }, () => {
+  it("forwards preparation diagnostics to the host without leaking the cause to Studio", async () => {
+    const { createHost, state } = await setup();
+    vi.spyOn(state.fixture.store, "provisionCollectorAttempt").mockRejectedValue(
+      new Error("PRIVATE provisioning cause")
+    );
+    const onDiagnostic = vi.fn();
+    const host = await createHost({ onDiagnostic });
+    const response = await host.studio.fetch(request("/api/commands/parent/runs", { values: {} }));
+    expect(response.status).toBe(400);
+    expect(await response.text()).not.toContain("PRIVATE");
+    await host.drain();
+    expect(onDiagnostic).toHaveBeenCalledWith({
+      code: "TUBELESS_HOST_PREPARATION_FAILED",
+      launchId: expect.any(String),
+      commandId: "parent",
+    });
+    expect(state.requests).toEqual([]);
+  });
+
   it("owns deferred dispatch configuration after the caller changes its options", async () => {
     const fixture = await setup();
     const options = {

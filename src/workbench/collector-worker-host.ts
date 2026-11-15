@@ -7,6 +7,7 @@ import {
 import { createStudioHost, type StudioHostOptions } from "../hosting/hosting-studio.js";
 import { collectorWorkerBudgets, startCollectorWorker } from "./collector-worker.js";
 import { collectorBaseUrl } from "../hosting/collector-transport.js";
+import type { HostedRunDiagnostic } from "../hosting/run-coordinator.js";
 
 export interface CollectorWorkerCommand extends HostedCommand {
   readonly module: URL;
@@ -23,6 +24,7 @@ export async function createCollectorWorkerHost(input: {
   readonly authenticate: NonNullable<StudioHostOptions["authenticate"]>;
   readonly maxRunDurationMs: number;
   readonly startTimeoutMs?: number;
+  readonly onDiagnostic?: (diagnostic: HostedRunDiagnostic) => void | Promise<void>;
   readonly worker: Pick<
     Parameters<typeof startCollectorWorker>[0],
     "cwd" | "env" | "fetch" | "startupTimeoutMs" | "cancelGraceMs"
@@ -37,6 +39,7 @@ export async function createCollectorWorkerHost(input: {
     authenticate: input.authenticate,
     maxRunDurationMs: input.maxRunDurationMs,
     startTimeoutMs: input.startTimeoutMs,
+    onDiagnostic: input.onDiagnostic?.bind(input),
     worker: {
       cwd: input.worker.cwd,
       fetch: input.worker.fetch,
@@ -68,6 +71,7 @@ export async function createCollectorWorkerHost(input: {
     output: { cwd: options.worker.cwd, stdout: { write() {} }, stderr: { write() {} } },
     maxRunDurationMs: options.maxRunDurationMs,
     startTimeoutMs: options.startTimeoutMs,
+    onDiagnostic: options.onDiagnostic,
     credentialTtlMs:
       budgets.startupTimeoutMs + options.maxRunDurationMs + budgets.cancelGraceMs + 60_000,
     async start({ job, token }) {

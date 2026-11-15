@@ -6,7 +6,7 @@ import type { HostedLaunchStore } from "./launch-store.js";
 import type { CollectorRunJob } from "./collector-run.js";
 import { provisionCollectorAttempt } from "./collector-credentials.js";
 import { createHostedCollector } from "./collector-http.js";
-import { HostedRunCoordinator } from "./run-coordinator.js";
+import { HostedRunCoordinator, type HostedRunDiagnostic } from "./run-coordinator.js";
 
 export type CollectorLaunchStore = HostedCollectorStore &
   Pick<HostedAttemptStore, "liveAttemptRunIds" | "requestAttemptRunCancellation"> &
@@ -28,6 +28,7 @@ export function createCollectorHostedRun(input: {
   readonly credentialTtlMs: number;
   readonly startTimeoutMs?: number;
   readonly now?: () => number;
+  readonly onDiagnostic?: (diagnostic: HostedRunDiagnostic) => void | Promise<void>;
   start(dispatch: CollectorDispatch): Promise<void>;
 }) {
   const {
@@ -49,6 +50,7 @@ export function createCollectorHostedRun(input: {
     output,
     maxRunDurationMs,
     startTimeoutMs,
+    onDiagnostic: input.onDiagnostic?.bind(input),
     driver: {
       async prepare(input) {
         const job = { ...input, attemptId: crypto.randomUUID() };

@@ -395,6 +395,15 @@ serves the collector separately with TLS and executor credentials; Studio sessio
 authority grants no collector access, and worker credentials grant no Studio
 access. The host does not open listeners or own the supplied store.
 
+Configure the optional host-only `onDiagnostic` callback to distinguish launch
+failures while browser responses remain generic. Receive only `launchId`,
+`commandId` and one fixed code: `TUBELESS_HOST_PREPARATION_FAILED`,
+`TUBELESS_HOST_DISPATCH_FAILED` or `TUBELESS_HOST_FAILURE_RECORDING_FAILED`.
+These events contain no raw errors, stacks, credentials or submitted values.
+Observers run without blocking launch handling; thrown errors and rejected
+promises are contained. The application owns any diagnostic sink's flushing.
+Normal host closure is not a preparation-failure diagnostic.
+
 Owned liveness and run-based cancellation are scoped to the configured deployment
 and top-level root. They exclude trusted runs, foreign deployments and child run
 IDs. Request cancellation atomically against a running owned root; delivered

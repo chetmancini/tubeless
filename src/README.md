@@ -202,6 +202,9 @@ their source files.
   through a typed `HostedRunDriver`, with scoped cancellation and liveness. It
   snapshots the catalog and validates the shared start timeout; target factories
   capture configuration before deferred dispatch.
+  An optional host-only diagnostic callback receives fixed failure-stage codes
+  and launch/command IDs, never raw errors or input values; observer failures do
+  not interrupt launch handling.
   The coordinator observes preparation and dispatch independently of the response timeout, and
   closes admission before draining dispatch tasks. `trusted-run-coordinator.ts`
   supplies trusted store/executor policy, recovery scheduling and separate RPC ingest;
