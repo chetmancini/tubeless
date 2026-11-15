@@ -30,14 +30,25 @@ export function createCollectorHostedRun(input: {
   readonly now?: () => number;
   start(dispatch: CollectorDispatch): Promise<void>;
 }) {
-  const options = { ...input };
-  const { store, deploymentId } = options;
+  const {
+    store,
+    deploymentId,
+    commands,
+    output,
+    maxRunDurationMs,
+    credentialTtlMs,
+    startTimeoutMs,
+  } = input;
+  const start = input.start.bind(input);
   assertAttemptId(deploymentId);
-  if (!Number.isSafeInteger(options.credentialTtlMs) || options.credentialTtlMs <= 0)
+  if (!Number.isSafeInteger(credentialTtlMs) || credentialTtlMs <= 0)
     throw new Error("Invalid collector credential lifetime.");
-  const now = options.now ?? Date.now;
+  const now = input.now ?? Date.now;
   const launcher = new HostedRunCoordinator<CollectorDispatch>({
-    ...options,
+    commands,
+    output,
+    maxRunDurationMs,
+    startTimeoutMs,
     driver: {
       async prepare(input) {
         const job = { ...input, attemptId: crypto.randomUUID() };
@@ -52,11 +63,11 @@ export function createCollectorHostedRun(input: {
             deploymentId,
             createdAtMs,
           },
-          createdAtMs + options.credentialTtlMs
+          createdAtMs + credentialTtlMs
         );
         return { job, token };
       },
-      start: (dispatch) => options.start(dispatch),
+      start,
       failUnadmitted: (launchId, message) => store.failUnadmitted(launchId, message, now()),
       cancel: (runId) => store.requestAttemptRunCancellation(runId, deploymentId),
       liveRunIds: () => store.liveAttemptRunIds(deploymentId),

@@ -30,6 +30,38 @@ function setup() {
 }
 
 describe("owned launch preparation and dispatch", () => {
+  it("accepts inherited configuration and dispatch methods with their original receiver", async () => {
+    vi.useFakeTimers();
+    const { options, start, storage } = setup();
+    class Configuration {
+      store = options.store;
+      commands = options.commands;
+      output = options.output;
+      maxRunDurationMs = options.maxRunDurationMs;
+      startTimeoutMs = options.startTimeoutMs;
+      credentialTtlMs = options.credentialTtlMs;
+      calls = 0;
+      get deploymentId() {
+        return "inherited-revision";
+      }
+      async start(packet: CollectorDispatch) {
+        this.calls++;
+        await start(packet);
+      }
+    }
+    const config = new Configuration();
+    const { launcher } = createCollectorHostedRun(config);
+    cleanup.push(() => launcher.close());
+    const result = launcher.launch("greeting", { name: "Ada" });
+    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
+    expect(config.calls).toBe(1);
+    expect(storage.sql.exec("SELECT deployment_id FROM tubeless_attempts").toArray()).toEqual([
+      { deployment_id: "inherited-revision" },
+    ]);
+    await vi.advanceTimersByTimeAsync(10);
+    await result;
+  });
+
   it("retains configured deployment, credentials, dispatch and catalog after caller mutation", async () => {
     vi.useFakeTimers();
     const { launcher, start, options, storage } = setup();

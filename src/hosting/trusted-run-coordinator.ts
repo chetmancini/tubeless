@@ -16,8 +16,9 @@ export function createTrustedHostedRun(
   },
   store: HostedLaunchStore
 ) {
-  const options = { ...input };
-  const now = options.now ?? Date.now;
+  const { commands, output, executor, maxRunDurationMs, startTimeoutMs } = input;
+  const scheduleReconcile = input.scheduleReconcile.bind(input);
+  const now = input.now ?? Date.now;
   const observe = async <T>(operation: () => Promise<T>): Promise<T> => {
     try {
       return await operation();
@@ -27,20 +28,23 @@ export function createTrustedHostedRun(
     }
   };
   const launcher = new HostedRunCoordinator<RunJob>({
-    ...options,
+    commands,
+    output,
+    maxRunDurationMs,
+    startTimeoutMs,
     driver: {
       prepare: (job) =>
         observe(async () => {
           await store.create(job.launchId, job.commandId, now());
-          await options.scheduleReconcile();
+          await scheduleReconcile();
           return job;
         }),
-      start: (job) => observe(() => options.executor.start(job)),
+      start: (job) => observe(() => executor.start(job)),
       failUnadmitted: (launchId, message) =>
         observe(() => store.failUnadmitted(launchId, message, now())),
       async cancel(runId) {
         const launchId = await store.launchIdForRun(runId);
-        return launchId !== undefined && (await options.executor.cancel(launchId));
+        return launchId !== undefined && (await executor.cancel(launchId));
       },
       liveRunIds: () => store.liveRunIds(),
     },

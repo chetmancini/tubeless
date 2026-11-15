@@ -29,8 +29,21 @@ export async function createCollectorWorkerHost(input: {
   >;
 }) {
   const options = {
-    ...input,
-    worker: { ...input.worker, env: input.worker.env && { ...input.worker.env } },
+    store: input.store,
+    commands: input.commands,
+    deploymentId: input.deploymentId,
+    collectorUrl: input.collectorUrl,
+    clientScript: input.clientScript,
+    authenticate: input.authenticate,
+    maxRunDurationMs: input.maxRunDurationMs,
+    startTimeoutMs: input.startTimeoutMs,
+    worker: {
+      cwd: input.worker.cwd,
+      fetch: input.worker.fetch,
+      startupTimeoutMs: input.worker.startupTimeoutMs,
+      cancelGraceMs: input.worker.cancelGraceMs,
+      env: input.worker.env && { ...input.worker.env },
+    },
   };
   if (typeof options.authenticate !== "function")
     throw new Error("Studio requires explicit authentication.");

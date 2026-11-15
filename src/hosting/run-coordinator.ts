@@ -55,7 +55,13 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
       startTimeoutMs > MAX_TIMEOUT_DELAY_MS
     )
       throw new Error("Invalid hosted start acknowledgement budget.");
-    this.deps = { ...deps, commands: new Map(deps.commands), startTimeoutMs };
+    this.deps = {
+      commands: new Map(deps.commands),
+      driver: deps.driver,
+      output: deps.output,
+      maxRunDurationMs: deps.maxRunDurationMs,
+      startTimeoutMs,
+    };
     this.commands = [...this.deps.commands.values()].map((entry) => entry.descriptor);
   }
 
