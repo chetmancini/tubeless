@@ -64,6 +64,41 @@ async function setup(mode = "nested") {
 }
 
 describe("Studio launches supervised collector workers", { timeout: 15_000 }, () => {
+  it("owns deferred dispatch configuration after the caller changes its options", async () => {
+    const fixture = await setup();
+    const options = {
+      store: fixture.state.fixture.store,
+      commands: new Map([["parent", fixture.entry]]),
+      deploymentId: "revision-1",
+      collectorUrl: fixture.baseUrl,
+      clientScript: "",
+      maxRunDurationMs: 20_000,
+      authenticate: () => undefined,
+      worker: {
+        cwd: fixture.directory,
+        env: fixture.workerOptions.env,
+        fetch: fixture.workerOptions.fetch,
+      },
+    };
+    const host = await createCollectorWorkerHost(options);
+    cleanups.push(() => host.close());
+    fixture.state.collector = host.collector;
+    options.deploymentId = "changed";
+    options.collectorUrl = "https://unreachable.test";
+    options.worker.cwd = "/missing-worker-directory";
+    options.commands.clear();
+    fixture.entry.module.href = new URL("missing.mjs", fixture.module).href;
+    expect(
+      (await host.studio.fetch(request("/api/commands/parent/runs", { values: {} }))).status
+    ).toBe(202);
+    await host.drain();
+    expect(
+      (await fixture.state.fixture.store.listEvents()).filter(
+        (event) => event.name === "pipeline.completed"
+      )
+    ).toHaveLength(2);
+  });
+
   it("acknowledges persisted nested history over HTTPS and preserves it after reopen", async () => {
     const fixture = await setup();
     const host = await fixture.createHost();

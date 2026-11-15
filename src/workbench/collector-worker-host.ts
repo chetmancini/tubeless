@@ -7,7 +7,6 @@ import {
 import { createStudioHost, type StudioHostOptions } from "../hosting/hosting-studio.js";
 import { collectorWorkerBudgets, startCollectorWorker } from "./collector-worker.js";
 import { collectorBaseUrl } from "../hosting/collector-transport.js";
-import { MAX_TIMEOUT_DELAY_MS } from "../utilities/abort.js";
 
 export interface CollectorWorkerCommand extends HostedCommand {
   readonly module: URL;
@@ -15,7 +14,7 @@ export interface CollectorWorkerCommand extends HostedCommand {
 }
 
 /** Internal Node host. The application routes/authenticates Studio and serves collector separately. */
-export async function createCollectorWorkerHost(options: {
+export async function createCollectorWorkerHost(input: {
   readonly store: CollectorLaunchStore & Pick<PipelineRunEventReader, "listEvents">;
   readonly commands: ReadonlyMap<string, CollectorWorkerCommand>;
   readonly deploymentId: string;
@@ -29,19 +28,15 @@ export async function createCollectorWorkerHost(options: {
     "cwd" | "env" | "fetch" | "startupTimeoutMs" | "cancelGraceMs"
   >;
 }) {
+  const options = {
+    ...input,
+    worker: { ...input.worker, env: input.worker.env && { ...input.worker.env } },
+  };
   if (typeof options.authenticate !== "function")
     throw new Error("Studio requires explicit authentication.");
   const collectorUrl = collectorBaseUrl(options.collectorUrl);
-  const startTimeoutMs = options.startTimeoutMs ?? 30_000;
-  if (
-    !Number.isSafeInteger(startTimeoutMs) ||
-    startTimeoutMs <= 0 ||
-    startTimeoutMs > MAX_TIMEOUT_DELAY_MS
-  )
-    throw new Error("Invalid hosted start acknowledgement budget.");
-  const workerOptions = { ...options.worker, env: options.worker.env && { ...options.worker.env } };
   const budgets = collectorWorkerBudgets({
-    ...workerOptions,
+    ...options.worker,
     maxRunDurationMs: options.maxRunDurationMs,
   });
   const commands = new Map<string, CollectorWorkerCommand>();
@@ -59,14 +54,14 @@ export async function createCollectorWorkerHost(options: {
     deploymentId: options.deploymentId,
     output: { cwd: options.worker.cwd, stdout: { write() {} }, stderr: { write() {} } },
     maxRunDurationMs: options.maxRunDurationMs,
-    startTimeoutMs,
+    startTimeoutMs: options.startTimeoutMs,
     credentialTtlMs:
       budgets.startupTimeoutMs + options.maxRunDurationMs + budgets.cancelGraceMs + 60_000,
     async start({ job, token }) {
       const entry = commands.get(job.commandId);
       if (!entry) throw new Error("Pipeline command not found.");
       const worker = startCollectorWorker({
-        ...workerOptions,
+        ...options.worker,
         ...budgets,
         job,
         token,

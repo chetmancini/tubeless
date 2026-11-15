@@ -45,4 +45,23 @@ it("scopes owned liveness and root cancellation without enrolling attempts in tr
   expect(await store.liveAttemptRunIds("release-1")).toEqual([]);
   expect(await store.requestAttemptRunCancellation("root", "release-1")).toBe(false);
   expect(await store.liveAttemptRunIds("release-2")).toEqual(["other-root"]);
+  await store.revokeAttempt("other", "other");
+  expect(await store.requestAttemptRunCancellation("other-root", "release-2")).toBe(false);
+});
+
+it("leaves intent and history unchanged when a scoped cancellation write fails", async () => {
+  const { store, authority, storage, readLaunch } = await collectorFixture();
+  cleanups.push(() => store.close());
+  await store.claimCollectorAttempt(authority, "worker", "release-1");
+  await store.acceptCollectorBatch(authority, "worker", batch(0, [started()]));
+  const history = await store.listEvents();
+  storage.sql.exec(
+    "CREATE TRIGGER fail_cancel BEFORE INSERT ON tubeless_attempt_cancellations BEGIN SELECT RAISE(ABORT, 'cancel failed'); END"
+  );
+  await expect(store.requestAttemptRunCancellation("root", "release-1")).rejects.toThrow(
+    "cancel failed"
+  );
+  expect(await store.collectorCancellationRequested(authority, "worker")).toBe(false);
+  expect(await store.listEvents()).toEqual(history);
+  expect(readLaunch("launch")?.state).toBe("running");
 });

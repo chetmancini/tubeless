@@ -5,7 +5,7 @@ import { HostedRunCoordinator, type HostedExecutor } from "./run-coordinator.js"
 
 /** Preserve trusted RPC admission/recovery without exposing it to owned workers. */
 export function createTrustedHostedRun(
-  options: {
+  input: {
     readonly commands: ReadonlyMap<string, HostedCommand>;
     readonly executor: HostedExecutor;
     readonly output: HostedOutput;
@@ -16,6 +16,7 @@ export function createTrustedHostedRun(
   },
   store: HostedLaunchStore
 ) {
+  const options = { ...input };
   const now = options.now ?? Date.now;
   const observe = async <T>(operation: () => Promise<T>): Promise<T> => {
     try {

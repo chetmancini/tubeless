@@ -14,21 +14,40 @@ function setup() {
   const fixture = createSqliteLaunchStoreFixture();
   cleanup.push(() => fixture.store.close());
   const start = vi.fn(async (_packet: CollectorDispatch) => {});
-  const hosted = createCollectorHostedRun({
+  const options = {
     store: fixture.store,
-    commands,
+    commands: new Map(commands),
     deploymentId: "revision",
     maxRunDurationMs: 1000,
     credentialTtlMs: 60_000,
     startTimeoutMs: 10,
     output: { cwd: "/tmp", stdout: { write() {} }, stderr: { write() {} } },
     start,
-  });
+  };
+  const hosted = createCollectorHostedRun(options);
   cleanup.push(() => hosted.launcher.close());
-  return { ...fixture, ...hosted, start };
+  return { ...fixture, ...hosted, start, options };
 }
 
 describe("owned launch preparation and dispatch", () => {
+  it("retains configured deployment, credentials, dispatch and catalog after caller mutation", async () => {
+    vi.useFakeTimers();
+    const { launcher, start, options, storage } = setup();
+    const replacement = vi.fn(async (_packet: CollectorDispatch) => {});
+    options.deploymentId = "changed";
+    options.credentialTtlMs = 0;
+    options.start = replacement;
+    options.commands.clear();
+    const result = launcher.launch("greeting", { name: "Ada" });
+    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
+    expect(replacement).not.toHaveBeenCalled();
+    expect(storage.sql.exec("SELECT deployment_id FROM tubeless_attempts").toArray()).toEqual([
+      { deployment_id: "revision" },
+    ]);
+    await vi.advanceTimersByTimeAsync(10);
+    await result;
+  });
+
   it("owns submitted input while provisioning and waits for a committed start acknowledgement", async () => {
     vi.useFakeTimers();
     const { launcher, start } = setup();

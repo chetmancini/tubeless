@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import type { HostedRunCoordinator } from "./run-coordinator.js";
 import type { StudioIngest } from "./run-contract.js";
+import { MAX_TIMEOUT_DELAY_MS } from "../utilities/abort.js";
 import { createTrustedHostedRun } from "./trusted-run-coordinator.js";
 import { createStudioHost } from "./hosting-studio.js";
 import { createSqliteLaunchStoreFixture } from "./launch-store-sqlite.test-support.js";
@@ -173,6 +174,13 @@ describe("process hosted executor through the shared coordinator", () => {
 });
 
 describe("hosted acknowledgement failures", () => {
+  it.each([0, -1, 1.5, NaN, Infinity, MAX_TIMEOUT_DELAY_MS + 1])(
+    "rejects an invalid shared acknowledgement timeout (%s) before dispatch",
+    (startTimeoutMs) => {
+      expect(() => setup({ startTimeoutMs })).toThrow("acknowledgement budget");
+    }
+  );
+
   it("acknowledges a committed start after its store reply was lost", async () => {
     vi.useFakeTimers();
     const { coordinator, executor, store } = setup({ startTimeoutMs: 1000 });

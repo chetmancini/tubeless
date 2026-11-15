@@ -200,7 +200,9 @@ their source files.
   not mounted in Studio or exposed by the existing trusted Cloudflare RPC.
   `hosting/run-coordinator.ts` owns launch validation and start acknowledgements
   through a typed `HostedRunDriver`, with scoped cancellation and liveness. It
-  observes preparation and dispatch independently of the response timeout, and
+  snapshots the catalog and validates the shared start timeout; target factories
+  capture configuration before deferred dispatch.
+  The coordinator observes preparation and dispatch independently of the response timeout, and
   closes admission before draining dispatch tasks. `trusted-run-coordinator.ts`
   supplies trusted store/executor policy, recovery scheduling and separate RPC ingest;
   `collector-coordinator.ts` supplies credential provisioning, deployment-scoped

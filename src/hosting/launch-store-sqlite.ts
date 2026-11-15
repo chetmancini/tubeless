@@ -419,21 +419,17 @@ export class SqliteHostedLaunchStore
   async requestAttemptCancellation(launchId: string, attemptId: string): Promise<boolean> {
     assertAttemptId(launchId);
     assertAttemptId(attemptId);
-    return this.storage.transactionSync(() =>
-      this.#requestAttemptCancellation(launchId, attemptId)
-    );
-  }
-
-  #requestAttemptCancellation(launchId: string, attemptId: string): boolean {
-    const launch = this.#get(launchId);
-    const attempt = this.#getAttempt({ launchId, attemptId });
-    if (!launch || TERMINAL.has(launch.state) || !attempt || Number(attempt.revoked) !== 0)
-      return false;
-    this.storage.sql.exec(
-      "INSERT OR IGNORE INTO tubeless_attempt_cancellations (attempt_id) VALUES (?)",
-      attemptId
-    );
-    return true;
+    return this.storage.transactionSync(() => {
+      const launch = this.#get(launchId);
+      const attempt = this.#getAttempt({ launchId, attemptId });
+      if (!launch || TERMINAL.has(launch.state) || !attempt || Number(attempt.revoked) !== 0)
+        return false;
+      this.storage.sql.exec(
+        "INSERT OR IGNORE INTO tubeless_attempt_cancellations (attempt_id) VALUES (?)",
+        attemptId
+      );
+      return true;
+    });
   }
 
   async liveAttemptRunIds(deploymentId: string): Promise<readonly string[]> {
@@ -453,21 +449,22 @@ export class SqliteHostedLaunchStore
   async requestAttemptRunCancellation(runId: string, deploymentId: string): Promise<boolean> {
     assertAttemptId(runId);
     assertAttemptId(deploymentId);
-    return this.storage.transactionSync(() => {
-      const row = this.storage.sql
+    // The no-op update acknowledges repeated requests as well as the first insert.
+    return (
+      this.storage.sql
         .exec(
-          `SELECT attempt.launch_id, attempt.attempt_id FROM tubeless_attempts AS attempt
+          `INSERT INTO tubeless_attempt_cancellations (attempt_id)
+         SELECT attempt.attempt_id FROM tubeless_attempts AS attempt
          JOIN tubeless_launches AS launch ON launch.launch_id = attempt.launch_id
-         WHERE launch.run_id = ? AND launch.state = 'running' AND attempt.deployment_id = ?`,
+         WHERE launch.run_id = ? AND launch.state = 'running'
+           AND attempt.deployment_id = ? AND attempt.revoked = 0
+         ON CONFLICT (attempt_id) DO UPDATE SET attempt_id = excluded.attempt_id
+         RETURNING attempt_id`,
           runId,
           deploymentId
         )
-        .toArray()[0];
-      return (
-        row !== undefined &&
-        this.#requestAttemptCancellation(String(row.launch_id), String(row.attempt_id))
-      );
-    });
+        .toArray().length > 0
+    );
   }
 
   #cancellationRequested(attemptId: string): boolean {

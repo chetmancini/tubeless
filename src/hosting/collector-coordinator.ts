@@ -19,7 +19,7 @@ export interface CollectorDispatch {
 }
 
 /** Compose owned launches and authenticated ingest; targets supply dispatch and lifecycle policy. */
-export function createCollectorHostedRun(options: {
+export function createCollectorHostedRun(input: {
   readonly store: CollectorLaunchStore;
   readonly commands: ReadonlyMap<string, HostedCommand>;
   readonly deploymentId: string;
@@ -30,6 +30,7 @@ export function createCollectorHostedRun(options: {
   readonly now?: () => number;
   start(dispatch: CollectorDispatch): Promise<void>;
 }) {
+  const options = { ...input };
   const { store, deploymentId } = options;
   assertAttemptId(deploymentId);
   if (!Number.isSafeInteger(options.credentialTtlMs) || options.credentialTtlMs <= 0)

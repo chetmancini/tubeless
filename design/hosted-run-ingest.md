@@ -37,6 +37,9 @@ dispatch value, start it, atomically fail an unadmitted launch, and provide scop
 cancellation and live-run reads. It owns browser value validation and acknowledgement
 waiters, not ingestion authority or SQL. `createTrustedHostedRun` supplies the
 existing trusted store/executor policy and a separate RPC ingest capability.
+The coordinator owns the catalog snapshot and validates its bounded start timeout
+for every driver. Factories capture configuration before deferred preparation or
+dispatch; caller mutation cannot change an existing host's deployment or workers.
 Cloudflare arranges recovery before dispatch through `scheduleReconcile`; a scheduling
 failure prevents dispatch. The coordinator observes preparation and dispatch in
 a background task, independently of its start-acknowledgement timeout. A stalled
@@ -383,7 +386,7 @@ to the existing Node supervisor. Supply one explicit command/module catalog,
 deployment ID, HTTPS collector URL, worker environment/cwd and execution budgets.
 The host normalizes process budgets before provisioning and sizes credentials for
 startup, execution, cancellation grace and final failure-report delivery. Modules
-come only from the trusted catalog. Snapshot submitted values before asynchronous
+come only from the trusted catalog. Snapshot host configuration and submitted values before asynchronous
 provisioning; keep credentials out of browser responses, application values and logs.
 
 The factory returns separate `studio` and `collector` Fetch handlers, plus `drain`

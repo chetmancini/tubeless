@@ -1,5 +1,6 @@
 import type { RunJob } from "./run-contract.js";
 import type { PipelineRunControls } from "../core/pipeline.js";
+import { MAX_TIMEOUT_DELAY_MS } from "../utilities/abort.js";
 import { hostedCommandContext, type HostedCommand, type HostedOutput } from "./hosting-commands.js";
 import type {
   PipelineRunStudioCancelResult,
@@ -42,9 +43,20 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
   readonly #waiters = new Map<string, (result: PipelineRunStudioLaunchResult) => void>();
   #closed = false;
   readonly #dispatches = new Set<Promise<void>>();
+  private readonly deps: HostedRunCoordinatorOptions<TDispatch> & {
+    readonly startTimeoutMs: number;
+  };
 
-  constructor(private readonly deps: HostedRunCoordinatorOptions<TDispatch>) {
-    this.commands = [...deps.commands.values()].map((entry) => entry.descriptor);
+  constructor(deps: HostedRunCoordinatorOptions<TDispatch>) {
+    const startTimeoutMs = deps.startTimeoutMs ?? 30_000;
+    if (
+      !Number.isSafeInteger(startTimeoutMs) ||
+      startTimeoutMs <= 0 ||
+      startTimeoutMs > MAX_TIMEOUT_DELAY_MS
+    )
+      throw new Error("Invalid hosted start acknowledgement budget.");
+    this.deps = { ...deps, commands: new Map(deps.commands), startTimeoutMs };
+    this.commands = [...this.deps.commands.values()].map((entry) => entry.descriptor);
   }
 
   plan(commandId: string, input: PipelineRunControls) {
@@ -77,7 +89,7 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
     const acknowledged = new Promise<PipelineRunStudioLaunchResult>((resolve) =>
       this.#waiters.set(launchId, resolve)
     );
-    const timeoutMs = this.deps.startTimeoutMs ?? 30_000;
+    const timeoutMs = this.deps.startTimeoutMs;
     const timeout = setTimeout(
       () =>
         this.acknowledge(launchId, {
