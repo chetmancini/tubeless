@@ -30,16 +30,20 @@ import type {
   StoredPipelineEvent,
 } from "./run-store.js";
 
-interface SqliteStatement {
-  all(...params: unknown[]): unknown[];
-  run(...params: unknown[]): void;
-}
+import {
+  sqliteStatement as statement,
+  sqliteTransaction,
+  type SqliteDatabase as SqliteConnection,
+} from "./sqlite-database.js";
+import {
+  importSqliteAgentTranscript,
+  listSqliteAgentTranscript,
+  clearSqliteAgentTranscripts,
+} from "./agent-transcript-sqlite.js";
+import type { AgentTranscriptReader, AgentTranscriptRecord } from "../tracing/agent-transcript.js";
 
-interface SqliteDatabase {
+interface SqliteDatabase extends SqliteConnection {
   close(): void;
-  exec(sql: string): void;
-  prepare?(sql: string): SqliteStatement;
-  query?(sql: string): SqliteStatement;
 }
 
 interface SqliteOpenOptions {
@@ -68,18 +72,15 @@ ${sqlScript(RUN_EVENT_TRIGGER_STATEMENTS)}`;
 
 /** SQLite event store plus the explicit all-history maintenance operation. */
 export interface SqlitePipelineRunStore extends PipelineRunEventStore {
+  readonly transcripts: Pick<AgentTranscriptReader, "list">;
+  /** Atomically ingest explicit content records, retaining identical duplicates once. */
+  importTranscript(records: readonly AgentTranscriptRecord[]): number;
   /** Delete every recorded event and compact the database; individual mutation stays forbidden. */
   clearHistory(): void | Promise<void>;
 }
 
 function storedLegacyAttributeEvent(row: LegacyAttributeRow): StoredPipelineEvent {
   return { ...upgradeLegacyAttributeRow(row), id: Number(row.id) };
-}
-
-function statement(database: SqliteDatabase, sql: string): SqliteStatement {
-  const prepared = database.query?.(sql) ?? database.prepare?.(sql);
-  if (!prepared) throw new Error("The current SQLite runtime does not support prepared queries.");
-  return prepared;
 }
 
 async function loadSqliteModule(): Promise<SqliteModule> {
@@ -334,6 +335,17 @@ export async function openSqlitePipelineRunStore(
     }
   }
 
+  async function read<T>(query: () => T): Promise<T> {
+    if (closed) throw new Error("Cannot query a closed pipeline run store.");
+    drain();
+    if (readOnly && resolvedFilename !== ":memory:")
+      await sqliteAssertImmutableInspect(resolvedFilename);
+    const result = query();
+    if (readOnly && resolvedFilename !== ":memory:")
+      await sqliteAssertImmutableInspect(resolvedFilename);
+    return result;
+  }
+
   return {
     export(event) {
       if (closed) throw new Error("Cannot append to a closed pipeline run store.");
@@ -351,37 +363,38 @@ export async function openSqlitePipelineRunStore(
       if (exportError) throw exportError;
       drain();
     },
-    async listEvents(query: PipelineRunEventQuery = {}) {
-      if (closed) throw new Error("Cannot query a closed pipeline run store.");
+    listEvents(query: PipelineRunEventQuery = {}) {
+      return read(() => {
+        const { sql, params } = runEventListQuery(query);
+        const rows = statement(database, sql).all(...params);
+        if (legacyAttributes) return (rows as LegacyAttributeRow[]).map(storedLegacyAttributeEvent);
+        // SAFETY: The SELECT * columns match the RunEventRecord interface exactly
+        // (the table schema is owned by run-store-sql.ts), so each result row is one.
+        return (rows as RunEventRecord[]).map(storedRunEvent);
+      });
+    },
+    transcripts: {
+      list(query) {
+        return read(() => listSqliteAgentTranscript(database, query));
+      },
+    },
+    importTranscript(records) {
+      if (closed) throw new Error("Cannot append to a closed pipeline run store.");
+      if (readOnly) throw new Error("Cannot append to a read-only pipeline run store.");
+      if (exportError) throw exportError;
       drain();
-      if (readOnly && resolvedFilename !== ":memory:") {
-        await sqliteAssertImmutableInspect(resolvedFilename);
-      }
-      const { sql, params } = runEventListQuery(query);
-      const rows = statement(database, sql).all(...params);
-      if (readOnly && resolvedFilename !== ":memory:") {
-        await sqliteAssertImmutableInspect(resolvedFilename);
-      }
-      if (legacyAttributes) return (rows as LegacyAttributeRow[]).map(storedLegacyAttributeEvent);
-      // SAFETY: The SELECT * columns match the RunEventRecord interface exactly
-      // (the table schema is owned by run-store-sql.ts), so each result row is one.
-      return (rows as RunEventRecord[]).map(storedRunEvent);
+      return importSqliteAgentTranscript(database, records);
     },
     clearHistory() {
       if (closed) throw new Error("Cannot clear a closed pipeline run store.");
       drain();
-      try {
-        database.exec(`BEGIN IMMEDIATE;
-${sqlScript(RUN_EVENT_DROP_TRIGGER_STATEMENTS)}
+      sqliteTransaction(database, () => {
+        // The database guard also protects content from older, event-only clear implementations.
+        clearSqliteAgentTranscripts(database);
+        database.exec(`${sqlScript(RUN_EVENT_DROP_TRIGGER_STATEMENTS)}
 DELETE FROM pipeline_run_events;
-${sqlScript(RUN_EVENT_TRIGGER_STATEMENTS)}
-COMMIT;`);
-      } catch (error) {
-        try {
-          database.exec("ROLLBACK");
-        } catch {}
-        throw error;
-      }
+${sqlScript(RUN_EVENT_TRIGGER_STATEMENTS)}`);
+      });
       try {
         database.exec("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");
       } catch {

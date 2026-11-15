@@ -528,7 +528,11 @@ read when a pipeline needs them.
   from `tubeless/agent/node`, then close it after all agents settle. Attach the
   finished file with `history --transcript <path> <run-id>` or `ui --transcript <path>`
   alongside its structural trace/store. Studio pages content in a Transcript tab;
-  attached files are immutable snapshots and disable history clearing.
+  attached files are immutable snapshots and disable history clearing. Import a
+  finished artifact with `history --store <path> --import-transcript <path>`
+  to retain content in SQLite; its run IDs must already exist in history. History
+  and Studio then read it automatically, and clearing deletes events and content
+  together. Capture still requires an explicit transcript sink.
   Read [transcript contracts](./agents.md#opt-in-transcripts)
   and adapt [the credential-free recipe](../examples/agent-transcript.ts).
 

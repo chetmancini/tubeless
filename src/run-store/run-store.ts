@@ -1,3 +1,4 @@
+import type { AgentTranscriptReader } from "../tracing/agent-transcript.js";
 import type {
   RUN_MODEL_VERSION,
   PipelineRunStatus,
@@ -42,6 +43,8 @@ export interface PipelineRunEventQuery {
 
 /** Read-only event source consumed by run history and the local studio. */
 export interface PipelineRunEventReader {
+  /** Optional content owned by this store and included in its all-history deletion. */
+  readonly transcripts?: Pick<AgentTranscriptReader, "list">;
   close(): void | Promise<void>;
   listEvents(query?: PipelineRunEventQuery): Promise<readonly StoredPipelineEvent[]>;
 }

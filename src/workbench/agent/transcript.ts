@@ -6,7 +6,7 @@ import type {
 import { terminalSafeText } from "../workbench-shared.js";
 
 export async function readAgentTranscript(
-  reader: AgentTranscriptReader,
+  reader: Pick<AgentTranscriptReader, "list">,
   runId: string
 ): Promise<AgentTranscriptPage> {
   const records: AgentTranscriptRecord[] = [];

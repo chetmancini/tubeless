@@ -888,7 +888,8 @@ tubeless history [options] [run-id]
 - `--json` emits the projected run list, or one projected run when `run-id` is set
 - `--events` emits raw store events as NDJSON (run-scoped when `run-id` is set)
 - `--transcript <path>` attaches a finished agent transcript for the selected run; requires `run-id` and cannot combine with `--events` or `--clear`
-- `--clear` deletes all recorded events from a SQLite store and compacts it; requires `--yes` and cannot combine with `--trace`, `--json`, `--events`, or a run id
+- `--import-transcript <path>` atomically copies a finished transcript into existing SQLite history; accepts `--store` and `--json`, with no run id or other history mode
+- `--clear` deletes all recorded events and stored transcripts from a SQLite store and compacts it; requires `--yes` and cannot combine with `--trace`, `--json`, `--events`, or a run id
 - `--yes` confirms `--clear`; there is no interactive prompt
 
 `--store` and `--trace` cannot be combined. `--json` and `--events` cannot be
@@ -901,7 +902,12 @@ A pipeline with no recorded runs returns an empty list or event stream (exit `0`
 History reads recorded IDs directly without loading a project file or command module.
 With `--transcript`, text output adds the selected agent's saved content and JSON
 adds a `transcript` object. This is an explicit, read-only artifact, independent of
-`--store` and `--trace`; see [transcript inspection](./agents.md#save-and-inspect-a-transcript).
+`--store` and `--trace`. With `--import-transcript`, every transcript run must
+already have structural events in the SQLite store. Identical records are retained
+once; conflicting records or identities abort the whole import. `--json` returns
+`{ "imported": <new-record-count> }`. Later run details read that stored content
+automatically. Imports preserve the source file and the event schema, and use the
+existing database permissions; `--store` alone never enables capture. See [transcript inspection](./agents.md#save-and-inspect-a-transcript).
 By default, history prints a run list. Supply a run ID to see that run's steps,
 logs, and error details. Agent runs and parents containing agents also show their
 recorded turn/call/child structure, state versions, call counts, termination, and
@@ -931,6 +937,7 @@ bunx tubeless history --pipeline import
 bunx tubeless history --json <run-id>
 bunx tubeless history --events <run-id>
 bunx tubeless history --trace run.ndjson
+bunx tubeless history --store .tubeless/runs.sqlite --import-transcript .tubeless/transcript.ndjson
 bunx tubeless history --clear --yes --store .tubeless/runs.sqlite
 ```
 

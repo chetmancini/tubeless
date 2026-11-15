@@ -35,6 +35,11 @@ bunx tubeless ui --trace run.ndjson
 The NDJSON view is always read-only. It cannot launch commands or clear history,
 and does not accept a project file or `--command`.
 
+Studio automatically reads transcripts imported with
+`history --store <path> --import-transcript <path>`. Stored content is deleted
+atomically with its structural history when clearing is available. Reopen the
+transcript view after importing additional records.
+
 Add `--transcript <path>` to attach a finished agent transcript alongside either
 event source. Runs with content gain a **Transcript** tab: prompts, public assistant
 text, proposed decisions, tool calls/results, and explicit omissions. Content is

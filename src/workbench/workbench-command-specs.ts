@@ -238,6 +238,13 @@ Run details include recorded agent turns, tool calls, and child agents.
         valueName: "path",
         completion: "file",
       },
+      "import-transcript": {
+        type: "string",
+        description:
+          "Import a finished transcript into SQLite history; identical records are retained once",
+        valueName: "path",
+        completion: "file",
+      },
       clear: {
         type: "boolean",
         description: "Delete all recorded history from a SQLite store (requires --yes)",
