@@ -355,6 +355,10 @@ Workspace tools run with your host permissions.`,
         type: "boolean",
         description: "Hide pipeline reporting (keep model/tool logs and answers)",
       },
+      "capture-transcript": {
+        type: "boolean",
+        description: "Save built-in agent prompts, answers and tool content in --store (opt-in)",
+      },
       store: {
         type: "string",
         description: "Append each prompt's run to a local SQLite database",

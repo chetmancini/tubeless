@@ -1320,8 +1320,14 @@ Content stays in a separate table and inherits the existing database's filesyste
 permissions. Protect the database and its sidecars accordingly. Recording a run
 with `--store` still does not capture content automatically. Existing event-store
 schema versions are unchanged; older writable stores still require the normal
-explicit upgrade. Cloudflare persistence and direct streaming into SQLite remain
-subsequent work in the
+explicit upgrade.
+
+The built-in workspace CLI can capture directly with
+`agent --store <path> --capture-transcript`, avoiding the artifact/import step.
+It uses the default transcript bounds and records full application content; it
+does not install a custom redactor or override selected agents' own sinks. See
+[CLI recording](./cli.md#prompt-a-workspace-agent) for a credential-free example.
+Cloudflare persistence remains subsequent work in the
 [feature design](https://github.com/chetmancini/tubeless/blob/main/design/agent-transcripts.md).
 
 ## Inspection and recordings

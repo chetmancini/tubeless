@@ -1,7 +1,8 @@
 import { createWriteStream, type WriteStream } from "node:fs";
 import { mkdir, readlink, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
-import type { PipelineRunEventStore } from "../run-store/run-store.js";
+import type { SqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
+import type { AgentTranscriptOptions } from "../agent/agent.js";
 import type { PipelineTraceEvent, PipelineTraceExporter } from "../tracing/tracing.js";
 import { writeCliChunk, type WorkbenchCliIo } from "./workbench-shared.js";
 
@@ -9,6 +10,8 @@ import { writeCliChunk, type WorkbenchCliIo } from "./workbench-shared.js";
 export interface WorkbenchRecording {
   /** Trace exporters in recording order; empty when neither destination was requested. */
   readonly exporters: readonly PipelineTraceExporter[];
+  /** Explicit content capture into the same store; structural recording alone never enables it. */
+  readonly transcript?: AgentTranscriptOptions;
   /** Close the trace, then the store. Returns every close error so callers report each one. */
   close(): Promise<unknown[]>;
 }
@@ -18,12 +21,19 @@ export interface WorkbenchRecording {
  * stdout. If one destination fails to open, the other is closed before rethrowing.
  */
 export async function openWorkbenchRecording(
-  destinations: { readonly store?: string; readonly trace?: string },
+  destinations: {
+    readonly store?: string;
+    readonly trace?: string;
+    readonly captureTranscript?: boolean;
+  },
   io: WorkbenchCliIo,
   signal: AbortSignal
 ): Promise<WorkbenchRecording> {
   const exporters: PipelineTraceExporter[] = [];
-  let store: PipelineRunEventStore | undefined;
+  if (destinations.captureTranscript && !destinations.store)
+    throw new Error("--capture-transcript requires --store.");
+  let store: SqlitePipelineRunStore | undefined;
+  let transcript: AgentTranscriptOptions | undefined;
   let closeTrace: (() => Promise<void>) | undefined;
   const close = async () => {
     const errors: unknown[] = [];
@@ -39,8 +49,17 @@ export async function openWorkbenchRecording(
   try {
     if (destinations.store) {
       const { openSqlitePipelineRunStore } = await import("../run-store/run-store-sqlite.js");
-      store = await openSqlitePipelineRunStore(path.resolve(io.cwd, destinations.store));
-      exporters.push(store);
+      const opened = await openSqlitePipelineRunStore(path.resolve(io.cwd, destinations.store));
+      store = opened;
+      exporters.push(opened);
+      if (destinations.captureTranscript) {
+        transcript = {
+          write(record) {
+            // Ingestion drains buffered events first, establishing this run's history ownership.
+            opened.importTranscript([record]);
+          },
+        };
+      }
     }
     if (destinations.trace) {
       const writer = await createRunTraceWriter(destinations.trace, io, signal);
@@ -51,7 +70,7 @@ export async function openWorkbenchRecording(
     await close();
     throw error;
   }
-  return { exporters, close };
+  return { exporters, transcript, close };
 }
 
 /** True when the store (including SQLite sidecar files) and trace resolve to the same file. */

@@ -161,10 +161,35 @@ tubeless history --pipeline tubeless-agent
 ```
 
 `--trace -` is rejected because stdout carries the conversation, and `--store` and
-`--trace` cannot name the same file. Recordings hold each prompt's run status,
-agent turns, tool activity, model usage and logs, but not the prompt or answer
-text, so they are not a saved conversation. Logs and tool activity can still
-contain workspace content; keep traces and stores as private as the workspace.
+`--trace` cannot name the same file. Structural recordings hold each prompt's run
+status, agent turns, tool activity, model usage and logs. Logs and tool activity
+can contain workspace content; keep traces and stores as private as the workspace.
+
+For the built-in workspace agent, add `--capture-transcript` with `--store` to
+save prompts, instructions, public assistant text, decisions, validated tool
+inputs/results and terminal status directly in SQLite. Capture remains off
+without that flag. It uses the existing transcript bounds (64 KiB per record,
+1 MiB per prompt by default), and capture failures emit a fixed warning without
+changing the agent result. Each prompt owns its sequence and content budget.
+The database keeps structural events and content separately and clears them
+atomically. Content inherits the database's filesystem permissions. This flag
+captures application data without a custom redactor; use an application-defined
+transcript sink when custom redaction or bounds are required.
+
+The [scripted model example](../examples/agent-transcript-model.ts) demonstrates
+this without credentials or an NDJSON file:
+
+```sh
+tubeless agent --model-module ./examples/agent-transcript-model.ts --prompt "List the current directory." --store .tubeless/runs.sqlite --capture-transcript
+tubeless history --store .tubeless/runs.sqlite --pipeline tubeless-agent
+tubeless history --store .tubeless/runs.sqlite <agent-run-id>
+tubeless ui --store .tubeless/runs.sqlite
+```
+
+History reads saved content automatically after the recording closes; Studio can
+inspect the store while recording continues. Reopen a Studio transcript view to
+read later appends. `--capture-transcript` cannot override a selected project/file
+agent's capture configuration; those agents continue to own their transcript sink.
 
 #### Select a defined agent
 

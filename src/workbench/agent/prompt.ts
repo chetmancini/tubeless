@@ -4,6 +4,7 @@ import {
   type AgentLimits,
   type AgentModel,
   type AgentSession,
+  type AgentTranscriptOptions,
   type DefaultAgentToolName,
 } from "../../agent/agent.js";
 import type { PipelineLogger } from "../../core/pipeline.js";
@@ -35,6 +36,7 @@ interface BuiltinAgentOptions {
   readonly limits: AgentLimits;
   readonly defaultTools?: readonly DefaultAgentToolName[];
   readonly codemode?: boolean;
+  readonly transcript?: AgentTranscriptOptions;
 }
 
 type PromptOutcome =
@@ -64,6 +66,7 @@ export function createPromptSession(
     limits: options.limits,
     defaultTools: options.defaultTools,
     codemode: options.codemode,
+    transcript: options.transcript,
   });
   return {
     id: agent.id,
