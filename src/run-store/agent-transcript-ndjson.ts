@@ -4,9 +4,8 @@ import {
   MAX_TRANSCRIPT_RECORD_BYTES,
   type AgentTranscriptRecord,
   type AgentTranscriptReader,
-  type AgentTranscriptPage,
 } from "../tracing/agent-transcript.js";
-import { transcriptPageQuery } from "./agent-transcript-query.js";
+import { transcriptPageQuery, transcriptRecordingStatus } from "./agent-transcript-page.js";
 import { readNdjsonArtifact } from "./ndjson-artifact.js";
 
 /** Open a validated, read-only snapshot. Later appends require reopening the artifact. */
@@ -34,15 +33,7 @@ export async function openNdjsonAgentTranscriptReader(
   const indexed = new Map(
     [...runs].map(([id, entries]) => {
       const records = [...entries.values()].sort((a, b) => a.sequence - b.sequence);
-      const last = records.at(-1)!;
-      const hasGaps = records.some((record, index) => record.sequence !== index + 1);
-      const status: AgentTranscriptPage["status"] = hasGaps
-        ? "partial"
-        : "limit" in last
-          ? "limited"
-          : "event" in last && last.event.kind === "end"
-            ? "complete"
-            : "partial";
+      const status = transcriptRecordingStatus(records.length, records.at(-1)!);
       return [id, { records, status }] as const;
     })
   );

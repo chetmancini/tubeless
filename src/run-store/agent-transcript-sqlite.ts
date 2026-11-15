@@ -4,7 +4,7 @@ import {
   type AgentTranscriptReader,
   type AgentTranscriptRecord,
 } from "../tracing/agent-transcript.js";
-import { transcriptPageQuery } from "./agent-transcript-query.js";
+import { transcriptPageQuery, transcriptRecordingStatus } from "./agent-transcript-page.js";
 import {
   sqliteStatement as statement,
   sqliteTransaction,
@@ -144,14 +144,7 @@ export function listSqliteAgentTranscript(
           "SELECT run_id, sequence, record_json FROM agent_transcript_records WHERE run_id = ? ORDER BY sequence DESC LIMIT 1"
         ).all(runId)[0]
       );
-      const status =
-        Number(summary.record_count) !== last.sequence
-          ? "partial"
-          : "limit" in last
-            ? "limited"
-            : "event" in last && last.event.kind === "end"
-              ? "complete"
-              : "partial";
+      const status = transcriptRecordingStatus(Number(summary.record_count), last);
       const records = statement(
         database,
         "SELECT run_id, sequence, record_json FROM agent_transcript_records WHERE run_id = ? AND sequence > ? ORDER BY sequence LIMIT ?"

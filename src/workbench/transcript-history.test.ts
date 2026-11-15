@@ -117,6 +117,13 @@ describe("history transcript inspection", () => {
       ).toBe(0);
       expect(JSON.parse(io.output.join(""))).toEqual({ imported });
     }
+    // Empty imports must preserve both existing history and saved content.
+    await writeFile(files.transcript, "");
+    const empty = captureIo(files.cwd);
+    expect(
+      await runHistory(["--store", store, "--import-transcript", files.transcript, "--json"], empty)
+    ).toBe(0);
+    expect(JSON.parse(empty.output.join(""))).toEqual({ imported: 0 });
     await rm(files.transcript);
     const detail = captureIo(files.cwd);
     expect(await runHistory(["--store", store, "--json", files.runId], detail)).toBe(0);
