@@ -14,6 +14,8 @@ import { createSteps, definePipeline } from "./core/pipeline.js";
 import { defineProject } from "./project/project.js";
 import { createCloudflareApp } from "./cloudflare/cloudflare.js";
 import { createR2CacheStore, jsonCacheCodec } from "./cloudflare/cloudflare-cache.js";
+import { defineAgentLoop } from "./agent/agent.js";
+import { createCloudflareAgentTranscriptWriter } from "./cloudflare/cloudflare-transcript.js";
 // The documented pattern: step definitions hold a getter; the Worker entry binds the bucket.
 let bucket;
 const bindCacheBucket = (value) => { bucket = value; };
@@ -21,6 +23,14 @@ const r2Cache = { store: createR2CacheStore(() => { if (!bucket) throw new Error
 const schema = (validate, input) => ({ "~standard": { vendor: "test", version: 1, validate, jsonSchema: { input: () => input } } });
 const nameInput = { type: "object", properties: { name: { type: "string" } }, required: ["name"] };
 const emptyInput = { type: "object", properties: {} };
+const transcript = createCloudflareAgentTranscriptWriter(() => env.TUBELESS_STUDIO.getByName("default"));
+const agent = (id, capture) => defineAgentLoop({
+  id, inputSchema: schema(value => ({ value: value ?? {} }), emptyInput),
+  resultSchema: schema(value => ({ value }), { type: "string" }),
+  defaultTools: [], tools: {}, initialState: () => 0, reduce: () => 0,
+  decide: () => ({ kind: "finish", result: "private-answer" }),
+  ...(capture ? { transcript: { ...transcript, redact: event => event.kind === "decision" ? { ...event, decision: { kind: "finish", result: "[redacted]" } } : event } } : {}),
+});
 const greetSteps = createSteps(schema((v) => typeof v?.name === "string" && v.name.length >= 3 ? { value: v } : { issues: [{ message: "Expected at least 3 characters", path: ["name"] }] }, nameInput));
 const greet = greetSteps.step("greet", { run: (_i, c) => { c.log.log("hello " + c.options.name); return "hi " + c.options.name; } });
 const slowSteps = createSteps(schema((v) => ({ value: v ?? {} }), emptyInput));
@@ -28,12 +38,16 @@ const wait = slowSteps.step("wait", { run: (_i, c) => new Promise((resolve, reje
 const cachedSteps = createSteps(schema((v) => ({ value: v ?? {} }), emptyInput));
 const cached = cachedSteps.step("cached", { cache: { version: "v1" }, run: () => ({ ok: true }) });
 const r2Cached = cachedSteps.step("r2-cached", { cache: { version: "v1", ...r2Cache }, run: () => ({ rows: [1, 2, 3] }) });
+const nestedAgent = slowSteps.fromPipeline("nested-agent", { pipeline: agent("nested-captured-agent", true) });
 const app = createCloudflareApp(defineProject("worker-test", [
   definePipeline({ id: "greeting", name: "Greeting", steps: [greet], finalize: greet }),
   definePipeline({ id: "trace-timeout", steps: [greet], finalize: greet }),
   definePipeline({ id: "slow", steps: [wait], finalize: wait }),
   definePipeline({ id: "cached", steps: [cached], finalize: cached }),
   definePipeline({ id: "r2-cached", steps: [r2Cached], finalize: r2Cached }),
+  agent("captured-agent", true),
+  agent("uncaptured-agent", false),
+  definePipeline({ id: "agent-parent", steps: [nestedAgent] }),
 ], { tracing: {
   exporters: () => [{ export(event) { if (event.name === "pipeline.completed") console.log("project-export:" + event.runId); } }],
 } }), { tracing: {
@@ -311,7 +325,34 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
       "slow",
       "cached",
       "r2-cached",
+      "captured-agent",
+      "uncaptured-agent",
+      "agent-parent",
     ]);
+  });
+
+  it("persists only opted-in redacted agent content behind history authorization", async () => {
+    for (const command of ["captured-agent", "uncaptured-agent"]) {
+      const response = await launch(command, {});
+      expect(response.status).toBe(202);
+      const { runId } = (await response.json()) as { runId: string };
+      expect(await runStatus(runId, (status) => status !== "running")).toBe("completed");
+      const path = `/api/runs/${encodeURIComponent(runId)}/transcript`;
+      expect((await call(path, {}, false)).status).toBe(401);
+      const page = (await (await call(path)).json()) as {
+        live: boolean;
+        transcript: { status: string; records: unknown[] };
+      };
+      expect(page.live).toBe(true);
+      expect(page.transcript.status).toBe(
+        command === "captured-agent" ? "complete" : "unavailable"
+      );
+      if (command === "captured-agent") {
+        expect(page.transcript.records).toHaveLength(2);
+        expect(JSON.stringify(page)).toContain("[redacted]");
+        expect(JSON.stringify(page)).not.toContain("private-answer");
+      } else expect(page.transcript.records).toEqual([]);
+    }
   });
 
   it("rejects cross-origin mutations", async () => {
@@ -427,6 +468,41 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
     expect(run.error?.message).toMatch(/cache encode failed/i);
     expect(run.error?.cause?.message).toMatch(/serialize|not implemented/i);
     expect((await call("/api/snapshot")).status).toBe(200);
+  });
+
+  it("records explicitly opted-in child agents under their structural parent", async () => {
+    const { runId } = (await (await launch("agent-parent", {})).json()) as { runId: string };
+    expect(await runStatus(runId, (status) => status !== "running")).toBe("completed");
+    const detail = (await (await call(`/api/runs/${encodeURIComponent(runId)}`)).json()) as {
+      children: { pipelineId: string; runId: string }[];
+    };
+    const child = detail.children.find((child) => child.pipelineId === "nested-captured-agent")!;
+    expect(child).toBeDefined();
+    const page = (await (
+      await call(`/api/runs/${encodeURIComponent(child.runId)}/transcript`)
+    ).json()) as { transcript: { status: string; records: { parentRunId: string }[] } };
+    expect(page.transcript.status).toBe("complete");
+    expect(page.transcript.records).toHaveLength(2);
+    expect(page.transcript.records.every((record) => record.parentRunId === runId)).toBe(true);
+  });
+
+  it("clears captured content under history authorization and accepts new runs", async () => {
+    const response = await launch("captured-agent", {});
+    const { runId } = (await response.json()) as { runId: string };
+    await runStatus(runId, (status) => status !== "running");
+    const init: CallInit = {
+      method: "DELETE",
+      headers: { origin: "http://localhost", "x-tubeless-studio-clear-history": "1" },
+    };
+    expect((await call("/api/history", init, false)).status).toBe(401);
+    expect((await call("/api/history", init)).status).toBe(200);
+    expect((await call(`/api/runs/${encodeURIComponent(runId)}/transcript`)).status).toBe(404);
+    const snapshot = (await (await call("/api/snapshot")).json()) as { eventCount: number };
+    expect(snapshot.eventCount).toBe(0);
+    const next = await launch("uncaptured-agent", {});
+    expect(next.status).toBe(202);
+    const nextRun = (await next.json()) as { runId: string };
+    expect(await runStatus(nextRun.runId, (status) => status !== "running")).toBe("completed");
   });
 });
 

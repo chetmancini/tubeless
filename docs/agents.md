@@ -1331,8 +1331,12 @@ The built-in workspace CLI can capture directly with
 It uses the default transcript bounds and records full application content; it
 does not install a custom redactor or override selected agents' own sinks. See
 [CLI recording](./cli.md#prompt-a-workspace-agent) for a credential-free example.
-Cloudflare persistence remains subsequent work in the
-[feature design](https://github.com/chetmancini/tubeless/blob/main/design/agent-transcripts.md).
+On Cloudflare, use `createCloudflareAgentTranscriptWriter` from
+`tubeless/cloudflare/transcript` as the explicit sink for each agent. The Studio
+Durable Object owns content alongside history; reads share Cloudflare Access and
+clearing deletes events and content atomically while refusing active launches.
+See [Cloudflare capture](./deploy-cloudflare.md#opt-in-agent-transcripts) and its
+[credential-free recipe](../examples/agent-transcript-cloudflare.ts).
 
 ## Inspection and recordings
 

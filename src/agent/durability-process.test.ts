@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, it } from "vitest";
+import { expect, it, onTestFailed } from "vitest";
 import { openSqliteAgentCheckpointStore } from "./node.js";
 
 function launch(mode: string, directory: string) {
@@ -21,6 +21,9 @@ function launch(mode: string, directory: string) {
   let stderr = "";
   child.stderr!.on("data", (data: Buffer) => {
     stderr += data.toString();
+  });
+  onTestFailed(() => {
+    if (stderr) console.error(`Durability child (${mode}) stderr:\n${stderr}`);
   });
   const exited = new Promise<void>((resolve, reject) => {
     child.once("error", reject);
@@ -48,12 +51,15 @@ it("survives SIGKILL with committed model state, call receipts and budgets in a 
     expect(await first.message).toEqual({ ready: true });
     const competing = await openSqliteAgentCheckpointStore(join(directory, "state.db"));
     try {
-      await expect(competing.acquire("job")).rejects.toMatchObject({
+      await expect(competing.acquire("job").then((lease) => lease.close())).rejects.toMatchObject({
         code: "TUBELESS_AGENT_EXECUTION_BUSY",
       });
       const other = await competing.acquire("other-job");
-      await other.write("independent");
-      await other.close();
+      try {
+        await other.write("independent");
+      } finally {
+        await other.close();
+      }
     } finally {
       competing.close();
     }

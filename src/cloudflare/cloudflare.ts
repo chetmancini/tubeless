@@ -10,6 +10,12 @@ import { RunObjectCore } from "./cloudflare-run.js";
 import { StudioObjectCore, type RunStubLike } from "./cloudflare-studio.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 import { PIPELINE_RUN_STUDIO_CLIENT } from "./cloudflare-studio-client.js";
+import type { AgentTranscriptRecord } from "../tracing/agent-transcript.js";
+import type { CloudflareTranscriptIngest } from "./cloudflare-transcript.js";
+export {
+  createCloudflareAgentTranscriptWriter,
+  type CloudflareTranscriptIngest,
+} from "./cloudflare-transcript.js";
 
 export {
   createWorkerLoaderCodemodeExecutor,
@@ -45,13 +51,16 @@ export interface CloudflareWorker {
 }
 
 /** Durable Object class to export from the Worker entry under its binding's export name. */
-export type CloudflareDurableObjectClass = abstract new (ctx: never, env: never) => object;
+export type CloudflareDurableObjectClass<Instance extends object = object> = abstract new (
+  ctx: never,
+  env: never
+) => Instance;
 
 /** Worker handler and Durable Object classes that a Worker entry exports. */
 export interface CloudflareApp {
   readonly worker: CloudflareWorker;
   readonly durableObjects: {
-    readonly TubelessStudio: CloudflareDurableObjectClass;
+    readonly TubelessStudio: CloudflareDurableObjectClass<CloudflareTranscriptIngest>;
     readonly TubelessRun: CloudflareDurableObjectClass;
   };
 }
@@ -189,6 +198,10 @@ export function createCloudflareApp<TEnv = unknown>(
 
     reportFailure(launchId: string, message: string): Promise<void> {
       return this.#core.reportFailure(launchId, message);
+    }
+
+    appendTranscript(record: AgentTranscriptRecord): Promise<{ accepted: boolean }> {
+      return this.#core.appendTranscript(record);
     }
 
     alarm(): Promise<void> {

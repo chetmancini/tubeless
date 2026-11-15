@@ -9,6 +9,7 @@ import {
   type CloudflareWorker,
   type R2BucketLike,
   type R2ObjectLike,
+  createCloudflareAgentTranscriptWriter,
 } from "tubeless/cloudflare";
 import { defineProject } from "tubeless/project";
 
@@ -40,5 +41,7 @@ const app: CloudflareApp = createCloudflareApp(
 );
 const worker: CloudflareWorker = app.worker;
 const studio: CloudflareDurableObjectClass = app.durableObjects.TubelessStudio;
+declare const studioRpc: InstanceType<typeof app.durableObjects.TubelessStudio>;
+createCloudflareAgentTranscriptWriter(() => studioRpc);
 export { studio as TubelessStudio, worker as default };
 export const { TubelessRun } = app.durableObjects;

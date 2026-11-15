@@ -142,6 +142,44 @@ throwing or rejecting in one cannot suppress the other. Their promises are obser
 for rejection but do not delay alarm completion. Put required delivery in an
 exporter's `export` or `flush`.
 
+## Opt-in agent transcripts
+
+History records structure by default. To retain agent content, configure each
+agent's `transcript` option with `createCloudflareAgentTranscriptWriter` from
+`tubeless/cloudflare/transcript`. This entry also loads in Node, so shared project
+modules can import it. Resolve the Studio binding lazily in the Worker; keep the
+binding and its RPC capability on the server:
+
+```ts
+import { env } from "cloudflare:workers";
+import { createCloudflareAgentTranscriptWriter } from "tubeless/cloudflare/transcript";
+
+const transcript = createCloudflareAgentTranscriptWriter(() =>
+  env.TUBELESS_STUDIO.getByName("default")
+);
+// Supply { ...transcript, redact, maxBytes } as your agent's transcript option.
+```
+
+Adapt the [credential-free agent recipe](../examples/agent-transcript-cloudflare.ts)
+and register its returned agent in your Worker project. Child agents require their
+own opt-in. Redaction and the usual per-record/per-invocation byte budgets apply
+before delivery. The writer makes at most five delivery attempts within five
+seconds; it handles buffered structural starts and lost acknowledgements without
+duplicating content. Delivery failure disables capture for that invocation without
+failing the agent. An abruptly terminated host can leave a partial recording.
+
+The Studio Durable Object stores content separately from trace events and recovery
+state, and exposes it in the live Transcript tab behind the same Cloudflare Access
+checks as history. All admitted users can read the deployment's captured content.
+No new binding or storage credential is required. Tables are created on the first
+accepted write; old history remains readable without transcript content.
+
+**Clear history** deletes structural events and transcript content in one transaction
+and refuses while launches are active, including launches still starting. Closed
+launch receipts remain to prevent late event retries from recreating deleted history.
+Late content for a deleted run is refused. This does not add automatic expiry or
+delete application-owned artifacts in R2.
+
 ## Run limits
 
 **A run executes inside one Durable Object alarm, so it has at most 15 minutes of

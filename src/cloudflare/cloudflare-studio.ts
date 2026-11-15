@@ -2,10 +2,11 @@ import type { RunJob, StudioIngest } from "../hosting/run-contract.js";
 import type { HostedCommand, HostedOutput } from "../hosting/hosting-commands.js";
 import { createStudioHost, type StudioHost } from "../hosting/hosting-studio.js";
 import { SqliteHostedLaunchStore } from "../hosting/launch-store-sqlite.js";
-import type { HostedLaunchStore } from "../hosting/launch-store.js";
 import { HostedRunCoordinator } from "../hosting/run-coordinator.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
-import { openDurableRunStore } from "./cloudflare-run-store.js";
+import { openDurableRunStore, type DurableRunStore } from "./cloudflare-run-store.js";
+import type { AgentTranscriptRecord } from "../tracing/agent-transcript.js";
+import { PipelineRunStudioHistoryBusyError } from "../studio/server/state.js";
 import { HOST_TERMINATED } from "./cloudflare-run-contract.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 
@@ -33,14 +34,16 @@ export interface StudioObjectDependencies {
 
 /** Singleton Studio object: Durable Object adapters around shared launch coordination. */
 export class StudioObjectCore implements StudioIngest {
-  readonly #store: HostedLaunchStore;
+  readonly #store: SqliteHostedLaunchStore;
+  readonly #events: DurableRunStore;
   readonly #coordinator: HostedRunCoordinator;
   readonly #now: () => number;
   #host: Promise<StudioHost> | undefined;
 
   constructor(private readonly deps: StudioObjectDependencies) {
     this.#now = deps.now ?? Date.now;
-    this.#store = new SqliteHostedLaunchStore(deps.storage, openDurableRunStore(deps.storage));
+    this.#events = openDurableRunStore(deps.storage);
+    this.#store = new SqliteHostedLaunchStore(deps.storage, this.#events);
     this.#coordinator = new HostedRunCoordinator(
       {
         commands: deps.commands,
@@ -72,11 +75,22 @@ export class StudioObjectCore implements StudioIngest {
 
   async fetch(request: Request): Promise<Response> {
     this.#host ??= createStudioHost({
-      store: this.#store,
+      store: this.#events,
       launcher: this.#coordinator,
       clientScript: this.deps.clientScript,
+      history: {
+        clear: () =>
+          this.deps.storage.transactionSync(() => {
+            if (this.#store.hasActiveLaunches()) throw new PipelineRunStudioHistoryBusyError();
+            this.#events.clearHistory();
+          }),
+      },
     });
     return (await this.#host).fetch(request);
+  }
+
+  async appendTranscript(record: AgentTranscriptRecord): Promise<{ accepted: boolean }> {
+    return { accepted: this.#events.appendTranscript(record) };
   }
 
   admit(launchId: string) {

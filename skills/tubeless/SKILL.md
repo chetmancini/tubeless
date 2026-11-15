@@ -238,6 +238,11 @@ Read the corresponding package recipe before using these features:
   SQLite capture with default bounds and no custom redactor. `--store` alone
   remains structural; this flag cannot override selected agents' transcript sinks.
   Read `docs/agents.md#opt-in-transcripts` and `examples/agent-transcript.ts`.
+  For Cloudflare content, use `createCloudflareAgentTranscriptWriter` from
+  `tubeless/cloudflare/transcript` with a getter for the private Studio stub.
+  Keep each agent's capture explicit, bounded and redactable; content shares
+  history authorization and atomic deletion. Read `docs/deploy-cloudflare.md`
+  and `examples/agent-transcript-cloudflare.ts`.
   Add `durability: { store, key }` with an explicit `implementationVersion` to
   persist decisions, call outcomes, child state and ancestor budgets. Every live
   child inheriting recovery also needs `implementationVersion`; bump it when

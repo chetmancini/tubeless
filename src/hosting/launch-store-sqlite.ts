@@ -183,6 +183,15 @@ export class SqliteHostedLaunchStore
       storage.sql.exec(statement);
   }
 
+  /** Synchronous so target-owned history deletion can check eligibility in its transaction. */
+  hasActiveLaunches(): boolean {
+    return (
+      this.storage.sql
+        .exec("SELECT 1 FROM tubeless_launches WHERE state IN ('starting', 'running') LIMIT 1")
+        .toArray().length > 0
+    );
+  }
+
   async create(launchId: string, commandId: string, nowMs: number): Promise<void> {
     this.#create(launchId, commandId, nowMs);
   }

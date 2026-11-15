@@ -345,6 +345,7 @@ try {
   run("node", ["--experimental-strip-types", "project.ts"], consumerRoot);
   // The cache entry stays free of cloudflare:workers so projects using it load in Node.
   run("node", ["--experimental-strip-types", "cloudflare-cache.ts"], consumerRoot);
+  run("node", ["--experimental-strip-types", "cloudflare-transcript.ts"], consumerRoot);
 
   // The Cloudflare entry imports cloudflare:workers, which only workerd resolves; its
   // runtime loading is covered by src/cloudflare/cloudflare-app.test.ts. The
