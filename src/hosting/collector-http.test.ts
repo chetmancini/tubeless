@@ -65,6 +65,26 @@ describe("collector credentials", () => {
 });
 
 describe("Fetch-native collector", () => {
+  it("rejects unknown operations before reading bodies or accessing storage", async () => {
+    const { send, store } = await setup();
+    const lookup = vi.spyOn(store, "getCollectorCredential");
+    const report = vi.spyOn(store, "reportCollectorFailure");
+    for (const operation of ["unknown", "constructor", "toString", "__proto__", "admit/extra"]) {
+      const read = vi.fn();
+      const cancel = vi.fn();
+      const response = await send(
+        operation,
+        new ReadableStream<Uint8Array>({ pull: read, cancel }, { highWaterMark: 0 })
+      );
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ code: "not_found" });
+      expect(read).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledOnce();
+    }
+    expect(lookup).not.toHaveBeenCalled();
+    expect(report).not.toHaveBeenCalled();
+  });
+
   it.each(["missing", "wrong-secret", "other-launch", "expired", "revoked"])(
     "authenticates %s before reading a body",
     async (mode) => {

@@ -89,6 +89,7 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
       outcome: { status: "history-confirmed" },
     });
     expect(Number((await readFile(effectFile, "utf8")).trim())).not.toBe(process.pid);
+    expect(worker.cancel()).toBe(false);
     const batches = state.requests.filter((request) => request.operation === "batches");
     expect(batches[0]!.body).toEqual(batches[1]!.body);
     const events = await state.fixture.store.listEvents();
