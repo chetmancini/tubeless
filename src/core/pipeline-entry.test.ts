@@ -330,6 +330,7 @@ describe("module runtime boundaries", () => {
     const pending = [
       resolve(dist, "workbench/collector-worker-runtime.js"),
       resolve(dist, "workbench/collector-worker.js"),
+      resolve(dist, "workbench/collector-worker-host.js"),
     ];
     const visited = new Set<string>();
     while (pending.length > 0) {
@@ -341,6 +342,7 @@ describe("module runtime boundaries", () => {
         expect([
           "workbench/collector-worker-runtime.js",
           "workbench/collector-worker.js",
+          "workbench/collector-worker-host.js",
           "workbench/collector-worker-protocol.js",
           "workbench/pipeline-module.js",
         ]).toContain(name);

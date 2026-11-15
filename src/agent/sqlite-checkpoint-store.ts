@@ -65,7 +65,9 @@ export async function openSqliteAgentCheckpointStore(
     database.close();
     throw error;
   }
-  let active = 0;
+  // Own the connections until explicit release, even while an execution's pending
+  // promise has no externally retained callbacks and can be garbage collected.
+  const active = new Set<InstanceType<typeof DatabaseSync>>();
   let closed = false;
   return {
     acquire: async (key) => {
@@ -88,7 +90,7 @@ export async function openSqliteAgentCheckpointStore(
           );
         throw error;
       }
-      active++;
+      active.add(lock);
       let released = false;
       const check = () => {
         if (released || closed) throw new Error("Agent checkpoint lease is closed");
@@ -113,14 +115,14 @@ export async function openSqliteAgentCheckpointStore(
           if (released) return;
           lock.close();
           released = true;
-          active--;
+          active.delete(lock);
           // Retain the lock file: unlinking it could give another owner a different inode to lock.
         },
       };
     },
     close: () => {
       if (closed) return;
-      if (active)
+      if (active.size)
         throw new Error("Close agent execution leases before closing the checkpoint store");
       database.close();
       closed = true;

@@ -16,6 +16,22 @@ export interface CollectorWorkerResult {
   readonly failureReport: "not-needed" | "recorded" | "closed" | "unconfirmed";
 }
 
+/** Normalize the target's process budgets before provisioning credentials or forking. */
+export function collectorWorkerBudgets(options: {
+  readonly maxRunDurationMs: number;
+  readonly startupTimeoutMs?: number;
+  readonly cancelGraceMs?: number;
+}) {
+  const startupTimeoutMs = options.startupTimeoutMs ?? 30_000;
+  const cancelGraceMs = options.cancelGraceMs ?? 1000;
+  for (const delay of [startupTimeoutMs, cancelGraceMs, options.maxRunDurationMs])
+    if (!Number.isSafeInteger(delay) || delay < 0 || delay > MAX_TIMEOUT_DELAY_MS)
+      throw new Error("Invalid worker supervision budget.");
+  if (options.maxRunDurationMs === 0 || startupTimeoutMs === 0)
+    throw new Error("Worker execution and startup budgets must be positive.");
+  return { startupTimeoutMs, cancelGraceMs };
+}
+
 /** Supervise one OS process. Provision first; preserve launch/attempt IDs after uncertain dispatch. */
 export function startCollectorWorker(options: {
   readonly job: CollectorRunJob;
@@ -34,13 +50,10 @@ export function startCollectorWorker(options: {
   readonly fetch?: typeof fetch;
 }) {
   const { baseUrl, token, deploymentId, fetch: transportFetch } = options;
-  const startupTimeoutMs = options.startupTimeoutMs ?? 30_000;
-  const cancelGraceMs = options.cancelGraceMs ?? 1000;
-  for (const delay of [startupTimeoutMs, cancelGraceMs, options.job.maxRunDurationMs])
-    if (!Number.isSafeInteger(delay) || delay < 0 || delay > MAX_TIMEOUT_DELAY_MS)
-      throw new Error("Invalid worker supervision budget.");
-  if (options.job.maxRunDurationMs === 0 || startupTimeoutMs === 0)
-    throw new Error("Worker execution and startup budgets must be positive.");
+  const { startupTimeoutMs, cancelGraceMs } = collectorWorkerBudgets({
+    ...options,
+    maxRunDurationMs: options.job.maxRunDurationMs,
+  });
   if (options.module.protocol !== "file:")
     throw new Error("Worker module must be a compiled file URL.");
   // Snapshot before fork, and keep credentials out of argv, environment and application values.

@@ -16,7 +16,7 @@ function launch(mode: string, directory: string) {
       join(directory, "decisions"),
       directory,
     ],
-    { silent: true, execArgv: ["--disable-warning=ExperimentalWarning"] }
+    { silent: true, execArgv: ["--disable-warning=ExperimentalWarning", "--expose-gc"] }
   );
   let stderr = "";
   child.stderr!.on("data", (data: Buffer) => {

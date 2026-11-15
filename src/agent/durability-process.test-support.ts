@@ -28,9 +28,17 @@ const agent = defineAgent({
       run: async (input) => {
         await appendFile(effects!, `${input}\n`);
         if (mode === "crash" && input === "uncertain") {
-          process.send?.({ ready: true });
           await new Promise<void>(() => {
             setInterval(() => {}, 1000);
+            // Collect the suspended execution before the parent checks ownership.
+            // A second turn also lets native connection finalizers run.
+            setImmediate(() => {
+              globalThis.gc!();
+              setImmediate(() => {
+                globalThis.gc!();
+                process.send?.({ ready: true });
+              });
+            });
           });
         }
         return input;

@@ -48,6 +48,10 @@ export interface HostedAttemptStore {
   ): Promise<AttemptBatchAcknowledgement>;
   /** Persist cancellation intent and fence future claims. True acknowledges an open attempt, not exit. */
   requestAttemptCancellation(launchId: string, attemptId: string): Promise<boolean>;
+  /** Live owned root runs in one deployment, independent of trusted launch recovery. */
+  liveAttemptRunIds(deploymentId: string): Promise<readonly string[]>;
+  /** Request cancellation only for a running owned root in this deployment. */
+  requestAttemptRunCancellation(runId: string, deploymentId: string): Promise<boolean>;
   /** Revoke write authority only; this neither terminates execution nor invents a run outcome. */
   revokeAttempt(launchId: string, attemptId: string): Promise<void>;
 }

@@ -15,6 +15,13 @@ import {
   decodeCollectorJson,
 } from "./collector-protocol.js";
 
+export function collectorBaseUrl(value: string): string {
+  const base = new URL(value);
+  if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash)
+    throw new Error("Collector requires an HTTPS base URL without credentials, query or fragment.");
+  return base.href.replace(/\/+$/, "");
+}
+
 /** HTTP delivery only; admission and ordered execution state belong to the client. */
 export function createCollectorTransport(options: {
   readonly baseUrl: string;
@@ -25,11 +32,8 @@ export function createCollectorTransport(options: {
   readonly signal?: AbortSignal;
 }) {
   const { baseUrl, launchId, workerId, token, signal: callerSignal } = options;
-  const base = new URL(baseUrl);
-  if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash)
-    throw new Error("Collector requires an HTTPS base URL without credentials, query or fragment.");
   if (!/^[a-f0-9]{32}\.[a-f0-9]{64}$/.test(token)) throw new Error("Invalid collector credential.");
-  const endpoint = `${base.href.replace(/\/+$/, "")}/v1/launches/${encodeURIComponent(launchId)}`;
+  const endpoint = `${collectorBaseUrl(baseUrl)}/v1/launches/${encodeURIComponent(launchId)}`;
   const transport = options.fetch ?? fetch;
 
   async function request<T>(

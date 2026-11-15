@@ -1,14 +1,13 @@
-import type { RunJob, StudioIngest } from "./run-contract.js";
+import type { RunJob } from "./run-contract.js";
 import type { PipelineRunControls } from "../core/pipeline.js";
+import { MAX_TIMEOUT_DELAY_MS } from "../utilities/abort.js";
 import { hostedCommandContext, type HostedCommand, type HostedOutput } from "./hosting-commands.js";
-import type { HostedLaunchStore } from "./launch-store.js";
 import type {
   PipelineRunStudioCancelResult,
   PipelineRunStudioLauncher,
   PipelineRunStudioLaunchRequest,
   PipelineRunStudioLaunchResult,
 } from "../studio/shared/protocol.js";
-import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
 /** Target-owned execution and duplicate prevention. start acknowledges dispatch, not completion. */
 export interface HostedExecutor {
@@ -17,15 +16,32 @@ export interface HostedExecutor {
   cancel(launchId: string): Promise<boolean>;
 }
 
-export interface HostedRunCoordinatorOptions {
+/** Target-owned preparation, dispatch and scoped launch controls. */
+export interface HostedRunDriver<TDispatch> {
+  prepare(job: RunJob): Promise<TDispatch>;
+  start(dispatch: TDispatch): Promise<void>;
+  failUnadmitted(launchId: string, message: string): Promise<void>;
+  cancel(runId: string): Promise<boolean>;
+  liveRunIds(): Promise<readonly string[]>;
+}
+
+/** Host-only stage diagnostics; deliberately excludes raw errors, credentials and input values. */
+export interface HostedRunDiagnostic {
+  readonly code:
+    | "TUBELESS_HOST_PREPARATION_FAILED"
+    | "TUBELESS_HOST_DISPATCH_FAILED"
+    | "TUBELESS_HOST_FAILURE_RECORDING_FAILED";
+  readonly launchId: string;
+  readonly commandId: string;
+}
+
+export interface HostedRunCoordinatorOptions<TDispatch> {
   readonly commands: ReadonlyMap<string, HostedCommand>;
-  readonly executor: HostedExecutor;
+  readonly driver: HostedRunDriver<TDispatch>;
   readonly output: HostedOutput;
   readonly maxRunDurationMs: number;
-  /** Arrange target-owned recovery before dispatch. Failure prevents dispatch. */
-  scheduleReconcile(): Promise<void>;
-  readonly now?: () => number;
   readonly startTimeoutMs?: number;
+  readonly onDiagnostic?: (diagnostic: HostedRunDiagnostic) => void | Promise<void>;
 }
 
 const START_FAILED = "The run host could not start the run.";
@@ -33,15 +49,32 @@ const START_UNCONFIRMED =
   "The run host could not confirm the run started. It may have started; check history before launching again.";
 const formatDuration = (ms: number) =>
   ms === 1000 ? "1 second" : ms > 1000 && ms % 1000 === 0 ? `${ms / 1000} seconds` : `${ms} ms`;
-export class HostedRunCoordinator implements PipelineRunStudioLauncher, StudioIngest {
+export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStudioLauncher {
   readonly commands;
   readonly #waiters = new Map<string, (result: PipelineRunStudioLaunchResult) => void>();
+  #closed = false;
+  readonly #dispatches = new Set<Promise<void>>();
+  private readonly deps: HostedRunCoordinatorOptions<TDispatch> & {
+    readonly startTimeoutMs: number;
+  };
 
-  constructor(
-    private readonly deps: HostedRunCoordinatorOptions,
-    private readonly store: HostedLaunchStore
-  ) {
-    this.commands = [...deps.commands.values()].map((entry) => entry.descriptor);
+  constructor(deps: HostedRunCoordinatorOptions<TDispatch>) {
+    const startTimeoutMs = deps.startTimeoutMs ?? 30_000;
+    if (
+      !Number.isSafeInteger(startTimeoutMs) ||
+      startTimeoutMs <= 0 ||
+      startTimeoutMs > MAX_TIMEOUT_DELAY_MS
+    )
+      throw new Error("Invalid hosted start acknowledgement budget.");
+    this.deps = {
+      commands: new Map(deps.commands),
+      driver: deps.driver,
+      output: deps.output,
+      maxRunDurationMs: deps.maxRunDurationMs,
+      startTimeoutMs,
+      onDiagnostic: deps.onDiagnostic?.bind(deps),
+    };
+    this.commands = [...this.deps.commands.values()].map((entry) => entry.descriptor);
   }
 
   plan(commandId: string, input: PipelineRunControls) {
@@ -54,12 +87,14 @@ export class HostedRunCoordinator implements PipelineRunStudioLauncher, StudioIn
     commandId: string,
     values: PipelineRunStudioLaunchRequest["values"]
   ): Promise<PipelineRunStudioLaunchResult> {
+    if (this.#closed) return { accepted: false, errors: ["The run host is stopping."] };
     const entry = this.deps.commands.get(commandId);
     if (!entry) return { accepted: false, errors: ["Pipeline command not found."] };
     let parsed: ReturnType<HostedCommand["command"]["parseValues"]>;
+    const submitted = structuredClone(values);
     try {
       parsed = entry.command.parseValues(
-        values,
+        submitted,
         hostedCommandContext(this.deps.output, new AbortController().signal)
       );
     } catch (error) {
@@ -72,10 +107,10 @@ export class HostedRunCoordinator implements PipelineRunStudioLauncher, StudioIn
     const acknowledged = new Promise<PipelineRunStudioLaunchResult>((resolve) =>
       this.#waiters.set(launchId, resolve)
     );
-    const timeoutMs = this.deps.startTimeoutMs ?? 30_000;
+    const timeoutMs = this.deps.startTimeoutMs;
     const timeout = setTimeout(
       () =>
-        this.#settle(launchId, {
+        this.acknowledge(launchId, {
           accepted: false,
           errors: [
             `The run did not record a start within ${formatDuration(timeoutMs)}. It may still start; check history before launching again.`,
@@ -83,12 +118,17 @@ export class HostedRunCoordinator implements PipelineRunStudioLauncher, StudioIn
         }),
       timeoutMs
     );
-    void this.#dispatch({
+    const dispatch = this.#dispatch({
       launchId,
       commandId,
-      values,
+      values: submitted,
       maxRunDurationMs: this.deps.maxRunDurationMs,
     });
+    this.#dispatches.add(dispatch);
+    void dispatch.then(
+      () => this.#dispatches.delete(dispatch),
+      () => this.#dispatches.delete(dispatch)
+    );
     try {
       return await acknowledged;
     } finally {
@@ -98,35 +138,48 @@ export class HostedRunCoordinator implements PipelineRunStudioLauncher, StudioIn
 
   /** Observe the whole dispatch task without holding the acknowledgement response open. */
   async #dispatch(job: RunJob): Promise<void> {
+    let dispatch: TDispatch;
     try {
-      await this.store.create(job.launchId, job.commandId, (this.deps.now ?? Date.now)());
-      // Recovery must be arranged before the executor can run user code.
-      await this.deps.scheduleReconcile();
-    } catch (error) {
-      await this.#failStart(job.launchId, error, START_FAILED);
+      dispatch = await this.deps.driver.prepare(job);
+    } catch {
+      this.#diagnose(job, "TUBELESS_HOST_PREPARATION_FAILED");
+      await this.#failStart(job, START_FAILED);
       return;
     }
+    if (this.#closed) return this.#failStart(job, START_FAILED);
     try {
-      await this.deps.executor.start(job);
-    } catch (error) {
-      await this.#failStart(job.launchId, error, START_UNCONFIRMED);
+      await this.deps.driver.start(dispatch);
+    } catch {
+      this.#diagnose(job, "TUBELESS_HOST_DISPATCH_FAILED");
+      await this.#failStart(job, START_UNCONFIRMED);
     }
   }
 
   /** Runs inside a voided promise chain, so it must never throw. */
-  async #failStart(launchId: string, error: unknown, message: string): Promise<void> {
-    console.error(error);
+  async #failStart(job: RunJob, message: string): Promise<void> {
     try {
       // An admitted run is executing user code; it records its own outcome or is reconciled.
-      await this.store.failUnadmitted(launchId, message, (this.deps.now ?? Date.now)());
-    } catch (failError) {
+      await this.deps.driver.failUnadmitted(job.launchId, message);
+    } catch {
+      this.#diagnose(job, "TUBELESS_HOST_FAILURE_RECORDING_FAILED");
       // Target-owned recovery must reconcile the launch later.
-      console.error(failError);
+      console.error("The run host could not persist launch failure.");
     }
-    this.#settle(launchId, { accepted: false, errors: [message] });
+    this.acknowledge(job.launchId, { accepted: false, errors: [message] });
   }
 
-  #settle(launchId: string, result: PipelineRunStudioLaunchResult): void {
+  #diagnose(job: RunJob, code: HostedRunDiagnostic["code"]): void {
+    try {
+      void Promise.resolve(
+        this.deps.onDiagnostic?.({ code, launchId: job.launchId, commandId: job.commandId })
+      ).catch(() => {});
+    } catch {
+      // Diagnostics must not interrupt failure fencing or launch acknowledgement.
+    }
+  }
+
+  /** Notify only after the corresponding history/failure transaction committed. */
+  acknowledge(launchId: string, result: PipelineRunStudioLaunchResult): void {
     const resolve = this.#waiters.get(launchId);
     if (!resolve) return;
     this.#waiters.delete(launchId);
@@ -134,34 +187,23 @@ export class HostedRunCoordinator implements PipelineRunStudioLauncher, StudioIn
   }
 
   async cancel(runId: string): Promise<PipelineRunStudioCancelResult> {
-    const launchId = await this.store.launchIdForRun(runId);
-    if (!launchId) return { cancelled: false };
-    return (await this.deps.executor.cancel(launchId))
+    return (await this.deps.driver.cancel(runId))
       ? { cancelled: true, runId }
       : { cancelled: false };
   }
 
   liveRunIds(): Promise<readonly string[]> {
-    return this.store.liveRunIds();
+    return this.deps.driver.liveRunIds();
   }
 
-  async admit(launchId: string): Promise<{ admitted: boolean }> {
-    return { admitted: await this.store.admit(launchId) };
+  async drain(): Promise<void> {
+    while (this.#dispatches.size > 0) await Promise.all(this.#dispatches);
   }
 
-  async appendEvents(
-    launchId: string,
-    sequence: number,
-    events: PipelineTraceEvent[]
-  ): Promise<{ accepted: boolean }> {
-    const acknowledgement = await this.store.acceptBatch(launchId, sequence, events);
-    if (acknowledgement.accepted && acknowledgement.runId !== undefined)
-      this.#settle(launchId, { accepted: true, runId: acknowledgement.runId });
-    return { accepted: acknowledgement.accepted };
-  }
-
-  async reportFailure(launchId: string, message: string): Promise<void> {
-    await this.store.fail(launchId, message, (this.deps.now ?? Date.now)());
-    this.#settle(launchId, { accepted: false, errors: [message] });
+  async close(): Promise<void> {
+    this.#closed = true;
+    for (const launchId of this.#waiters.keys())
+      this.acknowledge(launchId, { accepted: false, errors: ["The run host is stopping."] });
+    await this.drain();
   }
 }

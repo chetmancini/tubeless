@@ -432,6 +432,41 @@ export class SqliteHostedLaunchStore
     });
   }
 
+  async liveAttemptRunIds(deploymentId: string): Promise<readonly string[]> {
+    assertAttemptId(deploymentId);
+    return this.storage.sql
+      .exec(
+        `SELECT launch.run_id FROM tubeless_launches AS launch
+       JOIN tubeless_attempts AS attempt ON attempt.launch_id = launch.launch_id
+       WHERE attempt.deployment_id = ? AND launch.state = 'running' AND launch.run_id IS NOT NULL
+       ORDER BY launch.created_at_ms`,
+        deploymentId
+      )
+      .toArray()
+      .map((row) => String(row.run_id));
+  }
+
+  async requestAttemptRunCancellation(runId: string, deploymentId: string): Promise<boolean> {
+    assertAttemptId(runId);
+    assertAttemptId(deploymentId);
+    // The no-op update acknowledges repeated requests as well as the first insert.
+    return (
+      this.storage.sql
+        .exec(
+          `INSERT INTO tubeless_attempt_cancellations (attempt_id)
+         SELECT attempt.attempt_id FROM tubeless_attempts AS attempt
+         JOIN tubeless_launches AS launch ON launch.launch_id = attempt.launch_id
+         WHERE launch.run_id = ? AND launch.state = 'running'
+           AND attempt.deployment_id = ? AND attempt.revoked = 0
+         ON CONFLICT (attempt_id) DO UPDATE SET attempt_id = excluded.attempt_id
+         RETURNING attempt_id`,
+          runId,
+          deploymentId
+        )
+        .toArray().length > 0
+    );
+  }
+
   #cancellationRequested(attemptId: string): boolean {
     return (
       this.storage.sql

@@ -2,7 +2,8 @@ import type { RunJob, StudioIngest } from "../hosting/run-contract.js";
 import type { HostedCommand, HostedOutput } from "../hosting/hosting-commands.js";
 import { createStudioHost, type StudioHost } from "../hosting/hosting-studio.js";
 import { SqliteHostedLaunchStore } from "../hosting/launch-store-sqlite.js";
-import { HostedRunCoordinator } from "../hosting/run-coordinator.js";
+import type { HostedRunCoordinator } from "../hosting/run-coordinator.js";
+import { createTrustedHostedRun } from "../hosting/trusted-run-coordinator.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { openDurableRunStore, type DurableRunStore } from "./cloudflare-run-store.js";
 import type { AgentTranscriptRecord } from "../tracing/agent-transcript.js";
@@ -37,6 +38,7 @@ export class StudioObjectCore implements StudioIngest {
   readonly #store: SqliteHostedLaunchStore;
   readonly #events: DurableRunStore;
   readonly #coordinator: HostedRunCoordinator;
+  readonly #ingest: StudioIngest;
   readonly #now: () => number;
   #host: Promise<StudioHost> | undefined;
 
@@ -44,7 +46,7 @@ export class StudioObjectCore implements StudioIngest {
     this.#now = deps.now ?? Date.now;
     this.#events = openDurableRunStore(deps.storage);
     this.#store = new SqliteHostedLaunchStore(deps.storage, this.#events);
-    this.#coordinator = new HostedRunCoordinator(
+    const { launcher, ingest } = createTrustedHostedRun(
       {
         commands: deps.commands,
         output: SILENT_OUTPUT,
@@ -59,6 +61,8 @@ export class StudioObjectCore implements StudioIngest {
       },
       this.#store
     );
+    this.#coordinator = launcher;
+    this.#ingest = ingest;
   }
 
   async #scheduleReconcile(): Promise<void> {
@@ -94,13 +98,13 @@ export class StudioObjectCore implements StudioIngest {
   }
 
   admit(launchId: string) {
-    return this.#coordinator.admit(launchId);
+    return this.#ingest.admit(launchId);
   }
   appendEvents(launchId: string, sequence: number, events: PipelineTraceEvent[]) {
-    return this.#coordinator.appendEvents(launchId, sequence, events);
+    return this.#ingest.appendEvents(launchId, sequence, events);
   }
   reportFailure(launchId: string, message: string) {
-    return this.#coordinator.reportFailure(launchId, message);
+    return this.#ingest.reportFailure(launchId, message);
   }
 
   async alarm(): Promise<void> {
@@ -108,7 +112,7 @@ export class StudioObjectCore implements StudioIngest {
     for (const id of await this.#store.stale(
       now - this.deps.maxRunDurationMs - RECONCILE_GRACE_MS
     )) {
-      await this.#coordinator.reportFailure(id, HOST_TERMINATED);
+      await this.#ingest.reportFailure(id, HOST_TERMINATED);
     }
     await this.#scheduleReconcile();
   }
