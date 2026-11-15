@@ -4,6 +4,7 @@ import {
   RUN_EVENT_STORE_VERSION,
   RUN_EVENT_TABLE_STATEMENTS,
   RUN_EVENT_TRIGGER_STATEMENTS,
+  RUN_EVENT_DROP_TRIGGER_STATEMENTS,
   runEventListQuery,
   runEventRow,
   storedRunEvent,
@@ -21,11 +22,10 @@ import {
   listAgentTranscriptRows,
   type TranscriptSql,
 } from "../run-store/agent-transcript-sql.js";
-import { RUN_EVENT_DROP_TRIGGER_STATEMENTS } from "../run-store/run-store-sql.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 
 export interface DurableRunStore extends PipelineRunEventReader {
-  readonly transcripts: AgentTranscriptReader;
+  readonly transcripts: Pick<AgentTranscriptReader, "list">;
   /** Append events; callers own the surrounding transactionSync. */
   append(events: readonly PipelineTraceEvent[]): void;
   /** Trusted content ingress. Missing structural starts refuse delivery without creating content. */
@@ -70,26 +70,24 @@ export function openDurableRunStore(
       async list(query) {
         return storage.transactionSync(() => listAgentTranscriptRows(content, query));
       },
-      close() {},
     },
     appendTranscript(value) {
       const record = decodeAgentTranscriptRecord(value);
       return storage.transactionSync(() => {
-        const started = sql
+        // SAFETY: The owned event table returns RunEventRecord rows, decoded below.
+        const row = sql
           .exec(
-            "SELECT pipeline_id, parent_run_id, payload_json FROM pipeline_run_events WHERE run_id = ? AND event_name = 'pipeline.started' ORDER BY id LIMIT 1",
+            "SELECT * FROM pipeline_run_events WHERE run_id = ? AND event_name = 'pipeline.started' ORDER BY id LIMIT 1",
             record.runId
           )
           .toArray()[0];
-        if (!started) return false;
-        const payload: unknown = JSON.parse(String(started.payload_json));
+        if (!row) return false;
+        const started = storedRunEvent(row as unknown as RunEventRecord);
         if (
-          started.pipeline_id !== record.agentId ||
-          (started.parent_run_id ?? undefined) !== record.parentRunId ||
-          typeof payload !== "object" ||
-          payload === null ||
-          !("dryRun" in payload) ||
-          payload.dryRun !== record.dryRun
+          started.name !== "pipeline.started" ||
+          started.pipelineId !== record.agentId ||
+          started.parentRunId !== record.parentRunId ||
+          started.payload.dryRun !== record.dryRun
         )
           throw new Error("Transcript record disagrees with its structural run identity");
         importAgentTranscriptRows(content, [record]);

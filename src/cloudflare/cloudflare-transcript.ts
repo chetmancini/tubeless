@@ -2,7 +2,8 @@ import {
   decodeAgentTranscriptRecord,
   type AgentTranscriptRecord,
 } from "../tracing/agent-transcript.js";
-import { abortableSleep, awaitWithAbort } from "../utilities/abort.js";
+import { awaitWithAbort } from "../utilities/abort.js";
+import { withRetry } from "../utilities/retry.js";
 
 /** Trusted Studio Durable Object capability; keep this binding on the server. */
 export interface CloudflareTranscriptIngest {
@@ -23,24 +24,17 @@ export function createCloudflareAgentTranscriptWriter(studio: () => CloudflareTr
         5_000
       );
       try {
-        for (let attempt = 0; ; attempt++) {
-          try {
-            if (
-              (
-                await awaitWithAbort(
-                  Promise.resolve().then(() => studio().appendTranscript(record)),
-                  controller.signal,
-                  "Transcript delivery"
-                )
-              ).accepted
-            )
-              return;
-          } catch (error) {
-            if (attempt === 4 || controller.signal.aborted) throw error;
-          }
-          if (attempt === 4) throw new Error("Transcript run is absent from history");
-          await abortableSleep(250 * 2 ** attempt, controller.signal, "Transcript delivery");
-        }
+        await withRetry(
+          async () => {
+            const { accepted } = await awaitWithAbort(
+              Promise.resolve().then(() => studio().appendTranscript(record)),
+              controller.signal,
+              "Transcript delivery"
+            );
+            if (!accepted) throw new Error("Transcript run is absent from history");
+          },
+          { maxAttempts: 5, baseDelayMs: 250, signal: controller.signal }
+        );
       } finally {
         clearTimeout(timeout);
       }
