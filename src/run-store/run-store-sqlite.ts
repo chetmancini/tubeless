@@ -389,10 +389,11 @@ export async function openSqlitePipelineRunStore(
       if (closed) throw new Error("Cannot clear a closed pipeline run store.");
       drain();
       sqliteTransaction(database, () => {
+        // The database guard also protects content from older, event-only clear implementations.
+        clearSqliteAgentTranscripts(database);
         database.exec(`${sqlScript(RUN_EVENT_DROP_TRIGGER_STATEMENTS)}
 DELETE FROM pipeline_run_events;
 ${sqlScript(RUN_EVENT_TRIGGER_STATEMENTS)}`);
-        clearSqliteAgentTranscripts(database);
       });
       try {
         database.exec("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");

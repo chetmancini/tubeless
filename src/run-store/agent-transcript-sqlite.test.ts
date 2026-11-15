@@ -155,11 +155,11 @@ describe("SQLite transcripts", () => {
         this: DatabaseSync,
         sql
       ) {
-        if (sql.includes("DELETE FROM agent_transcript_records"))
-          throw new Error("content deletion failed");
+        if (sql.includes("DELETE FROM pipeline_run_events"))
+          throw new Error("event deletion failed after content deletion");
         return original.call(this, sql);
       });
-      expect(() => store.clearHistory()).toThrow("content deletion failed");
+      expect(() => store.clearHistory()).toThrow("event deletion failed after content deletion");
       injected.mockRestore();
       expect(await store.listEvents()).toHaveLength(1);
       expect(await store.transcripts.list({ runId: "agent:one" })).toMatchObject({
@@ -189,6 +189,16 @@ describe("SQLite transcripts", () => {
       });
       const database = new DatabaseSync(filename);
       try {
+        database.exec("BEGIN IMMEDIATE");
+        try {
+          // Older binaries only drop the event table's original append-only triggers.
+          database.exec("DROP TRIGGER pipeline_run_events_no_delete");
+          expect(() => database.exec("DELETE FROM pipeline_run_events")).toThrow(
+            "Clear stored transcripts with history"
+          );
+        } finally {
+          database.exec("ROLLBACK");
+        }
         expect(() => database.exec("DELETE FROM agent_transcript_records")).toThrow("append-only");
         expect(() =>
           database.exec("UPDATE agent_transcript_records SET sequence = sequence + 1")

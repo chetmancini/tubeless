@@ -23,7 +23,13 @@ BEFORE UPDATE ON agent_transcript_records
 BEGIN SELECT RAISE(ABORT, 'agent_transcript_records is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS agent_transcript_records_no_delete
 BEFORE DELETE ON agent_transcript_records
-BEGIN SELECT RAISE(ABORT, 'agent_transcript_records is append-only'); END;`;
+BEGIN SELECT RAISE(ABORT, 'agent_transcript_records is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS pipeline_run_events_transcript_delete_guard
+BEFORE DELETE ON pipeline_run_events
+WHEN EXISTS (SELECT 1 FROM agent_transcript_records WHERE run_id = OLD.run_id)
+BEGIN
+  SELECT RAISE(ABORT, 'Clear stored transcripts with history using a transcript-aware writer');
+END;`;
 
 function hasTranscripts(database: SqliteDatabase): boolean {
   return (
