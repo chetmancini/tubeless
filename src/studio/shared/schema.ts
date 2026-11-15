@@ -185,6 +185,7 @@ export const studioChildStepSchema = wireObject({
   count,
 });
 export const studioRunDetailSchema = wireObject({
+  // Whether the transcript view is available, including live agents awaiting their first record.
   transcriptAvailable: wireOptional(wireBoolean()),
   run: storedPipelineRunSchema,
   ancestors: wireArray(storedRunSummarySchema),
@@ -199,8 +200,10 @@ export const studioChildRunsSchema = wireObject({
   childCount: count,
 });
 export const studioTranscriptPageSchema = wireObject({
+  sourceId: id,
   transcript: agentTranscriptPageSchema,
   turnRuns: wireRecord(id),
+  live: wireBoolean(),
 });
 export const studioDefinitionSchema = wireObject({ definition: storedPipelineDefinitionSchema });
 export const studioDefinitionRunsSchema = wireObject({

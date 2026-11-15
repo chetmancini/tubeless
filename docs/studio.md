@@ -38,9 +38,16 @@ and does not accept a project file or `--command`.
 Studio automatically reads transcripts imported with
 `history --store <path> --import-transcript <path>`, or captured directly by the
 built-in workspace agent with `agent --store <path> --capture-transcript`.
-Stored content is deleted
-atomically with its structural history when clearing is available. Reopen the
-transcript view after importing additional records.
+Stored content is deleted atomically with its structural history when clearing
+is available. Agent runs in SQLite history expose a **Transcript** tab before
+content arrives. Opening it does not enable capture.
+
+While visible, unavailable and partial SQLite transcripts refresh every 1.2 seconds
+using bounded sequence cursors. Loaded records stay visible as later records arrive;
+complete and limited recordings stop refreshing. **Show more** loads remaining pages.
+Hidden browser tabs pause requests, and leaving the transcript stops them. A failed
+request keeps loaded content and offers **Retry**. Recording status remains separate
+from the run's execution status.
 
 Add `--transcript <path>` to attach a finished agent transcript alongside either
 event source. Runs with content gain a **Transcript** tab: prompts, public assistant

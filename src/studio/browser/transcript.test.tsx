@@ -43,13 +43,19 @@ describe("Studio transcript display and transport", () => {
       status: "partial",
       records: [transcriptRecord(1, { kind: "assistant", text: "text" }, "run")],
     };
-    const payload = { transcript: page, turnRuns: { 1: "turn-1" } };
+    const payload = {
+      transcript: page,
+      turnRuns: { 1: "turn-1" },
+      live: false,
+      sourceId: "source",
+    };
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => Response.json(payload));
     const api = createStudioApi(fetcher, "/admin");
-    expect(await api.loadTranscript("run")).toEqual(payload);
+    const controller = new AbortController();
+    expect(await api.loadTranscript("run", 0, controller.signal)).toEqual(payload);
     expect(fetcher).toHaveBeenCalledWith(
       "/admin/api/runs/run/transcript?afterSequence=0",
-      expect.objectContaining({ cache: "no-store" })
+      expect.objectContaining({ cache: "no-store", signal: controller.signal })
     );
     await expect(api.loadTranscript("run", 1)).rejects.toThrow("invalid response");
     fetcher.mockResolvedValue(

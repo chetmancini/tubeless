@@ -1312,8 +1312,12 @@ import validates all records, keeps identical `(runId, sequence)` records once, 
 rejects conflicting content or run identities. An import failure rolls back all
 of its content changes. `--json` returns the number of newly imported records.
 History and Studio then read the saved content without `--transcript`; the source
-file is no longer needed for inspection. Reopen a transcript view after importing
-more records. Clearing SQLite history also deletes its stored transcripts in the
+file is no longer needed for inspection. Studio refreshes visible partial and
+unavailable SQLite transcripts as records arrive, keeping loaded pages. Complete
+and limited recordings stop refreshing; **Show more** still loads remaining pages.
+SQLite agent runs expose the tab before content arrives, without enabling capture.
+Hidden tabs pause requests, and leaving the view stops them. Failed requests retain
+loaded content for retry. Clearing SQLite history also deletes its stored transcripts in the
 same transaction. Import leaves the original artifact unchanged.
 
 Content stays in a separate table and inherits the existing database's filesystem

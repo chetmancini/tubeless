@@ -129,15 +129,15 @@ export function TranscriptRecords({
 }
 
 export function TranscriptView({
-  load,
+  api,
   runId,
   onOpenRun,
 }: {
-  load: StudioApi["loadTranscript"];
+  api: StudioApi;
   runId: string;
   onOpenRun(id: string): void;
 }) {
-  const resource = useTranscript(load, runId);
+  const resource = useTranscript(api, runId);
   return (
     <div aria-busy={resource.loading}>
       {resource.page && (
@@ -147,7 +147,7 @@ export function TranscriptView({
           onOpenRun={onOpenRun}
         />
       )}
-      {resource.loading && <p role="status">Loading transcript…</p>}
+      {resource.loading && !resource.page && <p role="status">Loading transcript…</p>}
       {resource.error && <p role="alert">{resource.error}</p>}
       {(resource.error || resource.page?.nextSequence !== undefined) && (
         <button

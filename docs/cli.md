@@ -186,9 +186,9 @@ tubeless history --store .tubeless/runs.sqlite <agent-run-id>
 tubeless ui --store .tubeless/runs.sqlite
 ```
 
-History reads saved content automatically after the recording closes; Studio can
-inspect the store while recording continues. Reopen a Studio transcript view to
-read later appends. `--capture-transcript` cannot override a selected project/file
+History reads saved content automatically after the recording closes; Studio's
+visible Transcript tab refreshes partial or unavailable recordings while capture
+continues. Complete and limited recordings stop refreshing. `--capture-transcript` cannot override a selected project/file
 agent's capture configuration; those agents continue to own their transcript sink.
 
 #### Select a defined agent

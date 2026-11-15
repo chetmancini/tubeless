@@ -532,7 +532,9 @@ read when a pipeline needs them.
   finished artifact with `history --store <path> --import-transcript <path>`
   to retain content in SQLite; its run IDs must already exist in history. History
   and Studio then read it automatically, and clearing deletes events and content
-  together. For the built-in workspace CLI, use
+  together. Studio refreshes visible partial/unavailable SQLite transcripts;
+  complete/limited recordings stop refreshing, and hidden tabs pause requests.
+  Opening the tab does not enable capture. For the built-in workspace CLI, use
   `agent --store <path> --capture-transcript` for direct SQLite capture with the
   default bounds. This explicit flag records application content without a custom
   redactor; `--store` alone stays structural. Selected agents own their sinks.

@@ -231,6 +231,9 @@ Read the corresponding package recipe before using these features:
   Use `history --store <path> --import-transcript <path>` to retain the finished
   content in SQLite after recording its structural events. History and Studio
   then read it automatically; history clearing deletes the stored content too.
+  Studio refreshes visible partial/unavailable SQLite transcripts and pauses
+  hidden tabs. Complete/limited recordings stop refreshing. Opening the tab
+  does not enable capture.
   The built-in CLI supports `agent --store <path> --capture-transcript` for direct
   SQLite capture with default bounds and no custom redactor. `--store` alone
   remains structural; this flag cannot override selected agents' transcript sinks.
