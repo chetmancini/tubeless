@@ -12,12 +12,22 @@ import {
 } from "./sqlite-database.js";
 
 // Independent version-1 content records; the structural event schema stays unchanged.
-const SCHEMA = `CREATE TABLE IF NOT EXISTS agent_transcript_records (
+const SCHEMA = `CREATE TABLE IF NOT EXISTS agent_transcript_runs (
+  run_id TEXT PRIMARY KEY,
+  record_count INTEGER NOT NULL CHECK (record_count > 0)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS agent_transcript_records (
   run_id TEXT NOT NULL,
   sequence INTEGER NOT NULL CHECK (sequence > 0),
   record_json TEXT NOT NULL CHECK (length(CAST(record_json AS BLOB)) < 65536),
   PRIMARY KEY (run_id, sequence)
 ) WITHOUT ROWID;
+CREATE TRIGGER IF NOT EXISTS agent_transcript_records_count_insert
+AFTER INSERT ON agent_transcript_records
+BEGIN
+  INSERT INTO agent_transcript_runs (run_id, record_count) VALUES (NEW.run_id, 1)
+  ON CONFLICT (run_id) DO UPDATE SET record_count = record_count + 1;
+END;
 CREATE TRIGGER IF NOT EXISTS agent_transcript_records_no_update
 BEFORE UPDATE ON agent_transcript_records
 BEGIN SELECT RAISE(ABORT, 'agent_transcript_records is append-only'); END;
@@ -121,13 +131,13 @@ export function listSqliteAgentTranscript(
     database,
     () => {
       if (!hasTranscripts(database)) return { runId, records: [], status: "unavailable" };
-      // A unique sequence index makes count === max establish a contiguous one-based recording.
-      // SAFETY: SQLite aggregates return these named numeric columns.
+      // The insert trigger counts each unique record in the import transaction.
+      // SAFETY: The owned summary table returns this named numeric column.
       const summary = statement(
         database,
-        "SELECT COUNT(*) AS count, MAX(sequence) AS last FROM agent_transcript_records WHERE run_id = ?"
-      ).all(runId)[0] as { count: number; last: number | null };
-      if (Number(summary.count) === 0) return { runId, records: [], status: "unavailable" };
+        "SELECT record_count FROM agent_transcript_runs WHERE run_id = ?"
+      ).all(runId)[0] as { record_count: number } | undefined;
+      if (!summary) return { runId, records: [], status: "unavailable" };
       const last = decodeRow(
         statement(
           database,
@@ -135,7 +145,7 @@ export function listSqliteAgentTranscript(
         ).all(runId)[0]
       );
       const status =
-        Number(summary.count) !== Number(summary.last)
+        Number(summary.record_count) !== last.sequence
           ? "partial"
           : "limit" in last
             ? "limited"
@@ -167,5 +177,6 @@ export function clearSqliteAgentTranscripts(database: SqliteDatabase): void {
   database.exec(`DROP TRIGGER agent_transcript_records_no_update;
 DROP TRIGGER agent_transcript_records_no_delete;
 DELETE FROM agent_transcript_records;
+DELETE FROM agent_transcript_runs;
 ${SCHEMA}`);
 }

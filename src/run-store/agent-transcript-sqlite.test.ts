@@ -117,6 +117,39 @@ describe("SQLite transcripts", () => {
     }
   });
 
+  it("keeps run status independent across many pages and repeated imports", async () => {
+    const { store } = await fixture();
+    try {
+      const records = Array.from({ length: 2_001 }, (_, index) =>
+        index === 2_000 ? end(index + 1) : transcriptRecord(index + 1)
+      );
+      expect(store.importTranscript(records)).toBe(records.length);
+      expect(store.importTranscript(records.slice(50, 150))).toBe(0);
+      await store.export({
+        name: "pipeline.started",
+        payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+        pipelineId: "agent",
+        runId: "other",
+        timestampMs: 1,
+        version: 3,
+      });
+      store.importTranscript([transcriptRecord(3, { kind: "end", status: "completed" }, "other")]);
+      expect(await store.transcripts.list({ runId: "other" })).toMatchObject({ status: "partial" });
+      let afterSequence = 0;
+      const sequences: number[] = [];
+      for (;;) {
+        const page = await store.transcripts.list({ runId: "agent:one", afterSequence, limit: 50 });
+        expect(page.status).toBe("complete");
+        sequences.push(...page.records.map((record) => record.sequence));
+        if (page.nextSequence === undefined) break;
+        afterSequence = page.nextSequence;
+      }
+      expect(sequences).toEqual(records.map((record) => record.sequence));
+    } finally {
+      await store.close();
+    }
+  });
+
   it("rolls back the whole import on conflicts, identity changes and absent history", async () => {
     const { store } = await fixture();
     try {
