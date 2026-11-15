@@ -59,7 +59,11 @@ export interface StudioApi {
   loadCapabilities(): Promise<StudioCapabilities>;
   loadCommands(): Promise<PipelineRunStudioCommand[]>;
   loadRunDetail(runId: string): Promise<StudioRunDetail | null>;
-  loadTranscript(runId: string, afterSequence?: number): Promise<StudioTranscriptPage>;
+  loadTranscript(
+    runId: string,
+    afterSequence?: number,
+    signal?: AbortSignal
+  ): Promise<StudioTranscriptPage>;
   loadChildRuns(runId: string, page: number): Promise<StudioChildRuns | null>;
   loadSnapshot(query?: StudioHistoryQuery): Promise<StudioSnapshot>;
   loadDefinition(pipelineId: string, definitionId?: string): Promise<StoredPipelineDefinition>;
@@ -205,10 +209,10 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
       if (!parsed) throw invalidResponse("child runs");
       return parsed;
     },
-    async loadTranscript(runId, afterSequence = 0) {
+    async loadTranscript(runId, afterSequence = 0, signal) {
       const response = await request(
         "/api/runs/" + encodeURIComponent(runId) + "/transcript?afterSequence=" + afterSequence,
-        { cache: "no-store" }
+        { cache: "no-store", signal }
       );
       const payload = await readJson(response);
       if (!response.ok) throw responseError(payload, "Transcript request failed.", response.status);

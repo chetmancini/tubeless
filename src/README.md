@@ -126,8 +126,9 @@ their source files.
 - Studio consumes storage and pure trace schemas, and accepts optional launcher/history capabilities.
   It shares type-only pipeline and CLI descriptors; it does not load command
   execution or a concrete storage adapter itself.
-  `browser/transcript-resource.ts` owns transcript pagination and stale-request
-  retirement; `browser/components/transcript.tsx` renders content as text and links
+  `browser/transcript-resource.ts` owns transcript pagination, mutable-source refresh,
+  visibility pauses and request retirement. It resets on source identity changes;
+  `browser/components/transcript.tsx` renders content as text and links
   turns to structural child runs.
 - CLI adapts pipelines with Node helpers and terminal reporters. It must not load
   workbench, storage or Studio, including through lazy imports.

@@ -41,6 +41,7 @@ export function createStudioApiHandler(
   // An attached artifact is read-only; never advertise deletion that would leave its content behind.
   const history = options.transcripts ? undefined : options.history;
   const transcripts = options.transcripts ?? options.store.transcripts;
+  const transcriptLive = Boolean(transcripts && !options.transcripts);
   const launcher = options.launcher;
   const commands = [...(launcher?.commands ?? [])];
   const commandById = new Map<string, PipelineRunStudioCommand>();
@@ -143,6 +144,7 @@ export function createStudioApiHandler(
                 ? {
                     transcriptAvailable:
                       (await transcripts.list({ runId, limit: 1 })).records.length > 0,
+                    transcriptLive,
                   }
                 : {}),
             })
@@ -180,6 +182,8 @@ export function createStudioApiHandler(
           throw new Error("Transcript reader returned a mismatched run or cursor");
         return jsonResponse({
           transcript: page,
+          sourceId: instanceId,
+          live: transcriptLive,
           turnRuns: await eventState.agentTurnRuns(
             runId,
             page.records.map((record) => record.turn)

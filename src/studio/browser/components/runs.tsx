@@ -575,7 +575,7 @@ function RunDetail({
   };
   const tabs: [RunTab, string][] = [
     ["steps", `Steps · ${run.steps.length}`],
-    ...(detail.transcriptAvailable && api
+    ...((detail.transcriptAvailable || (detail.transcriptLive && run.agent)) && api
       ? [["transcript", "Transcript"] as [RunTab, string]]
       : []),
     ...(run.logs.length ? [["logs", `Logs · ${run.logs.length}`] as [RunTab, string]] : []),
@@ -741,12 +741,7 @@ function RunDetail({
         )}
         {activeTab === "logs" && <RunLogs key={run.runId} logs={run.logs} />}
         {activeTab === "transcript" && api && (
-          <TranscriptView
-            key={run.runId}
-            load={api.loadTranscript}
-            runId={run.runId}
-            onOpenRun={onSelect}
-          />
+          <TranscriptView key={run.runId} api={api} runId={run.runId} onOpenRun={onSelect} />
         )}
         {activeTab === "nested" && (
           <NestedRuns key={run.runId} api={api} detail={detail} onSelect={onSelect} />

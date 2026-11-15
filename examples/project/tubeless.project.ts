@@ -52,6 +52,7 @@ export default defineProject(
     // with openNdjsonAgentTranscriptWriter from tubeless/agent/node and an explicit path.
     // Attach it with --transcript <path>, or retain it with history --import-transcript <path>.
     // For built-in CLI capture, use --store <path> --capture-transcript with ../agent-transcript-model.ts.
+    // Studio refreshes visible partial/unavailable SQLite transcripts; opening the tab does not enable capture.
     // For credential-free evaluations with owned fixtures, run ../agent-evaluation.ts's helper.
     OpenAIAgentCommand,
     // Live model decisions and tools share the physical run cwd, including through symlinks.

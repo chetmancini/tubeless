@@ -31,8 +31,33 @@ describe("Studio transcript routes", () => {
     expect(JSON.stringify(payload)).not.toContain("Private transcript content");
     expect(list).toHaveBeenCalledWith({ runId: "run", limit: 1 });
     const response = await get("/api/runs/run/transcript?afterSequence=0");
-    expect(await response.json()).toEqual({ transcript: page, turnRuns: {} });
+    expect(await response.json()).toEqual({
+      transcript: page,
+      turnRuns: {},
+      live: false,
+      sourceId: expect.any(String),
+    });
     expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("advertises mutable store content before the first transcript record arrives", async () => {
+    const list = vi.fn(async () => ({ runId: "run", records: [], status: "unavailable" as const }));
+    const api = createStudioApiHandler({
+      store: { ...memoryStore(recordedRun()), transcripts: { list } },
+    });
+    const get = (path: string) =>
+      api(new Request("http://studio.local" + path), new URL("http://studio.local" + path));
+    expect(await (await get("/api/runs/run")).json()).toMatchObject({
+      transcriptAvailable: false,
+      transcriptLive: true,
+    });
+    const first = await (await get("/api/runs/run/transcript")).json();
+    expect(first).toMatchObject({
+      live: true,
+      sourceId: expect.any(String),
+      transcript: { status: "unavailable" },
+    });
+    expect((await (await get("/api/runs/run/transcript")).json()).sourceId).toBe(first.sourceId);
   });
 
   it("validates cursor and run scope before reading content", async () => {
@@ -98,6 +123,8 @@ describe("Studio transcript routes", () => {
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({
         transcript: { ...page, records },
+        live: false,
+        sourceId: expect.any(String),
         turnRuns: { 17: "turn-17", 20: "turn-20" },
       });
     }

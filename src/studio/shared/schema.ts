@@ -186,6 +186,7 @@ export const studioChildStepSchema = wireObject({
 });
 export const studioRunDetailSchema = wireObject({
   transcriptAvailable: wireOptional(wireBoolean()),
+  transcriptLive: wireOptional(wireBoolean()),
   run: storedPipelineRunSchema,
   ancestors: wireArray(storedRunSummarySchema),
   children: wireArray(storedRunSummarySchema),
@@ -199,8 +200,10 @@ export const studioChildRunsSchema = wireObject({
   childCount: count,
 });
 export const studioTranscriptPageSchema = wireObject({
+  sourceId: id,
   transcript: agentTranscriptPageSchema,
   turnRuns: wireRecord(id),
+  live: wireBoolean(),
 });
 export const studioDefinitionSchema = wireObject({ definition: storedPipelineDefinitionSchema });
 export const studioDefinitionRunsSchema = wireObject({

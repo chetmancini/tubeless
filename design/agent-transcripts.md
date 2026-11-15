@@ -3,9 +3,9 @@
 Design for [issue 286](https://github.com/chetmancini/tubeless/issues/286).
 Implemented: opt-in capture, a public Node NDJSON writer, validated artifact readers,
 CLI history inspection, a paginated Studio conversation view and public evaluation
-helpers, explicit SQLite artifact import and direct SQLite capture for the built-in
-workspace CLI. Follow-ups are tracked separately: live Studio refresh (#321),
-Cloudflare persistence (#322), and terminal token streaming (#323).
+helpers, explicit SQLite artifact import, direct SQLite capture for the built-in
+workspace CLI and live Studio refresh (#321). Follow-ups are tracked separately:
+Cloudflare persistence (#322) and terminal token streaming (#323).
 
 ## Contract and ownership
 
@@ -119,8 +119,11 @@ persistence without embedding it in traces.
 
 History renders the selected run's transcript in text or JSON. Studio offers a
 conversation view with prompts, assistant text, calls, outcomes and omission markers,
-linked to structural child runs. Pagination is bounded. Imported SQLite content uses the same reader; reopen a conversation view after
-further imports. Automatic live refresh remains subsequent work.
+linked to structural child runs. Pagination is bounded. Visible partial or unavailable
+SQLite recordings refresh with sequence cursors, retaining loaded pages; complete
+and limited recordings stop refreshing. Hidden tabs pause requests. Selection,
+source changes, history clearing and authorization denial retire stale requests.
+Attached NDJSON snapshots remain immutable.
 Show unavailable, partial, complete and limited recording states. Suppressed events
 have no tombstones; no records cannot establish whether capture was disabled or fully
 redacted, and must never imply an empty model conversation. Render content as text, never executable HTML. Transcript authorization
