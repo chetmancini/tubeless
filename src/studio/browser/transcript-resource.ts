@@ -21,11 +21,15 @@ export function useTranscript(api: TranscriptApi, runId: string) {
     let result: StudioTranscriptPage | undefined;
     let request: AbortController | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let afterSequence = 0;
     const hidden = () => typeof document !== "undefined" && document.hidden;
     const publish = (loading: boolean, error?: string) =>
       setState({ api, runId, result, loading, error, more: load });
     const refreshable = () =>
-      result?.live && ["partial", "unavailable"].includes(result.transcript.status);
+      result?.live &&
+      (["partial", "unavailable"].includes(result.transcript.status) ||
+        // A terminal recording can still have earlier records missing from this view.
+        (result.transcript.records.at(-1)?.sequence ?? 0) > result.transcript.records.length);
     const retire = () => {
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
@@ -37,7 +41,6 @@ export function useTranscript(api: TranscriptApi, runId: string) {
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
       const current = (request = new AbortController());
-      const afterSequence = result?.transcript.records.at(-1)?.sequence ?? 0;
       publish(true);
       void api.loadTranscript(runId, afterSequence, current.signal).then(
         (next) => {
@@ -46,14 +49,30 @@ export function useTranscript(api: TranscriptApi, runId: string) {
           if (result && result.sourceId !== next.sourceId) {
             // A replacement source cannot inherit another source's content or cursor.
             result = undefined;
+            afterSequence = 0;
             load();
             return;
           }
+          const records = [
+            ...new Map(
+              [...(result?.transcript.records ?? []), ...next.transcript.records].map((record) => [
+                record.sequence,
+                record,
+              ])
+            ).values(),
+          ].sort((left, right) => left.sequence - right.sequence);
+          // Walk bounded pages to their end, then revisit the first gap on the next refresh.
+          afterSequence = 0;
+          for (const record of records) {
+            if (record.sequence !== afterSequence + 1) break;
+            afterSequence = record.sequence;
+          }
+          afterSequence = next.transcript.nextSequence ?? afterSequence;
           result = {
             ...next,
             transcript: {
               ...next.transcript,
-              records: [...(result?.transcript.records ?? []), ...next.transcript.records],
+              records,
             },
             turnRuns: { ...result?.turnRuns, ...next.turnRuns },
           };

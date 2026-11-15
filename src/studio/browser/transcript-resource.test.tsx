@@ -1,6 +1,10 @@
 import { render } from "preact";
 import { act } from "preact/test-utils";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
+import { openSqlitePipelineRunStore } from "../../run-store/run-store-sqlite.js";
 import type { StudioTranscriptPage } from "../shared/schema.js";
 import { transcriptRecord } from "../../tracing/agent-transcript.test-support.js";
 import { useTranscript, TRANSCRIPT_REFRESH_MS } from "./transcript-resource.js";
@@ -122,6 +126,105 @@ async function tick() {
 function live(sequence = 1): StudioTranscriptPage {
   return { ...page(sequence), live: true };
 }
+
+async function storedTranscript() {
+  const directory = await mkdtemp(join(tmpdir(), "tubeless-transcript-gaps-"));
+  const store = await openSqlitePipelineRunStore(join(directory, "runs.sqlite"));
+  await store.export({
+    version: 3,
+    name: "pipeline.started",
+    pipelineId: "agent",
+    runId: "run",
+    timestampMs: 1,
+    payload: { dryRun: false, planOk: true, stepCount: 0, targetIds: [] },
+  });
+  const load = vi
+    .fn<StudioApi["loadTranscript"]>()
+    .mockImplementation(async (runId, afterSequence) => ({
+      transcript: await store.transcripts.list({ runId, afterSequence, limit: 2 }),
+      sourceId: "source",
+      live: true,
+      turnRuns: {},
+    }));
+  return {
+    store,
+    load,
+    async close() {
+      await store.close();
+      await rm(directory, { recursive: true, force: true });
+    },
+  };
+}
+
+it.each([
+  { sequence: 3, start: 3, terminal: "complete" },
+  { sequence: 3, start: 3, terminal: "limited" },
+  { sequence: 8, start: 8, terminal: "complete" },
+  { sequence: 8, start: 8, terminal: "limited" },
+  { sequence: 8, start: 2, terminal: "complete" },
+] as const)(
+  "backfills earlier SQLite gaps across bounded pages ($sequence, $terminal, start=$start)",
+  async ({ sequence, start, terminal }) => {
+    vi.useFakeTimers();
+    const fixture = await storedTranscript();
+    let mounted: Awaited<ReturnType<typeof mount>> | undefined;
+    try {
+      const last = transcriptRecord(sequence, { kind: "end", status: "completed" }, "run");
+      const { event: _, ...envelope } = last;
+      const initial = [
+        ...Array.from({ length: sequence - start }, (_, index) =>
+          transcriptRecord(start + index, undefined, "run")
+        ),
+        terminal === "complete" ? last : { ...envelope, limit: "maxBytes" as const },
+      ];
+      fixture.store.importTranscript(initial);
+      mounted = await mount(fixture.load);
+      expect(mounted.state.page?.status).toBe("partial");
+      expect(mounted.state.page?.records).toEqual(initial.slice(0, 2));
+      const earlier = Array.from({ length: start - 1 }, (_, index) =>
+        transcriptRecord(index + 1, undefined, "run")
+      );
+      fixture.store.importTranscript(earlier);
+      for (let index = 0; index <= Math.ceil(sequence / 2); index++) await tick();
+      expect(mounted.state.page?.records.map((record) => record.sequence)).toEqual(
+        Array.from({ length: sequence }, (_, index) => index + 1)
+      );
+      expect(mounted.state.page?.status).toBe(terminal);
+      const calls = fixture.load.mock.calls.length;
+      await tick();
+      expect(fixture.load).toHaveBeenCalledTimes(calls);
+    } finally {
+      await mounted?.unmount();
+      await fixture.close();
+    }
+  }
+);
+
+it("keeps paging and discovering appends while an earlier SQLite gap remains", async () => {
+  vi.useFakeTimers();
+  const fixture = await storedTranscript();
+  let mounted: Awaited<ReturnType<typeof mount>> | undefined;
+  try {
+    fixture.store.importTranscript(
+      [2, 3, 4].map((sequence) => transcriptRecord(sequence, undefined, "run"))
+    );
+    mounted = await mount(fixture.load);
+    await act(async () => {
+      mounted!.state.more();
+      await fixture.load.mock.results.at(-1)!.value;
+    });
+    expect(mounted.state.page?.records.map((record) => record.sequence)).toEqual([2, 3, 4]);
+    fixture.store.importTranscript([transcriptRecord(5, undefined, "run")]);
+    await tick();
+    await tick();
+    expect(mounted.state.page?.records.map((record) => record.sequence)).toEqual([2, 3, 4, 5]);
+    expect(mounted.state.page?.status).toBe("partial");
+    expect(fixture.load.mock.calls.map(([, afterSequence]) => afterSequence)).toEqual([0, 3, 0, 3]);
+  } finally {
+    await mounted?.unmount();
+    await fixture.close();
+  }
+});
 
 it.each(["complete", "limited"] as const)(
   "appends mutable pages and stops at %s",

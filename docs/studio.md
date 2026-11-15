@@ -43,8 +43,9 @@ is available. Agent runs in SQLite history expose a **Transcript** tab before
 content arrives. Opening it does not enable capture.
 
 While visible, unavailable and partial SQLite transcripts refresh every 1.2 seconds
-using bounded sequence cursors. Loaded records stay visible as later records arrive;
-complete and limited recordings stop refreshing. **Show more** loads remaining pages.
+using bounded sequence cursors. Loaded records stay visible as later records arrive,
+including records imported into earlier gaps. Complete and limited recordings stop
+refreshing once the current gap scan finishes. **Show more** loads remaining pages.
 Hidden browser tabs pause requests, and leaving the transcript stops them. A failed
 request keeps loaded content and offers **Retry**. Recording status remains separate
 from the run's execution status.
