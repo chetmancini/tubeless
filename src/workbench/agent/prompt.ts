@@ -5,7 +5,7 @@ import {
   type AgentModel,
   type AgentSession,
   type AgentTranscriptOptions,
-  type AgentTextOptions,
+  type AgentTextSink,
   type DefaultAgentToolName,
 } from "../../agent/agent.js";
 import type { PipelineLogger } from "../../core/pipeline.js";
@@ -38,7 +38,7 @@ interface BuiltinAgentOptions {
   readonly defaultTools?: readonly DefaultAgentToolName[];
   readonly codemode?: boolean;
   readonly transcript?: AgentTranscriptOptions;
-  readonly text?: AgentTextOptions;
+  readonly text?: AgentTextSink;
 }
 
 type PromptOutcome =

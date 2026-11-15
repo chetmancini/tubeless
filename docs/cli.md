@@ -305,7 +305,7 @@ alone does not satisfy the Responses adapter; see [compatible APIs](./agents.md#
 `--model-module ./model.ts` also accepts a default-exported factory when no
 `--provider` is supplied. This form keeps the existing default model selection
 (`--model`, then `OPENAI_MODEL`, then `gpt-5.4-mini`). The factory accepts
-`{ model: string, signal: AbortSignal, env: Readonly<Record<string, string | undefined>>, text?: AgentTextOptions }` and returns
+`{ model: string, signal: AbortSignal, env: Readonly<Record<string, string | undefined>>, text?: AgentTextSink }` and returns
 an `AgentModel`, synchronously or asynchronously. Tubeless calls the factory for
 each task with the currently selected model, that task's cancellation signal,
 and the resolved environment. Custom factories use `env` for provider credentials

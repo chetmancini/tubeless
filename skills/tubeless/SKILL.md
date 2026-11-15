@@ -149,13 +149,13 @@ Read the corresponding package recipe before using these features:
   `compactAfterBytes: null` when it lacks compaction. Most Anthropic-compatible
   servers need `authToken` (bearer), `strict: false`, and `promptCaching: false`; see
   `docs/agents.md#compatible-apis`.
-  Opt in to bounded public text with adapter `text: { write, redact? }` or CLI
-  `--stream`; factories forward their optional `text` setting. Await sink writes
-  for backpressure and use each callback's second argument, the attempt signal,
-  to cancel I/O. Redact live content separately from transcript persistence,
+  Opt in to bounded public text with adapter `text(event, signal)` or CLI
+  `--stream`; factories forward their optional `text` callback. Return a promise
+  for asynchronous writes and use the attempt signal to cancel I/O. Filter live
+  content inside the callback, separately from transcript persistence,
   and treat interrupted deltas as partial. Final structured results stay validated.
   See `docs/agents.md#stream-public-assistant-text` and the credential-free
-  `examples/agent-streaming-model.ts` local SSE fixture.
+  `examples/agent-transcript-model.ts` scripted fixture.
   Reasoning settings are omitted unless explicitly configured;
   the coding recipe opts into `reasoningEffort: "high"` for a supported model.
   Run with `{ task }` to get `{ answer }`; add `instructions`,

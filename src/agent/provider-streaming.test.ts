@@ -7,7 +7,7 @@ import {
 } from "./agent.js";
 import { openaiModel } from "./openai.js";
 import { anthropicModel } from "./anthropic.js";
-import { AgentTextStream } from "./text-stream.js";
+import { readAgentText } from "./text-stream.js";
 
 afterEach(() => vi.unstubAllGlobals());
 const finish = {
@@ -161,10 +161,8 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
         agent(
           model({
             apiKey: "fixture",
-            text: {
-              write: (event) => {
-                observed.push(event);
-              },
+            text(event) {
+              observed.push(event);
             },
           }),
           records
@@ -214,14 +212,12 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
     const running = agent(
       model({
         apiKey: "fixture",
-        text: {
-          async write(event) {
-            observed.push(event);
-            if (event.kind === "delta") {
-              sawDelta();
-              await blocked;
-            }
-          },
+        async text(event) {
+          observed.push(event);
+          if (event.kind === "delta") {
+            sawDelta();
+            await blocked;
+          }
         },
       })
     )
@@ -246,10 +242,8 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
       agent(
         model({
           apiKey: "fixture",
-          text: {
-            write(event) {
-              observed.push(event);
-            },
+          text(event) {
+            observed.push(event);
           },
         })
       )
@@ -272,23 +266,21 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
         model({
           apiKey: "fixture",
           timeoutMs: reason === "deadline" ? 30 : 5000,
-          text: {
-            write(event, signal) {
-              observed.push(event);
-              if (event.kind === "end") return;
-              const pending = new Promise<void>((resolve) => {
-                signal.addEventListener(
-                  "abort",
-                  () => {
-                    released = true;
-                    resolve();
-                  },
-                  { once: true }
-                );
-              });
-              if (reason === "caller") controller.abort();
-              return pending;
-            },
+          text(event, signal) {
+            observed.push(event);
+            if (event.kind === "end") return;
+            const pending = new Promise<void>((resolve) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  released = true;
+                  resolve();
+                },
+                { once: true }
+              );
+            });
+            if (reason === "caller") controller.abort();
+            return pending;
           },
         })
       ).run({ task: "hi" }, undefined, { signal: controller.signal });
@@ -299,7 +291,7 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
     }
   );
 
-  it("releases redactor I/O on the attempt deadline before delivering any text", async () => {
+  it("releases filtering I/O on the attempt deadline before delivering any text", async () => {
     let released = false;
     const observed: AgentTextEvent[] = [];
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(stream(events())));
@@ -307,22 +299,21 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
       model({
         apiKey: "fixture",
         timeoutMs: 30,
-        text: {
-          redact(_event, signal) {
-            return new Promise<null>((resolve) =>
-              signal.addEventListener(
-                "abort",
-                () => {
-                  released = true;
-                  resolve(null);
-                },
-                { once: true }
-              )
-            );
-          },
-          write(event) {
+        async text(event, signal) {
+          if (event.kind === "end") {
             observed.push(event);
-          },
+            return;
+          }
+          await new Promise<void>((resolve) =>
+            signal.addEventListener(
+              "abort",
+              () => {
+                released = true;
+                resolve();
+              },
+              { once: true }
+            )
+          );
         },
       })
     ).run({ task: "hi" });
@@ -341,11 +332,8 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
       defaultTools: [],
       model: model({
         apiKey: "fixture",
-        text: {
-          redact: () => "[filtered]",
-          write(event) {
-            observed.push(event);
-          },
+        text(event) {
+          observed.push(event.kind === "delta" ? { ...event, text: "[filtered]" } : event);
         },
       }),
       transcript: {
@@ -376,10 +364,8 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
     await agent(
       model({
         apiKey: "fixture",
-        text: {
-          write(event) {
-            observed.push(event);
-          },
+        text(event) {
+          observed.push(event);
         },
       })
     ).runOrThrow({ task: "hi" });
@@ -395,7 +381,7 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
       model: "fixture",
       apiKey: "fixture",
       compactAfterBytes: null,
-      text: { write() {} },
+      text() {},
     });
     await agent((request, context) =>
       transport(
@@ -439,10 +425,8 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
     const run = await agent(
       model({
         apiKey: "fixture",
-        text: {
-          write(event) {
-            observed.push(event);
-          },
+        text(event) {
+          observed.push(event);
         },
       })
     ).run({ task: "hi" });
@@ -480,10 +464,8 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
     const transport = model({
       apiKey: "fixture",
       compactAfterBytes: 1,
-      text: {
-        write(event) {
-          observed.push(event);
-        },
+      text(event) {
+        observed.push(event);
       },
     });
     await agent((request, context) =>
@@ -502,17 +484,15 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
         .fn()
         .mockResolvedValue(stream([{ type: "error", error: { message: "secret credential" } }]))
     );
-    const run = await agent(model({ apiKey: "fixture", text: { write() {} } })).run({ task: "hi" });
+    const run = await agent(model({ apiKey: "fixture", text() {} })).run({ task: "hi" });
     expect(run.status).toBe("failed");
     expect(JSON.stringify(run.errors)).not.toContain("secret credential");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(stream(events())));
     const failedSink = await agent(
       model({
         apiKey: "fixture",
-        text: {
-          write() {
-            throw new Error("secret credential");
-          },
+        text() {
+          throw new Error("secret credential");
         },
       })
     ).run({ task: "hi" });
@@ -528,10 +508,8 @@ it("rejects OpenAI final-text mismatch without committing a conversation", async
   const run = await agent(
     openaiModel({
       apiKey: "fixture",
-      text: {
-        write(event) {
-          observed.push(event);
-        },
+      text(event) {
+        observed.push(event);
       },
     })
   ).run({ task: "hi" });
@@ -540,32 +518,30 @@ it("rejects OpenAI final-text mismatch without committing a conversation", async
   expect(observed.at(-1)).toMatchObject({ status: "interrupted" });
 });
 
-it("bounds raw and redacted text and splits Unicode without cutting code points", async () => {
+it("bounds text and splits Unicode without cutting code points", async () => {
   const observed: AgentTextEvent[] = [];
-  const stream = new AgentTextStream(
+  const signal = new AbortController().signal;
+  const running = readAgentText(
+    new Response(null),
+    async (_events, write) => {
+      await write("a".repeat(4095) + "🌍".repeat(3000));
+      await write("x".repeat(1_048_576));
+      return {};
+    },
     "openai",
     1,
-    {
-      write(event) {
-        observed.push(event);
-      },
+    (event) => {
+      observed.push(event);
     },
-    new AbortController().signal
+    signal
   );
-  await stream.delta("a".repeat(4095) + "🌍".repeat(3000));
+  await expect(running).rejects.toThrow("exceeds");
   const chunks = observed.filter((event) => event.kind === "delta").map((event) => event.text);
+  expect(chunks.join("")).toBe("a".repeat(4095) + "🌍".repeat(3000));
   expect(
     chunks.every(
       (chunk) => Buffer.from(chunk).toString("utf8") === chunk && Buffer.byteLength(chunk) <= 16_384
     )
   ).toBe(true);
-  await expect(stream.delta("x".repeat(1_048_576))).rejects.toThrow("exceeds");
-  const expanding = new AgentTextStream(
-    "openai",
-    1,
-    { redact: () => "x".repeat(16_384), write() {} },
-    new AbortController().signal
-  );
-  for (let index = 0; index < 64; index++) await expanding.delta("a");
-  await expect(expanding.delta("a")).rejects.toThrow("sink failed");
+  expect(observed.at(-1)).toMatchObject({ kind: "end", status: "interrupted" });
 });

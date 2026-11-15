@@ -1,4 +1,4 @@
-import { AgentTextStream, textSettings, type AgentTextOptions } from "./text-stream.js";
+import { readAgentText, type AgentTextSink } from "./text-stream.js";
 import { readOpenAIStream } from "./openai-stream.js";
 import type { AgentModel, AgentModelDescriptors } from "./model-types.js";
 import { openaiRequest } from "./openai-http.js";
@@ -21,7 +21,7 @@ import { agentTranscript } from "./transcript.js";
 /** Responses transport settings; credentials are resolved only when a decision executes. */
 export interface OpenAIModelOptions {
   /** Opt-in public assistant text observations; does not enable transcript storage. */
-  readonly text?: AgentTextOptions;
+  readonly text?: AgentTextSink;
   /** Defaults to OPENAI_MODEL or gpt-5.4-mini. Must support Responses function calling and compaction. */
   readonly model?: string;
   /** Defaults to OPENAI_API_KEY at execution time. */
@@ -61,8 +61,8 @@ export interface OpenAIModelOptions {
 
 /** Create a dependency-free OpenAI Responses model with native history and automatic compaction. */
 export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
-  const text = textSettings(options.text);
   const {
+    text,
     model,
     apiKey,
     baseUrl,
@@ -72,6 +72,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
     maxRetries = DEFAULT_MAX_RETRIES,
   } = options;
   if (
+    (text !== undefined && typeof text !== "function") ||
     (compactAfterBytes !== null &&
       (!Number.isSafeInteger(compactAfterBytes) ||
         compactAfterBytes < 1 ||
@@ -125,9 +126,13 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
                   baseUrl,
                   text && operation === "decision"
                     ? (response) =>
-                        new AgentTextStream("openai", context.turn, text, signal).read(
+                        readAgentText(
                           response,
-                          readOpenAIStream
+                          readOpenAIStream,
+                          "openai",
+                          context.turn,
+                          text,
+                          signal
                         )
                     : undefined
                 )

@@ -49,7 +49,7 @@ export type {
   AgentExecutionIdentity,
 } from "./checkpoint-types.js";
 
-export type { AgentTextEvent, AgentTextOptions } from "./text-stream.js";
+export type { AgentTextEvent, AgentTextSink } from "./text-stream.js";
 
 export { defineAgent } from "./model-agent.js";
 export { createAgentSession, type AgentSession } from "./agent-session.js";
