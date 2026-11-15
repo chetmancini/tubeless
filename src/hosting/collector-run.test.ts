@@ -90,7 +90,7 @@ describe("collector job admission and supervision boundary", () => {
     const { options, readLaunch, store } = await setup();
     options.loadCommands.mockRejectedValue(new Error("secret module details"));
     expect(await runCollectorJob(options)).toEqual({
-      status: "history-unconfirmed",
+      status: "unconfirmed",
     });
     expect(options.onClaim).toHaveBeenCalledOnce();
     expect(readLaunch("l1")?.state).toBe("starting");
@@ -106,7 +106,7 @@ describe("collector job admission and supervision boundary", () => {
       return response;
     });
     expect(await runCollectorJob(options)).toEqual({
-      status: "history-unconfirmed",
+      status: "unconfirmed",
     });
     expect(options.onClaim).toHaveBeenCalledOnce();
     expect(options.loadCommands).not.toHaveBeenCalled();
@@ -141,7 +141,7 @@ describe("collector job admission and supervision boundary", () => {
         ],
       ])
     );
-    expect(await runCollectorJob(options)).toEqual({ status: "history-unconfirmed" });
+    expect(await runCollectorJob(options)).toEqual({ status: "unconfirmed" });
     expect(readLaunch("l1")?.state).toBe("running");
     expect((await store.listEvents()).map((event) => event.name)).toEqual(["pipeline.started"]);
   });

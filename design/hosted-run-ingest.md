@@ -297,8 +297,8 @@ zero outer retries; only the HTTP client retries delivery. A failed delivery
 poisons the ordered queue and requests cooperative cancellation.
 
 Keep execution and delivery cancellation separate: cancelling a command must
-still allow its terminal history to flush. Return refused or unconfirmed admission,
-or explicitly confirmed/unconfirmed history, to the supervisor. Do not promote a
+still allow its terminal history to flush. Return refused, history-confirmed or
+unconfirmed to the supervisor; it tracks claim ownership separately. Do not promote a
 delivered root start to terminal-history confirmation. Never turn lost contact, setup
 failure or a returned command promise into a synthetic termination report from
 inside the runner.

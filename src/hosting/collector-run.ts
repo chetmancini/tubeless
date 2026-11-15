@@ -10,7 +10,7 @@ export interface CollectorRunJob extends RunJob {
   readonly attemptId: string;
 }
 export type CollectorRunResult = {
-  readonly status: "refused" | "unconfirmed" | "history-confirmed" | "history-unconfirmed";
+  readonly status: "refused" | "unconfirmed" | "history-confirmed";
 };
 
 /** Claim once before loading user code. The supervisor owns failure reporting after worker exit. */
@@ -45,10 +45,6 @@ export async function runCollectorJob(options: {
   });
   try {
     if (!(await client.claim())) return { status: "refused" };
-  } catch {
-    return { status: "unconfirmed" };
-  }
-  try {
     await onClaim(client.workerId);
     throwIfAborted(controller.signal, "Worker execution");
     const entry = (await loadCommands()).get(job.commandId);
@@ -80,8 +76,8 @@ export async function runCollectorJob(options: {
       controller,
       exporter: batches,
     });
-    return { status: history.status === "complete" ? "history-confirmed" : "history-unconfirmed" };
+    return { status: history.status === "complete" ? "history-confirmed" : "unconfirmed" };
   } catch {
-    return { status: "history-unconfirmed" };
+    return { status: "unconfirmed" };
   }
 }

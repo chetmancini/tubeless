@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startCollectorWorker } from "../../dist/workbench/collector-worker.js";
 import { workerFixture } from "./collector-worker.test-support.js";
@@ -56,18 +57,13 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
       env: workerOptions.env,
       stdio: ["ignore", "ignore", "ignore", "ipc"],
     });
-    let resolveResult!: (result: unknown) => void;
-    let rejectResult!: (error: Error) => void;
-    const received = new Promise<unknown>((resolve, reject) => {
-      resolveResult = resolve;
-      rejectResult = reject;
-    });
-    launcher.once("message", resolveResult);
-    launcher.once("error", rejectResult);
-    const closed = new Promise<void>((resolve) => launcher.once("close", () => resolve()));
-    launcher.once("close", () =>
-      rejectResult(new Error("Eval launcher closed before its result."))
-    );
+    const closed = once(launcher, "close");
+    const received = Promise.race([
+      once(launcher, "message").then(([result]) => result),
+      closed.then(() => {
+        throw new Error("Eval launcher closed before its result.");
+      }),
+    ]);
     cleanups.push(async () => {
       launcher.kill("SIGKILL");
       await closed;
@@ -257,7 +253,7 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     state.unavailableFailure = true;
     const missing = new URL("missing.mjs", module);
     expect(await start({ module: missing }).completed).toMatchObject({
-      outcome: { status: "history-unconfirmed" },
+      outcome: { status: "unconfirmed" },
       failureReport: "unconfirmed",
     });
     expect(state.fixture.readLaunch("launch")?.state).toBe("starting");
@@ -269,7 +265,7 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     const { writeModule, start, state } = await setup();
     await writeModule("oversized");
     expect(await start().completed).toMatchObject({
-      outcome: { status: "history-unconfirmed" },
+      outcome: { status: "unconfirmed" },
       failureReport: "recorded",
     });
     const events = await state.fixture.store.listEvents();
@@ -283,7 +279,7 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     await writeModule("partial");
     expect(await start().completed).toMatchObject({
       code: 0,
-      outcome: { status: "history-unconfirmed" },
+      outcome: { status: "unconfirmed" },
       failureReport: "recorded",
     });
     expect(state.failureWhileAlive).toBe(false);

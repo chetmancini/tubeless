@@ -21,7 +21,7 @@ export interface CollectorWorkerStart {
 export type CollectorWorkerRequest = CollectorWorkerStart | { readonly type: "cancel" };
 const resultSchema = wireObject(
   {
-    status: wireEnum(["refused", "unconfirmed", "history-confirmed", "history-unconfirmed"]),
+    status: wireEnum(["refused", "unconfirmed", "history-confirmed"]),
   },
   { strict: true }
 );
