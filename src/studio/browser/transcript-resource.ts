@@ -24,7 +24,6 @@ export function useTranscript(api: TranscriptApi, runId: string) {
     const hidden = () => typeof document !== "undefined" && document.hidden;
     const publish = (loading: boolean, error?: string) =>
       setState({ api, runId, result, loading, error, more: load });
-    const cursor = () => result?.transcript.records.at(-1)?.sequence ?? 0;
     const refreshable = () =>
       result?.live && ["partial", "unavailable"].includes(result.transcript.status);
     const retire = () => {
@@ -38,7 +37,7 @@ export function useTranscript(api: TranscriptApi, runId: string) {
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
       const current = (request = new AbortController());
-      const afterSequence = cursor();
+      const afterSequence = result?.transcript.records.at(-1)?.sequence ?? 0;
       publish(true);
       void api.loadTranscript(runId, afterSequence, current.signal).then(
         (next) => {

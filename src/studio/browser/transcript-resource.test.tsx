@@ -212,12 +212,7 @@ it("aborts pending requests and timers on source changes and unmount", async () 
 
 it("pauses hidden tabs and resumes from the last successful cursor", async () => {
   vi.useFakeTimers();
-  const events = new EventTarget();
-  const document = {
-    hidden: false,
-    addEventListener: events.addEventListener.bind(events),
-    removeEventListener: events.removeEventListener.bind(events),
-  };
+  const document = Object.assign(new EventTarget(), { hidden: false });
   vi.stubGlobal("document", document);
   const waiting = pending();
   const load = vi
@@ -230,14 +225,14 @@ it("pauses hidden tabs and resumes from the last successful cursor", async () =>
   const signal = load.mock.calls[1]![2]!;
   await act(() => {
     document.hidden = true;
-    events.dispatchEvent(new Event("visibilitychange"));
+    document.dispatchEvent(new Event("visibilitychange"));
   });
   expect(signal.aborted).toBe(true);
   await tick();
   expect(load).toHaveBeenCalledTimes(2);
   await act(async () => {
     document.hidden = false;
-    events.dispatchEvent(new Event("visibilitychange"));
+    document.dispatchEvent(new Event("visibilitychange"));
   });
   expect(load).toHaveBeenLastCalledWith("run", 1, expect.any(AbortSignal));
   expect(mounted.state.page?.records.map((record) => record.sequence)).toEqual([1, 2]);
