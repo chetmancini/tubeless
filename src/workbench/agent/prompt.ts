@@ -5,6 +5,7 @@ import {
   type AgentModel,
   type AgentSession,
   type AgentTranscriptOptions,
+  type AgentTextOptions,
   type DefaultAgentToolName,
 } from "../../agent/agent.js";
 import type { PipelineLogger } from "../../core/pipeline.js";
@@ -37,6 +38,7 @@ interface BuiltinAgentOptions {
   readonly defaultTools?: readonly DefaultAgentToolName[];
   readonly codemode?: boolean;
   readonly transcript?: AgentTranscriptOptions;
+  readonly text?: AgentTextOptions;
 }
 
 type PromptOutcome =
@@ -74,7 +76,7 @@ export function createPromptSession(
     async prepare(model, signal) {
       throwIfAborted(signal, "Model initialization");
       const initialized: unknown = await awaitWithAbort(
-        Promise.resolve(factory({ model, signal, env: options.env })),
+        Promise.resolve(factory({ model, signal, env: options.env, text: options.text })),
         signal,
         "Model initialization"
       );

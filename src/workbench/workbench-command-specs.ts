@@ -355,6 +355,10 @@ Workspace tools run with your host permissions.`,
         type: "boolean",
         description: "Hide pipeline reporting (keep model/tool logs and answers)",
       },
+      stream: {
+        type: "boolean",
+        description: "Stream public assistant text to stderr (uses plain progress output).",
+      },
       "capture-transcript": {
         type: "boolean",
         description: "Save built-in agent prompts, answers and tool content in --store (opt-in)",

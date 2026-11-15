@@ -81,6 +81,8 @@ their source files.
   their provider protocols and compaction. They share `provider-http.ts` (bounded
   requests and responses, bounded retries of transient failures, base URLs, deadlines
   that fail rather than cancel),
+  `provider-sse.ts` (bounded, abortable SSE framing), `text-stream.ts` (ephemeral
+  public deltas and awaited sink delivery), provider-specific stream assemblers,
   `provider-schema.ts` (strict tool-parameter schemas) and `provider-tool-outputs.ts`
   (bounded tool results). `openai-http.ts` keeps OpenAI
   authentication-error handling: known codes, no raw provider messages. Shared

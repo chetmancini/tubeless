@@ -8,9 +8,10 @@ export const BUILTIN_AGENT_PROVIDERS = {
     model: "gpt-5.4-mini",
     modelEnv: "OPENAI_MODEL",
     credentialEnv: ["OPENAI_API_KEY"],
-    createModel: ({ model, env }) =>
+    createModel: ({ model, env, text }) =>
       openaiModel({
         model,
+        text,
         apiKey: env.OPENAI_API_KEY?.trim(),
         baseUrl: env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1",
       }),
@@ -19,9 +20,10 @@ export const BUILTIN_AGENT_PROVIDERS = {
     model: "claude-opus-5-5",
     modelEnv: "ANTHROPIC_MODEL",
     credentialEnv: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"],
-    createModel: ({ model, env }) =>
+    createModel: ({ model, env, text }) =>
       anthropicModel({
         model,
+        text,
         ...(env.ANTHROPIC_API_KEY?.trim()
           ? { apiKey: env.ANTHROPIC_API_KEY.trim() }
           : { authToken: env.ANTHROPIC_AUTH_TOKEN?.trim() }),

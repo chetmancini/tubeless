@@ -27,7 +27,8 @@ export async function openaiRequest(
   payload: object,
   apiKey: string | undefined,
   signal: AbortSignal,
-  baseUrl?: string
+  baseUrl?: string,
+  readResponse?: (response: Response) => Promise<unknown>
 ): Promise<unknown> {
   const key = (apiKey ?? process.env.OPENAI_API_KEY)?.trim();
   if (!key) throw new Error("OPENAI_API_KEY is required for live model execution");
@@ -51,6 +52,7 @@ export async function openaiRequest(
           ? ` Request ID: ${requestId}.`
           : "";
       return `${advice ? `: ${advice}` : ""}${request}`;
-    }
+    },
+    readResponse
   );
 }

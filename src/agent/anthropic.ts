@@ -1,3 +1,5 @@
+import { AgentTextStream, textSettings, type AgentTextOptions } from "./text-stream.js";
+import { readAnthropicStream } from "./anthropic-stream.js";
 import type { AgentModel, AgentModelDescriptors } from "./model-types.js";
 import { agentTranscript } from "./transcript.js";
 import {
@@ -24,6 +26,8 @@ import { throwIfAborted } from "../utilities/abort.js";
 
 /** Messages API transport settings; credentials are resolved only when a decision executes. */
 export interface AnthropicModelOptions {
+  /** Opt-in public assistant text observations; does not enable transcript storage. */
+  readonly text?: AgentTextOptions;
   /** Defaults to ANTHROPIC_MODEL or claude-opus-5-5. Must support tool use. */
   readonly model?: string;
   /**
@@ -78,6 +82,7 @@ const RESULT_MESSAGE_BYTES = 64;
 
 /** Create a dependency-free Anthropic Messages model with native history and on-demand compaction. */
 export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel {
+  const text = textSettings(options.text);
   const {
     model,
     apiKey,
@@ -169,8 +174,22 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
                       ? { "anthropic-beta": COMPACTION_BETA }
                       : {}),
                   },
-                  payload,
-                  signal
+                  { ...payload, ...(text && operation === "decision" ? { stream: true } : {}) },
+                  signal,
+                  undefined,
+                  text && operation === "decision"
+                    ? async (response) => {
+                        const stream = new AgentTextStream("anthropic", context.turn, text, signal);
+                        try {
+                          const body = await readAnthropicStream(response, signal, stream);
+                          await stream.end("completed");
+                          return body;
+                        } catch (error) {
+                          await stream.end("interrupted");
+                          throw error;
+                        }
+                      }
+                    : undefined
                 )
               )
           );

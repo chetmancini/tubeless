@@ -130,6 +130,11 @@ recent logs beside the tree; smaller terminals keep active work visible and writ
 logs above it. The reporter honors `NO_COLOR`, `FORCE_COLOR`, `TERM`, and `CI`.
 Redirected output uses ordinary append-only pipeline logs without cursor controls.
 Use `--no-graph` to hide pipeline reporting while keeping model/tool logs and answers.
+Use `--stream` for incremental public assistant text on stderr with plain progress
+output. The validated final answer stays on stdout. Tool arguments and thinking
+remain private, and transcript capture stays off unless explicitly enabled.
+Interrupted text is labelled; providers that emit only tool calls have no live
+text. See [streaming bounds and redaction](./agents.md#stream-public-assistant-text).
 
 For one task, including a multiline task, use `--prompt`:
 
@@ -222,7 +227,7 @@ schemas: omit `inputSchema` and `resultSchema` to use `{ task: string }` and
 the CLI's text prompt and answer interface.
 
 Selected agents own their configuration. The CLI rejects `--model`, `--provider`,
-`--model-module`, `--env-file`, `--instructions`, `--tools`, `--codemode`, and
+`--model-module`, `--env-file`, `--instructions`, `--tools`, `--codemode`, `--stream`, and
 `--max-turns`/`--max-calls`/`--max-concurrency` rather than ignoring them or replacing
 the agent's settings. Configure those in the agent definition and export its
 credentials to the process. `/model` reports that the agent owns its model;
@@ -300,11 +305,13 @@ alone does not satisfy the Responses adapter; see [compatible APIs](./agents.md#
 `--model-module ./model.ts` also accepts a default-exported factory when no
 `--provider` is supplied. This form keeps the existing default model selection
 (`--model`, then `OPENAI_MODEL`, then `gpt-5.4-mini`). The factory accepts
-`{ model: string, signal: AbortSignal, env: Readonly<Record<string, string | undefined>> }` and returns
+`{ model: string, signal: AbortSignal, env: Readonly<Record<string, string | undefined>>, text?: AgentTextOptions }` and returns
 an `AgentModel`, synchronously or asynchronously. Tubeless calls the factory for
 each task with the currently selected model, that task's cancellation signal,
 and the resolved environment. Custom factories use `env` for provider credentials
 and need no OpenAI key unless they use that provider.
+Forward optional `text` to `openaiModel` or `anthropicModel` to support `--stream`;
+custom factories may supply their own observation transport.
 Async setup must pass the signal into its I/O and release setup resources on abort.
 Cancellation stops waiting for setup and never invokes a model returned afterward.
 The callback receives the usual

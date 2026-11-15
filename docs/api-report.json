@@ -36,6 +36,8 @@
         "AgentProjectInstruction",
         "AgentSession",
         "AgentState",
+        "AgentTextEvent",
+        "AgentTextOptions",
         "AgentTool",
         "AgentToolContext",
         "AgentTranscriptEvent",
@@ -59,7 +61,7 @@
         "plainAgentCheckpointCodec",
         "ToolError"
       ],
-      "sha256": "fe2bbc48917eed13a1658263d589d0d8d0da7f322a8a539de8eab2d35a0879a5",
+      "sha256": "9c0f10ade53dfa2450a37578066e91211f024b93c2f84310fdc21227030b8a32",
       "specifier": "tubeless/agent"
     },
     {
@@ -187,7 +189,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "dda04916eb42187007461c3b586e81b14566c9380f6fad40a24ac888b3a8af82",
+      "sha256": "a9e2d3e2e215eb6310fd99d7112cf2d9dab39759dc0770ad6ab7439b5a5ecd05",
       "specifier": "tubeless/cli"
     },
     {
@@ -297,7 +299,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "16bf3329f493c2786f4a3369febfdac43ea202ed8925c2ee2fbed84384a94a33",
+      "sha256": "6974d068f02f72757aea243b8e1738cc57a610496cf615610217508dffae2f3e",
       "specifier": "tubeless/agent/openai"
     },
     {
@@ -317,7 +319,7 @@
     {
       "declaration": "./dist/agent/anthropic.d.ts",
       "exports": ["anthropicModel", "AnthropicModelOptions"],
-      "sha256": "4e75adfc4916d1274ff6a06e3d6da3f853b63941e4df4fdc433992b04d37ad32",
+      "sha256": "dc40aa7ec9efa2f0c5f891cf1cc97d784f2ec05330c9195ac2baa96bf3037dbe",
       "specifier": "tubeless/agent/anthropic"
     },
     {

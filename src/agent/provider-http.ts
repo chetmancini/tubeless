@@ -112,7 +112,8 @@ export async function providerRequest(
   headers: Readonly<Record<string, string>>,
   payload: object,
   signal: AbortSignal,
-  onHttpError?: (response: Response) => Promise<string>
+  onHttpError?: (response: Response) => Promise<string>,
+  readResponse?: (response: Response) => Promise<unknown>
 ): Promise<unknown> {
   const body = JSON.stringify(payload);
   if (Buffer.byteLength(body) > MAX_REQUEST_BYTES)
@@ -144,7 +145,9 @@ export async function providerRequest(
       retryAfterMs: retryAfterMs(response.headers),
     });
   }
-  return readProviderJson(response, signal, MAX_RESPONSE_BYTES, provider);
+  return readResponse
+    ? readResponse(response)
+    : readProviderJson(response, signal, MAX_RESPONSE_BYTES, provider);
 }
 
 /**

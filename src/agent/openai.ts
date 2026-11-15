@@ -1,3 +1,5 @@
+import { AgentTextStream, textSettings, type AgentTextOptions } from "./text-stream.js";
+import { readOpenAIStream } from "./openai-stream.js";
 import type { AgentModel, AgentModelDescriptors } from "./model-types.js";
 import { openaiRequest } from "./openai-http.js";
 import {
@@ -18,6 +20,8 @@ import { agentTranscript } from "./transcript.js";
 
 /** Responses transport settings; credentials are resolved only when a decision executes. */
 export interface OpenAIModelOptions {
+  /** Opt-in public assistant text observations; does not enable transcript storage. */
+  readonly text?: AgentTextOptions;
   /** Defaults to OPENAI_MODEL or gpt-5.4-mini. Must support Responses function calling and compaction. */
   readonly model?: string;
   /** Defaults to OPENAI_API_KEY at execution time. */
@@ -57,6 +61,7 @@ export interface OpenAIModelOptions {
 
 /** Create a dependency-free OpenAI Responses model with native history and automatic compaction. */
 export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
+  const text = textSettings(options.text);
   const {
     model,
     apiKey,
@@ -112,7 +117,26 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
             },
             () =>
               reportRequest(operation, () =>
-                openaiRequest(endpoint, payload, apiKey, signal, baseUrl)
+                openaiRequest(
+                  endpoint,
+                  payload,
+                  apiKey,
+                  signal,
+                  baseUrl,
+                  text && operation === "decision"
+                    ? async (response) => {
+                        const stream = new AgentTextStream("openai", context.turn, text, signal);
+                        try {
+                          const body = await readOpenAIStream(response, signal, stream);
+                          await stream.end("completed");
+                          return body;
+                        } catch (error) {
+                          await stream.end("interrupted");
+                          throw error;
+                        }
+                      }
+                    : undefined
+                )
               )
           );
         if (
@@ -195,7 +219,11 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
             provider: "openai",
           });
         }
-        const body = await send("decision", "responses", { ...decisionRequest, input });
+        const body = await send("decision", "responses", {
+          ...decisionRequest,
+          input,
+          ...(text ? { stream: true } : {}),
+        });
         if (!record(body)) throw new Error("OpenAI did not return a completed response");
         const output = outputItems(body);
         const transcript = agentTranscript(context);

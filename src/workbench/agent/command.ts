@@ -1,3 +1,4 @@
+import { createTerminalTextStream } from "./text-stream.js";
 import { WORKBENCH_SPECS } from "../workbench-command-specs.js";
 import {
   renderWorkbenchUsage,
@@ -68,6 +69,7 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
             "max-calls",
             "max-concurrency",
             "capture-transcript",
+            "stream",
           ] as const;
           const provided = overrides.filter((key) => values[key] !== undefined);
           if (provided.length)
@@ -170,6 +172,7 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
                 defaultTools,
                 codemode: values.codemode === true,
                 transcript,
+                text: values.stream ? createTerminalTextStream(commandIo) : undefined,
               },
               selected.factory
             );
@@ -193,7 +196,7 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
               label,
               projectTracing,
               prompt: values.prompt,
-              graph: !values["no-graph"],
+              graph: !values["no-graph"] && !values.stream,
               tracing:
                 recording.exporters.length > 0
                   ? { exporter: composeTraceExporters(recording.exporters) }

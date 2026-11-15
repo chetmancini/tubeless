@@ -1159,6 +1159,76 @@ decision source. Tools skip by default and require their own preview handler.
 A skipped required tool or agent output fails finalization instead of inventing
 an observation or answer.
 
+## Stream public assistant text
+
+Both bundled adapters accept `text: { write, redact? }`. Omit it to keep the
+ordinary JSON transport. With it, decision requests use SSE; compaction remains
+private and uses JSON. These observations are ephemeral and enable no transcript
+storage. Import `AgentTextEvent` and `AgentTextOptions` from `tubeless/agent`.
+
+```ts
+const model = anthropicModel({
+  text: {
+    write(event) {
+      if (event.kind === "delta") process.stderr.write(event.text);
+      else process.stderr.write(event.status === "completed" ? "\n" : "\n[interrupted]\n");
+    },
+  },
+});
+```
+
+Each HTTP attempt has a fresh `streamId`, provider name and agent `turn`.
+Ordered `delta` events carry public assistant text only; `end` carries
+`completed` or `interrupted`. Thinking, reasoning, signatures, tool arguments,
+compaction summaries and native conversation state never enter these events.
+The model's structured `_finish` arguments stay private until the agent validates
+its final result. A provider that emits only tool calls has no incremental text.
+
+Delivery awaits each redactor and sink before reading more events, within the
+existing decision deadline and caller cancellation. Each delta is at most 16 KiB
+of UTF-8 and keeps Unicode code points intact. Raw and delivered text each have
+a 1 MiB limit per attempt. SSE input has a 16 MiB total limit, a 2 MiB plus 4 KiB
+framing limit per event, and at most 65,536 events; assembled native responses
+retain the existing 2 MiB limit. A limit, protocol error or sink failure fails the
+decision with a sanitized diagnostic. HTTP failures retain ordinary retries;
+after a successful HTTP response, streaming failures are never retried, so
+already displayed text cannot be replayed silently.
+
+A successful end means the provider response completed, not that its proposed
+result passed agent validation. OpenAI deltas must match the completed response's
+text exactly. Anthropic deltas assemble the completed native content blocks.
+Neither adapter re-emits completed text to the live sink. When transcript capture
+is also enabled, it records each completed assistant block once using the
+existing version 1 `assistant` event; partial observations never enter artifacts,
+SQLite, evaluation fixtures or Studio. Failed streams commit no conversation or
+partial assistant record. End notification after interruption is best effort:
+a blocked sink cannot delay cancellation. Discard partial observations, or retain
+them explicitly as interrupted content rather than a completed answer.
+
+Streaming and capture are separate destinations. Configure `text.redact` before
+live delivery and `transcript.redact` before persistence; neither redactor filters
+the other destination. A live redactor receives a delta event and returns a
+replacement string or `null`. Use `streamId` for state when sensitive values can
+span deltas; a replacement must fit 16 KiB. Do not apply a whole-message secret
+regex independently to arbitrary chunks. Applications own privacy and must
+sanitize terminal control characters when writing live text themselves.
+
+Use `tubeless agent --stream` with built-in providers, or forward the factory's
+optional `text` setting into a custom adapter. Live commentary goes to stderr with
+plain progress reporting; the validated final answer keeps its usual stdout
+routing. Interrupted commentary is labelled. The flag does not enable
+`--capture-transcript`, and selected application agents keep ownership of their
+model configuration. Run the [local SSE demo](../examples/agent-streaming-model.ts)
+without credentials:
+
+```sh
+bun run tubeless -- agent --model-module ./examples/agent-streaming-model.ts --stream --prompt "Demonstrate streaming"
+```
+
+The transport follows the provider's documented event lifecycles:
+[OpenAI Responses](https://developers.openai.com/api/docs/guides/streaming-responses)
+and [Anthropic Messages](https://platform.claude.com/docs/en/build-with-claude/streaming).
+
 ## Opt-in transcripts
 
 Set `transcript` on `defineAgent` or `defineAgentLoop` to observe content in a

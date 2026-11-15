@@ -1,7 +1,9 @@
-import type { AgentModel } from "../agent/agent.js";
+import type { AgentModel, AgentTextOptions } from "../agent/agent.js";
 
 /** Create a model for one CLI prompt with the selected model and scoped environment. */
 export type AgentModelFactory = (options: {
+  /** Optional terminal stream; factories forward it to their model adapter. */
+  readonly text?: AgentTextOptions;
   readonly model: string;
   readonly signal: AbortSignal;
   readonly env: Readonly<Record<string, string | undefined>>;
