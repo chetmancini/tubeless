@@ -198,14 +198,6 @@ export async function runHostedJob(options: {
   // Core does not await exporters, so a refused batch could arrive after a step's side effects.
   // Admission precedes command execution; a refused launch was already closed by Studio.
   if (!(await admitted(ingest(), job.launchId))) return;
-  const deadlineAtMs = Date.now() + job.maxRunDurationMs;
-  const traceContext = {
-    pipelineId: job.commandId,
-    cwd: output.cwd,
-    signal: controller.signal,
-    launchId: job.launchId,
-  };
-  let recorded = false;
   let deliveryFailure: { readonly error: unknown } | undefined;
   const batches = new BatchingTraceExporter(
     async (sequence, events) => {
@@ -225,36 +217,16 @@ export async function runHostedJob(options: {
       },
     }
   );
-  const exporter: PipelineTraceExporter = {
-    export(event) {
-      if (isTopLevelStart(event)) recorded = true;
-      return batches.export(boundHostedEvent(event));
-    },
-    flush: () => batches.flush(),
-  };
-  const deadline = setTimeout(
-    () =>
-      controller.abort(new DOMException("The run exceeded its maximum duration.", "TimeoutError")),
-    Math.max(0, deadlineAtMs - Date.now())
-  );
-  let exitCode: number;
-  let launchTracing: LaunchTracing | undefined;
-  try {
-    launchTracing = createLaunchTracing({
-      context: traceContext,
-      configurations: [entry.tracing, options.tracing],
-      exporters: [exporter],
-      wrapExporter: wrapExporter && ((destination) => wrapExporter(destination, deadlineAtMs)),
-    });
-    exitCode = await executeHostedCommand(entry.command, parsed.values, output, controller.signal, {
-      tracing: launchTracing.prepare(),
-    });
-  } finally {
-    await launchTracing?.close();
-    clearTimeout(deadline);
-    // Drain pending events so no timer can deliver after the job's cleanup.
-    await batches.flush().catch(() => {});
-  }
+  const { exitCode, recorded } = await executeHostedRun({
+    job,
+    entry,
+    values: parsed.values,
+    output,
+    controller,
+    exporter: batches,
+    wrapExporter,
+    tracing: options.tracing,
+  });
   if (deliveryFailure) {
     // The run may be fully recorded locally yet unknown to Studio; tell it, best effort.
     const { error } = deliveryFailure;
@@ -270,5 +242,72 @@ export async function runHostedJob(options: {
       job.launchId,
       `Pipeline command exited (${exitCode}) before recording a run.${detail ? `\n${detail}` : ""}`
     );
+  }
+}
+
+/** Execute an already-admitted command. Targets own admission, transport and failure evidence. */
+export async function executeHostedRun(options: {
+  readonly job: RunJob;
+  readonly entry: HostedCommand;
+  readonly values: Record<string, unknown>;
+  readonly controller: AbortController;
+  readonly output: HostedOutput;
+  readonly exporter: PipelineTraceExporter;
+  readonly wrapExporter?: (
+    exporter: PipelineTraceExporter,
+    deadlineAtMs: number
+  ) => PipelineTraceExporter;
+  readonly tracing?: PipelineTraceExporterOptions<HostedRunTraceContext>;
+}): Promise<{ exitCode: number; recorded: boolean }> {
+  const { job, entry, controller, output, wrapExporter } = options;
+  const deadlineAtMs = Date.now() + job.maxRunDurationMs;
+  let recorded = false;
+  const exporter: PipelineTraceExporter = {
+    export(event) {
+      if (isTopLevelStart(event)) recorded = true;
+      return options.exporter.export(boundHostedEvent(event));
+    },
+    flush: () => options.exporter.flush?.(),
+  };
+  const deadline = setTimeout(
+    () =>
+      controller.abort(new DOMException("The run exceeded its maximum duration.", "TimeoutError")),
+    Math.max(0, deadlineAtMs - Date.now())
+  );
+  let launchTracing: LaunchTracing | undefined;
+  try {
+    launchTracing = createLaunchTracing({
+      context: {
+        pipelineId: job.commandId,
+        cwd: output.cwd,
+        signal: controller.signal,
+        launchId: job.launchId,
+      },
+      configurations: [entry.tracing, options.tracing],
+      exporters: [exporter],
+      wrapExporter: wrapExporter && ((destination) => wrapExporter(destination, deadlineAtMs)),
+    });
+    const exitCode = await executeHostedCommand(
+      entry.command,
+      options.values,
+      output,
+      controller.signal,
+      {
+        tracing: launchTracing.prepare(),
+      }
+    );
+    return { exitCode, recorded };
+  } finally {
+    try {
+      await launchTracing?.close();
+    } finally {
+      clearTimeout(deadline);
+      // Drain delivery even if an application exporter fails during cleanup.
+      try {
+        await options.exporter.flush?.();
+      } catch {
+        /* The target observes delivery failures. */
+      }
+    }
   }
 }

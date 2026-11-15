@@ -5,7 +5,8 @@ Issue: [#289](https://github.com/chetmancini/tubeless/issues/289).
 This change separates trusted hosted execution, launch coordination and storage
 while preserving the public Cloudflare API. Owned-attempt persistence, credential
 provisioning, a Fetch-native collector and a delivery client are implemented
-internally. No production routing or independent worker is wired yet. A
+internally. A supervised one-shot Node worker now exercises those contracts over
+HTTPS; no public deploy target or production route is added. A
 Node-process test executor exercises the
 shared coordination contract alongside Cloudflare; it is not a deployed remote
 target or a second production execution lifecycle. No new public package subpath
@@ -281,28 +282,79 @@ collector restart; reject changed reports and prevent all reports from replacing
 an existing successful completion. A pre-root failure closes the launch without
 inventing a run. Bound and sanitize transport diagnostics independently from trace data.
 
+## Implemented supervised worker integration
+
+`runCollectorJob` uses the authenticated client to claim exactly once before
+loading application modules or parsing values. It owns a snapshot of job input,
+reports the confirmed worker invocation to its supervisor, and calls the shared
+`executeHostedRun` path for command execution, trace context, history bounds,
+cooperative deadlines and final flushing. The trusted Cloudflare wrapper retains
+its existing admission, retry and failure policy. The remote wrapper batches with
+zero outer retries; only the HTTP client retries delivery. A failed delivery
+poisons the ordered queue and requests cooperative cancellation.
+
+Keep execution and delivery cancellation separate: cancelling a command must
+still allow its terminal history to flush. Return refused, unconfirmed, or finished
+execution/delivery evidence to the supervisor. Never turn lost contact, setup
+failure or a returned command promise into a synthetic termination report from
+inside the runner.
+
+`startCollectorWorker` in `workbench/collector-worker.ts` supervises a fresh Node
+process for one already-provisioned job. The trusted host supplies a compiled
+module, optional export name, working directory and deployment revision; job values
+never select executable code. The private IPC packet carries the credential
+separately from application values, argv, environment and logs. The fixed runtime
+selects a pipeline or explicit pipeline command only after a confirmed claim.
+Application output goes through trace history; raw child stdio is not forwarded.
+
+Bound startup/claim separately from post-claim execution. Default startup to
+30 seconds and cooperative cancellation grace to one second. Arm the execution
+watchdog on a confirmed claim so application module loading is also covered.
+`cancel()` acknowledges a request; `completed` waits for process closure. If
+cancellation is ignored, force `SIGKILL` after the grace period. After observing
+closure, the parent may submit an owner-scoped failure report using its independent
+delivery lifetime. Preserve a successful terminal event and replay a lost failure
+reply with the same failure ID/body. Return an unconfirmed report outcome when
+delivery fails or no owner was confirmed; never provision another attempt or
+retry execution automatically.
+
+This supervision covers the direct worker process, not detached child processes
+or external effects. Parent death, uncertain dispatch and a lost claim reply still
+require target-owned recovery. An IPC disconnect requests cooperative abort; it
+does not prove termination. This is an internal adapter, not a sandbox, durable
+queue, crash-resume mechanism, or deployment selected for users.
+
 ## Validation and delivery gates
 
-This extraction must pass the existing Cloudflare alarm, reconciliation, tracing
-and real-workerd tests unchanged in behavior. Exercise the shared runner with a
-non-Cloudflare output/cwd and execution budget, and exercise registry transactions
-with an independent SQLite adapter. Expand runtime-graph checks to every hosting
-module: no Cloudflare/platform imports, concrete stores or Node listener assets.
-Keep public exports and declarations unchanged apart from generated path hashes.
+Preserve the existing Cloudflare alarm, reconciliation, tracing and real-workerd
+tests. Keep every hosting module free of Cloudflare/platform imports, concrete
+stores and Node listeners. Check the emitted worker entrypoint independently: it
+may select commands but must not reach CLI startup or concrete storage. Keep
+public exports and declarations unchanged apart from generated hashes.
 
-The transport tests exercise real SQLite through the client and Fetch handler,
-including lost replies after commit, exact byte retries, count/byte splitting,
-authentication before body reading, expiry/revocation races, failed receipt rollback,
-collector reopen, bounded streams and responses, and uncooperative cancellation.
-They also preserve the existing Studio parsing and emitted runtime-graph checks.
+Transport tests cover real SQLite through the client and Fetch handler, including
+lost replies after commit, exact byte retries, count/byte splitting, authentication
+before body reading, expiry/revocation races, failed receipt rollback, collector
+reopen, bounded streams/responses, and uncooperative cancellation.
 
-Keep #289 open for the independent worker integration. Before production use:
+Worker integration tests use separate OS processes and real HTTPS with a private
+test CA, keeping TLS verification enabled. Exercise duplicate dispatch and late
+redelivery, refusal before module loading, lost claim replies, collector/SQLite
+reopen after a committed batch whose reply was lost, nested history through Studio,
+cooperative cancellation, hung module loading, hard termination, lost contact
+without false terminal history, and failure-report retries after observed exit.
+Probe real nested definition snapshots: accept ordinary recordings and reject an
+oversized child snapshot without altering its identity or inventing child history;
+preserve and close the already-recorded root after worker exit.
 
-1. Connect a concrete worker to persisted admission and scoped credential delivery;
-   retain launch/attempt IDs on uncertain dispatch.
-2. Supply platform supervision and cancellation that distinguish lost contact from
-   confirmed termination, without automatically retrying execution.
-3. Exercise the worker across collector restarts and render its run tree in Studio.
-4. Probe real workload sizes before exposing transport limits as a public contract.
+Keep #289 open for production target wiring and recovery. Before production use:
 
-No new public package subpath or production route is introduced by this slice.
+1. Mount the collector separately from Studio admin/browser routes and provision
+   credentials through the chosen target's secret channel.
+2. Integrate durable dispatch, parent/process lifecycle recovery and cancellation
+   ownership; retain launch/attempt IDs after uncertain dispatch.
+3. Choose target-specific policy for process trees, remote effects and retained
+   attempt/credential state.
+4. Probe target workloads before publishing transport limits as a public contract.
+
+No new public package subpath, CLI command or production route is introduced.

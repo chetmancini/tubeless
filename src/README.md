@@ -172,7 +172,10 @@ their source files.
   `collector-client.ts` owns one worker invocation's admission and delivery lifecycle,
   ordered batch queue and explicit failure reporting after execution exits.
   `collector-transport.ts` owns HTTPS requests, deadlines, exact-byte retries and
-  typed replies. Strict collector envelopes use the canonical wire-object decoder;
+  typed replies. `collector-run.ts` claims once before loading application code,
+  then uses the same admitted execution path with transport-owned retries. It
+  returns execution/delivery evidence without declaring remote termination.
+  Strict collector envelopes use the canonical wire-object decoder;
   stored-event reads retain tolerant decoding for history compatibility.
   `utilities/read-body.ts` supplies bounded, cancellable byte reading for the collector,
   delivery client and Studio JSON parsing, using one bounded buffer independent of
@@ -189,7 +192,17 @@ their source files.
   Node process; the CLI retains its existing execution lifecycle.
   See the [hosted execution and ingest design](../design/hosted-run-ingest.md) before
   integrating the collector with an independent worker. The transport is internal;
-  production routing, credential delivery, dispatch and supervision remain target-owned.
+  production routing, durable dispatch and recovery remain target-owned.
+  `workbench/collector-worker.ts` is the internal Node process supervisor: the host
+  supplies an already-provisioned job, compiled module and trusted deployment ID.
+  Its fixed runtime receives credentials over private IPC, claims before importing
+  application code, and flushes history before exiting. The parent bounds startup
+  and post-claim execution, requests cancellation, and forces exit after a grace
+  period. Only observed process closure authorizes the parent's authenticated
+  failure report. `collector-worker-protocol.ts` owns the private IPC shapes;
+  `collector-worker-runtime.ts` reuses command selection without loading CLI startup,
+  a collector listener or concrete storage. No new CLI command or deploy target is
+  selected by these modules.
 - The Cloudflare target composes hosting, Studio and storage contracts inside Durable
   Objects. Only `cloudflare/cloudflare.ts` imports `cloudflare:workers`; nothing outside
   `cloudflare/` imports it, and its public declarations stay structural. The
