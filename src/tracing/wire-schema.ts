@@ -158,7 +158,8 @@ export function wireArray<T>(item: WireSchema<T>, options: ArrayOptions = {}): W
 }
 
 export function wireObject<const TShape extends WireShape>(
-  shape: TShape
+  shape: TShape,
+  options: { readonly strict?: boolean } = {}
 ): WireSchema<InferWireShape<TShape>> {
   const required = Object.entries(shape)
     .filter(([, child]) => !child.optionalOutput)
@@ -179,6 +180,9 @@ export function wireObject<const TShape extends WireShape>(
       }
       // SAFETY: The object guard above excludes null and arrays, so named properties are safe to read.
       const source = value as Record<string, unknown>;
+      if (options.strict && Object.keys(source).some((key) => !Object.hasOwn(shape, key))) {
+        throw new Error(`${path} contains unsupported fields`);
+      }
       const decoded: Record<string, unknown> = {};
       for (const [key, child] of Object.entries(shape)) {
         const item = child.decode(source[key], childPath(path, key));

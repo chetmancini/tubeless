@@ -7,18 +7,59 @@ import {
   wireObject,
   wireString,
 } from "../tracing/wire-schema.js";
+import {
+  COLLECTOR_BATCH_BYTES,
+  COLLECTOR_BATCH_EVENTS,
+  CollectorInputError,
+  decodeCollectorJson,
+  digestCollectorBody,
+} from "./collector-protocol.js";
 import { assertAttemptId } from "./attempt-store.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
-// Internal envelope limits; the HTTP adapter must also enforce these while reading.
-const MAX_BATCH_BYTES = 1_048_576;
-const MAX_BATCH_EVENTS = 50;
+const envelopeSchema = wireObject(
+  {
+    attemptId: wireString({ maxLength: 256 }),
+    sequence: wireNumber({ integer: true, minimum: 0 }),
+    events: wireArray(wireCustom({}, decodeAttemptEvent), { maxItems: COLLECTOR_BATCH_EVENTS }),
+  },
+  { strict: true }
+);
 
-const envelopeSchema = wireObject({
-  attemptId: wireString({ maxLength: 256 }),
-  sequence: wireNumber({ integer: true, minimum: 0 }),
-  events: wireArray(wireCustom({}, decodeStoredTraceEvent), { maxItems: MAX_BATCH_EVENTS }),
-});
+/** Prepare every bounded envelope before delivery so an oversized event cannot cause partial writes. */
+export function encodeAttemptBatches(
+  attemptId: string,
+  sequence: number,
+  events: readonly PipelineTraceEvent[]
+): Uint8Array[] {
+  if (events.length === 0) throw new CollectorInputError();
+  const batches: Uint8Array[] = [];
+  const encoder = new TextEncoder();
+  let group: PipelineTraceEvent[] = [];
+  const encode = (items: PipelineTraceEvent[]) =>
+    encoder.encode(
+      JSON.stringify({
+        attemptId,
+        sequence: sequence + batches.length,
+        events: items,
+      })
+    );
+  for (const event of events) {
+    const candidate = [...group, event];
+    if (
+      candidate.length > COLLECTOR_BATCH_EVENTS ||
+      encode(candidate).byteLength > COLLECTOR_BATCH_BYTES
+    ) {
+      if (group.length === 0) throw new CollectorInputError(413);
+      batches.push(encode(group));
+      group = [];
+    }
+    group.push(event);
+    if (encode(group).byteLength > COLLECTOR_BATCH_BYTES) throw new CollectorInputError(413);
+  }
+  if (group.length) batches.push(encode(group));
+  return batches;
+}
 
 /** Decode from the same owned bytes that are hashed; never accept a caller-supplied digest. */
 export async function decodeAttemptBatch(body: Uint8Array): Promise<{
@@ -27,27 +68,19 @@ export async function decodeAttemptBatch(body: Uint8Array): Promise<{
   readonly events: readonly PipelineTraceEvent[];
   readonly digest: string;
 }> {
-  if (body.byteLength > MAX_BATCH_BYTES) throw new Error("Hosted attempt batch is too large.");
+  if (body.byteLength > COLLECTOR_BATCH_BYTES) throw new CollectorInputError(413);
   const bytes = new Uint8Array(body);
-  const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new Error("Expected a hosted attempt batch object.");
-  if (Object.keys(value).some((key) => !["attemptId", "sequence", "events"].includes(key)))
-    throw new Error("Unsupported hosted attempt batch field.");
-  const envelope = envelopeSchema.decode(value, "batch");
-  if (envelope.events.length === 0) throw new Error("Hosted attempt batches must contain events.");
-  for (const event of envelope.events) {
-    if (event.version !== PIPELINE_TRACE_VERSION)
-      throw new Error("Hosted attempt writes require the current trace version.");
-    assertAttemptId(event.runId);
-    assertAttemptId(event.pipelineId);
-    if (event.parentRunId !== undefined) assertAttemptId(event.parentRunId);
-  }
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return {
-    ...envelope,
-    digest: Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
-      ""
-    ),
-  };
+  const envelope = decodeCollectorJson(bytes, envelopeSchema);
+  if (envelope.events.length === 0) throw new CollectorInputError();
+  return { ...envelope, digest: await digestCollectorBody(bytes) };
+}
+
+/** A fresh, validated current-version event for either transport direction. */
+export function decodeAttemptEvent(value: unknown): PipelineTraceEvent {
+  const event = decodeStoredTraceEvent(value);
+  if (event.version !== PIPELINE_TRACE_VERSION) throw new CollectorInputError();
+  assertAttemptId(event.runId);
+  assertAttemptId(event.pipelineId);
+  if (event.parentRunId !== undefined) assertAttemptId(event.parentRunId);
+  return event;
 }

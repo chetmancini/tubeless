@@ -3,9 +3,10 @@
 Issue: [#289](https://github.com/chetmancini/tubeless/issues/289).
 
 This change separates trusted hosted execution, launch coordination and storage
-while preserving the public Cloudflare API. The HTTP section below is a proposed
-next contract, not a shipped endpoint. Owned-attempt persistence and exact-byte
-replay records are implemented internally. A Node-process test executor exercises the
+while preserving the public Cloudflare API. Owned-attempt persistence, credential
+provisioning, a Fetch-native collector and a delivery client are implemented
+internally. No production routing or independent worker is wired yet. A
+Node-process test executor exercises the
 shared coordination contract alongside Cloudflare; it is not a deployed remote
 target or a second production execution lifecycle. No new public package subpath
 is introduced.
@@ -87,8 +88,9 @@ operations below; their launches cannot use the trusted admission or append path
 to bypass owner checks. Trusted liveness, cancellation lookup and reconciliation
 queries exclude owned attempts, so Cloudflare's alarm policy cannot declare a
 remote worker terminated. History readers still include both paths; the owner of
-remote execution must supply its own cancellation and recovery policy. Neither
-path is an authenticated network service. Do not mount `StudioIngest` as HTTP
+remote execution must supply its own cancellation and recovery policy. The
+authenticated collector uses a separate store capability that rechecks credential
+authority inside every write transaction. Do not mount `StudioIngest` as HTTP
 merely by decoding requests into its interface.
 
 Admission is consent, not a distributed execution lease. The Durable Object run
@@ -161,24 +163,26 @@ connections, close/reopen and competing writers, altered retries, ownership
 violations, schema rejection and rollback after event and receipt failures. The
 Durable Object SQL fixture exercises the same operations without new platform
 imports. Existing Cloudflare launches continue using trusted RPC; production
-worker dispatch, credential authority and failure-report transport remain work
-for the following slices.
+worker dispatch and supervision remain work for the next slice.
 
-## Proposed HTTP contract
+## Implemented internal HTTP transport
 
-Use an external container or CI job as the first independent executor when one is
-chosen. Keep the ingest service separate from Studio's browser/admin routes and
-credentials. It only appends to an already-created launch; it cannot submit jobs,
+`createHostedCollector` returns a Fetch handler; `createHostedCollectorClient`
+provides claim, ordered batch delivery and explicit failure reporting. Neither
+opens a listener or chooses a platform. Keep this service separate from Studio's
+browser/admin routes and credentials. It only writes to an already-created launch;
+it cannot submit jobs,
 select executable modules, cancel other runs, clear history, or read Studio data.
 The application continues to own launch creation and executor supervision.
 
 ### Authority and provisioning
 
-Create a random, launch-scoped credential with at least 256 bits of entropy when
-the trusted application provisions an execution attempt. Persist its verifier,
-launch ID, attempt ID, expected command/implementation identity, validity window
-and revocation state together. Store only a verifier, and pass the secret to the
-worker through the host's secret channel. Do not put it in trace events, job input
+`provisionCollectorAttempt` generates a random 256-bit secret and 128-bit
+credential ID, and atomically provisions the attempt and credential record.
+Persist an HMAC-SHA-256 verifier bound to the credential ID, launch, attempt and
+validity window; verify it using native Web Crypto. Store no bearer secret. Keep
+the expected command/deployment identity and revocation marker on the associated
+attempt. Pass the secret to the worker through the host's secret channel. Do not put it in trace events, job input
 values, URLs, logs, or browser configuration.
 
 Authenticate every request with `Authorization: Bearer <credential>` over HTTPS.
@@ -188,21 +192,24 @@ reading a body or looking up user-visible launch state. Use generic unauthorized
 responses for missing, invalid, expired or mismatched authority. Reject redirects
 on the client, omit CORS grants, and return `Cache-Control: no-store`.
 
-Keep expiry and revocation explicit. A terminal launch may retain a narrow replay
+Recheck expiry and revocation inside every write transaction, including receipt
+replays, after asynchronous body hashing. These checks also protect a request
+whose credential was valid before body reading. A terminal launch may retain a narrow replay
 window for acknowledging already-committed batches; it must not accept new work.
 History retention must not delete active attempt/credential state. Never reuse a
 launch ID or credential after history cleanup.
 
 ### Operations
 
-The following paths are proposed for a separately mounted internal service, not
-reserved routes in the current Studio server:
+Use the following paths on the separate collector, with a fresh
+`x-tubeless-worker-id` header per client invocation. These routes are not mounted
+in the current Studio server:
 
-| POST path                         | Request                             | Successful response                 |
-| --------------------------------- | ----------------------------------- | ----------------------------------- |
-| `/v1/launches/{launchId}/admit`   | `{ attemptId }`                     | `{ admitted }`                      |
-| `/v1/launches/{launchId}/batches` | `{ attemptId, sequence, events }`   | `{ accepted, duplicate, sequence }` |
-| `/v1/launches/{launchId}/failure` | `{ attemptId, failureId, message }` | `{ recorded }`                      |
+| POST path                         | Request                             | Successful response         |
+| --------------------------------- | ----------------------------------- | --------------------------- |
+| `/v1/launches/{launchId}/admit`   | `{ attemptId, deploymentId }`       | `{ admitted }`              |
+| `/v1/launches/{launchId}/batches` | `{ attemptId, sequence, events }`   | `{ accepted: true, runId }` |
+| `/v1/launches/{launchId}/failure` | `{ attemptId, failureId, message }` | `{ recorded }`              |
 
 Version the transport independently from native trace events. For v1 writes,
 validate the current version 3 event schema; accepting older recordings for reads
@@ -212,12 +219,17 @@ Bound UTF-8 bodies while streaming, even without `Content-Length`; initially cap
 batches at 50 events and 1 MiB encoded bytes and failure messages at 8 KiB. Reject
 oversized individual events rather than silently changing identity-bearing data.
 The sender must split by both count and bytes and retain the exact encoded body
-through retries. These wire limits need probes against real definition snapshots
-before becoming an implemented contract.
+through retries. Keep these limits internal until real worker workloads, including large
+definition snapshots, have been probed. Bound claim bodies and responses at 8 KiB
+and failure envelopes at 64 KiB. Bound each request, including authentication and
+response reading, at ten seconds; stop waiting on abort even when an injected
+transport or stream ignores cancellation. A timeout does not undo a store commit.
 
-Use 400 for invalid input, 401 for invalid authority, 409 for an admission/sequence
-conflict, 410 for a closed/revoked attempt, 413 for size limits, and 503 for a
-transient unavailable collector. Do not return stored event payloads in errors.
+Use 400 for invalid input, 401 for invalid/expired/revoked authority or a foreign
+owner, 409 for altered retries, sequence gaps or invalid event ownership, 410 for
+new batches on a closed attempt, 413 for size limits, and 503 for an unavailable
+collector. Return 405 for unsupported methods, 415 for non-JSON requests and 408
+for a request deadline. Return `{ admitted: false }` for a refused claim. Do not return stored event payloads in errors.
 Never treat a collector failure as permission to run without admission.
 
 ### Batch identity and event ownership
@@ -245,7 +257,10 @@ Use the persisted attempt/ownership operations for remote admission. Bind each
 request to its authenticated attempt and fresh worker invocation; duplicate queue
 deliveries must not obtain another execution grant. Retrying a batch must never
 retry pipeline execution. A timed-out claim request has an uncertain outcome;
-do not execute or provision a fresh attempt based on that timeout.
+do not execute or provision a fresh attempt based on that timeout. The client
+sends a claim once, and never retries it. Retry only batch and failure delivery,
+at most four sends with cancellable backoff and exact encoded bytes. Stop the
+batch queue after an uncertain delivery rather than reusing its sequence.
 
 An expired heartbeat or failed HTTP request does not prove that a container
 stopped. Record lost contact as an uncertain host outcome, retain possible side
@@ -258,7 +273,13 @@ Cancellation remains a separate application-to-executor capability. Distinguish
 requesting cancellation from observing termination. Rejecting late event writes
 does not itself stop remote user code. Idempotently accept repeated failure
 reports from the same attempt and never let them overwrite a committed terminal
-result. Bound and sanitize transport diagnostics independently from trace data.
+result. Report failure only after the owner has observed its execution exit and
+drain; the client never reports termination automatically on delivery failure.
+Persist failure IDs, exact-body digests and their original boolean result in the
+same transaction as synthetic subtree completions. Preserve that result after a
+collector restart; reject changed reports and prevent all reports from replacing
+an existing successful completion. A pre-root failure closes the launch without
+inventing a run. Bound and sanitize transport diagnostics independently from trace data.
 
 ## Validation and delivery gates
 
@@ -269,20 +290,19 @@ with an independent SQLite adapter. Expand runtime-graph checks to every hosting
 module: no Cloudflare/platform imports, concrete stores or Node listener assets.
 Keep public exports and declarations unchanged apart from generated path hashes.
 
-Before shipping HTTP ingestion, connect and test all of the following together.
-The persistence operations above cover the storage portion, not the full path:
+The transport tests exercise real SQLite through the client and Fetch handler,
+including lost replies after commit, exact byte retries, count/byte splitting,
+authentication before body reading, expiry/revocation races, failed receipt rollback,
+collector reopen, bounded streams and responses, and uncooperative cancellation.
+They also preserve the existing Studio parsing and emitted runtime-graph checks.
 
-1. A concrete independent executor using persisted admission/attempt fencing.
-2. Launch-scoped credential issuance, verification, expiry/revocation and redaction.
-3. Atomic replay digests and durable run/descendant ownership, including concurrent
-   duplicate requests, altered retries, sequence gaps and transaction rollback.
-4. Bounded parsing, invalid-event rejection, lost-ack retries and no redirect/token
-   leakage through client, server or logging paths.
-5. Lost-contact and cancellation history that never claims confirmed termination
-   or silently retries execution.
-6. A real worker-to-collector integration that survives collector restarts and
-   renders the resulting run tree in Studio.
+Keep #289 open for the independent worker integration. Before production use:
 
-Keep #289 open for that transport work. This change completes the ownership
-extraction and provides its design input; it does not claim that an external
-executor can already stream events to deployed Studio.
+1. Connect a concrete worker to persisted admission and scoped credential delivery;
+   retain launch/attempt IDs on uncertain dispatch.
+2. Supply platform supervision and cancellation that distinguish lost contact from
+   confirmed termination, without automatically retrying execution.
+3. Exercise the worker across collector restarts and render its run tree in Studio.
+4. Probe real workload sizes before exposing transport limits as a public contract.
+
+No new public package subpath or production route is introduced by this slice.
