@@ -392,6 +392,12 @@ Read the corresponding package recipe before using these features:
 
 ## Verify
 
+For agent evaluations, use `createAgentTranscriptCollector` from `tubeless/testing`
+as the transcript sink and call `assertComplete()` before checking its records.
+Use `createAgentTestWorkspace` for owned text fixtures and preserved-file assertions;
+close it in `finally`. See `examples/agent-evaluation.ts`. Keep live provider calls
+opt-in; `eval:agent -- --provider=anthropic` selects Claude for the repository's cases.
+
 Typecheck the consumer and run focused tests. Use `createPipelineTestRuntime`
 from `tubeless/testing` for deterministic observation and cancellation, with
 fake I/O for side effects. Supply intermediate values with `overrideStep(step, value)`

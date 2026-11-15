@@ -8,11 +8,17 @@ import { CodemodeAgent } from "../../examples/agent-codemode.js";
 import { ExtractTriagePipeline } from "../../examples/agent-extract.js";
 import { createDurableWorkspaceAgent } from "../../examples/agent-durable.js";
 import { runTranscriptExample } from "../../examples/agent-transcript.js";
+import { runAgentEvaluationExample } from "../../examples/agent-evaluation.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 describe("public agent recipe", () => {
+  it("evaluates a scripted model with immutable transcript evidence and disposable fixtures", async () => {
+    const { result, records } = await runAgentEvaluationExample();
+    expect(result).toEqual({ answer: "Read the fixture." });
+    expect(records.at(-1)).toMatchObject({ event: { kind: "end", status: "completed" } });
+  });
   it("writes an opt-in transcript to the caller's destination with redacted decisions", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "tubeless-transcript-recipe-"));
     try {

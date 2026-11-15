@@ -33,7 +33,7 @@ const allowedDependencies: Record<string, readonly string[]> = {
   "run-store": ["core", "tracing", "utilities"],
   studio: ["run-store", "tracing"],
   cli: ["core", "node", "reporter", "utilities"],
-  testing: ["core", "utilities"],
+  testing: ["core", "tracing", "utilities"],
   project: ["core", "utilities"],
   hosting: ["cli", "core", "project", "render", "run-store", "studio", "tracing", "utilities"],
   // The Worker Loader code-mode executor embeds agent's dependency-free script realm setup.

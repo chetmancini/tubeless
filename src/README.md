@@ -194,6 +194,13 @@ their source files.
 - Type-only imports can share contracts without loading their implementation.
   Avoid creating new cross-module contracts unless the consumer needs them.
 
+- Testing composes core execution helpers and the pure transcript codec. Its
+  bounded collector checks complete evidence without loading agent execution or
+  providers. `testing/agent-workspace.ts` owns disposable text fixtures and
+  preserved-tree assertions; Node filesystem modules load only when that helper
+  is called. The live evaluator projects transcript events into its existing
+  replay report rather than wrapping model calls or parsing log messages.
+
 `core/pipeline-entry.test.ts` checks the emitted runtime graph, including re-exports
 and lazy imports, and rejects runtime import cycles. Keep its allowed dependency
 list narrow when adding modules.

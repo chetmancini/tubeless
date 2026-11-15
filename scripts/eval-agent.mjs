@@ -1,18 +1,30 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { defineAgent, defineTool, ToolError } from "tubeless/agent";
 import { openaiModel } from "tubeless/agent/openai";
+import { anthropicModel } from "tubeless/agent/anthropic";
+import { createAgentTestWorkspace, createAgentTranscriptCollector } from "tubeless/testing";
+import { projectEvaluationTranscript } from "./eval-agent-transcript.mjs";
 
 // Opt-in, paid live evaluations. Each task gets a disposable workspace and objective checks.
-if (!process.env.OPENAI_API_KEY)
-  throw new Error("Set OPENAI_API_KEY to run live agent evaluations");
 // `--codemode` runs every case through one codemode tool instead of direct tool calls.
 // `--only=<id>,<id>` runs only the named cases.
 const args = process.argv.slice(2);
+const provider =
+  args.find((arg) => arg.startsWith("--provider="))?.slice("--provider=".length) ?? "openai";
+if (!["openai", "anthropic"].includes(provider))
+  throw new Error("Use --provider=openai or --provider=anthropic");
+if (
+  provider === "openai"
+    ? !process.env.OPENAI_API_KEY
+    : !(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN)
+)
+  throw new Error(
+    `Set ${provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN"} to run live agent evaluations`
+  );
 const codemode = args.includes("--codemode");
 const onlyArg = args.find((arg) => arg.startsWith("--only="));
 const only = onlyArg && new Set(onlyArg.slice("--only=".length).split(",").filter(Boolean));
@@ -23,19 +35,41 @@ const measureDescriptors = (context) => ({
   toolCount: context.capabilities.length,
   toolDescriptorBytes: Buffer.byteLength(JSON.stringify(context.capabilities)),
 });
+function evaluationModel(fixture, onDescriptors) {
+  const options = {
+    reasoningEffort: "high",
+    compactAfterBytes: fixture.compactAfterBytes,
+  };
+  // Anthropic strict mode caps direct inventories at 20 tools including _finish.
+  // The 49-tool case still validates every call through the harness.
+  const model =
+    provider === "anthropic"
+      ? anthropicModel({ ...options, strict: fixture.id !== "large-inventory" || codemode })
+      : openaiModel(options);
+  const check = model.checkDescriptors;
+  return Object.assign(model, {
+    checkDescriptors(descriptors) {
+      check?.(descriptors);
+      onDescriptors(measureDescriptors(descriptors));
+    },
+  });
+}
 const sourceHashes = Object.fromEntries(
   await Promise.all(
-    ["src/agent/model-prompt.ts", "src/agent/openai.ts", "scripts/eval-agent.mjs"].map(
-      async (path) => [
-        path,
-        createHash("sha256")
-          .update(await readFile(new URL(`../${path}`, import.meta.url)))
-          .digest("hex"),
-      ]
-    )
+    [
+      "src/agent/model-prompt.ts",
+      `src/agent/${provider}.ts`,
+      "scripts/eval-agent.mjs",
+      "scripts/eval-agent-transcript.mjs",
+    ].map(async (path) => [
+      path,
+      createHash("sha256")
+        .update(await readFile(new URL(`../${path}`, import.meta.url)))
+        .digest("hex"),
+    ])
   )
 );
-const cases = [
+const workspaceCases = [
   {
     id: "investigate-edit-verify",
     task: "Fix the cents conversion in price.mjs. Investigate the tests, edit the implementation, and verify the fix. Keep unrelated files and existing tests unchanged.",
@@ -107,27 +141,6 @@ const cases = [
     },
   },
 ];
-
-/** Hash every workspace file except .git, to detect created, changed or removed files. */
-async function snapshot(root) {
-  const files = [];
-  const walk = async (directory) => {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name);
-      if (directory === root && entry.name === ".git") continue;
-      if (entry.isDirectory()) await walk(path);
-      else
-        files.push([
-          relative(root, path),
-          createHash("sha256")
-            .update(await readFile(path))
-            .digest("hex"),
-        ]);
-    }
-  };
-  await walk(root);
-  return JSON.stringify(files.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
-}
 
 /**
  * Whether a run observed the `data/` inputs: a successful read of one of its JSON files or a
@@ -212,9 +225,10 @@ const triage = (id, task) => ({
   id,
   // No tools for a script to call, so these cases run directly in both modes.
   usesCodemode: false,
-  define: (model) =>
+  define: (model, transcript) =>
     defineAgent({
       id,
+      transcript,
       model,
       instructions: "Mark a ticket urgent only for outages, security incidents or failed payments.",
       inputSchema: plainSchema(
@@ -268,24 +282,7 @@ const operations = [
   ["count", "Count {noun}s matching a filter.", { filter: { type: "string" } }],
   ["export", "Export {noun}s as CSV text.", { filter: { type: "string" } }],
 ];
-/**
- * Wrap a handler to record each call in order. Handlers run for direct calls and for
- * code-mode script calls alike, so the log shows what the agent actually looked up.
- */
-function logged(log, tool, run) {
-  return async (input, context) => {
-    try {
-      const value = await run(input, context);
-      log.push({ tool, input, ok: true, value });
-      return value;
-    } catch (error) {
-      log.push({ tool, input, ok: false, code: error?.code });
-      throw error;
-    }
-  };
-}
-
-function inventoryTools(log) {
+function inventoryTools() {
   const tools = {};
   for (const [domain, noun] of domains)
     for (const [operation, description, properties] of operations)
@@ -293,7 +290,7 @@ function inventoryTools(log) {
         description: `${description.replaceAll("{noun}", noun)} Part of the ${domain} service.`,
         inputSchema: plainSchema(strictObject(properties)),
         outputSchema: plainSchema({ type: "object" }),
-        run: logged(log, `${domain}__${operation}_${noun}`, (input) => {
+        run: (input) => {
           if (["create", "update", "delete"].includes(operation))
             throw new ToolError("READ_ONLY", "This evaluation's services are read-only");
           if (domain === "support" && operation === "get" && input.id === "S-1042")
@@ -305,7 +302,7 @@ function inventoryTools(log) {
             };
           if (operation === "get") throw new ToolError("NOT_FOUND", `No ${noun} ${input.id}`);
           return { results: [] };
-        }),
+        },
       });
   tools.billing__get_balance = defineTool({
     description: "Get a billing customer's outstanding balance by customer id.",
@@ -317,10 +314,10 @@ function inventoryTools(log) {
         currency: { type: "string" },
       })
     ),
-    run: logged(log, "billing__get_balance", ({ customerId }) => {
+    run: ({ customerId }) => {
       if (customerId !== "C-77") throw new ToolError("NOT_FOUND", `No customer ${customerId}`);
       return { customerId, balance: 1234.56, currency: "USD" };
-    }),
+    },
   });
   return tools;
 }
@@ -340,20 +337,21 @@ const structuredCases = [
   {
     id: "large-inventory",
     usesCodemode: codemode,
-    define: (model, toolLog) =>
+    define: (model, transcript) =>
       defineAgent({
+        transcript,
         id: "large-inventory",
         model,
         projectContext: false,
         defaultTools: [],
-        tools: inventoryTools(toolLog),
+        tools: inventoryTools(),
         codemode,
         limits: { maxTurns: 6, maxCalls: 12, maxDecisions: 6 },
       }),
     input: {
       task: "Support ticket S-1042 was opened by a customer. What is that customer's outstanding billing balance? Reply exactly as Balance: <amount> USD.",
     },
-    check: (result, toolLog) => {
+    check: (result, { toolLog }) => {
       // The answer must come from the lookups, not a memorized or guessed balance.
       const ticket = toolLog.findIndex(
         (entry) => entry.tool === "support__get_ticket" && entry.ok && entry.input.id === "S-1042"
@@ -376,273 +374,262 @@ const structuredCases = [
     },
   },
 ];
-// Reject unknown --only names before any paid request.
-const unknownCases = [...(only ?? [])].filter(
-  (id) => ![...cases, ...structuredCases].some((fixture) => fixture.id === id)
-);
-if (unknownCases.length > 0) throw new Error(`Unknown --only case: ${unknownCases.join(", ")}`);
-const results = [];
-for (const fixture of cases.filter(selected)) {
-  const root = await realpath(await mkdtemp(join(tmpdir(), `tubeless-eval-${fixture.id}-`)));
-  const started = Date.now();
-  const calls = [];
-  const outcomes = [];
-  const turns = [];
-  let descriptors;
-  let compactions = 0;
-  let startupGuidanceLoaded = false;
-  let answer;
-  let verification;
-  let failure;
-  try {
-    await mkdir(join(root, ".git"));
-    const files = {
+async function checkWorkspaceCase(
+  { answer },
+  { fixture, workspace, records, calls, outcomes, turns, compactions }
+) {
+  const root = workspace.cwd;
+  const files = fixture.files;
+  const firstPrompt = records.find(
+    (record) => "event" in record && record.event.kind === "prompt"
+  )?.event;
+  const startupGuidanceLoaded =
+    firstPrompt?.kind === "prompt" &&
+    ["AGENTS.md", "src/AGENTS.md"].every((path) => firstPrompt.instructions.includes(files[path]));
+  if (codemode) {
+    // Script calls are child runs, not decisions; check objective results and keep the
+    // scripts in the report for review.
+    assert(
+      calls.length > 0 && calls.every((call) => call.tool === "codemode"),
+      "Code-mode agents must work through codemode scripts"
+    );
+    assert(
+      outcomes.some((outcome) => outcome.tool === "codemode" && outcome.ok),
+      "At least one script must complete"
+    );
+    if (fixture.id === "project-context")
+      assert(startupGuidanceLoaded, "Startup guidance must be included in the first model request");
+    assertAnswer(fixture, answer);
+    if (fixture.observesData)
+      assert(observedData(calls, outcomes), "Agent must observe the data files it aggregates");
+    if (fixture.compactAfterBytes)
+      assert(compactions > 0, "Conversation must compact and still complete");
+  } else {
+    // Edits must follow inspection; read-only answers may come from any read-only command,
+    // and the workspace snapshot plus the exact answer already check them.
+    if (!fixture.readOnly)
+      assert(
+        calls.some((call) => call.tool === "read"),
+        "Agent must inspect files"
+      );
+    if (fixture.id === "project-context") {
+      assert(startupGuidanceLoaded, "Startup guidance must be included in the first model request");
+      assert(
+        calls.every((call) =>
+          call.tool === "bash"
+            ? call.input.command.trim() === "node ../check.mjs" &&
+              resolve(root, fixture.cwd, call.input.cwd ?? ".") === join(root, "src")
+            : ["read", "edit", "write"].includes(call.tool) &&
+              resolve(root, fixture.cwd, call.input.path) === join(root, "src/greet.mjs")
+        ),
+        "Startup-guidance task must access only greet.mjs and run node ../check.mjs"
+      );
+      assert(
+        outcomes
+          .filter((outcome) => outcome.tool === "bash")
+          .every((outcome) => outcome.ok && outcome.value.exitCode === 0),
+        "Startup-guidance task must pass verification without learning from failed checks"
+      );
+    }
+    assertAnswer(fixture, answer);
+    if (fixture.observesData)
+      assert(observedData(calls, outcomes), "Agent must observe the data files it aggregates");
+    if (fixture.id === "nested-guidance") {
+      assert(
+        calls.every((call) => ["read", "list", "search"].includes(call.tool)),
+        "Read-only task must use only read, list, and search tools"
+      );
+      const readTurn = (path) =>
+        turns.findIndex(
+          (turn) =>
+            turn.decision?.kind === "continue" &&
+            turn.decision.calls.some(
+              (call) => call.tool === "read" && resolve(root, call.input.path) === join(root, path)
+            )
+        );
+      const guidance = readTurn("src/AGENTS.md");
+      const code = readTurn("src/code.txt");
+      assert(
+        guidance >= 0 && code > guidance,
+        "Nested guidance must be read before the requested first task read"
+      );
+      for (const [path, index] of [
+        ["src/AGENTS.md", guidance],
+        ["src/code.txt", code],
+      ]) {
+        assert(
+          turns[index].decision.calls.some(
+            (call) =>
+              call.tool === "read" &&
+              resolve(root, call.input.path) === join(root, path) &&
+              turns[index + 1]?.outcomes.some(
+                (outcome) =>
+                  outcome.id === call.id &&
+                  outcome.tool === "read" &&
+                  outcome.ok &&
+                  outcome.value.content.trimEnd() === files[path].trimEnd()
+              )
+          ),
+          `Read of ${path} must successfully return the expected contents`
+        );
+      }
+    } else if (!fixture.readOnly) {
+      assert(
+        calls.some((call) => call.tool === "edit" || call.tool === "write"),
+        "Agent must edit files"
+      );
+      assert(
+        outcomes.some(
+          (outcome) =>
+            outcome.tool === "bash" &&
+            outcome.ok &&
+            outcome.value.exitCode === 0 &&
+            calls.some(
+              (call) =>
+                call.id === outcome.id &&
+                call.tool === "bash" &&
+                /\bnode\s+[^\n]*check\.mjs\b/.test(call.input.command)
+            )
+        ),
+        "Agent must run the fixture check successfully"
+      );
+    }
+    if (fixture.compactAfterBytes) {
+      const first = calls[0];
+      assert(
+        first?.tool === "read" && first.input.path === "legacy-config.json",
+        "Agent must perform the requested missing-file read first"
+      );
+      assert(
+        turns[0].decision.calls.length === 1,
+        "Agent must wait for the missing-file result before choosing recovery calls"
+      );
+      const recovery = turns[1];
+      assert(
+        recovery?.decision?.kind === "continue" &&
+          recovery.outcomes.some(
+            (outcome) =>
+              outcome.id === first.id &&
+              outcome.tool === "read" &&
+              !outcome.ok &&
+              outcome.error.code === "ENOENT"
+          ),
+        "Agent must choose recovery in a subsequent decision that observes the missing-file error"
+      );
+      // Only outcomes from this batch establish recovery; later successful work cannot satisfy it.
+      assert(
+        recovery.decision.calls.some((call) =>
+          turns[2]?.outcomes.some(
+            (outcome) =>
+              outcome.id === call.id &&
+              outcome.tool === call.tool &&
+              locatesConfiguration(outcome, root)
+          )
+        ),
+        "The error-observing decision must read or locate the current configuration"
+      );
+      assert(compactions > 0, "Conversation must compact and still complete");
+    }
+  }
+  // Read-only tasks may run read-only commands, but must leave no trace in the workspace.
+  // Direct mode also rejects writes and edits, even if a later call restores the file.
+  if (fixture.readOnly) {
+    if (!codemode)
+      assert(
+        !outcomes.some((outcome) => outcome.ok && ["write", "edit"].includes(outcome.tool)),
+        "Read-only task must not call write or edit"
+      );
+    await workspace.assertUnchanged().catch(() => {
+      throw new Error("Read-only task must not change workspace files");
+    });
+  }
+}
+
+async function verifyWorkspace(workspace, files) {
+  await workspace.assertUnchanged(
+    Object.keys(files).filter(
+      (name) => name === "check.mjs" || name === "unrelated.txt" || name.endsWith("AGENTS.md")
+    )
+  );
+  const verification = execFileSync(process.execPath, ["check.mjs"], {
+    cwd: workspace.cwd,
+    encoding: "utf8",
+    timeout: 10_000,
+  }).trim();
+  return verification;
+}
+
+// Both case families share execution, evidence capture, cleanup and report writing.
+const cases = [
+  ...workspaceCases.map((fixture) => ({
+    ...fixture,
+    files: {
+      ".git/.keep": "",
       "AGENTS.md":
         "Read relevant source before editing. Run node check.mjs from the project root after changes. Do not modify check.mjs or unrelated.txt.\n",
       "unrelated.txt": "User work: preserve exactly.\n",
       ...fixture.files,
-    };
-    for (const [name, content] of Object.entries(files)) {
-      await mkdir(dirname(join(root, name)), { recursive: true });
-      await writeFile(join(root, name), content);
+    },
+    usesCodemode: codemode,
+    input: { task: fixture.task },
+    define: (model, transcript) =>
+      defineAgent({
+        id: fixture.id,
+        limits: { maxTurns: 12, maxCalls: 24, maxDecisions: 12 },
+        codemode,
+        transcript,
+        model,
+      }),
+    check: checkWorkspaceCase,
+  })),
+  ...structuredCases,
+];
+// Reject unknown --only names before any paid request.
+const unknownCases = [...(only ?? [])].filter((id) => !cases.some((fixture) => fixture.id === id));
+if (unknownCases.length > 0) throw new Error(`Unknown --only case: ${unknownCases.join(", ")}`);
+const results = [];
+for (const fixture of cases.filter(selected)) {
+  const started = Date.now();
+  const transcript = createAgentTranscriptCollector();
+  let workspace, output, descriptors, verification, failure, records, evidence;
+  try {
+    try {
+      workspace = await createAgentTestWorkspace(fixture.files ?? {}, { name: fixture.id });
+      const model = evaluationModel(fixture, (value) => {
+        descriptors = value;
+      });
+      output = await fixture.define(model, transcript).runOrThrow(fixture.input, undefined, {
+        cwd: fixture.cwd ? join(workspace.cwd, fixture.cwd) : workspace.cwd,
+        signal: AbortSignal.timeout(180_000),
+        log: { log() {}, warn() {}, error() {} },
+      });
+    } finally {
+      // Failed runs retain the same report evidence as successful runs.
+      records = transcript.records;
+      evidence = projectEvaluationTranscript(records);
     }
-    const workspaceBefore = fixture.readOnly ? await snapshot(root) : undefined;
-    const transport = openaiModel({
-      reasoningEffort: "high",
-      compactAfterBytes: fixture.compactAfterBytes,
-    });
-    const agent = defineAgent({
-      id: fixture.id,
-      limits: { maxTurns: 12, maxCalls: 24, maxDecisions: 12 },
-      codemode,
-      model: async (request, context) => {
-        descriptors ??= measureDescriptors(context);
-        if (fixture.id === "project-context" && turns.length === 0) {
-          startupGuidanceLoaded = ["AGENTS.md", "src/AGENTS.md"].every((path) =>
-            request.instructions.includes(files[path])
-          );
-        }
-        const turn = { outcomes: request.outcomes };
-        turns.push(turn);
-        outcomes.push(...request.outcomes);
-        const result = await transport(request, context);
-        turn.decision = result.decision;
-        if (result.decision.kind === "continue") calls.push(...result.decision.calls);
-        return result;
-      },
-    });
-    ({ answer } = await agent.runOrThrow({ task: fixture.task }, undefined, {
-      cwd: fixture.cwd ? join(root, fixture.cwd) : root,
-      signal: AbortSignal.timeout(180_000),
-      log: {
-        log(message) {
-          if (message === "Compacted agent conversation") compactions++;
-        },
-        warn() {},
-        error() {},
-      },
-    }));
-    for (const [name, content] of Object.entries(files)) {
-      if (
-        fixture.readOnly ||
-        name === "check.mjs" ||
-        name === "unrelated.txt" ||
-        name.endsWith("AGENTS.md")
-      )
-        assert.equal(
-          await readFile(join(root, name), "utf8"),
-          content,
-          `${name} must be preserved`
-        );
-    }
-    verification = execFileSync(process.execPath, ["check.mjs"], {
-      cwd: root,
-      encoding: "utf8",
-      timeout: 10_000,
-    }).trim();
-    if (codemode) {
-      // Script calls are child runs, not decisions; check objective results and keep the
-      // scripts in the report for review.
-      assert(
-        calls.length > 0 && calls.every((call) => call.tool === "codemode"),
-        "Code-mode agents must work through codemode scripts"
-      );
-      assert(
-        outcomes.some((outcome) => outcome.tool === "codemode" && outcome.ok),
-        "At least one script must complete"
-      );
-      if (fixture.id === "project-context")
-        assert(
-          startupGuidanceLoaded,
-          "Startup guidance must be included in the first model request"
-        );
-      assertAnswer(fixture, answer);
-      if (fixture.observesData)
-        assert(observedData(calls, outcomes), "Agent must observe the data files it aggregates");
-      if (fixture.compactAfterBytes)
-        assert(compactions > 0, "Conversation must compact and still complete");
-    } else {
-      // Edits must follow inspection; read-only answers may come from any read-only command,
-      // and the workspace snapshot plus the exact answer already check them.
-      if (!fixture.readOnly)
-        assert(
-          calls.some((call) => call.tool === "read"),
-          "Agent must inspect files"
-        );
-      if (fixture.id === "project-context") {
-        assert(
-          startupGuidanceLoaded,
-          "Startup guidance must be included in the first model request"
-        );
-        assert(
-          calls.every((call) =>
-            call.tool === "bash"
-              ? call.input.command.trim() === "node ../check.mjs" &&
-                resolve(root, fixture.cwd, call.input.cwd ?? ".") === join(root, "src")
-              : ["read", "edit", "write"].includes(call.tool) &&
-                resolve(root, fixture.cwd, call.input.path) === join(root, "src/greet.mjs")
-          ),
-          "Startup-guidance task must access only greet.mjs and run node ../check.mjs"
-        );
-        assert(
-          outcomes
-            .filter((outcome) => outcome.tool === "bash")
-            .every((outcome) => outcome.ok && outcome.value.exitCode === 0),
-          "Startup-guidance task must pass verification without learning from failed checks"
-        );
-      }
-      assertAnswer(fixture, answer);
-      if (fixture.observesData)
-        assert(observedData(calls, outcomes), "Agent must observe the data files it aggregates");
-      if (fixture.id === "nested-guidance") {
-        assert(
-          calls.every((call) => ["read", "list", "search"].includes(call.tool)),
-          "Read-only task must use only read, list, and search tools"
-        );
-        const readTurn = (path) =>
-          turns.findIndex(
-            (turn) =>
-              turn.decision?.kind === "continue" &&
-              turn.decision.calls.some(
-                (call) =>
-                  call.tool === "read" && resolve(root, call.input.path) === join(root, path)
-              )
-          );
-        const guidance = readTurn("src/AGENTS.md");
-        const code = readTurn("src/code.txt");
-        assert(
-          guidance >= 0 && code > guidance,
-          "Nested guidance must be read before the requested first task read"
-        );
-        for (const [path, index] of [
-          ["src/AGENTS.md", guidance],
-          ["src/code.txt", code],
-        ]) {
-          assert(
-            turns[index].decision.calls.some(
-              (call) =>
-                call.tool === "read" &&
-                resolve(root, call.input.path) === join(root, path) &&
-                turns[index + 1]?.outcomes.some(
-                  (outcome) =>
-                    outcome.id === call.id &&
-                    outcome.tool === "read" &&
-                    outcome.ok &&
-                    outcome.value.content.trimEnd() === files[path].trimEnd()
-                )
-            ),
-            `Read of ${path} must successfully return the expected contents`
-          );
-        }
-      } else if (!fixture.readOnly) {
-        assert(
-          calls.some((call) => call.tool === "edit" || call.tool === "write"),
-          "Agent must edit files"
-        );
-        assert(
-          outcomes.some(
-            (outcome) =>
-              outcome.tool === "bash" &&
-              outcome.ok &&
-              outcome.value.exitCode === 0 &&
-              calls.some(
-                (call) =>
-                  call.id === outcome.id &&
-                  call.tool === "bash" &&
-                  /\bnode\s+[^\n]*check\.mjs\b/.test(call.input.command)
-              )
-          ),
-          "Agent must run the fixture check successfully"
-        );
-      }
-      if (fixture.compactAfterBytes) {
-        const first = calls[0];
-        assert(
-          first?.tool === "read" && first.input.path === "legacy-config.json",
-          "Agent must perform the requested missing-file read first"
-        );
-        assert(
-          turns[0].decision.calls.length === 1,
-          "Agent must wait for the missing-file result before choosing recovery calls"
-        );
-        const recovery = turns[1];
-        assert(
-          recovery?.decision?.kind === "continue" &&
-            recovery.outcomes.some(
-              (outcome) =>
-                outcome.id === first.id &&
-                outcome.tool === "read" &&
-                !outcome.ok &&
-                outcome.error.code === "ENOENT"
-            ),
-          "Agent must choose recovery in a subsequent decision that observes the missing-file error"
-        );
-        // Only outcomes from this batch establish recovery; later successful work cannot satisfy it.
-        assert(
-          recovery.decision.calls.some((call) =>
-            turns[2]?.outcomes.some(
-              (outcome) =>
-                outcome.id === call.id &&
-                outcome.tool === call.tool &&
-                locatesConfiguration(outcome, root)
-            )
-          ),
-          "The error-observing decision must read or locate the current configuration"
-        );
-        assert(compactions > 0, "Conversation must compact and still complete");
-      }
-    }
-    // Read-only tasks may run read-only commands, but must leave no trace in the workspace.
-    // Direct mode also rejects writes and edits, even if a later call restores the file.
-    if (fixture.readOnly) {
-      if (!codemode)
-        assert(
-          !outcomes.some((outcome) => outcome.ok && ["write", "edit"].includes(outcome.tool)),
-          "Read-only task must not call write or edit"
-        );
-      assert(
-        (await snapshot(root)) === workspaceBefore,
-        "Read-only task must not change workspace files"
-      );
-    }
+    transcript.assertComplete();
+    if (fixture.task) verification = await verifyWorkspace(workspace, fixture.files);
+    await fixture.check(output, { ...evidence, fixture, workspace, records });
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await workspace?.close();
   }
+  const { calls, outcomes, turns, compactions, toolLog } = evidence;
   const result = {
     id: fixture.id,
-    task: fixture.task,
     passed: failure === undefined,
     error: failure,
-    answer,
-    verification,
+    codemode: fixture.usesCodemode,
+    ...(fixture.task
+      ? { task: fixture.task, answer: output?.answer, verification, compactions }
+      : { output, toolLog }),
+    transcript: records,
+    ...descriptors,
     calls,
     outcomes,
     turns,
-    compactions,
-    codemode,
-    ...descriptors,
     turnCount: turns.length,
     durationMs: Date.now() - started,
   };
@@ -655,66 +642,7 @@ for (const fixture of cases.filter(selected)) {
       scripts: codemode ? calls.map(({ input }) => input.code) : undefined,
       outcomes: undefined,
       turns: undefined,
-    })
-  );
-}
-for (const fixture of structuredCases.filter(selected)) {
-  const root = await realpath(await mkdtemp(join(tmpdir(), `tubeless-eval-${fixture.id}-`)));
-  const started = Date.now();
-  const calls = [];
-  const outcomes = [];
-  const turns = [];
-  const toolLog = [];
-  let descriptors;
-  let output;
-  let failure;
-  try {
-    const transport = openaiModel({ reasoningEffort: "high" });
-    const model = Object.assign(
-      async (request, context) => {
-        descriptors ??= measureDescriptors(context);
-        const turn = { outcomes: request.outcomes };
-        turns.push(turn);
-        outcomes.push(...request.outcomes);
-        const result = await transport(request, context);
-        turn.decision = result.decision;
-        if (result.decision.kind === "continue") calls.push(...result.decision.calls);
-        return result;
-      },
-      { checkDescriptors: transport.checkDescriptors }
-    );
-    output = await fixture.define(model, toolLog).runOrThrow(fixture.input, undefined, {
-      cwd: root,
-      signal: AbortSignal.timeout(180_000),
-    });
-    fixture.check(output, toolLog);
-  } catch (error) {
-    failure = error instanceof Error ? error.message : String(error);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-  const result = {
-    id: fixture.id,
-    passed: failure === undefined,
-    error: failure,
-    codemode: fixture.usesCodemode,
-    output,
-    toolLog,
-    ...descriptors,
-    calls,
-    outcomes,
-    turns,
-    turnCount: turns.length,
-    durationMs: Date.now() - started,
-  };
-  results.push(result);
-  console.log(
-    JSON.stringify({
-      ...result,
-      calls: calls.map(({ tool }) => tool),
-      scripts: codemode ? calls.map(({ input }) => input.code) : undefined,
-      outcomes: undefined,
-      turns: undefined,
+      transcript: undefined,
     })
   );
 }
@@ -726,7 +654,11 @@ await writeFile(
   reportPath,
   JSON.stringify(
     {
-      model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
+      provider,
+      model:
+        provider === "anthropic"
+          ? (process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5")
+          : (process.env.OPENAI_MODEL ?? "gpt-5.4-mini"),
       reasoningEffort: "high",
       codemode,
       completedAt: new Date().toISOString(),

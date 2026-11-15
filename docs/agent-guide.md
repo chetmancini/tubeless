@@ -512,6 +512,11 @@ read when a pipeline needs them.
   [prompt caching and usage traces](./agents.md#prompt-caching-and-usage-traces).
   Use `bun run eval:agent`
   for opt-in paid workspace evaluations; routine CI stays credential-free.
+  Select Claude with `--provider=anthropic`. For application evaluations, use
+  `createAgentTranscriptCollector` and `createAgentTestWorkspace` from
+  `tubeless/testing`; assert transcript completeness before checking recorded
+  actions and assert preserved files before closing the owned workspace. Adapt
+  the credential-free [evaluation recipe](../examples/agent-evaluation.ts).
 
 - Set `transcript: { write, redact?, maxRecordBytes?, maxBytes? }` on an agent
   only when its content should be captured. Supply the destination and redact
