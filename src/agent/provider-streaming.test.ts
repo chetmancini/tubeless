@@ -266,26 +266,70 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
     async (reason) => {
       const controller = new AbortController();
       const observed: AgentTextEvent[] = [];
+      let released = false;
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(stream(events())));
       const run = await agent(
         model({
           apiKey: "fixture",
           timeoutMs: reason === "deadline" ? 30 : 5000,
           text: {
-            write(event) {
+            write(event, signal) {
               observed.push(event);
               if (event.kind === "end") return;
+              const pending = new Promise<void>((resolve) => {
+                signal.addEventListener(
+                  "abort",
+                  () => {
+                    released = true;
+                    resolve();
+                  },
+                  { once: true }
+                );
+              });
               if (reason === "caller") controller.abort();
-              return new Promise<void>(() => {});
+              return pending;
             },
           },
         })
       ).run({ task: "hi" }, undefined, { signal: controller.signal });
       expect(run.status).toBe(reason === "caller" ? "cancelled" : "failed");
+      expect(released).toBe(true);
       expect(observed.at(-1)).toMatchObject({ kind: "end", status: "interrupted" });
       if (reason === "deadline") expect(run.errors[0]!.message).toContain("timed out");
     }
   );
+
+  it("releases redactor I/O on the attempt deadline before delivering any text", async () => {
+    let released = false;
+    const observed: AgentTextEvent[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(stream(events())));
+    const run = await agent(
+      model({
+        apiKey: "fixture",
+        timeoutMs: 30,
+        text: {
+          redact(_event, signal) {
+            return new Promise<null>((resolve) =>
+              signal.addEventListener(
+                "abort",
+                () => {
+                  released = true;
+                  resolve(null);
+                },
+                { once: true }
+              )
+            );
+          },
+          write(event) {
+            observed.push(event);
+          },
+        },
+      })
+    ).run({ task: "hi" });
+    expect(run.status).toBe("failed");
+    expect(released).toBe(true);
+    expect(observed).toEqual([expect.objectContaining({ kind: "end", status: "interrupted" })]);
+  });
 
   it("redacts terminal observations independently of completed transcript capture", async () => {
     const observed: AgentTextEvent[] = [];
@@ -342,6 +386,69 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(observed.filter((event) => event.kind === "delta")).toHaveLength(1);
     expect(observed.filter((event) => event.kind === "end")).toHaveLength(1);
+  });
+
+  it("budgets the streaming field before generating near-limit tool previews", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(stream(events()));
+    vi.stubGlobal("fetch", fetcher);
+    const transport = model({
+      model: "fixture",
+      apiKey: "fixture",
+      compactAfterBytes: null,
+      text: { write() {} },
+    });
+    await agent((request, context) =>
+      transport(
+        {
+          ...request,
+          conversation: [{ role: "user", content: "h".repeat(900_000) }],
+          outcomes: [{ id: "call", tool: "fixture", ok: true, value: "v".repeat(200_000) }],
+        },
+        context
+      )
+    ).runOrThrow({ task: "hi" });
+    const body = fetcher.mock.calls[0]![1]!.body as string;
+    const payload = JSON.parse(body);
+    expect(Buffer.byteLength(body)).toBeLessThanOrEqual(1_048_576);
+    expect(payload.stream).toBe(true);
+    const output =
+      name === "openai" ? payload.input.at(-1).output : payload.messages.at(-1).content[0].content;
+    expect(JSON.parse(output)).toMatchObject({ ok: true, truncated: true });
+  });
+
+  it("bounds the completed native response through the shared streaming shim", async () => {
+    const native = "x".repeat(2_097_152);
+    const oversized =
+      name === "openai"
+        ? [
+            {
+              type: "response.completed",
+              response: { status: "completed", output: [finish], native },
+            },
+          ]
+        : [
+            {
+              type: "message_start",
+              message: { type: "message", role: "assistant", content: [], native },
+            },
+            { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: {} },
+            { type: "message_stop" },
+          ];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(stream(oversized, 100_000)));
+    const observed: AgentTextEvent[] = [];
+    const run = await agent(
+      model({
+        apiKey: "fixture",
+        text: {
+          write(event) {
+            observed.push(event);
+          },
+        },
+      })
+    ).run({ task: "hi" });
+    expect(run.status).toBe("failed");
+    expect(run.errors[0]!.message).toContain("response exceeds 2 MiB");
+    expect(observed).toEqual([expect.objectContaining({ kind: "end", status: "interrupted" })]);
   });
 
   it("keeps compaction on JSON and out of public observations", async () => {
@@ -410,6 +517,7 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
       })
     ).run({ task: "hi" });
     expect(failedSink.status).toBe("failed");
+    expect(failedSink.errors[0]!.message).toContain("Agent text sink failed");
     expect(JSON.stringify(failedSink.errors)).not.toContain("secret credential");
   });
 });
@@ -428,6 +536,7 @@ it("rejects OpenAI final-text mismatch without committing a conversation", async
     })
   ).run({ task: "hi" });
   expect(run.status).toBe("failed");
+  expect(run.errors[0]!.message).toContain("text does not match final response");
   expect(observed.at(-1)).toMatchObject({ status: "interrupted" });
 });
 

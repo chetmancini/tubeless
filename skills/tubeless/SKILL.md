@@ -151,7 +151,8 @@ Read the corresponding package recipe before using these features:
   `docs/agents.md#compatible-apis`.
   Opt in to bounded public text with adapter `text: { write, redact? }` or CLI
   `--stream`; factories forward their optional `text` setting. Await sink writes
-  for backpressure, redact live content separately from transcript persistence,
+  for backpressure and use each callback's second argument, the attempt signal,
+  to cancel I/O. Redact live content separately from transcript persistence,
   and treat interrupted deltas as partial. Final structured results stay validated.
   See `docs/agents.md#stream-public-assistant-text` and the credential-free
   `examples/agent-streaming-model.ts` local SSE fixture.

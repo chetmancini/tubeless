@@ -1185,7 +1185,11 @@ The model's structured `_finish` arguments stay private until the agent validate
 its final result. A provider that emits only tool calls has no incremental text.
 
 Delivery awaits each redactor and sink before reading more events, within the
-existing decision deadline and caller cancellation. Each delta is at most 16 KiB
+existing decision deadline and caller cancellation. Both `write(event, signal)`
+and `redact(event, signal)` receive that attempt's signal, including its provider
+deadline. Pass it into asynchronous I/O and release resources on abort; stopping
+the caller's wait alone cannot cancel a destination's work. Interruption
+notifications may receive an already-aborted signal and should clean up promptly. Each delta is at most 16 KiB
 of UTF-8 and keeps Unicode code points intact. Raw and delivered text each have
 a 1 MiB limit per attempt. SSE input has a 16 MiB total limit, a 2 MiB plus 4 KiB
 framing limit per event, and at most 65,536 events; assembled native responses

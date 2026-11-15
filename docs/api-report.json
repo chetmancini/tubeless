@@ -61,7 +61,7 @@
         "plainAgentCheckpointCodec",
         "ToolError"
       ],
-      "sha256": "9c0f10ade53dfa2450a37578066e91211f024b93c2f84310fdc21227030b8a32",
+      "sha256": "ca6ca5bfd2f66435c84db1c68f1b6454a19e76c1676bbda56a2a6db80b170d94",
       "specifier": "tubeless/agent"
     },
     {
@@ -189,7 +189,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "a9e2d3e2e215eb6310fd99d7112cf2d9dab39759dc0770ad6ab7439b5a5ecd05",
+      "sha256": "f17b10eb5ed7ad5e63ed77d033aba5367ec968b7e05742e5566319f637e28dae",
       "specifier": "tubeless/cli"
     },
     {
@@ -299,7 +299,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "6974d068f02f72757aea243b8e1738cc57a610496cf615610217508dffae2f3e",
+      "sha256": "4d11685e0cc4cb5dd8edde4a732c4bbe6006b8ce82a8c8fb2b25ee706df9b035",
       "specifier": "tubeless/agent/openai"
     },
     {
@@ -319,7 +319,7 @@
     {
       "declaration": "./dist/agent/anthropic.d.ts",
       "exports": ["anthropicModel", "AnthropicModelOptions"],
-      "sha256": "dc40aa7ec9efa2f0c5f891cf1cc97d784f2ec05330c9195ac2baa96bf3037dbe",
+      "sha256": "509fbe383cc599b301e15b93e3aefa48eb38646340b2ef7d9dbee75e2d58346b",
       "specifier": "tubeless/agent/anthropic"
     },
     {

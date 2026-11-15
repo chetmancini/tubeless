@@ -1,15 +1,15 @@
 import { awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
+import { MAX_RESPONSE_BYTES } from "./provider-http.js";
 import { record } from "./provider-schema.js";
 
-const MAX_EVENT_BYTES = 2_101_248;
+const MAX_EVENT_BYTES = MAX_RESPONSE_BYTES + 4096;
 
-/** Bounded SSE framing shared by the bundled protocols. Consumer awaits provide backpressure. */
-export async function readProviderEvents(
+/** Yield bounded SSE data fields; consumers own JSON decoding and protocol completion. */
+export async function* readProviderEvents(
   response: Response,
   signal: AbortSignal,
-  provider: string,
-  consume: (event: Record<string, unknown>) => Promise<boolean | void>
-): Promise<void> {
+  provider: string
+): AsyncGenerator<string> {
   if (
     !response.body ||
     !response.headers.get("content-type")?.toLowerCase().includes("text/event-stream")
@@ -29,7 +29,7 @@ export async function readProviderEvents(
   // JSON line on every network chunk (which is quadratic with small chunks).
   let buffer = new Uint8Array(4096);
   let length = 0;
-  const line = async () => {
+  const line = (): string | undefined => {
     let value: string;
     try {
       value = decoder.decode(buffer.subarray(0, length));
@@ -41,24 +41,15 @@ export async function readProviderEvents(
     firstLine = false;
     if (value === "") {
       eventBytes = 0;
-      if (!data.length) return false;
+      if (!data.length) return;
       if (++events > 65_536) throw new Error(`${provider} stream has too many events`);
       const raw = data.join("\n");
       data = [];
-      if (raw === "[DONE]") return false;
-      let event: unknown;
-      try {
-        event = JSON.parse(raw);
-      } catch {
-        throw new Error(`${provider} stream contains invalid JSON`);
-      }
-      if (!record(event)) throw new Error(`${provider} stream contains an invalid event`);
-      return (await consume(event)) === true;
+      return raw;
     }
     eventBytes += Buffer.byteLength(value);
     if (eventBytes > MAX_EVENT_BYTES) throw new Error(`${provider} stream event exceeds 2 MiB`);
     if (value.startsWith("data:")) data.push(value.slice(5).replace(/^ /, ""));
-    return false;
   };
   try {
     while (true) {
@@ -90,7 +81,11 @@ export async function readProviderEvents(
         }
         afterCR = byte === 13;
         if (byte === 10 || byte === 13) {
-          if (await line()) return;
+          const event = line();
+          if (event !== undefined) {
+            yield event;
+            throwIfAborted(signal, `${provider} stream`);
+          }
           continue;
         }
         if (length + eventBytes >= MAX_EVENT_BYTES)
@@ -103,13 +98,20 @@ export async function readProviderEvents(
         buffer[length++] = byte;
       }
     }
-    throw new Error(`${provider} stream interrupted before completion`);
-  } catch (error) {
-    throwIfAborted(signal, `${provider} stream`);
-    if (error instanceof Error && error.message.startsWith(`${provider} stream `)) throw error;
-    throw new Error(`${provider} stream interrupted`);
   } finally {
     void reader.cancel().catch(() => {});
     reader.releaseLock();
   }
+}
+
+/** Decode an untrusted event without forwarding provider text in parse errors. */
+export function parseProviderEvent(data: string, provider: string): Record<string, unknown> {
+  let event: unknown;
+  try {
+    event = JSON.parse(data);
+  } catch {
+    throw new Error(`${provider} stream contains invalid JSON`);
+  }
+  if (!record(event)) throw new Error(`${provider} stream contains an invalid event`);
+  return event;
 }

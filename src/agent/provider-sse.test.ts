@@ -1,39 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { readProviderEvents } from "./provider-sse.js";
+import { parseProviderEvent, readProviderEvents } from "./provider-sse.js";
 
 const response = (value: string | Uint8Array) =>
   new Response(typeof value === "string" ? value : new Uint8Array(value), {
     headers: { "content-type": "text/event-stream" },
   });
-const signal = () => new AbortController().signal;
+async function collect(response: Response, signal = new AbortController().signal) {
+  const events: string[] = [];
+  for await (const event of readProviderEvents(response, signal, "Fixture")) events.push(event);
+  return events;
+}
 
 describe("provider SSE boundaries", () => {
   it("accepts comments, unknown fields, BOM and multiline data", async () => {
-    const events: unknown[] = [];
-    await readProviderEvents(
-      response('\uFEFF: keepalive\nevent: ignored\nid: 1\ndata: {"type":\ndata: "done"}\n\n'),
-      signal(),
-      "Fixture",
-      async (event) => {
-        events.push(event);
-        return true;
-      }
-    );
-    expect(events).toEqual([{ type: "done" }]);
+    expect(
+      await collect(
+        response('\uFEFF: keepalive\nevent: ignored\nid: 1\ndata: {"type":\ndata: "done"}\n\n')
+      )
+    ).toEqual(['{"type":\n"done"}']);
+  });
+
+  it("leaves payload interpretation and EOF completion to the protocol consumer", async () => {
+    expect(
+      await collect(response('data: {"type":"ping"}\n\ndata: [DONE]\n\ndata: unfinished'))
+    ).toEqual(['{"type":"ping"}', "[DONE]"]);
   });
 
   it.each([
-    { body: 'data: {"type":"ping"}\n\n', error: "before completion" },
-    { body: "data: [DONE]\n\n", error: "before completion" },
-    { body: 'data: {"type":"done"}', error: "before completion" },
-    { body: "data: secret-not-json\n\n", error: "invalid JSON" },
     { body: new Uint8Array([0xff]), error: "invalid UTF-8" },
     { body: "data: " + "x".repeat(2_101_248), error: "event exceeds" },
-  ])("rejects incomplete or invalid framing: $error", async ({ body, error }) => {
-    await expect(
-      readProviderEvents(response(body), signal(), "Fixture", async () => {})
-    ).rejects.toThrow(error);
+  ])("rejects invalid framing: $error", async ({ body, error }) => {
+    await expect(collect(response(body))).rejects.toThrow(error);
   });
+
+  it.each(["secret-not-json", "[]", "null"])(
+    "rejects invalid JSON events without exposing their content: %s",
+    (data) => {
+      expect(() => parseProviderEvent(data, "Fixture")).toThrow(
+        /Fixture stream contains (invalid JSON|an invalid event)/
+      );
+    }
+  );
 
   it("limits total bytes even when keepalives contain no JSON", async () => {
     const block = new TextEncoder().encode(": " + "x".repeat(100_000) + "\n\n");
@@ -47,13 +54,29 @@ describe("provider SSE boundaries", () => {
       },
     });
     await expect(
-      readProviderEvents(
-        new Response(body, { headers: { "content-type": "text/event-stream" } }),
-        signal(),
-        "Fixture",
-        async () => {}
-      )
+      collect(new Response(body, { headers: { "content-type": "text/event-stream" } }))
     ).rejects.toThrow(/exceeds/);
+    expect(cancelled).toBe(true);
+  });
+
+  it("cancels the reader when its consumer returns before EOF", async () => {
+    let cancelled = false;
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("data: first\n\ndata: second\n\n"));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    for await (const event of readProviderEvents(
+      new Response(body, { headers: { "content-type": "text/event-stream" } }),
+      new AbortController().signal,
+      "Fixture"
+    )) {
+      expect(event).toBe("first");
+      break;
+    }
     expect(cancelled).toBe(true);
   });
 
@@ -66,11 +89,9 @@ describe("provider SSE boundaries", () => {
         return new Promise<void>(() => {});
       },
     });
-    const reading = readProviderEvents(
+    const reading = collect(
       new Response(body, { headers: { "content-type": "text/event-stream" } }),
-      controller.signal,
-      "Fixture",
-      async () => {}
+      controller.signal
     );
     controller.abort();
     await expect(reading).rejects.toThrow();
@@ -84,12 +105,7 @@ describe("provider SSE boundaries", () => {
       },
     });
     await expect(
-      readProviderEvents(
-        new Response(body, { headers: { "content-type": "text/event-stream" } }),
-        signal(),
-        "Fixture",
-        async () => {}
-      )
+      collect(new Response(body, { headers: { "content-type": "text/event-stream" } }))
     ).rejects.toThrow("Fixture stream interrupted");
   });
 });

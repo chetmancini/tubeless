@@ -1,18 +1,15 @@
 import { record } from "./provider-schema.js";
-import { readProviderEvents } from "./provider-sse.js";
-import type { AgentTextStream } from "./text-stream.js";
+import { parseProviderEvent } from "./provider-sse.js";
+import type { AgentTextProtocol } from "./text-stream.js";
 
 /** Assemble native tool/thinking blocks privately; only text blocks reach the text port. */
-export async function readAnthropicStream(
-  response: Response,
-  signal: AbortSignal,
-  text: AgentTextStream
-): Promise<unknown> {
+export const readAnthropicStream: AgentTextProtocol = async (events, write) => {
   let message: Record<string, unknown> | undefined;
   const blocks: Record<string, unknown>[] = [];
   const open = new Set<number>();
   const inputs = new Map<number, string>();
-  await readProviderEvents(response, signal, "Anthropic", async (event) => {
+  for await (const data of events) {
+    const event = parseProviderEvent(data, "Anthropic");
     if (event.type === "error") throw new Error("Anthropic stream failed");
     if (event.type === "message_start") {
       if (
@@ -30,7 +27,7 @@ export async function readAnthropicStream(
       const block = { ...event.content_block };
       blocks.push(block);
       open.add(event.index as number);
-      if (block.type === "text" && typeof block.text === "string") await text.delta(block.text);
+      if (block.type === "text" && typeof block.text === "string") await write(block.text);
     } else if (event.type === "content_block_delta") {
       const index = event.index as number;
       const block = blocks[index];
@@ -39,7 +36,7 @@ export async function readAnthropicStream(
         throw new Error("Anthropic stream invalid block delta");
       if (delta.type === "text_delta" && block.type === "text" && typeof delta.text === "string") {
         block.text = String(block.text ?? "") + delta.text;
-        await text.delta(delta.text);
+        await write(delta.text);
       } else if (
         delta.type === "input_json_delta" &&
         block.type === "tool_use" &&
@@ -91,10 +88,8 @@ export async function readAnthropicStream(
       if (!message || open.size || typeof message.stop_reason !== "string")
         throw new Error("Anthropic stream incomplete message");
       message.content = blocks;
-      if (Buffer.byteLength(JSON.stringify(message)) > 2_097_152)
-        throw new Error("Anthropic stream response exceeds 2 MiB");
-      return true;
+      return message;
     }
-  });
-  return message;
-}
+  }
+  throw new Error("Anthropic stream interrupted before completion");
+};

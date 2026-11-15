@@ -524,7 +524,9 @@ read when a pipeline needs them.
   the credential-free [evaluation recipe](../examples/agent-evaluation.ts).
 
 - Set `text: { write, redact? }` on a bundled model adapter for bounded public
-  assistant deltas with awaited backpressure and provider deadlines. CLI `--stream`
+  assistant deltas with awaited backpressure and provider deadlines. Both callbacks
+  receive `(event, signal)`; use the attempt signal to cancel I/O and release resources.
+  CLI `--stream`
   sends commentary to stderr and keeps the validated answer on stdout. It enables
   no transcript persistence; redact live text separately from saved content.
   Read [the streaming contract](./agents.md#stream-public-assistant-text) and use

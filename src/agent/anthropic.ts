@@ -174,21 +174,15 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
                       ? { "anthropic-beta": COMPACTION_BETA }
                       : {}),
                   },
-                  { ...payload, ...(text && operation === "decision" ? { stream: true } : {}) },
+                  payload,
                   signal,
                   undefined,
                   text && operation === "decision"
-                    ? async (response) => {
-                        const stream = new AgentTextStream("anthropic", context.turn, text, signal);
-                        try {
-                          const body = await readAnthropicStream(response, signal, stream);
-                          await stream.end("completed");
-                          return body;
-                        } catch (error) {
-                          await stream.end("interrupted");
-                          throw error;
-                        }
-                      }
+                    ? (response) =>
+                        new AgentTextStream("anthropic", context.turn, text, signal).read(
+                          response,
+                          readAnthropicStream
+                        )
                     : undefined
                 )
               )
@@ -214,6 +208,7 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
         };
         const decisionRequest = {
           model: selectedModel,
+          ...(text ? { stream: true } : {}),
           max_tokens: maxTokens,
           ...(reasoningEffort === null ? {} : { output_config: { effort: reasoningEffort } }),
           ...(promptCaching ? { cache_control: cacheControl } : {}),

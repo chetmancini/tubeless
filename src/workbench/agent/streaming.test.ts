@@ -2,6 +2,7 @@ import { Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { runWorkbenchCli } from "../workbench.js";
 import { captureIo, writeModule } from "../workbench.test-support.js";
+import { AgentTextStream } from "../../agent/text-stream.js";
 import { createTerminalTextStream } from "./text-stream.js";
 
 describe("agent terminal streaming", () => {
@@ -9,12 +10,13 @@ describe("agent terminal streaming", () => {
     "forwards opt-in streams to factories without enabling capture (stream=%s)",
     async (enabled) => {
       const { directory } = await writeModule(`
-      export default ({ text }) => async () => {
+      export default ({ text, signal }) => async () => {
         if (text) {
-          const identity = { streamId: "fixture", provider: "openai", turn: 1 };
-          await text.write({ ...identity, kind: "delta", text: "Hello " });
-          await text.write({ ...identity, kind: "delta", text: "world\\u001b[2J" });
-          await text.write({ ...identity, kind: "end", status: "completed" });
+          const signal = new AbortController().signal;
+    const identity = { streamId: "fixture", provider: "openai", turn: 1 };
+          await text.write({ ...identity, kind: "delta", text: "Hello " }, signal);
+          await text.write({ ...identity, kind: "delta", text: "world\\u001b[2J" }, signal);
+          await text.write({ ...identity, kind: "end", status: "completed" }, signal);
         }
         return { conversation: null, decision: { kind: "finish", result: { answer: "Final answer" } } };
       };
@@ -70,10 +72,11 @@ describe("agent terminal streaming", () => {
     });
     const io = { ...captureIo("/tmp"), stderr };
     const text = createTerminalTextStream(io);
+    const signal = new AbortController().signal;
     const identity = { streamId: "fixture", provider: "openai" as const, turn: 1 };
     let delivered = false;
     const writing = Promise.resolve(
-      text.write({ ...identity, kind: "delta", text: "partial" })
+      text.write({ ...identity, kind: "delta", text: "partial" }, signal)
     ).then(() => {
       delivered = true;
     });
@@ -81,10 +84,44 @@ describe("agent terminal streaming", () => {
     expect(delivered).toBe(false);
     flush();
     await writing;
-    const ending = text.write({ ...identity, kind: "end", status: "interrupted" });
+    const ending = text.write({ ...identity, kind: "end", status: "interrupted" }, signal);
     flush();
     await ending;
     expect(output.join("")).toBe("\nassistant · partial\n[assistant text interrupted]\n");
     stderr.destroy();
+  });
+  it("releases flush listeners after repeated prompt cancellation while the launch remains active", async () => {
+    const stderr = new Writable({ write(_chunk, _encoding, _callback) {} });
+    const launch = new AbortController();
+    const sink = createTerminalTextStream({ ...captureIo("/tmp"), stderr, signal: launch.signal });
+    try {
+      for (let index = 0; index < 8; index++) {
+        const prompt = new AbortController();
+        const stream = new AgentTextStream("openai", 1, sink, prompt.signal);
+        const writing = stream.delta("partial");
+        expect(stderr.listenerCount("error")).toBe(1);
+        prompt.abort();
+        await expect(writing).rejects.toThrow();
+        await stream.end("interrupted");
+        expect(stderr.listenerCount("error")).toBe(0);
+        expect(stderr.listenerCount("close")).toBe(0);
+      }
+      expect(launch.signal.aborted).toBe(false);
+    } finally {
+      stderr.destroy();
+    }
+  });
+  it("keeps sanitizer state per stream for split CSI and OSC sequences", async () => {
+    const io = captureIo("/tmp");
+    const text = createTerminalTextStream(io);
+    const signal = new AbortController().signal;
+    const identity = { streamId: "fixture", provider: "openai" as const, turn: 1 };
+    for (const chunk of ["\u001B[", "31mred", "\u001B]private title", "\u001B", "\\after"]) {
+      await text.write({ ...identity, kind: "delta", text: chunk }, signal);
+    }
+    await text.write({ ...identity, kind: "end", status: "completed" }, signal);
+    await text.write({ ...identity, kind: "delta", text: "fresh" }, signal);
+    await text.write({ ...identity, kind: "end", status: "completed" }, signal);
+    expect(io.errors.join("")).toBe("\nassistant · redafter\n\nassistant · fresh\n");
   });
 });

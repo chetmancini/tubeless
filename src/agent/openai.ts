@@ -124,17 +124,11 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
                   signal,
                   baseUrl,
                   text && operation === "decision"
-                    ? async (response) => {
-                        const stream = new AgentTextStream("openai", context.turn, text, signal);
-                        try {
-                          const body = await readOpenAIStream(response, signal, stream);
-                          await stream.end("completed");
-                          return body;
-                        } catch (error) {
-                          await stream.end("interrupted");
-                          throw error;
-                        }
-                      }
+                    ? (response) =>
+                        new AgentTextStream("openai", context.turn, text, signal).read(
+                          response,
+                          readOpenAIStream
+                        )
                     : undefined
                 )
               )
@@ -152,6 +146,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
         const decisionRequest = {
           model: selectedModel,
           store: false,
+          ...(text ? { stream: true } : {}),
           ...(reasoningEffort === null ? {} : { reasoning: { effort: reasoningEffort } }),
           include: ["reasoning.encrypted_content"],
           max_output_tokens: 8192,
@@ -222,7 +217,6 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
         const body = await send("decision", "responses", {
           ...decisionRequest,
           input,
-          ...(text ? { stream: true } : {}),
         });
         if (!record(body)) throw new Error("OpenAI did not return a completed response");
         const output = outputItems(body);

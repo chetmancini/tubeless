@@ -1,18 +1,15 @@
 import { record } from "./provider-schema.js";
-import { readProviderEvents } from "./provider-sse.js";
+import { parseProviderEvent } from "./provider-sse.js";
 import { outputItems } from "./openai-protocol.js";
-import type { AgentTextStream } from "./text-stream.js";
+import type { AgentTextProtocol } from "./text-stream.js";
 
 /** Retain only the final native response; reconcile public deltas against its text. */
-export async function readOpenAIStream(
-  response: Response,
-  signal: AbortSignal,
-  text: AgentTextStream
-): Promise<unknown> {
+export const readOpenAIStream: AgentTextProtocol = async (events, write) => {
   const assistants = new Set<number>();
   const parts = new Map<string, string>();
-  let result: unknown;
-  await readProviderEvents(response, signal, "OpenAI", async (event) => {
+  for await (const data of events) {
+    if (data === "[DONE]") break;
+    const event = parseProviderEvent(data, "OpenAI");
     if (
       event.type === "error" ||
       event.type === "response.failed" ||
@@ -39,20 +36,16 @@ export async function readOpenAIStream(
       if (parts.has(key) || typeof event.part.text !== "string")
         throw new Error("OpenAI stream invalid text block");
       parts.set(key, event.part.text);
-      await text.delta(event.part.text);
+      await write(event.part.text);
     }
     if (event.type === "response.output_text.delta" && parts.has(key)) {
       if (typeof event.delta !== "string") throw new Error("OpenAI stream invalid text delta");
       parts.set(key, parts.get(key)! + event.delta);
-      await text.delta(event.delta);
+      await write(event.delta);
     }
-    if (event.type !== "response.completed") return;
+    if (event.type !== "response.completed") continue;
     const body = event.response;
-    if (
-      !record(body) ||
-      body.status !== "completed" ||
-      Buffer.byteLength(JSON.stringify(body)) > 2_097_152
-    )
+    if (!record(body) || body.status !== "completed")
       throw new Error("OpenAI stream invalid final response");
     const reconciled = new Set<string>();
     const output = outputItems(body);
@@ -66,12 +59,11 @@ export async function readOpenAIStream(
           if (parts.get(partKey) !== part.text)
             throw new Error("OpenAI stream text does not match final response");
           reconciled.add(partKey);
-        } else await text.delta(part.text);
+        } else await write(part.text);
       }
     }
     if (reconciled.size !== parts.size) throw new Error("OpenAI stream missing final text block");
-    result = body;
-    return true;
-  });
-  return result;
-}
+    return body;
+  }
+  throw new Error("OpenAI stream interrupted before completion");
+};

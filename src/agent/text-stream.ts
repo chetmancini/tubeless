@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { MAX_RESPONSE_BYTES } from "./provider-http.js";
+import { readProviderEvents } from "./provider-sse.js";
 import type { Awaitable } from "./agent-types.js";
 import { awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
 
@@ -15,11 +17,20 @@ export type AgentTextEvent = Readonly<{
 
 /** Opt-in streaming, independent of transcript persistence. */
 export interface AgentTextOptions {
-  /** Awaited in order for backpressure, within the provider deadline. Failure fails the request. */
-  readonly write: (event: AgentTextEvent) => Awaitable<void>;
-  /** Filter each bounded delta before delivery. Use streamId to maintain cross-delta state. */
-  readonly redact?: (event: Extract<AgentTextEvent, { kind: "delta" }>) => Awaitable<string | null>;
+  /** Awaited for backpressure. Use the attempt signal to release I/O on cancellation or deadline. */
+  readonly write: (event: AgentTextEvent, signal: AbortSignal) => Awaitable<void>;
+  /** Filter bounded deltas before delivery; use streamId for state and signal for cancellable I/O. */
+  readonly redact?: (
+    event: Extract<AgentTextEvent, { kind: "delta" }>,
+    signal: AbortSignal
+  ) => Awaitable<string | null>;
 }
+
+/** Provider-owned assembly over bounded data events and a public-text writer. */
+export type AgentTextProtocol = (
+  events: AsyncIterable<string>,
+  write: (text: string) => Promise<void>
+) => Promise<Record<string, unknown>>;
 
 export function textSettings(options: AgentTextOptions | undefined): AgentTextOptions | undefined {
   if (options === undefined) return undefined;
@@ -48,6 +59,23 @@ export class AgentTextStream {
     this.identity = Object.freeze({ streamId: randomUUID(), provider, turn });
   }
 
+  /** One attempt owns framing, public delivery and its terminal notification. */
+  async read(response: Response, protocol: AgentTextProtocol): Promise<Record<string, unknown>> {
+    const provider = this.identity.provider === "openai" ? "OpenAI" : "Anthropic";
+    try {
+      const body = await protocol(readProviderEvents(response, this.signal, provider), (text) =>
+        this.delta(text)
+      );
+      if (Buffer.byteLength(JSON.stringify(body)) > MAX_RESPONSE_BYTES)
+        throw new Error(`${provider} stream response exceeds 2 MiB`);
+      await this.end("completed");
+      return body;
+    } catch (error) {
+      await this.end("interrupted");
+      throw error;
+    }
+  }
+
   async delta(text: string): Promise<void> {
     if (this.ended) throw new Error("Agent text stream already ended");
     this.bytes += Buffer.byteLength(text);
@@ -66,7 +94,7 @@ export class AgentTextStream {
       try {
         const filtered = this.options.redact
           ? await awaitWithAbort(
-              Promise.resolve(this.options.redact(event)),
+              Promise.resolve(this.options.redact(event, this.signal)),
               this.signal,
               "Agent text redaction"
             )
@@ -78,7 +106,9 @@ export class AgentTextStream {
         if (this.deliveredBytes > 1_048_576) throw new Error("Redacted text exceeds 1 MiB");
         if (filtered)
           await awaitWithAbort(
-            Promise.resolve(this.options.write(Object.freeze({ ...event, text: filtered }))),
+            Promise.resolve(
+              this.options.write(Object.freeze({ ...event, text: filtered }), this.signal)
+            ),
             this.signal,
             "Agent text sink"
           );
@@ -95,7 +125,7 @@ export class AgentTextStream {
     try {
       await awaitWithAbort(
         Promise.resolve(
-          this.options.write(Object.freeze({ ...this.identity, kind: "end", status }))
+          this.options.write(Object.freeze({ ...this.identity, kind: "end", status }), this.signal)
         ),
         this.signal,
         "Agent text sink"
