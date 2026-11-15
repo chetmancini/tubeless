@@ -3,6 +3,8 @@
   "entry": [
     "src/reporter/live-ticker-worker.ts",
     "src/node/worker-thread-runtime.ts",
+    "src/workbench/collector-worker-runtime.ts",
+    "src/workbench/collector-worker.ts",
     "src/agent/codemode-worker.ts",
     "src/studio/browser/entry.ts",
     "src/**/*.test.tsx",

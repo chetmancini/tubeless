@@ -198,15 +198,6 @@ export async function runHostedJob(options: {
   // Core does not await exporters, so a refused batch could arrive after a step's side effects.
   // Admission precedes command execution; a refused launch was already closed by Studio.
   if (!(await admitted(ingest(), job.launchId))) return;
-  const deadlineAtMs = Date.now() + job.maxRunDurationMs;
-  const traceContext = {
-    pipelineId: job.commandId,
-    cwd: output.cwd,
-    signal: controller.signal,
-    launchId: job.launchId,
-  };
-  let recorded = false;
-  let deliveryFailure: { readonly error: unknown } | undefined;
   const batches = new BatchingTraceExporter(
     async (sequence, events) => {
       const { accepted } = await ingest().appendEvents(job.launchId, sequence, events);
@@ -219,56 +210,116 @@ export async function runHostedJob(options: {
       maxDelayMs: 250,
       retries: 4,
       retryDelayMs: 250,
-      onFailure: (error) => {
-        deliveryFailure = { error };
-        controller.abort(error);
-      },
+      onFailure: (error) => controller.abort(error),
     }
   );
-  const exporter: PipelineTraceExporter = {
-    export(event) {
-      if (isTopLevelStart(event)) recorded = true;
-      return batches.export(boundHostedEvent(event));
-    },
-    flush: () => batches.flush(),
-  };
-  const deadline = setTimeout(
-    () =>
-      controller.abort(new DOMException("The run exceeded its maximum duration.", "TimeoutError")),
-    Math.max(0, deadlineAtMs - Date.now())
-  );
-  let exitCode: number;
-  let launchTracing: LaunchTracing | undefined;
-  try {
-    launchTracing = createLaunchTracing({
-      context: traceContext,
-      configurations: [entry.tracing, options.tracing],
-      exporters: [exporter],
-      wrapExporter: wrapExporter && ((destination) => wrapExporter(destination, deadlineAtMs)),
-    });
-    exitCode = await executeHostedCommand(entry.command, parsed.values, output, controller.signal, {
-      tracing: launchTracing.prepare(),
-    });
-  } finally {
-    await launchTracing?.close();
-    clearTimeout(deadline);
-    // Drain pending events so no timer can deliver after the job's cleanup.
-    await batches.flush().catch(() => {});
-  }
-  if (deliveryFailure) {
+  const { exitCode, history } = await executeHostedRun({
+    job,
+    entry,
+    values: parsed.values,
+    output,
+    controller,
+    exporter: batches,
+    wrapExporter,
+    tracing: options.tracing,
+  });
+  if (history.status === "unconfirmed") {
     // The run may be fully recorded locally yet unknown to Studio; tell it, best effort.
-    const { error } = deliveryFailure;
+    const { error } = history;
     const message = error instanceof Error ? error.message : String(error);
     await ingest()
       .reportFailure(job.launchId, `Run events could not be delivered to Studio: ${message}`)
       .catch((reportError: unknown) => {
         console.error(reportError);
       });
-  } else if (!recorded) {
+  } else if (history.status === "absent") {
     const detail = output.tail();
     await ingest().reportFailure(
       job.launchId,
       `Pipeline command exited (${exitCode}) before recording a run.${detail ? `\n${detail}` : ""}`
     );
   }
+}
+
+/** Confirmed event extent after the delivery barrier, or explicit delivery uncertainty. */
+export type HostedRunHistory =
+  | { readonly status: "absent" | "partial" | "complete" }
+  | { readonly status: "unconfirmed"; readonly error: unknown };
+
+/** Execute an already-admitted command. Targets own admission, transport and failure evidence. */
+export async function executeHostedRun(options: {
+  readonly job: RunJob;
+  readonly entry: HostedCommand;
+  readonly values: Record<string, unknown>;
+  readonly controller: AbortController;
+  readonly output: HostedOutput;
+  readonly exporter: PipelineTraceExporter & { flush(): Promise<void> };
+  readonly wrapExporter?: (
+    exporter: PipelineTraceExporter,
+    deadlineAtMs: number
+  ) => PipelineTraceExporter;
+  readonly tracing?: PipelineTraceExporterOptions<HostedRunTraceContext>;
+}): Promise<{ exitCode: number; history: HostedRunHistory }> {
+  const { job, entry, controller, output, wrapExporter } = options;
+  const deadlineAtMs = Date.now() + job.maxRunDurationMs;
+  let rootRunId: string | undefined;
+  let history: HostedRunHistory = { status: "absent" };
+  const exporter: PipelineTraceExporter = {
+    export(event) {
+      if (isTopLevelStart(event) && rootRunId === undefined) {
+        rootRunId = event.runId;
+        history = { status: "partial" };
+      } else if (
+        event.name === "pipeline.completed" &&
+        event.parentRunId === undefined &&
+        event.runId === rootRunId
+      ) {
+        history = { status: "complete" };
+      }
+      return options.exporter.export(boundHostedEvent(event));
+    },
+    flush: () => options.exporter.flush(),
+  };
+  const deadline = setTimeout(
+    () =>
+      controller.abort(new DOMException("The run exceeded its maximum duration.", "TimeoutError")),
+    Math.max(0, deadlineAtMs - Date.now())
+  );
+  let launchTracing: LaunchTracing | undefined;
+  let exitCode: number;
+  try {
+    launchTracing = createLaunchTracing({
+      context: {
+        pipelineId: job.commandId,
+        cwd: output.cwd,
+        signal: controller.signal,
+        launchId: job.launchId,
+      },
+      configurations: [entry.tracing, options.tracing],
+      exporters: [exporter],
+      wrapExporter: wrapExporter && ((destination) => wrapExporter(destination, deadlineAtMs)),
+    });
+    exitCode = await executeHostedCommand(
+      entry.command,
+      options.values,
+      output,
+      controller.signal,
+      {
+        tracing: launchTracing.prepare(),
+      }
+    );
+  } finally {
+    try {
+      await launchTracing?.close();
+    } finally {
+      clearTimeout(deadline);
+      // Drain delivery even if an application exporter fails during cleanup.
+      try {
+        await options.exporter.flush();
+      } catch (error) {
+        history = { status: "unconfirmed", error };
+      }
+    }
+  }
+  return { exitCode, history };
 }

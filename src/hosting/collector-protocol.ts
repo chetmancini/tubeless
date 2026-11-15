@@ -42,6 +42,12 @@ export class CollectorRequestError extends Error {
   }
 }
 
+/** Outgoing failure messages are bounded before client state changes or delivery starts. */
+export function assertCollectorFailureMessage(message: string): void {
+  if (new TextEncoder().encode(message).byteLength > COLLECTOR_MESSAGE_BYTES)
+    throw new CollectorRequestError(413, false);
+}
+
 export class CollectorInputError extends Error {
   constructor(readonly status = 400) {
     super(status === 413 ? "Collector request body is too large." : "Invalid collector request.");

@@ -4,6 +4,7 @@ import { commands, completedStatus, ingest, job } from "./run.test-support.js";
 import {
   BatchingTraceExporter,
   runHostedJob,
+  executeHostedRun,
   boundHostedEvent,
   HOSTED_TRACE_TEXT_LIMIT,
 } from "./run.js";
@@ -39,6 +40,80 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe("admitted execution history evidence", () => {
+  const completed: PipelineTraceEvent = {
+    version: 3,
+    name: "pipeline.completed",
+    runId: "r",
+    pipelineId: "p",
+    timestampMs: 2,
+    payload: { dryRun: false, errorCount: 0, finalized: true, status: "completed", stepCount: 0 },
+  };
+  const entry = commands.get("greeting")!;
+  function execution(events: PipelineTraceEvent[], flush = vi.fn(async () => {})) {
+    return executeHostedRun({
+      job: job({ name: "Ada" }),
+      values: {},
+      output,
+      controller: new AbortController(),
+      exporter: { export() {}, flush },
+      entry: {
+        ...entry,
+        command: {
+          ...entry.command,
+          async execute(_values, context) {
+            for (const event of events)
+              await context!.pipelineContext!.tracing!.exporter.export(event);
+          },
+        },
+      },
+    });
+  }
+
+  it.each([
+    { name: "start only", events: [startEvent], status: "partial" },
+    {
+      name: "child completion",
+      events: [startEvent, { ...completed, parentRunId: "parent" }],
+      status: "partial",
+    },
+    {
+      name: "foreign completion",
+      events: [startEvent, { ...completed, runId: "foreign" }],
+      status: "partial",
+    },
+    { name: "matching root completion", events: [startEvent, completed], status: "complete" },
+  ])("requires matching terminal root evidence: $name", async ({ events, status }) => {
+    expect((await execution(events)).history.status).toBe(status);
+  });
+
+  it("waits for the final delivery barrier and returns its failure without a callback side channel", async () => {
+    let reject!: (error: Error) => void;
+    let draining!: () => void;
+    const observed = new Promise<void>((resolve) => {
+      draining = resolve;
+    });
+    const barrier = new Promise<void>((_resolve, fail) => {
+      reject = fail;
+    });
+    const flush = vi.fn(() => {
+      draining();
+      return barrier;
+    });
+    let returned = false;
+    const pending = execution([startEvent, completed], flush).then((result) => {
+      returned = true;
+      return result;
+    });
+    await observed;
+    expect(returned).toBe(false);
+    const error = new Error("delivery failed");
+    reject(error);
+    expect((await pending).history).toEqual({ status: "unconfirmed", error });
+    expect(flush).toHaveBeenCalledOnce();
+  });
 });
 
 describe("hosted trace text", () => {

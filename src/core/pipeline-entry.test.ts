@@ -326,6 +326,34 @@ describe("module runtime boundaries", () => {
     expect(visited.size).toBeGreaterThan(1);
   });
 
+  it("keeps collector worker entrypoints free of CLI startup and concrete storage", () => {
+    const pending = [
+      resolve(dist, "workbench/collector-worker-runtime.js"),
+      resolve(dist, "workbench/collector-worker.js"),
+    ];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      const name = relative(dist, file).split(sep).join("/");
+      if (moduleName(file) === "workbench") {
+        expect([
+          "workbench/collector-worker-runtime.js",
+          "workbench/collector-worker.js",
+          "workbench/collector-worker-protocol.js",
+          "workbench/pipeline-module.js",
+        ]).toContain(name);
+      }
+      expect(moduleName(file)).not.toBe("cloudflare");
+      expect(name).not.toMatch(
+        /^run-store\/run-store-(sqlite|ndjson)\.js$|^studio\/server\/(listener|node-http|client-script)\.js$/
+      );
+      pending.push(...dependencies(file));
+    }
+    expect(visited.size).toBeGreaterThan(1);
+  });
+
   it("confines cloudflare:workers to the Cloudflare entrypoint", () => {
     for (const name of readdirSync(dist, { recursive: true, encoding: "utf8" })) {
       if (!name.endsWith(".js")) continue;
