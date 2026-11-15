@@ -10,6 +10,7 @@ import {
   assertCollectorFailureMessage,
   batchReplySchema,
   claimReplySchema,
+  controlReplySchema,
   failureReplySchema,
   decodeCollectorJson,
 } from "./collector-protocol.js";
@@ -32,7 +33,7 @@ export function createCollectorTransport(options: {
   const transport = options.fetch ?? fetch;
 
   async function request<T>(
-    operation: "admit" | "batches" | "failure",
+    operation: "admit" | "batches" | "failure" | "control",
     body: Uint8Array,
     reply: WireSchema<T>
   ): Promise<T> {
@@ -105,6 +106,14 @@ export function createCollectorTransport(options: {
   }
 
   return {
+    cancellationRequested(attemptId: string) {
+      assertAttemptId(attemptId);
+      return request(
+        "control",
+        new TextEncoder().encode(JSON.stringify({ attemptId })),
+        controlReplySchema
+      );
+    },
     claim: (body: Uint8Array) => request("admit", body, claimReplySchema),
     async append(body: Uint8Array): Promise<AttemptBatchAcknowledgement> {
       try {

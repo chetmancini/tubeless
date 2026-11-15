@@ -7,10 +7,12 @@ import { awaitWithAbort } from "../utilities/abort.js";
 import {
   COLLECTOR_BATCH_BYTES,
   COLLECTOR_CLAIM_BYTES,
+  COLLECTOR_CONTROL_BYTES,
   COLLECTOR_FAILURE_BYTES,
   CollectorAuthorityError,
   CollectorInputError,
   claimSchema,
+  controlSchema,
   decodeCollectorJson,
 } from "./collector-protocol.js";
 
@@ -28,7 +30,9 @@ export function createHostedCollector(options: {
       const wait = <T>(pending: Promise<T>) => awaitWithAbort(pending, signal, "Collector request");
       try {
         const url = new URL(request.url);
-        const route = /^\/v1\/launches\/([^/]+)\/(admit|batches|failure)$/.exec(url.pathname);
+        const route = /^\/v1\/launches\/([^/]+)\/(admit|batches|failure|control)$/.exec(
+          url.pathname
+        );
         if (!route || url.search) return error(404, "not_found");
         if (url.protocol !== "https:") return error(400, "https_required");
         let launchId: string;
@@ -56,16 +60,26 @@ export function createHostedCollector(options: {
         )
           return error(415, "json_required");
         const operation = route[2]!;
-        const limit =
-          operation === "admit"
-            ? COLLECTOR_CLAIM_BYTES
-            : operation === "batches"
-              ? COLLECTOR_BATCH_BYTES
-              : COLLECTOR_FAILURE_BYTES;
+        const limits: Readonly<Record<string, number>> = {
+          admit: COLLECTOR_CLAIM_BYTES,
+          batches: COLLECTOR_BATCH_BYTES,
+          failure: COLLECTOR_FAILURE_BYTES,
+          control: COLLECTOR_CONTROL_BYTES,
+        };
+        const limit = limits[operation]!;
         const length = request.headers.get("content-length");
         if (length !== null && (!/^\d+$/.test(length) || Number(length) > limit))
           throw new CollectorInputError(413);
         const bytes = await readBoundedBody(request.body, limit, signal);
+        if (operation === "control") {
+          const control = decodeCollectorJson(bytes, controlSchema);
+          if (control.attemptId !== credential.attemptId) throw new CollectorAuthorityError();
+          return jsonResponse({
+            cancelRequested: await wait(
+              options.store.collectorCancellationRequested(credential, workerId)
+            ),
+          });
+        }
         if (operation === "admit") {
           const claim = decodeCollectorJson(bytes, claimSchema);
           if (claim.attemptId !== credential.attemptId) throw new CollectorAuthorityError();

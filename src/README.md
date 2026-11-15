@@ -183,6 +183,11 @@ their source files.
   returns explicit history confirmation without declaring remote termination. The
   shared execution path owns final draining and confirms only a matching root
   completion after successful delivery; a root start alone remains partial history.
+  The attempt store persists cancellation intent independently of history and
+  revocation, fences future claims, and preserves admitted workers' final writes.
+  The authenticated `control` read requires the claiming worker and rechecks
+  credential authority at the storage boundary; only the trusted host can request
+  cancellation.
   Strict collector envelopes use the canonical wire-object decoder;
   stored-event reads retain tolerant decoding for history compatibility.
   `utilities/read-body.ts` supplies bounded, cancellable byte reading for the collector,
@@ -207,7 +212,9 @@ their source files.
   credentials over private IPC, claims before importing
   application code, and flushes history before exiting. The parent bounds startup
   and post-claim execution, requests cancellation, and forces exit after a grace
-  period. Only observed process closure authorizes the parent's authenticated
+  period. It polls persisted cancellation through the collector and aborts control
+  reads on cancellation/exit. Control outages leave the execution deadline in
+  force and never imply termination. Only observed process closure authorizes the parent's authenticated
   failure report. `collector-worker-protocol.ts` owns the private IPC shapes;
   `collector-worker-runtime.ts` reuses command selection without loading CLI startup,
   a collector listener or concrete storage. No new CLI command or deploy target is

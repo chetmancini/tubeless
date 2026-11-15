@@ -46,6 +46,8 @@ export interface HostedAttemptStore {
     owner: HostedAttemptOwner,
     body: Uint8Array
   ): Promise<AttemptBatchAcknowledgement>;
+  /** Persist cancellation intent and fence future claims. True acknowledges an open attempt, not exit. */
+  requestAttemptCancellation(launchId: string, attemptId: string): Promise<boolean>;
   /** Revoke write authority only; this neither terminates execution nor invents a run outcome. */
   revokeAttempt(launchId: string, attemptId: string): Promise<void>;
 }

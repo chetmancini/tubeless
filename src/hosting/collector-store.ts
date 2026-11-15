@@ -31,6 +31,11 @@ export interface HostedCollectorStore {
     workerId: string,
     deploymentId: string
   ): Promise<boolean>;
+  /** Read persisted intent only for the claiming worker; recheck authority at the storage boundary. */
+  collectorCancellationRequested(
+    authority: CollectorAuthorization,
+    workerId: string
+  ): Promise<boolean>;
   acceptCollectorBatch(
     authority: CollectorAuthorization,
     workerId: string,
