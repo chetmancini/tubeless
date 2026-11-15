@@ -89,6 +89,7 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
       outcome: { status: "history-confirmed" },
     });
     expect(Number((await readFile(effectFile, "utf8")).trim())).not.toBe(process.pid);
+    expect(worker.cancel()).toBe(false);
     const batches = state.requests.filter((request) => request.operation === "batches");
     expect(batches[0]!.body).toEqual(batches[1]!.body);
     const events = await state.fixture.store.listEvents();
@@ -174,6 +175,103 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     );
     expect(completions).toHaveLength(2);
     expect(completions.every((event) => event.payload.status === "cancelled")).toBe(true);
+  });
+
+  it("refuses persisted cancellation before claim without importing user code", async () => {
+    const { start, state, importFile } = await setup();
+    expect(await state.fixture.store.requestAttemptCancellation("launch", "attempt")).toBe(true);
+    expect(await start().completed).toMatchObject({
+      outcome: { status: "refused" },
+      failureReport: "not-needed",
+    });
+    await expect(readFile(importFile)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await state.fixture.store.listEvents()).toEqual([]);
+    expect(state.requests.filter((request) => request.operation === "failure")).toEqual([]);
+  });
+
+  it("delivers persisted cancellation after collector restart and drains cancelled history", async () => {
+    const { writeModule, start, state, effectFile, restartCollector } = await setup();
+    await writeModule("wait");
+    const worker = start();
+    await vi.waitFor(async () =>
+      expect((await readFile(effectFile, "utf8")).length).toBeGreaterThan(0)
+    );
+    await vi.waitFor(() => expect(state.fixture.readLaunch("launch")?.state).toBe("running"));
+    expect(await state.fixture.store.requestAttemptCancellation("launch", "attempt")).toBe(true);
+    expect(state.fixture.readLaunch("launch")?.state).toBe("running");
+    restartCollector();
+    expect(await worker.completed).toMatchObject({
+      code: 0,
+      outcome: { status: "history-confirmed" },
+      failureReport: "not-needed",
+    });
+    const completions = (await state.fixture.store.listEvents()).filter(
+      (event) => event.name === "pipeline.completed"
+    );
+    expect(completions).toHaveLength(2);
+    expect(completions.every((event) => event.payload.status === "cancelled")).toBe(true);
+    expect(state.requests.some((request) => request.operation === "control")).toBe(true);
+    expect(state.requests.filter((request) => request.operation === "failure")).toEqual([]);
+  });
+
+  it("forces a hung worker to exit after persisted cancellation before reporting failure", async () => {
+    const { writeModule, start, state, effectFile } = await setup();
+    await writeModule("hang");
+    const worker = start({ cancelGraceMs: 0 });
+    await vi.waitFor(async () =>
+      expect((await readFile(effectFile, "utf8")).length).toBeGreaterThan(0)
+    );
+    await vi.waitFor(() => expect(state.fixture.readLaunch("launch")?.state).toBe("running"));
+    expect(await state.fixture.store.requestAttemptCancellation("launch", "attempt")).toBe(true);
+    expect(state.fixture.readLaunch("launch")?.state).toBe("running");
+    expect(await worker.completed).toMatchObject({ signal: "SIGKILL", failureReport: "recorded" });
+    expect(state.failureWhileAlive).toBe(false);
+    expect(state.fixture.readLaunch("launch")?.state).toBe("failed");
+  });
+
+  it("keeps control outages uncertain and observes cancellation when connectivity returns", async () => {
+    const { writeModule, start, state, effectFile } = await setup();
+    await writeModule("wait");
+    state.unavailableControl = true;
+    const worker = start();
+    await vi.waitFor(async () =>
+      expect((await readFile(effectFile, "utf8")).length).toBeGreaterThan(0)
+    );
+    await vi.waitFor(() => expect(state.fixture.readLaunch("launch")?.state).toBe("running"));
+    await state.fixture.store.requestAttemptCancellation("launch", "attempt");
+    await vi.waitFor(
+      () =>
+        expect(state.requests.filter((request) => request.operation === "control")).toHaveLength(4),
+      { timeout: 2000 }
+    );
+    expect(state.requests.filter((request) => request.operation === "failure")).toEqual([]);
+    expect(state.fixture.readLaunch("launch")?.state).toBe("running");
+    process.kill(worker.pid!, 0);
+    state.unavailableControl = false;
+    expect(await worker.completed).toMatchObject({
+      code: 0,
+      outcome: { status: "history-confirmed" },
+      failureReport: "not-needed",
+    });
+  });
+
+  it("aborts pending control reads on worker exit and observes late transport failures", async () => {
+    const { start, workerOptions } = await setup();
+    let signal: AbortSignal | undefined;
+    let reject!: (error: Error) => void;
+    const worker = start({
+      fetch: async (input, init) => {
+        if (!String(input).endsWith("/control")) return workerOptions.fetch(input, init);
+        signal = init!.signal!;
+        return new Promise<Response>((_, fail) => {
+          reject = fail;
+        });
+      },
+    });
+    expect(await worker.completed).toMatchObject({ failureReport: "not-needed" });
+    expect(signal?.aborted).toBe(true);
+    reject(new Error("late private transport detail"));
+    await Promise.resolve();
   });
 
   it("forces an uncooperative worker to exit on deadline, then idempotently reports failure", async () => {

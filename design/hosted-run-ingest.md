@@ -6,7 +6,7 @@ This change separates trusted hosted execution, launch coordination and storage
 while preserving the public Cloudflare API. Owned-attempt persistence, credential
 provisioning, a Fetch-native collector and a delivery client are implemented
 internally. A supervised one-shot Node worker now exercises those contracts over
-HTTPS; no public deploy target or production route is added. A
+HTTPS and reads persisted cancellation intent; no public deploy target or production route is added. A
 Node-process test executor exercises the
 shared coordination contract alongside Cloudflare; it is not a deployed remote
 target or a second production execution lifecycle. No new public package subpath
@@ -111,7 +111,7 @@ Its SQL transactions keep launch changes and appended events atomic.
 host provisions a new launch and its only attempt atomically with an expected
 pipeline ID and host-selected deployment revision. Provisioning conflicting IDs
 rejects without overwriting records or leaving an orphan launch. Existing launch
-and event tables keep their layout; the adapter adds three tables on open:
+and event tables keep their layout; the adapter adds attempt tables on open:
 
 - `tubeless_attempts`: the unique launch/attempt association, expected pipeline and
   deployment IDs, winning worker invocation, claim time and revocation marker.
@@ -120,6 +120,8 @@ and event tables keep their layout; the adapter adds three tables on open:
 - `tubeless_attempt_batches`: exact-body SHA-256 digests and original root-run
   acknowledgements keyed by attempt and committed sequence. Store no extra copy
   of raw request bodies here.
+- `tubeless_attempt_cancellations`: one retained cancellation marker per attempt,
+  separate from run history and write-authority revocation.
 
 `claimAttempt` grants execution exactly once to the first matching worker and
 marks launch admission in the same transaction. Workers must generate a fresh
@@ -164,14 +166,14 @@ connections, close/reopen and competing writers, altered retries, ownership
 violations, schema rejection and rollback after event and receipt failures. The
 Durable Object SQL fixture exercises the same operations without new platform
 imports. Existing Cloudflare launches continue using trusted RPC; production
-worker dispatch and supervision remain work for the next slice.
+target dispatch and supervisor recovery remain target-owned.
 
 ## Implemented internal HTTP transport
 
 `createHostedCollector` returns a Fetch handler; `createHostedCollectorClient`
 provides claim, ordered batch delivery and explicit failure reporting. Neither
 opens a listener or chooses a platform. Keep this service separate from Studio's
-browser/admin routes and credentials. It only writes to an already-created launch;
+browser/admin routes and credentials. It accesses only an already-created launch;
 it cannot submit jobs,
 select executable modules, cancel other runs, clear history, or read Studio data.
 The application continues to own launch creation and executor supervision.
@@ -193,7 +195,7 @@ reading a body or looking up user-visible launch state. Use generic unauthorized
 responses for missing, invalid, expired or mismatched authority. Reject redirects
 on the client, omit CORS grants, and return `Cache-Control: no-store`.
 
-Recheck expiry and revocation inside every write transaction, including receipt
+Recheck expiry and revocation inside every control read and write transaction, including receipt
 replays, after asynchronous body hashing. These checks also protect a request
 whose credential was valid before body reading. A terminal launch may retain a narrow replay
 window for acknowledging already-committed batches; it must not accept new work.
@@ -211,6 +213,7 @@ in the current Studio server:
 | `/v1/launches/{launchId}/admit`   | `{ attemptId, deploymentId }`       | `{ admitted }`              |
 | `/v1/launches/{launchId}/batches` | `{ attemptId, sequence, events }`   | `{ accepted: true, runId }` |
 | `/v1/launches/{launchId}/failure` | `{ attemptId, failureId, message }` | `{ recorded }`              |
+| `/v1/launches/{launchId}/control` | `{ attemptId }`                     | `{ cancelRequested }`       |
 
 Version the transport independently from native trace events. For v1 writes,
 validate the current version 3 event schema; accepting older recordings for reads
@@ -221,7 +224,7 @@ batches at 50 events and 1 MiB encoded bytes and failure messages at 8 KiB. Reje
 oversized individual events rather than silently changing identity-bearing data.
 The sender must split by both count and bytes and retain the exact encoded body
 through retries. Keep these limits internal until real worker workloads, including large
-definition snapshots, have been probed. Bound claim bodies and responses at 8 KiB
+definition snapshots, have been probed. Bound claim/control bodies and responses at 8 KiB
 and failure envelopes at 64 KiB. Bound each request, including authentication and
 response reading, at ten seconds; stop waiting on abort even when an injected
 transport or stream ignores cancellation. A timeout does not undo a store commit.
@@ -259,7 +262,7 @@ request to its authenticated attempt and fresh worker invocation; duplicate queu
 deliveries must not obtain another execution grant. Retrying a batch must never
 retry pipeline execution. A timed-out claim request has an uncertain outcome;
 do not execute or provision a fresh attempt based on that timeout. The client
-sends a claim once, and never retries it. Retry only batch and failure delivery,
+sends a claim once, and never retries it. Retry batch/failure delivery and control reads,
 at most four sends with cancellable backoff and exact encoded bytes. Stop the
 batch queue after an uncertain delivery rather than reusing its sequence.
 
@@ -332,6 +335,36 @@ require target-owned recovery. An IPC disconnect requests cooperative abort; it
 does not prove termination. This is an internal adapter, not a sandbox, durable
 queue, crash-resume mechanism, or deployment selected for users.
 
+## Persisted cancellation for owned attempts
+
+The trusted host calls `requestAttemptCancellation(launchId, attemptId)` to persist
+intent atomically for an open, unrevoked owned attempt. Repeated requests return
+true while it remains open; unknown, mismatched, revoked or terminal attempts
+return false. A request fences future claims without changing admission, history,
+credentials or the launch's terminal state. Already-admitted workers retain write
+authority so they can flush cancellation history. The marker survives a collector
+restart and is never cleared to authorize another execution.
+
+The owner-scoped `control` operation reads that marker. Require the claiming
+worker and recheck credential validity and revocation inside the storage
+transaction, after body reading. This endpoint cannot request cancellation or
+read another attempt's control state. Keep host cancellation authority outside
+the worker credential and outside the Studio browser protocol.
+
+After a confirmed claim, the Node supervisor reads control immediately and then
+one second after each settled read, with no overlapping polls. A true response
+uses its existing cooperative cancellation and forced-exit grace. Stop polling
+and abort pending control reads on local cancellation or process closure; keep
+failure reporting on its independent delivery lifetime. Failed reads neither
+cancel execution nor record failure; the existing hard execution deadline still
+applies during an outage. Revoking credentials alone does not request cancellation.
+
+A persisted request acknowledges intent, not delivery or termination. Before
+claim, it prevents execution but leaves an unstarted launch for target-owned
+resolution. After claim, only the worker's delivered terminal history or observed
+process closure can establish its outcome. Production admin routing, dispatch,
+supervisor recovery and process-tree policy remain target responsibilities.
+
 ## Validation and delivery gates
 
 Preserve the existing Cloudflare alarm, reconciliation, tracing and real-workerd
@@ -352,6 +385,8 @@ reopen after a committed batch whose reply was lost, nested history through Stud
 eval/print parent launchers, partial root history, cooperative cancellation, hung
 module loading, hard termination, lost contact
 without false terminal history, and failure-report retries after observed exit.
+Exercise cancellation before claim, intent surviving collector restart, control
+outages, hung workers and aborted control reads with late transport failures.
 Probe real nested definition snapshots: accept ordinary recordings and reject an
 oversized child snapshot without altering its identity or inventing child history;
 preserve and close the already-recorded root after worker exit.

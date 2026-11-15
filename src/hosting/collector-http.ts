@@ -1,4 +1,4 @@
-import type { HostedCollectorStore } from "./collector-store.js";
+import type { CollectorAuthorization, HostedCollectorStore } from "./collector-store.js";
 import { verifyCollectorCredential } from "./collector-credentials.js";
 import { HostedAttemptConflict } from "./attempt-store.js";
 import { jsonResponse } from "../studio/server/http.js";
@@ -7,12 +7,19 @@ import { awaitWithAbort } from "../utilities/abort.js";
 import {
   COLLECTOR_BATCH_BYTES,
   COLLECTOR_CLAIM_BYTES,
+  COLLECTOR_CONTROL_BYTES,
   COLLECTOR_FAILURE_BYTES,
   CollectorAuthorityError,
   CollectorInputError,
   claimSchema,
+  controlSchema,
   decodeCollectorJson,
 } from "./collector-protocol.js";
+
+interface CollectorOperation {
+  readonly limit: number;
+  handle(body: Uint8Array, authority: CollectorAuthorization, workerId: string): Promise<Response>;
+}
 
 /** Separate executor ingress; never mount this as a Studio admin/browser capability. */
 export function createHostedCollector(options: {
@@ -22,14 +29,61 @@ export function createHostedCollector(options: {
   const now = options.now ?? Date.now;
   const error = (status: number, code: string, extra: object = {}) =>
     jsonResponse({ code, ...extra }, status);
+  const operations = new Map(
+    Object.entries<CollectorOperation>({
+      admit: {
+        limit: COLLECTOR_CLAIM_BYTES,
+        async handle(body, authority, workerId) {
+          const claim = decodeCollectorJson(body, claimSchema);
+          if (claim.attemptId !== authority.attemptId) throw new CollectorAuthorityError();
+          return jsonResponse({
+            admitted: await options.store.claimCollectorAttempt(
+              authority,
+              workerId,
+              claim.deploymentId
+            ),
+          });
+        },
+      },
+      control: {
+        limit: COLLECTOR_CONTROL_BYTES,
+        async handle(body, authority, workerId) {
+          const control = decodeCollectorJson(body, controlSchema);
+          if (control.attemptId !== authority.attemptId) throw new CollectorAuthorityError();
+          return jsonResponse({
+            cancelRequested: await options.store.collectorCancellationRequested(
+              authority,
+              workerId
+            ),
+          });
+        },
+      },
+      batches: {
+        limit: COLLECTOR_BATCH_BYTES,
+        async handle(body, authority, workerId) {
+          const ack = await options.store.acceptCollectorBatch(authority, workerId, body);
+          return ack.accepted ? jsonResponse(ack) : error(410, "attempt_closed");
+        },
+      },
+      failure: {
+        limit: COLLECTOR_FAILURE_BYTES,
+        async handle(body, authority, workerId) {
+          return jsonResponse({
+            recorded: await options.store.reportCollectorFailure(authority, workerId, body),
+          });
+        },
+      },
+    })
+  );
   return {
     async fetch(request: Request): Promise<Response> {
       const signal = AbortSignal.any([request.signal, AbortSignal.timeout(10_000)]);
       const wait = <T>(pending: Promise<T>) => awaitWithAbort(pending, signal, "Collector request");
       try {
         const url = new URL(request.url);
-        const route = /^\/v1\/launches\/([^/]+)\/(admit|batches|failure)$/.exec(url.pathname);
-        if (!route || url.search) return error(404, "not_found");
+        const route = /^\/v1\/launches\/([^/]+)\/([^/]+)$/.exec(url.pathname);
+        const operation = route && operations.get(route[2]!);
+        if (!route || !operation || url.search) return error(404, "not_found");
         if (url.protocol !== "https:") return error(400, "https_required");
         let launchId: string;
         try {
@@ -55,33 +109,11 @@ export function createHostedCollector(options: {
           "application/json"
         )
           return error(415, "json_required");
-        const operation = route[2]!;
-        const limit =
-          operation === "admit"
-            ? COLLECTOR_CLAIM_BYTES
-            : operation === "batches"
-              ? COLLECTOR_BATCH_BYTES
-              : COLLECTOR_FAILURE_BYTES;
         const length = request.headers.get("content-length");
-        if (length !== null && (!/^\d+$/.test(length) || Number(length) > limit))
+        if (length !== null && (!/^\d+$/.test(length) || Number(length) > operation.limit))
           throw new CollectorInputError(413);
-        const bytes = await readBoundedBody(request.body, limit, signal);
-        if (operation === "admit") {
-          const claim = decodeCollectorJson(bytes, claimSchema);
-          if (claim.attemptId !== credential.attemptId) throw new CollectorAuthorityError();
-          return jsonResponse({
-            admitted: await wait(
-              options.store.claimCollectorAttempt(credential, workerId, claim.deploymentId)
-            ),
-          });
-        }
-        if (operation === "batches") {
-          const ack = await wait(options.store.acceptCollectorBatch(credential, workerId, bytes));
-          return ack.accepted ? jsonResponse(ack) : error(410, "attempt_closed");
-        }
-        return jsonResponse({
-          recorded: await wait(options.store.reportCollectorFailure(credential, workerId, bytes)),
-        });
+        const bytes = await readBoundedBody(request.body, operation.limit, signal);
+        return await wait(operation.handle(bytes, credential, workerId));
       } catch (cause) {
         if (cause instanceof CollectorAuthorityError) return error(401, "unauthorized");
         if (cause instanceof CollectorInputError) return error(cause.status, "invalid_request");

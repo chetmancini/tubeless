@@ -42,9 +42,15 @@ export async function workerFixture() {
     dropFailure: false,
     unavailableBatches: false,
     unavailableFailure: false,
+    unavailableControl: false,
     requests: [] as { operation: string; body: Uint8Array; workerId: string | null }[],
     failureWhileAlive: false,
     pid: undefined as number | undefined,
+  };
+  const restartCollector = () => {
+    state.fixture.store.close();
+    state.fixture = createSqliteLaunchStoreFixture(database);
+    state.collector = createHostedCollector({ store: state.fixture.store });
   };
   const now = Date.now();
   const token = await provisionCollectorAttempt(
@@ -80,7 +86,8 @@ export async function workerFixture() {
       }
       if (
         (operation === "batches" && state.unavailableBatches) ||
-        (operation === "failure" && state.unavailableFailure)
+        (operation === "failure" && state.unavailableFailure) ||
+        (operation === "control" && state.unavailableControl)
       ) {
         await writeFetchResponse(target, new Response(null, { status: 503 }), "POST");
         return;
@@ -99,9 +106,7 @@ export async function workerFixture() {
       }
       if (operation === "batches" && state.dropBatchAndRestart) {
         state.dropBatchAndRestart = false;
-        state.fixture.store.close();
-        state.fixture = createSqliteLaunchStoreFixture(database);
-        state.collector = createHostedCollector({ store: state.fixture.store });
+        restartCollector();
         target.destroy();
         return;
       }
@@ -214,6 +219,7 @@ export async function workerFixture() {
     baseUrl,
     module,
     writeModule,
+    restartCollector,
     effectFile,
     importFile,
     workerOptions: {

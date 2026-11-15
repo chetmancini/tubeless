@@ -154,6 +154,9 @@ export class SqliteHostedLaunchStore
         recorded INTEGER NOT NULL,
         PRIMARY KEY (attempt_id, failure_id)
       )`,
+      `CREATE TABLE IF NOT EXISTS tubeless_attempt_cancellations (
+        attempt_id TEXT PRIMARY KEY NOT NULL
+      )`,
       `CREATE TABLE IF NOT EXISTS tubeless_attempts (
         attempt_id TEXT PRIMARY KEY,
         launch_id TEXT NOT NULL UNIQUE,
@@ -343,6 +346,7 @@ export class SqliteHostedLaunchStore
       !attempt ||
       attempt.worker_id !== null ||
       Number(attempt.revoked) !== 0 ||
+      this.#cancellationRequested(owner.attemptId) ||
       attempt.deployment_id !== deploymentId
     )
       return false;
@@ -401,6 +405,30 @@ export class SqliteHostedLaunchStore
       runId
     );
     return { accepted: true, runId };
+  }
+
+  async requestAttemptCancellation(launchId: string, attemptId: string): Promise<boolean> {
+    assertAttemptId(launchId);
+    assertAttemptId(attemptId);
+    return this.storage.transactionSync(() => {
+      const launch = this.#get(launchId);
+      const attempt = this.#getAttempt({ launchId, attemptId });
+      if (!launch || TERMINAL.has(launch.state) || !attempt || Number(attempt.revoked) !== 0)
+        return false;
+      this.storage.sql.exec(
+        "INSERT OR IGNORE INTO tubeless_attempt_cancellations (attempt_id) VALUES (?)",
+        attemptId
+      );
+      return true;
+    });
+  }
+
+  #cancellationRequested(attemptId: string): boolean {
+    return (
+      this.storage.sql
+        .exec("SELECT 1 FROM tubeless_attempt_cancellations WHERE attempt_id = ?", attemptId)
+        .toArray().length > 0
+    );
   }
 
   async revokeAttempt(launchId: string, attemptId: string): Promise<void> {
@@ -516,6 +544,19 @@ export class SqliteHostedLaunchStore
     });
   }
 
+  async collectorCancellationRequested(
+    authority: CollectorAuthorization,
+    workerId: string
+  ): Promise<boolean> {
+    assertAttemptId(workerId);
+    return this.storage.transactionSync(() => {
+      this.#requireCollectorAuthority(authority);
+      const attempt = this.#getAttempt(authority);
+      if (!attempt || attempt.worker_id !== workerId) throw new HostedAttemptConflict("ownership");
+      return this.#cancellationRequested(authority.attemptId);
+    });
+  }
+
   async reportCollectorFailure(
     authority: CollectorAuthorization,
     workerId: string,
@@ -531,7 +572,7 @@ export class SqliteHostedLaunchStore
     const digest = await digestCollectorBody(bytes);
     return this.storage.transactionSync(() => {
       this.#requireCollectorAuthority(snapshot);
-      const attempt = this.#getAttempt({ ...snapshot, workerId });
+      const attempt = this.#getAttempt(snapshot);
       if (failure.attemptId !== snapshot.attemptId || !attempt || attempt.worker_id !== workerId)
         throw new HostedAttemptConflict("ownership");
       const receipt = this.storage.sql
@@ -559,7 +600,7 @@ export class SqliteHostedLaunchStore
     });
   }
 
-  #getAttempt(owner: HostedAttemptOwner) {
+  #getAttempt(owner: Pick<HostedAttemptOwner, "launchId" | "attemptId">) {
     return this.storage.sql
       .exec(
         "SELECT * FROM tubeless_attempts WHERE launch_id = ? AND attempt_id = ?",

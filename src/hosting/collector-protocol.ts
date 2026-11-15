@@ -9,6 +9,7 @@ import {
 export const COLLECTOR_BATCH_BYTES = 1_048_576;
 export const COLLECTOR_BATCH_EVENTS = 50;
 export const COLLECTOR_CLAIM_BYTES = 8192;
+export const COLLECTOR_CONTROL_BYTES = 8192;
 export const COLLECTOR_FAILURE_BYTES = 65_536;
 export const COLLECTOR_MESSAGE_BYTES = 8192;
 export const COLLECTOR_RESPONSE_BYTES = 8192;
@@ -21,6 +22,8 @@ export const failureSchema = wireObject(
   { attemptId: collectorId, failureId: collectorId, message: wireString({ allowEmpty: true }) },
   { strict: true }
 );
+export const controlSchema = wireObject({ attemptId: collectorId }, { strict: true });
+export const controlReplySchema = wireObject({ cancelRequested: wireBoolean() }, { strict: true });
 export const claimReplySchema = wireObject({ admitted: wireBoolean() }, { strict: true });
 export const batchReplySchema = wireObject(
   { accepted: wireLiteral(true), runId: collectorId },

@@ -1,7 +1,7 @@
 import { fork } from "node:child_process";
 import type { CollectorRunJob, CollectorRunResult } from "../hosting/collector-run.js";
 import { createCollectorTransport } from "../hosting/collector-transport.js";
-import { MAX_TIMEOUT_DELAY_MS } from "../utilities/abort.js";
+import { abortableSleep, MAX_TIMEOUT_DELAY_MS } from "../utilities/abort.js";
 import type {
   CollectorWorkerRequest,
   CollectorWorkerResponse,
@@ -30,7 +30,7 @@ export function startCollectorWorker(options: {
   /** Bounds startup/claim, separately from the post-claim execution budget. */
   readonly startupTimeoutMs?: number;
   readonly cancelGraceMs?: number;
-  /** Parent-side failure-report transport. Child delivery uses native HTTPS and its own trust store. */
+  /** Parent-side control and failure-report transport. Child delivery uses native HTTPS. */
   readonly fetch?: typeof fetch;
 }) {
   const { baseUrl, token, deploymentId, fetch: transportFetch } = options;
@@ -61,22 +61,42 @@ export function startCollectorWorker(options: {
     stdio: ["ignore", "ignore", "ignore", "ipc"],
     serialization: "advanced",
   });
-  let exited = false;
-  let stopping = false;
   let workerId: string | undefined;
   let outcome: CollectorRunResult | undefined;
   let forced: ReturnType<typeof setTimeout> | undefined;
+  const stop = new AbortController();
   const send = (message: CollectorWorkerRequest) => {
     if (child.connected) child.send(message, () => {});
   };
   const cancel = () => {
-    if (exited || stopping) return false;
-    stopping = true;
+    if (stop.signal.aborted) return false;
+    stop.abort();
     send({ type: "cancel" });
     forced = setTimeout(() => child.kill("SIGKILL"), cancelGraceMs);
     return true;
   };
   let deadline = setTimeout(cancel, startupTimeoutMs);
+  async function pollCancellation(workerId: string): Promise<void> {
+    const transport = createCollectorTransport({
+      baseUrl,
+      launchId: packet.job.launchId,
+      workerId,
+      token,
+      fetch: transportFetch,
+      signal: stop.signal,
+    });
+    while (!stop.signal.aborted) {
+      try {
+        if ((await transport.cancellationRequested(packet.job.attemptId)).cancelRequested) {
+          cancel();
+          return;
+        }
+      } catch {
+        // Lost contact is neither a cancellation request nor proof of termination.
+      }
+      await abortableSleep(1000, stop.signal, "Worker supervision");
+    }
+  }
   // Ignore unrelated application IPC; only validated runtime messages affect supervision.
   child.on("message", (value: unknown) => {
     let message: CollectorWorkerResponse;
@@ -89,12 +109,13 @@ export function startCollectorWorker(options: {
       workerId = message.workerId;
       clearTimeout(deadline);
       deadline = setTimeout(cancel, packet.job.maxRunDurationMs);
+      void pollCancellation(message.workerId).catch(() => {});
     } else if (message.type === "done") outcome = message.result;
   });
   child.on("error", () => {}); // The close result remains unconfirmed; never echo bootstrap secrets.
   const completed = new Promise<CollectorWorkerResult>((resolve) => {
     child.once("close", (code, signal) => {
-      exited = true;
+      stop.abort();
       clearTimeout(deadline);
       clearTimeout(forced);
       void finish(code, signal).then(resolve);
