@@ -9,23 +9,23 @@ behind the bundled executable; their implementation modules are not public subpa
 Directory names describe internal ownership. Keep implementation tests beside
 their source files.
 
-| Directory     | Responsibility                                                                                                                               |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `core/`       | Pipeline definitions, graph planning, execution, lifecycle and progress                                                                      |
-| `agent/`      | In-process decision validation, handler/pipeline tools, owned state, shared subtree admission                                                |
-| `tracing/`    | Trace contracts, internal emission and exporter composition                                                                                  |
-| `utilities/`  | Domain-independent cancellation, collections, batching, retry, rate limits, error branding and the checkpoint store contract                 |
-| `cli/`        | Argument parsing, command declarations and pipeline adaptation                                                                               |
-| `reporter/`   | Terminal reporting and live ticker rendering                                                                                                 |
-| `render/`     | Plan and error formatting                                                                                                                    |
-| `run-store/`  | Event reader/store contracts, projection, SQLite and NDJSON adapters                                                                         |
-| `studio/`     | HTTP server, browser client, page, state and UI protocol                                                                                     |
-| `project/`    | Typed pipeline projects and parsed pipeline document compilation                                                                             |
-| `hosting/`    | Platform-neutral deployment hosting: project commands, hosted execution, Studio host composition                                             |
-| `cloudflare/` | Cloudflare deploy target: Access, Durable Object storage and execution, public `tubeless/cloudflare` and `tubeless/cloudflare/cache` entries |
-| `workbench/`  | Module loading, executable integration and adapter wiring                                                                                    |
-| `node/`       | Optional filesystem, path, environment, checkpoints and Node worker execution                                                                |
-| `testing/`    | Test runtime and executable-example integration tests                                                                                        |
+| Directory     | Responsibility                                                                                                                                     |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `core/`       | Pipeline definitions, graph planning, execution, lifecycle and progress                                                                            |
+| `agent/`      | In-process decision validation, handler/pipeline tools, owned state, shared subtree admission                                                      |
+| `tracing/`    | Trace contracts, internal emission and exporter composition                                                                                        |
+| `utilities/`  | Domain-independent cancellation, bounded body reading, collections, batching, retry, rate limits, error branding and the checkpoint store contract |
+| `cli/`        | Argument parsing, command declarations and pipeline adaptation                                                                                     |
+| `reporter/`   | Terminal reporting and live ticker rendering                                                                                                       |
+| `render/`     | Plan and error formatting                                                                                                                          |
+| `run-store/`  | Event reader/store contracts, projection, SQLite and NDJSON adapters                                                                               |
+| `studio/`     | HTTP server, browser client, page, state and UI protocol                                                                                           |
+| `project/`    | Typed pipeline projects and parsed pipeline document compilation                                                                                   |
+| `hosting/`    | Platform-neutral deployment hosting: project commands, hosted execution, Studio host composition                                                   |
+| `cloudflare/` | Cloudflare deploy target: Access, Durable Object storage and execution, public `tubeless/cloudflare` and `tubeless/cloudflare/cache` entries       |
+| `workbench/`  | Module loading, executable integration and adapter wiring                                                                                          |
+| `node/`       | Optional filesystem, path, environment, checkpoints and Node worker execution                                                                      |
+| `testing/`    | Test runtime and executable-example integration tests                                                                                              |
 
 ## Dependency direction
 
@@ -164,13 +164,26 @@ their source files.
   claim per launch, fenced event writes and explicit revocation. The same SQLite
   adapter owns the attempt, replay-receipt and run-binding tables within its
   transactions.
-  `attempt-batch.ts` decodes current-version events and hashes an owned snapshot of
-  the exact envelope bytes. Ownership, events, sequence and the original receipt
+  `attempt-batch.ts` owns count/byte batch encoding, current-version event decoding
+  and hashing an owned snapshot of the exact envelope bytes. Ownership, events, sequence and the original receipt
   commit together. Trusted liveness, cancellation lookup and reconciliation read
   only trusted launches; shared history still includes owned attempts. Each append
   path validates one launch snapshot before the common transactional commit.
-  These operations are not exposed by the existing trusted RPC
-  or HTTP API; claim uncertainty never authorizes another execution.
+  `collector-store.ts` defines the authenticated operation port; `collector-credentials.ts`
+  provisions per-attempt bearer secrets with native HMAC verifiers. The SQLite adapter
+  checks persisted expiry and revocation inside every authenticated write transaction.
+  `collector-http.ts` owns the separate Fetch handler, authenticating before bounded
+  body reads. `collector-protocol.ts` owns strict envelopes and transport limits.
+  `collector-client.ts` owns one worker invocation's admission and delivery lifecycle,
+  ordered batch queue and explicit failure reporting after execution exits.
+  `collector-transport.ts` owns HTTPS requests, deadlines, exact-byte retries and
+  typed replies. Strict collector envelopes use the canonical wire-object decoder;
+  stored-event reads retain tolerant decoding for history compatibility.
+  `utilities/read-body.ts` supplies bounded, cancellable byte reading for the collector,
+  delivery client and Studio JSON parsing, using one bounded buffer independent of
+  chunk count. Claim uncertainty never authorizes execution;
+  delivery failure never automatically declares termination. These operations are
+  not mounted in Studio or exposed by the existing trusted Cloudflare RPC.
   `hosting/run-coordinator.ts` owns launch validation, start acknowledgements,
   ingestion and cancellation through that store and a `HostedExecutor`. Its
   observed dispatch task arranges recovery before execution, independently of
@@ -180,8 +193,8 @@ their source files.
   `hosting/process-executor.test-support.ts` exercises the shared contracts in a
   Node process; the CLI retains its existing execution lifecycle.
   See the [hosted execution and ingest design](../design/hosted-run-ingest.md) before
-  exposing this trusted port to a network. HTTP ingestion is a proposed contract,
-  with separate admission, credential, ownership and replay requirements.
+  integrating the collector with an independent worker. The transport is internal;
+  production routing, credential delivery, dispatch and supervision remain target-owned.
 - The Cloudflare target composes hosting, Studio and storage contracts inside Durable
   Objects. Only `cloudflare/cloudflare.ts` imports `cloudflare:workers`; nothing outside
   `cloudflare/` imports it, and its public declarations stay structural. The

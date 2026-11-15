@@ -1,3 +1,5 @@
+import { BodyLimitError, readBoundedBody } from "../../utilities/read-body.js";
+
 /** Format a host literal for an HTTP URL or authority. */
 export function formatHttpUrlHost(host: string): string {
   return host.includes(":") ? `[${host}]` : host;
@@ -91,35 +93,17 @@ export function errorResponse(
 
 /** Read at most 64 KiB of JSON without assuming a runtime-specific body helper. */
 export async function readJsonBody(request: Request): Promise<unknown> {
-  const chunks: Uint8Array[] = [];
-  let byteLength = 0;
-  const reader = request.body?.getReader();
-  if (reader) {
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        byteLength += value.byteLength;
-        if (byteLength > MAX_REQUEST_BODY_BYTES) {
-          throw new StudioRequestError(
-            "request_body_too_large",
-            "Request body exceeds 64 KiB.",
-            413,
-            "Send a JSON body no larger than 64 KiB."
-          );
-        }
-        chunks.push(value);
-      }
-    } finally {
-      await reader.cancel().catch(() => {});
-      reader.releaseLock();
-    }
-  }
-  const bytes = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
+  let bytes: Uint8Array;
+  try {
+    bytes = await readBoundedBody(request.body, MAX_REQUEST_BODY_BYTES, request.signal);
+  } catch (error) {
+    if (!(error instanceof BodyLimitError)) throw error;
+    throw new StudioRequestError(
+      "request_body_too_large",
+      "Request body exceeds 64 KiB.",
+      413,
+      "Send a JSON body no larger than 64 KiB."
+    );
   }
   try {
     return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
