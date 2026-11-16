@@ -1,3 +1,4 @@
+import type { LaunchActor } from "../studio/shared/launch-metadata.js";
 import { errorResponse } from "../studio/server/http.js";
 
 export interface AccessConfig {
@@ -90,7 +91,7 @@ async function defaultFetchJson(url: string): Promise<unknown> {
 export function createAccessAuthenticator(
   config: AccessConfig,
   options: AccessAuthenticatorOptions = {}
-): (request: Request) => Promise<Response | undefined> {
+): (request: Request) => Promise<Response | LaunchActor | undefined> {
   const fetchJson = options.fetchJson ?? defaultFetchJson;
   const now = options.now ?? Date.now;
   const refreshIntervalMs = options.refreshIntervalMs ?? 30_000;
@@ -203,6 +204,13 @@ export function createAccessAuthenticator(
     if (payload.iss !== config.issuer) return denial(request, 403);
     const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
     if (!audiences.includes(config.audience)) return denial(request, 403);
-    return undefined;
+    const service = payload.sub === "" && typeof payload.common_name === "string";
+    const id = service ? payload.common_name : (payload.sub ?? payload.email);
+    if (typeof id !== "string" || !id || id.length > 1024) return undefined;
+    const label =
+      typeof payload.email === "string" && payload.email.length > 0 && payload.email.length <= 1024
+        ? payload.email
+        : undefined;
+    return { id, kind: service ? "service" : "user", ...(label ? { label } : {}) };
   };
 }

@@ -193,6 +193,7 @@ describe("module runtime boundaries", () => {
       "studio/shared/limits.js",
       "studio/server/http.js",
       "studio/shared/protocol.js",
+      "studio/shared/launch-metadata.js",
       "studio/server/state.js",
       "studio/server/history.js",
       "studio/server/run-details.js",

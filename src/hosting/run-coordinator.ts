@@ -51,7 +51,7 @@ const formatDuration = (ms: number) =>
   ms === 1000 ? "1 second" : ms > 1000 && ms % 1000 === 0 ? `${ms / 1000} seconds` : `${ms} ms`;
 export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStudioLauncher {
   readonly commands;
-  readonly #waiters = new Map<string, (result: PipelineRunStudioLaunchResult) => void>();
+  readonly #waiters = new Map<string, Set<(result: PipelineRunStudioLaunchResult) => void>>();
   #closed = false;
   readonly #dispatches = new Set<Promise<void>>();
   private readonly deps: HostedRunCoordinatorOptions<TDispatch> & {
@@ -96,20 +96,7 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
     );
     if ("errors" in parsed) return { accepted: false, errors: parsed.errors };
     const launchId = crypto.randomUUID();
-    const acknowledged = new Promise<PipelineRunStudioLaunchResult>((resolve) =>
-      this.#waiters.set(launchId, resolve)
-    );
-    const timeoutMs = this.deps.startTimeoutMs;
-    const timeout = setTimeout(
-      () =>
-        this.acknowledge(launchId, {
-          accepted: false,
-          errors: [
-            `The run did not record a start within ${formatDuration(timeoutMs)}. It may still start; check history before launching again.`,
-          ],
-        }),
-      timeoutMs
-    );
+    const acknowledged = this.waitForStart(launchId);
     void this.#track(
       this.#dispatch({
         launchId,
@@ -118,11 +105,35 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
         maxRunDurationMs: this.deps.maxRunDurationMs,
       })
     );
-    try {
-      return await acknowledged;
-    } finally {
-      clearTimeout(timeout);
-    }
+    return acknowledged;
+  }
+
+  /** Register before reading persisted state, so a concurrent start cannot be missed. */
+  waitForStart(launchId: string): Promise<PipelineRunStudioLaunchResult> {
+    if (this.#closed)
+      return Promise.resolve({ accepted: false, errors: ["The run host is stopping."] });
+    const waiters = this.#waiters.get(launchId) ?? new Set();
+    this.#waiters.set(launchId, waiters);
+    const timeoutMs = this.deps.startTimeoutMs;
+    return new Promise((resolve) => {
+      const settle = (result: PipelineRunStudioLaunchResult) => {
+        clearTimeout(timeout);
+        waiters.delete(settle);
+        if (waiters.size === 0) this.#waiters.delete(launchId);
+        resolve(result);
+      };
+      const timeout = setTimeout(
+        () =>
+          settle({
+            accepted: false,
+            errors: [
+              `The run did not record a start within ${formatDuration(timeoutMs)}. It may still start; check history before launching again.`,
+            ],
+          }),
+        timeoutMs
+      );
+      waiters.add(settle);
+    });
   }
 
   async #dispatch(job: RunJob): Promise<void> {
@@ -186,10 +197,9 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
 
   /** Notify only after the corresponding history/failure transaction committed. */
   acknowledge(launchId: string, result: PipelineRunStudioLaunchResult): void {
-    const resolve = this.#waiters.get(launchId);
-    if (!resolve) return;
-    this.#waiters.delete(launchId);
-    resolve(result);
+    const waiters = this.#waiters.get(launchId);
+    if (!waiters) return;
+    for (const resolve of waiters) resolve(result);
   }
 
   async cancel(runId: string): Promise<PipelineRunStudioCancelResult> {

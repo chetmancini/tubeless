@@ -253,7 +253,7 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
       const response = await request("/api/commands/" + encodeURIComponent(commandId) + "/runs", {
         method: "POST",
         headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
-        body: JSON.stringify({ values }),
+        body: JSON.stringify({ values, idempotencyKey: globalThis.crypto?.randomUUID?.() }),
       });
       const payload = await readSuccess(response, "Launch failed.");
       return decodeResponse(studioLaunchResultSchema, payload, "launch").runId;

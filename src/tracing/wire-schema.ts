@@ -103,11 +103,11 @@ export function wireString(options: StringOptions = {}): WireSchema<string> {
   });
 }
 
-export function wireLiteral<const TValue extends boolean | number | string>(
+export function wireLiteral<const TValue extends boolean | number | string | null>(
   value: TValue,
   message?: (path: string) => string
 ): WireSchema<TValue> {
-  return schema({ const: value, type: typeof value }, (input, path) => {
+  return schema({ const: value, type: value === null ? "null" : typeof value }, (input, path) => {
     if (input !== value) throw new Error(message?.(path) ?? `${path} must be ${String(value)}`);
     return value;
   });

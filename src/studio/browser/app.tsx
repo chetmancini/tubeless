@@ -5,6 +5,7 @@ import { type StudioApi, type StudioSnapshot, createStudioApi } from "./transpor
 import { StudioDataController } from "./data-controller.js";
 import type { PipelineRunStudioCommand } from "../shared/protocol.js";
 import { commandDescription, errorMessage } from "./components/common.js";
+import type { StudioLaunchMetadata } from "../shared/launch-metadata.js";
 import { RunCrumbs, RunList, RunsView } from "./components/runs.js";
 import { LaunchModal } from "./components/launch.js";
 import { PipelinePage } from "./components/pipeline.js";
@@ -199,7 +200,10 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
   const [canCancel, setCanCancel] = useState(false);
   const [canClearHistory, setCanClearHistory] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [launchCommandId, setLaunchCommandId] = useState<string | null>(null);
+  const [launch, setLaunch] = useState<{
+    commandId: string;
+    previous?: StudioLaunchMetadata;
+  } | null>(null);
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [nowMs, setNowMs] = useState(Date.now);
@@ -216,7 +220,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
       setCommands([]);
       setCanCancel(false);
       setCanClearHistory(false);
-      setLaunchCommandId(null);
+      setLaunch(null);
       setClearHistoryOpen(false);
       setToast("");
       return;
@@ -469,7 +473,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
                 <button
                   class="primary-button"
                   title={`Run ${launchTarget.name}`}
-                  onClick={() => setLaunchCommandId(launchTarget.id)}
+                  onClick={() => setLaunch({ commandId: launchTarget.id })}
                 >
                   Run
                 </button>
@@ -477,7 +481,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
                 commands.length > 0 && (
                   <button
                     class="primary-button"
-                    onClick={() => setLaunchCommandId(commands[0]?.id ?? "")}
+                    onClick={() => setLaunch({ commandId: commands[0]?.id ?? "" })}
                   >
                     Run pipeline
                   </button>
@@ -560,6 +564,8 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
           )}
           {snapshot && page === "run" && (
             <RunsView
+              commands={commands}
+              onRunAgain={(previous) => setLaunch({ commandId: previous.commandId, previous })}
               api={api}
               pipelineId={route.pipelineId}
               pipelineName={pipelineName}
@@ -586,15 +592,16 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
           )}
         </main>
       </div>
-      {launchCommandId !== null && (
+      {launch !== null && (
         <LaunchModal
           api={api}
           commands={commands}
-          commandId={launchCommandId}
-          onClose={() => setLaunchCommandId(null)}
+          commandId={launch.commandId}
+          previousLaunch={launch.previous}
+          onClose={() => setLaunch(null)}
           onLaunched={(runId, commandId) => {
             if (dataController.getState().accessDenied) return;
-            setLaunchCommandId(null);
+            setLaunch(null);
             navigate({ pipelineId: commandId, runId });
             showToast("Run accepted · " + shortId(runId));
             dataController.invalidate({ delayMs: 80 });

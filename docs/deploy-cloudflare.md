@@ -110,7 +110,10 @@ configuration changes. Existing browser-only apps can omit it.
 import { createCloudflareApp } from "tubeless/cloudflare";
 import project from "../tubeless.project.ts";
 
-const app = createCloudflareApp(project, { deploymentId: "release-2026-11-16" });
+const app = createCloudflareApp(project, {
+  deploymentId: "release-2026-11-16",
+  recordInputs: { "validated-import": ["source"] },
+});
 
 export default {
   ...app.worker,
@@ -119,7 +122,11 @@ export default {
       env,
       "validated-import",
       { source: "daily.csv" },
-      { idempotencyKey: `validated-import.daily.${event.scheduledTime}` }
+      {
+        idempotencyKey: `validated-import.daily.${event.scheduledTime}`,
+        actor: { id: "daily-import", kind: "service" },
+        trigger: "schedule",
+      }
     );
     if (!admission.accepted) throw new Error(admission.errors.join("; "));
     console.log(`Admitted launch ${admission.launchId}`);
@@ -178,9 +185,39 @@ is also refused before user code runs. Inspect the original launch, then use a
 new key only when deliberately requesting another run. This is submission
 deduplication, not crash resume or business-side-effect idempotency.
 
-Only the intent digest and admission metadata are added to persistent launch
-bookkeeping. Input history, actor attribution, and prefilled reruns are not enabled
-by this API. Execution jobs still temporarily hold their values as before.
+### Attribution, input history, and Run again
+
+Studio's run Details tab shows the command, launch, deployment and definition IDs,
+trigger, and actor when available. Browser launches use `manual` and the verified
+Cloudflare Access JWT's user ID and email, or service-token client ID. Unconfigured
+localhost sessions and older runs have no verified actor; Studio labels missing
+metadata explicitly. Identity headers and browser JSON cannot supply attribution.
+Trusted `app.launch` callers can supply `actor: { id, kind: "service", label? }` and
+`trigger: "schedule" | "queue" | "code" | "manual"`; the trigger defaults to `code`.
+Attribution is recorded on first admission. Matching retries keep the original
+actor, trigger and input history, even if the retry supplies different attribution.
+
+Input values are **not saved in launch history by default**. To retain selected
+fields, configure `recordInputs: { [commandId]: [parameterKey, ...] }` on
+`createCloudflareApp`. Unknown command IDs or parameter keys are configuration
+errors. Choose only fields suitable for everyone with Studio access; this is an
+allowlist, not automatic secret detection or redaction. Saved values are normalized
+command parameters, including defaults. Non-allowlisted values never enter launch
+metadata. Omitted fields are listed by name; allowed fields distinguish an absent
+value from `""`, `[]`, `false`, and `0`. Execution jobs still temporarily hold their
+full input values, and application logging/exporters retain their own policies.
+
+**Run again** opens the current command's launch form for review. It fills only
+compatible saved fields, leaves unsaved values blank, and asks for missing required
+inputs. Removed fields and changed types, choices or numeric constraints are
+discarded with an explanation. A changed or unavailable definition identity is
+shown before submission; a removed command cannot be rerun. Current command and
+domain-schema validation still apply. Submission creates a fresh key and launch;
+it never replays the old admission or automatically executes when the form opens.
+
+Clear history deletes launch metadata and events together and refuses active
+launches. It preserves launch/admission bookkeeping and deduplication keys. Clearing
+history does not recreate metadata when an old key is retried.
 
 ## Application trace exporters
 

@@ -5,6 +5,12 @@ import {
 import { canonicalJsonValue } from "../utilities/canonical-json.js";
 import { parseHostedLaunch, type HostedCommand, type HostedOutput } from "./hosting-commands.js";
 import type { RunJob } from "./run-contract.js";
+import {
+  launchAttributionSchema,
+  type LaunchAttribution,
+  type StudioLaunchMetadata,
+} from "../studio/shared/launch-metadata.js";
+import { recordedLaunch } from "./launch-metadata.js";
 
 /** Structured command parameters, including built-in execution controls. */
 export type HostedLaunchValues = PipelineRunStudioLaunchRequest["values"];
@@ -24,6 +30,11 @@ export type HostedLaunchResult =
       readonly launchId: string;
     };
 
+/** Only the reservation creator receives a job to dispatch; replay returns no job. */
+export type HostedLaunchDecision =
+  | { readonly accepted: true; readonly launchId: string; readonly job: RunJob | undefined }
+  | Extract<HostedLaunchResult, { accepted: false }>;
+
 /** Current launch bookkeeping; inspect the linked run for its pipeline outcome. */
 export interface HostedLaunchStatus {
   readonly launchId: string;
@@ -37,8 +48,9 @@ export interface HostedLaunchRequest {
   readonly commandId: string;
   readonly values: HostedLaunchValues;
   readonly projectId: string;
-  readonly deploymentId: string;
+  readonly deploymentId: string | undefined;
   readonly idempotencyKey: string;
+  readonly context?: LaunchAttribution;
 }
 
 export interface StoredLaunchAdmission {
@@ -51,6 +63,7 @@ export interface StoredLaunchAdmission {
 export interface HostedLaunchReservation extends StoredLaunchAdmission {
   readonly idempotencyKey: string;
   readonly createdAtMs: number;
+  readonly metadata?: StudioLaunchMetadata;
 }
 
 /** Reservation and its launch creation commit together; only the creator may dispatch. */
@@ -65,11 +78,13 @@ export function isLaunchIdentifier(value: unknown): value is string {
   return typeof value === "string" && /^[a-zA-Z0-9._:-]{1,200}$/.test(value);
 }
 
-function invalid(errors: readonly string[]): HostedLaunchResult {
+function invalid(
+  errors: readonly string[]
+): Extract<HostedLaunchResult, { code: "invalid_launch" }> {
   return { accepted: false, code: "invalid_launch", errors };
 }
 
-function conflict(launchId: string): HostedLaunchResult {
+function conflict(launchId: string): Extract<HostedLaunchResult, { code: "idempotency_conflict" }> {
   return {
     accepted: false,
     code: "idempotency_conflict",
@@ -102,34 +117,46 @@ export function createHostedLaunchAdmission(input: {
   readonly store: HostedLaunchAdmissionStore;
   readonly maxRunDurationMs: number;
   readonly now?: () => number;
+  readonly inputPolicy?: ReadonlyMap<string, ReadonlySet<string>>;
   scheduleReconcile(newLaunchAtMs: number): Promise<void>;
-  start(job: RunJob): Promise<void>;
-}): (request: HostedLaunchRequest) => Promise<HostedLaunchResult> {
+}): (request: HostedLaunchRequest) => Promise<HostedLaunchDecision> {
   const { projectId, deploymentId, output, store, maxRunDurationMs } = input;
   const commands = new Map(input.commands);
+  const policy = input.inputPolicy ?? new Map();
   const now = input.now ?? Date.now;
   const scheduleReconcile = input.scheduleReconcile.bind(input);
-  const start = input.start.bind(input);
   return async ({
     commandId,
     values,
     idempotencyKey,
     projectId: requestedProject,
     deploymentId: requestedDeployment,
+    context,
   }) => {
     if (!isLaunchIdentifier(idempotencyKey))
       return invalid([
         "An idempotency key must contain 1–200 letters, digits, periods, underscores, colons or hyphens.",
       ]);
-    if (!deploymentId || requestedDeployment !== deploymentId || requestedProject !== projectId)
+    if (requestedDeployment !== deploymentId || requestedProject !== projectId)
       return invalid([
         "The Worker and Studio must use the same configured project and deploymentId.",
       ]);
     const request = parseStudioLaunchRequest({ values: structuredClone(values) });
     if (!request)
       return invalid(["Launch values must use the supported bounded command parameter shapes."]);
+    let launchContext: LaunchAttribution;
+    try {
+      launchContext = launchAttributionSchema.decode(context ?? {}, "Launch attribution");
+    } catch {
+      return invalid(["Launch actor or trigger is invalid."]);
+    }
+    // An empty stored deployment denotes an unpinned browser launch; the public code API requires an ID.
+    const storedDeployment = deploymentId ?? "";
     const previous = await store.get(idempotencyKey);
-    if (previous && (previous.commandId !== commandId || previous.deploymentId !== deploymentId))
+    if (
+      previous &&
+      (previous.commandId !== commandId || previous.deploymentId !== storedDeployment)
+    )
       return conflict(previous.launchId);
     const parsed = parseHostedLaunch(commands.get(commandId), request.values, output);
     if ("errors" in parsed) return previous ? conflict(previous.launchId) : invalid(parsed.errors);
@@ -157,27 +184,39 @@ export function createHostedLaunchAdmission(input: {
     ).join("");
     const createdAtMs = now();
     if (!previous) await scheduleReconcile(createdAtMs);
+    const launchId = previous?.launchId ?? crypto.randomUUID();
     const reservation = previous
       ? { created: false, admission: previous }
       : await store.reserve({
           idempotencyKey,
           intentDigest,
-          deploymentId,
+          deploymentId: storedDeployment,
           commandId,
           createdAtMs,
-          launchId: crypto.randomUUID(),
+          launchId,
+          metadata: recordedLaunch(
+            commands.get(commandId)!,
+            normalized,
+            policy.get(commandId),
+            { launchId, deploymentId },
+            launchContext
+          ),
         });
     const { admission } = reservation;
-    if (admission.intentDigest !== intentDigest || admission.deploymentId !== deploymentId)
+    if (admission.intentDigest !== intentDigest || admission.deploymentId !== storedDeployment)
       return conflict(admission.launchId);
-    if (reservation.created)
-      await start({
-        launchId: admission.launchId,
-        commandId,
-        values: normalized,
-        deploymentId,
-        maxRunDurationMs,
-      });
-    return { accepted: true, launchId: admission.launchId };
+    return {
+      accepted: true,
+      launchId: admission.launchId,
+      job: reservation.created
+        ? {
+            launchId: admission.launchId,
+            commandId,
+            values: normalized,
+            deploymentId,
+            maxRunDurationMs,
+          }
+        : undefined,
+    };
   };
 }

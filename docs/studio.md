@@ -471,6 +471,11 @@ For trusted self-hosted Cloudflare code, use the separate
 with a stable idempotency key. Its durable admission contract does not change the
 retry rules for these browser routes.
 
+Self-hosted Cloudflare Studio also records launch attribution and, with an explicit
+per-command allowlist, selected input values. In a run's Details tab, **Run again**
+opens the current command form for review and submits a fresh launch. Unsaved inputs
+must be supplied again. See [Cloudflare launch history](./deploy-cloudflare.md#attribution-input-history-and-run-again).
+
 Studio checks the backend credential on **all** routes, including pages, redirects,
 unknown paths, and readiness, before body parsing, store reads, or command effects.
 It uses a fixed-length timing-safe token comparison and rejects duplicate or

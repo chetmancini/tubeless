@@ -257,6 +257,12 @@ read when a pipeline needs them.
   Keep this capability in trusted Worker code. Adapt the
   [scheduled Worker example](../examples/cloudflare/scheduled-worker.ts) and read
   [the admission contract](./deploy-cloudflare.md#launch-from-application-code).
+- Cloudflare launch history saves no input values unless `createCloudflareApp` has
+  an explicit `recordInputs: { [commandId]: [parameterKey] }` allowlist. Keep secrets
+  out of that list. Browser actors come from verified Access claims; trusted code
+  can supply a service `actor` and `trigger` on `app.launch`. Retries preserve the
+  first attribution. Studio's Run again opens the current form for review, reuses
+  compatible saved fields, and submits a fresh launch after required inputs are supplied.
 - Keep handlers Workers-compatible: no durable filesystem writes, no `v8` serialization.
   Read bindings through `import { env } from "cloudflare:workers"`.
 - Give every cached step an explicit store and codec from `tubeless/cloudflare/cache`,

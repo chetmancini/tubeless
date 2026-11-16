@@ -1,10 +1,16 @@
 import type { HostedLaunchAdmissionStore, StoredLaunchAdmission } from "./launch-admission.js";
 import type { SqliteLaunchStorage } from "./launch-store-sqlite.js";
+import type { StudioLaunchMetadata } from "../studio/shared/launch-metadata.js";
 
 /** Compose key persistence with the launch adapter's synchronous creation operation. */
 export function createSqliteLaunchAdmissionStore(
   storage: SqliteLaunchStorage,
-  createLaunch: (launchId: string, commandId: string, createdAtMs: number) => void
+  createLaunch: (
+    launchId: string,
+    commandId: string,
+    createdAtMs: number,
+    metadata?: StudioLaunchMetadata
+  ) => void
 ): HostedLaunchAdmissionStore {
   storage.sql.exec(`CREATE TABLE IF NOT EXISTS tubeless_launch_admissions (
     idempotency_key TEXT PRIMARY KEY NOT NULL,
@@ -41,7 +47,7 @@ export function createSqliteLaunchAdmissionStore(
         if (previous) return { created: false, admission: previous };
         const { launchId, commandId, intentDigest, deploymentId, createdAtMs, idempotencyKey } =
           request;
-        createLaunch(launchId, commandId, createdAtMs);
+        createLaunch(launchId, commandId, createdAtMs, request.metadata);
         storage.sql.exec(
           "INSERT INTO tubeless_launch_admissions (idempotency_key, launch_id, intent_digest, deployment_id) VALUES (?, ?, ?, ?)",
           idempotencyKey,

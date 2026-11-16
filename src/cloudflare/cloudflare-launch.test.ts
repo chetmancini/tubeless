@@ -10,6 +10,12 @@ import { createSteps, definePipeline } from "../core/pipeline.js";
 import { definePipelineCommand } from "../cli/cli-pipeline-command.js";
 import { defineProject } from "../project/project.js";
 import { hostedProjectCommands } from "../hosting/hosting-commands.js";
+import { launchInputPolicy } from "../hosting/launch-metadata.js";
+import type {
+  LaunchInputPolicy,
+  LaunchAttribution,
+  StudioLaunchMetadata,
+} from "../studio/shared/launch-metadata.js";
 
 function setup(
   options: {
@@ -19,6 +25,7 @@ function setup(
     start?: (job: RunJob, run: RunObjectCore) => Promise<void>;
     commands?: typeof commands;
     maxRunDurationMs?: number;
+    recordInputs?: LaunchInputPolicy;
   } = {}
 ) {
   const storage = options.storage ?? createFakeDurableStorage();
@@ -45,13 +52,15 @@ function setup(
     clientScript: "",
     maxRunDurationMs: options.maxRunDurationMs ?? 60_000,
     now: options.now,
+    inputPolicy: launchInputPolicy(catalog, options.recordInputs),
     runStub: () => ({ start, cancel: () => false }),
   });
   const launch = (
     idempotencyKey = "daily.1",
     values: CloudflareLaunchValues = { name: "Ada" },
-    commandId = "effect"
-  ) => studio.launch({ commandId, values, idempotencyKey, projectId: "p", deploymentId });
+    commandId = "effect",
+    context?: LaunchAttribution
+  ) => studio.launch({ commandId, values, idempotencyKey, projectId: "p", deploymentId, context });
   return { studio, storage, start, runs, launch };
 }
 
@@ -63,6 +72,73 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Cloudflare programmatic launch admission", () => {
+  it("records only opted-in normalized inputs and preserves the first actor on replay and restart", async () => {
+    const first = setup({ recordInputs: { effect: ["name", "dryRun"] } });
+    const context = {
+      actor: { id: "cron", kind: "service" as const },
+      trigger: "schedule" as const,
+    };
+    const receipt = await first.launch("history.1", { name: "Ada" }, "effect", context);
+    if (!receipt.accepted) throw new Error("Expected admission");
+    await first.runs.get(receipt.launchId)!.alarm();
+    const status = await first.studio.getLaunch(receipt.launchId);
+    const detail = async (studio: StudioObjectCore) =>
+      (await (
+        await studio.fetch(new Request(`https://studio.example/api/runs/${status!.runId}`))
+      ).json()) as { launch: StudioLaunchMetadata };
+    expect((await detail(first.studio)).launch).toMatchObject({
+      launchId: receipt.launchId,
+      commandId: "effect",
+      deploymentId: "release-1",
+      actor: context.actor,
+      trigger: "schedule",
+      inputs: {
+        recorded: expect.arrayContaining([
+          expect.objectContaining({ key: "name", value: "Ada" }),
+          expect.objectContaining({ key: "dryRun", value: false }),
+        ]),
+      },
+    });
+    const reopened = setup({ storage: first.storage });
+    expect(
+      await reopened.launch("history.1", { name: "Ada" }, "effect", {
+        actor: { id: "someone-else", kind: "user" },
+        trigger: "queue",
+      })
+    ).toEqual(receipt);
+    expect((await detail(reopened.studio)).launch.actor).toEqual(context.actor);
+    expect(reopened.start).not.toHaveBeenCalled();
+    expect(
+      (
+        await reopened.launch("invalid-context", { name: "Ada" }, "effect", {
+          trigger: "forged" as never,
+        })
+      ).accepted
+    ).toBe(false);
+  });
+
+  it("defaults to recording no values and clears metadata without deleting admission receipts", async () => {
+    const { studio, storage, launch, runs } = setup();
+    const receipt = await launch("private", { name: "never-save-this" });
+    if (!receipt.accepted) throw new Error("Expected admission");
+    const rows = () => storage.sql.exec("SELECT * FROM tubeless_launch_metadata").toArray();
+    expect(JSON.stringify(rows())).not.toContain("never-save-this");
+    expect(JSON.parse(String(rows()[0]!.metadata_json)).inputs.recorded).toEqual([]);
+    const clear = () =>
+      studio.fetch(
+        new Request("https://studio.example/api/history", {
+          method: "DELETE",
+          headers: { origin: "https://studio.example", "x-tubeless-studio-clear-history": "1" },
+        })
+      );
+    expect((await clear()).status).toBe(409);
+    expect(rows()).toHaveLength(1);
+    await runs.get(receipt.launchId)!.alarm();
+    expect((await clear()).status).toBe(200);
+    expect(rows()).toEqual([]);
+    expect(await launch("private", { name: "never-save-this" })).toEqual(receipt);
+    expect(rows()).toEqual([]);
+  });
   it("admits concurrent submissions once, normalizes defaults, and keeps the receipt after completion", async () => {
     const { studio, launch, start, runs, storage } = setup();
     const [first, duplicate] = await Promise.all([
@@ -77,6 +153,7 @@ describe("Cloudflare programmatic launch admission", () => {
     ]);
     expect(first.accepted).toBe(true);
     expect(duplicate).toEqual(first);
+    expect(first).toEqual({ accepted: true, launchId: expect.any(String) });
     expect(start).toHaveBeenCalledTimes(1);
     expect(sideEffect).not.toHaveBeenCalled();
     if (!first.accepted) throw new Error("Expected admission");
