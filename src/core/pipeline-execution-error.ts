@@ -58,7 +58,7 @@ export class PipelineChildError extends Error {
 
 const originalPipelineErrors = new WeakMap<PipelineError, unknown>();
 
-/** Private provenance carried from a leaf handler to the diagnostic boundary. */
+/** Private provenance carried from an application handler to the diagnostic boundary. */
 export class PipelineHandlerFailure {
   constructor(readonly error: unknown) {}
 }
@@ -82,7 +82,7 @@ function collectHandlerFailures(
     : undefined;
 }
 
-/** Leaf-handler evidence only; any other failure origin makes the run unclassified. */
+/** Application-handler evidence only; any other failure origin makes the run unclassified. */
 export function pipelineHandlerFailures(
   result: PipelineRun<unknown>
 ): readonly unknown[] | undefined {

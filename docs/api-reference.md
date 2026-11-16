@@ -12,20 +12,20 @@ Package: `tubeless`
 | -------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------ | ---------------: |
 | `tubeless/agent/node`            | `./dist/agent/node.d.ts`                       | `73e8caecc9e4c9cfcb71a961379ddd53fd7f0cdbe8e8577178d84e2c0bc9e3cf` |                6 |
 | `tubeless/agent`                 | `./dist/agent/agent.d.ts`                      | `f650cfc8f8e581cdff0bd4df546fc8025d8882a09e9f5094e8f696a0867ae172` |               44 |
-| `tubeless`                       | `./dist/core/pipeline.d.ts`                    | `c09cab713d6175c7115e6f675a80283523a09dd08c56269de8b546af2ca8b8fd` |               82 |
-| `tubeless/cli`                   | `./dist/cli/cli.d.ts`                          | `2f79f4ddbaf4ac98d0eb8ccc30c95c53313011f2283464a0bd05011422027603` |               33 |
+| `tubeless`                       | `./dist/core/pipeline.d.ts`                    | `63321b0475729b8c94beaf42d30ef6ccde59562240afd60e13a17ea4d652bf1c` |               82 |
+| `tubeless/cli`                   | `./dist/cli/cli.d.ts`                          | `bdbada69f8b62f1aa214a532d36f48ef1186a8c5f2551350f35c47cd91c6f795` |               33 |
 | `tubeless/batch`                 | `./dist/utilities/batch.d.ts`                  | `856e4e759f1a62a4edd210d0291bc8b3d82b2e3e983bd37d7348bfb2b8993156` |                7 |
-| `tubeless/node`                  | `./dist/node/node.d.ts`                        | `3c6773a2a6371c618fd2c635def2393586c05bd7f4abe9907f97fcd8fa4ae6f5` |               16 |
+| `tubeless/node`                  | `./dist/node/node.d.ts`                        | `bf35ac08c0fea6b9edbe40ca4a446f6ddc8d43599bc5f4fcfef0c8158c41a065` |               16 |
 | `tubeless/rate-limit`            | `./dist/utilities/rate-limit.d.ts`             | `21223a0ce096d7eb188e7aa38e4e0df70081b086f899dfea825b429308f6910e` |                1 |
 | `tubeless/retry`                 | `./dist/utilities/retry.d.ts`                  | `ae8bdf0276b1930e4052f88a4912efe7dc6b857a8a51dcf2399eac0514fc9a0b` |                6 |
-| `tubeless/project`               | `./dist/project/project.d.ts`                  | `bd086f07f534b4d3997794dae7e83b503286bf6b39485b4c14410ac74100688f` |                9 |
-| `tubeless/testing`               | `./dist/testing/testing.d.ts`                  | `14f481312589ffc89f5cd212a7cf170b0a587b0e52bd77b02dece9e6381bbac6` |               16 |
+| `tubeless/project`               | `./dist/project/project.d.ts`                  | `dc4e95415d9eabd0be835ba451b75c31d8f15b09bd40c37f77566baa2ce70669` |                9 |
+| `tubeless/testing`               | `./dist/testing/testing.d.ts`                  | `6df1f6a09ac77cd88becf385538062f2d34ed36223cf872de2bec0a4655c1d62` |               16 |
 | `tubeless/tracing`               | `./dist/tracing/tracing.d.ts`                  | `af6edbdd05cf46af0434b1b8ff7ff6af03f81beb98608031d322c60f3b7c7eb7` |                4 |
 | `tubeless/agent/openai`          | `./dist/agent/openai.d.ts`                     | `4531a27632d6cf2eb47af66f98908dd38f8f2442062f94ff7fcfae4a34c5d4bb` |                2 |
 | `tubeless/agent/mcp`             | `./dist/agent/mcp.d.ts`                        | `dadd4fac3e3d5979dcd4d4889c7e4aef0ce85a88c92b547dca0d19f5942f78ec` |                7 |
 | `tubeless/agent/anthropic`       | `./dist/agent/anthropic.d.ts`                  | `bcfb9509f35f2e4868fb44b1c48abe5df9ad182cab2dd1bd4da581a0a54dec8a` |                2 |
-| `tubeless/cloudflare`            | `./dist/cloudflare/cloudflare.d.ts`            | `53412fdb5989dff072c784eda06eda69f007f778a96e34dce7d6c5b15eb9ad53` |               21 |
-| `tubeless/cloudflare/cache`      | `./dist/cloudflare/cloudflare-cache.d.ts`      | `16048dc4a3739c478fddbd214e5094d4beb707e6c43323bde0a5582f97cf1062` |                4 |
+| `tubeless/cloudflare`            | `./dist/cloudflare/cloudflare.d.ts`            | `d5bda7542833ad68a0fcf06a64424671b2b694505917fb52bedd716bbe1e3146` |               21 |
+| `tubeless/cloudflare/cache`      | `./dist/cloudflare/cloudflare-cache.d.ts`      | `33feb3037cbf6fc8a8b28a56e242d60e86a48a52a3412e44bf94b23a2b114c45` |                4 |
 | `tubeless/cloudflare/transcript` | `./dist/cloudflare/cloudflare-transcript.d.ts` | `16d1ce9f7867b6aa9285c2611f924133fbc5cfd1038180591280ff4f602cdfc5` |                2 |
 | `tubeless/check-report`          | `./dist/utilities/check-report.d.ts`           | `419f3aa46711da489d280616e62b73512dfc1a5f699f4108abdd5b6f437b7788` |               14 |
 
@@ -103,13 +103,13 @@ Package: `tubeless`
 | [`ArtifactSaver`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-artifacts.ts#L17)                 | Application-owned write boundary returning a typed receipt and separate trace metadata.                                       |
 | [`createSteps`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L73)                       | Create typed step constructors for one pipeline definition.                                                                   |
 | [`definePipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline.ts#L147)                         | Compile a typed step graph into a validated, executable pipeline.                                                             |
-| [`ForEachItemFailurePolicy`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L198)    | What a `forEachPipeline` step does when an item's child run fails: - `"fail"` (default) runs every item, then fails the step. |
-| [`ForEachItemOutput`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L215)           | Output element of a `forEachPipeline` step: the item value, or its settled entry under `"collect"`.                           |
-| [`ForEachSettledItem`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L201)          | One item's outcome from `forEachPipeline` with `onItemFailure: "collect"`, in item order.                                     |
+| [`ForEachItemFailurePolicy`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L200)    | What a `forEachPipeline` step does when an item's child run fails: - `"fail"` (default) runs every item, then fails the step. |
+| [`ForEachItemOutput`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L217)           | Output element of a `forEachPipeline` step: the item value, or its settled entry under `"collect"`.                           |
+| [`ForEachSettledItem`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L203)          | One item's outcome from `forEachPipeline` with `onItemFailure: "collect"`, in item order.                                     |
 | [`isPipelineErrorCode`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L230)              | Return whether an unknown value is a stable package-owned pipeline error code.                                                |
 | [`IterationDecision`](https://github.com/chetmancini/tubeless/blob/main/src/core/iteration.ts#L17)                      | Continue with a new state or publish the iteration step's final output.                                                       |
 | [`IterationState`](https://github.com/chetmancini/tubeless/blob/main/src/core/iteration.ts#L14)                         | Read-only state supplied to an iteration's mapping and transition callbacks.                                                  |
-| [`MappedChildProgressOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L188)  | Presentation options for opaque `forEachPipeline` progress.                                                                   |
+| [`MappedChildProgressOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L190)  | Presentation options for opaque `forEachPipeline` progress.                                                                   |
 | [`Pipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L609)                         | Compiled pipeline that can be planned, executed, and rendered as a graph.                                                     |
 | [`PIPELINE_ERROR_CODES`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L222)             | Ordered catalog of every stable package-owned pipeline error code.                                                            |
 | [`PipelineCacheOptions`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-cache.ts#L58)              | Defaults for opted-in steps; configuring defaults does not make other steps cacheable.                                        |
@@ -169,7 +169,7 @@ Package: `tubeless`
 | [`requireOutputs`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-finalizer.ts#L38)                | Build a finalizer that only runs when every listed step published an output.                                                  |
 | [`RUN_MODEL_VERSION`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-ids.ts#L2)                    | Current persisted run-record schema version.                                                                                  |
 | [`StandardSchemaV1`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-types.ts#L281)                 | Dependency-free subset of the Standard Schema V1 protocol.                                                                    |
-| [`Step`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L83)                         | Typed pipeline step carrying its stable ID, output, and option types.                                                         |
+| [`Step`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L85)                         | Typed pipeline step carrying its stable ID, output, and option types.                                                         |
 | [`StepCache`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-cache.ts#L71)                         | Opt a deterministic ordinary step into caching, with optional overrides of pipeline defaults.                                 |
 | [`StepCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-cache.ts#L42)                    | Encode a detached snapshot; decode must produce a fresh handler-result value.                                                 |
 | [`StepCacheContext`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-cache.ts#L15)                  | Cache I/O is cancellable and independent of pipeline scheduling.                                                              |

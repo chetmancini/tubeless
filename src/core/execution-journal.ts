@@ -1,5 +1,10 @@
 import { throwIfAborted } from "../utilities/abort.js";
-import { STEP_AGENT, STEP_NESTED_PIPELINE, STEP_ORCHESTRATION } from "./pipeline-step-metadata.js";
+import {
+  STEP_AGENT,
+  STEP_INPUT,
+  STEP_NESTED_PIPELINE,
+  STEP_ORCHESTRATION,
+} from "./pipeline-step-metadata.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import type {
   PipelineContext,
@@ -171,7 +176,7 @@ export async function executeWithJournal<TOptions extends object>(
   const boundary =
     step[STEP_AGENT] !== undefined
       ? "agent"
-      : step[STEP_NESTED_PIPELINE] || step[STEP_ORCHESTRATION]
+      : step[STEP_NESTED_PIPELINE] || step[STEP_ORCHESTRATION] || step[STEP_INPUT]
         ? "orchestration"
         : "effect";
   const saved =

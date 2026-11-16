@@ -1,6 +1,11 @@
 import { executionScope } from "./execution-scope.js";
 import { PipelineHandlerFailure } from "./pipeline-execution-error.js";
-import { STEP_CACHE, STEP_NESTED_PIPELINE, STEP_ORCHESTRATION } from "./pipeline-step-metadata.js";
+import {
+  STEP_CACHE,
+  STEP_INPUT,
+  STEP_NESTED_PIPELINE,
+  STEP_ORCHESTRATION,
+} from "./pipeline-step-metadata.js";
 import { executeWithStepCache } from "./pipeline-cache.js";
 import { artifactRecordSchema, type ArtifactRecord } from "../tracing/artifact-metadata.js";
 import type { AnyStep } from "./pipeline-steps.js";
@@ -66,7 +71,8 @@ export async function executeStepAttempt<TOptions extends object>(input: {
   step: AnyStep<TOptions>;
 }): Promise<unknown> {
   const { step } = input;
-  const leaf = !step[STEP_NESTED_PIPELINE] && !step[STEP_ORCHESTRATION];
+  const handlerOwned = !step[STEP_NESTED_PIPELINE] && !step[STEP_ORCHESTRATION];
+  const leaf = handlerOwned && !step[STEP_INPUT];
   let acceptsReports = true;
   const stepContext = {
     ...input.context,
@@ -90,7 +96,7 @@ export async function executeStepAttempt<TOptions extends object>(input: {
         ? await step.dryRun(input.inputs, stepContext)
         : await step.run(input.inputs, stepContext);
     } catch (error) {
-      throw leaf ? new PipelineHandlerFailure(error) : error;
+      throw handlerOwned ? new PipelineHandlerFailure(error) : error;
     } finally {
       acceptsReports = false;
     }

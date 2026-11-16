@@ -4,6 +4,7 @@ import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.j
 import type {
   STEP_AGENT,
   STEP_CACHE,
+  STEP_INPUT,
   STEP_NESTED_PIPELINE,
   STEP_OPTIONS_SCHEMA,
   STEP_ORCHESTRATION,
@@ -41,6 +42,7 @@ export type AnyStepDryRunHandler<TOptions extends object> = {
 
 /** Runtime shape shared by every declared pipeline step. */
 export interface AnyStep<TOptions extends object = object> {
+  readonly [STEP_INPUT]?: true;
   readonly [STEP_ORCHESTRATION]?: true;
   readonly [STEP_AGENT]?: NonNullable<PipelinePlanStep["agent"]>;
   readonly [STEP_NESTED_PIPELINE]?: NonNullable<PipelinePlanStep["nestedPipeline"]>;
