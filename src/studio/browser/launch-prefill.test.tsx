@@ -5,7 +5,7 @@ import type { StudioLaunchMetadata } from "../shared/launch-metadata.js";
 import type { CliParameterDescriptor } from "../../cli/cli.js";
 import { createStudioLaunchForm, serializeLaunchValues } from "./launch-form.js";
 import { LaunchHistory } from "./components/launch-history.js";
-import { LaunchModal } from "./components/launch.js";
+import { CommandFields, LaunchModal } from "./components/launch.js";
 import { createStudioApi } from "./transport.js";
 
 const parameter = (
@@ -57,6 +57,52 @@ const launch: StudioLaunchMetadata = {
 };
 
 describe("Studio rerun review", () => {
+  it("shows current scalar defaults and environment fallbacks for unsaved rerun fields", () => {
+    const current = {
+      ...command,
+      parameters: [
+        parameter("limit", { type: "number", default: 100 }),
+        parameter("source", { default: "current.csv", environment: "IMPORT_SOURCE" }),
+      ],
+    };
+    const form = createStudioLaunchForm(current, launch);
+    expect(serializeLaunchValues(current, form)).toEqual({});
+    const html = renderToString(
+      <CommandFields command={current} form={form} onChange={() => {}} />
+    );
+    expect(html).toMatch(/class="field-hint"[^>]*>[^<]*100/);
+    expect(html).toMatch(/class="field-hint"[^>]*>[^<]*IMPORT_SOURCE[^<]*current\.csv/);
+  });
+
+  it("allows a recorded empty required string while still requiring an unsaved value", () => {
+    const current = {
+      ...command,
+      parameters: [
+        parameter("empty", { required: true, default: "fallback" }),
+        parameter("missing", { required: true }),
+      ],
+    };
+    const form = createStudioLaunchForm(current, launch);
+    const html = renderToString(
+      <CommandFields command={current} form={form} onChange={() => {}} />
+    );
+    const empty = html.match(/<input[^>]*id="run-param-0"[^>]*>/)?.[0];
+    const missing = html.match(/<input[^>]*id="run-param-1"[^>]*>/)?.[0];
+    expect(empty).toBeDefined();
+    expect(empty).not.toMatch(/\srequired(?:[\s=/>])/);
+    expect(missing).toMatch(/\srequired(?:[\s=/>])/);
+    expect(serializeLaunchValues(current, form)).toEqual({ empty: "" });
+    const unsaved = createStudioLaunchForm(current, {
+      ...launch,
+      inputs: { recorded: [], omitted: ["empty", "missing"] },
+    });
+    const unsavedHtml = renderToString(
+      <CommandFields command={current} form={unsaved} onChange={() => {}} />
+    );
+    expect(unsavedHtml.match(/<input[^>]*id="run-param-0"[^>]*>/)?.[0]).toMatch(
+      /\srequired(?:[\s=/>])/
+    );
+  });
   it("uses current boolean defaults while leaving unsaved scalar inputs blank", () => {
     const current = {
       ...command,

@@ -23,10 +23,13 @@ function parameterLabel(parameter: CliParameterDescriptor): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function parameterHint(parameter: CliParameterDescriptor): string {
+function parameterHint(parameter: CliParameterDescriptor, savedEmpty: boolean): string {
   const details = [];
   if (parameter.description) details.push(parameter.description);
   if (parameter.environment) details.push("Environment fallback: " + parameter.environment);
+  if (parameter.default !== undefined)
+    details.push("Current default: " + JSON.stringify(parameter.default) + ".");
+  if (savedEmpty) details.push("Saved value: empty string. Leave blank to reuse it.");
   if (parameter.multiple)
     details.push(parameter.choices ? "Choose one or more values." : "Enter one value per line.");
   if (parameter.mustExist)
@@ -38,12 +41,20 @@ interface ParameterControlProps {
   index: number;
   onChange(index: number, values: StudioParameterValue[]): void;
   parameter: CliParameterDescriptor;
+  savedEmpty: boolean;
   values: readonly StudioParameterValue[];
 }
 
-function ParameterControl({ index, onChange, parameter, values }: ParameterControlProps) {
+function ParameterControl({
+  index,
+  onChange,
+  parameter,
+  savedEmpty,
+  values,
+}: ParameterControlProps) {
   const id = "run-param-" + index;
-  const hint = parameterHint(parameter);
+  const hint = parameterHint(parameter, savedEmpty);
+  const required = parameter.required && !savedEmpty;
   const label = parameterLabel(parameter);
   if (parameter.type === "boolean") {
     return (
@@ -64,7 +75,7 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
   const fieldLabel = (
     <label for={id}>
       {label}
-      {parameter.required && <span class="required-mark">required</span>}
+      {required && <span class="required-mark">required</span>}
     </label>
   );
   let control;
@@ -74,7 +85,7 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
       <select
         id={id}
         multiple={parameter.multiple}
-        required={parameter.required}
+        required={required}
         value={parameter.multiple ? undefined : (selectedValues[0] ?? "")}
         onChange={(event: TargetedEvent<HTMLSelectElement>) =>
           onChange(
@@ -86,8 +97,12 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
         }
       >
         {!parameter.multiple && (
-          <option value="" disabled={parameter.required}>
-            {parameter.required ? "Choose a value" : "Use default or leave unset"}
+          <option value="" disabled={required}>
+            {required
+              ? "Choose a value"
+              : savedEmpty
+                ? "Use saved empty string"
+                : "Use default or leave unset"}
           </option>
         )}
         {parameter.choices.map((choice) => (
@@ -121,7 +136,7 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
         step={parameter.integer ? "1" : "any"}
         min={parameter.min}
         max={parameter.max}
-        required={parameter.required}
+        required={required}
         onInput={(event) =>
           onChange(
             index,
@@ -146,7 +161,7 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
               : "./file"
             : ""
         }
-        required={parameter.required}
+        required={required}
         onInput={(event) => onChange(index, [event.currentTarget.value])}
       />
     );
@@ -163,10 +178,10 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
 interface CommandFieldsProps {
   command: PipelineRunStudioCommand;
   onChange(index: number, values: StudioParameterValue[]): void;
-  values: readonly (readonly StudioParameterValue[])[];
+  form: StudioLaunchForm;
 }
 
-export function CommandFields({ command, onChange, values }: CommandFieldsProps) {
+export function CommandFields({ command, onChange, form }: CommandFieldsProps) {
   const renderSection = (execution: boolean, title: string, note: string) => {
     const parameters = command.parameters
       .map((parameter, index) => ({ index, parameter }))
@@ -180,7 +195,8 @@ export function CommandFields({ command, onChange, values }: CommandFieldsProps)
             index={index}
             onChange={onChange}
             parameter={parameter}
-            values={values[index] ?? []}
+            savedEmpty={form.emptyKeys.has(parameter.key)}
+            values={form.values[index] ?? []}
           />
         ))}
       </div>
@@ -360,7 +376,8 @@ export function LaunchModal({
           {form.review && (
             <div class="field-hint" role="status">
               Review the saved inputs and supply any missing required values. This creates a new
-              launch.
+              launch. Unrecorded inputs may use the current defaults or environment fallbacks shown
+              below.
               {form.review.definitionChanged && (
                 <p>
                   The pipeline definition changed or could not be compared. This run will use the
@@ -395,9 +412,7 @@ export function LaunchModal({
             </select>
           </div>
           <div ref={firstField}>
-            {command && (
-              <CommandFields command={command} onChange={updateValue} values={form.values} />
-            )}
+            {command && <CommandFields command={command} onChange={updateValue} form={form} />}
           </div>
           {plan && (
             <div class="plan-result" aria-live="polite">

@@ -52,7 +52,11 @@ function run(overrides: Partial<StoredPipelineRun> = {}): StoredPipelineRun {
 describe("Studio components", () => {
   it("renders form controls from descriptors", () => {
     const markup = renderToString(
-      <CommandFields command={command} values={[[""]]} onChange={() => {}} />
+      <CommandFields
+        command={command}
+        form={{ values: [[""]], emptyKeys: new Set() }}
+        onChange={() => {}}
+      />
     );
     expect(markup).toContain("Display Name");
     expect(markup).toContain("A &quot;name&quot;");
@@ -659,7 +663,7 @@ describe("run detail hierarchy", () => {
             },
           ],
         }}
-        values={[[""], [false]]}
+        form={{ values: [[""], [false]], emptyKeys: new Set() }}
         onChange={() => {}}
       />
     );

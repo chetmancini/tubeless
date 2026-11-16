@@ -209,7 +209,10 @@ full input values, and application logging/exporters retain their own policies.
 
 **Run again** opens the current command's launch form for review. It fills only
 compatible saved fields, leaves unsaved values blank, and asks for missing required
-inputs. Removed fields and changed types, choices or numeric constraints are
+inputs. Review the current defaults and configured environment fallbacks shown with
+each field; blank unsaved inputs can use those fallbacks. A saved empty string is
+an explicit supplied value and can remain blank even for a required parameter.
+Removed fields and changed types, choices or numeric constraints are
 discarded with an explanation. A changed or unavailable definition identity is
 shown before submission; a removed command cannot be rerun. Current command and
 domain-schema validation still apply. Submission creates a fresh key and launch;
