@@ -18,6 +18,12 @@ export interface VitestReportOptions {
   process: CheckProcessOutcome;
 }
 
+function lastNonFailedTest(tests: readonly CheckTest[]): number {
+  for (let index = tests.length - 1; index >= 0; index--)
+    if (tests[index].outcome !== "failed") return index;
+  return -1;
+}
+
 /** Adapt Vitest 5 JSON reporter output, never console text. Retries are final outcomes only. */
 export function vitestCheckReport(
   content: string | undefined,
@@ -101,7 +107,9 @@ export function vitestCheckReport(
         duplicates.set(key, group);
         if (tests.length >= L.tests) {
           truncated = true;
-          continue;
+          const replace = t.status === "failed" ? lastNonFailedTest(tests) : -1;
+          if (replace < 0) continue;
+          tests.splice(replace, 1);
         }
         const test: CheckTest = {
           id,
@@ -139,7 +147,8 @@ export function vitestCheckReport(
     report.completeness = checkReportCompleteness(report);
     for (const entries of [report.tests, report.failures]) {
       while (Buffer.byteLength(JSON.stringify(report)) > L.bytes && entries.length) {
-        entries.pop();
+        const discard = entries === report.tests ? lastNonFailedTest(report.tests) : -1;
+        entries.splice(discard < 0 ? entries.length - 1 : discard, 1);
         if (entries === report.tests) report.omittedTests++;
         report.truncated = true;
         report.completeness = "incomplete";

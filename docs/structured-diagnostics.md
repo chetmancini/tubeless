@@ -58,7 +58,9 @@ unavailable. Missing durations, locations, causes and raw references stay absent
 Failure messages/stacks are retained from structured runner data, not parsed for
 source locations. `includeTaskLocation` supplies test declaration locations.
 
-Input JSON is capped at 2 MB; normalized reports at 32 KiB and 128 tests. Each
+Input JSON is capped at 2 MB; normalized reports at 32 KiB and 128 tests. The
+adapter favors failed tests over other outcomes under both limits, preserving
+their original identities and source order among retained tests. Each
 test retains four failures, with 2,000-character messages and 4,000-character
 stacks. Collection failures are capped at 16. Details clipped or tests omitted
 by the adapter set `truncated` and `completeness: "incomplete"`. The decoder

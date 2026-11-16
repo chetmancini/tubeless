@@ -161,6 +161,41 @@ describe("optional Vitest structured adapter", () => {
     expect(vitestCheckReport(JSON.stringify(input), options).state).toBe("malformed");
   });
 
+  it.each([
+    ["test-count", L.tests, 0],
+    ["byte", 32, 700],
+  ] as const)("retains a late failed test when applying the %s limit", (_, count, padding) => {
+    const input = JSON.parse(raw());
+    const failed = input.testResults[0].assertionResults[0];
+    const passing = Array.from({ length: count }, (_, i) => ({
+      ...failed,
+      title: `passes ${i} ${"x".repeat(padding)}`,
+      status: "passed",
+      failureMessages: [],
+    }));
+    input.testResults[0].assertionResults = [...passing, failed];
+    input.numTotalTests = count + 1;
+    const result = vitestCheckReport(JSON.stringify(input), options);
+    expect(result).toMatchObject({
+      state: "available",
+      report: { completeness: "incomplete", truncated: true },
+    });
+    if (result.state !== "available") throw new Error(result.state);
+    expect(result.report.tests.filter((test) => test.outcome === "failed")).toEqual([
+      expect.objectContaining({
+        id: JSON.stringify(["test/ü.spec.ts", ["suite"], "fails", 0]),
+        title: "fails",
+        line: 3,
+        column: 2,
+        failures: [expect.objectContaining({ message: "expected 4 to be 5" })],
+      }),
+    ]);
+    expect(result.report.tests.length).toBeLessThanOrEqual(L.tests);
+    expect(result.report.omittedTests).toBe(input.numTotalTests - result.report.tests.length);
+    expect(result.report.omittedTests).toBeGreaterThan(0);
+    expect(Buffer.byteLength(JSON.stringify(result.report))).toBeLessThanOrEqual(L.bytes);
+  });
+
   it("keeps process failure independent of passing claims and unavailable timing", () => {
     const input = JSON.parse(raw());
     input.success = true;
