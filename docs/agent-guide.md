@@ -145,6 +145,17 @@ For an explicit Node/Bun repository gate on a POSIX host, use [the optional Node
   retry the whole pipeline. Add host-owned observation, compatibility checks,
   loading, and supply to recover individual outputs; see
   [host recovery](./step-output-recovery.md). Correlation IDs give no persistence.
+- For recovery across fresh processes, pass a host-owned `executionJournal` in
+  runtime context and follow the [execution journal contract](./execution-journal.md).
+  Give every journaled pipeline an explicit `implementationVersion`; keep inputs,
+  cwd, effective controls and replayed callbacks compatible. Acknowledged outputs
+  restore; incomplete ordinary effects require reconciliation. Only built-in
+  composition, input waits and native agent handoff re-enter incomplete work.
+  Host input callbacks deduplicate with `executionJournalPath`, not fresh `runId`s.
+  Keep this capability separate from `context.checkpoint`, caches and traces.
+  Native agents inherit their own journal or use explicit durability before the
+  host's `agentStore`; the outer journal is suppressed inside agent work.
+  Adapt [host embedding](../examples/host-embedding.ts).
 
 ## Projects and commands
 

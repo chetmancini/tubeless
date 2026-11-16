@@ -34,8 +34,37 @@ export interface PipelineLogger {
   warn(message?: unknown, ...optionalParams: unknown[]): void;
 }
 
+/** Host-owned, fenced recovery for one logical execution. Resolve writes only after durable acknowledgement. */
+export interface PipelineExecutionJournal {
+  /** Reuse for recovery; use a new key for a new intentional execution. */
+  readonly key: string;
+  /** Atomically record or compare an owned, lossless compatibility snapshot. Reject differences. */
+  bind(path: readonly string[], binding: unknown): Promise<void>;
+  /** Persist intent before returning new; distinguish incomplete intent from completed undefined. */
+  begin(
+    path: readonly string[],
+    inputs: unknown,
+    boundary: "effect" | "orchestration"
+  ): Promise<
+    | { readonly status: "new" | "incomplete" }
+    | { readonly status: "completed"; readonly value: unknown }
+  >;
+  /** Atomically complete an existing intent; identical retries succeed, conflicting values fail. */
+  complete(path: readonly string[], value: unknown): Promise<void>;
+  /** Optional native agent handoff. Structurally compatible with AgentCheckpointStore. */
+  readonly agentStore?: {
+    acquire(key: string): Promise<{
+      read(): Promise<string | undefined>;
+      write(checkpoint: string): Promise<void>;
+      close(): Promise<void>;
+    }>;
+  };
+}
+
 /** Caller-supplied services and metadata shared by one pipeline execution. */
 export interface PipelineContext {
+  /** Optional host-owned execution recovery, separate from completed-item checkpoints and caches. */
+  executionJournal?: PipelineExecutionJournal;
   /** Optional caller-owned identifier used to correlate separate executions. */
   correlationId?: string;
   /**
@@ -142,6 +171,8 @@ export interface PipelineRuntime extends PipelineContext {
 
 /** Resolved execution context provided to pipeline handlers. */
 export interface PipelineExecutionContext<TOptions extends object> extends PipelineRuntime {
+  /** Stable logical boundary identity for host input deduplication; absent during previews and agent work. */
+  readonly executionJournalPath?: readonly string[];
   dryRun: boolean;
   options: TOptions;
   /** Explicit run-wide cache policy; absent uses each step's policy. */

@@ -41,6 +41,7 @@ Guides:
 
 Hosting:
 
+- Host-owned execution recovery: ./execution-journal.md
 - Deploy to Cloudflare: ./deploy-cloudflare.md
 - Airflow: ./airflow.md
 - Temporal: ./temporal.md

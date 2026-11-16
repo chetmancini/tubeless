@@ -58,6 +58,7 @@ export type {
   PipelineDefinitionIdentity,
   PipelineDefinitionSnapshot,
   PipelineLogger,
+  PipelineExecutionJournal,
   PipelineContext,
   PipelineRunControls,
   PipelineChildRunControls,
