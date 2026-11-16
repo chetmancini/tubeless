@@ -128,6 +128,16 @@ Agents:
 
 Optional capabilities:
 
+- For host-owned crash recovery, supply `executionJournal` in runtime context.
+  Require explicit pipeline implementation versions and stable inputs/controls;
+  acknowledged outputs restore, while incomplete ordinary effects stop for
+  reconciliation. Keep mappers, predicates, schemas and finalizers replay-safe.
+  Hosts own storage, fencing and waiting; input requests use stable
+  `executionJournalPath`, while each invocation has a fresh `runId`. Native agents
+  use inherited/explicit checkpoints or the host's `agentStore` and suppress the
+  outer journal inside agent work. This is separate from item checkpoints and
+  caches. Read the package's `docs/execution-journal.md` and adapt
+  `examples/host-embedding.ts`.
 - Artifacts: `context.recordArtifact`, `loadArtifact`, `saveArtifact`
   (`docs/artifacts.md`). Graph metadata (`docs/graph-metadata.md`). Node helpers
   from `tubeless/node` (`definePaths`, `writeJson`, `resetDir`; mark writes

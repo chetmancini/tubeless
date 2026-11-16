@@ -231,7 +231,7 @@ export function isPipelineCancellation(
 export function stepExecutionError(
   failure: unknown,
   runtime: Pick<PipelineRuntime, "signal">,
-  stepId: string
+  stepId?: string
 ): PipelineError {
   const error = failure instanceof PipelineHandlerFailure ? failure.error : failure;
   const cancelled = isPipelineCancellation(error, runtime);

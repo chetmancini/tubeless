@@ -2,6 +2,15 @@ import { type PreparedOptions, validatePipelineOptions } from "./prepared-option
 import { abortableSleep, throwIfAborted as throwIfSignalAborted } from "../utilities/abort.js";
 import { createPipelineLifecycleObserver } from "./lifecycle.js";
 import { createRunId } from "./pipeline-ids.js";
+import {
+  assertJournalHealthy,
+  beginJournalStep,
+  bindExecutionJournal,
+  bindJournalInput,
+  completeJournalStep,
+  enterExecutionJournal,
+  journalFailure,
+} from "./execution-journal.js";
 import type { CompiledPipeline } from "./pipeline-compiler.js";
 import type { StepsOptions } from "./pipeline-definition.js";
 import { decideStepDisposition } from "./pipeline-disposition.js";
@@ -10,7 +19,12 @@ import type { CompiledStep } from "./pipeline-graph.js";
 import { planStepById, stepToPlanStep } from "./pipeline-plan.js";
 import { PipelineRunState, type PipelineStepAttempt } from "./pipeline-run-state.js";
 import type { AnyStep } from "./pipeline-steps.js";
-import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
+import {
+  PIPELINE_FINALIZE_STEP_ID,
+  STEP_AGENT,
+  STEP_NESTED_PIPELINE,
+  STEP_ORCHESTRATION,
+} from "./pipeline-step-metadata.js";
 import {
   evaluateStepSkip,
   executeStepAttempt,
@@ -90,6 +104,32 @@ export async function executePlannedRun<
   }
 
   const maxConcurrency = controls.maxConcurrency ?? 1;
+  // Test execution and previews never touch the real recovery capability.
+  const journalContext = {
+    ...runtime,
+    executionJournal:
+      dryRun || input.overrides !== undefined ? undefined : runtime.executionJournal,
+  };
+  const journalScope = journalContext.executionJournal
+    ? enterExecutionJournal(journalContext, compiled.id)
+    : {};
+  const journalRuntime = { ...journalContext, ...journalScope };
+  try {
+    if (journalRuntime.executionJournal) {
+      throwIfAborted(runtime);
+      // Bind original inputs before a schema can mutate them in place.
+      await bindJournalInput(
+        journalRuntime,
+        compiled.definition.identity,
+        input.domainOptions,
+        controls,
+        input.plan
+      );
+    }
+  } catch (error) {
+    state.recordRunErrors([stepExecutionError(error, runtime)]);
+    return state.finish();
+  }
 
   let pipelineOptions = input.domainOptions as TOptions;
   if (compiled.optionsSchema || input.preparedOptions) {
@@ -115,10 +155,20 @@ export async function executePlannedRun<
     }
   }
 
+  try {
+    if (journalRuntime.executionJournal) {
+      throwIfAborted(journalRuntime);
+      await bindExecutionJournal(journalRuntime, ["options"], pipelineOptions);
+    }
+  } catch (error) {
+    state.recordRunErrors([stepExecutionError(error, runtime)]);
+    return state.finish();
+  }
+
   for (const step of input.plan.steps) state.planStep(step);
 
   const executionContext: PipelineExecutionContext<TOptions> = {
-    ...runtime,
+    ...journalRuntime,
     dryRun,
     log: lifecycle.logger(),
     options: pipelineOptions,
@@ -190,7 +240,7 @@ export async function executePlannedRun<
   ): void => {
     const pipelineError = stepExecutionError(error, runtime, plannedStep.id);
     state.failStep(plannedStep, attempt, pipelineError);
-    if (!controls.continueOnError) stopError ??= pipelineError;
+    if (!controls.continueOnError || journalFailure(executionContext)) stopError ??= pipelineError;
   };
 
   const recordPolicySkip = async (
@@ -280,24 +330,49 @@ export async function executePlannedRun<
 
     const attempt = state.beginAttempt(plannedStep);
     try {
-      const output = await executeStepAttempt({
-        attemptId: attempt.attemptId,
-        pipelineId: compiled.id,
-        onCacheHit: () => {
-          attempt.outputSource = "cache";
-        },
-        context: executionContext,
-        dryRun,
-        inputs: stepInputs,
-        log: lifecycle.logger(step.id, attempt.attemptId),
-        onArtifact: (record, preview) =>
-          lifecycle.recordArtifact(step.id, attempt.attemptId, record, preview),
-        onProgress: (progress) => state.reportProgress(plannedStep, attempt, progress),
-        onReportAttempt: (number, attributes) =>
-          lifecycle.reportAttempt(step.id, number, attributes, attempt.attemptId),
-        outputBoundary: `Pipeline ${compiled.id} step ${step.id} output`,
-        step,
-      });
+      const path = executionContext.executionJournalPath
+        ? Object.freeze([...executionContext.executionJournalPath, "step", step.id])
+        : undefined;
+      const stepContext = path
+        ? { ...executionContext, executionJournalPath: path }
+        : executionContext;
+      const nativeAgent = step[STEP_AGENT] !== undefined;
+      const saved =
+        path && !nativeAgent
+          ? await beginJournalStep(
+              executionContext,
+              path,
+              stepInputs,
+              !!step[STEP_NESTED_PIPELINE] || !!step[STEP_ORCHESTRATION]
+            )
+          : undefined;
+      // A cancelled begin never grants permission to start a handler.
+      if (path) throwIfAborted(runtime);
+      assertJournalHealthy(executionContext);
+      const output =
+        saved?.status === "completed"
+          ? saved.value
+          : await executeStepAttempt({
+              attemptId: attempt.attemptId,
+              pipelineId: compiled.id,
+              onCacheHit: () => {
+                attempt.outputSource = "cache";
+              },
+              context: stepContext,
+              dryRun,
+              inputs: stepInputs,
+              log: lifecycle.logger(step.id, attempt.attemptId),
+              onArtifact: (record, preview) =>
+                lifecycle.recordArtifact(step.id, attempt.attemptId, record, preview),
+              onProgress: (progress) => state.reportProgress(plannedStep, attempt, progress),
+              onReportAttempt: (number, attributes) =>
+                lifecycle.reportAttempt(step.id, number, attributes, attempt.attemptId),
+              outputBoundary: `Pipeline ${compiled.id} step ${step.id} output`,
+              step,
+            });
+      if (path && !nativeAgent && saved?.status !== "completed")
+        await completeJournalStep(executionContext, path, output);
+      if (nativeAgent) assertJournalHealthy(executionContext);
       state.completeStep(plannedStep, attempt, output);
     } catch (error) {
       recordStepExecutionFailure(error, plannedStep, attempt);
@@ -308,8 +383,16 @@ export async function executePlannedRun<
     orderedSteps,
     maxConcurrency,
     executeOneStep,
-    shouldStop: () => stopError !== undefined || runtime.signal?.aborted === true,
+    shouldStop: () =>
+      stopError !== undefined ||
+      runtime.signal?.aborted === true ||
+      !!journalFailure(executionContext),
   });
+  const fatalJournalError = journalFailure(executionContext);
+  if (fatalJournalError && !stopError) {
+    stopError = stepExecutionError(fatalJournalError, runtime);
+    state.recordRunErrors([stopError]);
+  }
   if (unstarted.length > 0 && runtime.signal?.aborted) {
     // An external abort takes precedence for work that never started, even
     // when an earlier failure stopped dispatch. Keep every active step's outcome.
@@ -318,7 +401,7 @@ export async function executePlannedRun<
   }
   for (const step of unstarted) recordUnstartedStep(step, stopError!);
 
-  if (state.errors.length === 0 || controls.continueOnError) {
+  if (!fatalJournalError && (state.errors.length === 0 || controls.continueOnError)) {
     const finalizeStartedAt = runtime.now();
     state.beginFinalization();
     try {
