@@ -8,6 +8,8 @@ For an existing script or workflow, use `tubeless-make-pipeline` from the
 [agent skill pack](./agent-skills.md) to choose step boundaries before adapting
 one of these recipes.
 
+For optional structured Vitest failures, see [the diagnostic contract](structured-diagnostics.md). It preserves native outcomes and uses existing artifact recording.
+
 For headless Cloud submission, see [Cloud CLI](./cli.md#tubeless-cloud) for scoped
 credentials, Git refs, admission retries, and following runs that wait for human
 input in the Cloud dashboard.

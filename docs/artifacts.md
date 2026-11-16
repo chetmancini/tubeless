@@ -175,3 +175,12 @@ Cached output in history and Studio. Cache hits do not replay application artifa
 records or verify files referenced by the cached value. Cache receipts describe
 past operations, not current availability. Saved version 2 recordings without
 artifact events remain readable.
+
+## Structured check reports
+
+The optional [Vitest diagnostic adapter](structured-diagnostics.md) normalizes a
+runner JSON artifact into a bounded version-1 report. Store its body in an artifact,
+then use ordinary `recordArtifact` metadata for lineage. On Cloud, the existing
+run-scoped uploader recognizes `*.check-report.json` for bounded run inspection.
+This local slice is not a released or deployed integration. Reports and artifact
+metadata are untrusted observations and cannot establish successful check receipts.

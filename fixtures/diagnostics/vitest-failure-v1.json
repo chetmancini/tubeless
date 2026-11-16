@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "tool": {
+    "name": "vitest",
+    "version": "5.1.0"
+  },
+  "context": {
+    "pipelineId": "check",
+    "runId": "fixture-run",
+    "stepId": "test",
+    "attemptId": "attempt-1",
+    "source": "fixture-sha",
+    "rawOutputArtifact": "vitest.json"
+  },
+  "process": {
+    "status": "exited",
+    "exitCode": 1,
+    "signal": null,
+    "outputComplete": true
+  },
+  "completeness": "complete",
+  "truncated": false,
+  "omittedTests": 0,
+  "tests": [
+    {
+      "id": "[\"fixtures/diagnostics/vitest/failure.spec.ts\",[\"structured failure\"],\"reports the expected value\",0]",
+      "file": "fixtures/diagnostics/vitest/failure.spec.ts",
+      "title": "reports the expected value",
+      "suite": ["structured failure"],
+      "ambiguous": false,
+      "outcome": "failed",
+      "durationMs": 2.130167,
+      "line": 4,
+      "column": 3,
+      "failures": [
+        {
+          "message": "AssertionError: expected 4 to be 5 // Object.is equality\n    at /fixture/fixtures/diagnostics/vitest/failure.spec.ts:5:19\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:1632:35\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:26\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3333:10)\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3318:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3276:10)\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3922:64",
+          "stack": "AssertionError: expected 4 to be 5 // Object.is equality\n    at /fixture/fixtures/diagnostics/vitest/failure.spec.ts:5:19\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:1632:35\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:26\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3333:10)\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3318:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3276:10)\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3922:64",
+          "file": "fixtures/diagnostics/vitest/failure.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "[\"fixtures/diagnostics/vitest/failure.spec.ts\",[\"structured failure\"],\"passes\",0]",
+      "file": "fixtures/diagnostics/vitest/failure.spec.ts",
+      "title": "passes",
+      "suite": ["structured failure"],
+      "ambiguous": false,
+      "outcome": "passed",
+      "durationMs": 0.11283299999999485,
+      "line": 7,
+      "column": 3,
+      "failures": []
+    },
+    {
+      "id": "[\"fixtures/diagnostics/vitest/failure.spec.ts\",[\"structured failure\"],\"skips\",0]",
+      "file": "fixtures/diagnostics/vitest/failure.spec.ts",
+      "title": "skips",
+      "suite": ["structured failure"],
+      "ambiguous": false,
+      "outcome": "skipped",
+      "line": 8,
+      "column": 6,
+      "failures": []
+    },
+    {
+      "id": "[\"fixtures/diagnostics/vitest/failure.spec.ts\",[\"structured failure\"],\"later\",0]",
+      "file": "fixtures/diagnostics/vitest/failure.spec.ts",
+      "title": "later",
+      "suite": ["structured failure"],
+      "ambiguous": false,
+      "outcome": "todo",
+      "line": 9,
+      "column": 6,
+      "failures": []
+    },
+    {
+      "id": "[\"fixtures/diagnostics/vitest/failure.spec.ts\",[\"structured failure\"],\"parameter 1\",0]",
+      "file": "fixtures/diagnostics/vitest/failure.spec.ts",
+      "title": "parameter 1",
+      "suite": ["structured failure"],
+      "ambiguous": false,
+      "outcome": "passed",
+      "durationMs": 0.09087499999999693,
+      "line": 10,
+      "column": 18,
+      "failures": []
+    },
+    {
+      "id": "[\"fixtures/diagnostics/vitest/failure.spec.ts\",[\"structured failure\"],\"parameter 2\",0]",
+      "file": "fixtures/diagnostics/vitest/failure.spec.ts",
+      "title": "parameter 2",
+      "suite": ["structured failure"],
+      "ambiguous": false,
+      "outcome": "passed",
+      "durationMs": 0.06145800000000179,
+      "line": 10,
+      "column": 18,
+      "failures": []
+    },
+    {
+      "id": "[\"fixtures/diagnostics/vitest/failure.spec.ts\",[\"structured failure\"],\"duplicate\",0]",
+      "file": "fixtures/diagnostics/vitest/failure.spec.ts",
+      "title": "duplicate",
+      "suite": ["structured failure"],
+      "ambiguous": true,
+      "outcome": "passed",
+      "durationMs": 0.043290999999996416,
+      "line": 11,
+      "column": 3,
+      "failures": []
+    },
+    {
+      "id": "[\"fixtures/diagnostics/vitest/failure.spec.ts\",[\"structured failure\"],\"duplicate\",1]",
+      "file": "fixtures/diagnostics/vitest/failure.spec.ts",
+      "title": "duplicate",
+      "suite": ["structured failure"],
+      "ambiguous": true,
+      "outcome": "passed",
+      "durationMs": 0.041667000000003895,
+      "line": 12,
+      "column": 3,
+      "failures": []
+    },
+    {
+      "id": "[\"fixtures/diagnostics/vitest/failure.spec.ts\",[\"structured failure\"],\"retried\",0]",
+      "file": "fixtures/diagnostics/vitest/failure.spec.ts",
+      "title": "retried",
+      "suite": ["structured failure"],
+      "ambiguous": false,
+      "outcome": "passed",
+      "durationMs": 0.30004100000000733,
+      "line": 14,
+      "column": 3,
+      "failures": [
+        {
+          "message": "AssertionError: expected 1 to be 2 // Object.is equality\n    at /fixture/fixtures/diagnostics/vitest/failure.spec.ts:14:56\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:1632:35\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:26\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3333:10)\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3318:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3276:10)\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3922:64",
+          "stack": "AssertionError: expected 1 to be 2 // Object.is equality\n    at /fixture/fixtures/diagnostics/vitest/failure.spec.ts:14:56\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:1632:35\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:26\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3333:10)\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3318:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3276:10)\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3922:64",
+          "file": "fixtures/diagnostics/vitest/failure.spec.ts"
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

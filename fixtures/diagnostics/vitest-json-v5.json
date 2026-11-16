@@ -1,0 +1,177 @@
+{
+  "numTotalTestSuites": 2,
+  "numPassedTestSuites": 0,
+  "numFailedTestSuites": 2,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 9,
+  "numPassedTests": 6,
+  "numFailedTests": 1,
+  "numPendingTests": 1,
+  "numTodoTests": 1,
+  "snapshot": {
+    "added": 0,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0,
+    "didUpdate": false
+  },
+  "startTime": 1794799709254,
+  "success": false,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["structured failure"],
+          "fullName": "structured failure reports the expected value",
+          "status": "failed",
+          "title": "reports the expected value",
+          "duration": 2.130167,
+          "failureMessages": [
+            "AssertionError: expected 4 to be 5 // Object.is equality\n    at /fixture/fixtures/diagnostics/vitest/failure.spec.ts:5:19\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:1632:35\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:26\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3333:10)\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3318:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3276:10)\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3922:64"
+          ],
+          "location": {
+            "line": 4,
+            "column": 3
+          },
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["structured failure"],
+          "fullName": "structured failure passes",
+          "status": "passed",
+          "title": "passes",
+          "duration": 0.11283299999999485,
+          "failureMessages": [],
+          "location": {
+            "line": 7,
+            "column": 3
+          },
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["structured failure"],
+          "fullName": "structured failure skips",
+          "status": "skipped",
+          "title": "skips",
+          "failureMessages": [],
+          "location": {
+            "line": 8,
+            "column": 6
+          },
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["structured failure"],
+          "fullName": "structured failure later",
+          "status": "todo",
+          "title": "later",
+          "failureMessages": [],
+          "location": {
+            "line": 9,
+            "column": 6
+          },
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["structured failure"],
+          "fullName": "structured failure parameter 1",
+          "status": "passed",
+          "title": "parameter 1",
+          "duration": 0.09087499999999693,
+          "failureMessages": [],
+          "location": {
+            "line": 10,
+            "column": 18
+          },
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["structured failure"],
+          "fullName": "structured failure parameter 2",
+          "status": "passed",
+          "title": "parameter 2",
+          "duration": 0.06145800000000179,
+          "failureMessages": [],
+          "location": {
+            "line": 10,
+            "column": 18
+          },
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["structured failure"],
+          "fullName": "structured failure duplicate",
+          "status": "passed",
+          "title": "duplicate",
+          "duration": 0.043290999999996416,
+          "failureMessages": [],
+          "location": {
+            "line": 11,
+            "column": 3
+          },
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["structured failure"],
+          "fullName": "structured failure duplicate",
+          "status": "passed",
+          "title": "duplicate",
+          "duration": 0.041667000000003895,
+          "failureMessages": [],
+          "location": {
+            "line": 12,
+            "column": 3
+          },
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["structured failure"],
+          "fullName": "structured failure retried",
+          "status": "passed",
+          "title": "retried",
+          "duration": 0.30004100000000733,
+          "failureMessages": [
+            "AssertionError: expected 1 to be 2 // Object.is equality\n    at /fixture/fixtures/diagnostics/vitest/failure.spec.ts:14:56\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:1632:35\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:26\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3338:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3333:10)\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3318:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3276:10)\n    at file:///fixture/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:3922:64"
+          ],
+          "location": {
+            "line": 14,
+            "column": 3
+          },
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        }
+      ],
+      "startTime": 1794799709332,
+      "endTime": 1794799709335.3,
+      "status": "failed",
+      "message": "",
+      "name": "/fixture/fixtures/diagnostics/vitest/failure.spec.ts"
+    }
+  ]
+}
