@@ -120,6 +120,12 @@ read when a pipeline needs them.
 
 ### Caching and artifacts
 
+- For structured test failures, use the optional `vitestCheckReport` adapter from
+  `tubeless/node` with Vitest 5 JSON reporter output and independently observed
+  process outcomes. Store the bounded report as an artifact before failing the
+  step; do not scrape logs or turn reported test passes into execution authority.
+  See [structured diagnostics](./structured-diagnostics.md).
+
 - Opt ordinary deterministic steps into caching with `cache: { version: "v1" }`,
   or `cache: true` to inherit the pipeline's `implementationVersion`. Defaults hash
   dependency inputs and validated options and store results under the run cwd's

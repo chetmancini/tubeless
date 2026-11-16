@@ -1,5 +1,6 @@
 export { openCheckpoint, withCheckpointedBatch, type CheckpointStore } from "./checkpoint.js";
 export { requireEnv } from "./env.js";
+export { vitestCheckReport, type VitestReportOptions } from "./vitest-report.js";
 export { readJson, resetDir, writeJson } from "./file-utils.js";
 export { definePaths } from "./paths.js";
 export {

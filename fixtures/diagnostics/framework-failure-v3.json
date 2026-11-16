@@ -1,0 +1,182 @@
+{
+  "run": {
+    "pipelineId": "check",
+    "dryRun": false,
+    "errors": [
+      {
+        "code": "TUBELESS_STEP_FAILED",
+        "kind": "step",
+        "phase": "execution",
+        "stepId": "test",
+        "message": "Vitest exited with code 1",
+        "stack": "Error: Vitest exited with code 1\n    at run (/fixture/[eval]:1:265)\n    at <anonymous> (/fixture/dist/core/pipeline-step-executor.js:57:30)\n    at <anonymous> (/fixture/dist/core/pipeline-cache.js:72:61)\n    at executeWithStepCache (/fixture/dist/core/pipeline-cache.js:74:16)\n    at executeStepAttempt (/fixture/dist/core/pipeline-step-executor.js:66:12)\n    at <anonymous> (/fixture/dist/core/pipeline-execute.js:208:34)\n    at schedulePipelineSteps (/fixture/dist/core/pipeline-scheduler.js:34:30)\n    at executePlannedRun (/fixture/dist/core/pipeline-execute.js:230:29)\n    at executeCompiled (/fixture/dist/core/pipeline.js:57:16)\n    at run (/fixture/dist/core/pipeline.js:72:16)",
+        "sourceCode": "NATIVE_EXIT",
+        "cause": {
+          "message": "assertion failure",
+          "name": "Error",
+          "sourceCode": "EASSERT"
+        }
+      }
+    ],
+    "finishedAtMs": 1794799370479,
+    "runId": "check:72f08a55-639b-4a09-9544-cdfcc8e584b6",
+    "startedAtMs": 1794799370477,
+    "status": "failed",
+    "steps": [
+      {
+        "id": "test",
+        "finishedAtMs": 1794799370478,
+        "attemptId": "check:72f08a55-639b-4a09-9544-cdfcc8e584b6:attempt:1",
+        "error": {
+          "code": "TUBELESS_STEP_FAILED",
+          "kind": "step",
+          "phase": "execution",
+          "stepId": "test",
+          "message": "Vitest exited with code 1",
+          "stack": "Error: Vitest exited with code 1\n    at run (/fixture/[eval]:1:265)\n    at <anonymous> (/fixture/dist/core/pipeline-step-executor.js:57:30)\n    at <anonymous> (/fixture/dist/core/pipeline-cache.js:72:61)\n    at executeWithStepCache (/fixture/dist/core/pipeline-cache.js:74:16)\n    at executeStepAttempt (/fixture/dist/core/pipeline-step-executor.js:66:12)\n    at <anonymous> (/fixture/dist/core/pipeline-execute.js:208:34)\n    at schedulePipelineSteps (/fixture/dist/core/pipeline-scheduler.js:34:30)\n    at executePlannedRun (/fixture/dist/core/pipeline-execute.js:230:29)\n    at executeCompiled (/fixture/dist/core/pipeline.js:57:16)\n    at run (/fixture/dist/core/pipeline.js:72:16)",
+          "sourceCode": "NATIVE_EXIT",
+          "cause": {
+            "message": "assertion failure",
+            "name": "Error",
+            "sourceCode": "EASSERT"
+          }
+        },
+        "startedAtMs": 1794799370478,
+        "status": "failed"
+      }
+    ],
+    "version": 2,
+    "finalized": false,
+    "definitionIdentity": {
+      "version": 1,
+      "structuralFingerprint": "sha256:3b092e7a0944dbfaf865868908b0862b416b7fd2b6398636a4da587ee51ea29e",
+      "definitionId": "sha256:334a42db554536b84338dfa00bb2518129efc87177a99f505a60cb87459c9aaf"
+    }
+  },
+  "events": [
+    {
+      "pipelineId": "check",
+      "runId": "check:72f08a55-639b-4a09-9544-cdfcc8e584b6",
+      "timestampMs": 1794799370477,
+      "version": 3,
+      "name": "pipeline.started",
+      "payload": {
+        "definitionIdentity": {
+          "version": 1,
+          "definitionId": "sha256:334a42db554536b84338dfa00bb2518129efc87177a99f505a60cb87459c9aaf",
+          "structuralFingerprint": "sha256:3b092e7a0944dbfaf865868908b0862b416b7fd2b6398636a4da587ee51ea29e"
+        },
+        "definitionSnapshot": {
+          "identity": {
+            "version": 1,
+            "definitionId": "sha256:334a42db554536b84338dfa00bb2518129efc87177a99f505a60cb87459c9aaf",
+            "structuralFingerprint": "sha256:3b092e7a0944dbfaf865868908b0862b416b7fd2b6398636a4da587ee51ea29e"
+          },
+          "steps": [
+            {
+              "id": "test",
+              "dependencies": [],
+              "optionalDependencies": [],
+              "skipAfterFailureOf": [],
+              "dryRun": "run",
+              "runtimeSkipPossible": false,
+              "outputValidated": false
+            }
+          ],
+          "targetIds": ["test"],
+          "optionsValidated": false,
+          "resultValidated": false
+        },
+        "dryRun": false,
+        "planOk": true,
+        "stepCount": 1,
+        "targetIds": ["test"]
+      }
+    },
+    {
+      "pipelineId": "check",
+      "runId": "check:72f08a55-639b-4a09-9544-cdfcc8e584b6",
+      "timestampMs": 1794799370478,
+      "version": 3,
+      "stepId": "test",
+      "name": "step.planned",
+      "payload": {
+        "dependencies": [],
+        "dryRun": "run",
+        "optionalDependencies": [],
+        "runtimeSkipPossible": false,
+        "selected": true,
+        "selectionReasons": [
+          {
+            "kind": "all"
+          }
+        ],
+        "skipAfterFailureOf": []
+      }
+    },
+    {
+      "pipelineId": "check",
+      "runId": "check:72f08a55-639b-4a09-9544-cdfcc8e584b6",
+      "timestampMs": 1794799370478,
+      "version": 3,
+      "stepId": "test",
+      "attemptId": "check:72f08a55-639b-4a09-9544-cdfcc8e584b6:attempt:1",
+      "name": "step.running",
+      "payload": {}
+    },
+    {
+      "pipelineId": "check",
+      "runId": "check:72f08a55-639b-4a09-9544-cdfcc8e584b6",
+      "timestampMs": 1794799370479,
+      "version": 3,
+      "attemptId": "check:72f08a55-639b-4a09-9544-cdfcc8e584b6:attempt:1",
+      "durationMs": 0,
+      "stepId": "test",
+      "error": {
+        "cause": {
+          "message": "assertion failure",
+          "name": "Error",
+          "sourceCode": "EASSERT"
+        },
+        "code": "TUBELESS_STEP_FAILED",
+        "kind": "step",
+        "message": "Vitest exited with code 1",
+        "phase": "execution",
+        "sourceCode": "NATIVE_EXIT",
+        "stack": "Error: Vitest exited with code 1\n    at run (/fixture/[eval]:1:265)\n    at <anonymous> (/fixture/dist/core/pipeline-step-executor.js:57:30)\n    at <anonymous> (/fixture/dist/core/pipeline-cache.js:72:61)\n    at executeWithStepCache (/fixture/dist/core/pipeline-cache.js:74:16)\n    at executeStepAttempt (/fixture/dist/core/pipeline-step-executor.js:66:12)\n    at <anonymous> (/fixture/dist/core/pipeline-execute.js:208:34)\n    at schedulePipelineSteps (/fixture/dist/core/pipeline-scheduler.js:34:30)\n    at executePlannedRun (/fixture/dist/core/pipeline-execute.js:230:29)\n    at executeCompiled (/fixture/dist/core/pipeline.js:57:16)\n    at run (/fixture/dist/core/pipeline.js:72:16)"
+      },
+      "name": "step.failed",
+      "payload": {
+        "status": "failed"
+      }
+    },
+    {
+      "pipelineId": "check",
+      "runId": "check:72f08a55-639b-4a09-9544-cdfcc8e584b6",
+      "timestampMs": 1794799370479,
+      "version": 3,
+      "durationMs": 2,
+      "error": {
+        "cause": {
+          "message": "assertion failure",
+          "name": "Error",
+          "sourceCode": "EASSERT"
+        },
+        "code": "TUBELESS_STEP_FAILED",
+        "kind": "step",
+        "message": "Vitest exited with code 1",
+        "phase": "execution",
+        "sourceCode": "NATIVE_EXIT",
+        "stack": "Error: Vitest exited with code 1\n    at run (/fixture/[eval]:1:265)\n    at <anonymous> (/fixture/dist/core/pipeline-step-executor.js:57:30)\n    at <anonymous> (/fixture/dist/core/pipeline-cache.js:72:61)\n    at executeWithStepCache (/fixture/dist/core/pipeline-cache.js:74:16)\n    at executeStepAttempt (/fixture/dist/core/pipeline-step-executor.js:66:12)\n    at <anonymous> (/fixture/dist/core/pipeline-execute.js:208:34)\n    at schedulePipelineSteps (/fixture/dist/core/pipeline-scheduler.js:34:30)\n    at executePlannedRun (/fixture/dist/core/pipeline-execute.js:230:29)\n    at executeCompiled (/fixture/dist/core/pipeline.js:57:16)\n    at run (/fixture/dist/core/pipeline.js:72:16)"
+      },
+      "name": "pipeline.completed",
+      "payload": {
+        "dryRun": false,
+        "errorCount": 1,
+        "finalized": false,
+        "status": "failed",
+        "stepCount": 1
+      }
+    }
+  ]
+}

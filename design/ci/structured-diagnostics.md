@@ -1,6 +1,6 @@
 # O2: structured check diagnostics
 
-Status: proposed. Priority: first, independently of O1. Size: M across slices.
+Status: first O2/C4 slice implemented locally, November 15, 2026. Further slices remain proposed. No publication or hosted rollout claim.
 Baseline: OSS `8f932a247328ea0f6e2f898cf3792e1412f87ae4`, Cloud
 `01ca1b89a75eb63eab631877f3052e97b01cf1c0`, November 3, 2026.
 
@@ -8,6 +8,32 @@ Let a developer or agent identify a failing command/test from bounded structured
 data, while keeping raw-output references and uncertainty. Start with one Vitest
 report adapter; TypeScript locations are a separate slice. The parent
 [roadmap](./README.md) records dependencies and Cloud ownership.
+
+## Implemented first slice
+
+See [the implemented contract](../../docs/structured-diagnostics.md) for the exact
+version-1 shape, bounds, optional Vitest adapter, paired fixtures, Cloud projection
+and API/MCP/CLI behavior. Current checkouts: OSS `0.4.1`, Cloud patched `0.4.1`.
+Framework errors retain their existing classification and causes. Cloud preserves
+bounded structured snapshots alongside compatibility strings; it also exposes
+existing supervisor native command exits separately from untrusted report claims.
+
+The real failing Vitest fixture uses the JSON reporter with task locations. A
+Cloud Miniflare integration uploads its report through the run-scoped artifact
+writer, then inspects test identity, failures and source location through native
+HTTP and the existing hosted MCP `get_run`. OSS's CLI keeps those fields in
+machine JSON and retains its failure exit code. Ordinary logs, artifact download
+scopes, pipeline/workspace authorization and retention remain in force.
+
+These are local execution/fixture/consumer checks. Cloud vendors the portable
+decoder pending a published compatible package; no pin upgrade or deployment is
+included. Native repository report-file collection is not yet connected to the
+fixed supervisor recipe. That transport, a compatible pin upgrade and hosted
+acceptance remain release dependencies. A new MCP server is not needed.
+
+The remaining sections preserve the original inventory and follow-up design;
+proposed process helpers, compiler adapters and richer reports are not implemented
+by this first slice.
 
 ## Existing contracts and actual losses
 
@@ -63,7 +89,7 @@ supervisor can establish native exits and trusted check receipts in Cloud.
 Keep claimed tool results and host observations distinct. Unknown/missing data
 must not become a passing test or a trusted successful job.
 
-## Implementation slices
+## Original follow-up scope (first report/projection slice now implemented)
 
 1. Inventory existing fields and round-trip failures. Preserve framework errors
    through the local and Cloud-facing paths before adding new types.
@@ -112,7 +138,6 @@ artifact/recipe/agent guidance and rebuild the website when recommended usage
 changes. Cloud projection acceptance requires its own fixtures/gate and explicit
 runtime pin update, not just a green OSS build.
 
-First slice is done when one controlled failed Vitest fixture yields stable test
-identity/outcome/duration and a usable raw-output reference locally. Cloud parity
-is a separate acceptance gate. Stop for contract review if this requires a new
+The first slice has local failed-fixture and paired Cloud API/MCP acceptance.
+Released and deployed integration remain separate acceptance gates. Stop for contract review if this requires a new
 generic trace event or public error taxonomy rather than an optional report.

@@ -189,6 +189,11 @@
       "types": "./dist/cloudflare/cloudflare-transcript.d.ts",
       "import": "./dist/cloudflare/cloudflare-transcript.js",
       "default": "./dist/cloudflare/cloudflare-transcript.js"
+    },
+    "./check-report": {
+      "types": "./dist/utilities/check-report.d.ts",
+      "import": "./dist/utilities/check-report.js",
+      "default": "./dist/utilities/check-report.js"
     }
   }
 }
