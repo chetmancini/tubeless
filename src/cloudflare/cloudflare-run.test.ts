@@ -14,6 +14,30 @@ afterEach(() => {
 });
 
 describe("run object", () => {
+  it("refuses a pending job after the deployment changes", async () => {
+    sideEffect.mockClear();
+    const storage = createFakeDurableStorage();
+    const { studio, batches, failures } = ingest();
+    const pending = { ...job({ name: "Ada" }), commandId: "effect", deploymentId: "release-1" };
+    await new RunObjectCore({
+      storage,
+      commands,
+      ingest: () => studio,
+      deploymentId: "release-1",
+    }).start(pending);
+    await new RunObjectCore({
+      storage,
+      commands,
+      ingest: () => studio,
+      deploymentId: "release-2",
+    }).alarm();
+    expect(sideEffect).not.toHaveBeenCalled();
+    expect(batches).toEqual([]);
+    expect(failures).toEqual([
+      "The launch deployment no longer matches the run host; user code was not executed.",
+    ]);
+    expect(await storage.get("job")).toBeUndefined();
+  });
   it("executes a job once and clears its storage", async () => {
     const storage = createFakeDurableStorage();
     const { studio, batches, failures } = ingest();

@@ -18,7 +18,16 @@ export function runCloudflareJob(options: {
   readonly ingest: () => StudioIngest;
   readonly controller: AbortController;
   readonly tracing?: PipelineTraceExporterOptions<CloudflareRunTraceContext>;
+  readonly deploymentId?: string;
 }): Promise<void> {
+  if (options.job.deploymentId !== undefined && options.job.deploymentId !== options.deploymentId) {
+    return options
+      .ingest()
+      .reportFailure(
+        options.job.launchId,
+        "The launch deployment no longer matches the run host; user code was not executed."
+      );
+  }
   return runHostedJob({
     ...options,
     job: { ...options.job, maxRunDurationMs: boundedDuration(options.job) },
@@ -43,6 +52,7 @@ export class RunObjectCore {
       readonly ingest: () => StudioIngest;
       readonly now?: () => number;
       readonly tracing?: PipelineTraceExporterOptions<CloudflareRunTraceContext>;
+      readonly deploymentId?: string;
     }
   ) {
     this.#now = deps.now ?? Date.now;
@@ -100,6 +110,7 @@ export class RunObjectCore {
         ingest: this.deps.ingest,
         controller,
         tracing: this.deps.tracing,
+        deploymentId: this.deps.deploymentId,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

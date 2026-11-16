@@ -51,6 +51,36 @@ export interface HostedCommand {
   readonly command: HostedPipelineCommand;
 }
 
+/** Validate one owned submission and expose only declared command parameters. */
+export function parseHostedLaunch(
+  entry: HostedCommand | undefined,
+  values: Record<string, unknown>,
+  output: HostedOutput
+): { values: Record<string, unknown> } | { errors: readonly string[] } {
+  if (!entry) return { errors: ["Pipeline command not found."] };
+  let parsed: HostedParseResult;
+  try {
+    parsed = entry.command.parseValues(
+      values,
+      hostedCommandContext(output, new AbortController().signal)
+    );
+  } catch (error) {
+    return { errors: [error instanceof Error ? error.message : String(error)] };
+  }
+  if (parsed.kind === "error") return { errors: parsed.errors };
+  if (parsed.kind === "help") return { errors: ["Help is not a launchable value set."] };
+  // CLI parsing also produces internal values such as unsupported resume=false.
+  // Only descriptor parameters can be passed back through structured command input.
+  const resolved = parsed.values;
+  return {
+    values: Object.fromEntries(
+      entry.descriptor.parameters
+        .filter((parameter) => resolved[parameter.key] !== undefined)
+        .map((parameter) => [parameter.key, resolved[parameter.key]])
+    ),
+  };
+}
+
 function isHostedPipelineCommand(value: unknown): value is HostedPipelineCommand {
   if (!pipelineForCommand(value)) return false;
   const candidate = value as object;

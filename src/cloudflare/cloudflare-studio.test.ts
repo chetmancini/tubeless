@@ -95,6 +95,7 @@ function setup(
     };
   };
   studio = new StudioObjectCore({
+    projectId: "p",
     storage: studioStorage,
     commands: options.commands ?? commands,
     clientScript: "",

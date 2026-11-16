@@ -25,6 +25,8 @@ import {
   type HostedAttemptStore,
 } from "./attempt-store.js";
 import type { BatchAcknowledgement, HostedLaunchStore } from "./launch-store.js";
+import type { HostedLaunchAdmissionStore, HostedLaunchStatus } from "./launch-admission.js";
+import { createSqliteLaunchAdmissionStore } from "./launch-admission-sqlite.js";
 import type { PipelineRunEventQuery, PipelineRunEventReader } from "../run-store/run-store.js";
 import {
   openSubtreeStartsQuery,
@@ -75,6 +77,7 @@ type LaunchState = "starting" | "running" | "finished" | "failed";
 
 interface LaunchRecord {
   readonly launchId: string;
+  readonly commandId: string;
   readonly runId?: string;
   readonly pipelineId?: string;
   readonly dryRun: boolean;
@@ -121,6 +124,7 @@ function hostTerminatedEvent(
 export class SqliteHostedLaunchStore
   implements HostedLaunchStore, HostedAttemptStore, HostedCollectorStore
 {
+  readonly admissions: HostedLaunchAdmissionStore;
   constructor(
     private readonly storage: SqliteLaunchStorage,
     private readonly events: LaunchEventStore & PipelineRunEventReader,
@@ -183,6 +187,10 @@ export class SqliteHostedLaunchStore
       )`,
     ])
       storage.sql.exec(statement);
+    this.admissions = createSqliteLaunchAdmissionStore(
+      storage,
+      (launchId, commandId, createdAtMs) => this.#create(launchId, commandId, createdAtMs)
+    );
   }
 
   /** Synchronous so target-owned history deletion can check eligibility in its transaction. */
@@ -196,6 +204,17 @@ export class SqliteHostedLaunchStore
 
   async create(launchId: string, commandId: string, nowMs: number): Promise<void> {
     this.#create(launchId, commandId, nowMs);
+  }
+
+  async launchStatus(launchId: string): Promise<HostedLaunchStatus | undefined> {
+    const launch = this.#get(launchId);
+    if (!launch || launch.ownership !== "trusted") return undefined;
+    return {
+      launchId,
+      commandId: launch.commandId,
+      state: launch.state,
+      ...(launch.runId === undefined ? {} : { runId: launch.runId }),
+    };
   }
 
   #create(launchId: string, commandId: string, nowMs: number): void {
@@ -219,6 +238,7 @@ export class SqliteHostedLaunchStore
     if (!row) return undefined;
     return {
       launchId: String(row.launch_id),
+      commandId: String(row.command_id),
       ...(row.run_id == null ? {} : { runId: String(row.run_id) }),
       ...(row.pipeline_id == null ? {} : { pipelineId: String(row.pipeline_id) }),
       dryRun: Number(row.dry_run) === 1,

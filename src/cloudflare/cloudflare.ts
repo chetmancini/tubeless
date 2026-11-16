@@ -8,6 +8,18 @@ import { createAccessAuthenticator, parseAccessConfig } from "./cloudflare-acces
 import { MAX_RUN_DURATION_MS, type CloudflareRunTraceContext } from "./cloudflare-run-contract.js";
 import { RunObjectCore } from "./cloudflare-run.js";
 import { StudioObjectCore, type RunStubLike } from "./cloudflare-studio.js";
+import {
+  isLaunchIdentifier,
+  type HostedLaunchRequest,
+  type HostedLaunchResult as CloudflareLaunchResult,
+  type HostedLaunchStatus as CloudflareLaunchStatus,
+  type HostedLaunchValues as CloudflareLaunchValues,
+} from "../hosting/launch-admission.js";
+export type {
+  HostedLaunchResult as CloudflareLaunchResult,
+  HostedLaunchStatus as CloudflareLaunchStatus,
+  HostedLaunchValues as CloudflareLaunchValues,
+} from "../hosting/launch-admission.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 import { PIPELINE_RUN_STUDIO_CLIENT } from "./cloudflare-studio-client.js";
 import type { AgentTranscriptRecord } from "../tracing/agent-transcript.js";
@@ -35,8 +47,15 @@ export interface CloudflareTraceContext<TEnv = unknown> extends CloudflareRunTra
   readonly env: TEnv;
 }
 
-/** Configure application tracing and the cooperative run deadline for a Cloudflare deployment. */
+/** Reuse the same key for every delivery of one logical submission. */
+export interface CloudflareLaunchOptions {
+  readonly idempotencyKey: string;
+}
+
+/** Configure deployment identity, application tracing and the cooperative run deadline. */
 export interface CloudflareAppOptions<TEnv = unknown> {
+  /** Immutable code/configuration revision. Required for programmatic launches; change it on redeploy. */
+  readonly deploymentId?: string;
   /** Extra destinations composed with project exporters and Studio ingestion. */
   readonly tracing?: PipelineTraceExporterOptions<CloudflareTraceContext<TEnv>>;
   readonly limits?: {
@@ -59,6 +78,15 @@ export type CloudflareDurableObjectClass<Instance extends object = object> = abs
 /** Worker handler and Durable Object classes that a Worker entry exports. */
 export interface CloudflareApp {
   readonly worker: CloudflareWorker;
+  /** Trusted code capability; a successful receipt confirms admission, not execution success. */
+  launch(
+    env: unknown,
+    commandId: string,
+    values: CloudflareLaunchValues,
+    options: CloudflareLaunchOptions
+  ): Promise<CloudflareLaunchResult>;
+  /** Read current launch state and its run id; undefined when the launch does not exist. */
+  getLaunch(env: unknown, launchId: string): Promise<CloudflareLaunchStatus | undefined>;
   readonly durableObjects: {
     readonly TubelessStudio: CloudflareDurableObjectClass<CloudflareTranscriptIngest>;
     readonly TubelessRun: CloudflareDurableObjectClass;
@@ -71,6 +99,8 @@ interface NamespaceLike<T> {
 
 interface StudioStub extends StudioIngest {
   fetch(request: Request): Promise<Response>;
+  launch(request: HostedLaunchRequest): Promise<CloudflareLaunchResult>;
+  getLaunch(launchId: string): Promise<CloudflareLaunchStatus | undefined>;
 }
 
 interface TubelessEnv {
@@ -117,6 +147,11 @@ export function createCloudflareApp<TEnv = unknown>(
   options: CloudflareAppOptions<TEnv> = {}
 ): CloudflareApp {
   const maxRunDurationMs = maxRunDuration(options.limits?.maxRunDurationMs);
+  const deploymentId = options.deploymentId;
+  if (deploymentId !== undefined && !isLaunchIdentifier(deploymentId))
+    throw new Error(
+      "deploymentId must contain 1–200 letters, digits, periods, underscores, colons or hyphens."
+    );
   const commands = new Map(
     hostedProjectCommands(project).map((entry) => [entry.descriptor.id, entry])
   );
@@ -176,12 +211,22 @@ export function createCloudflareApp<TEnv = unknown>(
         commands,
         clientScript: PIPELINE_RUN_STUDIO_CLIENT,
         maxRunDurationMs,
+        projectId: project.id,
+        deploymentId,
         runStub: (launchId) => env.TUBELESS_RUN.getByName(launchId),
       });
     }
 
     fetch(request: Request): Promise<Response> {
       return this.#core.fetch(request);
+    }
+
+    launch(request: HostedLaunchRequest) {
+      return this.#core.launch(request);
+    }
+
+    getLaunch(launchId: string) {
+      return this.#core.getLaunch(launchId);
     }
 
     admit(launchId: string): Promise<{ admitted: boolean }> {
@@ -218,6 +263,7 @@ export function createCloudflareApp<TEnv = unknown>(
       this.#core = new RunObjectCore({
         storage: state.storage,
         commands,
+        deploymentId,
         ingest: () => env.TUBELESS_STUDIO.getByName("default"),
         tracing:
           options.tracing === undefined
@@ -247,5 +293,30 @@ export function createCloudflareApp<TEnv = unknown>(
     }
   }
 
-  return { worker, durableObjects: { TubelessStudio, TubelessRun } };
+  return {
+    worker,
+    durableObjects: { TubelessStudio, TubelessRun },
+    async launch(rawEnv, commandId, values, launchOptions) {
+      if (deploymentId === undefined)
+        return {
+          accepted: false,
+          code: "invalid_launch",
+          errors: ["Configure deploymentId on createCloudflareApp before launching from code."],
+        };
+      // SAFETY: the scaffold binds this private namespace; no HTTP route exposes this capability.
+      const env = rawEnv as TubelessEnv;
+      return env.TUBELESS_STUDIO.getByName("default").launch({
+        commandId,
+        values,
+        idempotencyKey: launchOptions?.idempotencyKey,
+        projectId: project.id,
+        deploymentId,
+      });
+    },
+    async getLaunch(rawEnv, launchId) {
+      if (!isLaunchIdentifier(launchId)) return undefined;
+      const env = rawEnv as TubelessEnv;
+      return env.TUBELESS_STUDIO.getByName("default").getLaunch(launchId);
+    },
+  };
 }

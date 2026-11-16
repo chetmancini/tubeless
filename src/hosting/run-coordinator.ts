@@ -1,7 +1,7 @@
 import type { RunJob } from "./run-contract.js";
 import type { PipelineRunControls } from "../core/pipeline.js";
 import { MAX_TIMEOUT_DELAY_MS } from "../utilities/abort.js";
-import { hostedCommandContext, type HostedCommand, type HostedOutput } from "./hosting-commands.js";
+import { parseHostedLaunch, type HostedCommand, type HostedOutput } from "./hosting-commands.js";
 import type {
   PipelineRunStudioCancelResult,
   PipelineRunStudioLauncher,
@@ -88,21 +88,13 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
     values: PipelineRunStudioLaunchRequest["values"]
   ): Promise<PipelineRunStudioLaunchResult> {
     if (this.#closed) return { accepted: false, errors: ["The run host is stopping."] };
-    const entry = this.deps.commands.get(commandId);
-    if (!entry) return { accepted: false, errors: ["Pipeline command not found."] };
-    let parsed: ReturnType<HostedCommand["command"]["parseValues"]>;
     const submitted = structuredClone(values);
-    try {
-      parsed = entry.command.parseValues(
-        submitted,
-        hostedCommandContext(this.deps.output, new AbortController().signal)
-      );
-    } catch (error) {
-      return { accepted: false, errors: [error instanceof Error ? error.message : String(error)] };
-    }
-    if (parsed.kind === "error") return { accepted: false, errors: parsed.errors };
-    if (parsed.kind === "help")
-      return { accepted: false, errors: ["Help is not a launchable value set."] };
+    const parsed = parseHostedLaunch(
+      this.deps.commands.get(commandId),
+      submitted,
+      this.deps.output
+    );
+    if ("errors" in parsed) return { accepted: false, errors: parsed.errors };
     const launchId = crypto.randomUUID();
     const acknowledged = new Promise<PipelineRunStudioLaunchResult>((resolve) =>
       this.#waiters.set(launchId, resolve)
@@ -118,16 +110,13 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
         }),
       timeoutMs
     );
-    const dispatch = this.#dispatch({
-      launchId,
-      commandId,
-      values: submitted,
-      maxRunDurationMs: this.deps.maxRunDurationMs,
-    });
-    this.#dispatches.add(dispatch);
-    void dispatch.then(
-      () => this.#dispatches.delete(dispatch),
-      () => this.#dispatches.delete(dispatch)
+    void this.#track(
+      this.#dispatch({
+        launchId,
+        commandId,
+        values: submitted,
+        maxRunDurationMs: this.deps.maxRunDurationMs,
+      })
     );
     try {
       return await acknowledged;
@@ -145,6 +134,24 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
       await this.#failStart(job, START_FAILED);
       return;
     }
+    return this.#start(job, dispatch);
+  }
+
+  /** Dispatch a target's already-persisted launch after it has arranged recovery. */
+  startPrepared(job: RunJob, dispatch: TDispatch): Promise<void> {
+    return this.#track(this.#start(job, dispatch));
+  }
+
+  #track(dispatch: Promise<void>): Promise<void> {
+    this.#dispatches.add(dispatch);
+    void dispatch.then(
+      () => this.#dispatches.delete(dispatch),
+      () => this.#dispatches.delete(dispatch)
+    );
+    return dispatch;
+  }
+
+  async #start(job: RunJob, dispatch: TDispatch): Promise<void> {
     if (this.#closed) return this.#failStart(job, START_FAILED);
     try {
       await this.deps.driver.start(dispatch);
