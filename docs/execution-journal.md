@@ -50,6 +50,9 @@ native agents keep their existing inherited-version checks. Version handlers,
 schemas, mappers, predicates and finalizers when their semantics change. Structural
 fingerprints alone cannot establish code compatibility.
 
+An absent run-wide cache override stays distinct from explicit `cache: "use"`:
+omission preserves each step's cache policy, while an explicit override replaces it.
+
 The host atomically records a first binding or rejects a different binding for
 the same path. Check child bindings when entering each child, even if the parent
 was already admitted. Check dependency inputs again when beginning a step.
@@ -145,6 +148,10 @@ then the host's checkpoint-store handoff keyed by logical path. The host supplie
 the existing lossless byte-lease operations; core needs no agent runtime import.
 Missing handoff support fails before agent work rather than silently running it
 without recovery.
+
+The host handoff derives a bounded, opaque SHA-256 checkpoint key from the full
+logical path, including long host and fan-out keys. Explicit agent durability keys
+remain unchanged.
 
 In `src/agent/invocation.ts`, suppress the outer step journal in the agent's
 execution scope, including ordinary pipeline tools and delegated agents. The

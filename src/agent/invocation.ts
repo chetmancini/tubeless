@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { setExecutionScope } from "../core/execution-scope.js";
 import { journalAgentStore, withExecutionJournal } from "../core/execution-journal.js";
 import { isPipelineCancellation } from "../core/pipeline-execution-error.js";
@@ -52,7 +53,7 @@ export async function runAgentInvocation<Options extends object, State>(
         (context.executionJournal
           ? {
               store: context.executionJournal.agentStore,
-              key: JSON.stringify(context.executionJournalPath),
+              key: `tubeless:journal:v1:${createHash("sha256").update(JSON.stringify(context.executionJournalPath)).digest("hex")}`,
               codec: undefined,
             }
           : undefined));
