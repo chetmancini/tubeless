@@ -1,3 +1,11 @@
+import {
+  structuredError,
+  projectStructuredErrors,
+  STRUCTURED_ERROR_LIMITS,
+  decodeCheckReportResult,
+  type StructuredError,
+  type CheckReportResult,
+} from "../../utilities/check-report.js";
 /** Internal transport contracts for the first-party Cloud CLI API. */
 export type CloudJsonValue =
   | null
@@ -79,7 +87,18 @@ export interface CliRun {
     durationMs: number;
     dependencies: string[];
     error?: string;
+    structuredError?: StructuredError;
+    attemptId?: string;
   }[];
+  structuredErrors?: StructuredError[];
+  omittedStructuredErrors?: number;
+  diagnostics?: {
+    version: 1;
+    state: "missing" | "available" | "unavailable";
+    reports: { artifact: string; result: CheckReportResult }[];
+    omitted: number;
+  };
+  nativeCommands?: { id: string; exitCode: number; durationMs: number }[];
   logs: CliLogLine[];
   artifacts: { name: string; size: number; contentType: string }[];
   result?: CloudJsonValue;
@@ -316,6 +335,34 @@ export function parseCliPipelines(value: unknown): CliPipeline[] {
   return parseResponse(value, Array.isArray(value) && value.every(isPipeline), "pipelines");
 }
 
+function parseDiagnostics(value: unknown): CliRun["diagnostics"] {
+  if (value === undefined) return;
+  const valid =
+    isCloudObject(value) &&
+    value.version === 1 &&
+    oneOf(value.state, ["missing", "available", "unavailable"]) &&
+    Number.isSafeInteger(value.omitted) &&
+    (value.omitted as number) >= 0 &&
+    Array.isArray(value.reports) &&
+    value.reports.length <= 2 &&
+    (value.state === "available" || value.reports.length === 0);
+  const source = parseResponse<NonNullable<CliRun["diagnostics"]>>(value, valid, "run");
+  const reports = source.reports.map((entry: unknown) => {
+    if (!isCloudObject(entry) || !text(entry.artifact))
+      throw new Error("Invalid Cloud run response.");
+    const result = decodeCheckReportResult(entry.result);
+    if (!result) throw new Error("Invalid Cloud run response.");
+    return { artifact: entry.artifact, result };
+  });
+  return { version: 1, state: source.state, reports, omitted: source.omitted };
+}
+
+function parseStructuredError(value: unknown): StructuredError {
+  const error = structuredError(value);
+  if (!error) throw new Error("Invalid Cloud run response.");
+  return error;
+}
+
 export function parseCliRun(value: unknown): CliRun {
   const valid =
     isCloudObject(value) &&
@@ -344,9 +391,26 @@ export function parseCliRun(value: unknown): CliRun {
         oneOf(step.status, [...RUN_STATUSES, "pending", "skipped"]) &&
         number(step.durationMs) &&
         optionalText(step.error) &&
+        optionalText(step.attemptId) &&
         Array.isArray(step.dependencies) &&
         step.dependencies.every((dependency: unknown) => text(dependency))
     ) &&
+    (value.structuredErrors === undefined ||
+      (Array.isArray(value.structuredErrors) &&
+        value.structuredErrors.length <= STRUCTURED_ERROR_LIMITS.count)) &&
+    (value.omittedStructuredErrors === undefined ||
+      (Number.isSafeInteger(value.omittedStructuredErrors) &&
+        (value.omittedStructuredErrors as number) >= 0)) &&
+    (value.nativeCommands === undefined ||
+      (Array.isArray(value.nativeCommands) &&
+        value.nativeCommands.length <= 32 &&
+        value.nativeCommands.every(
+          (command: unknown) =>
+            isCloudObject(command) &&
+            text(command.id) &&
+            Number.isInteger(command.exitCode) &&
+            number(command.durationMs)
+        ))) &&
     Array.isArray(value.logs) &&
     value.logs.length <= 400 &&
     value.logs.every(
@@ -363,7 +427,24 @@ export function parseCliRun(value: unknown): CliRun {
         hasTexts(artifact, ["name", "contentType"]) &&
         number(artifact.size)
     );
-  return parseResponse(value, valid, "run");
+  const run = parseResponse<CliRun>(value, valid, "run");
+  const errors =
+    run.structuredErrors === undefined
+      ? undefined
+      : projectStructuredErrors(run.structuredErrors, run.omittedStructuredErrors);
+  if (errors && errors.structuredErrors.length !== run.structuredErrors?.length)
+    throw new Error("Invalid Cloud run response.");
+  return {
+    ...run,
+    steps: run.steps.map((step) => ({
+      ...step,
+      ...(step.structuredError === undefined
+        ? {}
+        : { structuredError: parseStructuredError(step.structuredError) }),
+    })),
+    ...(errors ?? {}),
+    ...(run.diagnostics === undefined ? {} : { diagnostics: parseDiagnostics(run.diagnostics) }),
+  };
 }
 
 export function parseCloudDeviceCode(value: unknown): CloudDeviceCode {

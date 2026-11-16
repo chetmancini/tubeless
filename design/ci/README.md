@@ -1,6 +1,6 @@
 # CI roadmap for Tubeless OSS
 
-Status: O1 implemented locally; O2–O9 proposed, November 3, 2026.
+Status: O1 and the first O2/C4 structured-failure slice implemented locally; further O2 work and O3–O9 proposed, November 15, 2026.
 No release commitments or hosted rollout claims.
 Assessed against OSS `8f932a247328ea0f6e2f898cf3792e1412f87ae4` and
 Cloud `01ca1b89a75eb63eab631877f3052e97b01cf1c0`. Recheck those contracts before
@@ -22,7 +22,14 @@ Its ignored research files in the sibling Cloud checkout are
 This tracked document carries the decisions and dependencies needed here;
 implementers do not need those ignored files to understand the roadmap.
 
-The research described fixed operator recipes with customer native CI still
+Current inventory: OSS is `0.4.1`, Cloud pins patched `0.4.1`. Cloud's operator
+CI and production rollout are complete. Its existing hosted MCP server, run
+inspection, logs, cancellation and scoped artifact downloads are foundations for
+O2/C4; do not build a second MCP server. The first structured report slice has
+local paired-fixture, API/MCP and machine-CLI validation; publication, a compatible
+pin upgrade and deployed structured-report acceptance remain separate.
+
+The historical research described fixed operator recipes with customer native CI still
 requiring productization and rollout. It reported Cloud pinned to Tubeless
 0.3.8 while this package is 0.3.9. No publication, deployment, provider capacity
 test or customer acceptance was performed for this transfer. Green OSS checks
@@ -50,8 +57,8 @@ compiler caches have different correctness contracts.
 
 Sizes are relative scope estimates: S is one focused slice, M spans several
 modules/contracts, and L needs a separate infrastructure or product decision.
-They are not calendar estimates. O1 has local implementation/validation evidence
-in its linked plan; the remaining items are proposed.
+They are not calendar estimates. O1 and the first O2/C4 slice have local implementation/validation evidence
+in their linked plans; the remaining slices are proposed.
 
 | Order | Deliverable                                           | First useful result                                                      | Dependencies                                                            | Size                       |
 | ----- | ----------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------- | -------------------------- |
@@ -60,12 +67,12 @@ in its linked plan; the remaining items are proposed.
 | O3    | [Portable Node check recipe](./node-check-recipe.md)  | One explicit definition usable locally and by an approved hosted wrapper | Agree policy with Cloud C2; O2 enriches reporting                       | M                          |
 | O4    | Reproduction manifest and local replay                | Verified pinned fixture rerun on a supported local container host        | O3; O2 report linkage; agree Cloud C2/C6 source and image access        | M                          |
 | O5    | Complete CLI job controls                             | Inspect output, retrieve artifacts, explicitly cancel, resume following  | O1/O2 and Cloud C4/C5; C6 for manifest retrieval                        | M                          |
-| O6    | Optional CI MCP server                                | Bounded tools over accepted client operations                            | O5 operations and corresponding Cloud scopes                            | S–M                        |
+| O6    | Existing hosted MCP inspection                        | Bounded tools over accepted client operations                            | O5 operations and corresponding Cloud scopes                            | S–M                        |
 | O7    | Repeatable benchmark harness                          | Raw comparable samples with phase timings and failures                   | Begin with O2/O3; O1 enables hosted automation                          | S–M                        |
 | O8    | Test selection and balanced partitions                | Explicit test selection and deterministic local partition plan           | O2 stable test IDs and O3 invocation; C8 only for hosted timing history | M                          |
 | O9    | Preparation identity and adapters                     | Correctly keyed dependency reuse for an actual consumer                  | O3/O4, measured install cost, and Cloud C9 design                       | S–M OSS; larger Cloud work |
 
-Start O1 and O2 independently while Cloud C1 qualifies existing hosted checks.
+The operator CI rollout is complete. O1 and the first O2/C4 slice have local acceptance; their remaining release boundaries are explicit in the linked plans.
 Agree O3's recipe during C2's customer-pilot design. Start collecting timings
 then; O7 is not a reason to postpone measurement until the end of the list.
 O4 and O5 can proceed together once their distinct contracts are agreed.
@@ -117,10 +124,11 @@ can precede deployment; hosted acceptance cannot.
 
 ### O6: expose proven operations to MCP clients
 
-Build thin optional server tools over O5's client operations, beginning with
-status and diagnostics if those are ready first. Tool descriptions state side
+Cloud already provides a hosted MCP endpoint. The first O2/C4 slice extends its
+existing `get_run`; this scope needs no second MCP server. Further tools should
+compose the accepted O5 operations in that server. Tool descriptions state side
 effects, permissions, idempotency and truncation. Bound response sizes and waits.
-Choose packaging and transport from actual consuming clients; the existing
+Any future OSS server for other hosts needs separate consumer evidence; the existing
 `tubeless/agent/mcp` entrypoint connects to servers and should keep that role.
 
 Acceptance: an MCP client inspects a controlled failed check using scoped access;
@@ -205,6 +213,7 @@ agent guidance as applicable, and rebuild human-facing docs with
 `make website-build`. Cloud deliberately updates its pinned package and runs its
 own gate before claiming hosted support.
 
-Immediate next work: coordinate O1's Cloud documentation/e2e-fixture follow-up
-and begin O2's contract inventory. Record actual behavior before selecting
-public diagnostic APIs.
+Immediate next work: publish and validate the O2/C4 release boundary, connect an
+approved native repository report transport, then choose the next compiler or
+reporting slice from consumer evidence. The existing Cloud MCP endpoint serves
+inspection; O6's proposed second server is superseded for this scope.

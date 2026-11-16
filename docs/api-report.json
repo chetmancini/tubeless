@@ -218,13 +218,15 @@
         "requireEnv",
         "resetDir",
         "v8StepCacheCodec",
+        "vitestCheckReport",
+        "VitestReportOptions",
         "withCheckpointedBatch",
         "WorkerThreadAdapter",
         "WorkerThreadAdapterOptions",
         "WorkerThreadContext",
         "writeJson"
       ],
-      "sha256": "1c29ae9e38491fd90887d1b3230bc903a6834ccfef9695baf65a9c3a382a2381",
+      "sha256": "8050dd9f7e78ac957e8c22d18147b18d4a1926a24d91bb959bc340d8647b9a73",
       "specifier": "tubeless/node"
     },
     {
@@ -361,6 +363,27 @@
       "exports": ["CloudflareTranscriptIngest", "createCloudflareAgentTranscriptWriter"],
       "sha256": "16d1ce9f7867b6aa9285c2611f924133fbc5cfd1038180591280ff4f602cdfc5",
       "specifier": "tubeless/cloudflare/transcript"
+    },
+    {
+      "declaration": "./dist/utilities/check-report.d.ts",
+      "exports": [
+        "CHECK_REPORT_LIMITS",
+        "CheckFailure",
+        "CheckProcessOutcome",
+        "CheckReport",
+        "checkReportCompleteness",
+        "CheckReportResult",
+        "CheckTest",
+        "decodeCheckReportResult",
+        "projectStructuredErrors",
+        "readCheckReport",
+        "STRUCTURED_ERROR_LIMITS",
+        "structuredError",
+        "StructuredError",
+        "StructuredErrors"
+      ],
+      "sha256": "419f3aa46711da489d280616e62b73512dfc1a5f699f4108abdd5b6f437b7788",
+      "specifier": "tubeless/check-report"
     }
   ],
   "packageName": "tubeless",

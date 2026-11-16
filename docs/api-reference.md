@@ -15,7 +15,7 @@ Package: `tubeless`
 | `tubeless`                       | `./dist/core/pipeline.d.ts`                    | `a90b1636e507f37e3c82d5e6f84f07ad10aa242a7fa0f2f2b8f555a66338e8ae` |               81 |
 | `tubeless/cli`                   | `./dist/cli/cli.d.ts`                          | `484d6477708233be63e2cfc790e622b6904c4e9e2cfe2d7fae38ad35f26538fe` |               33 |
 | `tubeless/batch`                 | `./dist/utilities/batch.d.ts`                  | `856e4e759f1a62a4edd210d0291bc8b3d82b2e3e983bd37d7348bfb2b8993156` |                7 |
-| `tubeless/node`                  | `./dist/node/node.d.ts`                        | `1c29ae9e38491fd90887d1b3230bc903a6834ccfef9695baf65a9c3a382a2381` |               14 |
+| `tubeless/node`                  | `./dist/node/node.d.ts`                        | `8050dd9f7e78ac957e8c22d18147b18d4a1926a24d91bb959bc340d8647b9a73` |               16 |
 | `tubeless/rate-limit`            | `./dist/utilities/rate-limit.d.ts`             | `21223a0ce096d7eb188e7aa38e4e0df70081b086f899dfea825b429308f6910e` |                1 |
 | `tubeless/retry`                 | `./dist/utilities/retry.d.ts`                  | `ae8bdf0276b1930e4052f88a4912efe7dc6b857a8a51dcf2399eac0514fc9a0b` |                6 |
 | `tubeless/project`               | `./dist/project/project.d.ts`                  | `32f902dbdc7500ccf3e812ea92e50833b98c4ead793f094ee291a8716f107a47` |                9 |
@@ -27,6 +27,7 @@ Package: `tubeless`
 | `tubeless/cloudflare`            | `./dist/cloudflare/cloudflare.d.ts`            | `36315b84c3098025d88f923fbb529112da391990d4442264ed263fa13731ecf6` |               21 |
 | `tubeless/cloudflare/cache`      | `./dist/cloudflare/cloudflare-cache.d.ts`      | `5d47c4596714c09b4bfa3a844ab3929a639edd1b1627c65c60efd72d3fa62fb2` |                4 |
 | `tubeless/cloudflare/transcript` | `./dist/cloudflare/cloudflare-transcript.d.ts` | `16d1ce9f7867b6aa9285c2611f924133fbc5cfd1038180591280ff4f602cdfc5` |                2 |
+| `tubeless/check-report`          | `./dist/utilities/check-report.d.ts`           | `419f3aa46711da489d280616e62b73512dfc1a5f699f4108abdd5b6f437b7788` |               14 |
 
 ## Symbols
 
@@ -239,6 +240,8 @@ Package: `tubeless`
 | [`requireEnv`](https://github.com/chetmancini/tubeless/blob/main/src/node/env.ts#L2)                                    | Read a required non-empty environment variable or throw a contextual error.                                                   |
 | [`resetDir`](https://github.com/chetmancini/tubeless/blob/main/src/node/file-utils.ts#L19)                              | Remove and recreate a directory for generated output.                                                                         |
 | [`v8StepCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/cache-storage.ts#L10)              | Node's structured serialization, including undefined, Maps, Dates, and BigInts.                                               |
+| [`vitestCheckReport`](https://github.com/chetmancini/tubeless/blob/main/src/node/vitest-report.ts#L28)                  | Adapt Vitest 5 JSON reporter output, never console text.                                                                      |
+| [`VitestReportOptions`](https://github.com/chetmancini/tubeless/blob/main/src/node/vitest-report.ts#L14)                | Caller supplies actual process observations and invocation identity; no subprocess is launched.                               |
 | [`withCheckpointedBatch`](https://github.com/chetmancini/tubeless/blob/main/src/node/checkpoint.ts#L99)                 | Runs `persist()`, and only once it resolves without throwing, records every item in `batch` into `checkpoint` and flushes it. |
 | [`WorkerThreadAdapter`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-adapter.ts#L26)        | Invoke cloneable payloads through a reusable pool of Node worker threads.                                                     |
 | [`WorkerThreadAdapterOptions`](https://github.com/chetmancini/tubeless/blob/main/src/node/worker-thread-adapter.ts#L14) | Configure the module export and worker-pool limits for a thread adapter.                                                      |
@@ -373,3 +376,22 @@ Package: `tubeless`
 | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | [`CloudflareTranscriptIngest`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-transcript.ts#L9)             | Trusted Studio Durable Object capability; keep this binding on the server. |
 | [`createCloudflareAgentTranscriptWriter`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-transcript.ts#L15) | An explicit agent sink.                                                    |
+
+### `tubeless/check-report`
+
+| Symbol                                                                                                                | Description                                                                                 |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [`CHECK_REPORT_LIMITS`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/check-report.ts#L10)          | Portable, untrusted check observations.                                                     |
+| [`CheckFailure`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/check-report.ts#L38)                 | One bounded runner failure; absent location or stack means unavailable.                     |
+| [`CheckProcessOutcome`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/check-report.ts#L21)          | Native outcome observed by the caller, independent of claimed test results.                 |
+| [`CheckReport`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/check-report.ts#L61)                  | Version 1 describes one invocation, not whole-repository coverage.                          |
+| [`checkReportCompleteness`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/check-report.ts#L87)      | Conservatively derive completeness; a declared incomplete report is never upgraded.         |
+| [`CheckReportResult`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/check-report.ts#L82)            | Missing is distinct from invalid data; incomplete/truncated are valid report properties.    |
+| [`CheckTest`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/check-report.ts#L47)                    | Identity is [relative file, suite ancestry, title, duplicate ordinal] encoded as JSON.      |
+| [`decodeCheckReportResult`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/check-report.ts#L101)     | Decode a service report envelope once, discarding fields outside its state variant.         |
+| [`projectStructuredErrors`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/structured-error.ts#L145) | Apply the same error-list projection at every execution and retrieval boundary.             |
+| [`readCheckReport`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/check-report.ts#L193)             | Decode bounded JSON, selecting known fields and rejecting unsupported schemas.              |
+| [`STRUCTURED_ERROR_LIMITS`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/structured-error.ts#L2)   | Encoded error and collection bounds shared by producers, services and clients.              |
+| [`structuredError`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/structured-error.ts#L39)          | Select existing framework error fields and enforce the final serialized byte bound.         |
+| [`StructuredError`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/structured-error.ts#L5)           | Bounded projection of the existing OSS PipelineError, including legacy message-only errors. |
+| [`StructuredErrors`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/structured-error.ts#L139)        | Bounded run-level error observations; omissions include invalid or unretained entries.      |

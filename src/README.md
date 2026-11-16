@@ -123,6 +123,12 @@ their source files.
 
 - Core uses utilities and internal trace emission. Its complete runtime import graph
   must stay independent of exporters, storage, UI, command parsing and presentation.
+- `utilities/check-report.ts` owns the portable bounded test-report wire contract
+  exposed through `tubeless/check-report`.
+  `node/vitest-report.ts` optionally adapts Vitest JSON without importing Vitest.
+  `utilities/structured-error.ts` supplies the bounded error and error-list codecs
+  through the same public entrypoint;
+  it adds no error taxonomy or execution behavior.
 - Utilities and tracing have no runtime imports from other modules. Node helpers
   depend only on pure utilities, with cache storage re-exported through their
   public entrypoint. `utilities/worker-argv.ts` owns file-worker argument
