@@ -8,6 +8,7 @@ import {
   defineAgentLoop,
   defineTool,
   pipelineTool,
+  ToolError,
   type AgentCheckpointStore,
   type AgentTranscriptRecord,
 } from "./agent.js";
@@ -204,6 +205,50 @@ it("inherits one native journal through delegated agents and ordinary pipeline t
   expect(ignoredStore.acquire).not.toHaveBeenCalled();
   // Native agent work never creates outer step receipts.
   expect([...records.keys()].filter((key) => key.startsWith('["step"'))).toEqual([]);
+});
+
+it("recovers input reader ToolErrors through pipeline tools with native journal handoff", async () => {
+  const records = new Map<string, Buffer>();
+  const store = createMemoryAgentCheckpointStore();
+  const read = vi.fn(async () => {
+    throw new ToolError("INPUT_UNAVAILABLE", "Input is unavailable");
+  });
+  const { waitForInput } = createSteps(emptyInput);
+  const input = waitForInput("input", { read });
+  const child = definePipeline({ id: "input-tool", steps: [input], finalize: input });
+  const reduce = vi.fn((_state, outcomes) => {
+    expect(outcomes).toEqual([
+      {
+        id: "read",
+        tool: "input",
+        ok: false,
+        error: { code: "INPUT_UNAVAILABLE", message: "Input is unavailable" },
+      },
+    ]);
+    return 1;
+  });
+  function agent() {
+    return defineAgentLoop({
+      id: "input-recovery",
+      implementationVersion: "1",
+      defaultTools: [],
+      environment: remote(),
+      inputSchema: emptyInput,
+      resultSchema: numberSchema,
+      initialState: () => 0,
+      tools: { input: pipelineTool(child, { description: "Read input" }) },
+      decide: (state, ctx) =>
+        ctx.turn === 1
+          ? { kind: "continue", calls: [{ id: "read", tool: "input", input: {} }] }
+          : { kind: "finish", result: state },
+      reduce,
+    });
+  }
+  const host = () => ({ ...retainedJournal(records), agentStore: store });
+  expect(await agent().runOrThrow({}, {}, context(host()))).toBe(1);
+  expect(await agent().runOrThrow({}, {}, context(host()))).toBe(1);
+  expect(read).toHaveBeenCalledOnce();
+  expect(reduce).toHaveBeenCalledOnce();
 });
 
 it("prefers explicit root durability over host handoff", async () => {

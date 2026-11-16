@@ -622,6 +622,9 @@ reducer receives `{ id, tool, ok: false, error: { code, message } }`. Any other 
 is fatal, as are `ToolError`s thrown by validators or reducers. Successes arrive as
 `{ id, tool, ok: true, value }`.
 
+Handler failures include `waitForInput` readers and their preview handlers inside
+pipeline tools.
+
 | Limit            | Default | Scope                                                           |
 | ---------------- | ------- | --------------------------------------------------------------- |
 | `maxTurns`       | 20      | Decision invocations, including finish                          |
@@ -639,6 +642,7 @@ is fatal, as are `ToolError`s thrown by validators or reducers. Successes arrive
   one depth edge; depth `0` permits handler tools but rejects pipeline tools.
   Nested execution works with `maxConcurrency: 1`. The outer pipeline's DAG
   `maxConcurrency` is separate.
+  Input waits also hold no leaf permit; reader errors still retain handler provenance.
 - Delegate through registered pipeline tools; calling `run` from a handler is
   outside this contract.
 - Cancellation and fatal failures stop new calls and drain active work without

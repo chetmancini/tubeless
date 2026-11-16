@@ -148,6 +148,57 @@ describe("pipeline tools", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
+  it.each(["read", "async-read", "preview", "output", "unexpected"] as const)(
+    "preserves input reader error provenance (%s)",
+    async (source) => {
+      for (const registeredHandler of [false, true]) {
+        const expected = new ToolError("INPUT_UNAVAILABLE", "Input is unavailable");
+        const { step, waitForInput } = createSteps(emptyInput);
+        const outputSchema = schema<string>((value) => {
+          if (source === "output") throw expected;
+          return { value: String(value) };
+        });
+        const preview = () => {
+          throw expected;
+        };
+        const input = waitForInput("input", {
+          read: () => {
+            if (source === "read") throw expected;
+            if (source === "async-read") return Promise.reject(expected);
+            if (source === "unexpected") throw new Error("Reader bug");
+            return "answer";
+          },
+          dryRun: preview,
+          outputSchema,
+        });
+        // Declarative registries also reuse waitForInput(...).run as an ordinary handler.
+        const work = registeredHandler
+          ? step("registered", {
+              run: input.run,
+              dryRun: preview,
+              outputSchema,
+            })
+          : input;
+        const child = definePipeline({ id: "input-errors", steps: [work], finalize: work });
+        const result = await caller(pipelineTool(child, { description: "Read input" })).run(
+          {},
+          { dryRun: source === "preview" }
+        );
+        const recoverable = source === "read" || source === "async-read" || source === "preview";
+        expect(result.status).toBe(recoverable ? "completed" : "failed");
+        if (recoverable)
+          expect(JSON.parse(result.value!)).toEqual([
+            {
+              id: "0",
+              tool: "child",
+              ok: false,
+              error: { code: expected.code, message: expected.message },
+            },
+          ]);
+      }
+    }
+  );
+
   it.each(["handler", "output", "finalizer", "skip", "unknown", "spoof"])(
     "classifies only handler ToolError (%s)",
     async (source) => {

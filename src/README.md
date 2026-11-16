@@ -142,7 +142,8 @@ Only boundaries that are not obvious from names are listed.
 - `iteration.ts` invokes the existing child runner; it neither reschedules the
   parent DAG nor owns a separate lifecycle.
 - `waitForInput` is an ordinary step with an application-owned read callback; core
-  has no terminal or UI dependency.
+  has no terminal or UI dependency. Reader errors retain handler provenance
+  independently of leaf permit admission.
 - `child-execution.ts` owns inherited child runtime context; invocation-specific hooks
   and identities stay with callers. Core carries the agent's opaque execution scope
   through child execution; orchestration steps hold no leaf permit.
