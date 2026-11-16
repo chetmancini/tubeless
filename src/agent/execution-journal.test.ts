@@ -60,6 +60,65 @@ it("hands completed native replay to a recreated session, preserving conversatio
   ]);
 });
 
+it("uses bounded, distinct native keys for long host and fan-out identities across recreation", async () => {
+  const records = new Map<string, Buffer>();
+  const store = createMemoryAgentCheckpointStore();
+  const acquire = vi.fn(store.acquire.bind(store));
+  const decide = vi.fn(() => ({ kind: "finish", result: 7 }));
+  const longKey = "host".repeat(1500);
+  const items = ["item".repeat(1500) + "a", "item".repeat(1500) + "b"];
+  function pipeline() {
+    const agent = defineAgentLoop({
+      id: "long-identity",
+      implementationVersion: "1",
+      defaultTools: [],
+      environment: remote(),
+      inputSchema: emptyInput,
+      resultSchema: numberSchema,
+      initialState: () => 0,
+      decide,
+    });
+    const { forEachPipeline } = createSteps();
+    return definePipeline({
+      id: "long-fan-out",
+      implementationVersion: "1",
+      steps: [
+        forEachPipeline("agents", {
+          pipeline: agent,
+          items: () => items,
+          key: (item) => item,
+          mapOptions: () => ({}),
+        }),
+      ],
+    });
+  }
+  const host = () => ({ ...retainedJournal(records, longKey), agentStore: { acquire } });
+  const firstHost = host();
+  const first = await pipeline().run(
+    {},
+    {},
+    context({
+      ...firstHost,
+      complete: async (path, value) => {
+        if (path.at(-1) === "agents")
+          throw Object.assign(new Error("lost wrapper completion"), {
+            code: "HOST_LOST_COMPLETION",
+          });
+        await firstHost.complete(path, value);
+      },
+    })
+  );
+  expect(first.errors[0]?.sourceCode).toBe("HOST_LOST_COMPLETION");
+  expect(await pipeline().runOrThrow({}, {}, context(host()))).toEqual([7, 7]);
+  expect(decide).toHaveBeenCalledTimes(2);
+  const keys = acquire.mock.calls.map(([key]) => key);
+  expect(keys).toHaveLength(4);
+  expect(keys.every((key) => key.length > 0 && key.length <= 4096)).toBe(true);
+  expect(keys[0]).toBe(keys[2]);
+  expect(keys[1]).toBe(keys[3]);
+  expect(keys[0]).not.toBe(keys[1]);
+});
+
 it("inherits one native journal through delegated agents and ordinary pipeline tools, suppressing the outer journal", async () => {
   const records = new Map<string, Buffer>();
   const bytes = createMemoryAgentCheckpointStore();

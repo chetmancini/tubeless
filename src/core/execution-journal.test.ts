@@ -179,6 +179,51 @@ describe("compatibility", () => {
   });
 });
 
+it.each(["bypass", "recompute"] as const)(
+  "distinguishes an absent cache override from explicit use with step policy %s",
+  async (policy) => {
+    for (const [initial, changed] of [
+      [undefined, "use"],
+      ["use", undefined],
+    ] as const) {
+      const records = new Map<string, Buffer>();
+      const effect = vi.fn(() => 1);
+      function pipeline() {
+        const { step } = createSteps();
+        return definePipeline({
+          id: "cache-controls",
+          ...version,
+          steps: [
+            step("work", {
+              run: effect,
+              cache: {
+                version: "1",
+                policy,
+                store: { get: async () => undefined, set: async () => {} },
+                codec: { encode: () => new Uint8Array([1]), decode: () => 1 },
+              },
+            }),
+          ],
+        });
+      }
+      expect(
+        await pipeline().runOrThrow({}, { cache: initial }, context(retainedJournal(records)))
+      ).toBe(1);
+      const recovered = await pipeline().run(
+        {},
+        { cache: changed },
+        context(retainedJournal(records))
+      );
+      expect(recovered.status).toBe("failed");
+      expect(recovered.errors[0]?.sourceCode).toBe("HOST_CONFLICT");
+      expect(
+        await pipeline().runOrThrow({}, { cache: initial }, context(retainedJournal(records)))
+      ).toBe(1);
+      expect(effect).toHaveBeenCalledTimes(1);
+    }
+  }
+);
+
 it("rejects a structural definition change even with the same implementation version", async () => {
   const records = new Map<string, Buffer>();
   const { step } = createSteps();

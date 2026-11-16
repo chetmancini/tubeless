@@ -138,7 +138,7 @@ export async function bindJournalInput(
       input,
       cwd: context.cwd,
       controls: {
-        cache: controls.cache ?? "use",
+        cache: controls.cache,
         continueOnError: controls.continueOnError ?? false,
         maxConcurrency: controls.maxConcurrency ?? 1,
         dryRun: false,
