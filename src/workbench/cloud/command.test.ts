@@ -1,5 +1,5 @@
 import { access, readFile, readdir, writeFile } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as path from "node:path";
 import { runCloud } from "./command.js";
 import { captureIo } from "../workbench.test-support.js";
@@ -196,6 +196,107 @@ describe("Cloud command", () => {
     const dependencies = service({ runs: [{ ...baseRun, status }] });
     expect(await runCloud(["run", pipeline.name, "--json"], captureIo(root), dependencies)).toBe(
       exit
+    );
+  });
+
+  describe.each(["run", "logs"] as const)("%s waiting follower", (command) => {
+    const args = command === "run" ? ["run", pipeline.name] : ["logs", baseRun.id, "--follow"];
+
+    it.each([
+      { statuses: ["running", "waiting", "running", "completed"], exit: 0 },
+      { statuses: ["waiting", "waiting", "waiting", "waiting", "waiting", "completed"], exit: 0 },
+      { statuses: ["waiting", "waiting", "cancelled"], exit: 7 },
+      { statuses: ["waiting", "failed"], exit: 6 },
+    ] as const)("follows $statuses to exit $exit", async ({ statuses, exit }) => {
+      const runs = statuses.map((status): CliRun => ({
+        ...baseRun,
+        status,
+        steps: [{ id: "input", name: "Input", status, durationMs: 0, dependencies: [] }],
+      }));
+      const sleep = vi.fn(async () => {});
+      const dependencies = {
+        ...service({ admission: runs[0], runs: command === "run" ? runs.slice(1) : runs }),
+        sleep,
+      };
+      const io = captureIo(await fixture());
+      expect(await runCloud([...args, "--json"], io, dependencies)).toBe(exit);
+      const final = runs.at(-1)!;
+      expect(JSON.parse(io.output.join(""))).toEqual(
+        command === "run"
+          ? final
+          : { id: final.id, pipelineId: final.pipelineId, status: final.status, logs: final.logs }
+      );
+      expect(sleep.mock.calls).toEqual(
+        Array.from({ length: runs.length - 1 }, () => [2000, expect.any(AbortSignal)])
+      );
+      expect(dependencies.calls.filter((call) => call.method === "POST")).toHaveLength(
+        command === "run" ? 1 : 0
+      );
+      expect(
+        dependencies.calls.filter((call) => call.url.endsWith(`/runs/${baseRun.id}`))
+      ).toHaveLength(command === "run" ? runs.length - 1 : runs.length);
+    });
+
+    it("resets the transport failure budget after waiting polls", async () => {
+      const waiting: CliRun = { ...baseRun, status: "waiting" };
+      const dependencies = service({
+        admission: waiting,
+        runs: [waiting, waiting, { ...baseRun, status: "completed" }],
+      });
+      const original = dependencies.fetch;
+      let polls = 0;
+      dependencies.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url).endsWith(`/runs/${baseRun.id}`)) {
+          const poll = polls++ - (command === "logs" ? 1 : 0);
+          if ([0, 1, 3, 4].includes(poll)) throw new Error("network unavailable");
+        }
+        return original(url, init);
+      }) as typeof fetch;
+      const io = captureIo(await fixture());
+      expect(await runCloud([...args, "--json"], io, dependencies)).toBe(0);
+      expect(JSON.parse(io.output.join(""))).toMatchObject({ status: "completed" });
+      expect(polls).toBe(7);
+      expect(dependencies.calls.filter((call) => call.method === "POST")).toHaveLength(
+        command === "run" ? 1 : 0
+      );
+    });
+
+    it("interrupts a waiting follower without cancelling remote work", async () => {
+      const controller = new AbortController();
+      const waiting: CliRun = { ...baseRun, status: "waiting" };
+      const dependencies = {
+        ...service({ admission: waiting, runs: [waiting] }),
+        sleep: async () => {
+          controller.abort();
+          throw new Error("Aborted");
+        },
+      };
+      const io = { ...captureIo(await fixture()), signal: controller.signal };
+      expect(await runCloud([...args, "--json"], io, dependencies)).toBe(7);
+      expect(io.output.join("")).toBe("");
+      expect(io.errors.join("")).toContain("Run run-1");
+      expect(io.errors.join("")).toContain("/app/runs/run-1?workspace=workspace");
+      expect(io.errors.join("")).toContain("Remote work continues");
+      expect(dependencies.calls.filter((call) => call.method === "POST")).toHaveLength(
+        command === "run" ? 1 : 0
+      );
+    });
+  });
+
+  it.each(["run", "logs"] as const)("preserves waiting in %s JSON snapshots", async (command) => {
+    const waiting: CliRun = {
+      ...baseRun,
+      status: "waiting",
+      steps: [{ id: "input", name: "Input", status: "waiting", durationMs: 0, dependencies: [] }],
+    };
+    const dependencies = service({ admission: waiting, runs: [waiting] });
+    const io = captureIo(await fixture());
+    const args = command === "run" ? ["run", pipeline.name, "--detach"] : ["logs", baseRun.id];
+    expect(await runCloud([...args, "--json"], io, dependencies)).toBe(0);
+    expect(JSON.parse(io.output.join(""))).toEqual(
+      command === "run"
+        ? waiting
+        : { id: waiting.id, pipelineId: waiting.pipelineId, status: "waiting", logs: [] }
     );
   });
   it("interrupting foreground follow prints the run ID without cancellation", async () => {

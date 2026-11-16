@@ -9,7 +9,8 @@ For an existing script or workflow, use `tubeless-make-pipeline` from the
 one of these recipes.
 
 For headless Cloud submission, see [Cloud CLI](./cli.md#tubeless-cloud) for scoped
-credentials, Git refs, and admission retries.
+credentials, Git refs, admission retries, and following runs that wait for human
+input in the Cloud dashboard.
 
 | Intent                                                  | Executable recipe                                                                                                                                       | Main primitives                                                                                                                                                                 |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

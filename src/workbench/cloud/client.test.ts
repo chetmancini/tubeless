@@ -261,6 +261,45 @@ describe("Cloud HTTP client", () => {
     );
   });
 
+  it.each([
+    ["waiting", "running"],
+    ["running", "waiting"],
+    ["waiting", "waiting"],
+  ] as const)("preserves run status %s and step status %s", async (status, stepStatus) => {
+    const response: CliRun = {
+      ...run,
+      status,
+      steps: [{ id: "input", name: "Input", status: stepStatus, durationMs: 0, dependencies: [] }],
+    };
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => json(response));
+    const client = createCloudClient({ host, token: "credential", fetch: fetcher });
+    expect(await client.getRun("workspace", "run")).toEqual(response);
+    expect(await client.run("workspace", { pipelineId: "pipeline", input: {} }, "key")).toEqual(
+      response
+    );
+  });
+
+  it.each(["run", "step"])("rejects unknown %s statuses on admission and reads", async (target) => {
+    const response = {
+      ...run,
+      ...(target === "run"
+        ? { status: "unknown" }
+        : {
+            steps: [
+              { id: "input", name: "Input", status: "unknown", durationMs: 0, dependencies: [] },
+            ],
+          }),
+    };
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => json(response));
+    const client = createCloudClient({ host, token: "credential", fetch: fetcher });
+    await expect(client.getRun("workspace", "run")).rejects.toMatchObject({
+      code: "invalid_response",
+    });
+    await expect(
+      client.run("workspace", { pipelineId: "pipeline", input: {} }, "key")
+    ).rejects.toMatchObject({ code: "invalid_response" });
+  });
+
   it("checks transport DTOs rather than treating successful JSON as trusted", async () => {
     const fetcher = vi.fn<typeof fetch>();
     const client = createCloudClient({ host, token: "credential", fetch: fetcher });
@@ -275,10 +314,6 @@ describe("Cloud HTTP client", () => {
       fetcher.mockResolvedValue(json(invalid));
       await expect(client.session()).rejects.toMatchObject({ code: "invalid_response" });
     }
-    fetcher.mockResolvedValue(json({ ...run, status: "unknown" }));
-    await expect(client.getRun("workspace", "run")).rejects.toMatchObject({
-      code: "invalid_response",
-    });
     for (const invalid of [
       { ...run, status: ["completed"] },
       { ...run, trigger: ["manual"] },

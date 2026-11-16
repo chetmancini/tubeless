@@ -1233,7 +1233,10 @@ input/source files fixed and never reuse an uncertain key for new work. Without
 an explicit key the CLI generates one for that invocation. Do not start a fresh
 run to retry an uncertain admission.
 
-Foreground runs follow status and retained logs every two seconds. `--detach`
+Foreground runs follow status and retained logs every two seconds. Run and step
+status `waiting` means human input is needed and is nonterminal. Answer through
+the existing Cloud dashboard; the CLI keeps following the same run until it is
+`completed`, `failed` or `cancelled`. There is no CLI answer command. `--detach`
 prints the run ID and returns after confirmed admission; use `--detach --json`
 to read `.id` in a script. Ctrl-C stops following and prints the run ID;
 it does not cancel the remote run. Cancel from the dashboard. Run logs retain a
