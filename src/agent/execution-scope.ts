@@ -1,6 +1,6 @@
 import { executionScope, type ExecutionScope } from "../core/execution-scope.js";
 import { createAbortError, throwIfAborted } from "../utilities/abort.js";
-import { agentError, limit } from "./agent-state.js";
+import { agentError, limit } from "./agent-errors.js";
 import type { AgentCheckpointSession } from "./checkpoint-session.js";
 import type { AgentExecutionIdentity } from "./checkpoint-types.js";
 import type { AgentEnvironment } from "./environment.js";

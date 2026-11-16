@@ -1,6 +1,7 @@
 import { awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
 import { MAX_RESPONSE_BYTES } from "./provider-http.js";
 import { record } from "./provider-schema.js";
+import { utf8ByteLength } from "./provider-utf8.js";
 
 const MAX_EVENT_BYTES = MAX_RESPONSE_BYTES + 4096;
 
@@ -47,7 +48,7 @@ export async function* readProviderEvents(
       data = [];
       return raw;
     }
-    eventBytes += Buffer.byteLength(value);
+    eventBytes += utf8ByteLength(value);
     if (eventBytes > MAX_EVENT_BYTES) throw new Error(`${provider} stream event exceeds 2 MiB`);
     if (value.startsWith("data:")) data.push(value.slice(5).replace(/^ /, ""));
   };

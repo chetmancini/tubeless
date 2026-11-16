@@ -85,7 +85,10 @@ their source files.
   (per-attempt framing, public delivery, sink cancellation and terminal events),
   and provider-specific assemblers (native events and response completion),
   `provider-schema.ts` (strict tool-parameter schemas) and `provider-tool-outputs.ts`
-  (bounded tool results). `openai-http.ts` keeps OpenAI
+  (bounded tool results). `provider-utf8.ts` shares web-standard UTF-8 encoding
+  and byte counts across those transports. `agent-errors.ts` keeps errors and
+  budget failures independent of state hashing so provider imports need no Node modules.
+  `openai-http.ts` keeps OpenAI
   authentication-error handling: known codes, no raw provider messages. Shared
   `provider-usage.ts` records per-request numeric token/cache counters and
   timing through existing trace events, including compaction and reminder requests.

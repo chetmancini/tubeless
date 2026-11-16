@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { utf8ByteLength } from "./provider-utf8.js";
 import { MAX_RESPONSE_BYTES } from "./provider-http.js";
 import { readProviderEvents } from "./provider-sse.js";
 import type { Awaitable } from "./agent-types.js";
@@ -33,7 +33,7 @@ export async function readAgentText(
   sink: AgentTextSink,
   signal: AbortSignal
 ): Promise<Record<string, unknown>> {
-  const identity = { streamId: randomUUID(), provider, turn };
+  const identity = { streamId: globalThis.crypto.randomUUID(), provider, turn };
   const label = provider === "openai" ? "OpenAI" : "Anthropic";
   let bytes = 0;
   let completed = false;
@@ -51,7 +51,7 @@ export async function readAgentText(
   };
   try {
     const body = await protocol(readProviderEvents(response, signal, label), async (text) => {
-      bytes += Buffer.byteLength(text);
+      bytes += utf8ByteLength(text);
       if (bytes > 1_048_576) throw new Error("Agent text stream exceeds 1 MiB");
       for (let start = 0; start < text.length;) {
         let end = Math.min(start + 4096, text.length);
@@ -61,7 +61,7 @@ export async function readAgentText(
         start = end;
       }
     });
-    if (Buffer.byteLength(JSON.stringify(body)) > MAX_RESPONSE_BYTES)
+    if (utf8ByteLength(JSON.stringify(body)) > MAX_RESPONSE_BYTES)
       throw new Error(`${label} stream response exceeds 2 MiB`);
     completed = true;
     return body;

@@ -30,11 +30,11 @@ export async function openaiRequest(
   baseUrl?: string,
   readResponse?: (response: Response) => Promise<unknown>
 ): Promise<unknown> {
-  const key = (apiKey ?? process.env.OPENAI_API_KEY)?.trim();
+  const key = (apiKey ?? globalThis.process?.env.OPENAI_API_KEY)?.trim();
   if (!key) throw new Error("OPENAI_API_KEY is required for live model execution");
   const base = providerBaseUrl(
     "OpenAI",
-    baseUrl ?? (process.env.OPENAI_BASE_URL?.trim() || DEFAULT_BASE_URL)
+    baseUrl ?? (globalThis.process?.env.OPENAI_BASE_URL?.trim() || DEFAULT_BASE_URL)
   );
   return providerRequest(
     "OpenAI",

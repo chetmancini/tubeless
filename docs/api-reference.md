@@ -310,8 +310,8 @@ Package: `tubeless`
 
 | Symbol                                                                                            | Description                                                                                   |
 | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L63)        | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
-| [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L22) | Responses transport settings; credentials are resolved only when a decision executes.         |
+| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L64)        | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
+| [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L23) | Responses transport settings; credentials are resolved only when a decision executes.         |
 
 ### `tubeless/agent/mcp`
 
@@ -329,8 +329,8 @@ Package: `tubeless`
 
 | Symbol                                                                                                  | Description                                                                                     |
 | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [`anthropicModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L84)        | Create a dependency-free Anthropic Messages model with native history and on-demand compaction. |
-| [`AnthropicModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L28) | Messages API transport settings; credentials are resolved only when a decision executes.        |
+| [`anthropicModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L85)        | Create a dependency-free Anthropic Messages model with native history and on-demand compaction. |
+| [`AnthropicModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L29) | Messages API transport settings; credentials are resolved only when a decision executes.        |
 
 ### `tubeless/cloudflare`
 

@@ -2,7 +2,12 @@ import { createServer, type RequestListener } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { httpTransport } from "./mcp-http.js";
-import { ProviderRequestError, providerRequest, withProviderRetry } from "./provider-http.js";
+import {
+  ProviderRequestError,
+  providerRequest,
+  readProviderJson,
+  withProviderRetry,
+} from "./provider-http.js";
 
 async function server(handler: RequestListener) {
   const instance = createServer(handler);
@@ -20,6 +25,66 @@ async function server(handler: RequestListener) {
 
 const signal = () => AbortSignal.timeout(2000);
 const credentials = { "X-Fixture-Key": "synthetic-credential" };
+
+describe("provider JSON UTF-8 boundaries", () => {
+  it("decodes multibyte characters split across every byte, including body views", async () => {
+    const expected = { answer: "é漢🌍\uFEFF" };
+    const bytes = new TextEncoder().encode(JSON.stringify(expected));
+    let offset = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (offset === bytes.length) return controller.close();
+        controller.enqueue(bytes.subarray(offset, ++offset));
+      },
+    });
+    await expect(
+      readProviderJson(new Response(body), signal(), bytes.length, "Fixture")
+    ).resolves.toEqual(expected);
+  });
+
+  it.each([
+    Buffer.from('\uFEFF{"answer":"hello"}'),
+    Buffer.from([0xef, 0xbb]),
+    Buffer.from('{"answer":'),
+  ])("preserves BOM and invalid-JSON rejection for %j", async (bytes) => {
+    expect(() => JSON.parse(bytes.toString("utf8"))).toThrow();
+    await expect(
+      readProviderJson(new Response(bytes), signal(), bytes.length, "Fixture")
+    ).rejects.toThrow("Fixture returned invalid JSON");
+  });
+
+  it.each([[0xff], [0xc3, 0x28], [0xf0, 0x9f], [0xed, 0xa0, 0x80]])(
+    "preserves replacement of malformed UTF-8 in JSON strings: %j",
+    async (...malformed) => {
+      const bytes = Buffer.concat([
+        Buffer.from('{"answer":"'),
+        Buffer.from(malformed),
+        Buffer.from('"}'),
+      ]);
+      await expect(
+        readProviderJson(new Response(bytes), signal(), bytes.length, "Fixture")
+      ).resolves.toEqual(JSON.parse(bytes.toString("utf8")));
+    }
+  );
+
+  it("cancels an oversized body and counts raw bytes before decoding", async () => {
+    const bytes = new TextEncoder().encode('{"answer":"🌍"}');
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    await expect(
+      readProviderJson(new Response(body), signal(), bytes.length - 1, "Fixture")
+    ).rejects.toThrow(`Fixture response exceeds ${bytes.length - 1} bytes`);
+    expect(cancelled).toBe(true);
+    expect(body.locked).toBe(false);
+  });
+});
 
 describe("credential-bearing HTTP requests", () => {
   it("keeps credentials and JSON on a directly configured provider endpoint", async () => {
@@ -283,15 +348,14 @@ describe("provider HTTP failure classification", () => {
   });
 
   it("retries a response dropped mid-body on the next attempt", async () => {
-    const payload = { answer: "ok" };
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn<typeof fetch>()
-        .mockResolvedValueOnce(brokenResponse())
-        .mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
-    );
+    const payload = { answer: "recovered é漢🌍" };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(brokenResponse())
+      .mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }));
+    vi.stubGlobal("fetch", fetcher);
     await expect(retry(() => request(AbortSignal.timeout(2000)))).resolves.toEqual(payload);
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("returns the original rejection when the caller aborts the exchange", async () => {
