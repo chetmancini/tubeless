@@ -232,6 +232,12 @@ their source files.
   Targets own dispatch deduplication and recovery scheduling,
   without leaking stubs or alarms into the coordinator. Studio accepts async
   live-run reads. Drivers and event-store schema initialization remain target-owned.
+  `hosting/hosting-commands.ts` owns structured launch parsing and projects resolved
+  values back to declared parameters. `hosting/launch-admission.ts` owns durable
+  submission validation, canonical intent, replay/conflict policy, and its typed
+  persistence port. `launch-admission-sqlite.ts` composes key reservation with the
+  launch adapter's synchronous creation operation in one transaction; storage
+  returns the original record, leaving intent comparison to admission policy.
   `hosting/process-executor.test-support.ts` exercises the shared contracts in a
   Node process; the CLI retains its existing execution lifecycle.
   See the [hosted execution and ingest design](../design/hosted-run-ingest.md) before
@@ -261,6 +267,13 @@ their source files.
   `cloudflare/` imports it, and its public declarations stay structural. The
   `tubeless/cloudflare/cache` entry (`cloudflare/cloudflare-cache.ts`) must stay free of
   `cloudflare:` imports so project modules that use it still load in Node.
+  Its public entry exports structural code-launch types from hosting. The Studio
+  object composes the shared admission policy with its reconciliation alarm and
+  coordinator dispatch. Key records survive event-history clearing and never expire
+  automatically. Prepared dispatches join the coordinator's ordinary drain/close
+  lifecycle. Code launches pin an explicit deployment identity;
+  the run object checks it before executing. Browser launch acknowledgements retain
+  their existing start-event contract. See the [admission design](../design/cloudflare-launch-admission.md).
   `tubeless/cloudflare/transcript` is also platform-neutral. Its explicit writer
   retries bounded trusted RPC delivery; the Studio object owns run-identity checks,
   content reads and atomic history/content deletion, refusing active launches.

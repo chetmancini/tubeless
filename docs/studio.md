@@ -466,6 +466,11 @@ For every page and API request, before contacting Studio:
    Do not retry launches or other mutations: an uncertain response may already
    have produced side effects, and there is no idempotency/replay contract.
 
+For trusted self-hosted Cloudflare code, use the separate
+[programmatic launch capability](./deploy-cloudflare.md#launch-from-application-code)
+with a stable idempotency key. Its durable admission contract does not change the
+retry rules for these browser routes.
+
 Studio checks the backend credential on **all** routes, including pages, redirects,
 unknown paths, and readiness, before body parsing, store reads, or command effects.
 It uses a fixed-length timing-safe token comparison and rejects duplicate or

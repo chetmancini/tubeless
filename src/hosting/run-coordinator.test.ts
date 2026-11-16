@@ -64,6 +64,33 @@ function request(path: string, body?: unknown) {
 }
 
 describe("process hosted executor through the shared coordinator", () => {
+  it("drains prepared dispatches before closing and refuses later starts", async () => {
+    const { coordinator, executor, store } = setup();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const start = vi.spyOn(executor, "start").mockImplementation(() => pending);
+    const prepared = job({ name: "Ada" });
+    await store.create(prepared.launchId, prepared.commandId, Date.now());
+    const dispatch = coordinator.startPrepared(prepared, prepared);
+    const drained = vi.fn();
+    const closed = vi.fn();
+    const draining = coordinator.drain().then(drained);
+    const closing = coordinator.close().then(closed);
+    await Promise.resolve();
+    expect(drained).not.toHaveBeenCalled();
+    expect(closed).not.toHaveBeenCalled();
+    release();
+    await Promise.all([dispatch, draining, closing]);
+    expect(drained).toHaveBeenCalledOnce();
+    expect(closed).toHaveBeenCalledOnce();
+    const later = { ...prepared, launchId: "after-close" };
+    await store.create(later.launchId, later.commandId, Date.now());
+    await coordinator.startPrepared(later, later);
+    expect(start).toHaveBeenCalledOnce();
+    expect(await store.admit(later.launchId)).toBe(false);
+  });
   it("launches through Studio and keeps completed history across a collector reopen", async () => {
     const directory = await mkdtemp(join(tmpdir(), "tubeless-hosted-"));
     cleanups.push(() => rm(directory, { recursive: true, force: true }));

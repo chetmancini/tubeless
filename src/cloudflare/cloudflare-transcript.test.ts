@@ -146,6 +146,7 @@ it("exposes stored content and coordinated clearing through the Studio host", as
   start();
   store.appendTranscript(transcriptRecord());
   const core = new StudioObjectCore({
+    projectId: "transcript-test",
     storage,
     commands: new Map(),
     clientScript: "",

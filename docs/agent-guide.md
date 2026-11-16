@@ -248,6 +248,15 @@ read when a pipeline needs them.
   pins together, and match the test Miniflare version to `cf`'s exact dependency.
   Keep the fixed binding names `TUBELESS_STUDIO`, `TUBELESS_RUN`, `TUBELESS_BUCKET`,
   `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD`.
+- For application-owned cron or queue submission, set an immutable `deploymentId`
+  on `createCloudflareApp` and call `app.launch(env, commandId, values, { idempotencyKey })`.
+  Reuse a stable delivery key and the same intent on transport retry. The receipt
+  confirms admission, not execution success; inspect `app.getLaunch(env, launchId)`
+  and its linked run. Keys survive history clearing and never expire automatically.
+  Changed intent or deployment conflicts; pending jobs refuse another deployment.
+  Keep this capability in trusted Worker code. Adapt the
+  [scheduled Worker example](../examples/cloudflare/scheduled-worker.ts) and read
+  [the admission contract](./deploy-cloudflare.md#launch-from-application-code).
 - Keep handlers Workers-compatible: no durable filesystem writes, no `v8` serialization.
   Read bindings through `import { env } from "cloudflare:workers"`.
 - Give every cached step an explicit store and codec from `tubeless/cloudflare/cache`,

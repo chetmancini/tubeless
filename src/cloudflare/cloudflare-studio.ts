@@ -10,6 +10,11 @@ import type { AgentTranscriptRecord } from "../tracing/agent-transcript.js";
 import { PipelineRunStudioHistoryBusyError } from "../studio/server/state.js";
 import { HOST_TERMINATED } from "./cloudflare-run-contract.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
+import {
+  createHostedLaunchAdmission,
+  type HostedLaunchRequest,
+  type HostedLaunchResult,
+} from "../hosting/launch-admission.js";
 
 const RECONCILE_GRACE_MS = 120_000;
 const SILENT_OUTPUT: HostedOutput = {
@@ -31,6 +36,8 @@ export interface StudioObjectDependencies {
   runStub(launchId: string): RunStubLike;
   readonly now?: () => number;
   readonly startTimeoutMs?: number;
+  readonly projectId: string;
+  readonly deploymentId?: string;
 }
 
 export class StudioObjectCore implements StudioIngest {
@@ -39,6 +46,7 @@ export class StudioObjectCore implements StudioIngest {
   readonly #coordinator: HostedRunCoordinator;
   readonly #ingest: StudioIngest;
   readonly #now: () => number;
+  readonly launch: (request: HostedLaunchRequest) => Promise<HostedLaunchResult>;
   #host: Promise<StudioHost> | undefined;
 
   constructor(private readonly deps: StudioObjectDependencies) {
@@ -62,18 +70,40 @@ export class StudioObjectCore implements StudioIngest {
     );
     this.#coordinator = launcher;
     this.#ingest = ingest;
+    this.launch = createHostedLaunchAdmission({
+      projectId: deps.projectId,
+      deploymentId: deps.deploymentId,
+      commands: deps.commands,
+      output: SILENT_OUTPUT,
+      store: this.#store.admissions,
+      maxRunDurationMs: deps.maxRunDurationMs,
+      now: this.#now,
+      scheduleReconcile: (atMs) => this.#scheduleReconcile(atMs),
+      start: (job) => launcher.startPrepared(job, job),
+    });
   }
 
-  async #scheduleReconcile(): Promise<void> {
+  async #scheduleReconcile(newLaunchAtMs?: number): Promise<void> {
     const pending = await this.deps.storage.getAlarm();
-    const target = await this.#store.nextReconcileAt(
+    const existing = await this.#store.nextReconcileAt(
       this.deps.maxRunDurationMs + RECONCILE_GRACE_MS
     );
+    const target =
+      newLaunchAtMs === undefined
+        ? existing
+        : Math.min(
+            existing ?? Infinity,
+            newLaunchAtMs + this.deps.maxRunDurationMs + RECONCILE_GRACE_MS
+          );
     if (target === undefined) {
       if (pending !== null) await this.deps.storage.deleteAlarm();
     } else if (pending === null || pending <= this.#now() || pending > target) {
       await this.deps.storage.setAlarm(target);
     }
+  }
+
+  getLaunch(launchId: string) {
+    return this.#store.launchStatus(launchId);
   }
 
   async fetch(request: Request): Promise<Response> {

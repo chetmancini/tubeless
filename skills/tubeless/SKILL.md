@@ -386,6 +386,12 @@ Read the corresponding package recipe before using these features:
   `cf`, `vite` and `@cloudflare/vite-plugin` versions it prints. Cached steps need
   `createR2CacheStore` and `jsonCacheCodec` from `tubeless/cloudflare/cache` (never `tubeless/cloudflare`, which loads only in workerd),
   with the bucket bound from `cloudflare/worker.ts` through the guide's getter pattern.
+  Application-owned cron/queue handlers can call `app.launch(env, commandId, values,
+  { idempotencyKey })` after setting an immutable app `deploymentId`. Reuse a stable
+  delivery key on transport retry; changed intent or deployment conflicts. A receipt
+  confirms admission only; use `app.getLaunch(env, launchId)` and its linked run.
+  Keys survive history clearing and never expire automatically. Keep this capability
+  in trusted Worker code and follow the deploy guide's scheduled Worker example.
 - Use `context.recordArtifact({ operation, artifact })` within ordinary steps to
   record successful reads, writes, or verified reuse without changing domain outputs.
   Multiple reports support batches; earlier reports survive later failure. Keep

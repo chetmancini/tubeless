@@ -7,6 +7,10 @@ import {
   type CloudflareAppOptions,
   type CloudflareDurableObjectClass,
   type CloudflareWorker,
+  type CloudflareLaunchOptions,
+  type CloudflareLaunchResult,
+  type CloudflareLaunchStatus,
+  type CloudflareLaunchValues,
   type R2BucketLike,
   type R2ObjectLike,
   createCloudflareAgentTranscriptWriter,
@@ -34,7 +38,10 @@ const report = step("report", {
   run: () => ({ ok: true }),
 });
 const pipeline = definePipeline({ id: "report", steps: [report], finalize: report });
-const options: CloudflareAppOptions = { limits: { maxRunDurationMs: 600_000 } };
+const options: CloudflareAppOptions = {
+  deploymentId: "packed-v1",
+  limits: { maxRunDurationMs: 600_000 },
+};
 const app: CloudflareApp = createCloudflareApp(
   defineProject("packed-cloudflare", [pipeline]),
   options
@@ -45,3 +52,15 @@ declare const studioRpc: InstanceType<typeof app.durableObjects.TubelessStudio>;
 createCloudflareAgentTranscriptWriter(() => studioRpc);
 export { studio as TubelessStudio, worker as default };
 export const { TubelessRun } = app.durableObjects;
+
+export async function launchFromCode(env: unknown): Promise<CloudflareLaunchStatus | undefined> {
+  const values: CloudflareLaunchValues = {};
+  const launchOptions: CloudflareLaunchOptions = { idempotencyKey: "packed.1" };
+  const receipt: CloudflareLaunchResult = await app.launch(env, "report", values, launchOptions);
+  if (receipt.accepted) return app.getLaunch(env, receipt.launchId);
+  if (receipt.code === "idempotency_conflict") {
+    const originalLaunchId: string = receipt.launchId;
+    return app.getLaunch(env, originalLaunchId);
+  }
+  return undefined;
+}

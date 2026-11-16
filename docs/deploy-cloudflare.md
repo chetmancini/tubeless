@@ -99,6 +99,89 @@ not a secret, but do not put credentials in these text bindings or anywhere else
 For a working deployment root, see [`examples/cloudflare/`](../examples/cloudflare/).
 It deploys the shared [example project](../examples/tubeless.project.ts).
 
+## Launch from application code
+
+After scaffolding, add a handler to your Worker entry when cron, a queue, or another
+trusted part of your application needs to submit a command. Set an immutable
+`deploymentId` on `createCloudflareApp` and change it whenever execution code or
+configuration changes. Existing browser-only apps can omit it.
+
+```ts
+import { createCloudflareApp } from "tubeless/cloudflare";
+import project from "../tubeless.project.ts";
+
+const app = createCloudflareApp(project, { deploymentId: "release-2026-11-16" });
+
+export default {
+  ...app.worker,
+  async scheduled(event: { scheduledTime: number }, env: unknown): Promise<void> {
+    const admission = await app.launch(
+      env,
+      "validated-import",
+      { source: "daily.csv" },
+      { idempotencyKey: `validated-import.daily.${event.scheduledTime}` }
+    );
+    if (!admission.accepted) throw new Error(admission.errors.join("; "));
+    console.log(`Admitted launch ${admission.launchId}`);
+  },
+};
+export const { TubelessStudio, TubelessRun } = app.durableObjects;
+```
+
+Adapt the [compiled scheduled Worker example](../examples/cloudflare/scheduled-worker.ts).
+The application configures its Cloudflare cron trigger or queue binding and owns
+delivery acknowledgements and retries. Await `app.launch`; admission does not wait
+for the pipeline to finish. Do not expose this trusted code capability as an
+unauthenticated HTTP route. Studio's browser routes retain Access and Origin checks.
+
+### Receipts, retries, and deployment changes
+
+`launch` accepts registered command IDs and the same structured parameter values
+as Studio, including `dryRun`, `stepIds`, `targets`, and `maxConcurrency`. It validates
+the command parameters before admission; pipeline domain-schema validation still
+happens during execution and can produce a failed recorded run.
+
+Choose a stable key for one logical delivery: a named cron occurrence's scheduled
+timestamp, or a queue's stable message/business ID. Keys and deployment IDs contain
+1–200 letters, digits, periods, underscores, colons, or hyphens. Do not put secrets
+in either identifier. A new random key on every retry creates different submissions.
+
+- `{ accepted: true, launchId }` is an immutable receipt for durable admission. It
+  confirms neither a recorded start nor successful execution.
+- Retry a thrown transport/storage error with the same key and unchanged intent.
+  Matching retries return the original receipt, including after completion or a
+  Durable Object restart. They never dispatch another execution.
+- `accepted: false` with `code: "invalid_launch"` reports invalid command parameters
+  or configuration. `code: "idempotency_conflict"` includes the original `launchId`;
+  investigate that launch before deliberately submitting new work.
+
+Keys share one namespace across all commands and deployments using the same Studio
+object/binding. Intent comparison includes the project, command, normalized
+parameters and controls (including defaults), cooperative deadline, and deployment
+ID. Object property order does not matter; array order does. Parameter strings and
+arrays use Studio's existing bounds; normalized intent must also fit within 64 KiB.
+Changing intent or deployment under an existing key conflicts. Keys never expire
+automatically and survive history clearing, including after a terminal launch.
+Deleting the Studio object's storage also deletes these guarantees.
+
+Use `await app.getLaunch(env, launchId)` to read `commandId`, `state`, and an optional
+`runId`. Missing launches return `undefined`. State `starting` means no root start
+has been recorded; `running` means one has; `finished` means a root completion was
+recorded, whose actual success/failure/cancellation is in the linked run. State
+`failed` means the host closed the launch and can occur without a run ID. Open the
+linked run in Studio with `/?run=<runId>`.
+
+An unconfirmed dispatch is never automatically executed again. If admission
+commits but the host stops before dispatch, reconciliation eventually marks that
+same launch failed; replay does not start it. A queued job from an older deployment
+is also refused before user code runs. Inspect the original launch, then use a
+new key only when deliberately requesting another run. This is submission
+deduplication, not crash resume or business-side-effect idempotency.
+
+Only the intent digest and admission metadata are added to persistent launch
+bookkeeping. Input history, actor attribution, and prefilled reruns are not enabled
+by this API. Execution jobs still temporarily hold their values as before.
+
 ## Application trace exporters
 
 Cloudflare runs honor the project's `tracing.exporters` factory described in the
@@ -368,9 +451,10 @@ for the model this builds on.
 
 ## What it is not
 
-This version has no crash resume, scheduling, multi-tenant isolation or per-user
-audit trail. It runs one project for one team. For durable retries or scheduled
-runs, host your pipelines in a [host engine](#run-limits) instead.
+This version has no crash resume, built-in scheduler, multi-tenant isolation or
+per-user audit trail. It runs one project for one team. Application-owned cron and
+queue handlers can [submit commands](#launch-from-application-code); use a
+[host engine](#run-limits) when execution itself needs durable retries or long waits.
 
 ## Troubleshooting
 
