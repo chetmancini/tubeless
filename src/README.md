@@ -117,7 +117,9 @@ Only boundaries that are not obvious from names are listed.
   terminal reports; `pipeline-cache.ts` owns cache keys and policy around handler
   execution and imports no concrete store or codec eagerly.
 - `core/execution-journal.ts` owns host journal acknowledgements, logical paths,
-  compatibility bindings and shared infrastructure failure state. It imports no
+  compatibility bindings, per-step recovery and shared infrastructure failure state.
+  Scheduling delegates the step protocol; handler failures stay outside the host
+  acknowledgement boundary. It imports no
   storage or agent runtime. Child composition extends its scope; native agents
   consume a structural byte-store handoff and suppress the outer journal.
 - `run-controls.ts` snapshots supported run controls for direct runs, child runs and
