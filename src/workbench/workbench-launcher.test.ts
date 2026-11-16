@@ -18,7 +18,6 @@ afterEach(() =>
   directories.splice(0).forEach((directory) => rmSync(directory, { recursive: true, force: true }))
 );
 
-/** A directory with nothing in it, used as the whole `PATH` to hide every executable. */
 function emptyPath(): string {
   const directory = mkdtempSync(join(tmpdir(), "tubeless-empty-path-"));
   directories.push(directory);

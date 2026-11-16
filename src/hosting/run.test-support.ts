@@ -27,7 +27,6 @@ const nameSchema = schema((value) => {
 const { step } = createSteps(nameSchema);
 const greet = step("greet", { run: (_inputs, context) => `hi ${context.options.name}` });
 const Greeting = definePipeline({ id: "greeting", steps: [greet], finalize: greet });
-// Blocks until the run is aborted, so tests can exercise cancellation and the deadline.
 const hold = step("hold", {
   run: (_inputs, context) =>
     new Promise<never>((_resolve, reject) => {

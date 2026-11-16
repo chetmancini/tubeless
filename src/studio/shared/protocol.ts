@@ -69,16 +69,11 @@ export function parseStudioLaunchRequest(
     }
     return undefined;
   }
-  // SAFETY: The loop above rejected any entry that is not a boolean, finite
-  // number, bounded string, or bounded homogeneous array of those, so `values`
-  // matches PipelineRunStudioLaunchRequest["values"].
   return { values: values as PipelineRunStudioLaunchRequest["values"] };
 }
 
 export function parseStudioPlanInput(value: unknown): PipelineRunControls | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  // SAFETY: The object guard above narrows `value` to a non-null object; this
-  // wire shape only names the fields we read, leaving their values unchecked.
   const input = value as StudioPlanInputWire;
   if (input.dryRun !== undefined && typeof input.dryRun !== "boolean") return undefined;
   const selection = (key: "stepIds" | "targets"): readonly string[] | false | undefined => {

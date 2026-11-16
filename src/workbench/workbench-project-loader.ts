@@ -51,7 +51,6 @@ interface WorkbenchProjectFile {
   inventory: Record<string, unknown>;
 }
 
-/** Defer direct module loading until a plan or command is needed. */
 export function createModuleRegistration(
   filePath: string,
   cwd: string,
@@ -109,7 +108,6 @@ function createPipelineRegistration(
     identity: `project-pipeline\0${filePath}\0${pipeline.id}`,
     source: pipeline.id,
     id: pipeline.id,
-    // A registered command owns presentation overrides; it plans its pipeline unchanged.
     async loadPlan() {
       return { view: command ?? pipeline };
     },
@@ -131,7 +129,6 @@ async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
-/** Select the project once and normalize its pipelines for every workbench consumer. */
 export async function loadPipelineProjectFile(
   fileArgument: string,
   io: WorkbenchCliIo
@@ -191,7 +188,6 @@ async function projectFileForTarget(
   return (await pathExists(defaultFile)) ? defaultFile : undefined;
 }
 
-/** Resolve a direct file or registered id to the same lazy loading contract. */
 export async function resolveWorkbenchRegistration(
   target: string,
   exportName: string | undefined,

@@ -1,15 +1,11 @@
 import type { AgentModelRequest } from "./model-types.js";
 import { utf8ByteLength, utf8Bytes } from "./provider-utf8.js";
+import { MAX_TOOL_OUTPUT_BYTES } from "./provider-limits.js";
 
 type Outcome = AgentModelRequest["outcomes"][number];
 
-const MAX_BATCH_BYTES = 262_144;
 const encodedBytes = (value: unknown) => utf8ByteLength(JSON.stringify(value));
 
-/**
- * Bound provider-visible results, including outer JSON escaping and item separators.
- * `wrap` builds one provider item from an outcome and its JSON-text output.
- */
 export function boundedToolOutputs<Item>(
   provider: string,
   outcomes: AgentModelRequest["outcomes"],
@@ -22,7 +18,7 @@ export function boundedToolOutputs<Item>(
     )
   );
   const outputs = outcomes.map((outcome, index) => wrap(outcome, texts[index]!));
-  const budget = Math.min(MAX_BATCH_BYTES, availableBytes);
+  const budget = Math.min(MAX_TOOL_OUTPUT_BYTES, availableBytes);
   if (
     outputs.length === 0 ||
     outputs.reduce((bytes, item) => bytes + encodedBytes(item) + 1, 0) <= budget
@@ -44,13 +40,11 @@ export function boundedToolOutputs<Item>(
         })
       );
     const marker = preview(0);
-    // Small complete results can cost less than a truncation marker.
     const minimum = encodedBytes(item) <= encodedBytes(marker) ? item : marker;
     return { item, bytes, preview, minimum, minimumBytes: encodedBytes(minimum) + 1 };
   });
   const remaining = budget - entries.reduce((total, entry) => total + entry.minimumBytes, 0);
   if (remaining < 0) throw new Error(`${provider} request has no room for tool output metadata`);
-  // The full batch did not fit, so at least one entry must still need a preview.
   const previewCount = entries.filter((entry) => entry.minimum !== entry.item).length;
   const extra = Math.floor(remaining / previewCount);
   return entries.map(({ item, bytes, preview, minimum, minimumBytes }) => {

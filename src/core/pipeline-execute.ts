@@ -91,12 +91,9 @@ export async function executePlannedRun<
 
   const maxConcurrency = controls.maxConcurrency ?? 1;
 
-  // SAFETY: `domainOptions` is the user-supplied options object; if a schema
-  // is present it is re-validated below before assignment to `pipelineOptions`.
   let pipelineOptions = input.domainOptions as TOptions;
   if (compiled.optionsSchema || input.preparedOptions) {
     try {
-      // SAFETY: the private token or ordinary schema validates the same options boundary.
       pipelineOptions = (
         input.preparedOptions
           ? input.preparedOptions.read(compiled.optionsSchema, input.domainOptions)
@@ -132,10 +129,6 @@ export async function executePlannedRun<
 
   const plannedSteps = planStepById(input.plan);
   const stepsById = new Map(compiled.orderedSteps.map((step) => [step.id, step]));
-  // `input.plan.steps` is already topologically ordered. Rehydrate from the original step
-  // objects so callers still get the typed handlers rather than plan metadata.
-  // SAFETY: every planned step id originates from `compiled.orderedSteps`, so the
-  // map lookup always finds the matching `CompiledStep<TOptions>`.
   const orderedSteps = input.plan.steps.map(
     (step) => stepsById.get(step.id) as CompiledStep<TOptions>
   );
@@ -330,8 +323,6 @@ export async function executePlannedRun<
     state.beginFinalization();
     try {
       throwIfAborted(runtime);
-      // SAFETY: `state.outputs` maps step ids to their produced values, which is
-      // exactly the shape the finalizer's outputs parameter describes.
       const finalOutputs = Object.fromEntries(state.outputs) as Parameters<
         CompiledPipeline<TSteps, TResult, TTargets, TResultSchema>["finalize"]
       >[0];
@@ -339,9 +330,6 @@ export async function executePlannedRun<
         ...executionContext,
         log: lifecycle.logger(PIPELINE_FINALIZE_STEP_ID),
       });
-      // SAFETY: with a result schema the value is validated against
-      // `TPipelineResult`; without one the finalizer's declared return type
-      // is `TPipelineResult`, so the cast only restores that type.
       const value = compiled.resultSchema
         ? ((await validateStandardSchema(
             compiled.resultSchema,

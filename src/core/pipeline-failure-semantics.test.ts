@@ -56,7 +56,6 @@ describe("parallel failure semantics", () => {
       const complete = vi.fn();
       const pipeline = definePipeline({
         id: "ordered-failures",
-        // Plan order differs from declaration order as well as completion order.
         steps: [blocked, first, second, child, independent, gated, optional],
         finalize,
       });

@@ -24,9 +24,7 @@ import {
 } from "./reporter.js";
 import { safeTerminalLog, safeTerminalText } from "./terminal-text.js";
 
-/** Failed-step lines retained when they were only visible in the log pane. */
 const PANE_ONLY_LOG_LIMIT = 50;
-/** Characters kept per log line in pane and failed-output buffers. */
 const MAX_RETAINED_LOG_LINE = 2048;
 
 /** Rendering mode selected for pipeline lifecycle reporting. */
@@ -110,7 +108,6 @@ function formatCount(value: number): string {
 }
 
 function renderProgress(progress: PipelineStepProgress, width: number, unicode: boolean): string {
-  // Parent line keeps the summary message only; per-item work uses `details`.
   const message = progress.message ? ` ${safeTerminalText(progress.message)}` : "";
   if (progress.total === undefined || safeNumber(progress.total) <= 0) {
     return `${formatCount(safeNumber(progress.completed))}${message}`;
@@ -168,7 +165,6 @@ function renderProgressDetail(
   return `${"  ".repeat(depth + 2)}${symbol} ${paintedBody}${progress}`;
 }
 
-/** Read-only view of sibling step rows, used to explain waits and skips. */
 interface StepLookup {
   label(stepId: string): string;
   status(stepId: string): StepState["status"] | undefined;
@@ -272,7 +268,6 @@ function createInteractiveReporter<TResult>(
     terminal: { isTTY: terminalIsTTY, ...options.terminal },
   });
   const progressBarWidth = Math.max(4, Math.floor(options.progressBarWidth ?? 20));
-  // ~12.5 fps keeps braille spinners smooth without flooding the terminal.
   const refreshIntervalMs = Math.max(16, Math.floor(options.refreshIntervalMs ?? 80));
   const steps = new Map<string, StepState>();
   const recentLogs: string[] = [];
@@ -309,7 +304,6 @@ function createInteractiveReporter<TResult>(
   };
 
   const summaryHeader = (run: PipelineRun<TResult>): string => {
-    // Steps outside the selection are not part of what the user asked to run.
     const counted = run.steps.filter(
       (step) => !(step.status === "skipped" && step.reason === "filtered")
     );
@@ -505,9 +499,7 @@ function createInteractiveReporter<TResult>(
       output.write(text);
       return;
     }
-    // Retained copies are bounded; scrollback keeps the full line.
     const bounded = (line: string): string => line.slice(0, MAX_RETAINED_LOG_LINE);
-    // Retain a bounded tail for the pane, including when the terminal is resized.
     recentLogs.push(...lines.slice(-8).map(bounded));
     recentLogs.splice(0, Math.max(0, recentLogs.length - 8));
     if (logPaneVisible()) {
@@ -533,7 +525,6 @@ function createInteractiveReporter<TResult>(
   };
   const log = stepLog(undefined);
 
-  /** Show failed steps' output that was only visible in the log pane. */
   const writePaneOnlyFailureOutput = (run: PipelineRun<TResult>): void => {
     const failedIds = run.steps.filter((step) => step.status === "failed").map((step) => step.id);
     if (finalize.status === "failed") failedIds.push(PIPELINE_FINALIZE_STEP_ID);
@@ -571,8 +562,6 @@ function createInteractiveReporter<TResult>(
     onStepStatus: (event) => {
       const previous = steps.get(event.step.id);
       if (event.status === "running") {
-        // Empty/non-visible progress only refreshes the frame; retain the last
-        // visible progress snapshot while still publishing one running state.
         const progress =
           event.progress && hasVisibleStepProgress(event.progress)
             ? event.progress

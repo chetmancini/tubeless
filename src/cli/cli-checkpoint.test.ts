@@ -205,8 +205,6 @@ describe("defineCommand: checkpoint", () => {
     await command.run(["--dry-run"]);
     expect(seenHasA).toBe(false);
     expect(seenEntriesSize).toBe(0);
-    // The on-disk file is untouched by the dry run (verified by the test above); this test
-    // only asserts what `run` observes through `context.checkpoint`.
     expect(openCheckpoint(checkpointPath).has("a")).toBe(true);
   });
 
@@ -340,9 +338,7 @@ describe("defineCommand: checkpoint", () => {
       },
     });
     await command.run(["--resume", "--dry-run"], { checkpoint: stub });
-    // The dry-run preview still reflects the caller's real entries...
     expect(seenHasA).toBe(true);
-    // ...but nothing `run` writes reaches the caller's actual store.
     expect(stub.record).not.toHaveBeenCalled();
     expect(stub.flush).not.toHaveBeenCalled();
     expect(stub.has("b")).toBe(false);

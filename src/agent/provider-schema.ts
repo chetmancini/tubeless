@@ -88,7 +88,6 @@ function assertParameterSchema(schema: unknown, path: string, rules: StrictSchem
     );
 }
 
-/** Wrap a tool schema as a single required field after checking provider strict rules. */
 export function strictParameter(
   name: string,
   schema: Readonly<Record<string, unknown>>,

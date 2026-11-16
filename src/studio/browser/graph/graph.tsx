@@ -600,7 +600,6 @@ export function RunGraph({
     setSelection(next);
     onSelectStep?.(next?.kind === "step" && next.runId === runId ? next.stepId : null);
   };
-  // Follow the page's step: select it, or drop a top-level step selection it no longer names.
   useEffect(() => {
     setSelection((current) => {
       const ownStep = current?.kind === "step" && current.runId === runId;
@@ -622,8 +621,6 @@ export function RunGraph({
   });
   opened.current = ctx.opened;
   const { scene } = ctx;
-  // Reconcile subscriptions after each scene. Revision changes update a loader without
-  // retiring its in-flight read; only collapsed/removed runs and owner changes retire reads.
   useEffect(() => {
     for (const [id, loader] of loaders) {
       if (!ctx.wanted.has(id)) {

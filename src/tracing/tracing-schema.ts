@@ -25,6 +25,7 @@ import {
   PIPELINE_TRACE_LIST_LIMIT,
   PIPELINE_TRACE_STRING_LIMIT,
   PIPELINE_TRACE_VERSION,
+  STEP_CACHE_POLICIES,
 } from "./tracing-constants.js";
 
 export const PIPELINE_ERROR_CODES = [
@@ -135,7 +136,6 @@ function decodeCause(
       fanOut ? "error.fanOut cause exceeds its depth limit" : "error.cause exceeds 16 levels"
     );
   }
-  // SAFETY: The object guard above excludes null and arrays, so named properties are safe to read.
   const source = value as Record<string, unknown>;
   const decodeText = (key: "message" | "name" | "sourceCode"): string | undefined => {
     const item = source[key];
@@ -409,7 +409,7 @@ export const agentMetadataSchema = wireObject({
   ),
 });
 export const iterationControlsSchema = wireObject({
-  cache: wireOptional(wireEnum(["use", "recompute", "bypass"])),
+  cache: wireOptional(wireEnum(STEP_CACHE_POLICIES)),
   dryRun: wireOptional(wireBoolean()),
   continueOnError: wireOptional(wireBoolean()),
   maxConcurrency: wireOptional(finiteNumber),
@@ -430,7 +430,7 @@ const definitionStepSchema = wireObject({
     wireObject({
       version: wireString({ maxLength: 256 }),
       maxAgeMs: wireOptional(finiteNumber),
-      policy: wireEnum(["use", "recompute", "bypass", "dynamic"]),
+      policy: wireEnum([...STEP_CACHE_POLICIES, "dynamic"]),
     })
   ),
   nestedPipeline: wireOptional(

@@ -75,7 +75,6 @@ describe("tubeless init", () => {
     // Package managers save ^ranges by default; the verified beta toolchain must stay exact.
     expect(steps).toContain("bun add -d --exact ");
     // cf dev and cf build write generated types and Build Output there.
-    // Idempotent and safe when .gitignore lacks a trailing newline.
     expect(steps).toContain(
       "grep -qxF '.cloudflare/' .gitignore 2>/dev/null || printf '\\n.cloudflare/\\n' >> .gitignore"
     );
@@ -245,7 +244,6 @@ describe("tubeless init project", () => {
       "Beta"
     );
     expect(JSON.parse(stdout)).toMatchObject({ status: "completed", value: ["alpha", "beta"] });
-    // Deployment targets load the project init just created.
     await cli(cwd, "init", "cloudflare");
     expect(readFileSync(join(cwd, "cloudflare/worker.ts"), "utf8")).toContain(
       'import project from "../tubeless.project.ts";'
@@ -306,7 +304,6 @@ describe("cloudflare scaffold naming and imports", () => {
   });
 
   it("does not leave a trailing dash when the cut lands on a separator", () => {
-    // 52 letters, a separator at the 53rd character, then more text.
     const { worker, bucket } = generate(`${"a".repeat(52)} tail`);
     expect(worker).toBe("a".repeat(52));
     expect(bucket).toBe(`${"a".repeat(52)}-artifacts`);

@@ -61,7 +61,6 @@ export async function openNdjsonPipelineRunStore(
     (value, id) => ({ ...decodeStoredTraceEvent(value), id })
   );
 
-  // Resolve subtrees through recorded parent links without scanning unrelated runs.
   const eventsByRun = new Map<string, StoredPipelineEvent[]>();
   const eventsByParent = new Map<string, StoredPipelineEvent[]>();
   for (const event of events) {
@@ -98,8 +97,6 @@ export async function openNdjsonPipelineRunStore(
                 .flatMap((runId) => eventsByRun.get(runId) ?? [])
                 .sort((a, b) => a.id - b.id);
       }
-      // Buckets retain file order. Seek past the cursor without revisiting
-      // preceding pages, including when the reader requests very small pages.
       let start = 0;
       let end = selected.length;
       if (query.afterId !== undefined) {

@@ -47,7 +47,6 @@ export function useTranscript(api: TranscriptApi, runId: string) {
           if (!active || request !== current) return;
           request = undefined;
           if (result && result.sourceId !== next.sourceId) {
-            // A replacement source cannot inherit another source's content or cursor.
             result = undefined;
             afterSequence = 0;
             load();
@@ -61,7 +60,6 @@ export function useTranscript(api: TranscriptApi, runId: string) {
               ])
             ).values(),
           ].sort((left, right) => left.sequence - right.sequence);
-          // Walk bounded pages to their end, then revisit the first gap on the next refresh.
           afterSequence = 0;
           for (const record of records) {
             if (record.sequence !== afterSequence + 1) break;
@@ -82,7 +80,6 @@ export function useTranscript(api: TranscriptApi, runId: string) {
         (cause: unknown) => {
           if (!active || request !== current) return;
           request = undefined;
-          // Keep successful pages without scheduling another request.
           publish(false, cause instanceof Error ? cause.message : "Could not load transcript.");
         }
       );

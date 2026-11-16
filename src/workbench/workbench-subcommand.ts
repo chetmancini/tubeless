@@ -43,7 +43,6 @@ export interface WorkbenchCommandSpec {
 
 const HELP_OPTION = { type: "boolean", short: "h", description: "Show this help" } as const;
 
-/** Options visible at the root, or accepted by one selected nested command. */
 export function workbenchOptions(
   spec: WorkbenchCommandSpec,
   command?: string
@@ -67,7 +66,6 @@ export function renderWorkbenchUsage(spec: WorkbenchCommandSpec, command?: strin
   return `${spec.usage.trimEnd()}\n\nOptions:\n${rows.map(({ flag, description }) => `  ${flag.padEnd(width)}  ${description}`).join("\n")}\n${spec.footer ? `\n${spec.footer.trimEnd()}\n` : ""}`;
 }
 
-/** Strict subcommand parsing with positionals; every subcommand accepts `-h, --help`. */
 export function parseSubcommandArgs<const T extends SubcommandOptions>(
   argv: readonly string[],
   options: T

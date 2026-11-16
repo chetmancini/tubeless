@@ -60,7 +60,6 @@ export const pipelineMetadataSchema = wireCustom<PipelineMetadata>(
         throw new TypeError(`${path}.${key} is unknown; use annotations for application fields`);
       }
     }
-    // SAFETY: each allowed field is validated above, and nested values are bounded JSON.
     return freeze(snapshot as PipelineMetadata);
   }
 );

@@ -31,7 +31,6 @@ function definitionStep(
   return step;
 }
 
-/** Own observed definition replacement independently of run execution state. */
 export class DefinitionProjection {
   #snapshot?: PipelineDefinitionSnapshot;
   #definitionRun: { id: string; startedAtMs: number; startedEventId: number } | undefined;

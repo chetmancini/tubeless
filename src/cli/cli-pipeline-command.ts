@@ -17,6 +17,7 @@ import type {
   CliStringParam,
 } from "./cli-types.js";
 import { markPipelineCommand } from "../utilities/pipeline-command-marker.js";
+import { STEP_CACHE_POLICIES } from "../tracing/tracing-constants.js";
 import { hasConflictingSelectionControls } from "../core/pipeline-plan.js";
 import {
   type Pipeline,
@@ -40,7 +41,7 @@ export type PipelineCliBuiltins = {
   targets: CliStringParam & { multiple: true };
   continueOnError: CliBooleanParam;
   maxConcurrency: CliNumberParam;
-  cache: CliStringParam & { choices: readonly ["use", "recompute", "bypass"]; optional: true };
+  cache: CliStringParam & { choices: typeof STEP_CACHE_POLICIES; optional: true };
 };
 
 /** Validated domain parameters plus the built-in pipeline execution controls. */
@@ -168,7 +169,7 @@ function pipelineCommandBuiltins(pipeline: {
   return {
     cache: {
       type: "string",
-      choices: ["use", "recompute", "bypass"],
+      choices: STEP_CACHE_POLICIES,
       optional: true,
       group: "execution",
       description: "Override the cache policy for opted-in steps, including child pipelines.",
@@ -263,7 +264,6 @@ function normalizePipelineHookSets<TResult>(
   hooks: PipelineCommandHookSets<TResult> | undefined
 ): PipelineHooks<TResult>[] {
   if (!hooks) return [];
-  // SAFETY: a non-array `PipelineCommandHookSets` is always a single `PipelineHooks`.
   return Array.isArray(hooks) ? [...hooks] : [hooks as PipelineHooks<TResult>];
 }
 
@@ -279,8 +279,6 @@ function defaultPipelineCommandOptions<TSchema extends CliParamsSchema>(
   values: PipelineCliValues<TSchema>,
   builtins: PipelineCliBuiltins
 ): DefaultPipelineCommandOptions<TSchema> {
-  // SAFETY: remove the pipeline schema's keys and the two base-command values,
-  // exactly matching DefaultPipelineCommandOptions's omitted execution controls.
   return Object.fromEntries(
     Object.entries(values).filter(
       ([key]) => !Object.hasOwn(builtins, key) && key !== "dryRun" && key !== "resume"
@@ -356,8 +354,6 @@ export function definePipelineCommand<
   const bridgeParams: CliParamsSchema = { ...builtins };
   if (!targetFlagEnabled) delete bridgeParams.targets;
 
-  // SAFETY: `bridgeParams` supplies the `PipelineCliBuiltins` keys and `userParams` is
-  // `TSchema`, so the merged object satisfies `PipelineCliBuiltins & TSchema`.
   const params = { ...bridgeParams, ...userParams } as PipelineCliBuiltins & TSchema;
   const inheritedName = nonBlankPipelineText(pipeline.name);
   const inheritedDescription = nonBlankPipelineText(pipeline.description);
@@ -416,7 +412,6 @@ export function definePipelineCommand<
         // SAFETY: TResult is extracted from this exact pipeline's runOrThrow return type.
         result = (await pipeline.runOrThrow(mapped, controls, {
           ...cliContext.pipelineContext,
-          // The managed store, or its dry-run view, wins over an executor-supplied one.
           ...(cliContext.checkpoint ? { checkpoint: cliContext.checkpoint } : {}),
           cwd: runtimeContext.cwd,
           log: runtimeContext.log,

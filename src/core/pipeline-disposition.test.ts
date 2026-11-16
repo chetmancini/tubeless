@@ -48,7 +48,6 @@ function disposition(
     selected?: boolean;
   } = {}
 ) {
-  // Test dependencies are leaves, so they precede the step in topological order.
   const graph = compilePipelineGraph({ orderedSteps: [...stepEdges(step), step] });
   return decideStepDisposition({
     dryRun: options.dryRun ?? false,

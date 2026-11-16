@@ -111,7 +111,6 @@ function strictSubset(schema: unknown): unknown {
   return withStrictType(kept);
 }
 
-/** Build a Messages API tool whose arguments carry the value in one wrapped field. */
 export function anthropicTool(
   name: string,
   description: string,
@@ -135,7 +134,6 @@ export function anthropicTool(
   }
   // Check the schema the provider will see: stripped constraints are enforced only by
   // the harness, so their subschemas need not meet strict-mode object rules.
-  // SAFETY: strictSubset returns a record when given a record.
   const visible = strictSubset(schema) as Record<string, unknown>;
   return {
     name,
@@ -149,7 +147,6 @@ export function anthropicTool(
   };
 }
 
-/** Validate a Messages API response and return its stop reason and content blocks. */
 export function anthropicMessage(body: unknown) {
   if (
     !record(body) ||
@@ -162,7 +159,6 @@ export function anthropicMessage(body: unknown) {
   return { stopReason: body.stop_reason, content: body.content };
 }
 
-/** Map tool_use blocks to a harness decision; null when the model replied without tools. */
 export function anthropicDecision(content: readonly Record<string, unknown>[]) {
   const calls: { id: string; tool: string; input: unknown }[] = [];
   for (const block of content) {

@@ -86,7 +86,6 @@ export function pipelineTool<
     definition.inputJsonSchema,
     "Pipeline tool input"
   );
-  // SAFETY: this private registry brands the descriptor; overloads correlate inputs and child results.
   const tool = Object.freeze({}) as AgentTool<unknown, unknown>;
   pipelineTools.set(tool, {
     description: definition.description,

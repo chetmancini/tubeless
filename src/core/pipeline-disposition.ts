@@ -1,7 +1,6 @@
 import type { CompiledStep } from "./pipeline-graph.js";
 import type { PipelineStepReport, PipelineStepSkipReason } from "./pipeline-types.js";
 
-/** Required dependencies are met when completed, or intentionally policy-skipped. */
 function isRequiredDependencyMet(report: PipelineStepReport | undefined): boolean {
   if (!report) return false;
   if (report.status === "completed") return true;

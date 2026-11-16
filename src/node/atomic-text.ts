@@ -12,9 +12,7 @@ export function writeAtomicText(filePath: string, text: string): void {
   } catch (error) {
     try {
       fs.rmSync(tmpPath, { force: true });
-    } catch {
-      // Best-effort cleanup; surface the original write/rename error.
-    }
+    } catch {}
     throw error;
   }
 }

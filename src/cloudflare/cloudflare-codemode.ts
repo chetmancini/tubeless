@@ -18,7 +18,7 @@ export interface WorkerLoaderLike {
   }): { getEntrypoint(name: string): unknown };
 }
 
-/** Options for createWorkerLoaderCodemodeExecutor. */
+/** Set the CPU budget and compatibility date for code-mode Dynamic Workers. */
 export interface WorkerLoaderCodemodeOptions {
   /** CPU budget for each script's Dynamic Worker. Defaults to 30000 ms. */
   readonly cpuMs?: number;
@@ -30,8 +30,7 @@ const ENTRYPOINT = "TubelessCodemode";
 
 // The Dynamic Worker module that runs one script. It receives only the call bridge, as an RPC
 // function stub, and the realm setup's tools and console; it has no env or outbound network.
-// Specifiers are interpolated so this source text is not mistaken for this module's imports.
-const MAIN = `import { WorkerEntrypoint } from ${JSON.stringify("cloudflare:workers")};
+const MAIN = `import { WorkerEntrypoint } from "cloudflare:workers";
 const setup = ${REALM_SETUP};
 const describe = ${describeScriptError.toString()};
 const logLines = ${scriptLogLines.toString()};
@@ -80,7 +79,6 @@ function loadFailure(error: unknown): CodemodeExecutionResult | undefined {
   return { ok: false, message: `${detail} (line ${line})`, logs: [], logsTruncated: false };
 }
 
-/** Accept only the result shape the module returns; anything else is a sandbox failure. */
 function executionResult(value: unknown): CodemodeExecutionResult {
   const result = value as Partial<Record<string, unknown>> | null;
   if (
@@ -127,7 +125,6 @@ export function createWorkerLoaderCodemodeExecutor(
         globalOutbound: null,
         limits: { cpuMs },
       });
-      // SAFETY: the module above defines this entrypoint and its run method.
       const entrypoint = worker.getEntrypoint(ENTRYPOINT) as ScriptEntrypoint;
       const running = entrypoint.run(
         JSON.stringify(execution.tools),

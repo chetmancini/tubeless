@@ -3,7 +3,7 @@ import { Writable } from "node:stream";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { openSqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import { writeCliChunk } from "./workbench-shared.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli } from "./workbench.js";
@@ -485,6 +485,7 @@ describe("workbench run integration", () => {
       ["run", "--trace", fifo, "pipeline.mjs", "--", "--message", "hello", "--target", "work"],
       io
     );
+    // FIFO write-open has no readiness event until a reader connects.
     await new Promise((resolve) => setTimeout(resolve, 50));
     controller.abort();
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
@@ -501,7 +502,7 @@ describe("workbench run integration", () => {
       ["run", "--trace", "-", "pipeline.mjs", "--", "--message", "hello", "--target", "work"],
       io
     );
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await vi.waitFor(() => expect(stdout.writableLength).toBeGreaterThan(0));
     controller.abort();
     await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
     expect(io.output.join("")).not.toContain("completed:hello");

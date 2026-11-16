@@ -126,7 +126,6 @@ describe("TickerFrame painting", () => {
     const last = chunks.at(-1)!;
     expect(last.startsWith("\u001B[?2026h")).toBe(true);
     expect(last.endsWith("\u001B[?2026l")).toBe(true);
-    // The old frame stays visible until each row is overwritten.
     expect(last.indexOf("\u001B[J")).toBeGreaterThan(last.indexOf("short"));
     expect(renderTerminal(chunks.join(""), columns)).toEqual([
       "earlier output",

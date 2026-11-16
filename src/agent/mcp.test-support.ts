@@ -66,7 +66,6 @@ const tools = [
   },
 ];
 
-/** A small MCP server: two-tool pages, per-call behavior, and observed cancellations. */
 export function createFakeMcpServer() {
   const cancelled: unknown[] = [];
   const calls: unknown[] = [];
@@ -116,7 +115,6 @@ export function createFakeMcpServer() {
   return { handle, cancelled, calls, responses };
 }
 
-/** Serve the fake over Streamable HTTP, answering tool calls as event streams. */
 export async function serveFakeMcpHttp(): Promise<{
   url: string;
   expireSession(): void;
@@ -185,7 +183,6 @@ export async function serveFakeMcpHttp(): Promise<{
   };
 }
 
-// Executed directly, speak newline-delimited JSON-RPC over stdio.
 if (process.argv[2] === "stdio") {
   const fake = createFakeMcpServer();
   process.stderr.write("fake server ready\n");

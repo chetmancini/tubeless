@@ -43,7 +43,6 @@ it.each([
       const runId: string = events.find(
         (event) => event.name === "pipeline.started" && !event.parentRunId
       ).runId;
-      // An unrelated run in the same database must not leak into this detail view.
       const store = await openSqlitePipelineRunStore(database);
       await store.export({
         version: 2,

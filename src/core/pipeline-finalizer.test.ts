@@ -94,7 +94,6 @@ describe("pipeline finalizers", () => {
         sourceCode: REQUIRED_OUTPUTS_MISSING_CODE,
         stepId: PIPELINE_FINALIZE_STEP_ID,
       });
-      // With no causal error to show instead, the derived failure stays visible.
       expect(causalPipelineErrors(run)).toEqual(run.errors);
       await expect(pipeline.runOrThrow({}, controls)).rejects.toThrow();
     }
@@ -113,7 +112,6 @@ describe("pipeline finalizers", () => {
     const gated = step("gated", { dependsOn: [broken], run: () => "published" });
     const finalizerError = { sourceCode: REQUIRED_OUTPUTS_MISSING_CODE };
 
-    // The dry run, not the unrelated failure, left `downstream` unpublished.
     const independent = await definePipeline({
       id: "independent",
       steps: [broken, missing, downstream],
@@ -125,7 +123,6 @@ describe("pipeline finalizers", () => {
     ]);
     expect(causalPipelineErrors(independent)).toEqual(independent.errors);
 
-    // `gated` was skipped because `broken` failed; the finalizer error repeats that.
     const derived = await definePipeline({
       id: "derived",
       steps: [broken, gated],

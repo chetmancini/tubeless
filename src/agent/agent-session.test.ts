@@ -17,7 +17,6 @@ import { remote } from "./environment.test-support.js";
 import type { Checkpoint } from "./checkpoint-format.js";
 import { wireArray, wireString } from "../tracing/wire-schema.js";
 
-/** A provider that appends each task, and fails tasks named "fail", recording what it saw. */
 function chatModel() {
   const requests: AgentModelRequest[] = [];
   const model: AgentModel = (request) => {
@@ -409,7 +408,6 @@ describe("agent sessions", () => {
       initialState: () => null,
       decide: () => ({ kind: "finish", result: "" }),
     });
-    // Loops own their state; only model-backed agents carry a provider conversation.
     expect(() => createAgentSession(loop)).toThrow("requires an agent from defineAgent");
   });
 

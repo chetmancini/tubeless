@@ -73,7 +73,6 @@ export class RunDetailLoader {
         this.#detail = detail;
         this.#loaded = revision;
         this.accept(detail);
-        // Publish this success even if newer events arrived, then read the newest revision once.
         this.#load();
       },
       () => {

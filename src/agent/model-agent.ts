@@ -111,7 +111,6 @@ export function defineAgent<
 export function defineAgent<Options extends StandardSchemaV1<object, object>>(
   config: ModelAgentDefinition<Options>
 ): unknown {
-  // Sessions compile from this owned definition, never from caller-owned collections.
   // Tools are opaque immutable handles; schemas, providers and executors retain their services.
   const owned = Object.freeze({
     ...config,
@@ -148,7 +147,6 @@ type ModelAgentDefinition<Options extends StandardSchemaV1<object, object>> = Ag
   readonly durability?: AgentDurability<Output<Options>>;
 };
 
-/** Compile one copy of the agent; a session's copy seeds and observes its conversation. */
 function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
   config: ModelAgentDefinition<Options>,
   session?: SessionHooks
@@ -165,7 +163,6 @@ function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
       "TUBELESS_AGENT_INVALID_DEFINITION",
       "Invalid agent configuration: supply a model, and a task mapper exactly when inputSchema is set"
     );
-  // The mapper is application code over validated options; recheck its text at each decision.
   const describe = (options: object): string => {
     // SAFETY: compileAgent validated options with inputSchema, or with `{ task }` when it is absent.
     const text = typedInput
@@ -190,7 +187,6 @@ function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
       // SAFETY: the key callback only receives options validated by this agent's input schema.
       durability: config.durability as AgentDurability<object> | undefined,
       codemode,
-      // Reject descriptors the provider cannot accept now, not at the first request.
       checkDescriptors: model.checkDescriptors,
       inputSchema: config.inputSchema ?? taskInput,
       resultSchema: config.resultSchema ?? answer,

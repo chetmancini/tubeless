@@ -85,7 +85,6 @@ function record(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new PipelineDocumentError(path, "Expected an object");
   }
-  // SAFETY: the check above establishes a non-null, non-array object; values stay unknown.
   return value as Record<string, unknown>;
 }
 
@@ -189,7 +188,6 @@ function parseStep(value: unknown, path: string): PipelineDocumentStep {
     );
   }
   if (fromPipeline !== undefined) return { ...common, fromPipeline, dryRun };
-  // The exactly-one check above establishes this final variant.
   return { ...common, forEachPipeline: forEachPipeline!, dryRun };
 }
 

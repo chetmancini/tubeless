@@ -523,7 +523,6 @@ describe("definePipeline runtime policies", () => {
     });
     expectTypeOf(mixedSkip).toEqualTypeOf<Step<"mixed-skip", "ok" | undefined, {}>>();
 
-    // Config-gated: `skip: predicate | undefined` stays explicit and widens.
     const enableSkip = false as boolean;
     const gated = step("gated-skip", {
       skip: enableSkip ? () => "disabled" : undefined,

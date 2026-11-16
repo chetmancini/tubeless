@@ -15,6 +15,7 @@ import { defineToolWithActivity } from "./tools.js";
 import { environmentOperation, type AgentEnvironment } from "./environment.js";
 import { toolPreview } from "./tool-progress.js";
 import type { AgentToolContext } from "./agent-types.js";
+import type { DefaultAgentToolName } from "./default-tool-names.js";
 import {
   DEFAULT_BASH_TIMEOUT_MS,
   DEFAULT_READ_LINES,
@@ -204,7 +205,7 @@ export const defaultTools = Object.freeze({
     summarize: (result) =>
       `${result.matches.length} ${result.matches.length === 1 ? "match" : "matches"}${result.truncated ? ", truncated" : ""}, ${result.skippedFiles} files skipped`,
   }),
-});
+} satisfies Record<DefaultAgentToolName, unknown>);
 
 /** The read, write, edit, bash, list and search tools included in every agent. */
 export type DefaultAgentTools = typeof defaultTools;

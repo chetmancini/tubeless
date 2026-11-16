@@ -138,7 +138,9 @@ describe("createLiveTicker worker fallback", () => {
       const { chunks, close, path, ticker } = workerTicker(source, undefined, 120);
       try {
         ticker.setLines([`${SPINNER_TOKEN} running`], ["latest log"]);
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await vi.waitFor(() =>
+          expect(readFileSync(path, "utf8") + chunks.join("")).toContain("| latest log")
+        );
         ticker.dispose();
         const output = readFileSync(path, "utf8") + chunks.join("");
         expect(output).toContain("+- Logs ");

@@ -26,14 +26,23 @@ describe("compiledClientSource", () => {
     expect(compiledClientSource(compiled)).toBe(compiled);
   });
 
-  it.each(['import { x } from "./x.js";', 'import "./x.js";', 'const x = import("./x.js");'])(
-    "rejects imports requiring separate browser assets: %s",
-    (statement) => {
-      expect(() => compiledClientSource(`${statement}\nexport function initStudio() {}\n`)).toThrow(
-        /import/
-      );
-    }
-  );
+  it("keeps import-like content that is plain text", () => {
+    const compiled = `const example = 'import("./example.js")';\n`;
+    expect(compiledClientSource(compiled)).toBe(compiled);
+  });
+
+  it.each([
+    'import { x } from "./x.js";',
+    'import "./x.js";',
+    'const x = import("./x.js");',
+    'export { x } from "./x.js";',
+    'export * from "./x.js";',
+    "const x = import(path);",
+  ])("rejects imports requiring separate browser assets: %s", (statement) => {
+    expect(() => compiledClientSource(`${statement}\nexport function initStudio() {}\n`)).toThrow(
+      /import/
+    );
+  });
 });
 
 describe("cloudflareClientModule", () => {

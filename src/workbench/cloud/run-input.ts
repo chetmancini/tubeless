@@ -168,6 +168,5 @@ function parseJsonObject(text: string, label: string): Record<string, CloudJsonV
       `${label} must contain JSON data with finite numbers and at most ${CLOUD_INPUT_MAX_DEPTH} levels of objects and arrays.`,
       "invalid_request"
     );
-  // SAFETY: The object shape and every JSON value were checked above.
   return value as Record<string, CloudJsonValue>;
 }

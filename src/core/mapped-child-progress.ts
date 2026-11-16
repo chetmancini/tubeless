@@ -181,8 +181,6 @@ export function mappedChildProgressSummary(
       itemNoun: options.itemNoun,
       sampleLimit: options.sampleLimit,
     });
-  // Empty fan-outs report total 0; otherwise keep total ≥ 1 so renderers can
-  // show a determinate bar once work has been scheduled.
   const total =
     snapshot.itemCount === 0
       ? 0

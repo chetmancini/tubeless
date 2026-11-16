@@ -4,7 +4,7 @@ import type { PipelineStepContext } from "../core/pipeline-types.js";
 import { createAbortError, throwIfAborted } from "../utilities/abort.js";
 import { clippedText } from "./default-tool-text.js";
 import { DEFAULT_BASH_TIMEOUT_MS, MAX_OUTPUT_BYTES } from "./default-tool-limits.js";
-import { ToolError } from "./tools.js";
+import { ToolError } from "./tool-error.js";
 
 export function bashTool(
   input: { command: string; cwd?: string | null; timeoutMs?: number | null },

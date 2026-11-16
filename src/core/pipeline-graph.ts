@@ -70,7 +70,6 @@ function compileStep<TOptions extends object>(
   return Object.freeze(compiled);
 }
 
-/** Normalized edges of an author or compiled step, deduplicated across policies. */
 export function stepEdges<TOptions extends object>(
   step: AnyStep<TOptions>
 ): readonly AnyStep<TOptions>[] {
@@ -83,7 +82,6 @@ export function stepEdges<TOptions extends object>(
   ];
 }
 
-/** Required data and failure-gate closure for dependency-aware targets. */
 export function targetClosure<TOptions extends object>(
   targets: readonly AnyStep<TOptions>[]
 ): Set<AnyStep<TOptions>> {
@@ -129,7 +127,6 @@ export function topologicalSort<TOptions extends object>(
 
   if (orderedIds.length !== steps.length) return null;
   const stepsById = new Map(steps.map((step) => [step.id, step]));
-  // SAFETY: every id in `orderedIds` came from the same `steps` array.
   return orderedIds.map((id) => stepsById.get(id) as AnyStep<TOptions>);
 }
 

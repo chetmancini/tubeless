@@ -132,8 +132,6 @@ const MAX_PIPELINE_CAUSE_DEPTH = 8;
 
 function readErrorField(value: object, field: "cause" | "code" | "message" | "name"): unknown {
   try {
-    // SAFETY: any object may be probed for an optional string-keyed field; a
-    // getter that throws is caught below, so the cast only enables the lookup.
     return (value as Record<string, unknown>)[field];
   } catch {
     return undefined;
@@ -177,7 +175,6 @@ function normalizePipelineCause(
   return cause;
 }
 
-// Fan-out snapshots bound every string as well as cause depth and item count.
 export function fanOutCause(error: unknown): PipelineErrorCause {
   const cause = normalizePipelineCause(error, new WeakSet<object>());
   let current: PipelineErrorCause | undefined = cause;

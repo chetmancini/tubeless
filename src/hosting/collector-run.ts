@@ -1,7 +1,8 @@
 import type { HostedCommand, HostedOutput } from "./hosting-commands.js";
 import { hostedCommandContext } from "./hosting-commands.js";
 import type { RunJob } from "./run-contract.js";
-import { BatchingTraceExporter, executeHostedRun } from "./run.js";
+import { executeHostedRun } from "./run.js";
+import { BatchingTraceExporter } from "./trace-batching.js";
 import { createHostedCollectorClient } from "./collector-client.js";
 import { COLLECTOR_BATCH_EVENTS } from "./collector-protocol.js";
 import { MAX_TIMEOUT_DELAY_MS, throwIfAborted } from "../utilities/abort.js";
@@ -63,8 +64,6 @@ export async function runCollectorJob(options: {
       {
         maxEvents: COLLECTOR_BATCH_EVENTS,
         maxDelayMs: 250,
-        retries: 0,
-        retryDelayMs: 0,
         onFailure: (error) => controller.abort(error),
       }
     );

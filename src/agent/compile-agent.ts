@@ -11,6 +11,7 @@ import { compileTool, type CompiledTool } from "./tools.js";
 import type { AgentModel } from "./model-types.js";
 import { CODEMODE_TOOL, compileCodemodeTool } from "./codemode.js";
 import { defaultTools } from "./default-tools.js";
+import { DEFAULT_AGENT_TOOL_NAMES, isDefaultAgentToolSelection } from "./default-tool-names.js";
 import { resolvedLimits, agentScope } from "./execution-scope.js";
 import { createAgentTurn, type TurnState } from "./turn.js";
 import { initialAgentExecution, runAgentInvocation } from "./invocation.js";
@@ -28,7 +29,6 @@ import type {
   Tools,
 } from "./agent-types.js";
 
-/** Accept raw or already-owned pending state; the turn snapshots it before tools run. */
 export type RuntimeAgentDefinition<
   Id extends string,
   Options extends StandardSchemaV1<object, object>,
@@ -41,7 +41,6 @@ export type RuntimeAgentDefinition<
   AgentDefinition<Id, Options, Result, State, Registry, Codemode, Defaults>,
   "decide" | "dryRun"
 > & {
-  /** A model's provider check, run once the model-facing descriptors are compiled. */
   readonly checkDescriptors?: AgentModel["checkDescriptors"];
   /** Restore a model session from an acknowledged finish snapshot without another decision. */
   readonly onCompletedReplay?: (state: AgentState<State>) => void;
@@ -114,14 +113,11 @@ export function compileAgent<
     config.resultJsonSchema,
     "Agent result"
   );
-  const selected = config.defaultTools ?? (Object.keys(defaultTools) as DefaultAgentToolName[]);
-  if (
-    !Array.isArray(selected) ||
-    selected.some((name) => typeof name !== "string" || !Object.hasOwn(defaultTools, name))
-  )
+  const selected = config.defaultTools ?? DEFAULT_AGENT_TOOL_NAMES;
+  if (!isDefaultAgentToolSelection(selected))
     throw agentError(
       "TUBELESS_AGENT_INVALID_DEFINITION",
-      `defaultTools must list standard tools: ${Object.keys(defaultTools).join(", ")}`
+      `defaultTools must list standard tools: ${DEFAULT_AGENT_TOOL_NAMES.join(", ")}`
     );
   const standard = Object.fromEntries(selected.map((name) => [name, defaultTools[name]]));
   const entries = Object.entries({ ...standard, ...config.tools }).sort(([a], [b]) =>
@@ -139,7 +135,6 @@ export function compileAgent<
       return [name, compileTool(config.id, name, tool)];
     })
   );
-  // Without tools, a script can only compute its answer; that costs a turn and adds nothing.
   if (config.codemode && tools.size === 0)
     throw agentError(
       "TUBELESS_AGENT_INVALID_DEFINITION",

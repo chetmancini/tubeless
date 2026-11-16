@@ -188,8 +188,6 @@ describe("openCheckpoint", () => {
     checkpoint.record("a", { attempt: 1 });
     checkpoint.flush();
 
-    // Assert on the actual bytes on disk, not just the in-memory view, and that no
-    // leftover temp file from the atomic-rename strategy survives the flush.
     const onDisk = JSON.parse(fs.readFileSync(filePath, "utf8"));
     expect(onDisk).toEqual({ a: { attempt: 1 } });
     expect(fs.readdirSync(dir)).toEqual([path.basename(filePath)]);
@@ -293,8 +291,6 @@ describe("withCheckpointedBatch", () => {
       ["a"],
       (item) => item,
       () => {
-        // If the implementation ever recorded first, checkpoint.has("a") would
-        // already be true here.
         order.push(checkpoint.has("a") ? "recorded-before-persist" : "persist");
       }
     );

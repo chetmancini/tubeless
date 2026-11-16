@@ -39,7 +39,6 @@ const pipeline = definePipeline({
 });
 
 function started(): Extract<PipelineTraceEvent, { name: "pipeline.started" }> {
-  // JSON round-tripping also gives these mutation tests a mutable wire record.
   const snapshot = JSON.parse(JSON.stringify(pipeline.definition));
   return {
     version: 2,

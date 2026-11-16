@@ -11,6 +11,8 @@ import type {
 } from "../tracing/tracing.js";
 import { createLaunchTracing, type LaunchTracing } from "./launch-tracing.js";
 import { type RunJob, type HostedRunTraceContext, type StudioIngest } from "./run-contract.js";
+import { BatchingTraceExporter } from "./trace-batching.js";
+import { withRetry } from "../utilities/retry.js";
 
 /**
  * Durable Object SQLite rejects a string or row over 2 MB. These trace strings have no
@@ -68,71 +70,8 @@ export function boundHostedEvent(event: PipelineTraceEvent): PipelineTraceEvent 
   return bounded;
 }
 
-export interface BatchingOptions {
-  readonly maxEvents: number;
-  readonly maxDelayMs: number;
-  readonly retries: number;
-  readonly retryDelayMs: number;
-  onFailure(error: unknown): void;
-  readonly sleep?: (ms: number) => Promise<void>;
-}
-
 const isTopLevelStart = (event: PipelineTraceEvent) =>
   event.name === "pipeline.started" && event.parentRunId === undefined;
-
-/** Deliver numbered batches in order; the collector applies each sequence at most once. */
-export class BatchingTraceExporter implements PipelineTraceExporter {
-  #pending: PipelineTraceEvent[] = [];
-  #sequence = 0;
-  #timer: ReturnType<typeof setTimeout> | undefined;
-  #chain: Promise<void> = Promise.resolve();
-  #failed = false;
-
-  constructor(
-    private readonly send: (sequence: number, events: PipelineTraceEvent[]) => Promise<void>,
-    private readonly options: BatchingOptions
-  ) {}
-
-  export(event: PipelineTraceEvent): void | Promise<void> {
-    this.#pending.push(event);
-    if (isTopLevelStart(event) || this.#pending.length >= this.options.maxEvents) {
-      return this.flush();
-    }
-    this.#timer ??= setTimeout(() => void this.flush().catch(() => {}), this.options.maxDelayMs);
-  }
-
-  flush(): Promise<void> {
-    clearTimeout(this.#timer);
-    this.#timer = undefined;
-    const events = this.#pending.splice(0);
-    if (events.length > 0) {
-      const sequence = this.#sequence++;
-      this.#chain = this.#chain.then(() => this.#deliver(sequence, events));
-    }
-    return this.#chain;
-  }
-
-  async #deliver(sequence: number, events: PipelineTraceEvent[]): Promise<void> {
-    const sleep =
-      this.options.sleep ??
-      ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        await this.send(sequence, events);
-        return;
-      } catch (error) {
-        if (attempt >= this.options.retries) {
-          if (!this.#failed) {
-            this.#failed = true;
-            this.options.onFailure(error);
-          }
-          throw error;
-        }
-        await sleep(this.options.retryDelayMs * 2 ** attempt);
-      }
-    }
-  }
-}
 
 function capturingOutput(output: HostedOutput): HostedOutput & { tail(): string } {
   const lines: string[] = [];
@@ -163,7 +102,6 @@ async function admitted(ingest: StudioIngest, launchId: string): Promise<boolean
   }
 }
 
-/** Execute one admitted job; report failures that never produced a recorded run. */
 export async function runHostedJob(options: {
   readonly job: RunJob;
   readonly commands: ReadonlyMap<string, HostedCommand>;
@@ -200,7 +138,10 @@ export async function runHostedJob(options: {
   if (!(await admitted(ingest(), job.launchId))) return;
   const batches = new BatchingTraceExporter(
     async (sequence, events) => {
-      const { accepted } = await ingest().appendEvents(job.launchId, sequence, events);
+      const { accepted } = await withRetry(
+        () => ingest().appendEvents(job.launchId, sequence, events),
+        { maxAttempts: 5, baseDelayMs: 250 }
+      );
       // Studio already failed this launch (for example, after an unconfirmed start), so
       // nothing more would be recorded and the run could not be cancelled.
       if (!accepted) controller.abort(new Error("Studio closed this launch; stopping the run."));
@@ -208,8 +149,6 @@ export async function runHostedJob(options: {
     {
       maxEvents: 50,
       maxDelayMs: 250,
-      retries: 4,
-      retryDelayMs: 250,
       onFailure: (error) => controller.abort(error),
     }
   );
@@ -313,7 +252,6 @@ export async function executeHostedRun(options: {
       await launchTracing?.close();
     } finally {
       clearTimeout(deadline);
-      // Drain delivery even if an application exporter fails during cleanup.
       try {
         await options.exporter.flush();
       } catch (error) {

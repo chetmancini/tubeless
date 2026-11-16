@@ -79,7 +79,6 @@ export function serializePlanInput(
       input[parameter.key] = values.filter((value): value is string => typeof value === "string");
     }
   });
-  // SAFETY: Execution controls are plan selections; the server parser ignores unknown keys.
   return input as PipelineRunControls;
 }
 
@@ -250,7 +249,6 @@ export function CommandFields({ command, onChange, values }: CommandFieldsProps)
         ))}
       </div>
     );
-    // Execution controls have working defaults, so they stay folded until needed.
     return execution ? (
       <details class="form-section execution-controls">
         <summary class="form-section-head">

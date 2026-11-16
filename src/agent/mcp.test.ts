@@ -17,7 +17,6 @@ afterEach(async () => {
   await Promise.all(open.splice(0).map((resource) => resource.close()));
 });
 
-/** Call the given tools in one batch, then finish with the observed outcomes. */
 function callingAgent(
   tools: Readonly<Record<string, McpTool>>,
   calls: { tool: string; input: unknown }[]
@@ -35,7 +34,6 @@ function callingAgent(
         ? { kind: "finish", result: state.outcomes }
         : {
             kind: "continue",
-            // SAFETY: tests address discovered tools by runtime name.
             calls: calls.map((call, index) => ({ id: `c${index}`, ...call })) as never,
           },
     reduce: (_state, outcomes) => ({ outcomes: outcomes as readonly AgentOutcome[] }),
@@ -95,7 +93,6 @@ describe("MCP servers", () => {
     }[];
     structuredContent?: Record<string, unknown>;
   }>;`);
-    // A declared outputSchema types structuredContent, with its local references resolved.
     expect(description).toContain(`  }): Promise<{
     content: {
       type: string;

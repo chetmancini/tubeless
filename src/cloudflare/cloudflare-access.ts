@@ -49,7 +49,6 @@ function decodeJson(segment: string): Record<string, unknown> {
   const value: unknown = JSON.parse(new TextDecoder().decode(base64UrlBytes(segment)));
   if (typeof value !== "object" || value === null || Array.isArray(value))
     throw new Error("Invalid JWT segment.");
-  // SAFETY: checked to be a non-array object above.
   return value as Record<string, unknown>;
 }
 
@@ -79,7 +78,6 @@ function denial(request: Request, status: 401 | 403): Response {
   });
 }
 
-// Bound the certificate request so a hung fetch cannot stall requests sharing the refresh.
 const CERTS_TIMEOUT_MS = 5_000;
 
 async function defaultFetchJson(url: string): Promise<unknown> {
@@ -97,11 +95,8 @@ export function createAccessAuthenticator(
   const now = options.now ?? Date.now;
   const refreshIntervalMs = options.refreshIntervalMs ?? 30_000;
   let keys = new Map<string, CryptoKey>();
-  // Start time of the last successful refresh; governs key trust.
   let keysFetchedAtMs: number | undefined;
-  // Start time of the last attempt; governs the refetch rate limit.
   let fetchedAtMs: number | undefined;
-  // In-flight refresh shared by concurrent callers, so one fetch serves them all.
   let pending: Promise<void> | undefined;
 
   function keysAreFresh(): boolean {
@@ -119,7 +114,6 @@ export function createAccessAuthenticator(
         : [];
     for (const entry of entries as unknown[]) {
       if (typeof entry !== "object" || entry === null) continue;
-      // SAFETY: fields are checked individually before use.
       const jwk = entry as { kid?: unknown; kty?: unknown; n?: unknown; e?: unknown };
       if (
         typeof jwk.kid !== "string" ||
@@ -138,7 +132,6 @@ export function createAccessAuthenticator(
           ["verify"]
         );
       } catch {
-        // One malformed key must not drop the rest of the set.
         continue;
       }
       next.set(jwk.kid, key);
@@ -157,7 +150,6 @@ export function createAccessAuthenticator(
       });
     }
     await pending;
-    // Stale keys after a failed refresh must deny, so freshness is checked again here.
     const refreshed = keys.get(kid);
     return refreshed && keysAreFresh() ? refreshed : undefined;
   }

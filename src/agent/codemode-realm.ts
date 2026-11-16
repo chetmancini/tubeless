@@ -107,7 +107,6 @@ export function describeScriptError(error: unknown): string {
   }
 }
 
-/** Decode the setup's JSON log text, keeping only string lines. */
 export function scriptLogLines(text: unknown): string[] {
   try {
     const parsed: unknown = typeof text === "string" ? JSON.parse(text) : undefined;

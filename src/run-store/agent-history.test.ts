@@ -107,7 +107,6 @@ function reportUsage(
   return modelRequestReporter(provider, model, context)("decision", async () => ({ usage }));
 }
 
-/** Parent delegates once to a child; both report a different provider and model. */
 function usageFixture() {
   const child = defineAgentLoop({
     id: "usage-child",
@@ -130,7 +129,6 @@ function usageFixture() {
     initialState: () => 0,
     tools: { delegate: pipelineTool(child, { description: "Delegate to the child agent" }) },
     decide: async (state, context) => {
-      // Per-turn usage keeps every level's hand-checked sums distinct.
       await reportUsage("anthropic", context, "parent-model", {
         input_tokens: 100 * context.turn,
         output_tokens: 10 * context.turn,
@@ -144,7 +142,6 @@ function usageFixture() {
   });
 }
 
-/** Fail the checkpoint write that advances a durable agent past its first turn. */
 function interruptTurnAdvance(store: AgentCheckpointStore): AgentCheckpointStore {
   let failed = false;
   return {
@@ -169,7 +166,6 @@ function interruptTurnAdvance(store: AgentCheckpointStore): AgentCheckpointStore
   };
 }
 
-/** A durable agent that reports usage each turn and resumes at its second logical turn. */
 function durableUsageAgent(store: AgentCheckpointStore) {
   return defineAgentLoop({
     id: "usage-durable",
@@ -199,7 +195,6 @@ function durableUsageAgent(store: AgentCheckpointStore) {
   });
 }
 
-/** One reported request under an ID that never contains the word "usage". */
 function reportingAgent() {
   return defineAgentLoop({
     id: "reported-agent",
@@ -264,7 +259,6 @@ describe("agent history projection", () => {
     expect(callIdReads).toBeLessThanOrEqual(70 * 10);
     expect(root.turns[0]!.calls).toHaveLength(70);
     expect(new Set(root.turns[0]!.calls.map((call) => call.callId)).size).toBe(70);
-    // Batch, call, decision and state reports all describe initial attempts.
     for (const run of runs) {
       for (const step of run.steps) {
         if (step.attempt) expect(step.attempt.retries).toEqual([]);
@@ -621,7 +615,6 @@ describe("agent history projection", () => {
 
   it("keeps merged durations finite when turn sums would overflow", async () => {
     const { events } = await record(usageFixture());
-    // Both parent turns report the largest finite double; their sum is not a number.
     const runs = projectPipelineRunStore(events).runs.map((run) =>
       run.agentTurn?.usage
         ? {

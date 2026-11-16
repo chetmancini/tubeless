@@ -32,7 +32,6 @@ function record(value: unknown, location: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return unsupported(location, "expected an object schema");
   }
-  // SAFETY: the object guard above excludes null, primitives and arrays.
   return value as Record<string, unknown>;
 }
 
@@ -171,7 +170,6 @@ export function inferCliParams(
       if (field.default !== undefined) {
         if (typeof field.default !== param.type)
           return unsupported(key, "default does not match the flag type");
-        // SAFETY: the default's primitive type was checked against the parameter discriminant.
         param = { ...param, default: field.default } as CliParam;
       } else if (param.type !== "boolean" && !required.has(key)) {
         param.optional = true;

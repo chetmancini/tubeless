@@ -88,7 +88,6 @@ function formatRunList(runs: readonly StoredPipelineRun[]): string {
 const MIN_RUN_ID_PREFIX_LENGTH = 4;
 const MAX_AMBIGUOUS_RUN_IDS = 5;
 
-/** The part after a run id's final `:` (the generated UUID), or the whole id without one. */
 function runIdSuffix(runId: string): string {
   return runId.slice(runId.lastIndexOf(":") + 1);
 }
@@ -122,7 +121,6 @@ function resolveRunIdPrefix(
       ].join("\n"),
     };
   }
-  // Compare full ids against full ids and bare UUIDs against UUIDs; always suggest full ids.
   const candidates = new Map(
     runs.map((run) => [input.includes(":") ? run.runId : runIdSuffix(run.runId), run.runId])
   );
@@ -338,7 +336,6 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
         };
         const projectRun = async (id: string): Promise<StoredPipelineRun | undefined> =>
           (await projectRuns({ ...scope, runId: id }, true)).find((run) => run.runId === id);
-        // Exact ids read only that run's events; only a miss scans every run for a prefix match.
         const resolveRunId = async (input: string): Promise<string | undefined> => {
           const resolution = resolveRunIdPrefix(
             input,

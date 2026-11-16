@@ -27,7 +27,6 @@ export type AgentTranscriptSettings = Required<
 > &
   AgentTranscriptOptions;
 
-/** Snapshot services and bounds when compiling, including the definition reused by sessions. */
 export function transcriptSettings(
   options?: AgentTranscriptOptions
 ): AgentTranscriptSettings | undefined {
@@ -60,7 +59,6 @@ export function agentTranscript(context: object): AgentTranscriptCapture | undef
   return agentScope(context)?.transcript;
 }
 
-/** Invocation-owned queue and budget; no dependency on traces, storage or provider state. */
 export class AgentTranscriptCapture {
   private pending = Promise.resolve();
   private sequence = 0;

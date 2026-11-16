@@ -30,7 +30,6 @@ export type BuildStep<TOptions extends object> = (
   definition: StepDefinitionBody<TOptions>
 ) => AnyStep<TOptions>;
 
-/** Wait on an application-owned input source using ordinary lifecycle and validation. */
 export function buildInputStep<TOptions extends object>(
   buildStep: BuildStep<TOptions>,
   id: string,
@@ -98,7 +97,6 @@ function buildArtifactStep<TOptions extends object>(
   });
 }
 
-/** Read an artifact as an ordinary step, publishing only its typed value. */
 export function buildLoadArtifactStep<TOptions extends object>(
   buildStep: BuildStep<TOptions>,
   id: string,
@@ -111,7 +109,6 @@ export function buildLoadArtifactStep<TOptions extends object>(
   return buildArtifactStep(buildStep, id, "read", { ...fields, run: load });
 }
 
-/** Write an artifact as an ordinary step. Dry runs skip unless a preview is supplied. */
 export function buildSaveArtifactStep<TOptions extends object>(
   buildStep: BuildStep<TOptions>,
   id: string,
@@ -128,7 +125,6 @@ export function buildSaveArtifactStep<TOptions extends object>(
   });
 }
 
-/** Erased `fromPipeline` definition. */
 export type SingleChildStepConfig<TOptions extends object> = ChildPipelineStepDefinitionBase<
   TOptions,
   AnyDeps<TOptions>,
@@ -172,7 +168,6 @@ export function buildPipelineStep<TOptions extends object>(
   return buildStep(id, definition);
 }
 
-/** Erased `fromRemote` definition. */
 export interface RemoteStepConfig<TOptions extends object> {
   adapter: RemoteStepAdapter<object, unknown, unknown>;
   mapInput(inputs: Record<string, unknown>, context: PipelineStepContext<TOptions>): unknown;
@@ -214,7 +209,6 @@ export function buildRemoteStep<TOptions extends object>(
   return buildStep(id, definition);
 }
 
-/** Erased `forEachPipeline` definition. */
 export type MappedChildStepConfig<TOptions extends object> = MappedChildPipelineStepDefinition<
   TOptions,
   AnyDeps<TOptions>,
@@ -277,7 +271,6 @@ export function buildMappedPipelineStep<TOptions extends object>(
   return buildStep(id, definition);
 }
 
-/** Erased `iteratePipeline` definition. */
 export type IterationStepConfig<TOptions extends object> = Omit<
   Parameters<typeof createIterationRunner<TOptions>>[0],
   "stepId"

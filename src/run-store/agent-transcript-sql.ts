@@ -1,5 +1,6 @@
 import {
   decodeAgentTranscriptRecord,
+  MAX_TRANSCRIPT_RECORD_BYTES,
   type AgentTranscriptPage,
   type AgentTranscriptReader,
   type AgentTranscriptRecord,
@@ -19,7 +20,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS agent_transcript_records (
   run_id TEXT NOT NULL,
   sequence INTEGER NOT NULL CHECK (sequence > 0),
-  record_json TEXT NOT NULL CHECK (length(CAST(record_json AS BLOB)) < 65536),
+  record_json TEXT NOT NULL CHECK (length(CAST(record_json AS BLOB)) < ${MAX_TRANSCRIPT_RECORD_BYTES}),
   PRIMARY KEY (run_id, sequence)
 ) WITHOUT ROWID`,
   `CREATE TRIGGER IF NOT EXISTS agent_transcript_records_count_insert

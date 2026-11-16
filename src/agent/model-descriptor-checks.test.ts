@@ -9,7 +9,6 @@ const schema = <T = unknown>(descriptor: Record<string, unknown>): StandardSchem
   "~standard": {
     version: 1,
     vendor: "test",
-    // SAFETY: fixtures accept their declared shape; these tests exercise descriptors only.
     validate: (value) => ({ value: value as T }),
     jsonSchema: { input: () => descriptor },
   },
@@ -72,7 +71,6 @@ describe("model descriptor checks", () => {
       })
     );
     expect(() => typed(openaiModel({ apiKey: "fixture" }), strictReport)).not.toThrow();
-    // A model without the hook defers the same check to its first request.
     expect(() => typed(() => ({ decision: null, conversation: null }), looseReport)).not.toThrow();
     expect(fetcher).not.toHaveBeenCalled();
   });
@@ -87,7 +85,6 @@ describe("model descriptor checks", () => {
     const tools = Object.fromEntries(Array.from({ length: 14 }, (_, index) => [`t${index}`, tool]));
     const define = (strict: boolean) =>
       defineAgent({ id: "many", tools, model: anthropicModel({ apiKey: "fixture", strict }) });
-    // Six default tools, fourteen custom tools and _finish make 21.
     expect(() => define(true)).toThrow("Anthropic strict mode allows at most 20 tools per request");
     expect(() => define(false)).not.toThrow();
     expect(() =>

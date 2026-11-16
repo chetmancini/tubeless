@@ -25,7 +25,6 @@ export function initialAgentExecution<State>(
   return { state: ownState(initialize()), turn: 1, stateVersion: 0, calls: 0 };
 }
 
-/** Own workspace resolution, recovery and lease lifetime for one agent invocation. */
 export async function runAgentInvocation<Options extends object, State>(
   config: {
     id: string;

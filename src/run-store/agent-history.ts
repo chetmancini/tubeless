@@ -1,6 +1,6 @@
 import type { PipelineTraceError } from "../tracing/tracing-contracts.js";
+import { AGENT_MODEL_COUNTERS } from "../tracing/agent-telemetry.js";
 import {
-  AGENT_MODEL_COUNTERS,
   addModelCounter,
   type StoredAgentCallMetadata,
   type StoredAgentDefinition,
@@ -67,10 +67,6 @@ function limited(error: PipelineTraceError | undefined): boolean {
   return false;
 }
 
-/**
- * Sum counters per provider and model in first-seen order. Absent counters were never
- * reported, so they stay absent, and sums never cross models.
- */
 function mergeUsage(
   lists: readonly (readonly StoredAgentModelUsage[] | undefined)[]
 ): StoredAgentModelUsage[] | undefined {
@@ -138,7 +134,6 @@ export function projectAgentHistory(runs: readonly StoredPipelineRun[]): AgentHi
           if (!recorded.has(attribution.callId))
             recorded.set(attribution.callId, { attribution, calls: [] });
         }
-        // Keep unattributed children first, then calls in recorded dispatch order.
         const calls: AgentCallHistory[] = [];
         for (const child of children.get(turn.runId) ?? []) {
           if (child.itemKey === undefined) continue;

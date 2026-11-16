@@ -44,7 +44,6 @@ interface Waiting {
   start(): void;
 }
 
-/** One queue per root, admitting all ancestor/local permits together. */
 class LeafQueue {
   private readonly waiting = new Set<Waiting>();
   private readonly aborts = new Map<AbortSignal, { jobs: Set<Waiting>; cancel(): void }>();
@@ -119,7 +118,6 @@ class LeafQueue {
   }
 }
 
-/** Invocation-local admission, workspace authority and durable subtree ownership. */
 export class AgentExecutionScope implements ExecutionScope {
   private constructor(
     private readonly budgets: readonly Budget[],
@@ -220,7 +218,6 @@ export class AgentExecutionScope implements ExecutionScope {
     else await this.admissionJournal?.reserve(this.durableBudgets, "maxCalls", count);
   }
 
-  /** Charge one script-issued call; it is admitted individually rather than with a decision. */
   async admitNestedCall(signal?: AbortSignal): Promise<void> {
     this.chargeLocal("maxCalls", 1, signal);
     await this.admissionJournal?.reserve(this.durableBudgets, "maxCalls", 1);

@@ -136,7 +136,6 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
     }
   }
 
-  /** Observe the whole dispatch task without holding the acknowledgement response open. */
   async #dispatch(job: RunJob): Promise<void> {
     let dispatch: TDispatch;
     try {

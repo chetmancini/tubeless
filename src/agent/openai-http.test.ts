@@ -83,7 +83,7 @@ describe("OpenAI HTTP diagnostics", () => {
   });
 
   it("bounds error-body reads and cancels the remaining stream", async () => {
-    const cancel = vi.fn();
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
     const response = new Response(
       new ReadableStream<Uint8Array>({
         start(controller) {

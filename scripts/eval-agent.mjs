@@ -157,7 +157,6 @@ function observedData(calls, outcomes) {
   );
 }
 
-/** Fixtures require either an exact answer or a phrase within a longer one. */
 function assertAnswer(fixture, answer) {
   if (fixture.exactAnswer !== undefined)
     assert(answer.trim() === fixture.exactAnswer, `Answer must be exactly ${fixture.exactAnswer}`);
@@ -559,7 +558,6 @@ async function verifyWorkspace(workspace, files) {
   return verification;
 }
 
-// Both case families share execution, evidence capture, cleanup and report writing.
 const cases = [
   ...workspaceCases.map((fixture) => ({
     ...fixture,
@@ -604,7 +602,6 @@ for (const fixture of cases.filter(selected)) {
         log: { log() {}, warn() {}, error() {} },
       });
     } finally {
-      // Failed runs retain the same report evidence as successful runs.
       records = transcript.records;
       evidence = projectEvaluationTranscript(records);
     }
@@ -634,7 +631,6 @@ for (const fixture of cases.filter(selected)) {
     durationMs: Date.now() - started,
   };
   results.push(result);
-  // Keep console output short; the report retains the complete captured evidence.
   console.log(
     JSON.stringify({
       ...result,

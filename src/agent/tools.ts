@@ -17,21 +17,6 @@ import { agentScope } from "./execution-scope.js";
 import { startToolActivity, type ToolActivity, type ToolActivityFormat } from "./tool-progress.js";
 import type { AgentTool, AgentToolContext, Awaitable, Input, Output } from "./agent-types.js";
 
-/** A handler may throw this error to return a recoverable observation to its agent. */
-export class ToolError extends Error {
-  constructor(
-    readonly code: string,
-    message: string
-  ) {
-    super(message);
-    this.name = "ToolError";
-    if (!code.trim() || code.length > 256 || message.length > 4096)
-      throw new Error(
-        "ToolError requires a nonblank code (up to 256 characters) and a message of at most 4096 characters"
-      );
-  }
-}
-
 interface ToolDefinition<Arguments extends StandardSchemaV1, Result extends StandardSchemaV1> {
   readonly description: string;
   readonly inputSchema: Arguments;
@@ -61,7 +46,6 @@ export function defineTool<
   return createTool(definition);
 }
 
-/** Internal workspace presentation; keep formatter callbacks out of the public tool API. */
 export function defineToolWithActivity<
   const Arguments extends StandardSchemaV1,
   const Result extends StandardSchemaV1,
@@ -96,7 +80,6 @@ function createTool<Arguments extends StandardSchemaV1, Result extends StandardS
     definition.inputJsonSchema,
     "Tool input"
   );
-  // SAFETY: the private WeakMap brands this opaque descriptor and keeps its validators/handlers.
   const tool = Object.freeze({}) as AgentTool<Input<Arguments>, Output<Result>>;
   tools.set(tool, { ...definition, inputJsonSchema, activity });
   return tool;
@@ -111,7 +94,6 @@ export interface ToolInvocation {
   onActivity?(activity: ToolActivity): void;
 }
 
-/** A validated handler capability compiled to a private pipeline over one invocation. */
 export interface CompiledHandlerTool {
   readonly kind: "handler";
   readonly replay: "safe" | "unsafe";
@@ -136,11 +118,8 @@ function outputDescriptor(schema: StandardSchemaV1): Readonly<Record<string, unk
   try {
     const descriptor: unknown = converter.output({ target: "draft-2020-12" });
     if (descriptor !== null && typeof descriptor === "object" && !Array.isArray(descriptor))
-      // SAFETY: the object guard and owned plain-data copy validate the descriptor's representation.
       return ownState(descriptor as Record<string, unknown>);
-  } catch {
-    // Declarations fall back to unknown for an unavailable descriptor.
-  }
+  } catch {}
   return undefined;
 }
 

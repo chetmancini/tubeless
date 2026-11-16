@@ -25,7 +25,6 @@ async function* eventText(body: ReadableStream<Uint8Array>) {
   if (trailingCR) yield "\n";
 }
 
-/** Decode a bounded response body as text chunks. */
 async function* text(body: ReadableStream<Uint8Array>) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -118,7 +117,6 @@ export function httpTransport(
       for await (const reply of messages(response)) {
         if (reply.id === message.id && reply.method === undefined) {
           answered = true;
-          // Later requests carry the version this initialize response negotiated.
           if (message.method === "initialize" && isRecord(reply.result))
             version = String(reply.result.protocolVersion);
         }

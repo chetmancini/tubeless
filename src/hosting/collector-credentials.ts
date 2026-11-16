@@ -1,5 +1,12 @@
 import type { HostedAttemptDefinition } from "./attempt-store.js";
 import type { StoredCollectorCredential, HostedCollectorStore } from "./collector-store.js";
+import {
+  COLLECTOR_CREDENTIAL_ID_BYTES,
+  COLLECTOR_SECRET_BYTES,
+  encodeCollectorToken,
+  isCollectorVerifier,
+  parseCollectorToken,
+} from "./collector-protocol.js";
 
 const hex = (bytes: Uint8Array) =>
   Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -26,9 +33,9 @@ export async function provisionCollectorAttempt(
   expiresAtMs: number
 ): Promise<string> {
   const attempt = { ...definition };
-  const secret = hex(crypto.getRandomValues(new Uint8Array(32)));
+  const secret = hex(crypto.getRandomValues(new Uint8Array(COLLECTOR_SECRET_BYTES)));
   const record = {
-    credentialId: hex(crypto.getRandomValues(new Uint8Array(16))),
+    credentialId: hex(crypto.getRandomValues(new Uint8Array(COLLECTOR_CREDENTIAL_ID_BYTES))),
     launchId: attempt.launchId,
     attemptId: attempt.attemptId,
     notBeforeMs: attempt.createdAtMs,
@@ -38,7 +45,7 @@ export async function provisionCollectorAttempt(
     new Uint8Array(await crypto.subtle.sign("HMAC", await key(secret, ["sign"]), context(record)))
   );
   await store.provisionCollectorAttempt(attempt, { ...record, verifier });
-  return `${record.credentialId}.${secret}`;
+  return encodeCollectorToken(record.credentialId, secret);
 }
 
 /** Use native HMAC verification instead of comparing secret-dependent strings in JavaScript. */
@@ -47,17 +54,18 @@ export async function verifyCollectorCredential(
   record: StoredCollectorCredential,
   nowMs: number
 ): Promise<boolean> {
+  const parsed = parseCollectorToken(token);
   if (
-    !/^[a-f0-9]{32}\.[a-f0-9]{64}$/.test(token) ||
-    !/^[a-f0-9]{64}$/.test(record.verifier) ||
-    token.slice(0, 32) !== record.credentialId ||
+    !parsed ||
+    !isCollectorVerifier(record.verifier) ||
+    parsed.credentialId !== record.credentialId ||
     nowMs < record.notBeforeMs ||
     nowMs >= record.expiresAtMs
   )
     return false;
   return crypto.subtle.verify(
     "HMAC",
-    await key(token.slice(33), ["verify"]),
+    await key(parsed.secret, ["verify"]),
     unhex(record.verifier),
     context(record)
   );

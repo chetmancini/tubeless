@@ -5,7 +5,6 @@ import { AgentInput } from "./input.js";
 import { executeAgentPrompt, type AgentPromptOptions, type AgentPromptSession } from "./prompt.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "../workbench-shared.js";
 
-/** Own commands and session cancellation; single prompts use the same task loop. */
 export async function runAgentSession(
   options: AgentPromptOptions & { readonly prompt?: string },
   chat: AgentPromptSession,

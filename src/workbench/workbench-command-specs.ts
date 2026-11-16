@@ -1,5 +1,6 @@
 import { PIPELINE_MERMAID_DIRECTIONS } from "../core/pipeline-types.js";
 import { AGENT_REPL_HELP } from "./agent/commands.js";
+import { BUILTIN_AGENT_OPTIONS } from "./agent/options.js";
 import type { WorkbenchCommandSpec } from "./workbench-subcommand.js";
 
 export const PROJECT_TARGET = {
@@ -75,7 +76,6 @@ const CLOUD_HOST_OPTION = {
   completion: "text",
 } as const;
 
-/** Static CLI metadata. Parsing, help, suggestions and completion share these definitions. */
 export const WORKBENCH_SPECS = {
   list: {
     name: "list",
@@ -286,82 +286,16 @@ Selected agents keep their own model, tools, environment and limits; configurati
 Workspace tools run with your host permissions.`,
     options: {
       ...REGISTRATION_OPTIONS,
-      provider: {
-        type: "string",
-        description: "Named model configuration (default openai); built-in or from --model-module",
-        valueName: "name",
-        completion: ["openai", "anthropic"],
-      },
-      model: {
-        type: "string",
-        description: "Model name (defaults to the selected provider's environment or model)",
-        valueName: "name",
-        completion: "text",
-      },
-      "model-module": {
-        type: "string",
-        description: "Default-export a named provider registry or a single model factory",
-        valueName: "file",
-        completion: "file",
-      },
-      "env-file": {
-        type: "string",
-        description: "Read dotenv values; existing environment values take precedence",
-        valueName: "file",
-        completion: "file",
-      },
+      ...BUILTIN_AGENT_OPTIONS,
       prompt: {
         type: "string",
         description: "Run one prompt and exit instead of opening the REPL",
         valueName: "text",
         completion: "text",
       },
-      instructions: {
-        type: "string",
-        description: "Append instructions to the workspace agent prompt",
-        valueName: "text",
-        completion: "text",
-      },
-      "max-turns": {
-        type: "string",
-        description: "Decision limit per prompt (default 20)",
-        valueName: "n",
-        completion: "text",
-      },
-      "max-calls": {
-        type: "string",
-        description: "Tool call limit per prompt (default 100)",
-        valueName: "n",
-        completion: "text",
-      },
-      "max-concurrency": {
-        type: "string",
-        description: "Concurrent decisions/tools (default 1)",
-        valueName: "n",
-        completion: "text",
-      },
-      tools: {
-        type: "string",
-        description:
-          "Comma-separated default tools to allow (default read,write,edit,bash,list,search)",
-        valueName: "names",
-        completion: "text",
-      },
-      codemode: {
-        type: "boolean",
-        description: "Offer one JavaScript codemode tool that calls the workspace tools",
-      },
       "no-graph": {
         type: "boolean",
         description: "Hide pipeline reporting (keep model/tool logs and answers)",
-      },
-      stream: {
-        type: "boolean",
-        description: "Stream public assistant text to stderr (uses plain progress output).",
-      },
-      "capture-transcript": {
-        type: "boolean",
-        description: "Save built-in agent prompts, answers and tool content in --store (opt-in)",
       },
       store: {
         type: "string",

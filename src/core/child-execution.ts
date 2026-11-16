@@ -16,6 +16,7 @@ import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { duplicateValues } from "../utilities/collections.js";
 import { EXECUTE_COMPILED_RUN, isCompiledPipeline } from "./pipeline-identity.js";
 import { createMappedChildProgress, createSingleChildProgress } from "./child-progress.js";
+import { snapshotRunControls } from "./run-controls.js";
 import type {
   Pipeline,
   PipelineContext,
@@ -258,20 +259,11 @@ function childRunControls(
   parentDryRun: boolean,
   cachePolicy: PipelineRunControls["cache"]
 ): PipelineRunControls {
-  const resolved: PipelineRunControls = {};
-  if (cachePolicy !== undefined || controls?.cache !== undefined)
-    resolved.cache = cachePolicy ?? controls?.cache;
-  if (controls?.continueOnError !== undefined) {
-    resolved.continueOnError = controls.continueOnError;
-  }
-  if (controls?.maxConcurrency !== undefined) {
-    resolved.maxConcurrency = controls.maxConcurrency;
-  }
-  if (controls?.stepIds !== undefined) resolved.stepIds = [...controls.stepIds];
-  if (controls?.targets !== undefined) resolved.targets = [...controls.targets];
-  if (parentDryRun || controls?.dryRun === true) {
+  const resolved = snapshotRunControls(controls);
+  if (cachePolicy !== undefined) resolved.cache = cachePolicy;
+  if (parentDryRun || resolved.dryRun === true) {
     resolved.dryRun = true;
-  } else if (controls?.dryRun !== undefined) {
+  } else if (resolved.dryRun !== undefined) {
     resolved.dryRun = false;
   }
   return resolved;
@@ -470,7 +462,6 @@ export function createMappedChildRunner<TParentOptions extends object>(
       );
     }
     const policy = config.onItemFailure ?? "fail";
-    // Thrown after recording a failure under "stop" so the scheduler starts no further items.
     const stopScheduling = new Error("Stop scheduling mapped items");
     const settled = new Array<MappedOutcome | undefined>(items.length);
 
@@ -547,7 +538,6 @@ export function createMappedChildRunner<TParentOptions extends object>(
       config.pipeline.id,
       policy,
       {
-        // Items never started under "stop" or cancellation leave holes.
         outcomes: settled.filter((outcome) => outcome !== undefined),
         itemCount: items.length,
         stopped,

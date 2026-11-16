@@ -53,7 +53,6 @@ export function thrownDefinitionErrors(define: () => unknown): readonly Pipeline
     define();
   } catch (error) {
     expect(error).toBeInstanceOf(PipelineDefinitionError);
-    // SAFETY: the assertion above proves the caught value is a definition error.
     return (error as PipelineDefinitionError).errors;
   }
   throw new Error("expected PipelineDefinitionError");

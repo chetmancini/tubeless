@@ -5,7 +5,6 @@ import { createFakeDurableStorage } from "./cloudflare-storage.test-support.js";
 import { RunObjectCore, runCloudflareJob } from "./cloudflare-run.js";
 import { MAX_RUN_DURATION_MS } from "./cloudflare-run-contract.js";
 
-// The run object forwards pipeline output to the console; keep test output quiet.
 beforeEach(() => {
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});

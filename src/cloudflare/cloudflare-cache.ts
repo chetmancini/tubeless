@@ -50,7 +50,6 @@ function roundTripError(path: string, reason: string): Error {
   return new Error(`jsonCacheCodec cannot store ${path}: ${reason}`);
 }
 
-/** Read an own data property without invoking accessors. */
 function dataValue(descriptor: PropertyDescriptor | undefined, path: string): unknown {
   if (!descriptor) throw roundTripError(path, "only own data properties round-trip.");
   if (!("value" in descriptor))

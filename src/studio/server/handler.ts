@@ -1,4 +1,5 @@
-import { errorResponse, jsonResponse, unexpectedStudioErrorResponse } from "./http.js";
+import { errorResponse, unexpectedStudioErrorResponse } from "./http.js";
+import { jsonResponse } from "../../utilities/http-response.js";
 import { studioRoute } from "./hosting.js";
 import type { StudioPage } from "./page.js";
 

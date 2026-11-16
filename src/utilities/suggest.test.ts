@@ -12,11 +12,8 @@ describe("closestMatches", () => {
   });
 
   it("rejects candidates beyond a third of the longer string", () => {
-    // "xyz" vs "run": distance 3, allowance 1.
     expect(closestMatches("xyz", COMMANDS)).toEqual([]);
-    // "source" vs "sourc": distance 1, allowance 2.
     expect(closestMatches("sourc", ["source", "target"])).toEqual(["source"]);
-    // Two edits in six characters is the boundary.
     expect(closestMatches("srouxe", ["source"])).toEqual([]);
     expect(closestMatches("sourxe", ["source"])).toEqual(["source"]);
   });

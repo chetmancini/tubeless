@@ -36,7 +36,6 @@ export function isRecord(value: unknown): value is Readonly<Record<string, unkno
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** Parse one inbound message, rejecting shapes that cannot be JSON-RPC. */
 export function parseMessage(text: string): McpMessage {
   let message: unknown;
   try {

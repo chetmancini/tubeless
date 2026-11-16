@@ -29,7 +29,6 @@ export function parseNdjson(
     .filter(Boolean)
     .flatMap((line) => {
       try {
-        // SAFETY: successful JSON parses are narrowed to the fields inspected by these tests.
         return [JSON.parse(line) as { name?: string; pipelineId?: string; runId?: string }];
       } catch {
         return [];

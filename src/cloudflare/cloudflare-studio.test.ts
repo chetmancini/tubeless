@@ -187,7 +187,6 @@ describe("Studio object", () => {
     expect(JSON.stringify(await response.json())).toMatch(/may still start/);
     now += 60_000 + 120_001;
     await studio.alarm();
-    // A second reconcile is a no-op once the launch is failed.
     await studio.alarm();
     expect(storage.alarmAtMs()).toBeUndefined();
     expect(

@@ -64,7 +64,6 @@ describe.each(["single", "mapped"] as const)("external %s child progress", (kind
                   ],
                 };
                 context.reportProgress(progress);
-                // A change confined to a detail row must remain observable.
                 context.reportProgress({
                   ...progress,
                   details: [{ ...progress.details![0]!, label: "writing" }],

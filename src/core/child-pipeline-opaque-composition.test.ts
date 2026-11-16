@@ -253,6 +253,7 @@ describe("opaque child adapter: composition", () => {
   });
 
   it("does not bridge empty child progress as visible parent progress", async () => {
+    let publishChildProgress: ((progress: PipelineStepProgress) => void) | undefined;
     let releaseWork!: () => void;
     const workGate = new Promise<void>((resolve) => {
       releaseWork = resolve;
@@ -260,6 +261,7 @@ describe("opaque child adapter: composition", () => {
     const { step: childStep } = createSteps();
     const work = childStep("work", {
       run: async (_inputs, context) => {
+        publishChildProgress = context.reportProgress;
         context.reportProgress({ completed: 3, total: 10, message: "batch" });
         await workGate;
         return "done";
@@ -291,19 +293,16 @@ describe("opaque child adapter: composition", () => {
       },
       log: console,
     });
-    await vi.waitFor(() => {
-      expect(bridged.filter((message) => message.includes("batch"))).toHaveLength(1);
-    });
-    // Hold the child pending across the old 250ms observation window so a late
-    // empty snapshot would still be recorded before we release the gate.
-    vi.useFakeTimers();
     try {
-      await vi.advanceTimersByTimeAsync(250);
+      await vi.waitFor(() => {
+        expect(bridged.filter((message) => message.includes("batch"))).toHaveLength(1);
+      });
+      const beforeEmptyProgress = [...bridged];
+      publishChildProgress!({ completed: 0 });
+      expect(bridged).toEqual(beforeEmptyProgress);
     } finally {
-      vi.useRealTimers();
+      releaseWork();
     }
-    expect(bridged.some((message) => message.includes("0 completed"))).toBe(false);
-    releaseWork();
     const result = await runPromise;
 
     expect(result.status).toBe("completed");

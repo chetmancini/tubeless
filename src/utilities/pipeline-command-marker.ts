@@ -11,7 +11,6 @@ export function pipelineForCommand(value: unknown): object | undefined {
   if ((typeof value !== "object" && typeof value !== "function") || value === null) {
     return undefined;
   }
-  // SAFETY: value is a non-null object/function; validate its symbol-keyed metadata below.
   const pipeline = (value as { [PIPELINE_COMMAND_MARKER]?: unknown })[PIPELINE_COMMAND_MARKER];
   return typeof pipeline === "object" && pipeline !== null ? pipeline : undefined;
 }

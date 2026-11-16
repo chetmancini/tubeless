@@ -12,6 +12,8 @@ import {
   decodeCollectorJson,
   digestCollectorBody,
   failureSchema,
+  isCollectorCredentialId,
+  isCollectorVerifier,
 } from "./collector-protocol.js";
 import { decodeAttemptBatch } from "./attempt-batch.js";
 import {
@@ -492,8 +494,8 @@ export class SqliteHostedLaunchStore
     credential: CollectorCredential
   ): Promise<void> {
     if (
-      !/^[a-f0-9]{32}$/.test(credential.credentialId) ||
-      !/^[a-f0-9]{64}$/.test(credential.verifier) ||
+      !isCollectorCredentialId(credential.credentialId) ||
+      !isCollectorVerifier(credential.verifier) ||
       !Number.isSafeInteger(credential.notBeforeMs) ||
       !Number.isSafeInteger(credential.expiresAtMs) ||
       credential.notBeforeMs < 0 ||

@@ -13,7 +13,6 @@ describe("pipeline defaults", () => {
   it("extracts inferred run input and result contracts", async () => {
     const optionsSchema = standardSchema<{ source: string }, { limit: number; source: string }>(
       (value) => {
-        // SAFETY: this focused type test supplies the declared schema input below.
         const input = value as { source: string };
         return { value: { limit: 10, source: input.source } };
       }
@@ -81,7 +80,6 @@ describe("pipeline defaults", () => {
       true,
     ]);
     await expect(pipeline.runOrThrow({ text: "hello" }, { targets: ["length"] })).resolves.toBe(5);
-    // The graph determines the public target at runtime.
     expect(pipeline.plan({ targets: ["load"] }).errors[0]?.code).toBe(
       "TUBELESS_PLANNING_TARGET_UNDECLARED"
     );

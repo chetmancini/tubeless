@@ -53,7 +53,6 @@ export interface HostedCommand {
 
 function isHostedPipelineCommand(value: unknown): value is HostedPipelineCommand {
   if (!pipelineForCommand(value)) return false;
-  // SAFETY: pipelineForCommand established a non-null object or function.
   const candidate = value as object;
   return (
     "id" in candidate &&
@@ -85,7 +84,6 @@ function isExecutablePipeline(pipeline: HostablePipeline): pipeline is Pipeline<
   );
 }
 
-/** Derive the automatic command, or explain why a pipeline needs an explicit adapter. */
 export function commandForPipeline(
   pipeline: HostablePipeline,
   source: "directly loaded" | "project"
@@ -119,7 +117,6 @@ export function studioDescriptor(command: HostedPipelineCommand): PipelineRunStu
   return descriptor;
 }
 
-/** Normalize a project once: explicit commands win, then schema-derived commands. */
 export function hostedProjectCommands(
   project: PipelineProject<string, readonly AnyProjectPipeline[]>
 ): readonly HostedCommand[] {
@@ -190,7 +187,6 @@ export function hostedCommandContext(
   return context;
 }
 
-/** Run one command operation and translate its failures into output and workbench exit codes. */
 export async function executeHostedCommandOperation(
   operation: () => Promise<void>,
   output: HostedOutput,
@@ -224,7 +220,6 @@ export async function executeHostedCommandOperation(
   }
 }
 
-/** Execute already validated structured command values through the normal workbench errors. */
 export async function executeHostedCommand(
   command: Pick<HostedPipelineCommand, "execute">,
   values: Record<string, unknown>,

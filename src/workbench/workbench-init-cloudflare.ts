@@ -68,8 +68,6 @@ export const cloudflareScaffold: DeployTargetScaffold = {
     const name = workerName(cwd);
     const workerDirectory = join(cwd, "cloudflare");
     const importProject = projectImport(projectExport, importPath(workerDirectory, projectFile));
-    // Interpolated so the runtime graph checks do not mistake template text for an import of this module.
-    const workerImport = importPath(cwd, join(workerDirectory, "worker.ts"));
     return [
       {
         path: "cloudflare/worker.ts",
@@ -85,7 +83,7 @@ export const { TubelessStudio, TubelessRun } = app.durableObjects;
       {
         path: "cloudflare.config.ts",
         contents: `import { bindings, defineConfig, defineWorker, exports as workerExports } from "cf/config";
-import * as entrypoint from "${workerImport}" with { type: "cf-worker" };
+import * as entrypoint from "./cloudflare/worker.ts" with { type: "cf-worker" };
 
 export default defineConfig(() => {
   const worker = defineWorker({

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createStudioRequestHandler, type StudioRequestHandlerOptions } from "./handler.js";
-import { jsonResponse } from "./http.js";
+import { jsonResponse } from "../../utilities/http-response.js";
 
 function handler(overrides: Partial<StudioRequestHandlerOptions> = {}) {
   return createStudioRequestHandler({

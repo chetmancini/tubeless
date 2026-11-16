@@ -11,7 +11,6 @@ interface SchemaContext {
   charge(value: unknown, depth: number): void;
 }
 
-/** Charge source data and every expanded copy before retaining its descriptor. */
 function expansionBudget() {
   let nodes = 0;
   let characters = 0;
@@ -75,7 +74,6 @@ const REFERENCE_ANNOTATIONS = [
   "definitions",
 ];
 
-/** Inline references and rewrite supported schema positions in one traversal. */
 function strict(
   schema: unknown,
   context: SchemaContext,
@@ -208,9 +206,7 @@ function decodeAny(options: unknown[], value: unknown, path: string, optional: W
     try {
       const decoded = decode(option, value, path, optional);
       matches.push(decoded);
-    } catch {
-      // Try the next alternative.
-    }
+    } catch {}
   }
   if (matches.length === 0) throw new Error(`${path} matches no allowed schema`);
   if (matches.some((match) => !jsonEqual(match, matches[0])))
@@ -227,7 +223,6 @@ function acceptsNull(schema: Json, optional: WeakSet<object>): boolean {
   }
 }
 
-/** Adapt an MCP tool input schema to a strict model descriptor and an argument decoder. */
 export function mcpInputSchema(inputSchema: unknown): StandardSchemaV1<Record<string, unknown>> {
   if (!isRecord(inputSchema) || inputSchema.type !== "object")
     throw new Error("MCP tool inputSchema must be a JSON Schema object");
@@ -242,7 +237,6 @@ export function mcpInputSchema(inputSchema: unknown): StandardSchemaV1<Record<st
       jsonSchema: { input: () => descriptor },
       validate(value) {
         try {
-          // SAFETY: the descriptor's root is an object schema, so decoding yields a record.
           return { value: decode(descriptor, value, "input", optional) as Record<string, unknown> };
         } catch (error) {
           return { issues: [{ message: error instanceof Error ? error.message : String(error) }] };
@@ -258,7 +252,6 @@ export interface McpToolResult {
   readonly structuredContent?: Readonly<Record<string, unknown>>;
 }
 
-/** The generic result shape, used for code-mode declarations. */
 const mcpResultJsonSchema = {
   type: "object",
   properties: {
@@ -278,12 +271,6 @@ const mcpResultJsonSchema = {
 const MAX_OUTPUT_SCHEMA_BYTES = 16_384;
 const utf8 = (text: string) => new TextEncoder().encode(text).length;
 
-/**
- * Describe `structuredContent` with a tool's declared `outputSchema`, which servers must honor.
- * Its `$defs` and `definitions` move to the descriptor root so local references still resolve.
- * Missing, non-object or unserializable schemas keep the generic shape, as do schemas over
- * 16 KiB of UTF-8 either serialized or rendered as a declaration, where references expand.
- */
 function resultDescriptor(outputSchema: unknown): Json {
   if (!isRecord(outputSchema) || outputSchema.type !== "object") return mcpResultJsonSchema;
   let text: string | undefined;
@@ -293,7 +280,6 @@ function resultDescriptor(outputSchema: unknown): Json {
     return mcpResultJsonSchema;
   }
   if (text === undefined || utf8(text) > MAX_OUTPUT_SCHEMA_BYTES) return mcpResultJsonSchema;
-  // SAFETY: the parsed copy of a stringified record is an owned plain JSON object.
   const {
     $defs,
     definitions,
@@ -324,7 +310,6 @@ export function mcpResultSchema(outputSchema?: unknown): StandardSchemaV1<unknow
     "~standard": {
       version: 1,
       vendor: "tubeless-mcp",
-      // Validation selects fields without transforming them, so both descriptors match.
       jsonSchema: { input: () => descriptor, output: () => descriptor },
       validate(value) {
         if (

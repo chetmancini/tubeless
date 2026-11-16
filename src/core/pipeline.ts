@@ -25,6 +25,7 @@ import {
 } from "./pipeline-identity.js";
 import { renderPipelineMermaid } from "./pipeline-mermaid.js";
 import { buildPipelinePlan } from "./pipeline-plan.js";
+import { snapshotRunControls } from "./run-controls.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import type {
   InferSchemaOutput,
@@ -136,20 +137,6 @@ type CheckedStepTuple<TSteps extends readonly AnyStep[]> =
           readonly __duplicateStepIds: DuplicateStepIds<TSteps>;
         };
 
-function normalizeRunControls<TStepId extends string, TTargetId extends string>(
-  controls: PipelineRunControls<TStepId, TTargetId>
-): PipelineRunControls<TStepId, TTargetId> {
-  const { cache, continueOnError, dryRun, maxConcurrency, stepIds, targets } = controls;
-  const snapshot: PipelineRunControls<TStepId, TTargetId> = {};
-  if (cache !== undefined) snapshot.cache = cache;
-  if (continueOnError !== undefined) snapshot.continueOnError = continueOnError;
-  if (dryRun !== undefined) snapshot.dryRun = dryRun;
-  if (maxConcurrency !== undefined) snapshot.maxConcurrency = maxConcurrency;
-  if (stepIds !== undefined) snapshot.stepIds = [...stepIds];
-  if (targets !== undefined) snapshot.targets = [...targets];
-  return snapshot;
-}
-
 /**
  * Compile a typed step graph into a validated, executable pipeline.
  * Prefer inferred type arguments to preserve the literal id. For an explicit
@@ -191,7 +178,7 @@ export function definePipeline<
     controls: PipelineRunControls<TStepId, TTargetId>;
     plan: PipelinePlan;
   } {
-    const normalizedControls = normalizeRunControls(controls);
+    const normalizedControls = snapshotRunControls(controls);
     return {
       controls: normalizedControls,
       plan: buildPipelinePlan(compiled, normalizedControls),
@@ -246,7 +233,6 @@ export function definePipeline<
     if (result.status !== "completed") {
       throw new PipelineExecutionError(result);
     }
-    // SAFETY: a completed run always carries its `TPipelineResult` value.
     return result.value as TPipelineResult;
   }
 

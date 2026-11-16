@@ -159,7 +159,6 @@ describe("runHistory", () => {
     const events = [...failedRunEvents, ...secondRunEvents];
     if (source === "--store") await seedStore(filename, events);
     else await writeFile(filename, `${events.map((next) => JSON.stringify(next)).join("\n")}\n`);
-    // A project must not resolve pipeline IDs or load modules during history reads.
     await writeFile(path.join(directory, "tubeless.project.ts"), 'throw new Error("do not load");');
 
     for (const mode of [[], ["--json"], ["--events"]]) {

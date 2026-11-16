@@ -13,13 +13,6 @@ import type {
   CliStringParam,
 } from "./cli-types.js";
 
-/**
- * Every command gets `-h`/`--help` and `--dry-run` for free, the same way every pipeline
- * step gets `context.dryRun`. `--resume`/`--no-resume` is added only for managed
- * checkpointing or an explicit application-owned resume capability. Schemas can't
- * redeclare any of these names; `defineCommand` throws immediately if one tries, instead
- * of silently shadowing the built-in.
- */
 const DRY_RUN_KEY = "dryRun";
 const DRY_RUN_PARAM: CliBooleanParam = {
   type: "boolean",
@@ -261,7 +254,6 @@ function buildParamEntries(schema: CliParamsSchema): CliParamEntry[] {
   return Object.entries(schema).map(([key, param]) => ({ key, param, flag: flagName(key, param) }));
 }
 
-/** Every spelling `tokenize` accepts after `--`, for unknown-option suggestions. */
 function longFlagNames(entries: readonly CliParamEntry[]): string[] {
   const names = entries.flatMap(({ flag, param }) =>
     param.type === "boolean" ? [flag, `no-${flag}`] : [flag]
@@ -335,8 +327,6 @@ export function tokenize(
 
   const nextValue = (index: number, name: string): string | undefined => {
     const next = argv[index + 1];
-    // A known short option must not be consumed as a value, but negative numeric
-    // values and ordinary dash-prefixed paths remain valid option values.
     if (
       next === undefined ||
       next.startsWith("--") ||
@@ -360,8 +350,6 @@ export function tokenize(
       continue;
     }
     if (afterOptions || !token.startsWith("-")) {
-      // The token right after an unknown `--flag` was almost certainly its value; calling
-      // it a stray argument too would only echo the unknown-option error.
       if (index === unknownFlagValueIndex && !nextPositionalEntry()) continue;
       assignPositional(token);
       continue;
@@ -397,10 +385,6 @@ export function tokenize(
     const bodyEqualsIndex = body.indexOf("=");
     const bodyName = bodyEqualsIndex === -1 ? body : body.slice(0, bodyEqualsIndex);
 
-    // A registered flag is matched exactly first, so a real flag that happens to start
-    // with "no-" (e.g. a `noCache` param, or an explicit `flag: "no-dry-run"`) is never
-    // misread as a negation of some other flag; negation is only inferred as a fallback
-    // when the literal name isn't registered.
     const negated = !paramByFlag.has(bodyName) && bodyName.startsWith("no-");
     const withoutNegation = negated ? body.slice(3) : body;
     const equalsIndex = withoutNegation.indexOf("=");
@@ -449,10 +433,8 @@ export function tokenize(
   return { values, errors, help };
 }
 
-/** A single resolved parameter value after CLI/environment/default decoding. */
 export type ResolvedParamValue = string | number | boolean | (string | number)[] | undefined;
 
-/** Mutable build-time views of the public descriptors, frozen before return. */
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 type MutableCliParameterDescriptor = Mutable<CliParameterDescriptor>;
 type MutableCliCommandDescriptor = Mutable<CliCommandDescriptor>;
@@ -474,11 +456,6 @@ function isNumberValue(value: string | number): value is number {
   return typeof value === "number";
 }
 
-/**
- * Shape diagnostics for structured values. The label is the parameter key, or
- * `flag` when set, and text is not coerced. `undefined` means the value can
- * continue through choice, range, and path checks.
- */
 function structuredShapeError(key: string, param: CliParam, value: unknown): string | undefined {
   const label = `--${param.flag ?? key}`;
   if (param.type === "boolean") {
@@ -514,7 +491,6 @@ export function resolveParam(
   }
 
   const flag = flagName(key, param);
-  // Accepted structured values use argv diagnostics for constraints and paths.
   const reportedSource = source === "structured" ? "argv" : source;
   const sourceLabel = reportedSource === "env" ? `environment variable ${param.env}` : `--${flag}`;
   const showRawValue = reportedSource !== "env";
@@ -549,7 +525,6 @@ export function resolveParam(
         resolved.push(item);
         continue;
       }
-      // Argv supplies strings. Any other item still reaches the decimal diagnostic.
       const numericItem =
         typeof item === "string" || typeof item === "number" ? item : String(item);
       const value = validateNumberValue(
@@ -686,10 +661,6 @@ export function assertNoDuplicateFlags(schema: CliParamsSchema): void {
   const keyByShort = new Map<string, string>();
   for (const [key, param] of Object.entries(schema)) {
     const flag = flagName(key, param);
-    // "no-resume" is reserved alongside "resume" (see RESERVED_FLAG_NAMES): the tokenizer
-    // exact-matches a registered flag before falling back to "no-" negation, so a schema
-    // that claims "no-resume" for itself (derived or via an explicit `flag:` override)
-    // would silently intercept it when resume support is enabled.
     const isBuiltInKey = key === DRY_RUN_KEY || key === RESUME_KEY;
     if (!isBuiltInKey && RESERVED_FLAG_NAMES.has(flag)) {
       throw new Error(
@@ -718,15 +689,6 @@ export function assertNoDuplicateFlags(schema: CliParamsSchema): void {
   }
 }
 
-/**
- * `default` or `optional` on a `multiple` param would be silently ignored at runtime:
- * `resolveParam`'s `multiple` branch always resolves absent to `[]`, never consulting
- * `param.default`, and `CliParamIsOptional` always resolves `multiple` params as
- * non-optional regardless of `param.optional`. Unlike `default`+`optional` on a scalar
- * param (a harmless, merely-wider type — see the doc comment above
- * `CliParamIsOptional`), these are dead, misleading configuration on a `multiple` param,
- * so they're rejected the same way duplicate/reserved flags are.
- */
 export function assertValidMultipleParams(schema: CliParamsSchema): void {
   for (const [key, param] of Object.entries(schema)) {
     if (!isMultipleParam(param)) {

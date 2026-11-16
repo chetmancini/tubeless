@@ -46,7 +46,6 @@ export function createSqliteLaunchStoreFixture(filename = ":memory:") {
     },
     async listEvents(query = {}) {
       const { sql, params } = runEventListQuery(query);
-      // SAFETY: this query reads complete rows from the owned event table.
       return (storage.sql.exec(sql, ...params).toArray() as unknown as RunEventRecord[]).map(
         storedRunEvent
       );

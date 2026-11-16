@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { moduleReferences } from "./module-references.ts";
 
 // This script is the only writer of the browser bundle. `tsconfig.json` excludes
 // `src/studio/browser/entry.ts` so `tsrs` never emits a competing
@@ -23,11 +24,12 @@ export function cloudflareClientModule(source) {
   return `export const PIPELINE_RUN_STUDIO_CLIENT = ${JSON.stringify(source)};\n`;
 }
 
-/** Keep compiled ESM intact for the inline module script. */
 export function compiledClientSource(js) {
   const withoutMaps = js.replace(/^\uFEFF?\/\/# sourceMappingURL=.*\r?\n?/gm, "");
-  if (/\bimport\s*(?:type\s+)?["'{*]/.test(withoutMaps) || /\bimport\s*\(/.test(withoutMaps)) {
-    throw new Error("Compiled studio client still contains import; cannot inline.");
+  if (moduleReferences(withoutMaps).length > 0) {
+    throw new Error(
+      "Compiled studio client still contains a module import or re-export; cannot inline."
+    );
   }
   return `${withoutMaps.replace(/\s+$/u, "")}\n`;
 }

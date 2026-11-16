@@ -1,4 +1,5 @@
 import type { PipelineRunEventReader } from "../../run-store/run-store.js";
+import { jsonResponse } from "../../utilities/http-response.js";
 import {
   agentTranscriptPageSchema,
   type AgentTranscriptReader,
@@ -16,7 +17,6 @@ import {
   type PipelineRunStudioHistoryMaintenance,
 } from "./state.js";
 import {
-  jsonResponse,
   errorResponse,
   readJsonBody,
   decodePathSegment,
@@ -158,14 +158,12 @@ export function createStudioApiHandler(
       const transcriptMatch = /^\/api\/runs\/([^/]+)\/transcript$/.exec(url.pathname);
       if (request.method === "GET" && transcriptMatch) {
         const runId = decodePathSegment(transcriptMatch[1]!);
-        const cursor = url.searchParams.get("afterSequence") ?? "0";
-        if (!/^\d+$/.test(cursor) || !Number.isSafeInteger(Number(cursor)))
-          throw new StudioRequestError(
-            "invalid_cursor",
-            "Invalid transcript cursor.",
-            400,
-            "Use a nonnegative safe integer."
-          );
+        const afterSequence = queryInteger(
+          url,
+          "afterSequence",
+          "invalid_cursor",
+          "Invalid transcript cursor."
+        );
         if (!transcripts || !(await eventState.detail(runId)))
           return errorResponse(
             404,
@@ -173,7 +171,6 @@ export function createStudioApiHandler(
             "Transcript not available for this run.",
             "Choose a recorded agent run with a transcript source."
           );
-        const afterSequence = Number(cursor);
         const page = agentTranscriptPageSchema.decode(
           await transcripts.list({ runId, afterSequence }),
           "Transcript page"

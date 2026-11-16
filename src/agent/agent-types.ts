@@ -2,6 +2,7 @@ import type { PipelineStepContext, StandardSchemaV1 } from "../core/pipeline-typ
 import type { AgentEnvironment, AgentEnvironmentProvider } from "./environment.js";
 import type { AgentDurability, AgentExecutionIdentity } from "./checkpoint-types.js";
 import type { DefaultAgentTools } from "./default-tools.js";
+import type { DefaultAgentToolName } from "./default-tool-names.js";
 import type { CodemodeExecutor } from "./codemode-executor.js";
 import type { AgentTranscriptOptions } from "./transcript.js";
 
@@ -18,8 +19,7 @@ export interface AgentTool<Arguments, Result> {
 }
 
 export type Tools = Readonly<Record<string, AgentTool<unknown, unknown>>>;
-/** A standard workspace tool an agent's setup may select. */
-export type DefaultAgentToolName = keyof DefaultAgentTools;
+export type { DefaultAgentToolName } from "./default-tool-names.js";
 type RegisteredTools<Custom extends Tools, Defaults extends DefaultAgentToolName> = Omit<
   Pick<DefaultAgentTools, Defaults>,
   keyof Custom

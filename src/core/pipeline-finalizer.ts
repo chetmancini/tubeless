@@ -60,8 +60,6 @@ export function requireOutputs<const TRequiredSteps extends readonly AnyStep[], 
         { code: REQUIRED_OUTPUTS_MISSING_CODE }
       );
     }
-    // SAFETY: every required step id was verified present above, so the partial
-    // outputs contain all required keys and are a complete required-outputs map.
     return finalize(outputs as unknown as RequiredPipelineOutputs<TRequiredSteps>, context);
   };
   const requiredFinalizer = (

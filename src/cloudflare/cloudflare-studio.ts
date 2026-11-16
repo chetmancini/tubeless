@@ -33,7 +33,6 @@ export interface StudioObjectDependencies {
   readonly startTimeoutMs?: number;
 }
 
-/** Singleton Studio object: Durable Object adapters around shared launch coordination. */
 export class StudioObjectCore implements StudioIngest {
   readonly #store: SqliteHostedLaunchStore;
   readonly #events: DurableRunStore;

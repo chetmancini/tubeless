@@ -4,7 +4,6 @@ import type { AgentState } from "./agent-types.js";
 import { agentError } from "./agent-errors.js";
 export { agentError, limit } from "./agent-errors.js";
 
-/** Copy plain data into owned, frozen snapshots; repeated references are copied, cycles fail. */
 function copy(value: unknown, ancestors: Set<object>, json: boolean): unknown {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
   if (value === undefined && !json) return value;
@@ -41,7 +40,6 @@ function copy(value: unknown, ancestors: Set<object>, json: boolean): unknown {
 
 export function ownState<T>(state: T): AgentState<T> {
   try {
-    // SAFETY: copying retains every plain-data value and only adds deep readonly ownership.
     return copy(state, new Set(), false) as AgentState<T>;
   } catch (cause) {
     throw agentError(
@@ -72,7 +70,6 @@ export function jsonDescriptor(
       explicit ?? schema["~standard"].jsonSchema?.input({ target: "draft-2020-12" });
     if (descriptor === null || typeof descriptor !== "object" || Array.isArray(descriptor))
       throw new Error("Missing JSON Schema object");
-    // SAFETY: the object guard and plain JSON copy validate the descriptor's representation.
     return copy(descriptor, new Set(), true) as Readonly<Record<string, unknown>>;
   } catch (cause) {
     throw agentError(

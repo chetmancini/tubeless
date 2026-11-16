@@ -1,11 +1,10 @@
 import { awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
-import { MAX_RESPONSE_BYTES } from "./provider-http.js";
+import { MAX_RESPONSE_BYTES } from "./provider-limits.js";
 import { record } from "./provider-schema.js";
 import { utf8ByteLength } from "./provider-utf8.js";
 
 const MAX_EVENT_BYTES = MAX_RESPONSE_BYTES + 4096;
 
-/** Yield bounded SSE data fields; consumers own JSON decoding and protocol completion. */
 export async function* readProviderEvents(
   response: Response,
   signal: AbortSignal,
@@ -26,8 +25,6 @@ export async function* readProviderEvents(
   let events = 0;
   let firstLine = true;
   let afterCR = false;
-  // Grow one bounded line buffer instead of rescanning/concatenating an unfinished
-  // JSON line on every network chunk (which is quadratic with small chunks).
   let buffer = new Uint8Array(4096);
   let length = 0;
   const line = (): string | undefined => {

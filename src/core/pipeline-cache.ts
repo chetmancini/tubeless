@@ -8,6 +8,7 @@ import {
 import { isAbortError, throwIfAborted } from "../utilities/abort.js";
 import { cacheDurationMs } from "../utilities/cache-duration.js";
 import { defaultCacheKey } from "../utilities/cache-key.js";
+import { isStepCachePolicy, STEP_CACHE_POLICIES } from "../tracing/tracing-constants.js";
 import type { PipelineExecutionContext } from "./pipeline-types.js";
 
 /** Cache I/O is cancellable and independent of pipeline scheduling. */
@@ -44,7 +45,7 @@ export interface StepCacheCodec {
 }
 
 /** Use reads and writes, recompute replaces entries, bypass performs no cache work. */
-export type StepCachePolicy = "use" | "recompute" | "bypass";
+export type StepCachePolicy = (typeof STEP_CACHE_POLICIES)[number];
 
 interface CacheSettings {
   /** Maximum acceptable age: milliseconds or a fixed duration such as "30 days" or "12h". */
@@ -131,7 +132,7 @@ export function compileStepCache<TOptions extends object>(
   if (
     config.policy !== undefined &&
     typeof config.policy !== "function" &&
-    !["use", "recompute", "bypass"].includes(config.policy)
+    !isStepCachePolicy(config.policy)
   )
     throw new Error("Invalid cache policy");
   const store = config.store ?? defaults?.store;
@@ -193,7 +194,7 @@ export async function executeWithStepCache<TOptions extends object>(input: {
         : (cache.policy ?? "use"))
   );
   if (policy === "bypass") return uncached();
-  if (policy !== "use" && policy !== "recompute") throw new Error("Invalid step cache policy");
+  if (!isStepCachePolicy(policy)) throw new Error("Invalid step cache policy");
   const key = await cacheOperation("key", context, () =>
     cache.key ? cache.key(input.inputs, context) : defaultCacheKey(input.inputs, context.options)
   );
@@ -207,7 +208,6 @@ export async function executeWithStepCache<TOptions extends object>(input: {
     cache.version,
     key,
   ]);
-  // Load the optional built-in persistence only when an eligible step needs it.
   const local =
     !cache.store || !cache.codec ? await import("../utilities/cache-storage.js") : undefined;
   const store =

@@ -33,7 +33,6 @@ const WORKBENCH_HANDLERS = {
   completion: runCompletion,
 } satisfies Record<keyof typeof WORKBENCH_SPECS, WorkbenchCommandHandler>;
 
-/** Public subcommands in usage order; dispatch, typo suggestions, and completion share it. */
 const WORKBENCH_COMMANDS = Object.values(WORKBENCH_SPECS).map((spec) => ({
   name: spec.name,
   description: spec.description,
@@ -50,7 +49,6 @@ ${WORKBENCH_COMMANDS.map(({ name, description }) => `  tubeless ${name.padEnd(10
 Run tubeless <command> --help for command-specific options.
 `;
 
-/** Run the `tubeless` development workbench. */
 export async function runWorkbenchCli(
   argv: readonly string[],
   io: WorkbenchCliIo

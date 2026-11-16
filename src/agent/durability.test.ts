@@ -14,7 +14,6 @@ import { createNodeAgentEnvironment } from "./node-environment.js";
 import { emptyInput, numberSchema, schema } from "./agent.test-support.js";
 import { createSteps, definePipeline } from "../core/pipeline.js";
 
-// Only the host-change test stubs the host name; every other call reaches the real implementation.
 vi.mock("node:os", { spy: true });
 
 function interruptWrite(
@@ -392,7 +391,6 @@ it.each([false, true])(
       initialState,
       decide,
     });
-    // Ordinary invocations remain ephemeral and do not require a version.
     expect(await child.runOrThrow({})).toBe(1);
     initialState.mockClear();
     decide.mockClear();

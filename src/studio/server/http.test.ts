@@ -3,13 +3,13 @@ import {
   errorResponse,
   formatHttpUrlHost,
   isUnspecifiedHttpHost,
-  jsonResponse,
   normalizeHttpAuthority,
   parseHttpAuthority,
   readJsonBody,
   StudioRequestError,
   unexpectedStudioErrorResponse,
 } from "./http.js";
+import { jsonResponse } from "../../utilities/http-response.js";
 
 describe("studio HTTP authorities", () => {
   it("brackets IPv6 literals for URLs", () => {

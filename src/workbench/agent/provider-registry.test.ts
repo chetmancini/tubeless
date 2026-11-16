@@ -8,7 +8,6 @@ import { captureIo, writeModule } from "../workbench.test-support.js";
 beforeEach(() => {
   for (const key of ["BASETEN_API_KEY", "BASETEN_MODEL", "BASETEN_BASE_URL"])
     vi.stubEnv(key, undefined);
-  // Unrelated public-service configuration must not influence a configured service.
   vi.stubEnv("OPENAI_API_KEY", "unrelated-openai-key");
   vi.stubEnv("ANTHROPIC_API_KEY", "unrelated-anthropic-key");
   vi.stubEnv("OPENAI_MODEL", "unrelated-openai-model");

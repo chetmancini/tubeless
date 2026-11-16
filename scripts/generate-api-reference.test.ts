@@ -104,6 +104,18 @@ describe("hashDeclarationSurface", () => {
     writeSurface(root, 'export type Mode = "b";\n');
     expect(hashDeclarationSurface(join(root, "entry.d.ts"), root)).not.toBe(before);
   });
+
+  it.each([
+    `export type Message = 'import("./unrelated.js")';`,
+    'export type Message = `export { value } from "./unrelated.js"`;',
+  ])("ignores import-like text inside literal types: %s", (declaration) => {
+    const root = mkdtempSync(join(tmpdir(), "tubeless-api-literal-import-"));
+    writeFileSync(join(root, "entry.d.ts"), declaration);
+    writeFileSync(join(root, "unrelated.d.ts"), "export type Unused = number;");
+    const before = hashDeclarationSurface(join(root, "entry.d.ts"), root);
+    writeFileSync(join(root, "unrelated.d.ts"), "export type Unused = string;");
+    expect(hashDeclarationSurface(join(root, "entry.d.ts"), root)).toBe(before);
+  });
 });
 
 describe("normalizeDeclarationSource", () => {

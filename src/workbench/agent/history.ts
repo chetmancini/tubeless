@@ -32,7 +32,6 @@ export function formatAgentHistory(history: AgentHistory): string {
   const lines = ["Agent history:"];
   const byId = new Map(history.agents.map((agent) => [agent.runId, agent]));
   type Row = string | { agent: AgentHistory["agents"][number]; depth: number };
-  // Include disconnected/cyclic records too; identity guards prevent duplicate expansion.
   const pending: Row[] = [
     ...history.agents.filter((agent) => !agent.parentCall),
     ...history.agents.filter((agent) => agent.parentCall),

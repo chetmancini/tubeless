@@ -49,6 +49,10 @@ const stages = ["01", "02", "03", "04"];
 
 <style>
   .pipeline-flow {
+    --pipe-cycle-distance: 800;
+    --pipe-duration-seconds: 9;
+    --pipe-pulse-length: 18;
+    --pipe-halo-length: 30;
     position: relative;
     isolation: isolate;
     overflow: clip;
@@ -89,15 +93,15 @@ const stages = ["01", "02", "03", "04"];
   .pipe-pulse {
     stroke: #bb9135;
     stroke-width: 5;
-    stroke-dasharray: 18 782;
-    animation: pipe-flow 9s linear infinite;
+    stroke-dasharray: var(--pipe-pulse-length) calc(var(--pipe-cycle-distance) - var(--pipe-pulse-length));
+    animation: pipe-flow calc(var(--pipe-duration-seconds) * 1s) linear infinite;
     animation-play-state: paused;
   }
 
   .pipe-pulse-halo {
     stroke: #d9b650;
     stroke-width: 13;
-    stroke-dasharray: 30 770;
+    stroke-dasharray: var(--pipe-halo-length) calc(var(--pipe-cycle-distance) - var(--pipe-halo-length));
     opacity: 0.3;
   }
 
@@ -108,8 +112,8 @@ const stages = ["01", "02", "03", "04"];
   .completion-glow,
   .completion-fill,
   .completion-check {
-    animation-duration: 9s;
-    animation-delay: var(--completion-delay, 9s);
+    animation-duration: calc(var(--pipe-duration-seconds) * 1s);
+    animation-delay: var(--completion-delay, calc(var(--pipe-duration-seconds) * 1s));
     animation-iteration-count: infinite;
     animation-play-state: paused;
   }
@@ -181,7 +185,7 @@ const stages = ["01", "02", "03", "04"];
   }
 
   @keyframes pipe-flow {
-    to { stroke-dashoffset: -800; }
+    to { stroke-dashoffset: calc(-1 * var(--pipe-cycle-distance)); }
   }
 
   @keyframes bucket-glow {
@@ -239,6 +243,7 @@ const stages = ["01", "02", "03", "04"];
     const joints = flow.querySelectorAll<SVGGElement>("[data-pipe-joint]");
     const bucket = flow.querySelector<SVGGElement>("[data-pipe-end]")!;
     const dividers = flow.querySelectorAll<HTMLElement>(".section, .package-strip .pkg");
+    const motion = getComputedStyle(flow);
 
     const draw = () => {
       const bounds = flow.getBoundingClientRect();
@@ -250,7 +255,6 @@ const stages = ["01", "02", "03", "04"];
       const first = points[0];
       const width = bounds.width;
       const heroExit = hero.getBoundingClientRect().bottom - bounds.top - 20;
-      // Broad curves weave underneath the content; opaque panels hide the pipe naturally.
       let d = `M ${width * 0.7} -20`
         + `C ${width * 0.7} 110 ${width * 0.42} 30 ${width * 0.42} 180`
         + `C ${width * 0.42} ${heroExit - 120} ${width * 0.86} ${heroExit - 120} ${width * 0.64} ${heroExit + 20}`
@@ -290,8 +294,10 @@ const stages = ["01", "02", "03", "04"];
         const crossing = path.getPointAtLength((start + end) / 2).x;
         divider.style.setProperty("--pipe-crossing", `${(crossing + bounds.left - rect.left) / rect.width * 100}%`);
       });
-      // A pulse's leading edge reaches the bucket once per 800px / 9s cycle.
-      const arrival = ((length - 18) % 800) / 800 * 9;
+      const distance = Number(motion.getPropertyValue("--pipe-cycle-distance"));
+      const pulse = Number(motion.getPropertyValue("--pipe-pulse-length"));
+      const seconds = Number(motion.getPropertyValue("--pipe-duration-seconds"));
+      const arrival = ((length - pulse) % distance) / distance * seconds;
       flow.style.setProperty("--completion-delay", `${arrival}s`);
       flow.dataset.ready = "";
     };

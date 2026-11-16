@@ -159,9 +159,7 @@ async function sqliteSidecarTargets(filename: string): Promise<readonly string[]
   const targets: string[] = [];
   try {
     targets.push(await realpath(filename));
-  } catch {
-    // Missing or unresolvable; still check the given name.
-  }
+  } catch {}
   if (targets.includes(filename) === false) targets.push(filename);
   return targets;
 }
@@ -221,7 +219,6 @@ function openReadableDatabase(
   }
 }
 
-/** Options for `openSqlitePipelineRunStore`. */
 export interface OpenSqlitePipelineRunStoreOptions {
   /**
    * When `false`, reject a path that is not already a versioned run store
@@ -322,14 +319,11 @@ export async function openSqlitePipelineRunStore(
   function drain(): void {
     if (!insert || pending.length === 0) return;
     try {
-      database.exec("BEGIN IMMEDIATE");
-      for (const row of pending) insert.run(...row);
-      database.exec("COMMIT");
+      sqliteTransaction(database, () => {
+        for (const row of pending) insert.run(...row);
+      });
       pending.length = 0;
     } catch (error) {
-      try {
-        database.exec("ROLLBACK");
-      } catch {}
       exportError = error instanceof Error ? error : new Error(String(error));
       throw exportError;
     }

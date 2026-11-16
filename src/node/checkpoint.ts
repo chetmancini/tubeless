@@ -16,8 +16,6 @@ function loadEntries<TMeta>(
     return new Map();
   }
   try {
-    // The file must be a JSON object keyed by item IDs, as written by flush().
-    // JSON.parse also accepts arrays and scalars; those are corrupt containers.
     const parsed: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
     if (!isCheckpointRecord(parsed)) {
       const kind =

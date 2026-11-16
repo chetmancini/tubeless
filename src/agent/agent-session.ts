@@ -7,18 +7,14 @@ import type {
 } from "../core/pipeline-types.js";
 import { agentError, ownState } from "./agent-state.js";
 
-/** Conversation hooks a session supplies to its own compiled copy of a model-backed agent. */
 export interface SessionHooks {
-  /** The committed conversation that seeds a fresh run. */
   seed(): unknown;
-  /** Record the latest owned conversation, including a finish decision's. */
   observe(conversation: unknown): void;
 }
 
 type SessionAgent = Pipeline<object, unknown, "agent", "agent", string>;
 const builders = new WeakMap<object, (hooks: SessionHooks) => SessionAgent>();
 
-/** Let `createAgentSession` recompile this model-backed agent with session hooks. */
 export function registerSessionAgent(
   agent: object,
   build: (hooks: SessionHooks) => SessionAgent
@@ -66,7 +62,6 @@ export function createAgentSession<Input extends object, Result>(
   let latest: unknown;
   let observed = false;
   let running = false;
-  // clear() during a run discards that run's conversation instead of reviving it later.
   let generation = 0;
   // SAFETY: the builder recompiles the same definition, so its options and result types match.
   const compiled = build({

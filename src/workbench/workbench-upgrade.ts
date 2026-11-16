@@ -22,7 +22,6 @@ function parseUpgradeArgs(argv: readonly string[]) {
   return parseSubcommandArgs(argv, WORKBENCH_SPECS.upgrade.options);
 }
 
-/** Confirm and apply a SQLite run-store schema upgrade. */
 export async function runUpgrade(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {

@@ -32,7 +32,6 @@ function attemptStatus(status: StoredPipelineStep["status"]): StoredPipelineAtte
   return status === "planned" ? "running" : status;
 }
 
-/** Own the mutable state of one recorded run. */
 export class RunProjection {
   #completed:
     | {
@@ -225,7 +224,6 @@ export class RunProjection {
   }
 }
 
-/** Fold one run's append-only events into a UI-friendly current snapshot. */
 export function projectPipelineRun(events: readonly StoredPipelineEvent[]): StoredPipelineRun {
   if (events.length === 0) throw new Error("Cannot project an empty pipeline run event list.");
   const ordered = [...events].sort((left, right) => left.id - right.id);

@@ -15,7 +15,7 @@ import { constants } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { PipelineStepContext } from "../core/pipeline-types.js";
 import { throwIfAborted } from "../utilities/abort.js";
-import { ToolError } from "./tools.js";
+import { ToolError } from "./tool-error.js";
 import {
   DEFAULT_READ_LINES,
   MAX_FILE_BYTES,
@@ -95,7 +95,6 @@ export async function readTool(
   return fileOperation(context, async () => {
     const path = resolve(context.cwd, input.path);
     const text = await readText(path, context.signal);
-    // Retain separators so each selected window is an exact substring of the file.
     const parts = text.length === 0 ? [] : text.split(/(\r?\n)/);
     const totalLines = Math.ceil(parts.length / 2);
     const startLine = input.startLine ?? 1;
@@ -136,8 +135,6 @@ async function writeDestination(path: string, signal?: AbortSignal) {
   }
 }
 
-// Serialize writes per file within this process so concurrent edits in one tool batch
-// cannot read the same original text and silently overwrite each other.
 const pathLocks = new Map<string, Promise<void>>();
 
 async function withPathLock<T>(path: string, work: () => Promise<T>): Promise<T> {
@@ -303,8 +300,6 @@ export async function searchTool(input: { query: string; path?: string | null },
           if (entry.isDirectory() && entry.name !== ".git" && entry.name !== "node_modules")
             await walk(join(path, entry.name), depth + 1);
           else if (entry.isFile()) {
-            // Read a bounded window of sibling files together, then apply results
-            // in traversal order so completion timing cannot change the limits.
             const files = [entry];
             while (
               files.length < 4 &&

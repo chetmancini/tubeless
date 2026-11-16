@@ -5,7 +5,6 @@ import { agentError } from "./agent-state.js";
 type ChatAgent = Pipeline<{ task: string }, { answer: string }, "agent", "agent", string>;
 const CHAT_SESSION = Symbol.for("tubeless/chat-agent-session/v1");
 
-/** Register only defineAgent's default task/answer contract for CLI chat. */
 export function registerChatAgent(agent: object): void {
   // The owning package instance creates the session, including separately installed copies.
   // SAFETY: defineAgent calls this only when both schemas are its task/answer defaults.
@@ -14,7 +13,6 @@ export function registerChatAgent(agent: object): void {
   });
 }
 
-/** Internal workbench boundary; typed agents keep their ordinary session support. */
 export function createChatAgentSession(
   agent: unknown
 ): AgentSession<{ task: string }, { answer: string }> {

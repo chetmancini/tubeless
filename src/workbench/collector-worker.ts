@@ -16,7 +16,6 @@ export interface CollectorWorkerResult {
   readonly failureReport: "not-needed" | "recorded" | "closed" | "unconfirmed";
 }
 
-/** Normalize the target's process budgets before provisioning credentials or forking. */
 export function collectorWorkerBudgets(options: {
   readonly maxRunDurationMs: number;
   readonly startupTimeoutMs?: number;

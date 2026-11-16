@@ -13,6 +13,7 @@ import {
   controlReplySchema,
   failureReplySchema,
   decodeCollectorJson,
+  parseCollectorToken,
 } from "./collector-protocol.js";
 
 export function collectorBaseUrl(value: string): string {
@@ -32,7 +33,7 @@ export function createCollectorTransport(options: {
   readonly signal?: AbortSignal;
 }) {
   const { baseUrl, launchId, workerId, token, signal: callerSignal } = options;
-  if (!/^[a-f0-9]{32}\.[a-f0-9]{64}$/.test(token)) throw new Error("Invalid collector credential.");
+  if (!parseCollectorToken(token)) throw new Error("Invalid collector credential.");
   const endpoint = `${collectorBaseUrl(baseUrl)}/v1/launches/${encodeURIComponent(launchId)}`;
   const transport = options.fetch ?? fetch;
 
@@ -132,7 +133,6 @@ export function createCollectorTransport(options: {
       const { attemptId, message } = input;
       assertAttemptId(attemptId);
       assertCollectorFailureMessage(message);
-      // Prepare one immutable identity/body before request() starts delivery retries.
       const body = new TextEncoder().encode(
         JSON.stringify({
           attemptId,

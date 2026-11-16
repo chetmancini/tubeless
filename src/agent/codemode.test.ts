@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -29,7 +28,6 @@ import { createNodeCodemodeExecutor } from "./codemode-node.js";
 
 const node = createNodeCodemodeExecutor();
 
-/** A promise the test resolves when a condition it waits for has happened. */
 function signal() {
   let resolve!: () => void;
   const promise = new Promise<void>((done) => {
@@ -57,7 +55,6 @@ const upperDescriptor = {
   properties: { upper: { type: "string" } },
   required: ["upper"],
 };
-// Declarations type results only from an output converter.
 const upperResult: StandardSchemaV1<{ upper: string }> = {
   "~standard": {
     version: 1,
@@ -82,7 +79,6 @@ const upper = upperTool((value) => {
   return { upper: value.toUpperCase() };
 });
 
-/** A scripted model: run each script in its own turn, then finish with the observed outcomes. */
 function scripted(...scripts: string[]) {
   const requests: AgentModelRequest[] = [];
   const contexts: AgentDecisionContext<object>[] = [];
@@ -274,12 +270,6 @@ describe("code mode", () => {
     });
   });
 
-  it("starts code-mode workers with an empty environment", () => {
-    // `vi.spyOn` cannot redefine the ESM `Worker` export, so assert the option from source.
-    const source = readFileSync(new URL("./codemode-node.ts", import.meta.url), "utf8");
-    expect(source).toContain("env: {}");
-  });
-
   it("charges nested calls against maxCalls and fails fatally on handler exceptions", async () => {
     const limited = defineAgent({
       id: "codemode-limit",
@@ -411,7 +401,6 @@ describe("code mode", () => {
 });
 
 describe("code mode on defineAgentLoop", () => {
-  /** Run one script per decision, then finish with every observed outcome. */
   function autonomous(scripts: readonly string[], dryRun = false) {
     const reduced: AgentOutcome<{ upper: typeof upper }, true>[] = [];
     const capabilities: string[][] = [];
@@ -518,6 +507,57 @@ describe("code-mode Node executor", () => {
     };
     return "expected";
   `;
+
+  it("starts code-mode workers with an empty environment", () => {
+    const probe = `
+      import { isMainThread, parentPort } from "node:worker_threads";
+      if (!isMainThread) parentPort.postMessage({
+        type: "done",
+        ok: true,
+        result: JSON.stringify({
+          hasSecret: Object.hasOwn(process.env, "TUBELESS_TEST_SECRET"),
+          variableCount: Object.keys(process.env).length,
+        }),
+        logs: [],
+        logsTruncated: false,
+      });
+    `;
+    const nodeUrl = pathToFileURL(path.resolve("dist/agent/codemode-node.js")).href;
+    const program = `
+      import { createNodeCodemodeExecutor } from ${JSON.stringify(nodeUrl)};
+      const outcome = await createNodeCodemodeExecutor().execute({
+        code: "return null;",
+        tools: [],
+        maxLogLines: 1,
+        maxLogCharacters: 1,
+        call: async () => JSON.stringify({ ok: true, value: null }),
+      }, AbortSignal.timeout(10000));
+      console.log(JSON.stringify({
+        parentHasSecret: process.env.TUBELESS_TEST_SECRET === "sentinel",
+        outcome,
+      }));
+    `;
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        `data:text/javascript,${encodeURIComponent(probe)}`,
+        "--input-type=module",
+        "-e",
+        program,
+      ],
+      {
+        env: { ...process.env, TUBELESS_TEST_SECRET: "sentinel" },
+        encoding: "utf8",
+        timeout: 30_000,
+      }
+    );
+    expect(result.status, result.stderr).toBe(0);
+    const { parentHasSecret, outcome } = JSON.parse(result.stdout);
+    expect(parentHasSecret).toBe(true);
+    expect(outcome.ok).toBe(true);
+    expect(JSON.parse(outcome.result)).toEqual({ hasSecret: false, variableCount: 0 });
+  }, 30_000);
 
   it("collects the result without consulting the script's Promise.prototype.then", async () => {
     const outcome = await runCodemodeScript({

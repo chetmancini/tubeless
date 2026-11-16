@@ -88,8 +88,6 @@ export function upgradeSqliteRunStore(database: RunStoreDatabase): void {
     2: rewriteAttributeEvents,
     3: addIterationColumn,
   };
-  // One transaction covers every missing step. A bad event rolls the store
-  // back to the schema it had when the open started.
   inTransaction(database, () => {
     for (;;) {
       const version = readSqliteUserVersion(database);

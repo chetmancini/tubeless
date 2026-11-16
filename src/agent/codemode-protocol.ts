@@ -1,4 +1,3 @@
-/** Script source and callable names supplied to one code-mode worker. */
 export interface CodemodeWorkerData {
   readonly code: string;
   readonly tools: readonly string[];

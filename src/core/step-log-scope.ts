@@ -11,7 +11,6 @@ export type StepScopedLogger = PipelineLogger & {
   [STEP_LOG_SCOPE]?: (stepId: string) => PipelineLogger;
 };
 
-/** Bind `log` to `stepId` when the sink supports attribution; otherwise return it unchanged. */
 export function scopeStepLogger(log: PipelineLogger, stepId: string | undefined): PipelineLogger {
   if (stepId === undefined) return log;
   // SAFETY: the optional symbol is only defined by sinks that implement the scope contract.

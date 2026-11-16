@@ -104,7 +104,6 @@ function promptLogger(io: WorkbenchCliIo): PipelineLogger {
   };
 }
 
-/** Run an ordinary pipeline reporter, disposing it before the answer or next prompt. */
 export async function executeAgentPrompt(
   task: string,
   options: AgentPromptOptions,

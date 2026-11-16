@@ -136,8 +136,6 @@ describe("pipeline boundary validation", () => {
 
   it("applies controls independently when an options schema returns its input", async () => {
     const optionsSchema = standardSchema<{ label: string }, { label: string }>((value) => ({
-      // SAFETY: identity schema; validate receives unknown and this test only
-      // needs the value echoed as the declared options object.
       value: value as { label: string },
     }));
     const { step } = createSteps(optionsSchema);

@@ -1,3 +1,4 @@
+import { AGENT_TRACE_ATTRIBUTES, AGENT_TURN_STEPS } from "../tracing/agent-telemetry.js";
 import { STEP_ORCHESTRATION } from "../core/pipeline-step-metadata.js";
 import { agentScope } from "./execution-scope.js";
 import { createSteps, definePipeline, type IterationDecision } from "../core/pipeline.js";
@@ -52,7 +53,7 @@ export function createAgentTurn<
     | { kind: "finish"; result: Output<Result> }
     | { kind: "continue"; calls: PreparedCall[]; state: AgentState<State> };
   const { step } = createSteps<TurnOptions>();
-  const decide = step("decide", {
+  const decide = step(AGENT_TURN_STEPS.decide, {
     name: "Plan next action",
     description: "Request and validate one decision, including the complete call batch.",
     run: async (_inputs, context): Promise<Decision> => {
@@ -70,10 +71,10 @@ export function createAgentTurn<
       await scope.beginDecision(context.signal);
       const callback = context.dryRun ? definition.dryRun! : definition.decide;
       const attributes = {
-        "agent.runId": agentRunId,
-        "agent.turn": turn,
-        "agent.stateVersion": stateVersion,
-        "agent.callsAdmitted": calls,
+        [AGENT_TRACE_ATTRIBUTES.runId]: agentRunId,
+        [AGENT_TRACE_ATTRIBUTES.turn]: turn,
+        [AGENT_TRACE_ATTRIBUTES.stateVersion]: stateVersion,
+        [AGENT_TRACE_ATTRIBUTES.callsAdmitted]: calls,
       };
       const response = await scope.run(
         async () =>
@@ -96,8 +97,9 @@ export function createAgentTurn<
       const decision = decisionEnvelope(response.decision);
       context.reportAttempt(1, {
         ...attributes,
-        "agent.decision": decision.kind,
-        "agent.callCount": decision.kind === "continue" ? decision.calls.length : 0,
+        [AGENT_TRACE_ATTRIBUTES.decision]: decision.kind,
+        [AGENT_TRACE_ATTRIBUTES.callCount]:
+          decision.kind === "continue" ? decision.calls.length : 0,
       });
       if (decision.kind === "finish") {
         const result = await validateStandardSchema(
@@ -121,7 +123,7 @@ export function createAgentTurn<
       };
     },
   });
-  const calls = step("calls", {
+  const calls = step(AGENT_TURN_STEPS.calls, {
     name: "Tool calls",
     dependsOn: [decide],
     description: "Dispatch validated calls and drain active work before advancing state.",
@@ -134,10 +136,10 @@ export function createAgentTurn<
       await scope.admitCalls(decision.calls.length, context.signal);
       const admitted = execution.calls + decision.calls.length;
       context.reportAttempt(1, {
-        "agent.runId": agentRunId,
-        "agent.turn": execution.turn,
-        "agent.callsAdmitted": admitted,
-        "agent.callCount": decision.calls.length,
+        [AGENT_TRACE_ATTRIBUTES.runId]: agentRunId,
+        [AGENT_TRACE_ATTRIBUTES.turn]: execution.turn,
+        [AGENT_TRACE_ATTRIBUTES.callsAdmitted]: admitted,
+        [AGENT_TRACE_ATTRIBUTES.callCount]: decision.calls.length,
       });
       const toolNames = new Map(decision.calls.map((call) => [call.id, call.tool.name]));
       const progress = createMappedChildProgress(
@@ -169,11 +171,11 @@ export function createAgentTurn<
           progress.start(call.id);
           try {
             const attributes = {
-              "agent.runId": agentRunId,
-              "agent.turn": execution.turn,
-              "agent.callId": call.id,
-              "agent.tool": call.tool.name,
-              "agent.parentAttemptId": context.attemptId,
+              [AGENT_TRACE_ATTRIBUTES.runId]: agentRunId,
+              [AGENT_TRACE_ATTRIBUTES.turn]: execution.turn,
+              [AGENT_TRACE_ATTRIBUTES.callId]: call.id,
+              [AGENT_TRACE_ATTRIBUTES.tool]: call.tool.name,
+              [AGENT_TRACE_ATTRIBUTES.parentAttemptId]: context.attemptId,
             };
             context.reportAttempt(1, attributes);
             const complete = async (outcome: CallOutcome, label?: string) => {
@@ -184,7 +186,10 @@ export function createAgentTurn<
             const admission = await journal?.startCall(scope.agentKey, call.id, call.tool.replay);
             if (admission?.kind === "outcome") {
               if (admission.reused)
-                context.reportAttempt(1, { ...attributes, "agent.checkpointReused": true });
+                context.reportAttempt(1, {
+                  ...attributes,
+                  [AGENT_TRACE_ATTRIBUTES.checkpointReused]: true,
+                });
               const { outcome } = admission;
               await agentTranscript(context)?.record(execution.turn, {
                 kind: "outcome",
@@ -231,7 +236,7 @@ export function createAgentTurn<
       return partial.results;
     },
   });
-  const reduce = step("reduce", {
+  const reduce = step(AGENT_TURN_STEPS.reduce, {
     name: "Update context",
     dependsOn: [decide, calls],
     description: "Commit one owned state snapshot, or publish the validated finish result.",
@@ -253,10 +258,10 @@ export function createAgentTurn<
         : decision.state;
       throwIfAborted(context.signal, "Agent reduction");
       context.reportAttempt(1, {
-        "agent.runId": context.options.agentRunId,
-        "agent.turn": execution.turn,
-        "agent.stateVersion": execution.stateVersion + 1,
-        "agent.callsAdmitted": execution.calls + decision.calls.length,
+        [AGENT_TRACE_ATTRIBUTES.runId]: context.options.agentRunId,
+        [AGENT_TRACE_ATTRIBUTES.turn]: execution.turn,
+        [AGENT_TRACE_ATTRIBUTES.stateVersion]: execution.stateVersion + 1,
+        [AGENT_TRACE_ATTRIBUTES.callsAdmitted]: execution.calls + decision.calls.length,
       });
       const next = {
         kind: "next",

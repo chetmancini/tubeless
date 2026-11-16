@@ -334,7 +334,6 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
           next.startedAtMs !== previous.startedAtMs
         )
           return undefined;
-        // Prefer one full traversal to overlapping ancestor walks in a large batch.
         remainingWork -= childrenOf(next.runId).length;
         let id: string | undefined = next.runId;
         while (id && runsById.has(id)) {

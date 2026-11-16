@@ -4,7 +4,6 @@ import type { DurableStorageLike } from "./cloudflare-storage.js";
 const FORBIDDEN =
   /^\s*(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|PRAGMA\s+(journal_mode|user_version))\b/i;
 
-/** Blank out comments and string literals so statement-shape checks see only SQL structure. */
 function sqlSkeleton(query: string): string {
   return query.replace(/'(?:[^']|'')*'|--[^\n]*|\/\*[\s\S]*?\*\//g, (token) =>
     token.startsWith("'") ? "''" : " "
@@ -58,7 +57,6 @@ export function createFakeDurableStorage(): DurableStorageLike & {
       }
     },
     async get<T>(key: string) {
-      // SAFETY: tests read back the values they wrote.
       return values.get(key) as T | undefined;
     },
     async put(key, value) {

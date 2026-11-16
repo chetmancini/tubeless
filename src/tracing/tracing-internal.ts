@@ -251,8 +251,6 @@ export function createPipelineTraceEmitter(
     : never;
 
   const emit = (fields: PipelineTraceEmission): void => {
-    // SAFETY: each emission is one PipelineTraceEvent variant minus context,
-    // timestamp, and version; reconstituting those fields restores the variant.
     const event = {
       ...context,
       ...fields,

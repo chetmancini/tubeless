@@ -9,7 +9,8 @@ import { agentError } from "./agent-state.js";
 import { compileAgent } from "./compile-agent.js";
 
 export { pipelineTool } from "./pipeline-tool.js";
-export { defineTool, ToolError } from "./tools.js";
+export { defineTool } from "./tools.js";
+export { ToolError } from "./tool-error.js";
 export type { DefaultAgentTools } from "./default-tools.js";
 export type {
   AgentCall,

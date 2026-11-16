@@ -5,6 +5,7 @@ import {
   wireLiteral,
   type WireSchema,
 } from "../tracing/wire-schema.js";
+import { MAX_ATTEMPT_ID_LENGTH } from "./attempt-store.js";
 
 export const COLLECTOR_BATCH_BYTES = 1_048_576;
 export const COLLECTOR_BATCH_EVENTS = 50;
@@ -13,7 +14,33 @@ export const COLLECTOR_CONTROL_BYTES = 8192;
 export const COLLECTOR_FAILURE_BYTES = 65_536;
 export const COLLECTOR_MESSAGE_BYTES = 8192;
 export const COLLECTOR_RESPONSE_BYTES = 8192;
-const collectorId = wireString({ maxLength: 256 });
+export const collectorId = wireString({ maxLength: MAX_ATTEMPT_ID_LENGTH });
+
+export const COLLECTOR_CREDENTIAL_ID_BYTES = 16;
+export const COLLECTOR_SECRET_BYTES = 32;
+const credentialIdPattern = `[a-f0-9]{${COLLECTOR_CREDENTIAL_ID_BYTES * 2}}`;
+const secretPattern = `[a-f0-9]{${COLLECTOR_SECRET_BYTES * 2}}`;
+const credentialId = new RegExp(`^${credentialIdPattern}$`);
+const credentialToken = new RegExp(`^(${credentialIdPattern})\\.(${secretPattern})$`);
+const credentialVerifier = /^[a-f0-9]{64}$/;
+
+export function isCollectorCredentialId(value: unknown): value is string {
+  return typeof value === "string" && credentialId.test(value);
+}
+
+export function isCollectorVerifier(value: unknown): value is string {
+  return typeof value === "string" && credentialVerifier.test(value);
+}
+
+export function parseCollectorToken(value: string | null | undefined) {
+  const match = typeof value === "string" ? credentialToken.exec(value) : null;
+  return match ? { credentialId: match[1]!, secret: match[2]! } : undefined;
+}
+
+export function encodeCollectorToken(credentialId: string, secret: string): string {
+  return `${credentialId}.${secret}`;
+}
+
 export const claimSchema = wireObject(
   { attemptId: collectorId, deploymentId: collectorId },
   { strict: true }

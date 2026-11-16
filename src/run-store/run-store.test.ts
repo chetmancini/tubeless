@@ -577,16 +577,13 @@ describe("incremental pipeline run projector", () => {
     expect(firstRunOne).toBeDefined();
     expect(firstRunTwo).toBeDefined();
 
-    // Only run-2 receives a new event.
     projector.append([event(3, "step.planned", { runId: "run-2", stepId: "load" })]);
 
     const second = projector.snapshot();
     const secondRunOne = second.runs.find((run) => run.runId === "run-1");
     const secondRunTwo = second.runs.find((run) => run.runId === "run-2");
 
-    // run-1 was untouched: same object reference, proving it was not recomputed.
     expect(secondRunOne).toBe(firstRunOne);
-    // run-2 changed: must be a new object reflecting the new step.
     expect(secondRunTwo).not.toBe(firstRunTwo);
     expect(secondRunTwo?.steps).not.toEqual(firstRunTwo?.steps);
   });
@@ -675,7 +672,6 @@ describe("incremental pipeline run projector", () => {
       error: { message: "original failure", cause: { message: "original cause" } },
     });
     first.error!.cause!.message = "consumer changed cause";
-    // A new snapshot must be derived from private projection state, not the old output.
     projector.append([event(2, "pipeline.log", { payload: { message: "late log" } })]);
     const next = projector.snapshot(20).runs[0]!;
     expect(next.error).toMatchObject({

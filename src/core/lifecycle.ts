@@ -32,7 +32,7 @@ export interface PipelineLifecycleObserver {
     attributes?: PipelineTraceAttributes,
     attemptId?: string
   ): void;
-  stepStatus(event: PipelineStepStatus, trace?: boolean): void;
+  stepStatus(event: PipelineStepStatus): void;
 }
 
 const PIPELINE_LOGGER_BASE = Symbol("pipelineLoggerBase");
@@ -40,11 +40,9 @@ const PIPELINE_LOGGER_BASE = Symbol("pipelineLoggerBase");
 type TracedPipelineLogger = PipelineLogger & { [PIPELINE_LOGGER_BASE]?: PipelineLogger };
 
 function basePipelineLogger(log: PipelineLogger): PipelineLogger {
-  // SAFETY: the optional symbol exists only on loggers created by this module.
   return (log as TracedPipelineLogger)[PIPELINE_LOGGER_BASE] ?? log;
 }
 
-/** Describe an arbitrary thrown value without letting the description throw. */
 function hookFailureMessage(error: unknown): string {
   try {
     return String(error instanceof Error ? error.message : error);
@@ -131,7 +129,7 @@ export function createPipelineLifecycleObserver(
       emitHook(runtime, (hooks) => hooks.onPipelineStart?.(structuredClone(plan)));
       trace?.pipelineStart(plan, targetIds);
     },
-    stepStatus(event, traceStatus = true) {
+    stepStatus(event) {
       emitHook(runtime, (hooks) => hooks.onStepStatus?.(structuredClone(event)));
       switch (event.status) {
         case "planned":
@@ -168,7 +166,7 @@ export function createPipelineLifecycleObserver(
           emitHook(runtime, (hooks) => hooks.onStepComplete?.(structuredClone(event)));
           break;
       }
-      if (traceStatus) trace?.stepStatus(event);
+      trace?.stepStatus(event);
     },
     recordArtifact: (stepId, attemptId, record, preview) =>
       trace?.artifact(stepId, attemptId, record, preview),

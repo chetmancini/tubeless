@@ -13,7 +13,6 @@ export interface LaunchTracing {
   close(): Promise<void>;
 }
 
-/** Own factory setup and rollback; ordinary runs retain core's trace flushing. */
 export function createLaunchTracing<TContext extends ProjectTraceContext>(options: {
   readonly context: TContext;
   readonly configurations: readonly (PipelineTraceExporterOptions<TContext> | undefined)[];

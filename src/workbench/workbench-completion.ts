@@ -172,7 +172,6 @@ async function flagValueCompletion(
   return valuesOf(value === "target" ? plan.view.targetIds : plan.view.stepIds);
 }
 
-/** Complete a pipeline command's own arguments after `run <id> --`. */
 async function commandArgumentCompletion(
   scanned: ScannedWords & { readonly passthrough: readonly string[] },
   current: string,
@@ -432,7 +431,6 @@ function isCompletionShell(value: string): value is CompletionShell {
   return (COMPLETION_SHELLS as readonly string[]).includes(value);
 }
 
-/** `tubeless completion <shell>`: print the completion script for one shell. */
 export async function runCompletion(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {

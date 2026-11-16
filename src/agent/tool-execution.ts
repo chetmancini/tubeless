@@ -18,7 +18,6 @@ type ToolExecutionResult =
       readonly failure: PipelineExecutionError;
     };
 
-/** Execute one prepared call; callers own admission, checkpointing and aggregate progress. */
 export async function executePreparedToolCall(
   call: PreparedCall,
   context: PipelineStepContext<object>,

@@ -153,7 +153,6 @@ describe("canonical child progress projection", () => {
       };
       hooks.onStepProgress!(changed);
       expect(snapshots).toHaveLength(2);
-      // Pair the focused update with an equivalent canonical copy.
       hooks.onStepStatus!(structuredClone(changed));
       expect(snapshots).toHaveLength(2);
       expect(snapshots.at(-1)?.details).toContainEqual(
@@ -172,7 +171,6 @@ describe("canonical child progress projection", () => {
     hooks.onStepStatus!(complete);
     progress.childCompleted("item");
     progress.childCompleted("item");
-    // A duplicate terminal event after reconciliation still cannot advance the count.
     hooks.onStepStatus!(complete);
     expect(snapshots.at(-1)).toMatchObject({ completed: 2, total: 2 });
     progress.fail("item", new Error("mapping failed"), false);

@@ -1,5 +1,7 @@
 import type { AgentLimits, AgentOutcome, Tools } from "./agent-types.js";
 import { DEFAULT_AGENT_LIMITS, validAgentLimit } from "./agent-limits.js";
+import { isStepCachePolicy } from "../tracing/tracing-constants.js";
+import type { StepCachePolicy } from "../core/pipeline-cache.js";
 
 export interface StoredBudget {
   depth: number;
@@ -32,7 +34,7 @@ interface AgentSnapshot {
     options: object;
     environment: string;
     cwd: string;
-    cache: "use" | "recompute" | "bypass";
+    cache: StepCachePolicy;
   };
   execution: { state: unknown; turn: number; stateVersion: number; calls: number };
 }
@@ -121,7 +123,7 @@ function checkAgent(agent: unknown): void {
     !options(metadata.options) ||
     (metadata.implementationVersion !== undefined &&
       typeof metadata.implementationVersion !== "string") ||
-    !["use", "recompute", "bypass"].includes(String(metadata.cache))
+    !isStepCachePolicy(String(metadata.cache))
   )
     throw new Error("Invalid saved agent metadata");
   if (
@@ -177,7 +179,6 @@ function checkBudget(budget: unknown): void {
     throw new Error("Saved agent budget exceeds its limits");
 }
 
-/** Validate receipts and counters before treating decoded storage as prepared work. */
 export function checkedCheckpoint(value: unknown): Checkpoint {
   if (!record(value) || value.version !== 1 || !record(value.agents) || !record(value.budgets))
     throw new Error("Invalid agent checkpoint envelope");
@@ -186,6 +187,5 @@ export function checkedCheckpoint(value: unknown): Checkpoint {
     if (!Object.hasOwn(value.budgets, key)) throw new Error("Missing saved agent budget");
   }
   for (const budget of Object.values(value.budgets)) checkBudget(budget);
-  // SAFETY: metadata, execution counters, call receipts and budget contracts were checked above.
   return value as unknown as Checkpoint;
 }

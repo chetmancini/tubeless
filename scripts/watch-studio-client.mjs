@@ -4,9 +4,7 @@ import { fileURLToPath } from "node:url";
 import { generateStudioClient, studioClientPaths } from "./generate-studio-client.mjs";
 
 // `tsrs --watch` never emits the Studio browser bundle. tsconfig excludes the
-// browser entry so a compile cannot overwrite the generator's output. Rebuild
-// on source changes. ponytail: accept extra rebuilds; use bundler dependency
-// metadata if filtering becomes necessary.
+// browser entry so a compile cannot overwrite the generator's output.
 
 const defaultPackageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const defaultDebounceMs = 50;

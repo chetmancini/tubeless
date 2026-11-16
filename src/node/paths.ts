@@ -12,9 +12,6 @@ export function definePaths<T extends Record<string, string>>(
   relativePaths: T
 ): (cwd: string) => { [K in keyof T]: string } {
   return (cwd: string) =>
-    // SAFETY: Object.entries(relativePaths) yields exactly T's keys, and every
-    // value is a resolved string, so the result preserves T's keys while widening
-    // relative path literals to string.
     Object.fromEntries(
       Object.entries(relativePaths).map(([key, relativePath]) => [
         key,

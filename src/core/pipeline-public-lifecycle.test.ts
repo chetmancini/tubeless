@@ -383,7 +383,6 @@ describe("definePipeline lifecycle and scheduling", () => {
         return `${inputs.build}+written`;
       },
     });
-    // Listed backwards on purpose: `write` before its dependency `build`.
     const pipeline = definePipeline({
       id: "reordered",
       steps: [write, build],
@@ -406,7 +405,6 @@ describe("definePipeline lifecycle and scheduling", () => {
       dependsOn: [build],
       run: (inputs) => `${inputs.build}+written`,
     });
-    // `build` is a real dependency but never listed in `steps` — a copy/paste bug.
     expect(
       thrownDefinitionErrors(() =>
         definePipeline({

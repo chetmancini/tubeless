@@ -56,7 +56,15 @@ export interface HostedAttemptStore {
   revokeAttempt(launchId: string, attemptId: string): Promise<void>;
 }
 
+export const MAX_ATTEMPT_ID_LENGTH = 256;
+
+export function isAttemptId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_ATTEMPT_ID_LENGTH;
+}
+
 export function assertAttemptId(value: string): void {
-  if (typeof value !== "string" || value.length === 0 || value.length > 256)
-    throw new Error("Hosted attempt identities must contain 1 to 256 characters.");
+  if (!isAttemptId(value))
+    throw new Error(
+      `Hosted attempt identities must contain 1 to ${MAX_ATTEMPT_ID_LENGTH} characters.`
+    );
 }

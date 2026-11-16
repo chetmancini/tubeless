@@ -1,5 +1,5 @@
 import * as path from "path";
-import { openCheckpoint, type CheckpointStore } from "../node/checkpoint.js";
+import { openCheckpoint } from "../node/checkpoint.js";
 import { inMemoryCheckpointStore } from "../utilities/checkpoint-store.js";
 import {
   assertNoDuplicateFlags,
@@ -121,7 +121,6 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       });
     }
     if (errors.length > 0) return { kind: "error", errors, helpText };
-    // SAFETY: resolveParam populated every effective schema key and all input checks passed.
     const typedValues = values as CliParams<TSchema>;
     const validationErrors = config.validate?.(typedValues, context) ?? [];
     return validationErrors.length > 0
@@ -214,10 +213,6 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     return { ...context, checkpoint };
   }
 
-  /**
-   * No-op unless `config.checkpoint` is set, a store is attached, and the run completed
-   * without a dry run or caller cancellation.
-   */
   function finalizeCheckpoint(context: CliContext, values: CliParams<TSchema>): void {
     const checkpointConfig = config.checkpoint;
     if (!checkpointConfig || !context.checkpoint || values.dryRun || context.signal?.aborted) {
@@ -292,11 +287,7 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     }
     const managedSignal = manageMainSignal(context);
     try {
-      const runContext = attachCheckpoint(managedSignal.context, result.values);
-      await config.run(result.values, runContext);
-      if (!managedSignal.wasInterrupted()) {
-        finalizeCheckpoint(runContext, result.values);
-      }
+      await executeValues(result.values, managedSignal.context);
     } catch (error) {
       context.log.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
       process.exitCode = managedSignal.wasInterrupted()

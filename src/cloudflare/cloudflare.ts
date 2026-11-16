@@ -35,7 +35,7 @@ export interface CloudflareTraceContext<TEnv = unknown> extends CloudflareRunTra
   readonly env: TEnv;
 }
 
-/** Options for createCloudflareApp. */
+/** Configure application tracing and the cooperative run deadline for a Cloudflare deployment. */
 export interface CloudflareAppOptions<TEnv = unknown> {
   /** Extra destinations composed with project exporters and Studio ingestion. */
   readonly tracing?: PipelineTraceExporterOptions<CloudflareTraceContext<TEnv>>;
@@ -214,7 +214,6 @@ export function createCloudflareApp<TEnv = unknown>(
 
     constructor(ctx: unknown, env: TubelessEnv) {
       super(ctx, env);
-      // SAFETY: see TubelessStudio.
       const state = ctx as DurableObjectStateLike;
       this.#core = new RunObjectCore({
         storage: state.storage,

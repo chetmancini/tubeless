@@ -1,5 +1,5 @@
 import { utf8ByteLength } from "./provider-utf8.js";
-import { MAX_RESPONSE_BYTES } from "./provider-http.js";
+import { MAX_RESPONSE_BYTES } from "./provider-limits.js";
 import { readProviderEvents } from "./provider-sse.js";
 import type { Awaitable } from "./agent-types.js";
 import { awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
@@ -18,13 +18,11 @@ export type AgentTextEvent = Readonly<{
 /** The destination owns filtering and I/O; its signal includes the provider deadline. */
 export type AgentTextSink = (event: AgentTextEvent, signal: AbortSignal) => Awaitable<void>;
 
-/** Provider-owned assembly over bounded data events and a public-text writer. */
 export type AgentTextProtocol = (
   events: AsyncIterable<string>,
   write: (text: string) => Promise<void>
 ) => Promise<Record<string, unknown>>;
 
-/** Own one bounded attempt; notify its destination once on completion or interruption. */
 export async function readAgentText(
   response: Response,
   protocol: AgentTextProtocol,

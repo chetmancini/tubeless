@@ -337,7 +337,6 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     (selection.status === "loading" ? selection.summary?.pipelineId : undefined);
   const runPipeline = entries.find((entry) => entry.pipelineId === runPipelineId);
   const launchTarget = (page === "run" ? runPipeline : pipeline)?.command;
-  // Until a read for the new scope lands, show no runs rather than another scope's list.
   const listCurrent = data.snapshotPipelineId === route.pipelineId;
   const roots = (listCurrent && snapshot?.runs) || [];
   const matchingRuns = listCurrent ? (snapshot?.matchingRootCount ?? 0) : 0;

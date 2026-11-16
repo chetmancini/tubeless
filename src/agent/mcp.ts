@@ -1,6 +1,7 @@
 import type { AgentTool } from "./agent-types.js";
 import { throwIfAborted } from "../utilities/abort.js";
-import { defineTool, ToolError } from "./tools.js";
+import { defineTool } from "./tools.js";
+import { ToolError } from "./tool-error.js";
 import { httpTransport, type McpHttpOptions } from "./mcp-http.js";
 import { mcpInputSchema, mcpResultSchema, type McpToolResult } from "./mcp-schema.js";
 import { isRecord, type OpenMcpTransport } from "./mcp-protocol.js";
@@ -32,7 +33,6 @@ export interface McpServers<Name extends string> {
   [Symbol.asyncDispose](): Promise<void>;
 }
 
-/** A validated server configuration, ready to connect. */
 interface ServerPlan {
   readonly label: string;
   readonly timeoutMs: number;
@@ -40,7 +40,6 @@ interface ServerPlan {
   readonly open: OpenMcpTransport;
 }
 
-/** The fields of a listed tool that the adapter uses. */
 interface McpToolInfo {
   readonly name: string;
   readonly description?: string;
@@ -52,7 +51,6 @@ const MAX_TOOLS = 4096;
 const MAX_TOOL_PAGES = 1024;
 const nonblank = (value: unknown): value is string => typeof value === "string" && !!value.trim();
 
-/** Validate one server entry before any connection starts. */
 function plan(label: string, server: McpServer): ServerPlan {
   if (!/^[A-Za-z][A-Za-z0-9-]{0,31}$/.test(label))
     throw new Error(`Invalid MCP server name ${label}: use letters, digits and hyphens`);
@@ -72,7 +70,6 @@ function plan(label: string, server: McpServer): ServerPlan {
   };
 }
 
-/** List every tool, following pagination, and parse the fields the adapter relies on. */
 async function discover(session: McpSession, label: string, signal?: AbortSignal) {
   const tools: McpToolInfo[] = [];
   const cursors = new Set<string>();

@@ -59,7 +59,6 @@ export function decisionEnvelope(
     value.calls.length === 0
   )
     return invalid("Agent decision must finish(result) or continue with a nonempty calls array");
-  // Leave call traversal to prepareCalls, after the turn admits the batch by length.
   return { kind: "continue", calls: value.calls };
 }
 
@@ -85,7 +84,6 @@ export async function prepareCalls(
     ids.add(call.id);
     return { id: call.id, tool: call.tool, input: call.input };
   });
-  // Resolve the complete registry membership before invoking any argument validators.
   const entries = calls.map((call) => {
     const tool = registry.get(call.tool);
     if (!tool) return invalid(`Unknown agent tool: ${call.tool}`);
@@ -128,7 +126,6 @@ export async function prepareCalls(
   return prepared;
 }
 
-/** Build one prepared call's child options and context; pipeline tools carry their delegated scope. */
 export function callInvocation(
   call: PreparedCall,
   context: PipelineStepContext<object>,

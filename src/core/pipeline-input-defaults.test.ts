@@ -36,7 +36,6 @@ describe("pipeline input defaults", () => {
 
   it("validates and transforms default options through the input schema", async () => {
     const optionsSchema = standardSchema<{ limit?: number }, { limit: number }>((value) => {
-      // SAFETY: this test supplies object inputs to the declared schema.
       const options = value as { limit?: number };
       return { value: { limit: options.limit ?? 10 } };
     });

@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
 import { fileWorkerExecArgv } from "../utilities/worker-argv.js";
+import { MAX_TIMEOUT_DELAY_MS } from "../utilities/abort.js";
 import type { PipelineStepContext, RemoteStepAdapter } from "../core/pipeline.js";
 import {
   decodeWorkerError,
@@ -70,8 +71,12 @@ export function createWorkerThreadAdapter<TPayload = unknown>(
   if (!Number.isInteger(poolSize) || poolSize < 1) {
     throw new RangeError("poolSize must be a positive finite integer");
   }
-  if (!Number.isFinite(cancelTimeoutMs) || cancelTimeoutMs < 0 || cancelTimeoutMs > 2_147_483_647) {
-    throw new RangeError("cancelTimeoutMs must be between 0 and 2147483647");
+  if (
+    !Number.isFinite(cancelTimeoutMs) ||
+    cancelTimeoutMs < 0 ||
+    cancelTimeoutMs > MAX_TIMEOUT_DELAY_MS
+  ) {
+    throw new RangeError(`cancelTimeoutMs must be between 0 and ${MAX_TIMEOUT_DELAY_MS}`);
   }
   if (!exportName.trim()) throw new TypeError("exportName must be non-empty");
   if (options.module.protocol !== "file:" && options.module.protocol !== "data:") {

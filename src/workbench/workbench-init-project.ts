@@ -2,9 +2,6 @@ import { PROJECT_TARGET } from "./workbench-command-specs.js";
 import type { ProjectScaffold } from "./workbench-init.js";
 import { DEFAULT_PIPELINE_PROJECT_FILE } from "./workbench-project-loader.js";
 
-// Interpolated so the runtime graph checks do not mistake template text for an import of this module.
-const STARTER_PIPELINE_IMPORT = "./pipelines/import.js";
-
 /** Mirrors the README quick start so the first project and the first program agree. */
 const STARTER_PIPELINE = `import { createSteps, definePipeline } from "tubeless";
 
@@ -40,7 +37,7 @@ export const projectScaffold: ProjectScaffold = {
         path: DEFAULT_PIPELINE_PROJECT_FILE,
         contents: `import { definePipelineCommand } from "tubeless/cli";
 import { defineProject } from "tubeless/project";
-import { ImportPipeline } from "${STARTER_PIPELINE_IMPORT}";
+import { ImportPipeline } from "./pipelines/import.js";
 
 // Register each pipeline exactly once. Pipelines with a Standard JSON Schema
 // options schema can be listed directly; this one is type-only, so its command

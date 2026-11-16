@@ -168,7 +168,6 @@ describe("tubeless __complete", () => {
       ":files",
     ]);
     expect((await complete(directory, "history", "--pipeline", "")).lines).toEqual([]);
-    // Only the first positional is a pipeline.
     expect((await complete(directory, "plan", "report", "")).lines).toEqual([]);
   });
 
@@ -461,7 +460,6 @@ describe("tubeless __complete", () => {
         .sort();
       expect(completed, command).toEqual(rows.map((row) => `--${row[2]}`).sort());
       for (const [, short, name, takesValue] of rows) {
-        // A value-taking flag completes its value, so the next word gets no flag list.
         const expectFlags = takesValue === undefined ? completed.length : 0;
         for (const spelling of short === undefined ? [`--${name}`] : [`--${name}`, `-${short}`]) {
           const after = await complete(tmpdir(), command, spelling, "--");

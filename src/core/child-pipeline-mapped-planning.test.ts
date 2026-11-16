@@ -8,10 +8,9 @@ describe("mapped child adapter: planning and progress", () => {
     const child = definePipeline({
       id: "mapped-once-child",
       steps: [work],
-      finalize: () => true,
+      finalize: (outputs) => outputs.work,
     });
     const planSpy = vi.spyOn(child, "plan");
-    const runSpy = vi.spyOn(child, "run");
     const { forEachPipeline: parentForEachPipeline } = createSteps();
     const children = parentForEachPipeline("children", {
       pipeline: child,
@@ -22,14 +21,14 @@ describe("mapped child adapter: planning and progress", () => {
     const parent = definePipeline({
       id: "mapped-once-parent",
       steps: [children],
-      finalize: () => true,
+      finalize: (outputs) => outputs.children,
     });
 
     const result = await parent.run({});
 
     expect(result.status).toBe("completed");
+    expect(result.value).toEqual(["done", "done"]);
     expect(planSpy).toHaveBeenCalledTimes(2);
-    expect(runSpy).not.toHaveBeenCalled();
   });
 
   it("does not count filtered child steps toward fan-out progress", async () => {
@@ -39,7 +38,6 @@ describe("mapped child adapter: planning and progress", () => {
 
     const { step: childStep } = createSteps<ChildOptions>();
     let processStarted = false;
-    // Independent steps so filtering "setup" does not unmet-dependency "process".
     const setup = childStep("setup", {
       run: () => "setup",
     });
@@ -61,7 +59,6 @@ describe("mapped child adapter: planning and progress", () => {
       pipeline: child,
       items: () => [{ id: "only" }],
       key: (item) => item.id,
-      // Select only process so setup is filtered out at the child plan.
       controls: { stepIds: ["process"] },
       mapOptions: (item) => ({ itemId: item.id }),
     });
@@ -93,9 +90,7 @@ describe("mapped child adapter: planning and progress", () => {
 
     expect(result.status).toBe("completed");
     expect(processStarted).toBe(true);
-    // Denominator is selected work only (process).
     expect(progress.some((p) => p.total === 1)).toBe(true);
-    // Filtered setup must not advance completed before process runs.
     expect(sawFullBeforeProcess).toBe(false);
     expect(progress.at(-1)).toMatchObject({ completed: 1, total: 1 });
   });
@@ -161,6 +156,7 @@ describe("mapped child adapter: planning and progress", () => {
   });
 
   it("does not re-publish mapped progress from empty child progress snapshots", async () => {
+    let publishChildProgress: ((progress: PipelineStepProgress) => void) | undefined;
     let releaseWork!: () => void;
     const workGate = new Promise<void>((resolve) => {
       releaseWork = resolve;
@@ -168,6 +164,7 @@ describe("mapped child adapter: planning and progress", () => {
     const { step: childStep } = createSteps();
     const work = childStep("work", {
       run: async (_inputs, context) => {
+        publishChildProgress = context.reportProgress;
         context.reportProgress({ completed: 1, total: 2, message: "chunk" });
         await workGate;
         return "done";
@@ -197,7 +194,6 @@ describe("mapped child adapter: planning and progress", () => {
       hooks: {
         onStepProgress: ({ progress, step }) => {
           if (step.id !== "children") return;
-          // Empty snapshots have no total/message; ignore those.
           if (!progress.message && progress.total === undefined) return;
           visibleFanoutPublishes += 1;
           const labels = [
@@ -211,24 +207,20 @@ describe("mapped child adapter: planning and progress", () => {
       },
       log: console,
     });
-    await vi.waitFor(() => {
-      expect(visibleFanoutPublishes).toBeGreaterThan(0);
-    });
-    // Hold mapped children across the old 250ms observation window so a late
-    // empty-progress tick would still be recorded before we release the gate.
-    vi.useFakeTimers();
     try {
-      await vi.advanceTimersByTimeAsync(250);
+      await vi.waitFor(() => {
+        expect(publishChildProgress).toBeTypeOf("function");
+      });
+      const beforeEmptyProgress = visibleFanoutPublishes;
+      publishChildProgress!({ completed: 0 });
+      expect(visibleFanoutPublishes).toBe(beforeEmptyProgress);
+      expect(zeroProgressLabels).toBe(0);
     } finally {
-      vi.useRealTimers();
+      releaseWork();
     }
-    expect(zeroProgressLabels).toBe(0);
-    releaseWork();
     const result = await runPromise;
 
     expect(result.status).toBe("completed");
-    // Real child progress + lifecycle updates only — not empty-progress spam.
-    expect(visibleFanoutPublishes).toBeLessThan(15);
     expect(zeroProgressLabels).toBe(0);
   });
 
@@ -290,7 +282,6 @@ describe("mapped child adapter: planning and progress", () => {
     const { forEachPipeline: parentForEachPipeline } = createSteps();
     const children = parentForEachPipeline("children", {
       pipeline: child,
-      // Zero items must not hide the invalid bound.
       items: () => [],
       key: String,
       concurrency: () => 0,

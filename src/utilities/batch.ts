@@ -11,7 +11,6 @@ export interface RunConcurrentOptions {
 /** Asynchronous worker invoked for one input item by the concurrency helpers. */
 export type ConcurrentWorker<T, R> = (item: T, index: number, signal?: AbortSignal) => Promise<R>;
 
-/** Split an input collection into fixed-size batches. */
 function chunk<T>(items: readonly T[], size: number): T[][] {
   if (!Number.isInteger(size) || size <= 0) {
     throw new Error(`chunk size must be a positive integer, got ${size}`);

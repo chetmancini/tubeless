@@ -9,7 +9,6 @@ export function optionalToolField<T>(schema: WireSchema<T>) {
   );
 }
 
-/** Build a built-in tool's object boundary from its declared field schemas. */
 export function toolObject<const Shape extends Readonly<Record<string, WireSchema<unknown>>>>(
   shape: Shape,
   check?: (value: ReturnType<ReturnType<typeof wireObject<Shape>>["decode"]>) => void
@@ -21,7 +20,6 @@ export function toolObject<const Shape extends Readonly<Record<string, WireSchem
       version: 1,
       vendor: "tubeless",
       // Models supply nullable options explicitly; application calls may omit them.
-      // Decoding does not transform values, so output descriptors match inputs.
       jsonSchema: {
         input: () => ({ ...schema.jsonSchema, required: fields }),
         output: () => ({ ...schema.jsonSchema, required: fields }),

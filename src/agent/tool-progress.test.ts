@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PipelineLogger, PipelineStepProgress } from "../core/pipeline.js";
 import { defineAgent } from "./agent.js";
-import { ToolError } from "./tools.js";
+import { ToolError } from "./tool-error.js";
 import { remote, workspaceAgent } from "./environment.test-support.js";
 
 function capture() {

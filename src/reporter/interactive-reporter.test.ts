@@ -254,7 +254,6 @@ describe("createPipelineReporter", () => {
       const screen = renderTerminal(output.chunks.join(""), columns);
       const failedOutput = screen.indexOf("fail check output:");
       if (columns < 120) {
-        // Narrow terminals already printed every line to scrollback.
         expect(screen).toContain("[Quiet] all good");
         expect(screen).toContain("[check] nested detail");
         expect(failedOutput).toBe(-1);
@@ -355,7 +354,6 @@ describe("createPipelineReporter", () => {
     expect(reporter.mode).toBe("interactive");
     expect(rendered).toContain("\u001B[?25l");
     expect(rendered).toContain("\u001B[?25h");
-    // Logs stay in scrollback while progress rows are replaced in place.
     const screen = renderTerminal(rendered);
     expect(screen).toContain("[load] loaded a batch");
     expect(screen.join("\n")).not.toContain("40% 4/10 records");
@@ -390,7 +388,6 @@ describe("createPipelineReporter", () => {
     const rendered = output.chunks.join("");
     expect(rendered).toContain("fan-out");
     expect(rendered).toContain("1/4 items · 2 running (max 2)");
-    // Indented child rows under the parent step.
     expect(rendered).toMatch(/\n {4}[^\n]*shard-b[^\n]*write/);
     expect(rendered).toMatch(/\n {4}[^\n]*shard-a[^\n]*parse/);
   });
@@ -764,7 +761,6 @@ describe("createPipelineReporter", () => {
           .map((chunk) => chunk.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "").trimEnd());
         const runningFrames = liveFrames.filter((frame) => /[-\\|/] slow/.test(frame));
         const uniqueRunning = new Set(runningFrames);
-        // Reporter timer (not kernel progress) must animate spinner/elapsed while live.
         expect(runningFrames.length).toBeGreaterThanOrEqual(2);
         expect(uniqueRunning.size).toBeGreaterThanOrEqual(2);
       });

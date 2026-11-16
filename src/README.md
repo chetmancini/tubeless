@@ -39,6 +39,9 @@ their source files.
   boundary returns full reports for handler-origin error classification.
   `agent/default-tools.ts` supplies the standard registry against the typed
   environment and supplies typed activity formatters to the private tool compiler.
+  `default-tool-names.ts` owns the pure builtin inventory shared with CLI setup;
+  the registry must provide exactly those names. `tool-error.ts` owns recoverable
+  handler errors independently of tool compilation.
   `tool-progress.ts` starts action previews inside handlers. `tool-execution.ts` owns
   prepared-call invocation, validated results, failure classification and terminal
   activity logs for direct and code-mode calls. `turn.ts` owns batch progress and
@@ -92,6 +95,12 @@ their source files.
   authentication-error handling: known codes, no raw provider messages. Shared
   `provider-usage.ts` records per-request numeric token/cache counters and
   timing through existing trace events, including compaction and reminder requests.
+  `provider-limits.ts` owns provider byte budgets; the compaction threshold
+  reserves the tool-result batch budget within the request budget. Provider JSON
+  responses use the shared bounded body reader, with retry classification and
+  JSON diagnostics retained by the provider adapter.
+  Pure `tracing/agent-telemetry.ts` owns the counter inventory, attribute names
+  and turn-step identities shared by agent producers and history readers.
   The provider-independent agent entrypoint imports none of them.
   The optional `tubeless/agent/mcp` entrypoint owns MCP sessions (`mcp-session.ts`),
   HTTP and lazily loaded stdio transports, and schema adaptation. Transports and
@@ -185,6 +194,9 @@ their source files.
   body reads. `collector-protocol.ts` owns strict envelopes and transport limits.
   `collector-client.ts` owns one worker invocation's admission and delivery lifecycle,
   ordered batch queue and explicit failure reporting after execution exits.
+  `trace-batching.ts` owns numbered, ordered delivery and draining; each transport
+  owns retries. Trusted RPC delivery retries in `run.ts`, while collector delivery
+  uses its exact-byte transport policy without disabling another retry layer.
   `collector-transport.ts` owns HTTPS requests, deadlines, exact-byte retries and
   typed replies and typed failure reports, encoding their identity/body once before retries.
   `collector-run.ts` claims once before loading application code,
@@ -272,8 +284,11 @@ their source files.
   replay report rather than wrapping model calls or parsing log messages.
 
 `core/pipeline-entry.test.ts` checks the emitted runtime graph, including re-exports
-and lazy imports, and rejects runtime import cycles. Keep its allowed dependency
-list narrow when adding modules.
+and lazy imports, and rejects runtime import cycles. Computed imports are confined
+to explicit module-loader owners. `scripts/module-references.ts` reads JavaScript
+and declaration syntax for that graph, API dependency hashes and the inline-bundle
+guard; literal text creates no dependency. Keep allowed dependency lists narrow
+when adding modules.
 Run `make check` after changes; it builds before checking these boundaries.
 
 ## Execution ownership
@@ -295,6 +310,13 @@ Run `make check` after changes; it builds before checking these boundaries.
   consumes that order rather than sorting again. `core/child-execution.ts` owns
   inherited child runtime context; invocation-specific hooks and identities remain
   with their callers.
+  `core/run-controls.ts` snapshots the supported run controls and owns their
+  selection arrays for direct runs, child runs and static iteration identities.
+  Its property order preserves existing durable definition hashes. Child inheritance remains in
+  `child-execution.ts`; static iteration controls additionally require their
+  existing serializable, frozen definition snapshot. The pure cache-policy
+  vocabulary in `tracing/tracing-constants.ts` is shared by execution, CLI, trace
+  schemas and checkpoint restoration; each boundary owns its validation errors.
 
 - `core/pipeline-execute.ts` coordinates a run: options validation, scheduling,
   step attempts, stop policy and finalization.
@@ -341,6 +363,8 @@ Run `make check` after changes; it builds before checking these boundaries.
   metadata without executing command help or loading optional command implementations.
 
 - `workbench/agent/command.ts` owns agent command validation and session setup.
+  `workbench/agent/options.ts` owns builtin-only CLI options; help, completion
+  and selected-agent override rejection consume the same inventory and defaults.
   `workbench/workbench-recording.ts` owns optional direct SQLite transcript capture
   for the built-in CLI agent, using the same store as structural recording. Ingestion
   drains pending trace events before accepting content, and the store outlives prompt
@@ -501,7 +525,9 @@ and interactive reporter orchestration.
   child pagination and browser graph geometry.
 - `run-store/run-store-schema.ts` validates projected storage records;
   `studio/shared/schema.ts` defines the browser protocol. Both reuse pure
-  trace schemas. Decode at the transport boundary instead of promoting partially
+  trace schemas. Successful Studio reply shapes and their inferred types belong
+  to the shared schema, including capabilities and mutation acknowledgements.
+  Decode at the transport boundary instead of promoting partially
   checked objects to core or storage types. Conditional history refreshes preserve
   the browser's current snapshot when the revision, query and live launch IDs agree.
 - `studio/server/api.ts` owns route behavior, command validation and API state.
@@ -516,6 +542,8 @@ and interactive reporter orchestration.
   validates operator configuration, raw mount paths and gateway credentials without
   loading stores or execution. Only the nonsecret mount enters page metadata;
   authentication remains outside core and the browser import graph.
+  `utilities/http-response.ts` owns JSON response headers and serialization shared
+  with collector ingress; collector HTTP does not import Studio response helpers.
 
 History projection and API routes do not load pipeline execution, concrete storage
 adapters or page assets. The emitted runtime graph test enforces this boundary.

@@ -3,6 +3,7 @@ import type { PipelineMetadata } from "../tracing/graph-metadata.js";
 import { createHash } from "node:crypto";
 import type { CompiledStep } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
+import { snapshotRunControls } from "./run-controls.js";
 import {
   STEP_CACHE,
   STEP_NESTED_PIPELINE,
@@ -28,17 +29,11 @@ function iterationFields(
   nested: NonNullable<PipelineDefinitionSnapshot["steps"][number]["nestedPipeline"]>
 ) {
   if (nested.mode !== "iterate") return {};
-  const controls = nested.controls;
-  const normalizedControls = {
-    ...(controls?.cache !== undefined ? { cache: controls.cache } : {}),
-    ...(controls?.dryRun !== undefined ? { dryRun: controls.dryRun } : {}),
-    ...(controls?.continueOnError !== undefined
-      ? { continueOnError: controls.continueOnError }
-      : {}),
-    ...(controls?.maxConcurrency !== undefined ? { maxConcurrency: controls.maxConcurrency } : {}),
-    ...(controls?.targets !== undefined ? { targets: [...controls.targets].sort() } : {}),
-    ...(controls?.stepIds !== undefined ? { stepIds: [...controls.stepIds].sort() } : {}),
-  };
+  const normalizedControls = snapshotRunControls(nested.controls);
+  if (normalizedControls.targets !== undefined)
+    normalizedControls.targets = [...normalizedControls.targets].sort();
+  if (normalizedControls.stepIds !== undefined)
+    normalizedControls.stepIds = [...normalizedControls.stepIds].sort();
   return {
     maxIterations: nested.maxIterations,
     ...(Object.keys(normalizedControls).length > 0 ? { controls: normalizedControls } : {}),

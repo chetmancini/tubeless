@@ -127,7 +127,6 @@ export async function openMcpSession(
   };
   let stale = false;
   let renewal: Promise<void> | undefined;
-  // One handshake serves every request that found the session expired.
   const renew = () =>
     (renewal ??= handshake()
       .then(() => {

@@ -1234,7 +1234,6 @@ main pre code {
   }
 }
 
-/* Shared editorial details and clear paths into the documentation. */
 .hero h1::after { display: none; }
 .hero .lede { max-width: 30rem; line-height: 1.65; }
 .hero-wheel { opacity: 0.035; }

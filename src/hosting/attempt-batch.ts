@@ -1,25 +1,20 @@
 import { decodeStoredTraceEvent } from "../run-store/run-store-event-decoder.js";
 import { PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
-import {
-  wireArray,
-  wireCustom,
-  wireNumber,
-  wireObject,
-  wireString,
-} from "../tracing/wire-schema.js";
+import { wireArray, wireCustom, wireNumber, wireObject } from "../tracing/wire-schema.js";
 import {
   COLLECTOR_BATCH_BYTES,
   COLLECTOR_BATCH_EVENTS,
   CollectorInputError,
   decodeCollectorJson,
   digestCollectorBody,
+  collectorId,
 } from "./collector-protocol.js";
 import { assertAttemptId } from "./attempt-store.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
 const envelopeSchema = wireObject(
   {
-    attemptId: wireString({ maxLength: 256 }),
+    attemptId: collectorId,
     sequence: wireNumber({ integer: true, minimum: 0 }),
     events: wireArray(wireCustom({}, decodeAttemptEvent), { maxItems: COLLECTOR_BATCH_EVENTS }),
   },

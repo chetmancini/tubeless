@@ -159,7 +159,6 @@ export function createRunReporter<TResult = unknown>(
   const logPlan = options.logPlan !== false;
   const logSummary = options.logSummary !== false;
   const { styled, symbols, unicodeEnabled } = createReporterTheme(options);
-  // Throttle progress lines so concurrent mapped children stay readable.
   const lastProgressLogAt = new Map<string, number>();
   const lastProgressMessage = new Map<string, string>();
   const progressLogIntervalMs = 750;

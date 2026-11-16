@@ -3,6 +3,7 @@ import { formatWithOxfmt } from "./format-with-oxfmt.mjs";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { moduleReferences } from "./module-references.ts";
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const packageJson = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8"));
@@ -168,8 +169,6 @@ export function resolveImportedDeclaration(fromPath, specifier) {
   return candidates.find((path) => existsSync(path));
 }
 
-const importSpecifierPattern = /(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/g;
-
 /**
  * Declaration files an entry point is built from, keyed by absolute path. The
  * scan sees declaration text only: a doc example that names another file's path
@@ -183,8 +182,9 @@ export function collectDeclarationSources(entryPath) {
     if (sources.has(path)) continue;
     const source = readFileSync(path, "utf8");
     sources.set(path, source);
-    for (const match of normalizeDeclarationSource(source).matchAll(importSpecifierPattern)) {
-      const next = resolveImportedDeclaration(path, match[1]);
+    for (const specifier of moduleReferences(source)) {
+      if (specifier === undefined) continue;
+      const next = resolveImportedDeclaration(path, specifier);
       if (next) pending.push(next);
     }
   }

@@ -16,7 +16,6 @@ import { createCloudflareApp } from "./cloudflare/cloudflare.js";
 import { createR2CacheStore, jsonCacheCodec } from "./cloudflare/cloudflare-cache.js";
 import { defineAgentLoop } from "./agent/agent.js";
 import { createCloudflareAgentTranscriptWriter } from "./cloudflare/cloudflare-transcript.js";
-// The documented pattern: step definitions hold a getter; the Worker entry binds the bucket.
 let bucket;
 const bindCacheBucket = (value) => { bucket = value; };
 const r2Cache = { store: createR2CacheStore(() => { if (!bucket) throw new Error("Bind the R2 cache bucket in cloudflare/worker.ts before running cached steps."); return bucket; }), codec: jsonCacheCodec };
@@ -71,7 +70,6 @@ export default app.worker;
 export const { TubelessStudio, TubelessRun } = app.durableObjects;
 `;
 
-// Gate checks: the same app without Access bindings, or with only one of them.
 const OPEN_WORKER = String.raw`
 import { createSteps, definePipeline } from "./core/pipeline.js";
 import { defineProject } from "./project/project.js";
@@ -83,7 +81,6 @@ export default app.worker;
 export const { TubelessStudio, TubelessRun } = app.durableObjects;
 `;
 
-// Reports whether createCloudflareApp accepts limits.maxRunDurationMs from the query string.
 const LIMITS_WORKER = String.raw`
 import { defineProject } from "./project/project.js";
 import { createCloudflareApp } from "./cloudflare/cloudflare.js";
@@ -108,7 +105,6 @@ export default { fetch: (request, env) => env[request.headers.get("x-gate-target
 
 let mf: Miniflare;
 let gates: Miniflare;
-// Worker console output is kept quiet and replayed only for the test that failed.
 let workerLogs: string[] = [];
 let persist: string | undefined;
 let keys: CryptoKeyPair;
@@ -277,7 +273,6 @@ beforeAll(async () => {
         ACCESS_AUD: { type: "text", value: " " },
       }),
       gateWorker("tubeless-half", { ACCESS_AUD: { type: "text", value: AUD } }),
-      // A Studio binding that cannot be reached makes the forward throw.
       gateWorker("tubeless-no-studio", { TUBELESS_STUDIO: { type: "text", value: "unbound" } }),
       {
         config: {
@@ -425,7 +420,6 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
   });
 
   it("records an options-schema rejection as a failed run", async () => {
-    // The run object parses values first, then core records the schema failure as a run.
     const response = await launch("greeting", { name: "ab" });
     expect(response.status).toBe(202);
     const { runId } = (await response.json()) as { runId: string };

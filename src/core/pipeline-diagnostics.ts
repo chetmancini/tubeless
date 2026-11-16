@@ -41,7 +41,6 @@ function unpublishedByFailure(
   return false;
 }
 
-/** Policy skips publish their value; other skips leave no output. */
 function unpublished(report: PipelineStepReport): boolean {
   return (
     report.status !== "completed" && !(report.status === "skipped" && report.reason === "policy")

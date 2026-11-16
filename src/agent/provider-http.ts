@@ -1,12 +1,8 @@
 import { abortableSleep, throwIfAborted } from "../utilities/abort.js";
 import { utf8ByteLength } from "./provider-utf8.js";
+import { BodyLimitError, readBoundedBody } from "../utilities/read-body.js";
+import { MAX_REQUEST_BYTES, MAX_RESPONSE_BYTES } from "./provider-limits.js";
 
-export const MAX_REQUEST_BYTES = 1_048_576;
-// Leave room for the next result batch without rewriting small, reusable histories.
-export const DEFAULT_COMPACT_AFTER_BYTES = 786_432;
-export const MAX_RESPONSE_BYTES = 2_097_152;
-
-/** Resolve an http(s) base URL without a trailing slash, or throw a provider-labelled error. */
 export function providerBaseUrl(provider: string, value: string): string {
   let url: URL;
   try {
@@ -20,24 +16,6 @@ export function providerBaseUrl(provider: string, value: string): string {
   return url.href.replace(/\/+$/, "");
 }
 
-/** Read one body chunk. A dropped connection is retryable; a caller abort keeps its own cause. */
-async function readProviderChunk(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  signal: AbortSignal,
-  provider: string
-): Promise<ReadableStreamReadResult<Uint8Array>> {
-  try {
-    return await reader.read();
-  } catch (error) {
-    if (signal.aborted) throw error;
-    throw new ProviderRequestError(`${provider} response interrupted`, {
-      retryable: true,
-      cause: error,
-    });
-  }
-}
-
-/** Read a bounded JSON body. The caller labels abort and size errors with `provider`. */
 export async function readProviderJson(
   response: Response,
   signal: AbortSignal,
@@ -45,32 +23,21 @@ export async function readProviderJson(
   provider: string
 ): Promise<unknown> {
   if (!response.body) throw new Error(`${provider} returned an empty response`);
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let bytes = 0;
+  let bytes: Uint8Array;
   try {
-    while (true) {
-      throwIfAborted(signal, `${provider} response`);
-      const chunk = await readProviderChunk(reader, signal, provider);
-      if (chunk.done) break;
-      bytes += chunk.value.byteLength;
-      if (bytes > maxBytes) throw new Error(`${provider} response exceeds ${maxBytes} bytes`);
-      chunks.push(chunk.value);
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-    reader.releaseLock();
+    bytes = await readBoundedBody(response.body, maxBytes, signal);
+  } catch (error) {
+    if (signal.aborted) throw error;
+    if (error instanceof BodyLimitError)
+      throw new Error(`${provider} response exceeds ${maxBytes} bytes`);
+    throw new ProviderRequestError(`${provider} response interrupted`, {
+      retryable: true,
+      cause: error,
+    });
   }
-  throwIfAborted(signal, `${provider} response`);
   try {
-    const joined = new Uint8Array(bytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      joined.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
     // Buffer's UTF-8 decoder retained BOMs and replaced malformed sequences.
-    return JSON.parse(new TextDecoder("utf-8", { ignoreBOM: true }).decode(joined));
+    return JSON.parse(new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes));
   } catch {
     throw new Error(`${provider} returned invalid JSON`);
   }
@@ -93,7 +60,6 @@ export class ProviderRequestError extends Error {
   }
 }
 
-/** Read `Retry-After` from a failed response. Never throws; an unusable value stays unknown. */
 function retryAfterMs(headers: Headers, now = Date.now()): number | undefined {
   const milliseconds = headers.get("retry-after-ms");
   if (milliseconds !== null) {
@@ -187,7 +153,6 @@ const BASE_RETRY_DELAY_MS = 500;
 const MAX_BACKOFF_MS = 8_000;
 const MAX_RETRY_WAIT_MS = 60_000;
 
-/** Retry retryable ProviderRequestErrors with backoff, inside the caller's signal and deadline. */
 export async function withProviderRetry<T>(
   options: {
     maxRetries: number;
@@ -214,7 +179,6 @@ export async function withProviderRetry<T>(
         throw error;
       const base = error.retryAfterMs ?? Math.min(BASE_RETRY_DELAY_MS * 2 ** retry, MAX_BACKOFF_MS);
       const delayMs = Math.ceil(base + (options.random ?? Math.random)() * base * 0.25);
-      // Fail now with the real cause instead of sleeping into a timeout.
       if (delayMs > MAX_RETRY_WAIT_MS || delayMs >= options.remainingMs()) throw error;
       const reason = error.status === undefined ? "network error" : `HTTP ${error.status}`;
       options.log?.(

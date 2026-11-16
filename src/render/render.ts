@@ -69,10 +69,8 @@ function describeSelectionReason(reason: PipelineStepSelectionReason): string | 
   }
 }
 
-/** Human-readable plan options (the JSON member excluded). */
 type HumanPlanRenderOptions = Exclude<PipelinePlanRenderOptions, PipelineJsonRenderOptions>;
 
-/** Human-readable plan body; the JSON branch is handled by the caller. */
 function renderHumanPlan(plan: PipelinePlan, options: HumanPlanRenderOptions): string {
   const explain = options.explain !== false;
   const lines = [

@@ -2,7 +2,6 @@ import { createDefinitionIdentity } from "../core/pipeline-definition-identity.j
 import { decodePipelineTraceEvent } from "../tracing/tracing-codec.js";
 import type { PipelineTraceEvent } from "../tracing/tracing-contracts.js";
 
-/** Validate persisted contents before they enter history or Studio projections. */
 export function decodeStoredTraceEvent(value: unknown): PipelineTraceEvent {
   const event = decodePipelineTraceEvent(value);
   if (event.name === "pipeline.started" && event.payload.definitionSnapshot) {

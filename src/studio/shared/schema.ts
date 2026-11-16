@@ -92,7 +92,7 @@ export const studioCommandsSchema = wireObject({
   ),
 });
 
-export const studioPlanSchema: WireSchema<PipelinePlan> = wireObject({
+const studioPlanSchema: WireSchema<PipelinePlan> = wireObject({
   definition: wireOptional(pipelineDefinitionSnapshotSchema),
   dryRun: wireBoolean(),
   ok: wireBoolean(),
@@ -211,6 +211,17 @@ export const studioDefinitionRunsSchema = wireObject({
   offset: count,
   runCount: count,
 });
+export const studioCapabilitiesSchema = wireObject({
+  canCancel: wireBoolean(),
+  canClearHistory: wireBoolean(),
+});
+export const studioClearResultSchema = wireObject({
+  cleared: wireLiteral(true),
+  eventCount: number,
+});
+export const studioCancelResultSchema = wireObject({ cancelled: wireLiteral(true), runId: text });
+export const studioLaunchResultSchema = wireObject({ accepted: wireLiteral(true), runId: id });
+export const studioPlanResponseSchema = wireObject({ plan: studioPlanSchema });
 export type StudioSnapshot = InferWireSchema<typeof studioSnapshotSchema>;
 export type StudioPipelineSummary = InferWireSchema<typeof studioPipelineSummarySchema>;
 export type StudioChildStep = InferWireSchema<typeof studioChildStepSchema>;
@@ -218,6 +229,8 @@ export type StudioRunDetail = InferWireSchema<typeof studioRunDetailSchema>;
 export type StudioChildRuns = InferWireSchema<typeof studioChildRunsSchema>;
 export type StudioTranscriptPage = InferWireSchema<typeof studioTranscriptPageSchema>;
 export type StudioDefinitionRuns = InferWireSchema<typeof studioDefinitionRunsSchema>;
+export type StudioCapabilities = InferWireSchema<typeof studioCapabilitiesSchema>;
+export type StudioClearResult = Pick<InferWireSchema<typeof studioClearResultSchema>, "eventCount">;
 
 export function parseStudioPayload<T>(schema: WireSchema<T>, value: unknown): T | undefined {
   try {

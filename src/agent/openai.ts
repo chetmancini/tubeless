@@ -2,10 +2,9 @@ import { readAgentText, type AgentTextSink } from "./text-stream.js";
 import { readOpenAIStream } from "./openai-stream.js";
 import type { AgentModel, AgentModelDescriptors } from "./model-types.js";
 import { openaiRequest } from "./openai-http.js";
+import { DEFAULT_COMPACT_AFTER_BYTES, MAX_REQUEST_BYTES } from "./provider-limits.js";
 import {
-  DEFAULT_COMPACT_AFTER_BYTES,
   DEFAULT_MAX_RETRIES,
-  MAX_REQUEST_BYTES,
   MAX_RETRIES_LIMIT,
   providerBaseUrl,
   withProviderDeadline,
@@ -100,10 +99,8 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
       context.signal,
       async (signal, remainingMs) => {
         throwIfAborted(signal, "OpenAI decision");
-        // Validate descriptors before either compaction or a decision can perform I/O.
         const tools = openaiTools(context);
         const reportRequest = modelRequestReporter("openai", selectedModel, context);
-        // Retry wraps the reporter, so every HTTP attempt is its own trace event.
         const send = (
           operation: "decision" | "compaction",
           endpoint: "responses" | "responses/compact",
@@ -202,7 +199,6 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
                 ),
               ];
         if (shouldCompact) {
-          // Keep the new user request verbatim, outside the completed history window.
           if (newPrompt) input = input.slice(0, -1);
           const compacted = await send("compaction", "responses/compact", {
             ...compactRequest,
@@ -257,7 +253,6 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
   });
 }
 
-/** Strict function tools for these descriptors, plus the adapter-only `_finish` function. */
 function openaiTools({ capabilities, resultJsonSchema }: AgentModelDescriptors) {
   return [
     ...capabilities.map((tool) => ({

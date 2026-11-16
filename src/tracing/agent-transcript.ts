@@ -96,6 +96,8 @@ const eventSchemas = {
   >;
 };
 
+const omittedEventSchema = wireEnum(Object.keys(eventSchemas) as AgentTranscriptEvent["kind"][]);
+
 const encoder = new TextEncoder();
 const bytes = (text: string) => encoder.encode(text).length;
 const MAX_CONTENT_DEPTH = 64;
@@ -161,7 +163,6 @@ export function snapshotTranscriptContent<T>(
     ancestors.delete(value);
     return Object.freeze(result);
   };
-  // SAFETY: the bounded plain-data copy preserves JSON-compatible input and freezes it.
   return copy(input, 0) as T;
 }
 
@@ -175,7 +176,6 @@ export function validateTranscriptEvent(event: unknown): asserts event is AgentT
     !Object.hasOwn(eventSchemas, event.kind)
   )
     throw new Error("Unsupported transcript event kind");
-  // SAFETY: own-key membership selects a declared event kind; its schema checks the fields.
   eventSchemas[event.kind as AgentTranscriptEvent["kind"]].decode(event, "Transcript event");
 }
 
@@ -233,15 +233,7 @@ export function decodeAgentTranscriptRecord(value: unknown): AgentTranscriptReco
       throw new Error("Only transcript end events use turn zero");
     record = { ...envelope, event };
   } else if (Object.hasOwn(fields, "omitted")) {
-    const omitted = wireEnum([
-      "prompt",
-      "assistant",
-      "decision",
-      "call",
-      "outcome",
-      "compaction",
-      "end",
-    ]).decode(fields.omitted, "Transcript omission");
+    const omitted = omittedEventSchema.decode(fields.omitted, "Transcript omission");
     const reason = wireEnum(["record-limit", "unsupported-content"]).decode(
       fields.reason,
       "Transcript omission reason"

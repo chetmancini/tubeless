@@ -95,7 +95,6 @@ describe("inert graph metadata", () => {
     { tags: Array.from({ length: 65 }, (_, i) => String(i)) },
   ])("rejects invalid metadata at compilation (%#)", (value) => {
     const { step } = createSteps();
-    // SAFETY: exercise runtime validation for untyped callers.
     const metadata = value as PipelineMetadata;
     expect(() =>
       definePipeline({ id: "bad", steps: [step("work", { metadata, run: () => 1 })] })
@@ -116,7 +115,6 @@ describe("inert graph metadata", () => {
     let deep: unknown = {};
     for (let i = 0; i < 10; i++) deep = { deep };
     for (const annotations of [cycle, getter, deep, { [Symbol("hidden")]: 1 }]) {
-      // SAFETY: deliberately invalid JSON values exercise the runtime boundary.
       expect(() =>
         definePipeline({ id: "bad", steps: [], metadata: { annotations } as PipelineMetadata })
       ).toThrow();

@@ -109,8 +109,6 @@ function createChildProgress(plan: PipelinePlan) {
     },
     update(event: PipelineStepStatus) {
       const name = event.step.name ?? event.step.id;
-      // Filtered steps are announced by single children, but never counted or
-      // included in the retained tree or mapped activity labels.
       if (event.status === "skipped" && event.reason === "filtered") {
         return { message: `${name}: skipped: filtered`, label: undefined, terminalDelta: 0 };
       }
@@ -240,8 +238,6 @@ export function createMappedChildProgress(
       terminalChildSteps,
       spotlight,
     };
-    // Materialize only the visible window. Active and failed sets avoid a
-    // scan or sort of the entire fan-out on every child status event.
     const limit = Math.max(0, Math.floor(options?.detailLimit ?? LIVE_FAN_OUT_GROUP_LIMIT)) || 0;
     let visibleKeys: readonly string[];
     if (final && options?.detailLimit === undefined) {

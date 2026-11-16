@@ -24,6 +24,7 @@ import {
   type CloudDeviceSession,
 } from "./protocol.js";
 import { terminalSafeText } from "../workbench-shared.js";
+import { BodyLimitError, readBoundedBody } from "../../utilities/read-body.js";
 
 const RUN_ENVELOPE_LIMIT = 68 * 1024;
 const RESPONSE_LIMIT = 4 * 1024 * 1024;
@@ -111,38 +112,18 @@ async function responseJson(response: Response, signal: AbortSignal): Promise<un
       response.status
     );
   }
-  const reader = response.body.getReader();
-  const onAbort = () => {
-    void reader.cancel().catch(() => {});
-  };
-  signal.addEventListener("abort", onAbort, { once: true });
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  let size = 0;
-  let body = "";
   try {
-    while (true) {
-      if (signal.aborted) throw new Error("Aborted");
-      const next = await reader.read();
-      if (next.done) break;
-      size += next.value.byteLength;
-      if (size > RESPONSE_LIMIT) {
-        await reader.cancel();
-        throw new CloudClientError(
-          "Cloud response exceeds the size limit.",
-          "invalid_response",
-          response.status
-        );
-      }
-      body += decoder.decode(next.value, { stream: true });
-    }
-    body += decoder.decode();
+    const bytes = await readBoundedBody(response.body, RESPONSE_LIMIT, signal);
+    const body = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     return JSON.parse(body) as unknown;
   } catch (error) {
-    if (error instanceof CloudClientError) throw error;
+    if (error instanceof BodyLimitError)
+      throw new CloudClientError(
+        "Cloud response exceeds the size limit.",
+        "invalid_response",
+        response.status
+      );
     throw new CloudClientError("Cloud returned invalid JSON.", "invalid_response", response.status);
-  } finally {
-    signal.removeEventListener("abort", onAbort);
-    reader.releaseLock();
   }
 }
 

@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { commands, completedStatus, ingest, job } from "./run.test-support.js";
 import {
-  BatchingTraceExporter,
   runHostedJob,
   executeHostedRun,
   boundHostedEvent,
@@ -33,7 +32,6 @@ const logEvent: PipelineTraceEvent = {
   payload: { level: "log", message: "x" },
 };
 
-// The run object forwards pipeline output to the console; keep test output quiet.
 beforeEach(() => {
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -214,102 +212,6 @@ describe("hosted trace text", () => {
   );
 });
 
-describe("batching exporter", () => {
-  it("flushes the top-level start immediately, numbers batches, and retries", async () => {
-    const sent: number[] = [];
-    let failOnce = true;
-    const exporter = new BatchingTraceExporter(
-      async (sequence) => {
-        if (failOnce) {
-          failOnce = false;
-          throw new Error("transient");
-        }
-        sent.push(sequence);
-      },
-      { maxEvents: 50, maxDelayMs: 10_000, retries: 2, retryDelayMs: 0, onFailure: () => {} }
-    );
-    await exporter.export(startEvent);
-    expect(sent).toEqual([0]);
-    await exporter.export(logEvent);
-    await exporter.flush();
-    expect(sent).toEqual([0, 1]);
-  });
-
-  it("flushes when maxEvents is reached", async () => {
-    const sent: number[] = [];
-    const exporter = new BatchingTraceExporter(async (sequence) => void sent.push(sequence), {
-      maxEvents: 2,
-      maxDelayMs: 10_000,
-      retries: 0,
-      retryDelayMs: 0,
-      onFailure: () => {},
-    });
-    await exporter.export(logEvent);
-    expect(sent).toEqual([]);
-    await exporter.export(logEvent);
-    expect(sent).toEqual([0]);
-  });
-
-  it("flushes after maxDelayMs", async () => {
-    vi.useFakeTimers();
-    try {
-      const sent: number[] = [];
-      const exporter = new BatchingTraceExporter(async (sequence) => void sent.push(sequence), {
-        maxEvents: 50,
-        maxDelayMs: 100,
-        retries: 0,
-        retryDelayMs: 0,
-        onFailure: () => {},
-      });
-      await exporter.export(logEvent);
-      await vi.advanceTimersByTimeAsync(99);
-      expect(sent).toEqual([]);
-      await vi.advanceTimersByTimeAsync(1);
-      expect(sent).toEqual([0]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("never sends a later sequence after a delivery failed", async () => {
-    const send = vi.fn(async (_sequence: number) => {
-      throw new Error("down");
-    });
-    const exporter = new BatchingTraceExporter(send, {
-      maxEvents: 1,
-      maxDelayMs: 0,
-      retries: 0,
-      retryDelayMs: 0,
-      onFailure: () => {},
-    });
-    await expect(exporter.export(logEvent)).rejects.toThrow("down");
-    await expect(exporter.export(logEvent)).rejects.toThrow("down");
-    await expect(exporter.flush()).rejects.toThrow("down");
-    expect(send.mock.calls.map(([sequence]) => sequence)).toEqual([0]);
-  });
-
-  it("reports exhausted retries once", async () => {
-    const onFailure = vi.fn();
-    const exporter = new BatchingTraceExporter(
-      async () => {
-        throw new Error("down");
-      },
-      { maxEvents: 1, maxDelayMs: 0, retries: 1, retryDelayMs: 0, onFailure }
-    );
-    await expect(
-      exporter.export({
-        version: 3,
-        name: "pipeline.log",
-        runId: "r",
-        pipelineId: "p",
-        timestampMs: 1,
-        payload: { level: "log", message: "x" },
-      })
-    ).rejects.toThrow("down");
-    expect(onFailure).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe("hosted job", () => {
   it("uses the target's output and cwd rather than a Cloudflare filesystem convention", async () => {
     const { studio, failures } = ingest();
@@ -442,9 +344,11 @@ describe("hosted job", () => {
   it("aborts the run and tells Studio when event delivery is exhausted", async () => {
     const controller = new AbortController();
     const { failures } = ingest();
+    const attempts: { sequence: number; atMs: number }[] = [];
     const failing: StudioIngest = {
       admit: async () => ({ admitted: true }),
-      appendEvents: async () => {
+      appendEvents: async (_launchId, sequence) => {
+        attempts.push({ sequence, atMs: Date.now() });
         throw new Error("studio unreachable");
       },
       reportFailure: async (_launchId, message) => void failures.push(message),
@@ -465,7 +369,43 @@ describe("hosted job", () => {
     }
     expect(controller.signal.aborted).toBe(true);
     expect(controller.signal.reason).toMatchObject({ message: "studio unreachable" });
+    expect(attempts.map(({ sequence }) => sequence)).toEqual([0, 0, 0, 0, 0]);
+    expect(attempts.map(({ atMs }) => atMs - attempts[0]!.atMs)).toEqual([0, 250, 750, 1750, 3750]);
     expect(failures).toEqual(["Run events could not be delivered to Studio: studio unreachable"]);
+  });
+
+  it("drains trusted delivery retries after execution cancellation", async () => {
+    const { studio, batches, failures } = ingest();
+    const controller = new AbortController();
+    let first = true;
+    const interrupted: StudioIngest = {
+      ...studio,
+      async appendEvents(launchId, sequence, events) {
+        if (first) {
+          first = false;
+          controller.abort(new DOMException("Cancelled", "AbortError"));
+          throw new Error("temporary delivery failure");
+        }
+        return studio.appendEvents(launchId, sequence, events);
+      },
+    };
+    vi.useFakeTimers();
+    try {
+      const running = runHostedJob({
+        output,
+        job: job({ name: "ada" }),
+        commands,
+        ingest: () => interrupted,
+        controller,
+      });
+      await vi.runAllTimersAsync();
+      await running;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(batches.map(({ sequence }) => sequence)).toEqual([0, 1]);
+    expect(completedStatus(batches)).toMatchObject({ status: "cancelled" });
+    expect(failures).toEqual([]);
   });
 
   it("stops the run without retrying when Studio refuses its events", async () => {

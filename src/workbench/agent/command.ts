@@ -5,11 +5,17 @@ import {
   parseSubcommandArgs,
   runWorkbenchSubcommand,
 } from "../workbench-subcommand.js";
-import type {
-  AgentLimits,
-  AgentTranscriptOptions,
-  DefaultAgentToolName,
-} from "../../agent/agent.js";
+import type { AgentLimits, AgentTranscriptOptions } from "../../agent/agent.js";
+import {
+  DEFAULT_AGENT_LIMITS,
+  minimumAgentLimit,
+  validAgentLimit,
+} from "../../agent/agent-limits.js";
+import {
+  DEFAULT_AGENT_TOOL_NAMES,
+  isDefaultAgentToolSelection,
+} from "../../agent/default-tool-names.js";
+import { BUILTIN_AGENT_OPTIONS } from "./options.js";
 import { loadAgentEnvironment } from "./environment.js";
 import { loadAgentProvider } from "./provider.js";
 import { loadDefinedAgent } from "./defined-agent.js";
@@ -30,16 +36,9 @@ import {
 } from "../workbench-shared.js";
 
 const AGENT_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.agent);
-const DEFAULT_TOOLS: readonly DefaultAgentToolName[] = [
-  "read",
-  "write",
-  "edit",
-  "bash",
-  "list",
-  "search",
-];
-const isDefaultTool = (name: string): name is DefaultAgentToolName =>
-  (DEFAULT_TOOLS as readonly string[]).includes(name);
+const BUILTIN_AGENT_OPTION_NAMES = Object.keys(
+  BUILTIN_AGENT_OPTIONS
+) as (keyof typeof BUILTIN_AGENT_OPTIONS)[];
 
 export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
@@ -57,21 +56,7 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
             AGENT_USAGE
           );
         if (target !== undefined) {
-          const overrides = [
-            "provider",
-            "model",
-            "model-module",
-            "env-file",
-            "instructions",
-            "tools",
-            "codemode",
-            "max-turns",
-            "max-calls",
-            "max-concurrency",
-            "capture-transcript",
-            "stream",
-          ] as const;
-          const provided = overrides.filter((key) => values[key] !== undefined);
+          const provided = BUILTIN_AGENT_OPTION_NAMES.filter((key) => values[key] !== undefined);
           if (provided.length)
             return writeUsageError(
               io,
@@ -89,24 +74,24 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
           return writeUsageError(io, "Prompt must not be blank.", AGENT_USAGE);
         if (values["env-file"] !== undefined && !values["env-file"].trim())
           return writeUsageError(io, "Environment file must not be blank.", AGENT_USAGE);
-        const limits: AgentLimits = {
-          maxTurns: Number(values["max-turns"] ?? 20),
-          maxCalls: Number(values["max-calls"] ?? 100),
-          maxConcurrency: Number(values["max-concurrency"] ?? 1),
-        };
-        for (const [name, value] of Object.entries(limits)) {
-          if (!Number.isSafeInteger(value) || value < (name === "maxCalls" ? 0 : 1))
+        const limits = {
+          maxTurns: Number(values["max-turns"] ?? DEFAULT_AGENT_LIMITS.maxTurns),
+          maxCalls: Number(values["max-calls"] ?? DEFAULT_AGENT_LIMITS.maxCalls),
+          maxConcurrency: Number(values["max-concurrency"] ?? DEFAULT_AGENT_LIMITS.maxConcurrency),
+        } satisfies AgentLimits;
+        for (const name of Object.keys(limits) as (keyof typeof limits)[]) {
+          if (!validAgentLimit(name, limits[name]))
             return writeUsageError(
               io,
-              `${name} must be a ${name === "maxCalls" ? "nonnegative" : "positive"} safe integer.`,
+              `${name} must be a ${minimumAgentLimit(name) === 0 ? "nonnegative" : "positive"} safe integer.`,
               AGENT_USAGE
             );
         }
         const defaultTools = values.tools?.split(",").map((name) => name.trim());
-        if (defaultTools && !defaultTools.every(isDefaultTool))
+        if (defaultTools && !isDefaultAgentToolSelection(defaultTools))
           return writeUsageError(
             io,
-            `--tools accepts a comma-separated subset of ${DEFAULT_TOOLS.join(", ")}.`,
+            `--tools accepts a comma-separated subset of ${DEFAULT_AGENT_TOOL_NAMES.join(", ")}.`,
             AGENT_USAGE
           );
         if (values["capture-transcript"] && !values.store)

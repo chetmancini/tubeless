@@ -358,6 +358,50 @@ describe("provider HTTP failure classification", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    { body: "x".repeat(2_097_153), message: "response exceeds 2097152 bytes" },
+    { body: "invalid-json", message: "returned invalid JSON" },
+    { body: '\uFEFF{"ok":true}', message: "returned invalid JSON" },
+  ])("does not retry a fatal response error: $message", async ({ body, message }) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(body));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(retry(() => request(AbortSignal.timeout(2000)))).rejects.toThrow(message);
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("preserves replacement decoding for malformed UTF-8 inside JSON strings", async () => {
+    const body = new Uint8Array([...Buffer.from('{"text":"'), 0xff, ...Buffer.from('"}')]);
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response(body)));
+    await expect(request(AbortSignal.timeout(2000))).resolves.toEqual({ text: "\uFFFD" });
+  });
+
+  it("aborts a pending body read with the caller's reason without awaiting source cancellation", async () => {
+    const controller = new AbortController();
+    const reason = new Error("stop reading");
+    let markReading!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      markReading = resolve;
+    });
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull() {
+          markReading();
+          return new Promise<void>(() => {});
+        },
+        cancel,
+      },
+      { highWaterMark: 0 }
+    );
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response(body)));
+    const result = request(controller.signal).catch((error: unknown) => error);
+    await reading;
+    controller.abort(reason);
+    expect(await result).toBe(reason);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(body.locked).toBe(false);
+  });
+
   it("returns the original rejection when the caller aborts the exchange", async () => {
     const controller = new AbortController();
     const aborted = new Error("stop");

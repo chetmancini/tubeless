@@ -1,4 +1,5 @@
 import { RUN_MODEL_VERSION } from "../core/pipeline-ids.js";
+import { AGENT_MODEL_COUNTERS, type AgentModelCounter } from "../tracing/agent-telemetry.js";
 import { artifactMetadataSchema, artifactOperationSchema } from "../tracing/artifact-metadata.js";
 import {
   agentLimitsSchema,
@@ -39,22 +40,16 @@ const agentCall = wireObject({
   tool: id,
   parentAttemptId: id,
 });
+const modelCounters = Object.fromEntries(
+  AGENT_MODEL_COUNTERS.map((name) => [name, wireOptional(count)])
+) as { [Name in AgentModelCounter]: WireSchema<number | undefined> };
 const agentModelUsage = wireObject({
   provider: id,
   model: id,
   requests: count,
   requestsWithoutUsage: count,
   durationMs: number,
-  inputTokens: wireOptional(count),
-  uncachedInputTokens: wireOptional(count),
-  outputTokens: wireOptional(count),
-  reasoningTokens: wireOptional(count),
-  cacheReadTokens: wireOptional(count),
-  cacheWriteTokens: wireOptional(count),
-  cacheWrite5mTokens: wireOptional(count),
-  cacheWrite1hTokens: wireOptional(count),
-  cacheWrite30mTokens: wireOptional(count),
-  cacheWrite12hTokens: wireOptional(count),
+  ...modelCounters,
 });
 
 export const storedPipelineRunSchema: WireSchema<StoredPipelineRun> = wireObject({

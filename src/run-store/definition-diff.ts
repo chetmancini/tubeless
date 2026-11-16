@@ -8,7 +8,6 @@ export interface DefinitionChange {
   after?: string;
 }
 
-// Every step semantic needs a comparison label; new snapshot fields must be handled here.
 const STEP_FIELDS = {
   dependencies: "Required edges",
   optionalDependencies: "Optional edges",
@@ -73,7 +72,6 @@ export function compareDefinitions(
       step.id
     );
     for (const field of Object.keys(STEP_FIELDS)) {
-      // SAFETY: keys come from the exhaustive, locally authored field map above.
       const key = field as keyof typeof STEP_FIELDS;
       compare(STEP_FIELDS[key], old[key], step[key], step.id);
     }

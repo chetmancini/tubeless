@@ -28,7 +28,6 @@ export function saveCalls(calls: readonly PreparedCall[]): SavedCall[] {
   });
 }
 
-/** Reconstruct privately prepared invocations after the owning definition has matched. */
 export function restoreCalls(
   saved: readonly SavedCall[],
   registry: ReadonlyMap<string, CompiledTool>,

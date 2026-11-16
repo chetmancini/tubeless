@@ -194,7 +194,6 @@ export class TickerFrame {
       if (rows > 0) chunk += TICKER_ANSI.clearDown;
       chunk += above;
     }
-    // Overwrite rows in place so the previous frame stays visible until replaced.
     // Fitted lines stop short of the last column, so erasing each stale tail
     // never lands on a pending wrap.
     for (const line of lines) chunk += `${line}${TICKER_ANSI.clearLineEnd}\n`;

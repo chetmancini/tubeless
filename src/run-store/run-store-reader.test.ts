@@ -32,7 +32,6 @@ describe("readPipelineEventPages", () => {
     const reader = {
       async listEvents(query: PipelineRunEventQuery = {}) {
         queries.push(query);
-        // The adapter has selected the subtree; exercise its one-event page cap.
         return events
           .filter((event) => query.afterId === undefined || event.id > query.afterId)
           .slice(0, 1);

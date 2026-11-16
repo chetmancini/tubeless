@@ -42,11 +42,9 @@ describe("inherited child inputs", () => {
 
   it("uses validated parent output as child schema input and preserves child validation", async () => {
     const parentSchema = standardSchema<{ raw: string }, { value: number }>((value) => {
-      // SAFETY: the test supplies the declared input shape.
       return { value: { value: Number((value as { raw: string }).raw) } };
     });
     const childSchema = standardSchema<{ value: number }, { text: string }>((value) => {
-      // SAFETY: inherited parent options have this declared child input shape.
       const number = (value as { value: number }).value;
       return number > 0
         ? { value: { text: String(number) } }

@@ -29,7 +29,6 @@ function callingAgent(checkpoint: Checkpoint, key: string): CallingAgent {
   return saved;
 }
 
-/** One owner for acknowledged state transitions and budgets across a durable subtree. */
 export class AgentCheckpointSession {
   #checkpoint: Checkpoint;
   #encodedCheckpoint: string | undefined;
@@ -253,8 +252,6 @@ export class AgentCheckpointSession {
   private update(change: (checkpoint: Checkpoint) => void): Promise<void> {
     const write = this.#tail.then(async () => {
       if (this.#failure) throw this.#failure.error;
-      // Reuse acknowledged bytes to make the private working copy. New state still
-      // passes the codec's deterministic round-trip check before it is persisted.
       const checkpoint =
         this.#encodedCheckpoint === undefined
           ? this.roundTrip(this.#checkpoint).decoded

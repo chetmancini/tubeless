@@ -1,4 +1,5 @@
 import { BodyLimitError, readBoundedBody } from "../../utilities/read-body.js";
+import { jsonResponse } from "../../utilities/http-response.js";
 
 /** Format a host literal for an HTTP URL or authority. */
 export function formatHttpUrlHost(host: string): string {
@@ -66,21 +67,7 @@ export function decodePathSegment(value: string): string {
   }
 }
 
-const JSON_HEADERS = {
-  "cache-control": "no-store",
-  "content-type": "application/json; charset=utf-8",
-  "x-content-type-options": "nosniff",
-} as const;
-
 const MAX_REQUEST_BODY_BYTES = 65_536;
-
-export function jsonResponse(
-  value: unknown,
-  status = 200,
-  headers: Record<string, string> = {}
-): Response {
-  return new Response(JSON.stringify(value), { status, headers: { ...JSON_HEADERS, ...headers } });
-}
 
 export function errorResponse(
   status: number,

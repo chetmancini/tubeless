@@ -203,6 +203,64 @@ describe("compiled definition identity", () => {
     );
   });
 
+  it.each([
+    {
+      selector: "targets",
+      structuralFingerprint:
+        "sha256:d838418639e9c60c519b100c2b3009fccddcbe000b68873b378ffffe7fb18329",
+      definitionId: "sha256:8196a565fecfe233d74d25b1e44ae2ccbd45350eb6eb956bf281f530b21c083c",
+    },
+    {
+      selector: "stepIds",
+      structuralFingerprint:
+        "sha256:2391d809466e1b786ae844baff061b164555c7fe69c1e677472afc0e5ebb4020",
+      definitionId: "sha256:048fdf7db2b14b39c8d2b8d158ec059e205e2d8b1b1fa203cc56a5b68d54bd6a",
+    },
+  ] as const)(
+    "retains persisted v2 iteration hashes with static $selector controls",
+    ({ selector, structuralFingerprint, definitionId }) => {
+      const { step, iteratePipeline } = createSteps();
+      const a = step("a", { run: () => 1 });
+      const z = step("z", { run: () => 2 });
+      const child = definePipeline({
+        id: "control-child",
+        implementationVersion: "child-v1",
+        steps: [a, z],
+        targets: [a, z],
+      });
+      for (const ids of [
+        ["z", "a"],
+        ["a", "z"],
+      ] as const) {
+        const repeat = iteratePipeline("repeat", {
+          pipeline: child,
+          maxIterations: 3,
+          controls: {
+            cache: "recompute",
+            dryRun: false,
+            continueOnError: true,
+            maxConcurrency: 2,
+            ...(selector === "targets" ? { targets: ids } : { stepIds: ids }),
+          },
+          initialState: () => 0,
+          mapOptions: () => ({}),
+          transition: (value) => ({ kind: "finish", result: value }),
+        });
+        const parent = definePipeline({
+          id: "control-parent",
+          implementationVersion: "parent-v1",
+          steps: [repeat],
+        });
+        expect(parent.definition.identity).toEqual({
+          version: 2,
+          structuralFingerprint,
+          implementationVersion: "parent-v1",
+          definitionId,
+        });
+      }
+    }
+  );
+
   it("omits empty iteration controls while retaining defined fields", () => {
     const { iteratePipeline } = createSteps();
     const build = (controls?: PipelineRunControls<"a", "a">) => {

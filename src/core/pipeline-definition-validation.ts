@@ -220,12 +220,8 @@ export function validatePipelineDefinition<
     }
   }
 
-  // SAFETY: `steps` is `TSteps extends readonly AnyStep[]`; the cast restores
-  // the `TOptions` generic that the tuple erased, without changing the values.
   const knownSteps = new Set<AnyStep<TOptions>>(steps as readonly AnyStep<TOptions>[]);
-  // SAFETY: the tuple contains only steps with the inferred options type.
   const orderedSteps = topologicalSort(steps as readonly AnyStep<TOptions>[]);
-  // SAFETY: explicit targets are a subset of TSteps; implicit targets come from its graph.
   const declaredTargets = (definition.targets ??
     orderedSteps?.slice(-1) ??
     []) as readonly AnyStep<TOptions>[];
@@ -252,8 +248,6 @@ export function validatePipelineDefinition<
     );
   }
   const missingReferences: string[] = [];
-  // SAFETY: `steps` is `TSteps extends readonly AnyStep[]`; the cast restores the
-  // `TOptions` generic that the tuple erased, without changing the values.
   for (const step of steps as readonly AnyStep<TOptions>[]) {
     for (const dependency of stepEdges(step)) {
       if (!knownSteps.has(dependency)) {

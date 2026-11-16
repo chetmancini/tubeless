@@ -70,8 +70,6 @@ function isWorkbenchPipeline(value: unknown): value is WorkbenchPipeline {
 
 export function isWorkbenchPipelineCommand(value: unknown): value is WorkbenchPipelineCommand {
   if (!pipelineForCommand(value)) return false;
-  // SAFETY: pipelineForCommand established value is a non-null object or
-  // function, so this single cast only widens to a shape we probe with `in`.
   const candidate = value as object;
   return (
     "descriptor" in candidate &&
@@ -110,7 +108,6 @@ function uniqueNamedExports<T>(
   );
 }
 
-/** Select one matching export and its name, deduplicating aliases. */
 export function selectUniqueExport<T>(
   moduleExports: Record<string, unknown>,
   exportName: string | undefined,
@@ -142,10 +139,6 @@ export function selectUniqueExport<T>(
   return { exportName: name, value };
 }
 
-/**
- * Select a plan source. A marked command wins when the module also exports a
- * pipeline. Named exports still have to be a pipeline or a marked command.
- */
 function selectPlanSourceExport(
   moduleExports: Record<string, unknown>,
   exportName?: string
@@ -188,7 +181,6 @@ function selectPlanSourceExport(
   throw new Error("Module does not export a tubeless pipeline or pipeline command.");
 }
 
-/** Import a JS/TS module as a string-keyed export namespace. */
 export async function importModuleNamespace(filePath: string): Promise<Record<string, unknown>> {
   // SAFETY: a dynamic import of a JS/TS module always yields a module namespace
   // object whose exports are string-keyed values, so the cast to
@@ -197,7 +189,6 @@ export async function importModuleNamespace(filePath: string): Promise<Record<st
   return (await import(pathToFileURL(filePath).href)) as Record<string, unknown>;
 }
 
-/** Load a marked command when present, otherwise a pipeline, for inspect/plan/graph. */
 export async function loadPlanSourceModule(
   filePath: string,
   exportName?: string

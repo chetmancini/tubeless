@@ -324,7 +324,6 @@ describe("SQLite pipeline run store", () => {
       await original.export(legacy);
       await original.close();
       const database = new DatabaseSync(filename);
-      // Recreate the previous table layout while retaining its events, indexes and triggers.
       database.exec(
         "ALTER TABLE pipeline_run_events DROP COLUMN iteration_json; PRAGMA user_version = 3;"
       );
@@ -1168,7 +1167,6 @@ describe("SQLite pipeline run store", () => {
       locker.exec("ROLLBACK");
       locker.close();
     }
-    // close() now waits out the full busy timeout before surfacing the failure.
   }, 15_000);
 
   it("persists unflushed exports when close drains the buffer", async () => {

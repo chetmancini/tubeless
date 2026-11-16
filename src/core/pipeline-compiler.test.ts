@@ -51,8 +51,6 @@ describe("pipeline compilation", () => {
       steps: [build, write],
       finalize: (outputs) => outputs.write,
     });
-    // SAFETY: mutate the authoring array after define to prove the compiled
-    // graph snapshotted original membership; extra is a different step id.
     (dependsOn as AnyStep[]).push(extra);
 
     const plan = pipeline.plan();

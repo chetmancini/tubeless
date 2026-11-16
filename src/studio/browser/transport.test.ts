@@ -4,7 +4,7 @@ import { parseStudioPayload } from "../shared/schema.js";
 import { describe, expect, it, vi } from "vitest";
 import { RUN_MODEL_VERSION } from "../../core/pipeline.js";
 import type { StoredPipelineRun } from "../../run-store/run-store.js";
-import { createStudioApi, parseStudioCommands, parseStudioSnapshot } from "./transport.js";
+import { createStudioApi, type StudioApi } from "./transport.js";
 
 function run(overrides: Partial<StoredPipelineRun> = {}): StoredPipelineRun {
   return {
@@ -36,6 +36,10 @@ function jsonResponse(value: unknown, init?: ResponseInit) {
   });
 }
 
+function apiWithReply(value: unknown) {
+  return createStudioApi(vi.fn(async () => jsonResponse(value)));
+}
+
 describe("Studio API response parsing", () => {
   it("validates artifact metadata and operation fields on recorded steps", () => {
     const entry = {
@@ -61,8 +65,10 @@ describe("Studio API response parsing", () => {
       expect(read(invalid)).toBeUndefined();
   });
 
-  it("accepts a complete snapshot and rejects malformed nested run data", () => {
-    expect(parseStudioSnapshot(snapshot())?.runs[0]?.runId).toBe("run-1");
+  it("accepts a complete snapshot and rejects malformed nested run data", async () => {
+    await expect(apiWithReply(snapshot()).loadSnapshot()).resolves.toMatchObject({
+      runs: [{ runId: "run-1" }],
+    });
     expect(parseRun(run({ correlationId: 42 as never }))).toBeUndefined();
     expect(
       parseRun(
@@ -84,7 +90,7 @@ describe("Studio API response parsing", () => {
     ).toBeUndefined();
   });
 
-  it("validates command descriptors before returning them", () => {
+  it("validates command descriptors before returning them", async () => {
     const valid = {
       commands: [
         {
@@ -104,12 +110,12 @@ describe("Studio API response parsing", () => {
         },
       ],
     };
-    expect(parseStudioCommands(valid)?.[0]?.id).toBe("fixture");
-    expect(
-      parseStudioCommands({
+    await expect(apiWithReply(valid).loadCommands()).resolves.toMatchObject([{ id: "fixture" }]);
+    await expect(
+      apiWithReply({
         commands: [{ ...valid.commands[0], parameters: [{ key: "name" }] }],
-      })
-    ).toBeUndefined();
+      }).loadCommands()
+    ).rejects.toThrow("invalid response for commands.");
     for (const field of [
       "min",
       "max",
@@ -120,16 +126,16 @@ describe("Studio API response parsing", () => {
       "environment",
       "description",
     ]) {
-      expect(
-        parseStudioCommands({
+      await expect(
+        apiWithReply({
           commands: [
             {
               ...valid.commands[0],
               parameters: [{ ...valid.commands[0]!.parameters[0], [field]: { invalid: true } }],
             },
           ],
-        })
-      ).toBeUndefined();
+        }).loadCommands()
+      ).rejects.toThrow("invalid response for commands.");
     }
   });
 
@@ -197,11 +203,18 @@ describe("Studio API response parsing", () => {
     ).toBeUndefined();
   });
 
-  it("rejects incomplete definition summaries and preserves unknown-field compatibility", () => {
-    expect(
-      parseStudioSnapshot({ ...snapshot(), definitions: [{ pipelineId: "fixture", runCount: 1 }] })
-    ).toBeUndefined();
-    expect(parseStudioSnapshot({ ...snapshot(), future: true })?.runs[0]?.runId).toBe("run-1");
+  it("rejects incomplete definition summaries and preserves unknown-field compatibility", async () => {
+    await expect(
+      apiWithReply({
+        ...snapshot(),
+        definitions: [{ pipelineId: "fixture", runCount: 1 }],
+      }).loadSnapshot()
+    ).rejects.toThrow("invalid response for snapshot.");
+    await expect(
+      apiWithReply({ ...snapshot(), future: true }).loadSnapshot()
+    ).resolves.toMatchObject({
+      runs: [{ runId: "run-1" }],
+    });
   });
 
   it("validates definition metadata independently of its run page", async () => {
@@ -313,6 +326,64 @@ describe("Studio API response parsing", () => {
       })
     );
   });
+
+  it.each<{
+    endpoint: string;
+    read(api: StudioApi): Promise<unknown>;
+    valid: object;
+    result: unknown;
+    invalid: unknown[];
+  }>([
+    {
+      endpoint: "capabilities",
+      read: (api) => api.loadCapabilities(),
+      valid: { canCancel: true, canClearHistory: false },
+      result: { canCancel: true, canClearHistory: false },
+      invalid: [{ canCancel: true }, { canCancel: "true", canClearHistory: false }],
+    },
+    {
+      endpoint: "clear history",
+      read: (api) => api.clearHistory(),
+      valid: { cleared: true, eventCount: 3 },
+      result: { eventCount: 3 },
+      invalid: [
+        { cleared: false, eventCount: 3 },
+        { cleared: true, eventCount: "3" },
+        { cleared: true, eventCount: null },
+      ],
+    },
+    {
+      endpoint: "cancel run",
+      read: (api) => api.cancelRun("run-1"),
+      valid: { cancelled: true, runId: "run-1" },
+      result: undefined,
+      invalid: [
+        { cancelled: false, runId: "run-1" },
+        { cancelled: true, runId: "another-run" },
+        { cancelled: true },
+      ],
+    },
+    {
+      endpoint: "launch",
+      read: (api) => api.launch("fixture", {}),
+      valid: { accepted: true, runId: "run-1" },
+      result: "run-1",
+      invalid: [
+        { accepted: false, runId: "run-1" },
+        { accepted: true, runId: "" },
+      ],
+    },
+  ])(
+    "validates $endpoint replies before returning results",
+    async ({ endpoint, read, valid, result, invalid }) => {
+      const reply = (value: unknown) =>
+        read(createStudioApi(vi.fn(async () => jsonResponse(value))));
+      await expect(reply({ ...valid, future: true })).resolves.toEqual(result);
+      for (const value of [null, [], ...invalid]) {
+        await expect(reply(value)).rejects.toThrow(`invalid response for ${endpoint}.`);
+      }
+    }
+  );
 });
 
 it.each(["override", "cache"] as const)(

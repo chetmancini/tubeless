@@ -404,7 +404,6 @@ export function parseCliError(value: unknown): { code: CliErrorCode; message: st
   ) {
     return undefined;
   }
-  // SAFETY: the error code allowlist and message were checked above.
   return value.error as { code: CliErrorCode; message: string };
 }
 

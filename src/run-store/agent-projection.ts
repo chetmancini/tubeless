@@ -1,5 +1,12 @@
 import type { PipelineDefinitionSnapshot } from "../core/pipeline-types.js";
 import type { PipelineTraceAttributes } from "../tracing/tracing-contracts.js";
+import {
+  AGENT_MODEL_ATTRIBUTES,
+  AGENT_MODEL_COUNTERS,
+  AGENT_TRACE_ATTRIBUTES,
+  AGENT_TURN_STEPS,
+  type AgentModelCounter,
+} from "../tracing/agent-telemetry.js";
 import type { StoredPipelineEvent, StoredPipelineRun } from "./run-store.js";
 
 type AgentMetadata = NonNullable<PipelineDefinitionSnapshot["steps"][number]["agent"]>;
@@ -31,21 +38,6 @@ export interface StoredAgentTurnMetadata {
   usage?: StoredAgentModelUsage[];
 }
 
-/** Counter names equal the `agent.model.<name>` trace attributes. */
-export const AGENT_MODEL_COUNTERS = [
-  "inputTokens",
-  "uncachedInputTokens",
-  "outputTokens",
-  "reasoningTokens",
-  "cacheReadTokens",
-  "cacheWriteTokens",
-  "cacheWrite5mTokens",
-  "cacheWrite1hTokens",
-  "cacheWrite30mTokens",
-  "cacheWrite12hTokens",
-] as const;
-export type AgentModelCounter = (typeof AGENT_MODEL_COUNTERS)[number];
-
 /** Sums for one provider and model. An absent counter was never reported; it is not zero. */
 export type StoredAgentModelUsage = {
   provider: string;
@@ -58,7 +50,6 @@ export type StoredAgentModelUsage = {
   durationMs: number;
 } & { [Counter in AgentModelCounter]?: number };
 
-/** Add one allowlisted counter: absent values stay absent, and unsafe sums are skipped. */
 export function addModelCounter(
   target: StoredAgentModelUsage,
   name: AgentModelCounter,
@@ -71,6 +62,7 @@ export function addModelCounter(
 
 /** Bounds retention for malformed traces that report unbounded model names. */
 const MAX_MODEL_USAGE_ENTRIES = 8;
+const agentTurnSteps = new Set<string>(Object.values(AGENT_TURN_STEPS));
 
 function count(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
@@ -80,7 +72,6 @@ function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-/** Retain only recognized agent telemetry, never arbitrary attempt attributes. */
 export class AgentProjection {
   #definition: StoredAgentDefinition | undefined;
   #turn: Omit<StoredAgentTurnMetadata, "calls"> | undefined;
@@ -115,19 +106,19 @@ export class AgentProjection {
     }
     if (event.name !== "step.attempted") return;
     const attributes = event.payload.attributes;
-    const provider = text(attributes["agent.model.provider"]);
-    const model = text(attributes["agent.model.name"]);
-    const request = count(attributes["agent.model.request"]);
+    const provider = text(attributes[AGENT_MODEL_ATTRIBUTES.provider]);
+    const model = text(attributes[AGENT_MODEL_ATTRIBUTES.name]);
+    const request = count(attributes[AGENT_MODEL_ATTRIBUTES.request]);
     const iteration = event.iteration;
     // Model requests carry `agent.turn` but no `agent.runId`; the turn run owns their usage.
     // A resumed invocation restarts `iteration.index` at 1 while the reporter keeps counting
     // logical turns, so the two are not comparable: the request's own turn is authoritative.
-    const turn = count(attributes["agent.turn"]);
+    const turn = count(attributes[AGENT_TRACE_ATTRIBUTES.turn]);
     if (
       provider &&
       model &&
       iteration &&
-      event.stepId === "decide" &&
+      event.stepId === AGENT_TURN_STEPS.decide &&
       event.parentRunId === iteration.runId &&
       turn !== undefined &&
       turn >= 1 &&
@@ -137,12 +128,12 @@ export class AgentProjection {
       this.#recordModelUsage(iteration.runId, turn, provider, model, attributes);
       return;
     }
-    const agentRunId = text(attributes["agent.runId"]);
-    const index = count(attributes["agent.turn"]);
+    const agentRunId = text(attributes[AGENT_TRACE_ATTRIBUTES.runId]);
+    const index = count(attributes[AGENT_TRACE_ATTRIBUTES.turn]);
     if (!agentRunId || !index) return;
-    const callId = text(attributes["agent.callId"]);
-    const tool = text(attributes["agent.tool"]);
-    const parentAttemptId = text(attributes["agent.parentAttemptId"]);
+    const callId = text(attributes[AGENT_TRACE_ATTRIBUTES.callId]);
+    const tool = text(attributes[AGENT_TRACE_ATTRIBUTES.tool]);
+    const parentAttemptId = text(attributes[AGENT_TRACE_ATTRIBUTES.parentAttemptId]);
     const call =
       callId && tool && parentAttemptId
         ? { agentRunId, turn: index, callId, tool, parentAttemptId }
@@ -155,34 +146,32 @@ export class AgentProjection {
     if (
       event.iteration.runId !== agentRunId ||
       event.parentRunId !== agentRunId ||
-      !["decide", "calls", "reduce"].includes(event.stepId)
+      !agentTurnSteps.has(event.stepId)
     )
       return;
-    // Logical agent turns continue after resume; invocation-local iteration indexes restart.
     this.#turn ??= { agentRunId, index };
     if (call) {
-      if (event.stepId === "calls" && event.attemptId === parentAttemptId) {
+      if (event.stepId === AGENT_TURN_STEPS.calls && event.attemptId === parentAttemptId) {
         this.#calls.set(JSON.stringify([parentAttemptId, callId]), call);
       }
       return;
     }
-    if (event.stepId === "decide") {
-      const decision = attributes["agent.decision"];
+    if (event.stepId === AGENT_TURN_STEPS.decide) {
+      const decision = attributes[AGENT_TRACE_ATTRIBUTES.decision];
       if (decision === "continue" || decision === "finish") this.#turn.decision = decision;
-      const version = count(attributes["agent.stateVersion"]);
+      const version = count(attributes[AGENT_TRACE_ATTRIBUTES.stateVersion]);
       if (version !== undefined) this.#turn.stateVersion = version;
     }
-    if (event.stepId === "reduce") {
-      const version = count(attributes["agent.stateVersion"]);
+    if (event.stepId === AGENT_TURN_STEPS.reduce) {
+      const version = count(attributes[AGENT_TRACE_ATTRIBUTES.stateVersion]);
       if (version !== undefined) this.#turn.nextStateVersion = version;
     }
-    const callCount = count(attributes["agent.callCount"]);
-    const admitted = count(attributes["agent.callsAdmitted"]);
+    const callCount = count(attributes[AGENT_TRACE_ATTRIBUTES.callCount]);
+    const admitted = count(attributes[AGENT_TRACE_ATTRIBUTES.callsAdmitted]);
     if (callCount !== undefined) this.#turn.callCount = callCount;
     if (admitted !== undefined) this.#turn.callsAdmitted = admitted;
   }
 
-  /** Sum one recognized model request; absent counters stay absent, never zero. */
   #recordModelUsage(
     agentRunId: string,
     turn: number,
@@ -190,7 +179,6 @@ export class AgentProjection {
     model: string,
     attributes: PipelineTraceAttributes
   ): void {
-    // The request reports its own logical turn, which survives a durable resume.
     this.#turn ??= { agentRunId, index: turn };
     const key = JSON.stringify([provider, model]);
     let entry = this.#usage.get(key);
@@ -200,7 +188,7 @@ export class AgentProjection {
       this.#usage.set(key, entry);
     }
     entry.requests += 1;
-    const duration = attributes["agent.model.durationMs"];
+    const duration = attributes[AGENT_MODEL_ATTRIBUTES.durationMs];
     // A sum that overflows to Infinity would fail the stored run wire schema.
     if (
       typeof duration === "number" &&
@@ -210,10 +198,10 @@ export class AgentProjection {
     )
       entry.durationMs += duration;
     for (const name of AGENT_MODEL_COUNTERS)
-      addModelCounter(entry, name, count(attributes[`agent.model.${name}`]));
+      addModelCounter(entry, name, count(attributes[AGENT_MODEL_ATTRIBUTES[name]]));
     if (
-      count(attributes["agent.model.inputTokens"]) === undefined ||
-      count(attributes["agent.model.outputTokens"]) === undefined
+      count(attributes[AGENT_MODEL_ATTRIBUTES.inputTokens]) === undefined ||
+      count(attributes[AGENT_MODEL_ATTRIBUTES.outputTokens]) === undefined
     )
       entry.requestsWithoutUsage += 1;
   }

@@ -1,4 +1,5 @@
 import { createSingleChildProgress } from "../core/child-progress.js";
+import { AGENT_TRACE_ATTRIBUTES } from "../tracing/agent-telemetry.js";
 import { createSteps, definePipeline } from "../core/pipeline.js";
 import { STEP_ORCHESTRATION } from "../core/pipeline-step-metadata.js";
 import type { PipelineStepContext } from "../core/pipeline-types.js";
@@ -23,14 +24,9 @@ import { toolObject } from "./default-tool-schema.js";
 import { agentScope } from "./execution-scope.js";
 import { executePreparedToolCall } from "./tool-execution.js";
 import { startToolActivity } from "./tool-progress.js";
-import {
-  ToolError,
-  type CompiledHandlerTool,
-  type CompiledTool,
-  type ToolInvocation,
-} from "./tools.js";
+import { ToolError } from "./tool-error.js";
+import type { CompiledHandlerTool, CompiledTool, ToolInvocation } from "./tools.js";
 
-/** The single model-facing capability of a code-mode agent. */
 export const CODEMODE_TOOL = "codemode";
 
 const MAX_CODE_LENGTH = 65_536;
@@ -41,7 +37,6 @@ const TIMEOUT_MS = 60_000;
 
 const utf8 = (text: string) => new TextEncoder().encode(text).length;
 
-/** Keep nested call IDs within the 256-character call ID limit, unique per outer call. */
 function idPrefix(callId: string): string {
   return callId.length <= 200
     ? callId
@@ -98,7 +93,6 @@ type ScriptOutcome =
   | { readonly ok: true; readonly value: ScriptResult }
   | { readonly ok: false; readonly code: string; readonly message: string };
 
-/** Keep complete lines within the byte budget; report whether any were dropped. */
 function boundedLogs(lines: readonly string[]): { logs: string[]; truncated: boolean } {
   const logs: string[] = [];
   let bytes = 0;
@@ -138,11 +132,6 @@ async function nodeExecutor(): Promise<CodemodeExecutor> {
   }
 }
 
-/**
- * Compile the code-mode capability over an agent's registry. The model sees only this tool;
- * its script reaches every registered tool through the same preparation, admission and child
- * execution as a direct call, so nested calls are budgeted, cancellable and recorded.
- */
 export function compileCodemodeTool(
   agentId: string,
   registry: ReadonlyMap<string, CompiledTool>,
@@ -171,7 +160,6 @@ export function compileCodemodeTool(
     );
   const names = tools.map(({ name }) => name);
   const { step } = createSteps<ToolInvocation>();
-  // Dry runs execute the script too; each script call follows its tool's own dry-run policy.
   const runScript = async (
     context: PipelineStepContext<ToolInvocation>
   ): Promise<ScriptOutcome> => {
@@ -226,9 +214,9 @@ export function compileCodemodeTool(
           turn: call.turn,
           attributes: {
             ...attributes,
-            "agent.callId": id,
-            "agent.tool": name,
-            "agent.parentAttemptId": context.attemptId,
+            [AGENT_TRACE_ATTRIBUTES.callId]: id,
+            [AGENT_TRACE_ATTRIBUTES.tool]: name,
+            [AGENT_TRACE_ATTRIBUTES.parentAttemptId]: context.attemptId,
           },
           execution: scope.identity(call.turn, id),
         },

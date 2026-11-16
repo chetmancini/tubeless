@@ -10,10 +10,9 @@ import {
   carriesCompaction,
   COMPACTION_BETA,
 } from "./anthropic-protocol.js";
+import { DEFAULT_COMPACT_AFTER_BYTES, MAX_REQUEST_BYTES } from "./provider-limits.js";
 import {
-  DEFAULT_COMPACT_AFTER_BYTES,
   DEFAULT_MAX_RETRIES,
-  MAX_REQUEST_BYTES,
   MAX_RETRIES_LIMIT,
   providerBaseUrl,
   providerRequest,
@@ -135,7 +134,6 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
       context.signal,
       async (signal, remainingMs) => {
         throwIfAborted(signal, "Anthropic decision");
-        // Validate descriptors before either compaction or a decision can perform I/O.
         const tools = anthropicTools(context, strict);
         const reportRequest = modelRequestReporter("anthropic", selectedModel, context);
         if (
@@ -203,7 +201,6 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
         const system = promptCaching
           ? [{ type: "text", text: systemText, cache_control: cacheControl }]
           : systemText;
-        // Summaries read the same system prompt and tools as the conversation.
         const compactRequest = {
           model: selectedModel,
           max_tokens: maxTokens,
@@ -254,7 +251,6 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
             // assistant reply can make that full request exceed the 1 MiB HTTP ceiling.
             utf8ByteLength(JSON.stringify({ ...decisionRequest, messages: completed })) >
               DEFAULT_COMPACT_AFTER_BYTES);
-        // Compaction covers completed history only. The new prompt stays verbatim.
         const nextRequest = shouldCompact ? compactRequest : decisionRequest;
         const payload = shouldCompact ? history : completed;
         const fits =
@@ -329,7 +325,6 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
 // Strict mode accepts at most this many strict tools per request, including _finish.
 const MAX_STRICT_TOOLS = 20;
 
-/** Messages API tools for these descriptors, plus the adapter-only `_finish` tool. */
 function anthropicTools(
   { capabilities, resultJsonSchema }: AgentModelDescriptors,
   strict: boolean

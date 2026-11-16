@@ -26,7 +26,6 @@ export class StudioRunDetails {
   async read(runId: string): Promise<StoredPipelineRun | undefined> {
     // A new run stays local until every page folds, so a failed read rebuilds it.
     let retained = this.#runs.get(runId);
-    // Pages hold only this run's events, ordered after the cursor.
     for await (const page of readPipelineEventPages(this.store, {
       afterId: retained?.lastEventId,
       limit: 100_000,

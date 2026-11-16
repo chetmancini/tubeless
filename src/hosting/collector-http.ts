@@ -1,7 +1,7 @@
 import type { CollectorAuthorization, HostedCollectorStore } from "./collector-store.js";
 import { verifyCollectorCredential } from "./collector-credentials.js";
-import { HostedAttemptConflict } from "./attempt-store.js";
-import { jsonResponse } from "../studio/server/http.js";
+import { HostedAttemptConflict, isAttemptId } from "./attempt-store.js";
+import { jsonResponse } from "../utilities/http-response.js";
 import { BodyLimitError, readBoundedBody } from "../utilities/read-body.js";
 import { awaitWithAbort } from "../utilities/abort.js";
 import {
@@ -14,6 +14,7 @@ import {
   claimSchema,
   controlSchema,
   decodeCollectorJson,
+  parseCollectorToken,
 } from "./collector-protocol.js";
 
 interface CollectorOperation {
@@ -91,19 +92,19 @@ export function createHostedCollector(options: {
         } catch {
           throw new CollectorInputError();
         }
-        if (!launchId || launchId.length > 256) throw new CollectorInputError();
-        const token = /^Bearer ([a-f0-9]{32}\.[a-f0-9]{64})$/.exec(
-          request.headers.get("authorization") ?? ""
-        )?.[1];
-        if (!token) throw new CollectorAuthorityError();
+        if (!isAttemptId(launchId)) throw new CollectorInputError();
+        const authorization = request.headers.get("authorization");
+        const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
+        const parsedToken = parseCollectorToken(token);
+        if (!token || !parsedToken) throw new CollectorAuthorityError();
         const credential = await wait(
-          options.store.getCollectorCredential(launchId, token.slice(0, 32))
+          options.store.getCollectorCredential(launchId, parsedToken.credentialId)
         );
         if (!credential || !(await wait(verifyCollectorCredential(token, credential, now()))))
           throw new CollectorAuthorityError();
         if (request.method !== "POST") return error(405, "method_not_allowed");
         const workerId = request.headers.get("x-tubeless-worker-id");
-        if (!workerId || workerId.length > 256) throw new CollectorInputError();
+        if (!isAttemptId(workerId)) throw new CollectorInputError();
         if (
           request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
           "application/json"

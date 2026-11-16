@@ -120,7 +120,6 @@ export function wireEnum<const TValues extends readonly string[]>(
   const accepted = new Set<string>(values);
   return schema({ enum: values, type: "string" }, (value, path) => {
     if (typeof value !== "string" || !accepted.has(value)) throw new Error(message(path));
-    // SAFETY: Set membership proves the string is one of the const tuple's values.
     return value as TValues[number];
   });
 }
@@ -178,7 +177,6 @@ export function wireObject<const TShape extends WireShape>(
       if (value === null || typeof value !== "object" || Array.isArray(value)) {
         throw new Error(`${path} must be an object`);
       }
-      // SAFETY: The object guard above excludes null and arrays, so named properties are safe to read.
       const source = value as Record<string, unknown>;
       if (options.strict && Object.keys(source).some((key) => !Object.hasOwn(shape, key))) {
         throw new Error(`${path} contains unsupported fields`);
@@ -188,7 +186,6 @@ export function wireObject<const TShape extends WireShape>(
         const item = child.decode(source[key], childPath(path, key));
         if (item !== undefined) decoded[key] = item;
       }
-      // SAFETY: Every declared field was decoded by its schema and optional undefined fields were omitted.
       return decoded as InferWireShape<TShape>;
     }
   );
@@ -221,11 +218,8 @@ export function wireUnion<const TSchemas extends readonly WireSchema<unknown>[]>
   return schema({ oneOf: schemas.map((entry) => entry.jsonSchema) }, (value, path) => {
     for (const candidate of schemas) {
       try {
-        // SAFETY: A successful candidate decoder returns one member of the requested schema union.
         return candidate.decode(value, path) as InferWireSchema<TSchemas[number]>;
-      } catch {
-        // Try the next branch; the union owns the final diagnostic.
-      }
+      } catch {}
     }
     throw new Error(message?.(path) ?? `${path} is unsupported`);
   });
@@ -284,12 +278,10 @@ export function wireDiscriminatedUnion<
       if (value === null || typeof value !== "object" || Array.isArray(value)) {
         throw new Error(`${path} must be an object`);
       }
-      // SAFETY: The object guard above excludes null and arrays, so the discriminator is safe to read.
       const discriminator = (value as Record<string, unknown>)[key];
       if (typeof discriminator !== "string" || !(discriminator in variants)) {
         throw new Error(`${key} is unsupported`);
       }
-      // SAFETY: The membership check selects a declared variant whose decoder returns a union member.
       return variants[discriminator]!.decode(value, path) as InferWireSchema<
         TVariants[keyof TVariants]
       >;

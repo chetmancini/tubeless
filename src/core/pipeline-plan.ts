@@ -1,5 +1,6 @@
 import { duplicateValues } from "../utilities/collections.js";
 import { didYouMean } from "../utilities/suggest.js";
+import { isStepCachePolicy } from "../tracing/tracing-constants.js";
 import type { CompiledPipeline } from "./pipeline-compiler.js";
 import type { StepIds, TargetIds } from "./pipeline-definition.js";
 import { decideStepDisposition } from "./pipeline-disposition.js";
@@ -120,7 +121,6 @@ export function hasConflictingSelectionControls(controls: {
   return controls.stepIds !== undefined && controls.targets !== undefined;
 }
 
-/** One `Did you mean …?` sentence per mistyped id, naming the id when several were requested. */
 function selectionSuggestions(ids: readonly string[], candidates: readonly string[]): string[] {
   const uniqueIds = [...new Set(ids)];
   return uniqueIds.flatMap((id) => {
@@ -132,7 +132,6 @@ function selectionSuggestions(ids: readonly string[], candidates: readonly strin
   });
 }
 
-/** Near-miss targets, plus the declared target list whenever some id has no near-miss. */
 function targetHints(
   pipelineId: string,
   ids: readonly string[],
@@ -171,7 +170,7 @@ export function buildPipelinePlan<
   const declaredTargetIds = new Set(compiled.declaredTargets.map((target) => target.id));
   const requestedStepIds = controls.stepIds ?? [];
   const requestedTargets = controls.targets ?? [];
-  if (controls.cache !== undefined && !["use", "recompute", "bypass"].includes(controls.cache)) {
+  if (controls.cache !== undefined && !isStepCachePolicy(controls.cache)) {
     errors.push(
       pipelineDiagnostic(
         "TUBELESS_RUN_CACHE_INVALID",

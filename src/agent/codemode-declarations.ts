@@ -16,7 +16,6 @@ const isRecord = (value: unknown): value is Json =>
 
 const key = (name: string) => (identifier.test(name) ? name : JSON.stringify(name));
 
-/** Keep comments single-purpose: no early terminators, bounded and trimmed. */
 function comment(text: string, indent: string): string[] {
   const lines = text.replaceAll("*/", "*\\/").trim().split(/\r?\n/);
   if (lines.length === 1 && lines[0]!.length <= 100) return [`${indent}/** ${lines[0]} */`];
@@ -29,7 +28,6 @@ function union(types: readonly string[]): string {
   return unique.length === 0 ? "never" : unique.join(" | ");
 }
 
-/** Parenthesize only top-level unions and intersections; nested object members need none. */
 function wrap(type: string): string {
   let depth = 0;
   for (const character of type) {
@@ -40,7 +38,6 @@ function wrap(type: string): string {
   return type;
 }
 
-/** Rendering stops once any fragment, or the whole declaration, exceeds its character budget. */
 class BudgetExceeded extends Error {}
 
 interface Context {
@@ -53,7 +50,6 @@ function bounded(context: Context, text: string): string {
   return text;
 }
 
-/** Resolve a local definition reference, decoding URI and JSON Pointer escapes. */
 function definition(context: Context, ref: string): unknown {
   const match = /^#\/(\$defs|definitions)\/([^/]+)$/.exec(ref);
   if (!match) return undefined;
@@ -69,7 +65,6 @@ function definition(context: Context, ref: string): unknown {
     : undefined;
 }
 
-/** Render a JSON Schema fragment as a TypeScript type; unsupported constructs become unknown. */
 function render(schema: unknown, context: Context, indent: string, depth: number): string {
   if (schema === false) return "never";
   if (!isRecord(schema) || depth > MAX_DEPTH) return "unknown";
@@ -185,7 +180,6 @@ function object(schema: Json, context: Context, indent: string, depth: number): 
   return lines.join("\n");
 }
 
-/** Render one schema as a TypeScript type, or undefined when it exceeds `maxCharacters`. */
 export function renderSchemaType(schema: Json, maxCharacters: number): string | undefined {
   try {
     return render(schema, { root: schema, maxCharacters }, "", 0);
@@ -195,10 +189,6 @@ export function renderSchemaType(schema: Json, maxCharacters: number): string | 
   }
 }
 
-/**
- * Render `declare const tools` for script-callable capabilities in registry order, or
- * undefined when the declarations exceed `maxCharacters`.
- */
 export function codemodeDeclarations(
   tools: readonly CodemodeDeclaration[],
   maxCharacters = Number.POSITIVE_INFINITY

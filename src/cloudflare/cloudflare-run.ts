@@ -12,7 +12,6 @@ import {
 
 const boundedDuration = (job: RunJob) => Math.min(job.maxRunDurationMs, MAX_RUN_DURATION_MS);
 
-/** Apply Cloudflare's execution and application-tracing policy to the shared job runner. */
 export function runCloudflareJob(options: {
   readonly job: RunJob;
   readonly commands: ReadonlyMap<string, HostedCommand>;

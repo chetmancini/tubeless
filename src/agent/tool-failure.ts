@@ -1,8 +1,7 @@
 import { pipelineHandlerFailures } from "../core/pipeline-execution-error.js";
 import type { PipelineRun } from "../core/pipeline-types.js";
-import { ToolError } from "./tools.js";
+import { ToolError } from "./tool-error.js";
 
-/** Classify actual handler failures only; validation, finalizers, and cancellation stay fatal. */
 export function expectedToolFailure(
   result: PipelineRun<unknown>
 ): { code: string; message: string } | undefined {

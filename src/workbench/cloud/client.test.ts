@@ -591,6 +591,63 @@ describe("Cloud HTTP client", () => {
     expect(chunks).toBeLessThanOrEqual(6);
   });
 
+  it("decodes UTF-8 response characters split across stream chunks", async () => {
+    const expected = { ...session, user: { ...session.user, name: "Renée 😀" } };
+    const bytes = new TextEncoder().encode(JSON.stringify(expected));
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const byte of bytes) controller.enqueue(Uint8Array.of(byte));
+        controller.close();
+      },
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(body, { headers: { "Content-Type": "application/json" } }));
+    await expect(
+      createCloudClient({ host, token: "credential", fetch: fetcher }).session()
+    ).resolves.toEqual(expected);
+  });
+
+  it.each(["timeout", "cancelled"])(
+    "interrupts a blocked response read on %s without waiting for source cancellation",
+    async (code) => {
+      vi.useFakeTimers();
+      let markReading!: () => void;
+      const reading = new Promise<void>((resolve) => {
+        markReading = resolve;
+      });
+      const cancel = vi.fn(() => new Promise<void>(() => {}));
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull() {
+            markReading();
+            return new Promise<void>(() => {});
+          },
+          cancel,
+        },
+        { highWaterMark: 0 }
+      );
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(body, { headers: { "Content-Type": "application/json" } }));
+      const controller = new AbortController();
+      const request = createCloudClient({
+        host,
+        token: "credential",
+        fetch: fetcher,
+        signal: controller.signal,
+        timeoutMs: 10,
+      })
+        .session()
+        .catch((error: unknown) => error);
+      await reading;
+      if (code === "timeout") await vi.advanceTimersByTimeAsync(10);
+      else controller.abort();
+      expect(await request).toMatchObject({ code });
+      expect(cancel).toHaveBeenCalledOnce();
+    }
+  );
+
   it("rejects HTML and malformed JSON without echoing response bodies", async () => {
     const fetcher = vi
       .fn<typeof fetch>()

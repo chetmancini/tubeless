@@ -380,7 +380,6 @@ function buildRunScene(
       );
       let path: string;
       if (blocked) {
-        // Skip-layer edges detour right of the layers they cross instead of through them.
         const lane =
           Math.max(...between.map((scene) => scene.x + scene.width)) + COLUMN_GAP / 2 + lanes * 6;
         lanes += 1;
