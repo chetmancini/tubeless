@@ -11,9 +11,9 @@ Package: `tubeless`
 | Entrypoint                       | Declaration                                    | Surface hash                                                       | Exported symbols |
 | -------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------ | ---------------: |
 | `tubeless/agent/node`            | `./dist/agent/node.d.ts`                       | `cfa347bb9ec4f599593841cf0ab48df4d8517fd467d0d3aede4ecae3081fb0f2` |                6 |
-| `tubeless/agent`                 | `./dist/agent/agent.d.ts`                      | `fe2bbc48917eed13a1658263d589d0d8d0da7f322a8a539de8eab2d35a0879a5` |               42 |
+| `tubeless/agent`                 | `./dist/agent/agent.d.ts`                      | `6e355f90b07ad484951d5685b76f74e35d0d37b8d9df5ca09f3b0e518179f51b` |               44 |
 | `tubeless`                       | `./dist/core/pipeline.d.ts`                    | `ed412459fb65e07ac5ff1ea26ec2705ba291a0338d802c0a74f89d7aa2173f1c` |               81 |
-| `tubeless/cli`                   | `./dist/cli/cli.d.ts`                          | `dda04916eb42187007461c3b586e81b14566c9380f6fad40a24ac888b3a8af82` |               33 |
+| `tubeless/cli`                   | `./dist/cli/cli.d.ts`                          | `9f3c74b95339c9f75cbb3d18d6e1d52d4388974d35079321b3712ea7ad4ab6b8` |               33 |
 | `tubeless/batch`                 | `./dist/utilities/batch.d.ts`                  | `856e4e759f1a62a4edd210d0291bc8b3d82b2e3e983bd37d7348bfb2b8993156` |                7 |
 | `tubeless/node`                  | `./dist/node/node.d.ts`                        | `90b5d7ff8a74e4313c536e2e98618d66d3b6f7cf2433b2d0611deb242527a3a4` |               14 |
 | `tubeless/rate-limit`            | `./dist/utilities/rate-limit.d.ts`             | `21223a0ce096d7eb188e7aa38e4e0df70081b086f899dfea825b429308f6910e` |                1 |
@@ -21,9 +21,9 @@ Package: `tubeless`
 | `tubeless/project`               | `./dist/project/project.d.ts`                  | `c406c63930dba38bc083c9af3bddaaddc73397874b5e8d3077a929540e63585e` |                9 |
 | `tubeless/testing`               | `./dist/testing/testing.d.ts`                  | `e0bfe4a5ee12abb0eabf00e24711fc54bce70ee7503034d96c44af8e1b66b742` |               16 |
 | `tubeless/tracing`               | `./dist/tracing/tracing.d.ts`                  | `438a27668f289e37cdb621d1bba965901da1cdc6091d16d19327e9ce8cdfc04f` |                4 |
-| `tubeless/agent/openai`          | `./dist/agent/openai.d.ts`                     | `16bf3329f493c2786f4a3369febfdac43ea202ed8925c2ee2fbed84384a94a33` |                2 |
+| `tubeless/agent/openai`          | `./dist/agent/openai.d.ts`                     | `8b1aa0d382c9c1f8d7eb59e7e960ba94a40449b88944da1da45065cc4bdf272f` |                2 |
 | `tubeless/agent/mcp`             | `./dist/agent/mcp.d.ts`                        | `df636d49c62fa2d6f8434e318a4a2b800e5fc849da862749c24711b739962ddd` |                7 |
-| `tubeless/agent/anthropic`       | `./dist/agent/anthropic.d.ts`                  | `4e75adfc4916d1274ff6a06e3d6da3f853b63941e4df4fdc433992b04d37ad32` |                2 |
+| `tubeless/agent/anthropic`       | `./dist/agent/anthropic.d.ts`                  | `f33a870adc5d957254f46e567bb06e7952dcfea355d13fdbd2143a6efa261a7f` |                2 |
 | `tubeless/cloudflare`            | `./dist/cloudflare/cloudflare.d.ts`            | `e74c1e2ddbc259c221e33f9c82ee6118994d3adb85212b7a7d1efb747c6290b7` |               15 |
 | `tubeless/cloudflare/cache`      | `./dist/cloudflare/cloudflare-cache.d.ts`      | `30fb378be8c6f3082958f425e421c286278c526e2ab91cece8d65c06abcfd5a7` |                4 |
 | `tubeless/cloudflare/transcript` | `./dist/cloudflare/cloudflare-transcript.d.ts` | `c350b42df69b23b4ca110d1b71bba99491a049df097636c03485903d66d11b37` |                2 |
@@ -65,6 +65,8 @@ Package: `tubeless`
 | [`AgentProjectInstruction`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L9)                      | One scoped guidance file, loaded by the workspace that owns it.                                  |
 | [`AgentSession`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-session.ts#L30)                              | Sequential runs of one model-backed agent that continue a single conversation.                   |
 | [`AgentState`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L12)                                  | Deeply read-only view of the owned plain-data state supplied to agent callbacks.                 |
+| [`AgentTextEvent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/text-stream.ts#L8)                               | Ephemeral public text from one HTTP attempt; completed text is captured separately.              |
+| [`AgentTextSink`](https://github.com/chetmancini/tubeless/blob/main/src/agent/text-stream.ts#L19)                               | The destination owns filtering and I/O; its signal includes the provider deadline.               |
 | [`AgentTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L16)                                   | Opaque capability created by defineTool or pipelineTool; model decisions contain data only.      |
 | [`AgentToolContext`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L123)                           | Step services and the workspace capability available to a registered tool.                       |
 | [`AgentTranscriptEvent`](https://github.com/chetmancini/tubeless/blob/main/src/tracing/agent-transcript.ts#L17)                 | Provider-neutral observations; decisions are proposals, not evidence of acceptance.              |
@@ -82,7 +84,7 @@ Package: `tubeless`
 | [`DefaultAgentToolName`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L22)                        | A standard workspace tool an agent's setup may select.                                           |
 | [`DefaultAgentTools`](https://github.com/chetmancini/tubeless/blob/main/src/agent/default-tools.ts#L210)                        | The read, write, edit, bash, list and search tools included in every agent.                      |
 | [`defineAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-agent.ts#L84)                                 | Prompt a model with `{ task }` and finish with the result schema, `{ answer }` by default.       |
-| [`defineAgentLoop`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent.ts#L67)                                   | Build a bounded in-process agent as an ordinary pipeline with one target, agent.                 |
+| [`defineAgentLoop`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent.ts#L69)                                   | Build a bounded in-process agent as an ordinary pipeline with one target, agent.                 |
 | [`defineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L57)                                        | Declare a validated handler capability; tools skip live work in dry runs by default.             |
 | [`pipelineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/pipeline-tool.ts#L25)                              | Reuse a compiled child's options schema and exact final result.                                  |
 | [`plainAgentCheckpointCodec`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-codec.ts#L101)             | Lossless, tagged JSON codec for finite plain data; preserves undefined and sparse arrays.        |
@@ -179,7 +181,7 @@ Package: `tubeless`
 | Symbol                                                                                                                  | Description                                                                               |
 | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | [`AgentModelFactory`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-agent-provider.ts#L4)               | Create a model for one CLI prompt with the selected model and scoped environment.         |
-| [`AgentProvider`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-agent-provider.ts#L11)                  | One named CLI model configuration; its factory owns the API, endpoint and authentication. |
+| [`AgentProvider`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-agent-provider.ts#L13)                  | One named CLI model configuration; its factory owns the API, endpoint and authentication. |
 | [`CliBooleanParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L57)                         | Declarative configuration for a boolean command parameter.                                |
 | [`CliCheckpointConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L216)                    | Checkpoint persistence settings for resumable commands.                                   |
 | [`CliCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L266)                             | Typed command that can parse, validate, execute, or own a CLI entry point.                |
@@ -308,8 +310,8 @@ Package: `tubeless`
 
 | Symbol                                                                                            | Description                                                                                   |
 | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L59)        | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
-| [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L20) | Responses transport settings; credentials are resolved only when a decision executes.         |
+| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L63)        | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
+| [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L22) | Responses transport settings; credentials are resolved only when a decision executes.         |
 
 ### `tubeless/agent/mcp`
 
@@ -327,8 +329,8 @@ Package: `tubeless`
 
 | Symbol                                                                                                  | Description                                                                                     |
 | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [`anthropicModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L80)        | Create a dependency-free Anthropic Messages model with native history and on-demand compaction. |
-| [`AnthropicModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L26) | Messages API transport settings; credentials are resolved only when a decision executes.        |
+| [`anthropicModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L84)        | Create a dependency-free Anthropic Messages model with native history and on-demand compaction. |
+| [`AnthropicModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L28) | Messages API transport settings; credentials are resolved only when a decision executes.        |
 
 ### `tubeless/cloudflare`
 

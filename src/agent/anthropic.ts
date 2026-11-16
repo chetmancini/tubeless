@@ -1,3 +1,5 @@
+import { readAgentText, type AgentTextSink } from "./text-stream.js";
+import { readAnthropicStream } from "./anthropic-stream.js";
 import type { AgentModel, AgentModelDescriptors } from "./model-types.js";
 import { agentTranscript } from "./transcript.js";
 import {
@@ -24,6 +26,8 @@ import { throwIfAborted } from "../utilities/abort.js";
 
 /** Messages API transport settings; credentials are resolved only when a decision executes. */
 export interface AnthropicModelOptions {
+  /** Opt-in public assistant text observations; does not enable transcript storage. */
+  readonly text?: AgentTextSink;
   /** Defaults to ANTHROPIC_MODEL or claude-opus-5-5. Must support tool use. */
   readonly model?: string;
   /**
@@ -79,6 +83,7 @@ const RESULT_MESSAGE_BYTES = 64;
 /** Create a dependency-free Anthropic Messages model with native history and on-demand compaction. */
 export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel {
   const {
+    text,
     model,
     apiKey,
     authToken,
@@ -92,6 +97,7 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
     maxRetries = DEFAULT_MAX_RETRIES,
   } = options;
   if (
+    (text !== undefined && typeof text !== "function") ||
     (compactAfterBytes !== null &&
       (!Number.isSafeInteger(compactAfterBytes) ||
         compactAfterBytes < 1 ||
@@ -170,7 +176,19 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
                       : {}),
                   },
                   payload,
-                  signal
+                  signal,
+                  undefined,
+                  text && operation === "decision"
+                    ? (response) =>
+                        readAgentText(
+                          response,
+                          readAnthropicStream,
+                          "anthropic",
+                          context.turn,
+                          text,
+                          signal
+                        )
+                    : undefined
                 )
               )
           );
@@ -195,6 +213,7 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
         };
         const decisionRequest = {
           model: selectedModel,
+          ...(text ? { stream: true } : {}),
           max_tokens: maxTokens,
           ...(reasoningEffort === null ? {} : { output_config: { effort: reasoningEffort } }),
           ...(promptCaching ? { cache_control: cacheControl } : {}),

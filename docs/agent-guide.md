@@ -523,6 +523,14 @@ read when a pipeline needs them.
   actions and assert preserved files before closing the owned workspace. Adapt
   the credential-free [evaluation recipe](../examples/agent-evaluation.ts).
 
+- Set `text(event, signal)` on a bundled model adapter for bounded public
+  assistant deltas with awaited backpressure and provider deadlines. Use the attempt
+  signal to cancel I/O and release resources; filter live text inside the callback.
+  CLI `--stream`
+  sends commentary to stderr and keeps the validated answer on stdout. It enables
+  no transcript persistence; redact live text separately from saved content.
+  Read [the streaming contract](./agents.md#stream-public-assistant-text) and use
+  [the scripted model demo](../examples/agent-transcript-model.ts) without credentials.
 - Set `transcript: { write, redact?, maxRecordBytes?, maxBytes? }` on an agent
   only when its content should be captured. Supply the destination and redact
   sensitive events before delivery; returning `null` suppresses an event. Each

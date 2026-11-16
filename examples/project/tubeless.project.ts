@@ -51,7 +51,8 @@ export default defineProject(
     // For transcript capture, use createTranscriptAgent in ../agent-transcript.ts
     // with openNdjsonAgentTranscriptWriter from tubeless/agent/node and an explicit path.
     // Attach it with --transcript <path>, or retain it with history --import-transcript <path>.
-    // For built-in CLI capture, use --store <path> --capture-transcript with ../agent-transcript-model.ts.
+    // For built-in streaming/capture, use ../agent-transcript-model.ts with --stream
+    // or --store <path> --capture-transcript.
     // For opt-in Cloudflare content, adapt ../agent-transcript-cloudflare.ts with a private Studio stub getter.
     // Studio refreshes visible partial/unavailable SQLite transcripts; opening the tab does not enable capture.
     // For credential-free evaluations with owned fixtures, run ../agent-evaluation.ts's helper.
