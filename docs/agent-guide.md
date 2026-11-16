@@ -826,7 +826,9 @@ tag or full/short SHA; omission runs the configured remote branch HEAD.
 Advanced `--source` selectors and their constraints are documented in the CLI
 contract below. Preserve an uncertain admission with `--idempotency-key` and
 the same request intent rather than launching a fresh run. Ctrl-C stops following;
-cancellation remains explicit in the dashboard.
+cancellation remains explicit in the dashboard. Run and step status `waiting`
+is nonterminal: keep following the same run and answer human input through the
+existing Cloud dashboard. The CLI has no answer command.
 Read [the Cloud CLI contract](./cli.md#tubeless-cloud) for credentials, roles,
 workspace selection, retention and exit codes.
 

@@ -10,7 +10,13 @@ export type CloudJsonValue =
 export type CloudRole = "owner" | "admin" | "member" | "viewer";
 export const CLOUD_INPUT_MAX_DEPTH = 128;
 export const CLOUD_INPUT_MAX_BYTES = 64 * 1024;
-export type CloudRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type CloudRunStatus =
+  | "queued"
+  | "running"
+  | "waiting"
+  | "completed"
+  | "failed"
+  | "cancelled";
 
 export interface CliWorkspace {
   id: string;
@@ -125,7 +131,7 @@ export class CloudClientError extends Error {
   }
 }
 
-const RUN_STATUSES = ["queued", "running", "completed", "failed", "cancelled"];
+const RUN_STATUSES = ["queued", "running", "waiting", "completed", "failed", "cancelled"];
 const ERROR_CODES = [
   "unauthenticated",
   "forbidden",
