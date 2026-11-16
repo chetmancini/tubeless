@@ -144,7 +144,7 @@ type ChildInputs = Record<string, unknown>;
 
 export interface SingleChildExecutionConfig<TParentOptions extends object> {
   stepId: string;
-  journalOccurrence?: readonly string[];
+  iterationIndex?: number;
   itemKey?: string;
   pipeline: ChildPipeline;
   controls?:
@@ -219,7 +219,7 @@ function childContext(
     pipelineId: string;
     stepId: string;
     itemKey?: string;
-    journalOccurrence?: readonly string[];
+    iterationIndex?: number;
   },
   dryRun: boolean,
   traceItemKey = context.trace?.itemKey
@@ -243,8 +243,7 @@ function childContext(
         sleep: context.sleep,
         tracing: childTracingOptions(context, identity.stepId, traceItemKey),
       },
-      identity.journalOccurrence ??
-        (identity.itemKey === undefined ? ["single"] : ["item", identity.itemKey]),
+      identity,
       dryRun
     ),
     identity
@@ -383,7 +382,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
           pipelineId: config.pipeline.id,
           stepId: config.stepId,
           itemKey: config.itemKey,
-          journalOccurrence: config.journalOccurrence,
+          iterationIndex: config.iterationIndex,
         },
         controls.dryRun === true
       ),

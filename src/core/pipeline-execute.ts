@@ -3,12 +3,10 @@ import { abortableSleep, throwIfAborted as throwIfSignalAborted } from "../utili
 import { createPipelineLifecycleObserver } from "./lifecycle.js";
 import { createRunId } from "./pipeline-ids.js";
 import {
-  assertJournalHealthy,
-  beginJournalStep,
   bindExecutionJournal,
   bindJournalInput,
-  completeJournalStep,
-  enterExecutionJournal,
+  executeWithJournal,
+  executionJournalRuntime,
   journalFailure,
 } from "./execution-journal.js";
 import type { CompiledPipeline } from "./pipeline-compiler.js";
@@ -20,12 +18,7 @@ import { planStepById, stepToPlanStep } from "./pipeline-plan.js";
 import { PipelineRunState, type PipelineStepAttempt } from "./pipeline-run-state.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { prepareStepOutput, type RunOutputObservation } from "./pipeline-output-observer.js";
-import {
-  PIPELINE_FINALIZE_STEP_ID,
-  STEP_AGENT,
-  STEP_NESTED_PIPELINE,
-  STEP_ORCHESTRATION,
-} from "./pipeline-step-metadata.js";
+import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import {
   evaluateStepSkip,
   executeStepAttempt,
@@ -115,16 +108,11 @@ export async function executePlannedRun<
   }
 
   const maxConcurrency = controls.maxConcurrency ?? 1;
-  // Test execution and previews never touch the real recovery capability.
-  const journalContext = {
-    ...runtime,
-    executionJournal:
-      dryRun || input.overrides !== undefined ? undefined : runtime.executionJournal,
-  };
-  const journalScope = journalContext.executionJournal
-    ? enterExecutionJournal(journalContext, compiled.id)
-    : {};
-  const journalRuntime = { ...journalContext, ...journalScope };
+  const journalRuntime = executionJournalRuntime(
+    runtime,
+    compiled.id,
+    !dryRun && input.overrides === undefined
+  );
   try {
     if (journalRuntime.executionJournal) {
       throwIfAborted(runtime);
@@ -352,50 +340,27 @@ export async function executePlannedRun<
 
     const attempt = state.beginAttempt(plannedStep);
     try {
-      const path = executionContext.executionJournalPath
-        ? Object.freeze([...executionContext.executionJournalPath, "step", step.id])
-        : undefined;
-      const stepContext = path
-        ? { ...executionContext, executionJournalPath: path }
-        : executionContext;
-      const nativeAgent = step[STEP_AGENT] !== undefined;
-      const saved =
-        path && !nativeAgent
-          ? await beginJournalStep(
-              executionContext,
-              path,
-              stepInputs,
-              !!step[STEP_NESTED_PIPELINE] || !!step[STEP_ORCHESTRATION]
-            )
-          : undefined;
-      // A cancelled begin never grants permission to start a handler.
-      if (path) throwIfAborted(runtime);
-      assertJournalHealthy(executionContext);
-      const output =
-        saved?.status === "completed"
-          ? saved.value
-          : await executeStepAttempt({
-              attemptId: attempt.attemptId,
-              pipelineId: compiled.id,
-              onCacheHit: () => {
-                attempt.outputSource = "cache";
-              },
-              context: stepContext,
-              dryRun,
-              inputs: stepInputs,
-              log: lifecycle.logger(step.id, attempt.attemptId),
-              onArtifact: (record, preview) =>
-                lifecycle.recordArtifact(step.id, attempt.attemptId, record, preview),
-              onProgress: (progress) => state.reportProgress(plannedStep, attempt, progress),
-              onReportAttempt: (number, attributes) =>
-                lifecycle.reportAttempt(step.id, number, attributes, attempt.attemptId),
-              outputBoundary: `Pipeline ${compiled.id} step ${step.id} output`,
-              observation,
-              step,
-            });
-      if (path && !nativeAgent && saved?.status !== "completed")
-        await completeJournalStep(executionContext, path, output);
-      if (nativeAgent) assertJournalHealthy(executionContext);
+      const output = await executeWithJournal(step, stepInputs, executionContext, (context) =>
+        executeStepAttempt({
+          attemptId: attempt.attemptId,
+          pipelineId: compiled.id,
+          onCacheHit: () => {
+            attempt.outputSource = "cache";
+          },
+          context,
+          dryRun,
+          inputs: stepInputs,
+          log: lifecycle.logger(step.id, attempt.attemptId),
+          onArtifact: (record, preview) =>
+            lifecycle.recordArtifact(step.id, attempt.attemptId, record, preview),
+          onProgress: (progress) => state.reportProgress(plannedStep, attempt, progress),
+          onReportAttempt: (number, attributes) =>
+            lifecycle.reportAttempt(step.id, number, attributes, attempt.attemptId),
+          outputBoundary: `Pipeline ${compiled.id} step ${step.id} output`,
+          observation,
+          step,
+        })
+      );
       state.completeStep(plannedStep, attempt, output);
     } catch (error) {
       recordStepExecutionFailure(error, plannedStep, attempt);

@@ -46,19 +46,10 @@ export async function runAgentInvocation<Options extends object, State>(
   throwIfAborted(context.signal, "Agent workspace");
   const parent = agentScope(context);
   const inherited = context.dryRun ? undefined : parent?.journal;
-  const durability =
-    context.dryRun || inherited
-      ? undefined
-      : (config.durability ??
-        (context.executionJournal
-          ? {
-              store: context.executionJournal.agentStore,
-              key: `tubeless:journal:v1:${createHash("sha256").update(JSON.stringify(context.executionJournalPath)).digest("hex")}`,
-              codec: undefined,
-            }
-          : undefined));
+  const durability = context.dryRun ? undefined : config.durability;
+  const recovering = inherited || durability || (!context.dryRun && context.executionJournal);
   if (
-    (durability || inherited) &&
+    recovering &&
     (typeof config.implementationVersion !== "string" || !config.implementationVersion.trim())
   )
     throw agentError(
@@ -86,12 +77,16 @@ export async function runAgentInvocation<Options extends object, State>(
     config.transcript && new AgentTranscriptCapture(config.transcript, config.id, scoped);
   const journal =
     inherited ??
-    (durability
+    (recovering
       ? await withExecutionJournal(context, () =>
           AgentCheckpointSession.open(
-            journalAgentStore(context, durability.store)!,
-            typeof durability.key === "function" ? durability.key(context.options) : durability.key,
-            durability.codec
+            journalAgentStore(context, durability?.store),
+            durability
+              ? typeof durability.key === "function"
+                ? durability.key(context.options)
+                : durability.key
+              : `tubeless:journal:v1:${createHash("sha256").update(JSON.stringify(context.executionJournalPath)).digest("hex")}`,
+            durability?.codec
           )
         )
       : undefined);
