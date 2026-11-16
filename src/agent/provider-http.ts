@@ -1,4 +1,5 @@
 import { abortableSleep, throwIfAborted } from "../utilities/abort.js";
+import { utf8ByteLength } from "./provider-utf8.js";
 
 export const MAX_REQUEST_BYTES = 1_048_576;
 // Leave room for the next result batch without rewriting small, reusable histories.
@@ -62,7 +63,14 @@ export async function readProviderJson(
   }
   throwIfAborted(signal, `${provider} response`);
   try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const joined = new Uint8Array(bytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      joined.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    // Buffer's UTF-8 decoder retained BOMs and replaced malformed sequences.
+    return JSON.parse(new TextDecoder("utf-8", { ignoreBOM: true }).decode(joined));
   } catch {
     throw new Error(`${provider} returned invalid JSON`);
   }
@@ -116,7 +124,7 @@ export async function providerRequest(
   readResponse?: (response: Response) => Promise<unknown>
 ): Promise<unknown> {
   const body = JSON.stringify(payload);
-  if (Buffer.byteLength(body) > MAX_REQUEST_BYTES)
+  if (utf8ByteLength(body) > MAX_REQUEST_BYTES)
     throw new Error(`${provider} request exceeds 1 MiB`);
   throwIfAborted(signal, `${provider} request`);
   let response: Response;

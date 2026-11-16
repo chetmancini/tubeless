@@ -72,6 +72,21 @@ it("fails explicitly when even one result marker cannot fit", () => {
   );
 });
 
+it.each([600, 601, 602, 603])(
+  "truncates a large multibyte result at a complete code point within %i bytes",
+  (budget) => {
+    const value = "é漢🌍".repeat(100_000);
+    const [item] = toolOutputs([{ id: "large", tool: "read", ok: true, value }], budget);
+    const output = JSON.parse(item!.output);
+    const original = JSON.stringify({ ok: true, value });
+    expect(output).toMatchObject({ truncated: true, originalBytes: Buffer.byteLength(original) });
+    expect(Buffer.byteLength(JSON.stringify(item)) + 1).toBeLessThanOrEqual(budget);
+    expect(original.startsWith(output.preview)).toBe(true);
+    expect(output.preview).not.toContain("\uFFFD");
+    expect(output.preview).not.toMatch(/[\uD800-\uDBFF]$/);
+  }
+);
+
 it.each([false, true])(
   "reserves unequal call-ID overhead before sharing preview space (small result: %s)",
   (smallResult) => {

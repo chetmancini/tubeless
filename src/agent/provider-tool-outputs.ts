@@ -1,9 +1,10 @@
 import type { AgentModelRequest } from "./model-types.js";
+import { utf8ByteLength, utf8Bytes } from "./provider-utf8.js";
 
 type Outcome = AgentModelRequest["outcomes"][number];
 
 const MAX_BATCH_BYTES = 262_144;
-const encodedBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
+const encodedBytes = (value: unknown) => utf8ByteLength(JSON.stringify(value));
 
 /**
  * Bound provider-visible results, including outer JSON escaping and item separators.
@@ -29,7 +30,7 @@ export function boundedToolOutputs<Item>(
     return outputs;
   const entries = outputs.map((item, index) => {
     const outcome = outcomes[index]!;
-    const bytes = Buffer.from(texts[index]!);
+    const bytes = utf8Bytes(texts[index]!);
     const preview = (length: number) =>
       wrap(
         outcome,

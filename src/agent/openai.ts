@@ -17,6 +17,7 @@ import { boundedToolOutputs } from "./provider-tool-outputs.js";
 import { modelRequestReporter } from "./provider-usage.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { agentTranscript } from "./transcript.js";
+import { utf8ByteLength } from "./provider-utf8.js";
 
 /** Responses transport settings; credentials are resolved only when a decision executes. */
 export interface OpenAIModelOptions {
@@ -92,7 +93,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
     throw new Error("Invalid OpenAI model configuration");
   if (baseUrl !== undefined) providerBaseUrl("OpenAI", baseUrl);
   const decide: AgentModel = async (request, context) => {
-    const selectedModel = (model ?? process.env.OPENAI_MODEL)?.trim() || "gpt-5.4-mini";
+    const selectedModel = (model ?? globalThis.process?.env.OPENAI_MODEL)?.trim() || "gpt-5.4-mini";
     return withProviderDeadline(
       "OpenAI decision",
       timeoutMs,
@@ -177,14 +178,14 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
         const shouldCompact =
           compactAfterBytes !== null &&
           (request.outcomes.length > 0 || (newPrompt && request.conversation !== null)) &&
-          (Buffer.byteLength(JSON.stringify(completedInput)) > compactAfterBytes ||
-            Buffer.byteLength(JSON.stringify({ ...decisionRequest, input: completedInput })) >
+          (utf8ByteLength(JSON.stringify(completedInput)) > compactAfterBytes ||
+            utf8ByteLength(JSON.stringify({ ...decisionRequest, input: completedInput })) >
               MAX_REQUEST_BYTES);
         // Compaction sends no tool schemas. Budget against the request actually sent,
         // then check the decision with the returned compacted window at the HTTP boundary.
         const nextRequest = shouldCompact ? compactRequest : decisionRequest;
         input =
-          Buffer.byteLength(JSON.stringify({ ...nextRequest, input: completedInput })) <=
+          utf8ByteLength(JSON.stringify({ ...nextRequest, input: completedInput })) <=
           MAX_REQUEST_BYTES
             ? completedInput
             : [
@@ -192,7 +193,7 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
                 ...boundedToolOutputs(
                   "OpenAI",
                   request.outcomes,
-                  MAX_REQUEST_BYTES - Buffer.byteLength(JSON.stringify(nextRequest)),
+                  MAX_REQUEST_BYTES - utf8ByteLength(JSON.stringify(nextRequest)),
                   (outcome, output) => ({
                     type: "function_call_output" as const,
                     call_id: outcome.id,

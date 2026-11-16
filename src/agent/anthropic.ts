@@ -1,4 +1,5 @@
 import { readAgentText, type AgentTextSink } from "./text-stream.js";
+import { utf8ByteLength } from "./provider-utf8.js";
 import { readAnthropicStream } from "./anthropic-stream.js";
 import type { AgentModel, AgentModelDescriptors } from "./model-types.js";
 import { agentTranscript } from "./transcript.js";
@@ -122,10 +123,11 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
     throw new Error("Invalid Anthropic model configuration");
   if (baseUrl !== undefined) providerBaseUrl("Anthropic", baseUrl);
   const decide: AgentModel = async (request, context) => {
-    const selectedModel = (model ?? process.env.ANTHROPIC_MODEL)?.trim() || "claude-opus-5-5";
+    const selectedModel =
+      (model ?? globalThis.process?.env.ANTHROPIC_MODEL)?.trim() || "claude-opus-5-5";
     const base = providerBaseUrl(
       "Anthropic",
-      baseUrl ?? (process.env.ANTHROPIC_BASE_URL?.trim() || DEFAULT_BASE_URL)
+      baseUrl ?? (globalThis.process?.env.ANTHROPIC_BASE_URL?.trim() || DEFAULT_BASE_URL)
     );
     return withProviderDeadline(
       "Anthropic decision",
@@ -247,22 +249,22 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
         const shouldCompact =
           compactAfterBytes !== null &&
           (request.outcomes.length > 0 || (newPrompt && request.conversation !== null)) &&
-          (Buffer.byteLength(JSON.stringify(completed)) > compactAfterBytes ||
+          (utf8ByteLength(JSON.stringify(completed)) > compactAfterBytes ||
             // Tools and instructions travel with compaction too. Compact before the next
             // assistant reply can make that full request exceed the 1 MiB HTTP ceiling.
-            Buffer.byteLength(JSON.stringify({ ...decisionRequest, messages: completed })) >
+            utf8ByteLength(JSON.stringify({ ...decisionRequest, messages: completed })) >
               DEFAULT_COMPACT_AFTER_BYTES);
         // Compaction covers completed history only. The new prompt stays verbatim.
         const nextRequest = shouldCompact ? compactRequest : decisionRequest;
         const payload = shouldCompact ? history : completed;
         const fits =
-          Buffer.byteLength(JSON.stringify({ ...nextRequest, messages: payload })) <=
+          utf8ByteLength(JSON.stringify({ ...nextRequest, messages: payload })) <=
           MAX_REQUEST_BYTES;
         messages = fits
           ? payload
           : [
               ...messages,
-              ...results(MAX_REQUEST_BYTES - Buffer.byteLength(JSON.stringify(nextRequest))),
+              ...results(MAX_REQUEST_BYTES - utf8ByteLength(JSON.stringify(nextRequest))),
             ];
         if (shouldCompact) {
           const summary = anthropicMessage(
@@ -390,9 +392,9 @@ function credentials(
   authToken: string | undefined
 ): Record<string, string> {
   if (authToken !== undefined) return { Authorization: `Bearer ${authToken.trim()}` };
-  const key = (apiKey ?? process.env.ANTHROPIC_API_KEY)?.trim();
+  const key = (apiKey ?? globalThis.process?.env.ANTHROPIC_API_KEY)?.trim();
   if (key) return { "x-api-key": key };
-  const token = process.env.ANTHROPIC_AUTH_TOKEN?.trim();
+  const token = globalThis.process?.env.ANTHROPIC_AUTH_TOKEN?.trim();
   if (token) return { Authorization: `Bearer ${token}` };
   throw new Error("ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN is required for live model execution");
 }
