@@ -8,3 +8,6 @@ export default defineProject("tubeless-examples", [ValidatedPipeline], {
   name: "Tubeless examples",
   description: "Import rows with schema-derived CLI flags and Studio forms.",
 });
+
+// Native repository checks use the separate optional Node recipe in node-check.ts;
+// keep process execution out of Worker-compatible project discovery.

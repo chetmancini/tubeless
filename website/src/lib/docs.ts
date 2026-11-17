@@ -19,6 +19,7 @@ export const DOC_NAV = [
   { slug: "step-output-cache", label: "Step output caching", blurb: "Reuse deterministic outputs with explicit keys, versions, and cache policies." },
   { slug: "step-output-observation", label: "Step output observation", blurb: "Capture raw values through host-owned encoding and awaited persistence." },
   { slug: "artifacts", label: "Artifacts", blurb: "Load, save, and trace typed artifacts with dry-run safety." },
+  { slug: "node-check-recipe", label: "Portable Node checks", blurb: "Inspect and run explicit Node/Bun check gates with structured Vitest reports." },
   { slug: "structured-diagnostics", label: "Structured failures", blurb: "Inspect bounded Vitest reports and preserve framework errors across machine interfaces." },
   { slug: "graph-metadata", label: "Graph metadata", blurb: "Describe ownership, tags, and annotations; query graphs without changing execution." },
   { slug: "studio", label: "Studio", blurb: "Inspect recorded runs and launch commands in your browser." },

@@ -1,3 +1,4 @@
+import { readFileSync as readNodePlanFixture } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import {
@@ -147,4 +148,23 @@ describe("Cloud structured failure handling", () => {
       }).diagnostics?.state
     ).toBe("unavailable");
   });
+});
+
+it("preserves the admitted portable command plan and rejects modified argv", () => {
+  const plan = JSON.parse(
+    readNodePlanFixture(
+      new URL("../../../fixtures/node-check/plan-v1.json", import.meta.url),
+      "utf8"
+    )
+  );
+  const nodeCheck = {
+    version: 1 as const,
+    digest: "d".repeat(43),
+    imageDigest: `sha256:${"a".repeat(64)}`,
+    plan,
+  };
+  const run = parseCliRun({ ...baseRun, nodeCheck });
+  expect(run.nodeCheck).toEqual(nodeCheck);
+  plan.commands[1].argv = ["publish"];
+  expect(() => parseCliRun({ ...baseRun, nodeCheck })).toThrow("Invalid Cloud run");
 });

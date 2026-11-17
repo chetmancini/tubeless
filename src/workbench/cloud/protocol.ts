@@ -1,3 +1,4 @@
+import { decodeNodeCheckPlan, type NodeCheckPlan } from "../../utilities/node-check-plan.js";
 import {
   structuredError,
   projectStructuredErrors,
@@ -98,6 +99,7 @@ export interface CliRun {
     reports: { artifact: string; result: CheckReportResult }[];
     omitted: number;
   };
+  nodeCheck?: { version: 1; digest: string; imageDigest: string; plan: NodeCheckPlan };
   nativeCommands?: { id: string; exitCode: number; durationMs: number }[];
   logs: CliLogLine[];
   artifacts: { name: string; size: number; contentType: string }[];
@@ -428,6 +430,15 @@ export function parseCliRun(value: unknown): CliRun {
         number(artifact.size)
     );
   const run = parseResponse<CliRun>(value, valid, "run");
+  if (
+    run.nodeCheck !== undefined &&
+    (!isCloudObject(run.nodeCheck) ||
+      run.nodeCheck.version !== 1 ||
+      !/^[A-Za-z0-9_-]{43}$/.test(run.nodeCheck.digest) ||
+      !/^sha256:[a-f0-9]{64}$/.test(run.nodeCheck.imageDigest) ||
+      !decodeNodeCheckPlan(run.nodeCheck.plan))
+  )
+    throw new Error("Invalid Cloud run response.");
   const errors =
     run.structuredErrors === undefined
       ? undefined

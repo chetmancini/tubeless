@@ -195,6 +195,16 @@
       "types": "./dist/utilities/check-report.d.ts",
       "import": "./dist/utilities/check-report.js",
       "default": "./dist/utilities/check-report.js"
+    },
+    "./check-plan": {
+      "types": "./dist/utilities/node-check-plan.d.ts",
+      "import": "./dist/utilities/node-check-plan.js",
+      "default": "./dist/utilities/node-check-plan.js"
+    },
+    "./node/check": {
+      "types": "./dist/check/node-check.d.ts",
+      "import": "./dist/check/node-check.js",
+      "default": "./dist/check/node-check.js"
     }
   }
 }

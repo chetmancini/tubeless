@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "toolchain": { "node": "24", "bun": "1.4.4" },
+  "checks": [
+    { "id": "types", "script": "types" },
+    {
+      "id": "test",
+      "dependsOn": ["types"],
+      "vitest": { "report": ".tubeless-reports/vitest.json" }
+    }
+  ]
+}
