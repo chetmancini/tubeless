@@ -29,7 +29,7 @@ Package: `tubeless`
 | `tubeless/cloudflare/transcript` | `./dist/cloudflare/cloudflare-transcript.d.ts` | `16d1ce9f7867b6aa9285c2611f924133fbc5cfd1038180591280ff4f602cdfc5` |                2 |
 | `tubeless/check-report`          | `./dist/utilities/check-report.d.ts`           | `419f3aa46711da489d280616e62b73512dfc1a5f699f4108abdd5b6f437b7788` |               14 |
 | `tubeless/check-plan`            | `./dist/utilities/node-check-plan.d.ts`        | `23fef204664df9348fcfab6d1d87dd782f58d75cd9b61a868793d246ba80fb10` |                6 |
-| `tubeless/node/check`            | `./dist/check/node-check.d.ts`                 | `790ba6a1b3453d98deee474680356bf45d0e58170f4211364f8b4efc804d67bc` |                3 |
+| `tubeless/node/check`            | `./dist/check/node-check.d.ts`                 | `808b631331c09e0e701ac17e26b18c2a392071562c3615f773bc593941663564` |                3 |
 
 ## Symbols
 

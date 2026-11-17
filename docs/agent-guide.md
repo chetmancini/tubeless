@@ -21,7 +21,7 @@ authoring.
 4. Typecheck, run focused tests, then run `make check` after package, docs, or
    example changes.
 
-For an explicit Node/Bun repository gate, use [the optional Node check recipe](node-check-recipe.md). It reads data without Cloud credentials and exposes its full plan before running.
+For an explicit Node/Bun repository gate on a POSIX host, use [the optional Node check recipe](node-check-recipe.md). It reads data without Cloud credentials and exposes its full plan before running. Windows execution is unsupported.
 
 ## Steps and results
 

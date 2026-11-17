@@ -9,6 +9,8 @@ export async function runCheckProcess(
   timeoutMs: number,
   context: Pick<PipelineStepContext<object>, "cwd" | "signal" | "log">
 ): Promise<CheckProcessOutcome> {
+  if (process.platform === "win32")
+    throw new TypeError("The node-check-v1 recipe requires a POSIX host; Windows is unsupported.");
   if (context.signal?.aborted)
     return { status: "cancelled", exitCode: null, signal: null, outputComplete: false };
   const child = spawn(argv[0], argv.slice(1), {
@@ -17,7 +19,7 @@ export async function runCheckProcess(
       ...process.env,
       PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH ?? ""}`,
     },
-    detached: process.platform !== "win32",
+    detached: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
   let status: "cancelled" | "timed-out" | undefined,
@@ -26,8 +28,7 @@ export async function runCheckProcess(
   let escalation: ReturnType<typeof setTimeout> | undefined;
   const kill = (signal: NodeJS.Signals): void => {
     try {
-      if (process.platform !== "win32" && child.pid) process.kill(-child.pid, signal);
-      else child.kill(signal);
+      if (child.pid) process.kill(-child.pid, signal);
     } catch {
       /* The process group may already have exited. */
     }

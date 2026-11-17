@@ -1,7 +1,9 @@
 # Portable Node checks
 
 Candidate O3 slice: a single-package Node 24 / Bun 1.4.4 recipe with Vitest
-5.1.0 reports. This API is newer than published Tubeless 0.4.2. Cloud's paired
+5.1.0 reports on POSIX hosts (Linux and macOS). Windows execution is rejected
+before launching commands because process-tree cancellation is not supported there.
+This API is newer than published Tubeless 0.4.2. Cloud's paired
 wrapper is an implementation/fixture integration pending an OSS release, Cloud
 pin update and hosted qualification. Customer enrollment remains disabled.
 The earlier `design/ci/node-check-recipe.md` proposal was removed in the repository's
@@ -104,6 +106,8 @@ The paired representative fixture is `scripts/fixtures/node-check`: a JavaScript
 syntax gate and a real Vitest test. Changing `answer` from 42 to 41 exercises the
 original failing invocation and available source location. It is not the package's
 own CI suite and does not replace its Node 22/24/26 verification matrix.
+The full Node 24 CI and release gates provision Bun 1.4.4 for this recipe;
+the Node 22/26 lanes retain Bun 1.3.14 coverage for the package's runtime floor.
 
 OSS owns the data contract, resolver, scheduler composition and adapter. Cloud
 owns source verification, plan hashing, approved images/commands, isolation,

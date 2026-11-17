@@ -60,6 +60,8 @@ export async function runNodeCheck(
   context: Partial<PipelineContext> & { cwd: string },
   options: { dryRun?: boolean } = {}
 ): Promise<NodeCheckExecution> {
+  if (process.platform === "win32")
+    throw new TypeError("The node-check-v1 recipe requires a POSIX host; Windows is unsupported.");
   const plan = decodeNodeCheckPlan(input);
   if (!plan) throw new TypeError("Invalid Node check plan.");
   if (process.versions.node.split(".")[0] !== plan.toolchain.node)
@@ -94,6 +96,7 @@ export async function runNodeCheck(
                 },
               },
             });
+            ctx.signal?.throwIfAborted();
             if (
               probe.status !== "exited" ||
               probe.exitCode !== 0 ||
@@ -120,6 +123,7 @@ export async function runNodeCheck(
                     process: outcome,
                   });
             reports.find((report) => report.stepId === command.id)!.result = result;
+            ctx.signal?.throwIfAborted();
             if (
               outcome.status === "exited" &&
               outcome.exitCode === 0 &&
@@ -132,6 +136,7 @@ export async function runNodeCheck(
                 `Expected complete Vitest report for ${command.id}; collection cannot establish a complete gate.`
               );
           }
+          ctx.signal?.throwIfAborted();
           if (outcome.status !== "exited" || outcome.exitCode !== 0)
             throw Object.assign(
               new Error(
